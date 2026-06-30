@@ -134,6 +134,38 @@ type RevenueSnapshot = {
     blockedActions: string[];
     currentInstruction: string;
   };
+  manualOutreachQueue: {
+    status: "ready" | "needs_approval" | "empty";
+    dailyContactLimit: number;
+    readyCount: number;
+    blockedCount: number;
+    overflowCount: number;
+    items: Array<{
+      draftId: string;
+      businessName: string;
+      channel: "email" | "gmail" | "mailto" | "instagram" | "contact_form";
+      subject: string;
+      manualAction: string;
+      priority: "high" | "medium";
+      contactUrl: string;
+      fallbackUrl: string;
+      estimatedSetupUsd: number;
+      monthlyRetainerUsd: number;
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      draftId: string;
+      businessName: string;
+      status: "draft" | "approved" | "blocked";
+      reason: string;
+    }>;
+    nextAction: string;
+    safety: {
+      sendsOutreach: false;
+      requiresHumanApproval: true;
+      blockedActions: string[];
+    };
+  };
   profitGuard: {
     status: "pause_spend" | "collect_first" | "review_queue" | "scale_carefully";
     monthlyCapUsd: number;

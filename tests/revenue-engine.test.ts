@@ -861,6 +861,106 @@ test("records outreach draft without sending and moves matching lead to outreach
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Black Room"), true);
 });
 
+test("snapshot builds a capped manual outreach queue from approved drafts", () => {
+  for (let index = 1; index <= 12; index += 1) {
+    recordRevenueOutreachDraft({
+      channel: "gmail",
+      approvalStatus: "approved",
+      recipientEmail: `owner${index}@queuecafe.example`,
+      contactName: "Owner",
+      businessName: `Queue Cafe ${index}`,
+      sourceUrl: `https://example.com/queue-cafe-${index}`,
+      businessSummary: `Queue Cafe ${index} has public evidence of no dedicated website, recent menu/service activity, and a verified contact path for a premium website pitch.`,
+      websitePriceUsd: 2500 + index * 100,
+      automationPriceUsd: 1000,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+    });
+  }
+  recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@needsapproval.example",
+    contactName: "Owner",
+    businessName: "Needs Approval Cafe",
+    sourceUrl: "https://example.com/needs-approval",
+    businessSummary: "Needs Approval Cafe has public evidence of no dedicated website, recent menu activity, and a verified contact path.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const queue = getRevenueEngineSnapshot().manualOutreachQueue;
+
+  assert.equal(queue.status, "ready");
+  assert.equal(queue.dailyContactLimit, 10);
+  assert.equal(queue.readyCount, 10);
+  assert.equal(queue.overflowCount, 2);
+  assert.equal(queue.blockedCount, 3);
+  assert.equal(queue.safety.sendsOutreach, false);
+  assert.equal(queue.safety.requiresHumanApproval, true);
+  assert.equal(queue.items.every((item) => item.contactUrl.includes("mail.google.com")), true);
+  assert.equal(queue.items.every((item) => item.nextAction.includes("registrar reply")), true);
+  assert.equal(queue.blocked.some((item) => item.businessName === "Needs Approval Cafe" && item.reason.includes("Robert")), true);
+  assert.equal(queue.blocked.filter((item) => item.reason.includes("Daily contact limit reached")).length, 2);
+});
+
+test("manual outreach queue uses public source URLs for non-email channels and caps blocked details", () => {
+  recordRevenueOutreachDraft({
+    channel: "instagram",
+    approvalStatus: "approved",
+    recipientEmail: "owner@instaqueuellc.example",
+    contactName: "Owner",
+    businessName: "Insta Queue Studio",
+    sourceUrl: "https://instagram.com/instaqueuestudio",
+    businessSummary: "Insta Queue Studio has public evidence of no dedicated website, recent service content, and Instagram as its visible contact path.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+  recordRevenueOutreachDraft({
+    channel: "contact_form",
+    approvalStatus: "approved",
+    recipientEmail: "owner@formqueue.example",
+    contactName: "Owner",
+    businessName: "Form Queue Studio",
+    sourceUrl: "https://example.com/form-queue/contact",
+    businessSummary: "Form Queue Studio has public evidence of a weak website, visible contact form, and a clear booking follow-up opportunity.",
+    websitePriceUsd: 3000,
+    automationPriceUsd: 1000,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+  for (let index = 1; index <= 12; index += 1) {
+    recordRevenueOutreachDraft({
+      channel: "gmail",
+      approvalStatus: "draft",
+      recipientEmail: `owner${index}@blockedqueue.example`,
+      contactName: "Owner",
+      businessName: `Blocked Queue ${index}`,
+      sourceUrl: `https://example.com/blocked-queue-${index}`,
+      businessSummary: `Blocked Queue ${index} has public evidence but still needs Robert approval before any manual contact.`,
+      websitePriceUsd: 3000,
+      automationPriceUsd: 1000,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+    });
+  }
+
+  const queue = getRevenueEngineSnapshot().manualOutreachQueue;
+  const instagramItem = queue.items.find((item) => item.businessName === "Insta Queue Studio")!;
+  const contactFormItem = queue.items.find((item) => item.businessName === "Form Queue Studio")!;
+
+  assert.equal(instagramItem.contactUrl, "https://instagram.com/instaqueuestudio");
+  assert.equal(instagramItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.equal(contactFormItem.contactUrl, "https://example.com/form-queue/contact");
+  assert.equal(contactFormItem.fallbackUrl.startsWith("mailto:"), true);
+  assert.equal(queue.blockedCount, 12);
+  assert.equal(queue.blocked.length, 10);
+});
+
 test("sales autopilot prepares lead mockup agent QA and draft without sending", () => {
   const result = recordRevenueSalesAutopilot({
     businessName: "Autopilot Cafe",

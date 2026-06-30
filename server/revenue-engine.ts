@@ -454,6 +454,39 @@ type RevenueOutreachDraft = RevenueOutreachDraftInput & {
   nextAction: string;
 };
 
+type RevenueManualOutreachQueue = {
+  status: "ready" | "needs_approval" | "empty";
+  dailyContactLimit: number;
+  readyCount: number;
+  blockedCount: number;
+  overflowCount: number;
+  items: Array<{
+    draftId: string;
+    businessName: string;
+    channel: RevenueOutreachDraft["channel"];
+    subject: string;
+    manualAction: string;
+    priority: "high" | "medium";
+    contactUrl: string;
+    fallbackUrl: string;
+    estimatedSetupUsd: number;
+    monthlyRetainerUsd: number;
+    nextAction: string;
+  }>;
+  blocked: Array<{
+    draftId: string;
+    businessName: string;
+    status: RevenueOutreachDraft["status"];
+    reason: string;
+  }>;
+  nextAction: string;
+  safety: {
+    sendsOutreach: false;
+    requiresHumanApproval: true;
+    blockedActions: string[];
+  };
+};
+
 type RevenueEmailProviderStatus = {
   provider: "resend";
   configured: boolean;
@@ -2730,6 +2763,81 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
   };
 }
 
+function manualActionForRevenueDraft(draft: RevenueOutreachDraft) {
+  if (draft.channel === "instagram") return "Abrir Instagram y enviar manualmente solo despues de revisar el draft.";
+  if (draft.channel === "contact_form") return "Abrir el formulario publico del negocio y pegar el mensaje aprobado.";
+  if (draft.channel === "mailto") return "Abrir mailto y enviar manualmente desde la cuenta aprobada.";
+  return "Abrir Gmail compose y enviar manualmente desde la cuenta aprobada.";
+}
+
+function contactUrlForRevenueDraft(draft: RevenueOutreachDraft) {
+  if (draft.channel === "mailto") return draft.links.mailto;
+  if (draft.channel === "instagram" || draft.channel === "contact_form") return draft.sourceUrl || draft.mockupUrl || draft.links.mailto;
+  return draft.links.gmailCompose;
+}
+
+function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualOutreachQueue {
+  const safeLimit = Math.max(0, Math.min(50, Math.floor(dailyContactLimit)));
+  const unsentDrafts = revenueOutreachDrafts
+    .filter((draft) => draft.delivery.sendStatus !== "sent")
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const readyDrafts = unsentDrafts.filter((draft) => draft.status === "approved" && draft.qaGates.every((gate) => gate.passed));
+  const readyToday = readyDrafts.slice(0, safeLimit);
+  const overflow = readyDrafts.slice(safeLimit);
+  const blockedAll = [
+    ...unsentDrafts
+      .filter((draft) => draft.status !== "approved" || draft.qaGates.some((gate) => !gate.passed))
+      .map((draft) => ({
+        draftId: draft.id,
+        businessName: draft.businessName,
+        status: draft.status,
+        reason: draft.qaGates.find((gate) => !gate.passed)?.fix || draft.nextAction,
+      })),
+    ...overflow.map((draft) => ({
+      draftId: draft.id,
+      businessName: draft.businessName,
+      status: draft.status,
+      reason: `Daily contact limit reached (${safeLimit}); keep for the next batch.`,
+    })),
+  ];
+  const blockedSample = blockedAll.slice(0, 10);
+
+  return {
+    status: readyToday.length > 0 ? "ready" : blockedAll.length > 0 ? "needs_approval" : "empty",
+    dailyContactLimit: safeLimit,
+    readyCount: readyToday.length,
+    blockedCount: blockedAll.length,
+    overflowCount: overflow.length,
+    items: readyToday.map((draft) => ({
+      draftId: draft.id,
+      businessName: draft.businessName,
+      channel: draft.channel,
+      subject: draft.subject,
+      manualAction: manualActionForRevenueDraft(draft),
+      priority: draft.pricing.totalSetupUsd >= 3500 ? "high" as const : "medium" as const,
+      contactUrl: contactUrlForRevenueDraft(draft),
+      fallbackUrl: draft.links.mailto,
+      estimatedSetupUsd: draft.pricing.totalSetupUsd,
+      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+      nextAction: "Revisar evidencia, abrir enlace manual y registrar reply/call/deposito despues.",
+    })),
+    blocked: blockedSample,
+    nextAction:
+      readyToday.length > 0
+        ? `Contactar manualmente max ${readyToday.length}/${safeLimit} leads aprobados hoy; registrar respuesta antes de escalar volumen.`
+        : blockedAll.length > 0
+          ? "Aprobar o corregir drafts antes de contactar negocios."
+          : "Crear y aprobar drafts desde Money sprint antes de contactar negocios.",
+    safety: {
+      sendsOutreach: false,
+      requiresHumanApproval: true,
+      blockedActions: ["auto-send email", "auto-submit contact form", "bulk DM", "paid data", "publish mockup"],
+    },
+  };
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -2876,6 +2984,7 @@ export function getRevenueEngineSnapshot() {
     systemReadiness,
     launchReadiness,
     agentOperatingContract,
+    manualOutreachQueue: buildRevenueManualOutreachQueue(10),
     profitGuard,
     nextBatchPlan,
     approvalQueueItems,
