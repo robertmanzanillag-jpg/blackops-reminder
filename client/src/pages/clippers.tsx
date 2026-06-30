@@ -2399,6 +2399,22 @@ interface ClipperTikTokMvpProofLinksDropImportSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofLinksDropStatusSummary {
+  status: "missing" | "needs_review" | "ready_for_import";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  found: boolean;
+  sourcePath: string;
+  bytes: number;
+  extractedUrls: number;
+  issues: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
@@ -10502,6 +10518,15 @@ export default function ClippersPage() {
       return data.tiktokMvpProofLinks as ClipperTikTokMvpProofLinksSummary;
     },
   });
+  const { data: tiktokMvpProofLinksDropStatus } = useQuery<ClipperTikTokMvpProofLinksDropStatusSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-proof-links-drop-status"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-proof-links-drop-status");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP proof drop status");
+      return data.tiktokMvpProofLinksDropStatus as ClipperTikTokMvpProofLinksDropStatusSummary;
+    },
+  });
   const { data: tiktokMvpProofDoctor } = useQuery<ClipperTikTokMvpProofDoctorSummary | null>({
     queryKey: ["/api/clippers/tiktok-mvp-proof-doctor"],
     queryFn: async () => {
@@ -11262,6 +11287,21 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPastePreview(data.tiktokMvpProofLinksPastePreview);
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinksDropImport.proofLinksText);
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksDropImport.proofLinksPreview);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], {
+        status: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "ready_for_import" : "needs_review",
+        generatedAt: data.tiktokMvpProofLinksDropImport.generatedAt,
+        scope: data.tiktokMvpProofLinksDropImport.scope,
+        launchMode: data.tiktokMvpProofLinksDropImport.launchMode,
+        directSocialApisRequired: data.tiktokMvpProofLinksDropImport.directSocialApisRequired,
+        realPublishEnabled: data.tiktokMvpProofLinksDropImport.realPublishEnabled,
+        found: true,
+        sourcePath: data.tiktokMvpProofLinksDropImport.sourcePath,
+        bytes: data.tiktokMvpProofLinksDropImport.bytes,
+        extractedUrls: data.tiktokMvpProofLinksDropImport.extractedUrls,
+        issues: [...data.tiktokMvpProofLinksDropImport.issues, ...data.tiktokMvpProofLinksDropImport.proofLinksPreview.issues],
+        guardrails: data.tiktokMvpProofLinksDropImport.guardrails,
+        nextStep: data.tiktokMvpProofLinksDropImport.nextStep,
+      } satisfies ClipperTikTokMvpProofLinksDropStatusSummary);
       toast({
         title: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "Proof drop importado" : "Proof drop necesita revision",
         description: `${data.tiktokMvpProofLinksDropImport.sourcePath}: ${data.tiktokMvpProofLinksDropImport.nextStep}`,
@@ -17524,6 +17564,33 @@ export default function ClippersPage() {
                       Build JSON
                     </Button>
                   </div>
+                  {tiktokMvpProofLinksDropStatus && (
+                    <div className={cn(
+                      "mt-2 rounded-md border bg-black/20 p-2 text-xs",
+                      tiktokMvpProofLinksDropStatus.status === "ready_for_import"
+                        ? "border-emerald-300/15 text-emerald-100/80"
+                        : tiktokMvpProofLinksDropStatus.status === "needs_review"
+                          ? "border-amber-300/15 text-amber-100/80"
+                          : "border-zinc-700/70 text-zinc-400"
+                    )} data-testid="clippers-tiktok-mvp-proof-links-drop-status">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={cn(
+                          "border text-[10px]",
+                          tiktokMvpProofLinksDropStatus.status === "ready_for_import"
+                            ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : tiktokMvpProofLinksDropStatus.status === "needs_review"
+                              ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              : "border-zinc-700 bg-zinc-900 text-zinc-300"
+                        )}>drop {tiktokMvpProofLinksDropStatus.status}</Badge>
+                        <span>{tiktokMvpProofLinksDropStatus.found ? "file detected" : "file missing"}</span>
+                        <span>{tiktokMvpProofLinksDropStatus.extractedUrls} URLs</span>
+                        <span>{tiktokMvpProofLinksDropStatus.issues.length} issues</span>
+                        <span>real publish {tiktokMvpProofLinksDropStatus.realPublishEnabled ? "enabled" : "disabled"}</span>
+                      </div>
+                      <p className="mt-1 break-all">{tiktokMvpProofLinksDropStatus.sourcePath}</p>
+                      <p className="mt-1">{tiktokMvpProofLinksDropStatus.issues[0] || tiktokMvpProofLinksDropStatus.nextStep}</p>
+                    </div>
+                  )}
                   <Textarea
                     value={tiktokMvpProofLinksPasteText}
                     onChange={(event) => setTiktokMvpProofLinksPasteText(event.target.value)}

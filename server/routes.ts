@@ -167,6 +167,53 @@ async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: 
   throw error;
 }
 
+async function buildClipperTikTokMvpProofLinksDropStatus() {
+  try {
+    const drop = await readClipperTikTokMvpProofLinksDropPaste();
+    const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
+    const issues = [...parsedPreview.issues, ...parsedPreview.proofLinksPreview.issues];
+    return {
+      status: issues.length ? "needs_review" : "ready_for_import",
+      generatedAt: parsedPreview.generatedAt,
+      scope: parsedPreview.scope,
+      launchMode: parsedPreview.launchMode,
+      directSocialApisRequired: parsedPreview.directSocialApisRequired,
+      realPublishEnabled: false,
+      found: true,
+      sourcePath: drop.sourcePath,
+      bytes: drop.bytes,
+      extractedUrls: parsedPreview.extractedUrls,
+      issues,
+      guardrails: [
+        "Drop status reads metadata and validated parsed fields only; it does not return raw paste text.",
+        "It does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+      ],
+      nextStep: issues.length
+        ? "Open the proof links drop file, fix the listed issues, then run Import drop file again."
+        : "Run Import drop file, preview links, then Save proof links if the preview stays clean.",
+    };
+  } catch (error: any) {
+    return {
+      status: "missing",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      found: false,
+      sourcePath: clipperTikTokMvpProofLinksDropPastePaths[0],
+      bytes: 0,
+      extractedUrls: 0,
+      issues: [error?.message || `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with the four non-secret proof URLs.`],
+      guardrails: [
+        "Drop status does not create proof files or write evidence.",
+        "It does not apply evidence, queue Metricool, create calendar rows, or send posts.",
+      ],
+      nextStep: `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with SPORT and memes ownership plus Metricool proof URLs.`,
+    };
+  }
+}
+
 export function buildClipperExternalCloseoutEvidenceCsvTemplate(rows: unknown): string {
   const enrichedRows = enrichClipperExternalCloseoutOperatorRows(rows);
   if (!enrichedRows.length) return "";
@@ -2782,6 +2829,14 @@ export async function registerRoutes(
       res.json({ tiktokMvpProofLinksPastePreview: extractClipperTikTokMvpProofLinksPaste(req.body?.pasteText) });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to parse TikTok MVP proof links paste" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-proof-links-drop-status", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus() });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to read TikTok MVP proof links drop status" });
     }
   });
 
