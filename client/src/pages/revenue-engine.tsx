@@ -197,6 +197,24 @@ type RevenueSnapshot = {
       nextStep: string;
     }>;
     manualStartPlan: string[];
+    todayExecutionPack: {
+      status: "ready";
+      ownerAgent: string;
+      mission: string;
+      copyableAgentCommand: string;
+      runLimits: {
+        researchTarget: number;
+        maxQualifiedRowsToImport: number;
+        maxMockups: number;
+        maxManualContacts: number;
+        maxPaidSpendUsd: number;
+      };
+      sourcePriority: string[];
+      requiredEvidenceFields: string[];
+      copyableBatchHeader: string;
+      nextApiAction: string;
+      approvalRequiredBefore: string[];
+    };
     contactScripts: {
       contactForm: string;
       phonePermission: string;
@@ -1470,7 +1488,7 @@ type AutomationOpportunityDeliveryResult = {
 };
 
 type WebsiteDeliveryHandoffResult = {
-  status: "created" | "blocked" | "not_found";
+  status: "created" | "already_created" | "blocked" | "not_found";
   reason: string;
   lead: RevenueSnapshot["recentLeads"][number] | null;
   outreachDraft: RevenueSnapshot["recentOutreach"][number] | null;
@@ -3520,6 +3538,36 @@ export default function RevenueEnginePage() {
                     {step}
                   </div>
                 ))}
+              </div>
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-100">Paquete ejecutable de hoy</p>
+                    <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+                      {snapshot?.launchReadiness.todayExecutionPack?.mission || "Buscar negocios publicos con evidencia verificable."}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={cn(statusTone("pass"), "shrink-0")}>
+                    {snapshot?.launchReadiness.todayExecutionPack?.ownerAgent || "lead-scout"}
+                  </Badge>
+                </div>
+                <p className="mt-3 rounded-md border border-black/30 bg-black/40 px-3 py-2 text-xs leading-5 text-zinc-300">
+                  {snapshot?.launchReadiness.todayExecutionPack?.copyableAgentCommand || "Find public no-website leads. Do not contact or spend."}
+                </p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Research {snapshot?.launchReadiness.todayExecutionPack?.runLimits.researchTarget ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Import {snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxQualifiedRowsToImport ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Mockups {snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxMockups ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Spend ${snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxPaidSpendUsd ?? 0}
+                  </div>
+                </div>
               </div>
             </div>
             <div>
@@ -8148,7 +8196,7 @@ export default function RevenueEnginePage() {
                             ))}
                           </div>
                         )}
-                        {websiteDeliveryHandoffMutation.data && websiteDeliveryHandoffMutation.data.status !== "created" && (
+                        {websiteDeliveryHandoffMutation.data && !["created", "already_created"].includes(websiteDeliveryHandoffMutation.data.status) && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
                             {websiteDeliveryHandoffMutation.data.reason}
                           </div>
@@ -8156,6 +8204,11 @@ export default function RevenueEnginePage() {
                         {websiteDeliveryHandoffMutation.data?.status === "created" && websiteDeliveryHandoffMutation.data.workspace && (
                           <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100">
                             Workspace creado: {websiteDeliveryHandoffMutation.data.workspace.input.clientName}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data?.status === "already_created" && websiteDeliveryHandoffMutation.data.workspace && (
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100">
+                            Workspace reutilizado: {websiteDeliveryHandoffMutation.data.workspace.input.clientName}
                           </div>
                         )}
                       </CardContent>

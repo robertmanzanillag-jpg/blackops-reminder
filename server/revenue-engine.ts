@@ -3424,6 +3424,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
   loadRevenueOutreach();
   loadRevenueLedger();
   loadRevenueWebsiteOpportunities();
+  loadRevenueDeliveryWorkspaces();
   const parsed = revenueWebsiteDeliveryWorkspaceSchema.parse(input);
   const lead = revenueLeads.find((item) => item.id === parsed.leadId);
 
@@ -3524,6 +3525,21 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     parsed.notes && `Operator notes: ${parsed.notes}`,
     "Codex build rule: create a separate branch and PR; do not deploy without Robert approval and App QA.",
   ].filter(Boolean).join("\n");
+
+  const existingWorkspace = revenueDeliveryWorkspaces.find((workspace) =>
+    workspace.input.sourceOpportunityId === websiteOpportunity.id
+    || (workspace.input.sourceLeadId === lead.id && ["website", "bundle"].includes(workspace.input.projectType))
+  );
+  if (existingWorkspace) {
+    return {
+      status: "already_created" as const,
+      reason: `Delivery workspace ya existe para esta venta: ${existingWorkspace.id}.`,
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: existingWorkspace,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
 
   if (!depositPaid || !websiteOpportunity.scopeApproved) {
     return {
@@ -5410,6 +5426,63 @@ function isRevenuePublicSourceUrl(sourceUrl: string) {
   }
 }
 
+function revenueEvidenceTokens(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, " ")
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && ![
+      "owner",
+      "email",
+      "public",
+      "business",
+      "contact",
+      "website",
+      "example",
+      "gmail",
+      "yahoo",
+      "outlook",
+    ].includes(token));
+}
+
+function revenueHostMatches(hostname: string, rootHost: string) {
+  return hostname === rootHost || hostname.endsWith(`.${rootHost}`);
+}
+
+function revenueSourceUrlMatchesCandidate(input: Pick<RevenuePublicLeadCandidateInput, "businessName" | "contactValue" | "recipientEmail" | "sourceUrl">) {
+  if (!isRevenuePublicSourceUrl(input.sourceUrl)) return false;
+  const parsed = new URL(input.sourceUrl);
+  const hostname = parsed.hostname.toLowerCase();
+  const publicPlatformHosts = [
+    "instagram.com",
+    "facebook.com",
+    "maps.google.com",
+    "yelp.com",
+    "linkedin.com",
+    "tripadvisor.com",
+    "doordash.com",
+    "ubereats.com",
+    "square.site",
+    "toasttab.com",
+    "opentable.com",
+    "resy.com",
+    "mindbodyonline.com",
+  ];
+  if (publicPlatformHosts.some((host) => revenueHostMatches(hostname, host))) return true;
+  if (publicPlatformHosts.some((host) => hostname.includes(host.replace(".com", "")))) return false;
+
+  const sourceText = `${hostname} ${parsed.pathname} ${parsed.search}`.toLowerCase();
+  const businessTokens = revenueEvidenceTokens(input.businessName);
+  const contactTokens = revenueEvidenceTokens(`${input.contactValue} ${input.recipientEmail}`);
+  const matchingBusinessTokens = businessTokens.filter((token) => sourceText.includes(token));
+  const contactLocalParts = `${input.contactValue} ${input.recipientEmail}`
+    .toLowerCase()
+    .match(/[a-z0-9._%+-]+(?=@)/g) || [];
+  const contactHandleTokens = contactTokens.filter((token) => token.length >= 6 && sourceText.includes(token));
+  return matchingBusinessTokens.length >= 2 || contactLocalParts.some((token) => token.length >= 6 && sourceText.includes(token)) || contactHandleTokens.length > 0;
+}
+
 function isRevenueManualContactChannel(channel: RevenueLeadInput["contactChannel"] | RevenueOutreachDraftInput["channel"]) {
   return channel === "instagram" || channel === "contact_form";
 }
@@ -5628,6 +5701,7 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     !parsed.approvalToImport && "approvalToImport false",
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
     parsed.sourceUrl.trim().length > 0 && !isRevenuePublicSourceUrl(parsed.sourceUrl) && "sourceUrl must be public",
+    parsed.sourceUrl.trim().length > 0 && isRevenuePublicSourceUrl(parsed.sourceUrl) && !revenueSourceUrlMatchesCandidate(parsed) && "sourceUrl must match business/contact evidence",
     !hasDraftContactPath && "recipientEmail or manual contact URL",
     ...revenuePlaceholderFieldNames(parsed).map((field) => `placeholder ${field}`),
     ...qualification.missing,
@@ -6710,6 +6784,48 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
       "Dia 2: contactar por contact form/Gmail manual y llamar solo los mejores para pedir permiso de enviar mockup.",
       "Dia 3-7: registrar replies, objeciones, calls booked y cualquier cash en ledger/improvement review.",
     ],
+    todayExecutionPack: {
+      status: "ready" as const,
+      ownerAgent: "lead-scout",
+      mission: `Buscar negocios reales de ${parsed.niche} en ${parsed.area} con senal no_website/weak_website y contacto publico verificable.`,
+      copyableAgentCommand: [
+        `Find ${Math.min(parsed.dailyResearchTarget, 30)} public ${parsed.niche} leads in ${parsed.area}.`,
+        "Use only public sources: Google Maps, public listings, official/social profiles and visible contact pages.",
+        `Return the best ${Math.min(parsed.dailyContactTarget, 10)} rows only after checking evidence, contact path and website weakness.`,
+        "Do not contact businesses, buy data, scrape at scale, create accounts, spend money or publish previews.",
+      ].join(" "),
+      runLimits: {
+        researchTarget: parsed.dailyResearchTarget,
+        maxQualifiedRowsToImport: Math.min(parsed.dailyContactTarget, 10),
+        maxMockups: parsed.dailyMockupTarget,
+        maxManualContacts: parsed.dailyContactTarget,
+        maxPaidSpendUsd: 0,
+      },
+      sourcePriority: [
+        "Google Maps business listing",
+        "Official website field or missing website evidence",
+        "Public Instagram/Facebook profile with recent activity",
+        "Public contact page, email, phone, DM handle or contact form",
+      ],
+      requiredEvidenceFields: [
+        "business",
+        "area",
+        "niche",
+        "website",
+        "channel",
+        "contact",
+        "sourceUrl",
+        "recipientEmail",
+        "evidence",
+        "painPoint",
+        "offer",
+        "contactName",
+        "summary",
+      ],
+      copyableBatchHeader: "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      nextApiAction: "/api/revenue-engine/money-sprint-preview",
+      approvalRequiredBefore: ["outreach send", "paid data", "build start", "deployment"],
+    },
     contactScripts: {
       contactForm:
         "Hola, vi que su negocio tiene buena presencia/reviews, pero hay una oportunidad clara de convertir mas citas con una pagina premium y follow-up. Prepare una idea visual rapida. Si te parece, te la puedo mandar para revisarla.",

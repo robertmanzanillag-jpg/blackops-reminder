@@ -961,6 +961,145 @@ test("public candidate approval keeps incomplete candidates blocked", () => {
   assert.equal(approved.snapshot.recentLeads.length, 0);
 });
 
+test("public lead candidates require source urls tied to business or contact evidence", () => {
+  const unrelated = recordRevenuePublicLeadCandidate({
+    businessName: "Generic Source Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@genericsource.example",
+    sourceUrl: "https://example.com",
+    recipientEmail: "owner@genericsource.example",
+    evidence: "Public listing has no website, current menu posts and a visible owner email.",
+    painPoint: "Needs online menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Generic Source Cafe appears to be a no-website coffee shop lead.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  assert.equal(unrelated.candidate.importReady, false);
+  assert.equal(unrelated.candidate.blockedReasons.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(unrelated.snapshot.publicLeadImportQueue.readyCount, 0);
+
+  const related = recordRevenuePublicLeadCandidate({
+    businessName: "Related Source Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@relatedsource.example",
+    sourceUrl: "https://example.com/related-source-cafe",
+    recipientEmail: "owner@relatedsource.example",
+    evidence: "Public listing has no website, current menu posts and a visible owner email.",
+    painPoint: "Needs online menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Related Source Cafe appears to be a no-website coffee shop lead.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  assert.equal(related.candidate.importReady, true);
+  assert.equal(related.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("public lead source matching rejects spoofed platforms and generic category pages", () => {
+  const spoofedPlatform = recordRevenuePublicLeadCandidate({
+    businessName: "Spoofed Platform Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@spoofedplatformcafe",
+    sourceUrl: "https://notinstagram.com/spoofedplatformcafe",
+    recipientEmail: "",
+    evidence: "Public profile claims no website and visible DM contact path.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Spoofed Platform Cafe should not trust a spoofed platform host.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const genericCategory = recordRevenuePublicLeadCandidate({
+    businessName: "Single Token Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@singletoken.example",
+    sourceUrl: "https://example.com/best-cafes-miami",
+    recipientEmail: "owner@singletoken.example",
+    evidence: "Public list mentions cafes but does not tie this exact business to a contact path.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Single Token Cafe should not import from a generic category page.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const genericGoogleSearch = recordRevenuePublicLeadCandidate({
+    businessName: "Generic Google Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@genericgoogle.example",
+    sourceUrl: "https://www.google.com/search?q=coffee+shops+miami",
+    recipientEmail: "owner@genericgoogle.example",
+    evidence: "Generic Google search results are not direct business evidence.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Generic Google Cafe should not import from a generic Google search URL.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  assert.equal(spoofedPlatform.candidate.importReady, false);
+  assert.equal(genericCategory.candidate.importReady, false);
+  assert.equal(genericGoogleSearch.candidate.importReady, false);
+  assert.equal(genericGoogleSearch.snapshot.publicLeadImportQueue.readyCount, 0);
+});
+
+test("public lead source matching accepts exact public platform hosts", () => {
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Maps Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "contact_form",
+    contactValue: "Google Maps public listing contact path",
+    sourceUrl: "https://maps.google.com/?q=Maps+Ready+Cafe+Miami",
+    recipientEmail: "",
+    evidence: "Google Maps listing has no website field, recent menu photos and a visible public contact path.",
+    painPoint: "Needs online menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Maps Ready Cafe has verified public no-website evidence from Google Maps.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+
+  assert.equal(result.candidate.importReady, true);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
 test("records verified public lead candidate batch without creating leads or outreach", () => {
   const result = recordRevenuePublicLeadCandidateBatch({
     area: "Miami",
@@ -1567,6 +1706,16 @@ test("launch readiness is ready to start with only email pending", () => {
   assert.equal(readiness.emailPending.isPending, true);
   assert.equal(readiness.emailPending.allowedWhilePending.includes("contact forms"), true);
   assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
+  assert.equal(readiness.todayExecutionPack.status, "ready");
+  assert.equal(readiness.todayExecutionPack.ownerAgent, "lead-scout");
+  assert.equal(readiness.todayExecutionPack.runLimits.maxPaidSpendUsd, 0);
+  assert.equal(readiness.todayExecutionPack.runLimits.maxMockups, 5);
+  assert.equal(readiness.todayExecutionPack.runLimits.maxManualContacts, 10);
+  assert.equal(readiness.todayExecutionPack.copyableBatchHeader.includes("business|area|niche"), true);
+  assert.equal(readiness.todayExecutionPack.nextApiAction, "/api/revenue-engine/money-sprint-preview");
+  assert.equal(readiness.todayExecutionPack.approvalRequiredBefore.includes("outreach send"), true);
+  assert.match(readiness.todayExecutionPack.copyableAgentCommand, /Do not contact businesses/);
+  assert.match(readiness.todayExecutionPack.copyableAgentCommand, /spend money/);
   assert.equal(readiness.summary.includes("solo falta configurar el correo"), true);
 });
 
@@ -1576,6 +1725,8 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.launchReadiness.status, "ready_to_start");
   assert.equal(snapshot.launchReadiness.blocked, 0);
   assert.equal(snapshot.launchReadiness.emailPending.isPending, true);
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.runLimits.maxPaidSpendUsd, 0);
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.approvalRequiredBefore.includes("deployment"), true);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
@@ -2845,7 +2996,9 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     publicDataVerified: true,
   });
 
-  assert.equal(duplicateHandoff.status, "created");
+  assert.equal(duplicateHandoff.status, "already_created");
+  assert.equal(duplicateHandoff.workspace?.id, handoff.workspace?.id);
+  assert.equal(duplicateHandoff.snapshot.recentDeliveryWorkspaces.length, 1);
   assert.equal(duplicateHandoff.snapshot.metrics.appsSold, 1);
   assert.equal(duplicateHandoff.snapshot.metrics.cashCollectedUsd, 2100);
 
