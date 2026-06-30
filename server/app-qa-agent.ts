@@ -48,6 +48,7 @@ export type AppQaRouteProbe = {
   path: string;
   label: string;
   expectedClicks: string[];
+  expectedControls?: string[];
   status: AppQaStatus;
   notes: string[];
 };
@@ -216,7 +217,14 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
   { path: "/code-agent", label: "Code Agent", expectedClicks: ["Leer archivo", "Guardar cambio"], status: "pass", notes: [] },
   { path: "/github-agent", label: "GitHub Agent", expectedClicks: ["Revisar repo"], status: "pass", notes: [] },
-  { path: "/revenue-engine", label: "Revenue Engine", expectedClicks: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"], status: "pass", notes: [] },
+  {
+    path: "/revenue-engine",
+    label: "Revenue Engine",
+    expectedClicks: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControls: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    status: "pass",
+    notes: [],
+  },
   { path: "/dropshipping-ceo", label: "Dropshipping CEO", expectedClicks: ["Ciclo diario", "Launch pack"], status: "pass", notes: [] },
   { path: "/marketing-command-center", label: "Marketing HQ", expectedClicks: ["Run day", "Review analytics"], status: "pass", notes: [] },
   { path: "/portfolio", label: "Portfolio", expectedClicks: ["Ver inversion", "Actualizar datos"], status: "pass", notes: [] },
@@ -834,6 +842,11 @@ function normalizeVisualText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function findMissingExpectedVisualControls(bodyText: string, expectedClicks: string[]): string[] {
+  const normalizedBody = normalizeVisualText(bodyText);
+  return expectedClicks.filter((click) => !normalizedBody.includes(normalizeVisualText(click)));
+}
+
 function isVisualAuthScreen(bodyText: string): boolean {
   const normalized = normalizeVisualText(bodyText);
   return normalized.includes("blackops ceo")
@@ -1190,6 +1203,11 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         if (consoleErrors.length) {
           status = "fail";
           notes.push(`${consoleErrors.length} errores de consola`);
+        }
+        const missingExpectedClicks = findMissingExpectedVisualControls(bodyText, route.expectedControls || []);
+        if (missingExpectedClicks.length) {
+          status = "fail";
+          notes.push(`Controles esperados no visibles: ${missingExpectedClicks.join(", ")}`);
         }
 
         const links = page.locator('a[href^="/"]');
@@ -1789,6 +1807,7 @@ export const __appQaAgentInternals = {
   emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  findMissingExpectedVisualControls,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,
   isVisualAuthScreen,
