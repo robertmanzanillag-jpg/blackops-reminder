@@ -6260,6 +6260,44 @@ test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", asy
   }
 });
 
+test("Metricool bridge evidence batch rejects credential URLs and mismatched active lane identity", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");
+  const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");
+  const previousSports = await readFile(sportsPath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesPath, "utf8").catch(() => null);
+
+  try {
+    await unlink(sportsPath).catch(() => undefined);
+    await unlink(memesPath).catch(() => undefined);
+    const raw = [
+      "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+      "sports-daily,tiktok,SPORT,6431687,https://viewer:secret@www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject profile URLs with embedded credentials.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://viewer:secret@drive.google.com/file/d/metricool-proof/view,Sport TikTok bridge must reject proof URLs with embedded credentials.",
+      "sports-daily,tiktok,WRONG,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject wrong Metricool brand names.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@someoneelse,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject profile URLs for a different handle.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/metricool-proof/view,Memes TikTok bridge connected in Metricool with redacted Drive proof reference.",
+    ].join("\n");
+
+    const { metricoolBridgeEvidenceBatch } = await previewClipperMetricoolBridgeEvidenceBatch({ raw });
+    assert.equal(metricoolBridgeEvidenceBatch.wouldWrite, false);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 5);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 4);
+    assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("real https URLs without token-like query params")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("metricool_brand_name must match active lane SPORT")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("profile_url must match active lane https://www.tiktok.com/@sportsdaily")));
+    assert.equal(await readFile(sportsPath, "utf8").catch(() => null), null);
+    assert.equal(await readFile(memesPath, "utf8").catch(() => null), null);
+  } finally {
+    if (previousSports === null) await unlink(sportsPath).catch(() => undefined);
+    else await writeFile(sportsPath, previousSports);
+    if (previousMemes === null) await unlink(memesPath).catch(() => undefined);
+    else await writeFile(memesPath, previousMemes);
+  }
+});
+
 test("previewClipperMetricoolBridgeEvidenceBatch validates rows without writing evidence", async () => {
   const beforeStatus = await getClipperStatus();
   const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");

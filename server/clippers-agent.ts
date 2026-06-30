@@ -28980,6 +28980,16 @@ const CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS = ["sports-daily", "meme-radar"];
 const CLIPPER_METRICOOL_TIKTOK_MVP_LANES = new Set(
   CLIPPER_METRICOOL_LAUNCH_ACCOUNT_IDS.map((accountId) => `${accountId}:tiktok`)
 );
+const CLIPPER_METRICOOL_TIKTOK_MVP_LANE_EXPECTATIONS: Record<string, { metricoolBrandName: string; profileUrl: string }> = {
+  "sports-daily:tiktok": {
+    metricoolBrandName: "SPORT",
+    profileUrl: "https://www.tiktok.com/@sportsdaily",
+  },
+  "meme-radar:tiktok": {
+    metricoolBrandName: "memes",
+    profileUrl: "https://www.tiktok.com/@memeradar",
+  },
+};
 
 interface MetricoolConnectedBrand {
   metricoolBrandId: string;
@@ -33075,10 +33085,29 @@ function metricoolBridgeString(record: Record<string, unknown>, keys: string[]):
   return "";
 }
 
+function isSafeMetricoolBridgeUrlObject(url: URL): boolean {
+  return url.protocol === "https:"
+    && !url.username
+    && !url.password
+    && !metricoolBridgeUnsafePattern.test(url.hostname)
+    && !metricoolBridgeUnsafeParamPattern.test(url.search);
+}
+
+function normalizeMetricoolBridgeCompareUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    if (url.pathname.endsWith("/") && url.pathname !== "/") url.pathname = url.pathname.slice(0, -1);
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
+}
+
 function isMetricoolBridgeUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !metricoolBridgeUnsafePattern.test(url.hostname) && !metricoolBridgeUnsafeParamPattern.test(url.search);
+    return isSafeMetricoolBridgeUrlObject(url);
   } catch {
     return false;
   }
@@ -33088,10 +33117,9 @@ function isTikTokProfileUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
-    return url.protocol === "https:"
+    return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com"))
-      && /^\/@[A-Za-z0-9._-]+\/?$/.test(url.pathname)
-      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+      && /^\/@[A-Za-z0-9._-]+\/?$/.test(url.pathname);
   } catch {
     return false;
   }
@@ -33101,9 +33129,9 @@ function isMetricoolProofUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
-    return url.protocol === "https:"
+    return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
-      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+      && !url.search;
   } catch {
     return false;
   }
@@ -33113,9 +33141,11 @@ function isGoogleMetricoolEvidenceProofUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
-    return url.protocol === "https:"
+    return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "drive.google.com" || hostname === "docs.google.com")
-      && !metricoolBridgeUnsafeParamPattern.test(url.search);
+      && !url.searchParams.has("access_token")
+      && !url.searchParams.has("auth")
+      && !url.searchParams.has("key");
   } catch {
     return false;
   }
@@ -33170,6 +33200,8 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Only active TikTok MVP lanes are accepted for Metricool bridge evidence right now." });
       continue;
     }
+    const laneKey = `${account.id}:${platform}`;
+    const expectedLane = CLIPPER_METRICOOL_TIKTOK_MVP_LANE_EXPECTATIONS[laneKey];
     if (!metricoolBrandName || !profileUrl || !proof || notesInput.length < 20) {
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "Missing metricool_brand_name, profile_url, proof, or 20+ character notes." });
       continue;
@@ -33184,6 +33216,14 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
     }
     if (!isTikTokProfileUrl(profileUrl)) {
       skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a public TikTok profile_url for the active lane." });
+      continue;
+    }
+    if (expectedLane && metricoolBrandName !== expectedLane.metricoolBrandName) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: `metricool_brand_name must match active lane ${expectedLane.metricoolBrandName}.` });
+      continue;
+    }
+    if (expectedLane && normalizeMetricoolBridgeCompareUrl(profileUrl) !== normalizeMetricoolBridgeCompareUrl(expectedLane.profileUrl)) {
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: `profile_url must match active lane ${expectedLane.profileUrl}.` });
       continue;
     }
     if (!isMetricoolConnectionProofUrl(proof)) {
