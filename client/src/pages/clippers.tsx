@@ -11813,6 +11813,7 @@ export default function ClippersPage() {
         tiktokMvpProofDoctor: ClipperTikTokMvpProofDoctorSummary;
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
         tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
         postImportApplyRuns: Record<string, unknown>;
         postImportApplyError: string;
       };
@@ -11826,6 +11827,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpProofHandoff) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
         title: data.postImportApplyError ? "Proof import aplicado con refresh pendiente" : "Proof import aplicado",
@@ -12006,6 +12010,7 @@ export default function ClippersPage() {
         operationalReadiness: ClipperOperationalReadinessSummary;
         tiktokMvpGoLivePacket: ClipperTikTokMvpGoLivePacketSummary | null;
         tiktokMvpReadinessVerifier: ClipperTikTokMvpReadinessVerifierSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
         postCloseoutApplyRuns: Record<string, unknown>;
         postCloseoutApplyError: string;
       };
@@ -12019,6 +12024,9 @@ export default function ClippersPage() {
       }
       if (data.tiktokMvpReadinessVerifier) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
         title: data.postCloseoutApplyError ? "TikTok MVP evidence aplicado con refresh pendiente" : "TikTok MVP evidence aplicado",

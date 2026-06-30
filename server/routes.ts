@@ -3487,6 +3487,7 @@ export async function registerRoutes(
         postImportApplyRuns.proofDoctorRun = await runClipperTikTokMvpProofDoctor();
         postImportApplyRuns.closeoutWizardRun = await runClipperTikTokMvpCloseoutWizard();
         postImportApplyRuns.proofHandoffRun = await runClipperTikTokMvpProofHandoff();
+        postImportApplyRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       } catch (refreshError: any) {
         postImportApplyError = refreshError.message || "Post-import apply refresh failed";
       }
@@ -3496,6 +3497,7 @@ export async function registerRoutes(
         tiktokMvpProofDoctor: await readClipperTikTokMvpProofDoctor(),
         tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
         tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
         postImportApplyRuns,
         postImportApplyError,
@@ -3739,6 +3741,7 @@ export async function registerRoutes(
         postCloseoutApplyRuns.auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
         postCloseoutApplyRuns.goLivePacketRun = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
         postCloseoutApplyRuns.readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
+        postCloseoutApplyRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       } catch (refreshError: any) {
         postCloseoutApplyError = refreshError.message || "Post-closeout apply refresh failed";
       }
@@ -3748,6 +3751,7 @@ export async function registerRoutes(
         operationalReadiness: await readClipperOperationalReadiness(),
         tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
         tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,
         postCloseoutApplyRuns,
         postCloseoutApplyError,
