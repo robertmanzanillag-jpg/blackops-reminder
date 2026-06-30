@@ -13,6 +13,9 @@ const mvpAccountEvidencePath = path.join(rootDir, "account-permission-mvp-accoun
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.csv");
+const outProofLinksPastePacketPath = path.join(reportsDir, "clippers-tiktok-external-closeout-proof-links-paste-packet.txt");
+const proofLinksFilledDropPath = path.join(rootDir, "proof-drop", "tiktok-mvp", "proof-links-paste-packet-filled.txt");
+const proofLinksJsonDropPath = path.join(rootDir, "proof-drop", "tiktok-mvp", "proof-links.json");
 
 async function readJson(filePath, fallback = {}) {
   const raw = await readFile(filePath, "utf8").catch(() => null);
@@ -113,9 +116,15 @@ function copyPacketFor(row) {
 
 function mvpProofTaskCsvRow(row, proofType) {
   if (proofType === "metricool_bridge") {
-    return `"${row.accountId}","tiktok","${row.metricoolBrandOrProfile || row.accountName || ""}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
+    return `"${row.accountId}","tiktok","${metricoolBrandNameFor(row)}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
   }
   return `"account","${row.accountId}","tiktok","verified","","","","","https://www.tiktok.com/signup","","<paste real public/non-secret ownership proof URL>","Replace with a real 20+ character note confirming the TikTok account ownership and safety setup."`;
+}
+
+function metricoolBrandNameFor(row) {
+  if (row.accountId === "sports-daily") return "SPORT";
+  if (row.accountId === "meme-radar") return "memes";
+  return row.metricoolBrandName || row.metricoolBrandOrProfile || row.accountName || "";
 }
 
 function activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) {
@@ -166,6 +175,28 @@ function activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) {
     });
 }
 
+function renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout) {
+  const rows = Array.isArray(tiktokMvpCloseout?.rows) ? tiktokMvpCloseout.rows : [];
+  const activeRows = rows.filter((row) => row.platform === "tiktok");
+  return [
+    "# TikTok MVP proof-links paste packet",
+    "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
+    "# Metricool proof URLs must be https://*.metricool.com/...",
+    "# Save the filled copy to clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt or paste it into the Proof Links Assistant.",
+    "",
+    ...activeRows.flatMap((row) => {
+      const key = `${row.accountId}:tiktok`;
+      return [
+        `${key}.accountOwnershipProofUrl=`,
+        `${key}.metricoolConnectionProofUrl=`,
+        `${key}.accountNotes=${row.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
+        `${key}.metricoolNotes=${metricoolBrandNameFor(row)} Metricool connection to ${row.handle} verified by Robert without secrets.`,
+        "",
+      ];
+    }),
+  ].join("\n");
+}
+
 function sortableNumber(value, fallback = 999) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -186,6 +217,16 @@ function renderMarkdown(summary) {
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## MVP Proof Links Paste Packet",
+    "",
+    `- Packet: ${summary.paths.proofLinksPastePacket}`,
+    `- Filled drop target: ${summary.paths.proofLinksFilledDrop}`,
+    `- Proof links JSON: ${summary.paths.proofLinksJsonDrop}`,
+    "",
+    "```text",
+    summary.proofLinksPastePacket || "",
+    "```",
     "",
     "## Tasks",
     "",
@@ -250,6 +291,7 @@ async function main() {
   );
   const metricoolMvpReady = accountReadiness.activeMvp?.status === "ready";
   const activeMvpProofRows = freshness.reportIsFresh ? activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) : [];
+  const proofLinksPastePacket = renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout);
   const repairQueue = freshness.reportIsFresh && Array.isArray(evidenceImport.repairQueue) ? evidenceImport.repairQueue : [];
   const coveredActiveMvpAccountRows = new Set(
     activeMvpProofRows
@@ -314,6 +356,9 @@ async function main() {
       tiktokMvpAccountCloseout: tiktokMvpAccountCloseoutPath,
       mvpAccountEvidence: mvpAccountEvidencePath,
       metricoolBridgeEvidence: metricoolBridgeEvidencePath,
+      proofLinksPastePacket: outProofLinksPastePacketPath,
+      proofLinksFilledDrop: proofLinksFilledDropPath,
+      proofLinksJsonDrop: proofLinksJsonDropPath,
     },
     source: {
       evidenceImportStatus: evidenceImport.status || "missing",
@@ -336,6 +381,19 @@ async function main() {
     tasks,
     activeTasks,
     deferredTasks,
+    proofLinksPastePacket,
+    proofLinksFlow: {
+      status: metricoolMvpReady ? "not_needed" : "needs_real_proof_links",
+      pastePacketPath: outProofLinksPastePacketPath,
+      filledDropPath: proofLinksFilledDropPath,
+      proofLinksJsonPath: proofLinksJsonDropPath,
+      nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse -> Save proof links -> Safe ingest drop.",
+      guardrails: [
+        "This packet is a template and does not save evidence by itself.",
+        "Metricool URLs must be real HTTPS metricool.com URLs.",
+        "Ownership proof URLs must be safe HTTPS URLs without token, signature, session, or expiry query params.",
+      ],
+    },
     guardrails: [
       "TikTok is first because the current operating mode is TikTok through Metricool.",
       "Direct TikTok API developer apps and posting scopes are deferred while Metricool is the publisher.",
@@ -354,6 +412,7 @@ async function main() {
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCsvPath, renderCsv(summary));
+  await writeFile(outProofLinksPastePacketPath, proofLinksPastePacket);
   console.log(JSON.stringify({
     status: summary.status,
     tiktokTasks: summary.totals.tiktokTasks,

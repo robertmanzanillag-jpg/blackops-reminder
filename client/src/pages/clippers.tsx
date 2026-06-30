@@ -3059,6 +3059,9 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
     tiktokMvpAccountCloseout?: string;
     mvpAccountEvidence?: string;
     metricoolBridgeEvidence?: string;
+    proofLinksPastePacket?: string;
+    proofLinksFilledDrop?: string;
+    proofLinksJsonDrop?: string;
   };
   source: {
     evidenceImportStatus: string;
@@ -3108,6 +3111,15 @@ interface ClipperTikTokExternalCloseoutSessionSummary {
   }>;
   activeTasks?: ClipperTikTokExternalCloseoutSessionSummary["tasks"];
   deferredTasks?: ClipperTikTokExternalCloseoutSessionSummary["tasks"];
+  proofLinksPastePacket?: string;
+  proofLinksFlow?: {
+    status: "needs_real_proof_links" | "not_needed" | string;
+    pastePacketPath: string;
+    filledDropPath: string;
+    proofLinksJsonPath: string;
+    nextStep: string;
+    guardrails: string[];
+  };
   guardrails: string[];
   nextStep: string;
 }
@@ -26826,6 +26838,18 @@ export default function ClippersPage() {
                           {tiktokExternalCloseoutSessionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                           TikTok session
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyExternalCloseoutPacket(tiktokExternalCloseoutSession?.proofLinksPastePacket || "")}
+                          disabled={!tiktokExternalCloseoutSession?.proofLinksPastePacket}
+                          className="border-cyan-300/25 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                          data-testid="copy-clippers-tiktok-mvp-proof-links-packet-button"
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copy proof links
+                        </Button>
                         <Badge className="w-fit border border-emerald-300/30 bg-emerald-300/10 text-emerald-100">
                           {tiktokExternalCloseoutSession?.totals.activeTasks ?? tiktokExternalCloseoutSession?.totals.tiktokTasks ?? 0} active now
                         </Badge>
@@ -26854,6 +26878,14 @@ export default function ClippersPage() {
                           <p>Apps: {tiktokExternalCloseoutSession.totals.developerApp}</p>
                           <p>Permissions: {tiktokExternalCloseoutSession.totals.permission}</p>
                         </div>
+                        {tiktokExternalCloseoutSession.proofLinksFlow && (
+                          <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-2 text-[11px] leading-4 text-cyan-100/80" data-testid="clippers-tiktok-external-proof-links-flow">
+                            <p>Proof links: {tiktokExternalCloseoutSession.proofLinksFlow.status}</p>
+                            <p className="mt-1">{tiktokExternalCloseoutSession.proofLinksFlow.nextStep}</p>
+                            <p className="mt-1 break-all">Packet: {tiktokExternalCloseoutSession.paths.proofLinksPastePacket}</p>
+                            <p className="mt-1 break-all">Filled drop: {tiktokExternalCloseoutSession.paths.proofLinksFilledDrop}</p>
+                          </div>
+                        )}
                         <div className="mt-3 grid gap-2 xl:grid-cols-2">
                           {tiktokExternalCloseoutSession.tasks.slice(0, 4).map((task) => (
                             <div key={task.closeoutId} className={cn(

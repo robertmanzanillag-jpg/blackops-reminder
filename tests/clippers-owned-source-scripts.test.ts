@@ -1097,12 +1097,23 @@ test("TikTok external closeout session surfaces active Metricool MVP proof block
   assert.match(session.tasks[0].copyPacket, /Do not paste passwords/);
   assert.match(session.tasks[0].csvRowTemplate, /sports-daily/);
   assert.equal(/client_secret=|access_token=|refresh_token=|bearer\s+[a-z0-9._-]+/i.test(session.tasks.map((task) => task.csvRowTemplate).join("\n")), false);
+  assert.equal(session.proofLinksFlow.status, "needs_real_proof_links");
+  assert.match(session.paths.proofLinksPastePacket, /clippers-tiktok-external-closeout-proof-links-paste-packet\.txt$/);
+  assert.match(session.paths.proofLinksFilledDrop, /proof-links-paste-packet-filled\.txt$/);
+  assert.match(session.proofLinksPastePacket, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(session.proofLinksPastePacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(session.proofLinksPastePacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(session.proofLinksPastePacket, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.doesNotMatch(session.proofLinksPastePacket, /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
   assert.match(session.nextStep, /account-proof:sports-daily:tiktok/);
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-tiktok-external-closeout-session.md"), "utf8");
   assert.match(markdown, /Clippers TikTok External Closeout Session/);
   assert.match(markdown, /account-proof:sports-daily:tiktok/);
   assert.match(markdown, /metricool-bridge-proof:sports-daily:tiktok/);
+  assert.match(markdown, /MVP Proof Links Paste Packet/);
+  const pastePacket = await readFile(path.join(rootDir, "reports/clippers-tiktok-external-closeout-proof-links-paste-packet.txt"), "utf8");
+  assert.equal(pastePacket, session.proofLinksPastePacket);
 });
 
 test("TikTok external closeout session blocks stale evidence import reports", async () => {
@@ -2113,12 +2124,16 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-tiktok-external-closeout-session"'));
   assert.ok(page.includes('data-testid="prepare-clippers-tiktok-external-closeout-session-button"'));
   assert.ok(page.includes('data-testid="copy-clippers-tiktok-external-task-button"'));
+  assert.ok(page.includes('data-testid="copy-clippers-tiktok-mvp-proof-links-packet-button"'));
+  assert.ok(page.includes('data-testid="clippers-tiktok-external-proof-links-flow"'));
   assert.ok(page.includes('queryKey: ["/api/clippers/tiktok-external-closeout-session"]'));
   assert.ok(page.includes('/api/clippers/prepare-tiktok-external-closeout-session'));
   assert.ok(page.includes("Bridge:"));
   assert.ok(page.includes("totals.metricoolBridge"));
   assert.ok(page.includes("Proof type:"));
   assert.ok(page.includes("task.proofType"));
+  assert.ok(page.includes("proofLinksPastePacket"));
+  assert.ok(page.includes("proofLinksFlow"));
   assert.ok(page.includes("priorityPolicy"));
   assert.ok(page.includes("priorityLabel"));
   assert.ok(page.includes("Active first:"));
