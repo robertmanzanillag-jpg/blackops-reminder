@@ -485,6 +485,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-mvp-readiness-verifier\.mjs/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpGoLivePacket/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpReadinessVerifier/);
+  assert.match(proofLinksSaveHelper, /buildClipperMetricoolBridgeEvidenceCsvStatus/);
+  assert.match(proofLinksSaveHelper, /metricoolBridgeEvidenceCsvStatus/);
   assert.doesNotMatch(proofLinksRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(importPreviewRoute, /runClipperTikTokMvpProofIntakeImport\(false\)/);
   assert.doesNotMatch(importPreviewRoute, /x-clippers-operator-confirm|runClipperTikTokMvpProofIntakeImport\(true\)|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness/);
@@ -658,6 +660,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpProofDropKitMutation\.isPending/);
   assert.match(page, /tiktokMvpProofLinksPreviewMutation\.isPending/);
   assert.match(page, /tiktokMvpProofLinksSaveMutation\.isPending/);
+  assert.match(page, /\["\/api\/clippers\/metricool-bridge-evidence-csv-status"\], data\.metricoolBridgeEvidenceCsvStatus/);
   assert.match(page, /tiktokMvpProofHandoffMutation\.isPending/);
   assert.match(page, /tiktokMvpProofRefreshMutation\.isPending/);
   assert.match(page, /tiktokMvpProofUnblockerMutation\.isPending/);

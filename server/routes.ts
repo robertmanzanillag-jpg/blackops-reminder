@@ -814,6 +814,7 @@ export async function registerRoutes(
       tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
       tiktokMvpGoLivePacket: await readClipperTikTokMvpGoLivePacket().catch(() => null),
       tiktokMvpReadinessVerifier: await readClipperTikTokMvpReadinessVerifier().catch(() => null),
+      metricoolBridgeEvidenceCsvStatus: await buildClipperMetricoolBridgeEvidenceCsvStatus().catch(() => null),
       proofDropRun,
       quickFillRun,
       importPreviewRun,
