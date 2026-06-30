@@ -482,6 +482,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-gates/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-collection-packets/);
+  assert.match(page, /paths\.pastePacketTxt/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-panel/);
   assert.match(page, /clippers-tiktok-mvp-local-verification-commands/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);
@@ -1236,6 +1237,7 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /metricoolConnectionProofUrl/);
   assert.match(source, /proofPacketsNeeded/);
   assert.match(source, /proof-handoff-collection-packets\.csv/);
+  assert.match(source, /proof-links-paste-packet\.txt/);
   assert.match(source, /renderCollectionCsv/);
   assert.match(source, /Must be a real HTTPS metricool\.com URL/);
   assert.match(source, /signed\/temporary URLs/);
@@ -1261,6 +1263,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
   assert.match(output.collectionCsvPath, /proof-handoff-collection-packets\.csv$/);
+  assert.match(output.pastePacketPath, /proof-links-paste-packet\.txt$/);
   assert.equal(output.proofPacketsNeeded, 4);
 
   const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-handoff-collection-packets.csv"), "utf8");
@@ -1272,6 +1275,14 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(csv, /signed\/temporary URLs/);
   assert.match(csv, /x-amz\/signature\/expires query params/);
   assert.doesNotMatch(csv, /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i);
+
+  const pastePacket = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-paste-packet.txt"), "utf8");
+  assert.match(pastePacket, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(pastePacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(pastePacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
+  assert.match(pastePacket, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com/);
+  assert.doesNotMatch(pastePacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 });
 
 test("TikTok MVP proof drop kit prepares local inventory without applying evidence", async () => {

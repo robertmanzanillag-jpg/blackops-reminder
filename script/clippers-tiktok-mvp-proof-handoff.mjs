@@ -7,6 +7,7 @@ const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
+const outPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
 
 const lanes = [
   {
@@ -201,6 +202,22 @@ function renderCollectionCsv(packets) {
   ].join("\n");
 }
 
+function renderProofLinksPastePacket() {
+  return [
+    "# TikTok MVP proof-links paste packet",
+    "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
+    "# Metricool proof URLs must be https://*.metricool.com/...",
+    "",
+    ...lanes.flatMap((lane) => [
+      `${lane.key}.accountOwnershipProofUrl=`,
+      `${lane.key}.metricoolConnectionProofUrl=`,
+      `${lane.key}.accountNotes=${lane.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
+      `${lane.key}.metricoolNotes=${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      "",
+    ]),
+  ].join("\n");
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Handoff",
@@ -226,6 +243,11 @@ function renderMarkdown(summary) {
       `- Copy: ${packet.copyPrompt}`,
       "",
     ].join("\n")),
+    "## Paste Packet",
+    "",
+    `- Proof links paste packet: ${summary.paths.pastePacketTxt}`,
+    "- Paste this packet into the app paste assistant after filling real proof URLs.",
+    "",
     "## Guardrails",
     "",
     ...summary.guardrails.map((item) => `- ${item}`),
@@ -296,6 +318,7 @@ async function main() {
       json: outJsonPath,
       markdown: outMarkdownPath,
       collectionCsv: outCollectionCsvPath,
+      pastePacketTxt: outPastePacketPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
       importJson: path.join(reportsDir, "proof-intake-import.json"),
@@ -313,6 +336,7 @@ async function main() {
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
+  await writeFile(outPastePacketPath, renderProofLinksPastePacket());
   console.log(JSON.stringify({
     status: summary.status,
     nextButton: summary.nextButton,
@@ -323,6 +347,7 @@ async function main() {
     proofPacketsNeeded: summary.totals.proofPacketsNeeded,
     reportJsonPath: outJsonPath,
     collectionCsvPath: outCollectionCsvPath,
+    pastePacketPath: outPastePacketPath,
     nextAction: summary.nextAction,
   }, null, 2));
 }

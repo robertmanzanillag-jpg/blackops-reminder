@@ -2460,6 +2460,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
     json: string;
     markdown: string;
     collectionCsv: string;
+    pastePacketTxt: string;
     proofDropJson: string;
     quickFillJson: string;
     importJson: string;
@@ -17712,6 +17713,7 @@ export default function ClippersPage() {
                   <p>Direct APIs: {tiktokMvpProofHandoff.directSocialApisRequired ? "required" : "not required"}</p>
                   <p className="break-all">Report: {tiktokMvpProofHandoff.paths.markdown}</p>
                   <p className="break-all">Collection CSV: {tiktokMvpProofHandoff.paths.collectionCsv}</p>
+                  <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
                 </div>
               </div>
             )}
