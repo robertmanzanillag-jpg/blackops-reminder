@@ -13,6 +13,7 @@ const goalAuditPath = path.join(reportsDir, "clippers-goal-completion-audit.json
 const launchControlPath = path.join(reportsDir, "clippers-tiktok-launch-control.json");
 const mvpReadinessVerifierPath = path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json");
 const externalCloseoutSessionPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
+const proofDoctorPath = path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-doctor.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-next-action.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-next-action.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-next-action.csv");
@@ -160,6 +161,15 @@ function taskRowsFor(summary) {
       nextAction: summary.externalCloseout.nextStep || "Record real non-secret account and Metricool proof before scheduling.",
     });
   }
+  if ((summary.proofDoctor?.fixQueue || 0) > 0) {
+    rows.splice(3, 0, {
+      id: "proof_doctor_fix_queue",
+      label: "Proof doctor fixes",
+      status: "blocked",
+      evidence: `${summary.proofDoctor.ready}/${summary.proofDoctor.lanes} lanes ready; ${summary.proofDoctor.fixQueue} fixes`,
+      nextAction: summary.proofDoctor.nextStep || "Fix proof doctor queue before scheduling in Metricool.",
+    });
+  }
   return rows;
 }
 
@@ -185,6 +195,36 @@ function externalCloseoutFor(session = {}) {
     proofLinksFlowStatus: session.proofLinksFlow?.status || "missing",
     proofLinksPacket: session.paths?.proofLinksPastePacket || session.proofLinksFlow?.pastePacketPath || "",
     nextStep: session.nextStep || firstActiveTask?.nextAction || "",
+  };
+}
+
+function proofDoctorFor(report = {}) {
+  const fixQueue = Array.isArray(report.fixQueue) ? report.fixQueue : [];
+  const firstFix = fixQueue[0] || null;
+  return {
+    status: report.status || "missing",
+    lanes: Number(report.totals?.lanes || 0),
+    ready: Number(report.totals?.ready || 0),
+    blocked: Number(report.totals?.blocked || 0),
+    rejected: Number(report.totals?.rejected || 0),
+    fixQueue: Number(report.totals?.fixQueue ?? fixQueue.length ?? 0),
+    firstFix: firstFix ? {
+      lane: firstFix.lane || "",
+      source: firstFix.source || "",
+      filePath: firstFix.filePath || "",
+      row: firstFix.row || "",
+      column: firstFix.column || "",
+      requiredValue: firstFix.requiredValue || "",
+      nextAction: firstFix.nextAction || "",
+    } : null,
+    paths: {
+      markdown: report.paths?.markdown || "",
+      fixQueueCsv: report.paths?.fixQueueCsv || "",
+      accountCsv: report.paths?.accountCsv || "",
+      bridgeCsv: report.paths?.bridgeCsv || "",
+      proofLinksFilledDrop: report.paths?.proofLinksFilledDrop || "",
+    },
+    nextStep: report.nextStep || "",
   };
 }
 
@@ -320,6 +360,17 @@ function renderMarkdown(summary) {
     ...(summary.externalCloseout.deferredTaskIds || []).map((id) => `- Deferred: ${id}`),
     "",
   ] : [];
+  const proofDoctorLines = summary.proofDoctor?.status ? [
+    "## Proof Doctor",
+    "",
+    `- Status: ${summary.proofDoctor.status}`,
+    `- Ready lanes: ${summary.proofDoctor.ready}/${summary.proofDoctor.lanes}`,
+    `- Fix queue: ${summary.proofDoctor.fixQueue}`,
+    `- First fix: ${summary.proofDoctor.firstFix ? `${summary.proofDoctor.firstFix.lane} ${summary.proofDoctor.firstFix.source}` : "none"}`,
+    `- Fix queue CSV: ${summary.proofDoctor.paths.fixQueueCsv || "missing"}`,
+    `- Next step: ${summary.proofDoctor.nextStep || "missing"}`,
+    "",
+  ] : [];
   return [
     "# TikTok Metricool Next Action",
     "",
@@ -354,6 +405,7 @@ function renderMarkdown(summary) {
     ].join("\n")),
     ...proofBridgeLines,
     ...externalCloseoutLines,
+    ...proofDoctorLines,
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -395,6 +447,7 @@ async function main() {
     launchControl,
     mvpReadinessVerifier,
     externalCloseoutSession,
+    proofDoctor,
   ] = await Promise.all([
     readJson(accountReadinessPath, {}),
     readJson(approvalRunPath, {}),
@@ -405,6 +458,7 @@ async function main() {
     readJson(launchControlPath, {}),
     readJson(mvpReadinessVerifierPath, {}),
     readJson(externalCloseoutSessionPath, {}),
+    readJson(proofDoctorPath, {}),
   ]);
   const accountCloseout = accountReadiness.tiktokMvpAccountCloseout || {};
   const accountReadyLanes = accountCloseout.totals?.ready || 0;
@@ -429,6 +483,7 @@ async function main() {
       launchControl: launchControlPath,
       mvpReadinessVerifier: mvpReadinessVerifierPath,
       externalCloseoutSession: externalCloseoutSessionPath,
+      proofDoctor: proofDoctorPath,
     },
     account: {
       ready: accountCloseout.status === "ready_for_metricool_tiktok" && accountReadyLanes === accountTotalLanes && accountTotalLanes > 0,
@@ -476,6 +531,7 @@ async function main() {
       ? externalCloseoutSession.proofLinksFlow.checklist
       : [],
     externalCloseout: externalCloseoutFor(externalCloseoutSession),
+    proofDoctor: proofDoctorFor(proofDoctor),
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",

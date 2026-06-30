@@ -2966,6 +2966,9 @@ export async function registerRoutes(
       await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
       await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
       await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      await runClipperTikTokExternalCloseoutSession();
+      await runClipperTikTokMvpProofDoctor();
+      await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
       await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       const tiktokNextAction = await readClipperTikTokNextAction();
@@ -4413,6 +4416,9 @@ export async function registerRoutes(
       const checklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
       const postScheduleVerifierRun = await runClipperJsonScript("script/clippers-tiktok-post-schedule-verifier.mjs", "TikTok post-schedule verifier");
       const closeoutRun = await runClipperJsonScript("script/clippers-tiktok-batch-closeout-verifier.mjs", "TikTok batch closeout verifier");
+      const externalCloseoutSessionRun = await runClipperTikTokExternalCloseoutSession();
+      const proofDoctorRun = await runClipperTikTokMvpProofDoctor();
+      const readinessVerifierRun = await runClipperJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier");
       const goalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
       const run = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       const tiktokNextAction = await readClipperTikTokNextAction();
@@ -4420,7 +4426,7 @@ export async function registerRoutes(
       const tiktokPostScheduleVerifier = await readClipperTikTokPostScheduleVerifier();
       const tiktokBatchCloseoutVerifier = await readClipperTikTokBatchCloseoutVerifier();
       const goalCompletionAudit = await readClipperGoalCompletionAudit();
-      res.json({ tiktokNextAction, accountPermissionReadiness, tiktokPostScheduleVerifier, tiktokBatchCloseoutVerifier, goalCompletionAudit, run, accountRun, trackerRun, checklistRun, postScheduleVerifierRun, closeoutRun, goalAuditRun });
+      res.json({ tiktokNextAction, accountPermissionReadiness, tiktokPostScheduleVerifier, tiktokBatchCloseoutVerifier, goalCompletionAudit, run, accountRun, trackerRun, checklistRun, postScheduleVerifierRun, closeoutRun, externalCloseoutSessionRun, proofDoctorRun, readinessVerifierRun, goalAuditRun });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to prepare clippers TikTok next action" });
     }

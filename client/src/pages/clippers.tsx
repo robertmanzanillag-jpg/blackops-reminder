@@ -1105,6 +1105,31 @@ interface ClipperTikTokNextActionSummary {
     proofLinksPacket: string;
     nextStep: string;
   };
+  proofDoctor?: {
+    status: string;
+    lanes: number;
+    ready: number;
+    blocked: number;
+    rejected: number;
+    fixQueue: number;
+    firstFix: {
+      lane: string;
+      source: string;
+      filePath: string;
+      row: string | number;
+      column: string;
+      requiredValue: string;
+      nextAction: string;
+    } | null;
+    paths: {
+      markdown: string;
+      fixQueueCsv: string;
+      accountCsv: string;
+      bridgeCsv: string;
+      proofLinksFilledDrop: string;
+    };
+    nextStep: string;
+  };
   tasks: Array<{
     id: string;
     label: string;
@@ -20188,6 +20213,36 @@ export default function ClippersPage() {
                         Deferred direct API/backlog: {tiktokNextAction.externalCloseout.deferredTaskIds.slice(0, 4).join(", ")}
                       </p>
                     )}
+                  </div>
+                )}
+                {tiktokNextAction.proofDoctor && tiktokNextAction.proofDoctor.fixQueue > 0 && (
+                  <div
+                    className="mt-3 rounded-md border border-orange-300/15 bg-orange-950/10 p-3"
+                    data-testid="clippers-tiktok-next-action-proof-doctor"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-orange-300/25 bg-orange-300/10 text-orange-100">
+                        proof doctor {tiktokNextAction.proofDoctor.status}
+                      </Badge>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.proofDoctor.ready)}/{formatNumber(tiktokNextAction.proofDoctor.lanes)} ready
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.proofDoctor.fixQueue)} fixes
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-orange-50/80">{tiktokNextAction.proofDoctor.nextStep}</p>
+                    {tiktokNextAction.proofDoctor.firstFix && (
+                      <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                        <p>{tiktokNextAction.proofDoctor.firstFix.lane} / {tiktokNextAction.proofDoctor.firstFix.source}</p>
+                        <p>Row {tiktokNextAction.proofDoctor.firstFix.row}, column {tiktokNextAction.proofDoctor.firstFix.column}: {tiktokNextAction.proofDoctor.firstFix.requiredValue}</p>
+                        <p>{tiktokNextAction.proofDoctor.firstFix.nextAction}</p>
+                        <p className="break-all">File: {tiktokNextAction.proofDoctor.firstFix.filePath}</p>
+                      </div>
+                    )}
+                    <p className="mt-2 break-all text-[11px] leading-4 text-zinc-500">
+                      Fix queue: {tiktokNextAction.proofDoctor.paths.fixQueueCsv || "missing"}
+                    </p>
                   </div>
                 )}
               </div>
