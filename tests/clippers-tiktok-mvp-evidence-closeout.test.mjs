@@ -456,6 +456,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-local-verification-commands/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-steps/);
+  assert.match(page, /clippers-tiktok-mvp-operator-session/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-textarea/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-import-panel/);
@@ -1126,6 +1127,9 @@ test("TikTok MVP closeout wizard consolidates gates without applying evidence", 
   assert.match(source, /Apply closeout remains separately guarded by the operator confirmation header/);
   assert.match(source, /closeout-apply-gate\.csv/);
   assert.match(source, /renderApplyGateCsv/);
+  assert.match(source, /buildOperatorSession/);
+  assert.match(source, /TikTok MVP operator session/);
+  assert.match(source, /preview_or_save_proof_links/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
   assert.doesNotMatch(source, /video\.publish/);
@@ -1144,6 +1148,12 @@ test("TikTok MVP closeout wizard writes an apply gate CSV without applying", asy
   const output = JSON.parse(result.stdout);
   assert.match(output.applyGateCsvPath, /closeout-apply-gate\.csv$/);
   assert.notEqual(output.status, "ready_to_send");
+
+  const wizard = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/closeout-wizard.json"), "utf8"));
+  assert.equal(wizard.operatorSession.status, "blocked_operator_session");
+  assert.equal(wizard.operatorSession.nextGateId, "proof_drop_links");
+  assert.match(wizard.operatorSession.copyPacket, /Metricool approval_required/);
+  assert.doesNotMatch(wizard.operatorSession.copyPacket, /ready_to_send|realPublishEnabled=true|video\.publish/i);
 
   const csv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/closeout-apply-gate.csv"), "utf8");
   assert.match(csv, /proof_drop_links/);

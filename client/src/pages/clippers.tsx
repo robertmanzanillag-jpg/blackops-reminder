@@ -2451,6 +2451,14 @@ interface ClipperTikTokMvpCloseoutWizardSummary {
     localVerificationJson: string;
     applyGateCsv: string;
   };
+  operatorSession?: {
+    status: "ready_for_operator_apply_review" | "blocked_operator_session";
+    nextGateId: string;
+    nextAction: string;
+    recommendedButton: string;
+    steps: string[];
+    copyPacket: string;
+  };
   guardrails: string[];
   nextStep: string;
 }
@@ -17403,6 +17411,17 @@ export default function ClippersPage() {
                   <p className="break-all">Apply gate CSV: {tiktokMvpCloseoutWizard.paths.applyGateCsv}</p>
                   <p>Real publish: {tiktokMvpCloseoutWizard.realPublishEnabled ? "enabled" : "disabled"}</p>
                 </div>
+                {tiktokMvpCloseoutWizard.operatorSession && (
+                  <div className="mt-2 rounded-md border border-emerald-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-operator-session">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-[10px] text-emerald-100">operator {tiktokMvpCloseoutWizard.operatorSession.status}</Badge>
+                      <span>next gate {tiktokMvpCloseoutWizard.operatorSession.nextGateId || "none"}</span>
+                      <span>button {tiktokMvpCloseoutWizard.operatorSession.recommendedButton}</span>
+                    </div>
+                    <p className="mt-1 text-emerald-100/80">{tiktokMvpCloseoutWizard.operatorSession.nextAction}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-zinc-500">{tiktokMvpCloseoutWizard.operatorSession.copyPacket}</p>
+                  </div>
+                )}
               </div>
             )}
             {tiktokMvpProofHandoff && (

@@ -186,6 +186,37 @@ function renderApplyGateCsv(summary) {
   ].join("\n");
 }
 
+function buildOperatorSession(summary) {
+  const nextGate = firstBlocked(summary.steps);
+  const readyForApply = summary.status === "ready_for_operator_apply_review";
+  const action = readyForApply
+    ? "Human review can run guarded apply only after confirming every proof URL is real and non-secret."
+    : nextGate?.nextAction || summary.nextStep;
+  const steps = [
+    "Open Proof handoff and review collection packets.",
+    "Paste real non-secret SPORT/memes TikTok and Metricool proof links.",
+    "Run Preview links before saving.",
+    "Save proof links only after preview has no blockers.",
+    "Run Proof handoff, Import preview, Preview closeout, and Local verify.",
+    "Apply only when closeout/apply gate says ready and operator confirmation is intentional.",
+  ];
+  return {
+    status: readyForApply ? "ready_for_operator_apply_review" : "blocked_operator_session",
+    nextGateId: nextGate?.id || "",
+    nextAction: action,
+    recommendedButton: readyForApply ? "apply_closeout_with_confirmation" : nextGate?.id === "proof_drop_links" ? "preview_or_save_proof_links" : nextGate?.id || "closeout_wizard",
+    steps,
+    copyPacket: [
+      "TikTok MVP operator session",
+      `Status: ${summary.status}`,
+      `Next gate: ${nextGate?.id || "none"}`,
+      `Action: ${action}`,
+      `Apply gate CSV: ${summary.paths.applyGateCsv}`,
+      "Guardrails: no auto publish, no direct social APIs, Metricool approval_required, no applied evidence unless guarded apply is intentionally confirmed.",
+    ].join("\n"),
+  };
+}
+
 function htmlEscape(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -265,6 +296,7 @@ async function main() {
     ],
     nextStep: blocker?.nextAction || "Run Apply closeout only after human review confirms the ready_to_apply preview.",
   };
+  summary.operatorSession = buildOperatorSession(summary);
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
