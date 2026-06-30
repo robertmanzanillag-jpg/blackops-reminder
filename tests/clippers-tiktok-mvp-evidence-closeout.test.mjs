@@ -536,15 +536,25 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.equal(pack.totals.lanes, 2);
   assert.equal(pack.paths.targetAccountCsv.endsWith("account-permission-mvp-account-evidence.csv"), true);
   assert.equal(pack.paths.targetBridgeCsv.endsWith("scheduled/metricool-tiktok-bridge-evidence.csv"), true);
+  assert.ok(pack.lanes.every((lane) => lane.evidenceQuality));
+  assert.ok(pack.lanes.some((lane) =>
+    lane.accountId === "sports-daily"
+    && lane.evidenceQuality.issues.some((issue) => issue.includes("accountProofUrl"))
+  ));
 
   const accountTemplate = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/account-evidence-template.csv"), "utf8");
   const bridgeTemplate = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/metricool-bridge-evidence-template.csv"), "utf8");
+  const markdown = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-pack.md"), "utf8");
   const html = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-pack.html"), "utf8");
   assert.match(accountTemplate, /<paste real public ownership proof URL for @sportsdaily>/);
   assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar>/);
   assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
   assert.match(bridgeTemplate, /<paste real public Metricool proof URL for memes @memeradar>/);
-  assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}\n${html}`, /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
+  assert.match(markdown, /Evidence quality:/);
+  assert.match(markdown, /Current blocker: .*accountProofUrl/);
+  assert.match(html, /Evidence quality:/);
+  assert.match(html, /accountProofUrl/);
+  assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}\n${markdown}\n${html}`, /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
   assert.match(html, /This guide does not publish or schedule posts/);
 });
 

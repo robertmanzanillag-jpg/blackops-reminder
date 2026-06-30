@@ -163,6 +163,10 @@ function renderMarkdown(summary) {
       `- Handle: ${lane.handle}`,
       `- Public profile URL: ${lane.profileUrl}`,
       `- Metricool brand: ${lane.metricoolBrandName}`,
+      `- Evidence quality: ${lane.evidenceQuality?.status || "unknown"}`,
+      ...((lane.evidenceQuality?.issues || []).length
+        ? lane.evidenceQuality.issues.map((issue) => `- Current blocker: ${issue}`)
+        : ["- Current blockers: none"]),
       `- Account proof: replace the Drive placeholder with a real public/non-secret ownership or security proof URL.`,
       `- Metricool proof: replace the Metricool placeholder with a real public/non-secret Metricool proof URL.`,
       "",
@@ -213,6 +217,8 @@ function renderHtml(summary, accountCsv, bridgeCsv, combinedCsv) {
         <p>Handle: <code>${htmlEscape(lane.handle)}</code></p>
         <p>Profile: <code>${htmlEscape(lane.profileUrl)}</code></p>
         <p>Metricool brand: <code>${htmlEscape(lane.metricoolBrandName)}</code></p>
+        <p>Evidence quality: <code>${htmlEscape(lane.evidenceQuality?.status || "unknown")}</code></p>
+        ${(lane.evidenceQuality?.issues || []).length ? `<ul>${lane.evidenceQuality.issues.map((issue) => `<li>${htmlEscape(issue)}</li>`).join("")}</ul>` : "<p>No current evidence blockers.</p>"}
       </div>`).join("")}
     </section>
     <section>
@@ -243,7 +249,26 @@ async function main() {
   await mkdir(intakeDir, { recursive: true });
   const closeoutRun = runJsonScript(["script/clippers-tiktok-mvp-evidence-closeout.mjs"], {});
   const readinessRun = runJsonScript(["script/clippers-account-permission-readiness.mjs"], {});
+  const readiness = await readJson(path.join(rootDir, "account-permission-readiness.json"), {});
   const closeout = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"), {});
+  const closeoutRows = Array.isArray(readiness?.tiktokMvpAccountCloseout?.rows) ? readiness.tiktokMvpAccountCloseout.rows : [];
+  const laneSummaries = lanes.map((lane) => {
+    const closeoutRow = closeoutRows.find((row) => row.accountId === lane.accountId && row.platform === lane.platform) || {};
+    return {
+      ...lane,
+      currentStatus: closeoutRow.status || "unknown",
+      evidenceQuality: closeoutRow.evidenceQuality || {
+        status: "missing",
+        issues: [
+          `missing verified account evidence file with exact profileUrl ${lane.profileUrl}`,
+          "missing safe HTTPS accountProofUrl ownership/security proof",
+          "missing safe HTTPS metricoolProofUrl connection proof",
+        ],
+      },
+      blockers: closeoutRow.blockers || [],
+      evidencePath: closeoutRow.evidencePath || "",
+    };
+  });
   const accountCsv = renderAccountCsv();
   const bridgeCsv = renderBridgeCsv();
   const combinedCsv = renderCombinedCsv();
@@ -274,7 +299,7 @@ async function main() {
     },
     currentReadiness: readinessRun,
     closeoutPreview: closeoutRun,
-    lanes,
+    lanes: laneSummaries,
     guardrails: [
       "Do not paste passwords, cookies, access tokens, recovery codes, private keys, or private screenshots.",
       "Use only public/non-secret proof URLs and 20+ character notes.",
