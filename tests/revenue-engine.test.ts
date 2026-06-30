@@ -1764,7 +1764,7 @@ test("records sold apps and automations into revenue metrics", () => {
     amountUsd: 6000,
     cashCollectedUsd: 3000,
     estimatedInternalCostUsd: 64,
-    notes: "Website 3D Premium + Automation Sprint",
+    notes: "Website 3D Premium + Automation Sprint | Stripe pi_blackroom_3000",
   });
   const snapshot = getRevenueEngineSnapshot();
 
@@ -1780,6 +1780,52 @@ test("records sold apps and automations into revenue metrics", () => {
   assert.equal(snapshot.executiveSummary.cashCollectedUsd, 3000);
   assert.equal(snapshot.executiveSummary.status, "ready");
   assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "closed" && stage.count === 1 && stage.valueUsd === 6000), true);
+});
+
+test("blocks ledger income cash without verifiable payment evidence", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Weak Cash Claim",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Deposit collected",
+  });
+
+  assert.equal(result.entry, null);
+  assert.equal(result.guardrail.status, "blocked");
+  assert.match(result.guardrail.reason, /comprobante verificable/);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(result.snapshot.metrics.revenueUsd, 0);
+  assert.equal(result.snapshot.profitGuard.status, "collect_first");
+
+  const bareStripePrefix = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Bare Prefix Claim",
+    amountUsd: 2500,
+    cashCollectedUsd: 1250,
+    estimatedInternalCostUsd: 35,
+    notes: "No Stripe pi_ yet",
+  });
+
+  assert.equal(bareStripePrefix.entry, null);
+  assert.equal(bareStripePrefix.guardrail.status, "blocked");
+  assert.equal(bareStripePrefix.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("allows ledger income when a real payment reference appears in notes", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Late Reference Client",
+    amountUsd: 2500,
+    cashCollectedUsd: 1250,
+    estimatedInternalCostUsd: 35,
+    notes: "Automation Sprint deposit collected after invoice review | notes ok | Stripe payment id pi_lateRef1250",
+  });
+
+  assert.equal(result.entry?.kind, "automation_sale");
+  assert.equal(result.guardrail.status, "ok");
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 1250);
 });
 
 test("blocks ledger expense when spend is higher than collected cash", () => {
@@ -1866,7 +1912,7 @@ test("profit guard allows small scale only when cash covers spend", () => {
     amountUsd: 5000,
     cashCollectedUsd: 2500,
     estimatedInternalCostUsd: 40,
-    notes: "Deposit collected",
+    notes: "Zelle ref cash-client-2500",
   });
   const snapshot = getRevenueEngineSnapshot();
 
@@ -1889,7 +1935,7 @@ test("expense preflight approves only within cash and monthly cap", () => {
     amountUsd: 3000,
     cashCollectedUsd: 1500,
     estimatedInternalCostUsd: 25,
-    notes: "Deposit collected",
+    notes: "Stripe pi_preflight_1500",
   });
 
   const result = preflightRevenueExpense({
@@ -1912,7 +1958,7 @@ test("records ledger expense only after cash covers spend and cap remains safe",
     amountUsd: 3000,
     cashCollectedUsd: 1500,
     estimatedInternalCostUsd: 25,
-    notes: "Deposit collected",
+    notes: "Stripe pi_expense_safe_1500",
   });
 
   const result = recordRevenueLedgerEntry({
@@ -6440,7 +6486,7 @@ test("persists ledger entries across module state reloads", () => {
     amountUsd: 2500,
     cashCollectedUsd: 1250,
     estimatedInternalCostUsd: 35,
-    notes: "Automation Sprint deposit",
+    notes: "Automation Sprint deposit | Stripe pi_persisted_1250",
   });
 
   setRevenueLedgerPathForTests(testLedgerPath);
@@ -6535,7 +6581,7 @@ test("next batch plan scales only when cash and latest review prove demand", () 
     amountUsd: 3000,
     cashCollectedUsd: 3000,
     estimatedInternalCostUsd: 40,
-    notes: "Automation Sprint paid.",
+    notes: "Automation Sprint paid | Zelle ref winning-3000",
   });
   recordRevenueImprovementReview({
     campaignName: "Winning automation offer",

@@ -1704,7 +1704,7 @@ function hasRevenuePaymentEvidence(value: string) {
   if (/^(paid|cash|deposit|payment|received|collected)\s+\$?\d+(\.\d{1,2})?$/.test(normalized)) return false;
 
   const lower = trimmed.toLowerCase();
-  if (lower.includes("pi_") || lower.includes("ch_")) return true;
+  if (/\b(?:pi|ch)_[a-z0-9]{6,}\b/i.test(trimmed)) return true;
 
   const hasPaymentProvider = /\b(zelle|venmo|cashapp|cash app|paypal|stripe|square|clover|ach|wire|bank transfer)\b/.test(lower);
   const hasReferenceLabel = /\b(ref|reference|receipt|invoice|txn|transaction|confirmation|confirmacion|comprobante|payment id|charge id)\b/.test(lower);
@@ -1714,6 +1714,10 @@ function hasRevenuePaymentEvidence(value: string) {
     || /\b[a-z]{2,}[-_][a-z0-9][a-z0-9_-]{2,}\b/i.test(trimmed);
 
   return hasSpecificToken && (hasPaymentProvider || hasReferenceLabel);
+}
+
+function isRevenueIncomeEntry(kind: RevenueLedgerEntryInput["kind"]) {
+  return kind !== "expense";
 }
 
 function escapeHtml(value: unknown): string {
@@ -3703,6 +3707,8 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
       outreachDraft && `outreach:${outreachDraft.id}`,
       effectiveMockupUrl && `mockup:${effectiveMockupUrl}`,
       sourceUrl && `source:${sourceUrl}`,
+      websiteOpportunity.paymentConfirmation && `Payment confirmation:${websiteOpportunity.paymentConfirmation}`,
+      outreachDraft?.delivery.outcomePaymentConfirmation && `Outreach payment confirmation:${outreachDraft.delivery.outcomePaymentConfirmation}`,
       parsed.notes,
     ].filter((item): item is string => Boolean(item && item.trim().length > 0)).join(" | ").slice(0, 1000);
 
@@ -4252,6 +4258,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
       `website-opportunity:${opportunity.id}`,
       `outreach:${opportunity.sourceOutreachDraftId}`,
       opportunity.mockupUrl && `mockup:${opportunity.mockupUrl}`,
+      opportunity.paymentConfirmation && `Payment confirmation:${opportunity.paymentConfirmation}`,
       parsed.notes,
     ].filter((item): item is string => Boolean(item && item.trim().length > 0)).join(" | ").slice(0, 1000),
   }).entry;
@@ -7911,6 +7918,17 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
 export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
   loadRevenueLedger();
   const parsed = revenueLedgerEntrySchema.parse(input);
+  if (isRevenueIncomeEntry(parsed.kind) && parsed.cashCollectedUsd > 0 && !hasRevenuePaymentEvidence(parsed.notes)) {
+    const snapshotBefore = getRevenueEngineSnapshot();
+    return {
+      entry: null,
+      snapshot: snapshotBefore,
+      guardrail: {
+        status: "blocked" as const,
+        reason: "Ingreso bloqueado: cashCollectedUsd requiere referencia/comprobante verificable de pago en notes.",
+      },
+    };
+  }
   if (parsed.kind === "expense") {
     const snapshotBefore = getRevenueEngineSnapshot();
     const projectedSpendUsd = snapshotBefore.metrics.estimatedSpendUsd + parsed.amountUsd + parsed.estimatedInternalCostUsd;
