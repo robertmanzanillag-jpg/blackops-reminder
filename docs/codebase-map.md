@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T21:49:23.350Z
+Generated: 2026-06-30T22:11:09.777Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 434 | 366 | 1385 | 101 | 9063 |
+| 434 | 366 | 1385 | 101 | 9081 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -176,7 +176,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 68 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 46 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-local-verification.mjs` (script; 25 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-operating-refresh.ts` (script; 20 symbols, 5 imports)
+- `script/clippers-tiktok-mvp-operating-refresh.ts` (script; 33 symbols, 5 imports)
 - `script/clippers-tiktok-mvp-proof-doctor.mjs` (script; 49 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-handoff.mjs` (script; 57 symbols, 3 imports)

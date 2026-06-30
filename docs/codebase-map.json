@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T21:49:23.350Z",
+  "generatedAt": "2026-06-30T22:11:09.777Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -97,7 +97,7 @@
     "filesIndexed": 366,
     "imports": 1385,
     "routes": 101,
-    "symbols": 9063
+    "symbols": 9081
   },
   "directories": {
     ".agents/skills": {
@@ -6288,28 +6288,43 @@
         "node:url"
       ],
       "exports": [
+        "buildProofGate",
         "collectBoundaryBlockers",
-        "statusFromBlockers"
+        "statusFromBlockers",
+        "statusFromBlockersAndProofGate"
       ],
       "symbols": [
         "blockers",
+        "boundaryNotReady",
+        "buildProofGate",
         "collectBoundaryBlockers",
         "entries",
+        "failedPreflightChecks",
+        "failedVerifierChecks",
         "main",
+        "minimumProofUrlsNeeded",
+        "missingRequiredReports",
         "outJsonPath",
         "outMarkdownPath",
+        "preflightNotReady",
+        "preflightSnapshotBlocked",
         "preservedQueuePaths",
+        "proofGate",
+        "proofHandoffBlocked",
         "queueSnapshot",
         "raw",
         "readJson",
         "renderMarkdown",
         "reportsDir",
+        "requiredLanes",
         "restoreFiles",
         "result",
         "rootDir",
         "runJson",
         "snapshotFiles",
+        "status",
         "statusFromBlockers",
+        "statusFromBlockersAndProofGate",
         "summary",
         "weeklyTotals"
       ],
@@ -14815,19 +14830,24 @@
         "after",
         "app",
         "before",
+        "blockedPreflightWithoutFailedRowsGate",
         "blockers",
         "body",
         "httpServer",
         "missingBoundaryBlockers",
+        "missingGate",
         "output",
         "queuePaths",
         "readQueueSnapshot",
         "readyBlockers",
+        "report",
         "response",
         "run",
         "scriptPath",
         "source",
-        "syntax"
+        "stalePreflightGate",
+        "syntax",
+        "unrelatedVerifierFailureGate"
       ],
       "routes": []
     },

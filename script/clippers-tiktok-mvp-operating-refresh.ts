@@ -79,6 +79,12 @@ export function statusFromBlockers(blockers: string[]) {
   return blockers.length ? "blocked_external_account_proof" : "ready_for_metricool_approval_review";
 }
 
+export function statusFromBlockersAndProofGate(blockers: string[], proofGate: any) {
+  return blockers.length || proofGate?.status !== "ready_for_operator_review"
+    ? "blocked_external_account_proof"
+    : "ready_for_metricool_approval_review";
+}
+
 export function collectBoundaryBlockers(boundaryRun: any, boundary: any) {
   const blockers = [
     boundaryRun?.ok ? "" : "Autopilot boundary refresh failed; rerun before operating.",
@@ -133,6 +139,16 @@ function renderMarkdown(summary: any) {
     "",
     ...(summary.blockers.length ? summary.blockers.map((item: string) => `- ${item}`) : ["- none"]),
     "",
+    "## Proof Gate",
+    "",
+    `- Status: ${summary.proofGate.status}`,
+    `- Required lanes: ${summary.proofGate.requiredLanes.join(", ")}`,
+    `- Minimum proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}`,
+    `- Next safe button: ${summary.proofGate.nextSafeButton}`,
+    `- Proof links JSON: ${summary.proofGate.paths.proofLinksJson}`,
+    `- Paste packet: ${summary.proofGate.paths.pastePacket}`,
+    `- One-screen guide: ${summary.proofGate.paths.oneScreenGuide}`,
+    "",
     "## Guardrails",
     "",
     ...summary.guardrails.map((item: string) => `- ${item}`),
@@ -142,6 +158,91 @@ function renderMarkdown(summary: any) {
     summary.nextStep,
     "",
   ].join("\n");
+}
+
+export function buildProofGate({ proofHandoff, preflight, verifier, boundary, boundaryRun }: any) {
+  const requiredLanes = ["sports-daily:tiktok", "meme-radar:tiktok"];
+  const failedPreflightChecks = (preflight?.checks || [])
+    .filter((row: any) => row.status === "fail")
+    .map((row: any) => row.id)
+    .filter(Boolean);
+  const failedVerifierChecks = (verifier?.checks || [])
+    .filter((row: any) => row.status === "fail")
+    .map((row: any) => row.id)
+    .filter(Boolean);
+  const minimumProofUrlsNeeded = Number(
+    proofHandoff?.totals?.minimumProofUrlsNeeded
+    ?? boundary?.totals?.minimumProofUrlsNeeded
+    ?? 0,
+  );
+  const missingRequiredReports = [
+    !proofHandoff?.status ? "proof handoff report is missing or unreadable" : "",
+    !verifier?.status || !Array.isArray(verifier?.checks) ? "TikTok MVP readiness verifier report is missing or unreadable" : "",
+    !preflight?.status || !Array.isArray(preflight?.checks) ? "Metricool MCP preflight report is missing or unreadable" : "",
+    !boundary?.status || !boundary?.launchDecision ? "autopilot boundary report is missing or incomplete" : "",
+  ].filter(Boolean);
+  const boundaryNotReady = [
+    boundaryRun?.ok === false ? "Autopilot boundary refresh failed" : "",
+    boundary?.status && boundary.status !== "ready_for_operator_apply_review" ? `Autopilot boundary status is ${boundary.status}` : "",
+    boundary?.launchDecision && boundary.launchDecision !== "ready_for_metricool_approval_review" ? `Autopilot boundary launch decision is ${boundary.launchDecision}` : "",
+  ].filter(Boolean);
+  const preflightNotReady = preflight?.status && !["ready", "pass"].includes(preflight.status)
+    ? `Metricool MCP preflight snapshot status is ${preflight.status}`
+    : "";
+  const proofHandoffBlocked = proofHandoff?.status && proofHandoff.status !== "ready_for_operator_review";
+  const preflightSnapshotBlocked = failedPreflightChecks.length > 0;
+  const status = missingRequiredReports.length
+    || boundaryNotReady.length
+    || preflightNotReady
+    || minimumProofUrlsNeeded > 0
+    || proofHandoffBlocked
+    || failedVerifierChecks.length > 0
+    || preflightSnapshotBlocked
+    ? "blocked_needs_real_metricool_tiktok_proof"
+    : "ready_for_operator_review";
+  return {
+    status,
+    requiredLanes,
+    minimumProofUrlsNeeded,
+    proofPacketsNeeded: Number(proofHandoff?.totals?.proofPacketsNeeded || 0),
+    fastPathAvailable: Boolean(proofHandoff?.totals?.fastPathAvailable),
+    nextSafeButton: status === "ready_for_operator_review" ? "operator_review" : "preview_proof_links",
+    nextLockedButton: status === "ready_for_operator_review" ? "metricool_approval_review" : "save_proof_links",
+    failedPreflightChecks,
+    failedVerifierChecks,
+    missingRequiredReports,
+    boundaryNotReady,
+    preflightNotReady,
+    blockedBy: [
+      ...missingRequiredReports,
+      ...boundaryNotReady,
+      preflightNotReady,
+      minimumProofUrlsNeeded > 0 ? `${minimumProofUrlsNeeded} real non-secret Metricool/Drive proof URL(s) needed` : "",
+      proofHandoffBlocked ? `Proof handoff status is ${proofHandoff.status}` : "",
+      ...failedVerifierChecks.map((id: string) => `TikTok MVP verifier check failed: ${id}`),
+      ...failedPreflightChecks.map((id: string) => `Metricool MCP preflight snapshot check failed: ${id}`),
+    ].filter(Boolean),
+    paths: {
+      proofLinksJson: "clippers_workspace/proof-drop/tiktok-mvp/proof-links.json",
+      proofLinksStarterJson: proofHandoff?.paths?.jsonStarter || "",
+      pastePacket: proofHandoff?.paths?.pastePacketTxt || "",
+      oneScreenGuide: proofHandoff?.paths?.oneScreenTxt || "",
+      proofHandoff: proofHandoff?.paths?.json || "",
+      preflight: preflight?.paths?.json || "",
+      verifier: verifier?.paths?.json || "",
+      bridgeEvidenceCsv: "clippers_workspace/scheduled/metricool-tiktok-bridge-evidence.csv",
+    },
+    guardrails: [
+      "Metricool keys/MCP readiness do not satisfy this proof gate.",
+      "Missing or stale safety reports fail closed instead of unlocking operator review.",
+      "Starter JSON with empty URLs remains blocked until real proof URLs are previewed and saved.",
+      "Do not use passwords, tokens, cookies, recovery codes, signed URLs, or private screenshots as proof.",
+      "This proof gate does not apply evidence, schedule posts, publish, or enable real publishing.",
+    ],
+    nextStep: status === "ready_for_operator_review"
+      ? "Run operator review with Metricool approval_required; do not enable real publishing."
+      : "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence, preview links, then save only if the preview is clean.",
+  };
 }
 
 async function main() {
@@ -155,6 +256,9 @@ async function main() {
   let weeklyFunnelRun: Awaited<ReturnType<typeof prepareClipperWeeklyProductionFunnel>>;
   let boundaryRun: ReturnType<typeof runJson>;
   let boundary: any;
+  let proofHandoff: any;
+  let preflight: any;
+  let verifier: any;
   try {
     sourceScoutRun = await prepareClipperSourceScout();
     await restoreFiles(queueSnapshot);
@@ -166,16 +270,20 @@ async function main() {
     await restoreFiles(queueSnapshot);
     boundaryRun = runJson(["script/clippers-tiktok-mvp-autopilot-boundary.mjs"]);
     boundary = await readJson(path.join(rootDir, "reports", "tiktok-mvp-proof-intake", "autopilot-boundary.json"), {});
+    proofHandoff = await readJson(path.join(rootDir, "reports", "tiktok-mvp-proof-intake", "proof-handoff.json"), {});
+    preflight = await readJson(path.join(rootDir, "reports", "clippers-metricool-mcp-preflight.json"), {});
+    verifier = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-readiness-verifier.json"), {});
   } finally {
     await restoreFiles(queueSnapshot);
   }
 
   const blockers = collectBoundaryBlockers(boundaryRun, boundary);
+  const proofGate = buildProofGate({ proofHandoff, preflight, verifier, boundary, boundaryRun });
 
   const weeklyTotals = weeklyFunnelRun.weeklyProductionFunnel?.totals || {};
   const summary = {
-    status: statusFromBlockers(blockers),
-    launchDecision: blockers.length ? "blocked_before_metricool" : "ready_for_metricool_approval_review",
+    status: statusFromBlockersAndProofGate(blockers, proofGate),
+    launchDecision: blockers.length || proofGate.status !== "ready_for_operator_review" ? "blocked_before_metricool" : "ready_for_metricool_approval_review",
     generatedAt: new Date().toISOString(),
     scope: "tiktok_only_metricool_mvp",
     launchMode: "metricool_approval_required",
@@ -210,6 +318,7 @@ async function main() {
       externalActionsRequired: Number(boundary?.totals?.externalActionsRequired || 0),
       minimumProofUrlsNeeded: Number(boundary?.totals?.minimumProofUrlsNeeded || 0),
     },
+    proofGate,
     blockers,
     guardrails: [
       "Operating refresh does not create external TikTok or Metricool accounts.",
@@ -222,8 +331,8 @@ async function main() {
     runs: {
       boundaryRun,
     },
-    nextStep: blockers.length
-      ? "Paste the real SPORT and memes TikTok Metricool proof URLs, then rerun operating refresh and the readiness verifier."
+    nextStep: blockers.length || proofGate.status !== "ready_for_operator_review"
+      ? proofGate.nextStep
       : "Review the Metricool approval queue manually; keep approval_required until Robert explicitly enables real publishing.",
     paths: {
       json: outJsonPath,

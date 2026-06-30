@@ -39,7 +39,14 @@ test("TikTok MVP operating refresh is wired to regenerate pipeline without exter
   assert.match(source, /preservedQueuePaths/);
   assert.match(source, /snapshotFiles/);
   assert.match(source, /restoreFiles\(queueSnapshot\)/);
-  assert.match(source, /statusFromBlockers\(blockers\)/);
+  assert.match(source, /statusFromBlockersAndProofGate\(blockers, proofGate\)/);
+  assert.match(source, /buildProofGate/);
+  assert.match(source, /failedPreflightChecks/);
+  assert.match(source, /missingRequiredReports/);
+  assert.match(source, /boundaryNotReady/);
+  assert.match(source, /blocked_needs_real_metricool_tiktok_proof/);
+  assert.match(source, /Metricool keys\/MCP readiness do not satisfy this proof gate/);
+  assert.match(source, /Missing or stale safety reports fail closed/);
   assert.match(source, /blocked_external_account_proof/);
   assert.match(source, /blocked_before_metricool/);
   assert.match(source, /targetWeeklyClips \|\| 100/);
@@ -55,7 +62,7 @@ test("TikTok MVP operating refresh is wired to regenerate pipeline without exter
 });
 
 test("TikTok MVP operating refresh blocks every non-ready boundary status", async () => {
-  const { collectBoundaryBlockers, statusFromBlockers } = await import(pathToFileURL(scriptPath).href);
+  const { buildProofGate, collectBoundaryBlockers, statusFromBlockers, statusFromBlockersAndProofGate } = await import(pathToFileURL(scriptPath).href);
   const blockers = collectBoundaryBlockers(
     { ok: true },
     {
@@ -83,6 +90,89 @@ test("TikTok MVP operating refresh blocks every non-ready boundary status", asyn
   );
   assert.deepEqual(readyBlockers, []);
   assert.equal(statusFromBlockers(readyBlockers), "ready_for_metricool_approval_review");
+
+  const missingGate = buildProofGate({
+    proofHandoff: {},
+    verifier: {},
+    preflight: {},
+    boundary: {},
+    boundaryRun: { ok: true },
+  });
+  assert.equal(missingGate.status, "blocked_needs_real_metricool_tiktok_proof");
+  assert.equal(missingGate.nextSafeButton, "preview_proof_links");
+  assert.ok(missingGate.missingRequiredReports.some((item) => item.includes("proof handoff")));
+  assert.ok(missingGate.missingRequiredReports.some((item) => item.includes("readiness verifier")));
+  assert.ok(missingGate.missingRequiredReports.some((item) => item.includes("preflight")));
+  assert.ok(missingGate.missingRequiredReports.some((item) => item.includes("autopilot boundary")));
+  assert.equal(statusFromBlockersAndProofGate([], missingGate), "blocked_external_account_proof");
+
+  const unrelatedVerifierFailureGate = buildProofGate({
+    proofHandoff: {
+      status: "ready_for_operator_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    verifier: {
+      status: "fail",
+      checks: [{ id: "launch_control_no_fake_publish", status: "fail" }],
+    },
+    preflight: { status: "ready", checks: [] },
+    boundary: {
+      status: "ready_for_operator_apply_review",
+      launchDecision: "ready_for_metricool_approval_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    boundaryRun: { ok: true },
+  });
+  assert.equal(unrelatedVerifierFailureGate.status, "blocked_needs_real_metricool_tiktok_proof");
+  assert.ok(unrelatedVerifierFailureGate.failedVerifierChecks.includes("launch_control_no_fake_publish"));
+  assert.ok(unrelatedVerifierFailureGate.blockedBy.some((item) => item.includes("launch_control_no_fake_publish")));
+
+  const stalePreflightGate = buildProofGate({
+    proofHandoff: {
+      status: "ready_for_operator_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    verifier: {
+      status: "pass",
+      checks: [{ id: "metricool_brands_ready", status: "pass" }],
+    },
+    preflight: {
+      status: "blocked",
+      checks: [{ id: "tiktok_mvp_verifier_passed", status: "fail" }],
+    },
+    boundary: {
+      status: "ready_for_operator_apply_review",
+      launchDecision: "ready_for_metricool_approval_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    boundaryRun: { ok: true },
+  });
+  assert.equal(stalePreflightGate.status, "blocked_needs_real_metricool_tiktok_proof");
+  assert.ok(stalePreflightGate.blockedBy.some((item) => item.includes("preflight snapshot check failed")));
+  assert.equal(statusFromBlockersAndProofGate([], stalePreflightGate), "blocked_external_account_proof");
+
+  const blockedPreflightWithoutFailedRowsGate = buildProofGate({
+    proofHandoff: {
+      status: "ready_for_operator_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    verifier: {
+      status: "pass",
+      checks: [{ id: "metricool_brands_ready", status: "pass" }],
+    },
+    preflight: {
+      status: "blocked",
+      checks: [],
+    },
+    boundary: {
+      status: "ready_for_operator_apply_review",
+      launchDecision: "ready_for_metricool_approval_review",
+      totals: { minimumProofUrlsNeeded: 0 },
+    },
+    boundaryRun: { ok: true },
+  });
+  assert.equal(blockedPreflightWithoutFailedRowsGate.status, "blocked_needs_real_metricool_tiktok_proof");
+  assert.match(blockedPreflightWithoutFailedRowsGate.preflightNotReady, /blocked/);
 });
 
 test("TikTok MVP operating refresh preserves Metricool queue artifacts byte for byte", async () => {
@@ -99,6 +189,22 @@ test("TikTok MVP operating refresh preserves Metricool queue artifacts byte for 
   const output = JSON.parse(run.stdout);
   assert.equal(output.status, "blocked_external_account_proof");
   assert.equal(output.launchDecision, "blocked_before_metricool");
+  const report = JSON.parse(await readFile(path.join(process.cwd(), "clippers_workspace/reports/tiktok-mvp-operating-refresh/operating-refresh.json"), "utf8"));
+  assert.equal(report.proofGate.status, "blocked_needs_real_metricool_tiktok_proof");
+  assert.deepEqual(report.proofGate.requiredLanes, ["sports-daily:tiktok", "meme-radar:tiktok"]);
+  assert.equal(report.proofGate.minimumProofUrlsNeeded, 2);
+  assert.equal(report.proofGate.nextSafeButton, "preview_proof_links");
+  assert.equal(report.proofGate.nextLockedButton, "save_proof_links");
+  assert.ok(report.proofGate.blockedBy.some((item) => item.includes("real non-secret Metricool/Drive proof")));
+  assert.ok(report.proofGate.failedVerifierChecks.includes("metricool_brands_ready"));
+  assert.ok(report.proofGate.failedPreflightChecks.includes("tiktok_mvp_verifier_passed"));
+  assert.match(report.proofGate.paths.proofLinksJson, /proof-links\.json$/);
+  assert.match(report.proofGate.paths.pastePacket, /proof-links-paste-packet\.txt$/);
+  assert.match(report.proofGate.paths.oneScreenGuide, /proof-fill-one-screen\.txt$/);
+  assert.match(report.proofGate.paths.bridgeEvidenceCsv, /metricool-tiktok-bridge-evidence\.csv$/);
+  assert.equal(report.realPublishEnabled, false);
+  assert.equal(report.directSocialApisRequired, false);
+  assert.doesNotMatch(JSON.stringify(report.proofGate), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i);
 });
 
 test("TikTok MVP operating refresh POST route refreshes status without changing Metricool queue", async () => {
@@ -129,6 +235,11 @@ test("TikTok MVP operating refresh POST route refreshes status without changing 
     assert.equal(body.tiktokMvpOperatingRefresh.directSocialApisRequired, false);
     assert.equal(body.tiktokMvpOperatingRefresh.codexCanCreateExternalAccounts, false);
     assert.equal(body.tiktokMvpOperatingRefresh.codexCanInventPermissions, false);
+    assert.equal(body.tiktokMvpOperatingRefresh.proofGate.status, "blocked_needs_real_metricool_tiktok_proof");
+    assert.equal(body.tiktokMvpOperatingRefresh.proofGate.nextSafeButton, "preview_proof_links");
+    assert.equal(body.tiktokMvpOperatingRefresh.proofGate.minimumProofUrlsNeeded, 2);
+    assert.ok(body.tiktokMvpOperatingRefresh.proofGate.guardrails.some((item) => item.includes("Metricool keys/MCP readiness do not satisfy")));
+    assert.equal(body.tiktokMvpOperatingRefresh.nextStep, body.tiktokMvpOperatingRefresh.proofGate.nextStep);
     assert.equal(body.tiktokMvpAutopilotBoundary.status, "blocked_external_account_proof");
     assert.equal(body.tiktokNextAction?.realPublishEnabled ?? false, false);
     assert.deepEqual(after, before);
