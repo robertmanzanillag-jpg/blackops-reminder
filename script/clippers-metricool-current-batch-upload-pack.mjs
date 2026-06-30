@@ -81,28 +81,51 @@ function hasOperatorEvidence(record = {}) {
   ].some((key) => String(record[key] || "").trim());
 }
 
+function verifierOrPreflightGate(verifier = {}, preflight = {}) {
+  const verifierReady = verifier.status === "pass" && verifier.launchDecision === "ready_for_metricool_operator";
+  const preflightReady = preflight.status === "ready_for_operator";
+  const blockers = [];
+  if (!verifierReady) blockers.push(`verifier=${verifier.status || "missing"}`);
+  if (!preflightReady) blockers.push(`preflight=${preflight.status || "missing"}`);
+  return {
+    ready: verifierReady && preflightReady,
+    blockers,
+    reason: blockers.join(", "),
+  };
+}
+
 async function readJson(filePath, fallback = {}) {
   const raw = await readFile(filePath, "utf8").catch(() => null);
   if (!raw) return fallback;
   return JSON.parse(raw);
 }
 
+function resolveWorkspaceSourcePath(filePath) {
+  const raw = String(filePath || "");
+  const marker = `${path.sep}clippers_workspace${path.sep}`;
+  const markerIndex = raw.indexOf(marker);
+  if (markerIndex >= 0) {
+    return path.join(rootDir, raw.slice(markerIndex + marker.length));
+  }
+  return raw;
+}
+
 async function validateSource(filePath) {
-  const resolved = path.resolve(filePath || "");
+  const resolved = path.resolve(resolveWorkspaceSourcePath(filePath));
   const allowedRoots = [
     path.join(rootDir, "sources", "sports"),
     path.join(rootDir, "sources", "memes"),
   ].map((item) => path.resolve(item) + path.sep);
   if (!allowedRoots.some((allowedRoot) => resolved.startsWith(allowedRoot))) {
-    return { ok: false, bytes: 0, blocker: "source_file_outside_allowed_tiktok_roots" };
+    return { ok: false, bytes: 0, blocker: "source_file_outside_allowed_tiktok_roots", resolvedPath: resolved };
   }
   const fileStat = await stat(resolved).catch(() => null);
-  if (!fileStat?.isFile()) return { ok: false, bytes: 0, blocker: "source_file_missing" };
-  if (fileStat.size < 1024) return { ok: false, bytes: fileStat.size, blocker: "source_file_too_small" };
+  if (!fileStat?.isFile()) return { ok: false, bytes: 0, blocker: "source_file_missing", resolvedPath: resolved };
+  if (fileStat.size < 1024) return { ok: false, bytes: fileStat.size, blocker: "source_file_too_small", resolvedPath: resolved };
   const header = await readFile(resolved).catch(() => Buffer.alloc(0));
   const signature = header.subarray(0, 4096).toString("latin1");
-  if (!signature.includes("ftyp")) return { ok: false, bytes: fileStat.size, blocker: "source_file_not_mp4_like" };
-  return { ok: true, bytes: fileStat.size, blocker: "" };
+  if (!signature.includes("ftyp")) return { ok: false, bytes: fileStat.size, blocker: "source_file_not_mp4_like", resolvedPath: resolved };
+  return { ok: true, bytes: fileStat.size, blocker: "", resolvedPath: resolved };
 }
 
 function renderMarkdown(summary) {
@@ -422,17 +445,7 @@ async function main() {
     });
     throw new Error(`Upload pack blocked: workbook batch ${batchId} does not match verifier batch ${verifier.active?.currentBatchId || "missing"}.`);
   }
-  if (verifier.status !== "pass" || preflight.status !== "ready_for_operator") {
-    await writeBlockedSummary({
-      workbook,
-      batchId,
-      batchEvidenceCsv: workbook.paths?.batchEvidenceCsv || preflight.paths?.currentBatchEvidenceCsv || "",
-      blocker: "verifier_or_preflight_not_ready",
-      guardrail: "This pack is blocked because TikTok verifier or Metricool preflight is not ready.",
-      nextStep: `Fix verifier/preflight before staging uploads. verifier=${verifier.status || "missing"}, preflight=${preflight.status || "missing"}.`,
-    });
-    throw new Error(`Upload pack blocked: verifier=${verifier.status || "missing"}, preflight=${preflight.status || "missing"}.`);
-  }
+  const operatorGate = verifierOrPreflightGate(verifier, preflight);
   const batchEvidenceCsv = workbook.paths?.batchEvidenceCsv || preflight.paths?.currentBatchEvidenceCsv || "";
   const evidenceRows = parseCsv(await readFile(batchEvidenceCsv, "utf8").catch(() => ""));
   const evidenceById = new Map(evidenceRows.map((record) => [String(record.metricool_queue_item_id || "").trim(), record]));
@@ -460,7 +473,7 @@ async function main() {
     const sourceStatus = inScope
       ? await validateSource(row.sourcePath)
       : { ok: false, bytes: 0, blocker: "row_outside_tiktok_sport_memes_scope" };
-    if (sourceStatus.ok) await copyFile(row.sourcePath, uploadFilePath);
+    if (sourceStatus.ok) await copyFile(sourceStatus.resolvedPath, uploadFilePath);
     rows.push({
       rank: Number(row.rank || rows.length + 1),
       metricoolQueueItemId: row.metricoolQueueItemId,
@@ -471,12 +484,17 @@ async function main() {
       metricoolBlogId: row.metricoolBlogId,
       publishAt: row.publishAt,
       sourcePath: row.sourcePath,
+      resolvedSourcePath: sourceStatus.resolvedPath || "",
       sourceBytes: sourceStatus.bytes,
       uploadFileName,
       uploadFilePath,
       captionSeed: row.captionSeed,
-      status: sourceStatus.ok ? "ready_to_upload" : "blocked_source_file",
-      blocker: sourceStatus.blocker,
+      status: sourceStatus.ok
+        ? operatorGate.ready ? "ready_to_upload" : "prepared_blocked_gate"
+        : "blocked_source_file",
+      blocker: sourceStatus.ok
+        ? operatorGate.ready ? "" : "verifier_or_preflight_not_ready"
+        : sourceStatus.blocker,
     });
   }
   const manifestUploadFiles = new Set(rows.map((row) => row.uploadFileName));
@@ -485,13 +503,19 @@ async function main() {
   const totals = rows.reduce((sum, row) => {
     sum.rows += 1;
     sum.bytes += row.sourceBytes;
-    if (row.status === "ready_to_upload") sum.copied += 1;
+    if (["ready_to_upload", "prepared_blocked_gate"].includes(row.status)) sum.copied += 1;
     if (row.status !== "ready_to_upload") sum.blocked += 1;
     return sum;
   }, { rows: 0, copied: 0, blocked: 0, bytes: 0 });
   totals.staleFiles = staleFiles.length;
+  const sourceFilesReady = totals.rows === 10 && totals.copied === 10 && totals.staleFiles === 0;
+  const status = sourceFilesReady && totals.blocked === 0
+    ? "ready_for_metricool_upload"
+    : sourceFilesReady && !operatorGate.ready
+      ? "prepared_blocked_account_or_metricool_connection"
+      : "blocked";
   const summary = {
-    status: totals.rows === 10 && totals.copied === 10 && totals.blocked === 0 && totals.staleFiles === 0 ? "ready_for_metricool_upload" : "blocked",
+    status,
     generatedAt: new Date().toISOString(),
     batchId,
     paths: {
@@ -512,12 +536,15 @@ async function main() {
     rows,
     guardrails: [
       "This pack only stages local files for manual Metricool upload.",
+      "Prepared files are not permission proof and do not unlock Metricool scheduling while verifier/preflight gates are blocked.",
       "Do not treat copied files as scheduled, published, or permission proof.",
       "Use final_status=scheduled only after Metricool scheduling proof exists.",
       "Use final_status=published only after a public TikTok URL and real 24h metrics exist.",
       "Keep TikTok-only SPORT/memes scope until Robert explicitly expands networks.",
     ],
-    nextStep: totals.blocked > 0
+    nextStep: status === "prepared_blocked_account_or_metricool_connection"
+      ? `Upload files are staged locally, but do not open Metricool scheduling yet. Clear blocked gates first: ${operatorGate.reason}.`
+      : totals.blocked > 0
       ? "Repair blocked source files before opening Metricool."
       : `Open ${uploadRootDir}, upload files in rank order, then fill ${workbook.paths?.batchEvidenceCsv || preflight.paths?.currentBatchEvidenceCsv || "the batch evidence CSV"} after scheduling.`,
   };

@@ -7051,6 +7051,11 @@ test("TikTok next action treats upload pack totals.blocked as blocked source fil
       copied: 0,
       blocked: 10,
     };
+    uploadPack.rows = (uploadPack.rows || []).map((row) => ({
+      ...row,
+      status: "blocked_source_file",
+      blocker: "source_file_missing",
+    }));
     delete uploadPack.totals.blockedUploadFiles;
     await writeFile(uploadPackPath, JSON.stringify(uploadPack, null, 2));
 
@@ -7262,7 +7267,7 @@ test("Metricool current batch upload pack blocks rerun after operator evidence e
   }
 });
 
-test("Metricool current batch upload pack clears stale ready artifacts when preflight is blocked", async () => {
+test("Metricool current batch upload pack can stage files while verifier or preflight is blocked", async () => {
   const preflightPath = path.join(rootDir, "reports/clippers-metricool-mcp-preflight.json");
   const originalPreflight = await readFile(preflightPath, "utf8");
   try {
@@ -7279,19 +7284,25 @@ test("Metricool current batch upload pack clears stale ready artifacts when pref
       cwd: process.cwd(),
       encoding: "utf8",
     });
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /preflight=blocked/);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "prepared_blocked_account_or_metricool_connection");
+    assert.equal(output.copied, 10);
+    assert.equal(output.blocked, 10);
     const blockedPack = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-metricool-current-batch-upload-pack.json"), "utf8"));
-    assert.equal(blockedPack.status, "blocked");
-    assert.equal(blockedPack.totals.copied, 0);
+    assert.equal(blockedPack.status, "prepared_blocked_account_or_metricool_connection");
+    assert.equal(blockedPack.totals.copied, 10);
+    assert.equal(blockedPack.totals.blocked, 10);
+    assert.equal(blockedPack.rows[0].status, "prepared_blocked_gate");
     assert.equal(blockedPack.rows[0].blocker, "verifier_or_preflight_not_ready");
+    assert.match(blockedPack.nextStep, /do not open Metricool scheduling/i);
     const blockedHtml = await readFile(blockedPack.paths.html, "utf8");
     assert.match(blockedHtml, /verifier_or_preflight_not_ready/);
     assert.match(blockedHtml, /Scheduled evidence helper unavailable/);
     assert.doesNotMatch(blockedHtml, /<button type="button" data-copy-scheduled-evidence/);
-    assert.equal((blockedHtml.match(/<video controls/g) || []).length, 0);
+    assert.equal((blockedHtml.match(/<video controls/g) || []).length, 10);
     const stagedFiles = (await readdir(blockedPack.paths.uploadDir)).filter((fileName) => fileName.endsWith(".mp4"));
-    assert.equal(stagedFiles.length, 0);
+    assert.equal(stagedFiles.length, 10);
   } finally {
     await writeFile(preflightPath, originalPreflight);
     spawnSync(process.execPath, ["script/clippers-metricool-current-batch-upload-pack.mjs"], {

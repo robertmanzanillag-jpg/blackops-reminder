@@ -43,7 +43,8 @@ function statusFor(input) {
   if (input.closeout?.status === "ready_to_close_batch") return "ready_for_import_preview";
   if ((input.closeout?.totals?.waitingMetrics || 0) > 0) return "waiting_24h_metrics";
   if ((input.closeout?.totals?.scheduled || 0) > 0) return "waiting_public_posts";
-  if ((input.uploadPack?.totals?.copied || 0) === (input.uploadPack?.totals?.rows || 0)
+  if (input.uploadPack?.status === "ready_for_metricool_upload"
+    && (input.uploadPack?.totals?.copied || 0) === (input.uploadPack?.totals?.rows || 0)
     && (input.uploadPack?.totals?.rows || 0) > 0
     && input.closeout?.status === "blocked_not_scheduled") {
     return "ready_for_metricool_scheduling";
@@ -55,6 +56,9 @@ function statusFor(input) {
 }
 
 function blockedUploadFilesFor(uploadPack = {}) {
+  if (Array.isArray(uploadPack.rows) && uploadPack.rows.length > 0) {
+    return uploadPack.rows.filter((row) => row.status === "blocked_source_file").length;
+  }
   return Number(uploadPack.totals?.blockedUploadFiles ?? uploadPack.totals?.blocked ?? 0);
 }
 
@@ -310,7 +314,9 @@ function operatorGateFor(summary) {
   }
   const blockedBy = [];
   if (!summary.account.ready) blockedBy.push("account_or_metricool_bridge_evidence");
-  if (!summary.uploadPack.ready) blockedBy.push("upload_pack_or_source_files");
+  if (summary.uploadPack.blockedUploadFiles > 0 || summary.uploadPack.copied < summary.uploadPack.rows) {
+    blockedBy.push("upload_pack_or_source_files");
+  }
   if (summary.batch.waitingPublicPosts > 0) blockedBy.push("public_tiktok_urls");
   if (summary.batch.waitingMetrics > 0) blockedBy.push("24h_metrics");
   if (summary.batch.needsFix > 0 || summary.status === "blocked_evidence_fix") blockedBy.push("evidence_rows_need_fix");
@@ -551,7 +557,7 @@ async function main() {
       rows: accountCloseout.rows || [],
     },
     uploadPack: {
-      ready: uploadRows > 0 && uploadCopied === uploadRows && blockedUploadFilesFor(uploadPack) === 0,
+      ready: uploadPack.status === "ready_for_metricool_upload" && uploadRows > 0 && uploadCopied === uploadRows && blockedUploadFilesFor(uploadPack) === 0,
       status: uploadPack.status || "missing",
       rows: uploadRows,
       copied: uploadCopied,

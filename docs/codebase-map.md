@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T13:47:22.187Z
+Generated: 2026-06-30T13:55:37.179Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 97 | 8924 |
+| 431 | 363 | 1368 | 97 | 8933 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -157,7 +157,7 @@ Package: `rest-express`
 - `script/clippers-goal-completion-audit.mjs` (script; 65 symbols, 2 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 120 symbols, 3 imports)
 - `script/clippers-metricool-current-batch-session-packet.mjs` (script; 50 symbols, 2 imports)
-- `script/clippers-metricool-current-batch-upload-pack.mjs` (script; 68 symbols, 2 imports)
+- `script/clippers-metricool-current-batch-upload-pack.mjs` (script; 77 symbols, 2 imports)
 - `script/clippers-metricool-mcp-preflight.ts` (script; 29 symbols, 3 imports)
 - `script/clippers-metricool-operator-handoff.mjs` (script; 159 symbols, 3 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
