@@ -2198,6 +2198,26 @@ interface ClipperTikTokMvpEvidenceCloseoutSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpEvidenceCloseoutPreviewGateSummary {
+  status: "ready_for_apply" | "blocked_preview_not_clean" | "blocked_missing_or_stale_preview";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  rawHash?: string;
+  rawStored?: boolean;
+  currentHash?: string;
+  totals?: {
+    lanes: number;
+    ready: number;
+    rejected: number;
+  };
+  issues?: string[];
+  guardrails: string[];
+  nextStep?: string;
+}
+
 interface ClipperTikTokMvpProofIntakePackSummary {
   status: "ready" | "needs_real_tiktok_metricool_proof";
   generatedAt: string;
@@ -10519,6 +10539,7 @@ export default function ClippersPage() {
   const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
   const [tiktokMvpProofLinksPastePreview, setTiktokMvpProofLinksPastePreview] = useState<ClipperTikTokMvpProofLinksPastePreviewSummary | null>(null);
   const [tiktokMvpProofLinksSaveReceipt, setTiktokMvpProofLinksSaveReceipt] = useState<ClipperTikTokMvpProofLinksSaveReceiptSummary | null>(null);
+  const [tiktokMvpEvidenceCloseoutPreviewGate, setTiktokMvpEvidenceCloseoutPreviewGate] = useState<ClipperTikTokMvpEvidenceCloseoutPreviewGateSummary | null>(null);
   const [trendCandidatesBatchText, setTrendCandidatesBatchText] = useState("");
   const [sourceIntakeBatchText, setSourceIntakeBatchText] = useState("");
   const [sourceScoutIntakeBatchText, setSourceScoutIntakeBatchText] = useState("");
@@ -11447,15 +11468,17 @@ export default function ClippersPage() {
       if (!response.ok) throw new Error(data.error || "No pude previsualizar TikTok MVP evidence closeout");
       return data as {
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
+        tiktokMvpEvidenceCloseoutPreviewGate: ClipperTikTokMvpEvidenceCloseoutPreviewGateSummary;
         accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
       };
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
       queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+      setTiktokMvpEvidenceCloseoutPreviewGate(data.tiktokMvpEvidenceCloseoutPreviewGate);
       toast({
         title: data.tiktokMvpEvidenceCloseout.status === "ready_to_apply" ? "TikTok closeout listo para aplicar" : "TikTok closeout bloqueado",
-        description: `${data.tiktokMvpEvidenceCloseout.totals.ready}/${data.tiktokMvpEvidenceCloseout.totals.lanes} lanes listas; ${data.tiktokMvpEvidenceCloseout.totals.rejected} rechazos.`,
+        description: `${data.tiktokMvpEvidenceCloseout.totals.ready}/${data.tiktokMvpEvidenceCloseout.totals.lanes} lanes listas; ${data.tiktokMvpEvidenceCloseout.totals.rejected} rechazos; gate ${data.tiktokMvpEvidenceCloseoutPreviewGate.status}.`,
         variant: data.tiktokMvpEvidenceCloseout.status === "ready_to_apply" ? undefined : "destructive",
       });
     },
@@ -12128,7 +12151,12 @@ export default function ClippersPage() {
         headers: { "x-clippers-operator-confirm": "apply-tiktok-mvp-evidence-closeout" },
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude aplicar TikTok MVP evidence closeout");
+      if (!response.ok) {
+        if (data.tiktokMvpEvidenceCloseoutPreviewGate) {
+          setTiktokMvpEvidenceCloseoutPreviewGate(data.tiktokMvpEvidenceCloseoutPreviewGate);
+        }
+        throw new Error(data.error || "No pude aplicar TikTok MVP evidence closeout");
+      }
       return data as {
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
         accountPermissionReadiness: ClipperAccountPermissionReadinessSummary;
@@ -18026,6 +18054,36 @@ export default function ClippersPage() {
                 <p className="break-all">Bridge CSV: {tiktokMvpEvidenceCloseout.bridgeCsvPath}</p>
                 <p className="break-all">Report: {tiktokMvpEvidenceCloseout.reportMarkdownPath}</p>
                 <p>Mode: {tiktokMvpEvidenceCloseout.mode}; applied: {tiktokMvpEvidenceCloseout.applied}</p>
+              </div>
+            )}
+            {tiktokMvpEvidenceCloseoutPreviewGate && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpEvidenceCloseoutPreviewGate.status === "ready_for_apply"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-amber-300/15 text-amber-100/80"
+              )} data-testid="clippers-tiktok-mvp-evidence-closeout-preview-gate">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpEvidenceCloseoutPreviewGate.status === "ready_for_apply"
+                      ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                      : "border-amber-300/25 bg-amber-300/10 text-amber-100"
+                  )}>
+                    gate {tiktokMvpEvidenceCloseoutPreviewGate.status}
+                  </Badge>
+                  <span>{tiktokMvpEvidenceCloseoutPreviewGate.totals?.ready ?? 0}/{tiktokMvpEvidenceCloseoutPreviewGate.totals?.lanes ?? 2} lanes</span>
+                  <span>{tiktokMvpEvidenceCloseoutPreviewGate.totals?.rejected ?? 0} rejected</span>
+                  <span>raw {tiktokMvpEvidenceCloseoutPreviewGate.rawStored ? "stored" : "hash only"}</span>
+                </div>
+                <p className="mt-1">
+                  {tiktokMvpEvidenceCloseoutPreviewGate.issues?.[0]
+                    || tiktokMvpEvidenceCloseoutPreviewGate.nextStep
+                    || "Preview gate saved for current CSV files."}
+                </p>
+                <p className="mt-1 break-all text-[10px] text-zinc-500">
+                  hash {tiktokMvpEvidenceCloseoutPreviewGate.rawHash || tiktokMvpEvidenceCloseoutPreviewGate.currentHash || "none"}
+                </p>
               </div>
             )}
             {tiktokMvpProofIntakePack && (
