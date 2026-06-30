@@ -694,6 +694,7 @@ type RevenueSnapshot = {
       clientHandoffReady: boolean;
     };
     status: "ready_to_deliver" | "needs_corrections" | "blocked";
+    projectPlan: RevenueProjectPlan;
     deliveryReview: DeliveryReview;
     correctionQueue: Array<{ agent: string; priority: "high" | "medium"; action: string; blocksDelivery: boolean }>;
     runbook: Array<{ phase: string; ownerAgent: string; checklist: string[] }>;
@@ -7461,6 +7462,8 @@ export default function RevenueEnginePage() {
                                       || workspace.codexBuildHandoff.status === "not_required"
                                       || Boolean(workspace.input.githubIssueUrl)
                                       || !workspace.input.repoFullName
+                                      || !workspace.input.publicDataVerified
+                                      || workspace.projectPlan.decision.status !== "ready_to_build"
                                     }
                                     className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
                                     onClick={() => deliveryWorkspaceGithubHandoffMutation.mutate(workspace)}

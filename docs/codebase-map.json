@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T14:46:06.616Z",
+  "generatedAt": "2026-06-30T15:13:16.569Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -83,10 +83,10 @@
   },
   "totals": {
     "filesVisible": 400,
-    "filesIndexed": 332,
+    "filesIndexed": 333,
     "imports": 1318,
     "routes": 447,
-    "symbols": 7080
+    "symbols": 7085
   },
   "directories": {
     ".agents/skills": {
@@ -141,7 +141,7 @@
     },
     "docs": {
       "files": 11,
-      "indexed": 10,
+      "indexed": 11,
       "kinds": {
         "docs": 11
       }
@@ -3602,6 +3602,14 @@
     },
     {
       "path": "docs/clippers-tiktok-go-live.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -13128,14 +13136,18 @@
         "blocked",
         "blockedDelivery",
         "blockedSend",
+        "buildHandoff",
+        "buildOpportunity",
         "call",
         "candidate",
         "cappedDraft",
         "cappedQueue",
         "closeResult",
+        "collectOpportunity",
         "commandInput",
         "contactFormItem",
         "converted",
+        "createApprovedWebsiteDraftForTest",
         "created",
         "delivered",
         "draft",
@@ -13193,6 +13205,7 @@
         "readyLead",
         "releaseGate",
         "reply",
+        "repoSaved",
         "result",
         "retry",
         "review",

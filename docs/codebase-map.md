@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T14:46:06.616Z
+Generated: 2026-06-30T15:13:16.569Z
 Repo: `/private/tmp/asistente-pr55-fresh`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 400 | 332 | 1318 | 447 | 7080 |
+| 400 | 333 | 1318 | 447 | 7085 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `tests` | 59 | 57 | test:59 |
 | `script` | 36 | 34 | script:36 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
-| `docs` | 11 | 10 | docs:11 |
+| `docs` | 11 | 11 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `client/public` | 13 | 2 | other:13 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |

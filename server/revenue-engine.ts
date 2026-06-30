@@ -4122,6 +4122,8 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
   const openWorkspaces = revenueDeliveryWorkspaces
     .filter((workspace) =>
       (workspace.input.projectType === "website" || workspace.input.projectType === "bundle")
+      && workspace.input.publicDataVerified
+      && workspace.projectPlan.decision.status === "ready_to_build"
       && workspace.codexBuildHandoff.status === "needs_pr"
     )
     .slice()
@@ -6057,7 +6059,7 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
     input.estimatedInternalCostUsd > 100 && "costo interno bajo $100/mes",
     grossMarginPercent < 65 && "margen mensual >= 65%",
   ].filter(Boolean) as string[];
-  const status = missing.some((item) => ["deposito pagado", "costo interno bajo $100/mes", "margen mensual >= 65%"].includes(item))
+  const status = missing.some((item) => ["deposito pagado", "data publica verificada", "costo interno bajo $100/mes", "margen mensual >= 65%"].includes(item))
     ? "blocked"
     : missing.length > 0
       ? "needs_scope"
@@ -7204,6 +7206,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const deploymentApprovalStatus = input.deploymentApprovalStatus || "not_requested";
   const deploymentApprovalUrl = (input.deploymentApprovalUrl || "").trim();
   const missing = [
+    isWebsiteBuild && !input.publicDataVerified && "data publica verificada",
     isWebsiteBuild && !repoFullName && "repo GitHub del website",
     isWebsiteBuild && !githubIssueUrl && "GitHub handoff issue PR-first",
     isWebsiteBuild && !prUrl && "pull request de build",

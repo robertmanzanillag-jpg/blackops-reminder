@@ -5223,6 +5223,15 @@ export async function registerRoutes(
         });
       }
 
+      if (!workspace.input.publicDataVerified || workspace.projectPlan.decision.status !== "ready_to_build") {
+        return res.status(422).json({
+          status: "blocked",
+          reason: "Verifica data publica y deja el project plan ready_to_build antes de crear el handoff GitHub.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
       if (workspace.input.githubIssueUrl) {
         return res.json({
           status: "already_created",
