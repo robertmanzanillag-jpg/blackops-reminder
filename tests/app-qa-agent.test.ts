@@ -55,6 +55,26 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"].every((click) => revenueRoute.expectedClicks.includes(click)),
     true,
   );
+  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]);
+});
+
+test("visual click scout can detect missing expected Revenue Engine controls", () => {
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+  ].join("\n");
+
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]),
+    [],
+  );
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Missing button"]),
+    ["Missing button"],
+  );
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {
