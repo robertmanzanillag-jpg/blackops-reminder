@@ -5067,6 +5067,7 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /clippers-tiktok-next-action-external-closeout/);
   assert.match(page, /clippers-tiktok-next-action-proof-doctor/);
   assert.match(page, /clippers-tiktok-next-action-proof-unblocker/);
+  assert.match(page, /clippers-tiktok-next-action-operating-refresh/);
   assert.match(page, /copy-clippers-tiktok-next-action-operator-packet/);
   assert.match(page, /Metricool operator packet/);
   assert.match(page, /proofBridgeGate/);
@@ -5074,6 +5075,7 @@ test("TikTok operator cockpit links upload and evidence consoles without publish
   assert.match(page, /externalCloseout/);
   assert.match(page, /proofDoctor/);
   assert.match(page, /proofUnblocker/);
+  assert.match(page, /operatingRefresh/);
   assert.match(page, /accountPermissionReadiness: ClipperAccountPermissionReadinessSummary/);
   assert.match(page, /\["\/api\/clippers\/account-permission-readiness"\], data\.accountPermissionReadiness/);
   assert.match(page, /getMetricoolBridgeEvidenceClientCheck/);
@@ -6957,10 +6959,12 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
   const verifierPath = path.join(rootDir, "reports/clippers-tiktok-mvp-readiness-verifier.json");
   const nextActionPath = path.join(rootDir, "reports/clippers-tiktok-next-action.json");
   const externalSessionPath = path.join(rootDir, "reports/clippers-tiktok-external-closeout-session.json");
+  const operatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
   const originalReadiness = await readFile(readinessPath, "utf8");
   const originalVerifier = await readFile(verifierPath, "utf8").catch(() => null);
   const originalNextAction = await readFile(nextActionPath, "utf8").catch(() => null);
   const originalExternalSession = await readFile(externalSessionPath, "utf8").catch(() => null);
+  const originalOperatingRefresh = await readFile(operatingRefreshPath, "utf8").catch(() => null);
   try {
     const readiness = JSON.parse(originalReadiness);
     readiness.activeMvp = {
@@ -7004,6 +7008,11 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
       encoding: "utf8",
     });
     assert.equal(proofUnblockerRun.status, 0, proofUnblockerRun.stderr || proofUnblockerRun.stdout);
+    const operatingRefreshRun = spawnSync(process.execPath, ["--import", "tsx", "script/clippers-tiktok-mvp-operating-refresh.ts"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(operatingRefreshRun.status, 0, operatingRefreshRun.stderr || operatingRefreshRun.stdout);
 
     const verifierRun = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-readiness-verifier.mjs"], {
       cwd: process.cwd(),
@@ -7046,11 +7055,18 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.match(nextAction.proofUnblocker.firstFix.field, /account_ownership_proof_url/);
     assert.match(nextAction.proofUnblocker.paths.html, /proof-unblocker\.html$/);
     assert.match(nextAction.proofUnblocker.paths.combinedCsv, /combined-proof-intake\.csv$/);
+    assert.equal(nextAction.operatingRefresh.status, "blocked_external_account_proof");
+    assert.equal(nextAction.operatingRefresh.launchDecision, "blocked_before_metricool");
+    assert.equal(nextAction.operatingRefresh.minimumProofUrlsNeeded, 2);
+    assert.match(nextAction.operatingRefresh.paths.json, /operating-refresh\.json$/);
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_bridge" && task.status === "blocked"));
     assert.ok(nextAction.tasks.some((task) => task.id === "external_closeout_proofs" && task.status === "blocked"));
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_doctor_fix_queue" && task.status === "blocked"));
     assert.ok(nextAction.tasks.some((task) => task.id === "proof_unblocker_packet" && task.status === "blocked"));
+    assert.equal(nextAction.tasks.some((task) => task.id === "operating_refresh"), false);
     assert.match(nextAction.operator.copyPacket, /Proof bridge gate: blocked_needs_real_proofs/);
+    assert.match(nextAction.operator.copyPacket, /Operating refresh: blocked_external_account_proof/);
+    assert.match(nextAction.operator.copyPacket, /Proof URLs needed: 2/);
     assert.match(nextAction.operator.copyPacket, /First external blocker: account-proof:sports-daily:tiktok/);
     assert.match(nextAction.operator.copyPacket, /Bridge CSV:/);
     assert.doesNotMatch(JSON.stringify(nextAction.proofBridgeGate), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);
@@ -7060,6 +7076,7 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.match(markdown, /External Proof Closeout/);
     assert.match(markdown, /Proof Doctor/);
     assert.match(markdown, /Proof Unblocker/);
+    assert.match(markdown, /Operating Refresh/);
     assert.match(markdown, /Proof Links Checklist/);
     assert.match(markdown, /Copy proof links packet/);
   } finally {
@@ -7067,6 +7084,8 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     if (originalVerifier) await writeFile(verifierPath, originalVerifier);
     if (originalNextAction) await writeFile(nextActionPath, originalNextAction);
     if (originalExternalSession) await writeFile(externalSessionPath, originalExternalSession);
+    if (originalOperatingRefresh) await writeFile(operatingRefreshPath, originalOperatingRefresh);
+    else await unlink(operatingRefreshPath).catch(() => undefined);
   }
 });
 

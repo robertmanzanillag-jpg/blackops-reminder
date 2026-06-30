@@ -15,6 +15,7 @@ const mvpReadinessVerifierPath = path.join(reportsDir, "clippers-tiktok-mvp-read
 const externalCloseoutSessionPath = path.join(reportsDir, "clippers-tiktok-external-closeout-session.json");
 const proofDoctorPath = path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-doctor.json");
 const proofUnblockerPath = path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-unblocker.json");
+const operatingRefreshPath = path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json");
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-next-action.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-next-action.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-next-action.csv");
@@ -273,6 +274,29 @@ function proofUnblockerFor(report = {}) {
   };
 }
 
+function operatingRefreshFor(report = {}) {
+  return {
+    status: report.status || "missing",
+    launchDecision: report.launchDecision || "missing",
+    sourceCandidates: Number(report.totals?.sourceCandidates || 0),
+    exactUrls: Number(report.totals?.sourceCandidatesExactUrls || 0),
+    weeklyTargetClips: Number(report.totals?.weeklyTargetClips || 0),
+    sourceReadyAssets: Number(report.totals?.weeklySourceReadyAssets || 0),
+    metricoolApprovalQueued: Number(report.totals?.weeklyMetricoolApprovalQueued || 0),
+    minimumProofUrlsNeeded: Number(report.totals?.minimumProofUrlsNeeded || 0),
+    externalActionsRequired: Number(report.totals?.externalActionsRequired || 0),
+    blockers: Array.isArray(report.blockers) ? report.blockers.slice(0, 6) : [],
+    nextStep: report.nextStep || "",
+    paths: {
+      json: report.paths?.json || operatingRefreshPath,
+      markdown: report.paths?.markdown || "",
+      sourceScout: report.paths?.sourceScout || "",
+      weeklyFunnel: report.paths?.weeklyFunnel || "",
+      boundary: report.paths?.boundary || "",
+    },
+  };
+}
+
 function operatorGateFor(summary) {
   const safetyBlockers = [];
   if (!summary.safety.approvalRequired) safetyBlockers.push("metricool_not_approval_required");
@@ -360,6 +384,8 @@ function operatorPacketFor(summary) {
     summary.proofBridgeGate?.status ? `Proof bridge gate: ${summary.proofBridgeGate.status}` : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
+    summary.operatingRefresh?.status ? `Operating refresh: ${summary.operatingRefresh.status}` : "",
+    summary.operatingRefresh?.minimumProofUrlsNeeded ? `Proof URLs needed: ${summary.operatingRefresh.minimumProofUrlsNeeded}` : "",
     summary.externalCloseout?.status ? `External closeout: ${summary.externalCloseout.status}` : "",
     summary.externalCloseout?.firstActiveTask?.id ? `First external blocker: ${summary.externalCloseout.firstActiveTask.id}` : "",
     "",
@@ -431,6 +457,22 @@ function renderMarkdown(summary) {
     `- Next step: ${summary.proofUnblocker.nextStep || "missing"}`,
     "",
   ] : [];
+  const operatingRefreshLines = summary.operatingRefresh?.status && summary.operatingRefresh.status !== "missing" ? [
+    "## Operating Refresh",
+    "",
+    `- Status: ${summary.operatingRefresh.status}`,
+    `- Launch decision: ${summary.operatingRefresh.launchDecision}`,
+    `- Source candidates: ${summary.operatingRefresh.sourceCandidates}`,
+    `- Exact URLs: ${summary.operatingRefresh.exactUrls}`,
+    `- Source-ready assets: ${summary.operatingRefresh.sourceReadyAssets}/${summary.operatingRefresh.weeklyTargetClips}`,
+    `- Metricool approval queue: ${summary.operatingRefresh.metricoolApprovalQueued}`,
+    `- Minimum proof URLs needed: ${summary.operatingRefresh.minimumProofUrlsNeeded}`,
+    `- External actions: ${summary.operatingRefresh.externalActionsRequired}`,
+    `- Report: ${summary.operatingRefresh.paths.markdown || summary.operatingRefresh.paths.json}`,
+    `- Next step: ${summary.operatingRefresh.nextStep || "missing"}`,
+    ...(summary.operatingRefresh.blockers || []).map((blocker) => `- Blocker: ${blocker}`),
+    "",
+  ] : [];
   return [
     "# TikTok Metricool Next Action",
     "",
@@ -467,6 +509,7 @@ function renderMarkdown(summary) {
     ...externalCloseoutLines,
     ...proofDoctorLines,
     ...proofUnblockerLines,
+    ...operatingRefreshLines,
     "## Guardrails",
     "",
     ...summary.guardrails.map((guardrail) => `- ${guardrail}`),
@@ -510,6 +553,7 @@ async function main() {
     externalCloseoutSession,
     proofDoctor,
     proofUnblocker,
+    operatingRefresh,
   ] = await Promise.all([
     readJson(accountReadinessPath, {}),
     readJson(approvalRunPath, {}),
@@ -522,6 +566,7 @@ async function main() {
     readJson(externalCloseoutSessionPath, {}),
     readJson(proofDoctorPath, {}),
     readJson(proofUnblockerPath, {}),
+    readJson(operatingRefreshPath, {}),
   ]);
   const accountCloseout = accountReadiness.tiktokMvpAccountCloseout || {};
   const accountReadyLanes = accountCloseout.totals?.ready || 0;
@@ -548,6 +593,7 @@ async function main() {
       externalCloseoutSession: externalCloseoutSessionPath,
       proofDoctor: proofDoctorPath,
       proofUnblocker: proofUnblockerPath,
+      operatingRefresh: operatingRefreshPath,
     },
     account: {
       ready: accountCloseout.status === "ready_for_metricool_tiktok" && accountReadyLanes === accountTotalLanes && accountTotalLanes > 0,
@@ -597,6 +643,7 @@ async function main() {
     externalCloseout: externalCloseoutFor(externalCloseoutSession),
     proofDoctor: proofDoctorFor(proofDoctor),
     proofUnblocker: proofUnblockerFor(proofUnblocker),
+    operatingRefresh: operatingRefreshFor(operatingRefresh),
     operator: {
       uploadHtml: uploadPack.paths?.html || "",
       uploadDir: uploadPack.paths?.uploadDir || "",

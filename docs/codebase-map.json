@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T21:07:06.534Z",
+  "generatedAt": "2026-06-30T21:23:27.692Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,9 +95,9 @@
   "totals": {
     "filesVisible": 434,
     "filesIndexed": 366,
-    "imports": 1382,
+    "imports": 1385,
     "routes": 101,
-    "symbols": 9051
+    "symbols": 9059
   },
   "directories": {
     ".agents/skills": {
@@ -6901,6 +6901,9 @@
         "main",
         "mvpReadinessVerifierPath",
         "nextStepFor",
+        "operatingRefreshFor",
+        "operatingRefreshLines",
+        "operatingRefreshPath",
         "operatorGateFor",
         "operatorPacketFor",
         "outCsvPath",
@@ -14793,23 +14796,31 @@
       "path": "tests/clippers-tiktok-mvp-operating-refresh.test.mjs",
       "kind": "test",
       "imports": [
+        "../server/routes",
+        "express",
         "node:assert/strict",
         "node:child_process",
         "node:fs/promises",
+        "node:http",
         "node:path",
         "node:test",
         "node:url"
       ],
       "exports": [],
       "symbols": [
+        "address",
         "after",
+        "app",
         "before",
         "blockers",
+        "body",
+        "httpServer",
         "missingBoundaryBlockers",
         "output",
         "queuePaths",
         "readQueueSnapshot",
         "readyBlockers",
+        "response",
         "run",
         "scriptPath",
         "source",

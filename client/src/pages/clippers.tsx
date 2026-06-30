@@ -1171,6 +1171,26 @@ interface ClipperTikTokNextActionSummary {
     };
     nextStep: string;
   };
+  operatingRefresh?: {
+    status: string;
+    launchDecision: string;
+    sourceCandidates: number;
+    exactUrls: number;
+    weeklyTargetClips: number;
+    sourceReadyAssets: number;
+    metricoolApprovalQueued: number;
+    minimumProofUrlsNeeded: number;
+    externalActionsRequired: number;
+    blockers: string[];
+    nextStep: string;
+    paths: {
+      json: string;
+      markdown: string;
+      sourceScout: string;
+      weeklyFunnel: string;
+      boundary: string;
+    };
+  };
   tasks: Array<{
     id: string;
     label: string;
@@ -21000,6 +21020,34 @@ export default function ClippersPage() {
                       <p className="break-all">HTML: {tiktokNextAction.proofUnblocker.paths.html || "missing"}</p>
                       <p className="break-all">CSV: {tiktokNextAction.proofUnblocker.paths.csv || "missing"}</p>
                       <p className="break-all">Combined: {tiktokNextAction.proofUnblocker.paths.combinedCsv || "missing"}</p>
+                    </div>
+                  </div>
+                )}
+                {tiktokNextAction.operatingRefresh && tiktokNextAction.operatingRefresh.status !== "missing" && (
+                  <div
+                    className="mt-3 rounded-md border border-teal-300/15 bg-teal-950/10 p-3"
+                    data-testid="clippers-tiktok-next-action-operating-refresh"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-teal-300/25 bg-teal-300/10 text-teal-100">
+                        operating {tiktokNextAction.operatingRefresh.status}
+                      </Badge>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.operatingRefresh.sourceCandidates)} candidates
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.operatingRefresh.sourceReadyAssets)}/{formatNumber(tiktokNextAction.operatingRefresh.weeklyTargetClips)} source-ready
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        {formatNumber(tiktokNextAction.operatingRefresh.minimumProofUrlsNeeded)} proof URLs
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-teal-50/80">{tiktokNextAction.operatingRefresh.nextStep}</p>
+                    <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
+                      <p>Decision: {tiktokNextAction.operatingRefresh.launchDecision}</p>
+                      <p>Exact URLs: {formatNumber(tiktokNextAction.operatingRefresh.exactUrls)}</p>
+                      <p>Metricool queue: {formatNumber(tiktokNextAction.operatingRefresh.metricoolApprovalQueued)}</p>
+                      <p className="break-all">Report: {tiktokNextAction.operatingRefresh.paths.markdown || tiktokNextAction.operatingRefresh.paths.json}</p>
                     </div>
                   </div>
                 )}
