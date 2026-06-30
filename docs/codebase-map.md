@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T13:34:57.422Z
+Generated: 2026-06-30T13:47:22.187Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 431 | 363 | 1368 | 97 | 8918 |
+| 431 | 363 | 1368 | 97 | 8924 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -169,7 +169,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-batch-runbook.mjs` (script; 54 symbols, 2 imports)
 - `script/clippers-tiktok-batch-tracker.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-tiktok-evidence-checklist.mjs` (script; 38 symbols, 2 imports)
-- `script/clippers-tiktok-external-closeout-session.mjs` (script; 55 symbols, 2 imports)
+- `script/clippers-tiktok-external-closeout-session.mjs` (script; 56 symbols, 2 imports)
 - `script/clippers-tiktok-launch-control.mjs` (script; 63 symbols, 2 imports)
 - `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 45 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 66 symbols, 3 imports)
@@ -183,7 +183,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-mvp-proof-quick-fill.mjs` (script; 51 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-refresh.mjs` (script; 20 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-unblocker.mjs` (script; 41 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-readiness-verifier.mjs` (script; 42 symbols, 2 imports)
+- `script/clippers-tiktok-mvp-readiness-verifier.mjs` (script; 47 symbols, 2 imports)
 - `script/clippers-tiktok-next-action.mjs` (script; 60 symbols, 2 imports)
 - `script/clippers-tiktok-operator-cockpit-preflight.mjs` (script; 75 symbols, 2 imports)
 - `script/clippers-tiktok-operator-cockpit.mjs` (script; 28 symbols, 2 imports)

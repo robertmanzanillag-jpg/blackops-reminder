@@ -352,14 +352,15 @@ async function main() {
     readJson(repairWorkPacketPath),
     readJson(accountReadinessPath),
   ]);
-  const tiktokMvpCloseout = await readJson(tiktokMvpAccountCloseoutPath);
+  const tiktokMvpCloseoutFile = await readJson(tiktokMvpAccountCloseoutPath);
+  const tiktokMvpCloseout = accountReadiness.tiktokMvpAccountCloseout || tiktokMvpCloseoutFile;
   const activeMetricoolAccountIds = new Set(
     Array.isArray(accountReadiness.activeMvp?.accountIds)
       ? accountReadiness.activeMvp.accountIds.map((accountId) => String(accountId || ""))
       : ["sports-daily", "meme-radar"],
   );
   const metricoolMvpReady = accountReadiness.activeMvp?.status === "ready";
-  const activeMvpProofRows = freshness.reportIsFresh ? activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady) : [];
+  const activeMvpProofRows = activeMetricoolMvpProofRows(tiktokMvpCloseout, metricoolMvpReady);
   const proofLinksPastePacket = renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout);
   const repairQueue = freshness.reportIsFresh && Array.isArray(evidenceImport.repairQueue) ? evidenceImport.repairQueue : [];
   const coveredActiveMvpAccountRows = new Set(
@@ -405,13 +406,13 @@ async function main() {
   });
   const activeTasks = tasks.filter((task) => task.activeForMetricoolMvp);
   const deferredTasks = tasks.filter((task) => task.deferredForMetricoolMvp);
-  const status = !freshness.reportIsFresh
-    ? "stale_evidence_import_report"
-    : activeTasks.length
+  const status = activeTasks.length
       ? "needs_tiktok_external_closeout"
-      : deferredTasks.length
-        ? "metricool_mvp_ready_deferred_backlog"
-        : "complete";
+      : !freshness.reportIsFresh
+        ? "stale_evidence_import_report"
+        : deferredTasks.length
+          ? "metricool_mvp_ready_deferred_backlog"
+          : "complete";
   const summary = {
     generatedAt: new Date().toISOString(),
     status,
@@ -471,10 +472,13 @@ async function main() {
       "Only import evidence after the proof file and CSV row contain real non-secret external proof.",
       "Metricool remains approval_required; this session does not publish content.",
     ],
-    nextStep: !freshness.reportIsFresh
-      ? freshness.nextStep
-      : activeTasks[0]
-        ? `Complete ${activeTasks[0].closeoutId} first, then rerun Validate and this TikTok session.`
+    nextStep: activeTasks[0]
+      ? [
+        `Complete ${activeTasks[0].closeoutId} first, then rerun Validate and this TikTok session.`,
+        !freshness.reportIsFresh ? freshness.nextStep : "",
+      ].filter(Boolean).join(" ")
+      : !freshness.reportIsFresh
+        ? freshness.nextStep
         : metricoolMvpReady
           ? "TikTok SPORT and memes are ready through Metricool. Continue with the current Metricool batch; deferred TikTok direct API/account expansion can wait."
           : "No active TikTok Metricool blockers remain in this session; verify SPORT and memes lanes before scheduling.",

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T13:34:57.422Z",
+  "generatedAt": "2026-06-30T13:47:22.187Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 97,
-    "symbols": 8918
+    "symbols": 8924
   },
   "directories": {
     ".agents/skills": {
@@ -5880,6 +5880,7 @@
         "tasks",
         "tiktokMvpAccountCloseoutPath",
         "tiktokMvpCloseout",
+        "tiktokMvpCloseoutFile",
         "tiktokRows"
       ],
       "routes": []
@@ -6680,6 +6681,7 @@
         "activeAccounts",
         "activeBrands",
         "activeMvp",
+        "activeScopeIsTikTokOnly",
         "blockedLanes",
         "bridgeCsvPath",
         "buildProofBridgeGate",
@@ -6693,13 +6695,16 @@
         "expectedBrands",
         "failed",
         "flowPrepared",
+        "goalAuditShowsExternalWork",
         "handoffAccounts",
         "handoffPlatforms",
         "header",
         "main",
+        "needsExternalAction",
         "nextStepForFailedChecks",
         "normalizedActual",
         "normalizedExpected",
+        "operatingMode",
         "paths",
         "previewReady",
         "previewStatus",
@@ -6718,7 +6723,8 @@
         "scheduledDir",
         "status",
         "summary",
-        "targetLanes"
+        "targetLanes",
+        "waitingMetricoolWork"
       ],
       "routes": []
     },

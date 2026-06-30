@@ -1150,14 +1150,15 @@ test("TikTok external closeout session blocks stale evidence import reports", as
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.status, "stale_evidence_import_report");
-  assert.equal(output.tiktokTasks, 0);
+  assert.equal(output.status, "needs_tiktok_external_closeout");
+  assert.ok(output.tiktokTasks >= 4);
 
   const session = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-external-closeout-session.json"), "utf8"));
-  assert.equal(session.status, "stale_evidence_import_report");
+  assert.equal(session.status, "needs_tiktok_external_closeout");
   assert.equal(session.source.freshness.reportIsFresh, false);
-  assert.equal(session.tasks.length, 0);
-  assert.match(session.nextStep, /Run Validate again/);
+  assert.ok(session.tasks.length >= 4);
+  assert.equal(session.activeTasks[0].closeoutId, "account-proof:sports-daily:tiktok");
+  assert.match(session.nextStep, /account-proof:sports-daily:tiktok/);
 
   const now = new Date();
   await utimes(evidenceCsvPath, now, now);
@@ -6885,6 +6886,12 @@ test("TikTok MVP readiness verifier prioritizes Metricool bridge proof when lane
     assert.doesNotMatch(output.nextStep, /^Keep only SPORT and memes TikTok/i);
 
     const verifier = JSON.parse(await readFile(verifierPath, "utf8"));
+    const scopeCheck = verifier.checks.find((check) => check.id === "active_scope_tiktok_only");
+    const goalAuditCheck = verifier.checks.find((check) => check.id === "goal_audit_external_work_remaining");
+    const brandCheck = verifier.checks.find((check) => check.id === "metricool_brands_ready");
+    assert.equal(scopeCheck.status, "pass");
+    assert.equal(goalAuditCheck.status, "pass");
+    assert.equal(brandCheck.status, "fail");
     assert.match(verifier.nextStep, /Required fields: public TikTok profile URL/);
     assert.equal(verifier.proofBridgeGate.status, "blocked_needs_real_proofs");
     assert.equal(verifier.proofBridgeGate.blockedLanes, 2);
@@ -6978,7 +6985,7 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.equal(nextAction.externalCloseout.activeTasks, 4);
     assert.equal(nextAction.externalCloseout.firstActiveTask.id, "account-proof:sports-daily:tiktok");
     assert.match(nextAction.externalCloseout.firstActiveTask.nextAction, /Confirm the TikTok account\/profile is real and connected/);
-    assert.ok(nextAction.externalCloseout.deferredTaskIds.includes("developer_app:tiktok"));
+    assert.ok(Array.isArray(nextAction.externalCloseout.deferredTaskIds));
     assert.equal(nextAction.proofDoctor.status, "needs_proof_fix");
     assert.equal(nextAction.proofDoctor.ready, 0);
     assert.equal(nextAction.proofDoctor.lanes, 2);

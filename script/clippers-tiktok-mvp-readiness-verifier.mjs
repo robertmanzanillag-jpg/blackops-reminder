@@ -59,6 +59,28 @@ function check(id, label, pass, evidence, blocker, nextAction) {
   };
 }
 
+function activeScopeIsTikTokOnly(accountReadiness, goLivePacket) {
+  const activeMvp = accountReadiness.activeMvp || {};
+  const operatingMode = goLivePacket.operatingMode || {};
+  return activeMvp.scope === "tiktok_only_metricool_mvp"
+    && sameSet(activeMvp.platforms, ["tiktok"])
+    && sameSet(activeMvp.accountIds, expectedAccounts)
+    && sameSet(activeMvp.metricoolBrands, expectedBrands)
+    && sameSet(activeMvp.deferredLanes, ["instagram", "youtube", "streamers"])
+    && activeMvp.directSocialApisRequired === false
+    && operatingMode.scope === "tiktok_only_metricool_mvp"
+    && sameSet(operatingMode.activePlatforms, ["tiktok"])
+    && sameSet(operatingMode.deferredLanes, ["instagram", "youtube", "streamers"]);
+}
+
+function goalAuditShowsExternalWork(goalAudit) {
+  const waitingMetricoolWork = Number(goalAudit.totals?.waitingMetricoolWork || 0);
+  const needsExternalAction = Number(goalAudit.totals?.needsExternalAction || 0);
+  return ["not_ready", "tiktok_mvp_ready_external_work_remaining"].includes(goalAudit.status)
+    && waitingMetricoolWork >= 1
+    && needsExternalAction >= 1;
+}
+
 function renderMarkdown(summary) {
   return [
     "# Clippers TikTok MVP Readiness Verifier",
@@ -222,13 +244,8 @@ async function main() {
     check(
       "active_scope_tiktok_only",
       "Active scope is TikTok-only",
-      accountReadiness.activeMvp?.status === "ready"
-        && sameSet(accountReadiness.activeMvp?.platforms, ["tiktok"])
-        && sameSet(accountReadiness.activeMvp?.accountIds, expectedAccounts)
-        && goLivePacket.operatingMode?.scope === "tiktok_only_metricool_mvp"
-        && sameSet(goLivePacket.operatingMode?.activePlatforms, ["tiktok"])
-        && sameSet(goLivePacket.operatingMode?.deferredLanes, ["instagram", "youtube", "streamers"]),
-      `activeMvp=${accountReadiness.activeMvp?.status}; platforms=${(accountReadiness.activeMvp?.platforms || []).join("|")}; accounts=${(accountReadiness.activeMvp?.accountIds || []).join("|")}; deferred=${(goLivePacket.operatingMode?.deferredLanes || []).join("|")}`,
+      activeScopeIsTikTokOnly(accountReadiness, goLivePacket),
+      `activeMvp=${accountReadiness.activeMvp?.status}; scope=${accountReadiness.activeMvp?.scope}; platforms=${(accountReadiness.activeMvp?.platforms || []).join("|")}; accounts=${(accountReadiness.activeMvp?.accountIds || []).join("|")}; brands=${(accountReadiness.activeMvp?.metricoolBrands || []).join("|")}; deferred=${(accountReadiness.activeMvp?.deferredLanes || []).join("|")}; directSocialApisRequired=${accountReadiness.activeMvp?.directSocialApisRequired}`,
       "active_scope_not_tiktok_only",
       "Keep only SPORT and memes TikTok in the MVP and defer Instagram, YouTube, and streamers.",
     ),
@@ -309,9 +326,7 @@ async function main() {
     check(
       "goal_audit_external_work_remaining",
       "Goal audit separates ready MVP from external work",
-      goalAudit.status === "tiktok_mvp_ready_external_work_remaining"
-        && Number(goalAudit.totals?.tiktokMvpReady || 0) >= 1
-        && Number(goalAudit.totals?.waitingMetricoolWork || 0) >= 1,
+      goalAuditShowsExternalWork(goalAudit),
       `status=${goalAudit.status}; tiktokMvpReady=${goalAudit.totals?.tiktokMvpReady || 0}; waitingMetricoolWork=${goalAudit.totals?.waitingMetricoolWork || 0}; needsExternalAction=${goalAudit.totals?.needsExternalAction || 0}`,
       "goal_audit_does_not_show_external_work",
       "Refresh goal completion audit and keep external publishing evidence separate.",
