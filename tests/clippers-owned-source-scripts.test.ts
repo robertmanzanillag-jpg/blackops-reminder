@@ -6770,8 +6770,13 @@ test("TikTok MVP readiness verifier gates Metricool operator start without fake 
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
   assert.match(page, /prepare-clippers-tiktok-mvp-readiness-verifier-button/);
   assert.match(page, /clippers-tiktok-mvp-readiness-verifier-panel/);
+  assert.match(page, /clippers-tiktok-mvp-proof-bridge-gate/);
   assert.match(page, /TikTok MVP Readiness Verifier/);
   assert.match(page, /currentBatchEvidenceCsv/);
+  assert.match(page, /proofBridgeGate/);
+  assert.match(page, /previewRawStored/);
+  assert.match(page, /proofLinksFlowStatus/);
+  assert.match(page, /blockedLanes/);
   assert.match(page, /ready_for_metricool_operator/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-readiness-verifier"\]/);
   });

@@ -482,6 +482,8 @@ interface ClipperTikTokMvpReadinessVerifierSummary {
     currentBatchCsv: string;
     currentBatchEvidenceCsv: string;
     masterEvidenceCsv: string;
+    tiktokExternalCloseoutSession?: string;
+    metricoolBridgePreviewGate?: string;
   };
   checks: Array<{
     id: string;
@@ -491,6 +493,24 @@ interface ClipperTikTokMvpReadinessVerifierSummary {
     blocker: string;
     nextAction: string;
   }>;
+  proofBridgeGate?: {
+    status: string;
+    blockedLanes: number;
+    proofLinksFlowStatus: string;
+    checklistSteps: number;
+    checklistReady: boolean;
+    previewGateStatus: string;
+    previewRawStored: boolean;
+    previewExpiresAt: string;
+    paths: {
+      proofLinksPastePacket: string;
+      proofLinksFilledDrop: string;
+      proofLinksJsonDrop: string;
+      bridgeEvidenceCsv: string;
+      previewGate: string;
+    };
+    nextStep: string;
+  };
   guardrails: string[];
   externalWorkRemaining: string[];
   nextStep: string;
@@ -19234,6 +19254,26 @@ export default function ClippersPage() {
               <p>Current: {tiktokMvpReadinessVerifier.active.currentBatchId}</p>
               <p>Batch evidence: {tiktokMvpReadinessVerifier.paths.currentBatchEvidenceCsv}</p>
             </div>
+            {tiktokMvpReadinessVerifier.proofBridgeGate && (
+              <div className="mt-3 rounded-md border border-cyan-300/15 bg-cyan-950/10 p-3 text-xs leading-5 text-cyan-100/80" data-testid="clippers-tiktok-mvp-proof-bridge-gate">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="border border-cyan-300/30 bg-cyan-300/10 text-cyan-100">
+                    bridge {tiktokMvpReadinessVerifier.proofBridgeGate.status}
+                  </Badge>
+                  <span>{tiktokMvpReadinessVerifier.proofBridgeGate.blockedLanes} blocked lanes</span>
+                  <span>proof-links {tiktokMvpReadinessVerifier.proofBridgeGate.proofLinksFlowStatus}</span>
+                  <span>preview {tiktokMvpReadinessVerifier.proofBridgeGate.previewGateStatus}</span>
+                  <span>raw stored {tiktokMvpReadinessVerifier.proofBridgeGate.previewRawStored ? "yes" : "no"}</span>
+                </div>
+                <p className="mt-1">{tiktokMvpReadinessVerifier.proofBridgeGate.nextStep}</p>
+                <div className="mt-2 grid gap-1 text-[11px] text-cyan-100/65 md:grid-cols-2">
+                  <p className="break-all">Packet: {tiktokMvpReadinessVerifier.proofBridgeGate.paths.proofLinksPastePacket || "missing"}</p>
+                  <p className="break-all">Bridge CSV: {tiktokMvpReadinessVerifier.proofBridgeGate.paths.bridgeEvidenceCsv || "missing"}</p>
+                  <p className="break-all">Preview gate: {tiktokMvpReadinessVerifier.proofBridgeGate.paths.previewGate || "missing"}</p>
+                  <p>Checklist: {tiktokMvpReadinessVerifier.proofBridgeGate.checklistSteps} steps / {tiktokMvpReadinessVerifier.proofBridgeGate.checklistReady ? "ready" : "not ready"}</p>
+                </div>
+              </div>
+            )}
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               {tiktokMvpReadinessVerifier.checks.slice(0, 8).map((check) => (
                 <div key={check.id} className="rounded-md border border-emerald-300/10 bg-black/25 p-3">
