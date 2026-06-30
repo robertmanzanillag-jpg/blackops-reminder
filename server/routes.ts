@@ -258,6 +258,48 @@ async function readClipperMetricoolBridgePreviewGate() {
   return JSON.parse(raw);
 }
 
+async function buildClipperMetricoolBridgePreviewGateStatus() {
+  try {
+    const gate = await readClipperMetricoolBridgePreviewGate();
+    const ageMs = gate?.generatedAt ? Date.now() - new Date(gate.generatedAt).getTime() : Number.POSITIVE_INFINITY;
+    const expired = ageMs > 30 * 60 * 1000;
+    return {
+      ...gate,
+      status: !expired && gate.status === "ready_for_import" ? "ready_for_import" : expired ? "expired" : gate.status,
+      found: true,
+      ageSeconds: Number.isFinite(ageMs) ? Math.max(0, Math.round(ageMs / 1000)) : null,
+      expiresAt: gate?.generatedAt ? new Date(new Date(gate.generatedAt).getTime() + 30 * 60 * 1000).toISOString() : null,
+      rawStored: false,
+      nextStep: !expired && gate.status === "ready_for_import"
+        ? "Import is available only for the bridge rows matching this preview hash."
+        : expired
+          ? "Preview bridge rows again; the previous preview gate expired."
+          : gate.nextStep || "Preview bridge rows again before importing evidence.",
+    };
+  } catch (error: any) {
+    return {
+      status: "missing",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      found: false,
+      rawHash: "",
+      rawStored: false,
+      totals: { rows: 0, recorded: 0, skipped: 0 },
+      ageSeconds: null,
+      expiresAt: null,
+      issues: [error?.message || "No Metricool bridge preview gate exists yet."],
+      guardrails: [
+        "Missing status does not read or expose raw bridge CSV text.",
+        "Preview gate status does not record evidence, queue Metricool, create calendar rows, schedule, or send posts.",
+      ],
+      nextStep: "Run Preview bridge rows before importing Metricool bridge evidence.",
+    };
+  }
+}
+
 async function validateClipperMetricoolBridgePreviewGate(raw: string, previewHash: unknown) {
   const currentHash = hashClipperMetricoolBridgeRaw(raw);
   const requestedHash = String(previewHash || "").trim();
@@ -5011,6 +5053,14 @@ export async function registerRoutes(
       res.json({ metricoolBridgeEvidenceBatch: result.metricoolBridgeEvidenceBatch, metricoolBridgePreviewGate });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to preview Clippers Metricool bridge evidence batch" });
+    }
+  });
+
+  app.get("/api/clippers/metricool-bridge-preview-gate", async (_req, res) => {
+    try {
+      res.json({ metricoolBridgePreviewGate: await buildClipperMetricoolBridgePreviewGateStatus() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to read Clippers Metricool bridge preview gate" });
     }
   });
 

@@ -7242,13 +7242,17 @@ interface ClipperMetricoolBridgeEvidenceBatchResult {
 }
 
 interface ClipperMetricoolBridgePreviewGate {
-  status: "ready_for_import" | "blocked_preview_not_clean" | "blocked_missing_or_stale_preview";
+  status: "missing" | "ready_for_import" | "blocked_preview_not_clean" | "blocked_missing_or_stale_preview" | "expired";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
   launchMode: "metricool_approval_required";
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
+  found?: boolean;
   rawHash: string;
+  rawStored?: boolean;
+  ageSeconds?: number | null;
+  expiresAt?: string | null;
   totals?: {
     rows: number;
     recorded: number;
@@ -10398,6 +10402,15 @@ export default function ClippersPage() {
       const data = await response.json();
       if (!response.ok) return null;
       return data.metricoolBridgeEvidenceCsvStatus as ClipperMetricoolBridgeEvidenceCsvStatus;
+    },
+  });
+  const { data: metricoolBridgePreviewGateStatus } = useQuery<ClipperMetricoolBridgePreviewGate | null>({
+    queryKey: ["/api/clippers/metricool-bridge-preview-gate"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/metricool-bridge-preview-gate");
+      const data = await response.json();
+      if (!response.ok) return null;
+      return data.metricoolBridgePreviewGate as ClipperMetricoolBridgePreviewGate;
     },
   });
   const { data: tiktokLaunchControl } = useQuery<ClipperTikTokLaunchControlSummary | null>({
@@ -13877,6 +13890,7 @@ export default function ClippersPage() {
     },
     onSuccess: (data) => {
       setMetricoolBridgeEvidenceBatchPreview({ raw: data.raw, result: data.metricoolBridgeEvidenceBatch, previewGate: data.metricoolBridgePreviewGate });
+      queryClient.setQueryData(["/api/clippers/metricool-bridge-preview-gate"], data.metricoolBridgePreviewGate);
       toast({
         title: "Preview bridge Metricool listo",
         description: `${data.metricoolBridgeEvidenceBatch.totals.recorded} filas aceptadas; ${data.metricoolBridgeEvidenceBatch.totals.skipped} omitidas. ${data.metricoolBridgePreviewGate.nextStep}`,
@@ -18546,6 +18560,11 @@ export default function ClippersPage() {
               <div className="mt-3 grid gap-1 text-xs text-zinc-500">
                 <p>Preview accepted: {metricoolBridgeEvidenceCurrentPreview?.totals.recorded ?? 0}</p>
                 <p>Preview skipped: {metricoolBridgeEvidenceCurrentPreview?.totals.skipped ?? 0}</p>
+                <p data-testid="clippers-metricool-bridge-preview-gate-status">
+                  Preview gate: {metricoolBridgeEvidenceCurrentPreviewGate?.status || metricoolBridgePreviewGateStatus?.status || "missing"}
+                  {metricoolBridgeEvidenceCurrentPreviewGate?.expiresAt || metricoolBridgePreviewGateStatus?.expiresAt ? `; expires ${metricoolBridgeEvidenceCurrentPreviewGate?.expiresAt || metricoolBridgePreviewGateStatus?.expiresAt}` : ""}
+                  ; raw stored {(metricoolBridgeEvidenceCurrentPreviewGate?.rawStored ?? metricoolBridgePreviewGateStatus?.rawStored) ? "yes" : "no"}
+                </p>
                 <p>Recorded: {metricoolBridgeEvidenceBatch?.totals.recorded ?? 0}</p>
                 <p>Skipped: {metricoolBridgeEvidenceBatch?.totals.skipped ?? 0}</p>
                 <p>Rows: {metricoolBridgeEvidenceBatch?.totals.rows ?? 0}</p>
