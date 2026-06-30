@@ -11671,11 +11671,11 @@ export default function ClippersPage() {
   });
 
   const tiktokMvpProofLinksPasteMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (pasteTextOverride?: string) => {
       const response = await fetch("/api/clippers/parse-tiktok-mvp-proof-links-paste", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pasteText: tiktokMvpProofLinksPasteText }),
+        body: JSON.stringify({ pasteText: pasteTextOverride ?? tiktokMvpProofLinksPasteText }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No pude convertir el proof packet");
@@ -16682,11 +16682,13 @@ export default function ClippersPage() {
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
-    setTiktokMvpProofLinksPasteText([
+    const packetText = [
       `SPORT Metricool connected proof ${sportUrl}`,
       `memes Metricool connected proof ${memesUrl}`,
-    ].join("\n"));
+    ].join("\n");
+    setTiktokMvpProofLinksPasteText(packetText);
     setTiktokMvpProofLinksPastePreview(null);
+    tiktokMvpProofLinksPasteMutation.mutate(packetText);
   };
   const getTikTokMvpOperatorButtonLabel = (button?: string) => {
     switch (button) {
@@ -18261,7 +18263,7 @@ export default function ClippersPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => tiktokMvpProofLinksPasteMutation.mutate()}
+                      onClick={() => tiktokMvpProofLinksPasteMutation.mutate(undefined)}
                       disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinksPasteText.trim()}
                       className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
                       data-testid="parse-clippers-tiktok-mvp-proof-links-paste-button"
@@ -18347,12 +18349,12 @@ export default function ClippersPage() {
                         className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
                         data-testid="build-clippers-tiktok-mvp-metricool-fast-path-button"
                       >
-                        <Wand2 className="mr-2 h-3.5 w-3.5" />
-                        Build 2 URL packet
+                        {tiktokMvpProofLinksPasteMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Wand2 className="mr-2 h-3.5 w-3.5" />}
+                        Build & preview 2 URLs
                       </Button>
                     </div>
                     <p className="mt-2 text-[10px] leading-4 text-emerald-100/70">
-                      These two URLs still go through Preview links. They do not save evidence, apply closeout, schedule, or publish.
+                      These two URLs go straight to Preview links. They do not save evidence, apply closeout, schedule, or publish.
                     </p>
                   </div>
                   <Textarea
