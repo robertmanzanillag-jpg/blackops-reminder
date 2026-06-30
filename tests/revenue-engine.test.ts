@@ -22,6 +22,7 @@ import {
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
   preflightRevenueExpense,
+  previewRevenueMoneySprintSeeds,
   recordRevenueAgentRun,
   recordRevenueApprovalDecision,
   recordRevenueAutomationIntake,
@@ -913,6 +914,116 @@ test("money sprint parses quoted CSV batches with pipes inside evidence", () => 
   assert.equal(result.recordedLeads[0].lead.evidence.includes("| Instagram"), true);
   assert.equal(result.outreachDrafts.length, 1);
   assert.equal(result.blockedSeeds.length, 0);
+});
+
+test("money sprint preview parses batch without persisting leads drafts or previews", () => {
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business,area,niche,website,channel,contact,sourceUrl,recipientEmail,evidence,painPoint,offer",
+      "\"Preview Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@previewsalon.example\",\"https://example.com/preview-salon\",\"owner@previewsalon.example\",\"Public profile has no website, recent service photos and a verified contact path.\",\"Needs online booking capture and follow-up.\",\"3200\"",
+      "\"Weak Row\",\"Miami\",\"salon\",\"unknown\",\"unknown\",\"\",\"\",\"\",\"short\",\"Needs review.\",\"1000\"",
+    ].join("\n"),
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_to_import");
+  assert.equal(result.totals.accepted, 2);
+  assert.equal(result.totals.mockupReady, 1);
+  assert.equal(result.totals.draftReady, 1);
+  assert.equal(result.acceptedSeeds[0].businessName, "Preview Salon");
+  assert.equal(result.acceptedSeeds[0].draftReady, true);
+  assert.equal(result.acceptedSeeds[1].draftReady, false);
+  assert.equal(result.safety.persistsData, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("money sprint preview respects daily mockup limit", () => {
+  const row = (index: number) => [
+    `Limit Cafe ${index}`,
+    "Miami",
+    "coffee shop",
+    "no_website",
+    "email",
+    `owner${index}@limitcafe.example`,
+    `https://example.com/limit-cafe-${index}`,
+    `owner${index}@limitcafe.example`,
+    "Google listing has no website, public social profile has products and verified contact path.",
+    "Needs online menu capture and follow-up.",
+    "3200",
+  ].join("|");
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 1,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      row(1),
+      row(2),
+      row(3),
+    ].join("\n"),
+  });
+
+  assert.equal(result.totals.accepted, 3);
+  assert.equal(result.totals.mockupReady, 1);
+  assert.deepEqual(result.acceptedSeeds.map((seed) => seed.mockupReady), [true, false, false]);
+});
+
+test("money sprint preview requires approval before paid data spend", () => {
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      [
+        "Approval Roof Co",
+        "Orlando",
+        "roofers",
+        "no_website",
+        "email",
+        "owner@approvalroof.example",
+        "https://example.com/approval-roof",
+        "owner@approvalroof.example",
+        "Google listing has no website, public profile has verified service photos and contact path.",
+        "Needs storm repair lead capture and follow-up.",
+        "4200",
+      ].join("|"),
+    ].join("\n"),
+  });
+
+  assert.equal(result.status, "needs_spend_approval");
+  assert.equal(result.totals.mockupReady, 1);
+  assert.equal(result.safety.persistsData, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.match(result.safety.nextAction, /approval/i);
 });
 
 test("money sprint caps pasted lead batch at remaining seed lead slots", () => {

@@ -5295,6 +5295,73 @@ export function parseRevenueMoneySprintSeedLeadBatch(
   return { seedLeads, blockedSeeds };
 }
 
+export function previewRevenueMoneySprintSeeds(input: RevenueMoneySprintInput) {
+  const parsed = revenueMoneySprintSchema.parse(input);
+  const parsedBatch = parseRevenueMoneySprintSeedLeadBatch(parsed.seedLeadBatchText, { area: parsed.area, niche: parsed.niche });
+  const availableBatchSlots = Math.max(0, 25 - parsed.seedLeads.length);
+  const sprintSeedLeads = [
+    ...parsed.seedLeads,
+    ...parsedBatch.seedLeads.slice(0, availableBatchSlots),
+  ];
+  const blockedSeeds = [
+    ...parsedBatch.blockedSeeds,
+    ...parsedBatch.seedLeads.slice(availableBatchSlots).map((seed) => ({
+      businessName: seed.businessName,
+      reason: "batch limit 25",
+    })),
+  ];
+  let previewMockupCount = 0;
+  const acceptedSeeds = sprintSeedLeads.map((seed, index) => {
+    const qualification = qualifyRevenueLead(seed);
+    const hasSource = seed.sourceUrl.trim().length > 0;
+    const hasRecipient = seed.recipientEmail.trim().length > 0;
+    const mockupEligible = ["A", "B"].includes(qualification.grade);
+    const mockupReady = mockupEligible && previewMockupCount < parsed.dailyMockupLimit;
+    if (mockupReady) previewMockupCount += 1;
+    const draftReady = hasSource && hasRecipient && qualification.missing.length === 0;
+    return {
+      rowNumber: index + 1,
+      businessName: seed.businessName,
+      area: seed.area,
+      niche: seed.niche,
+      websiteStatus: seed.websiteStatus,
+      contactChannel: seed.contactChannel,
+      contactValue: seed.contactValue,
+      sourceUrl: seed.sourceUrl,
+      recipientEmail: seed.recipientEmail,
+      estimatedOfferUsd: seed.estimatedOfferUsd,
+      qualification,
+      mockupReady,
+      draftReady,
+      missingForDraft: [
+        !hasSource && "sourceUrl publico",
+        !hasRecipient && "recipientEmail",
+        ...qualification.missing,
+      ].filter((item): item is string => Boolean(item)),
+    };
+  });
+  const paidSpendBlocked = parsed.maxPaidDataSpendUsd > 0;
+
+  return {
+    status: paidSpendBlocked ? "needs_spend_approval" as const : acceptedSeeds.some((seed) => seed.mockupReady) ? "ready_to_import" as const : acceptedSeeds.length > 0 ? "needs_lead_evidence" as const : "empty" as const,
+    acceptedSeeds,
+    blockedSeeds,
+    totals: {
+      accepted: acceptedSeeds.length,
+      blocked: blockedSeeds.length,
+      mockupReady: acceptedSeeds.filter((seed) => seed.mockupReady).length,
+      draftReady: acceptedSeeds.filter((seed) => seed.draftReady).length,
+      maxImportable: 25,
+    },
+    safety: {
+      persistsData: false,
+      writesPreviewFiles: false,
+      sendsOutreach: false,
+      nextAction: paidSpendBlocked ? "Get Robert approval before running any paid data step; preview did not spend or persist." : acceptedSeeds.length > 0 ? "Review rows, then run Money sprint to persist selected batch and create draft-only outreach." : "Paste researched public leads before running preview.",
+    },
+  };
+}
+
 function revenueOutreachChannelFromLead(channel: RevenueLeadInput["contactChannel"]): RevenueOutreachDraftInput["channel"] {
   if (channel === "email") return "email";
   if (channel === "instagram") return "instagram";
