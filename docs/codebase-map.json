@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T20:59:44.887Z",
+  "generatedAt": "2026-06-30T21:07:06.534Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -96,24 +96,10 @@
     "filesVisible": 434,
     "filesIndexed": 366,
     "imports": 1382,
-    "routes": 99,
-    "symbols": 9050
+    "routes": 101,
+    "symbols": 9051
   },
   "directories": {
-    "script": {
-      "files": 67,
-      "indexed": 65,
-      "kinds": {
-        "script": 67
-      }
-    },
-    "tests": {
-      "files": 62,
-      "indexed": 59,
-      "kinds": {
-        "test": 62
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -171,6 +157,13 @@
         "docs": 11
       }
     },
+    "script": {
+      "files": 67,
+      "indexed": 65,
+      "kinds": {
+        "script": 67
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -204,6 +197,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 62,
+      "indexed": 59,
+      "kinds": {
+        "test": 62
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -14676,6 +14676,7 @@
         "metricoolBridgeRecordRoute",
         "metricoolQueuePath",
         "oneScreen",
+        "operatingRefreshRoute",
         "operatorButtonHelper",
         "output",
         "pack",
@@ -14760,6 +14761,7 @@
         "/api/clippers/prepare-tiktok-mvp-autopilot-boundary",
         "/api/clippers/prepare-tiktok-mvp-closeout-wizard",
         "/api/clippers/prepare-tiktok-mvp-local-verification",
+        "/api/clippers/prepare-tiktok-mvp-operating-refresh",
         "/api/clippers/prepare-tiktok-mvp-proof-doctor",
         "/api/clippers/prepare-tiktok-mvp-proof-drop-kit",
         "/api/clippers/prepare-tiktok-mvp-proof-handoff",
@@ -14776,6 +14778,7 @@
         "/api/clippers/tiktok-mvp-closeout-wizard",
         "/api/clippers/tiktok-mvp-evidence-closeout",
         "/api/clippers/tiktok-mvp-local-verification",
+        "/api/clippers/tiktok-mvp-operating-refresh",
         "/api/clippers/tiktok-mvp-proof-doctor",
         "/api/clippers/tiktok-mvp-proof-drop-kit",
         "/api/clippers/tiktok-mvp-proof-handoff",

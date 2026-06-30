@@ -887,6 +887,7 @@ export async function registerRoutes(
   const runClipperTikTokMvpLocalVerification = () => runClipperJsonScript("script/clippers-tiktok-mvp-local-verification.mjs", "TikTok MVP local verification");
   const runClipperTikTokMvpCloseoutWizard = () => runClipperJsonScript("script/clippers-tiktok-mvp-closeout-wizard.mjs", "TikTok MVP closeout wizard");
   const runClipperTikTokMvpAutopilotBoundary = () => runClipperJsonScript("script/clippers-tiktok-mvp-autopilot-boundary.mjs", "TikTok MVP autopilot boundary");
+  const runClipperTikTokMvpOperatingRefresh = () => runClipperNodeJson(["--import", "tsx", "script/clippers-tiktok-mvp-operating-refresh.ts"], "TikTok MVP operating refresh");
   const runClipperExternalCloseoutEvidenceImport = (apply: boolean, applyReady = false) => {
     const args = ["--import", "tsx", "script/clippers-import-external-closeout-evidence.ts"];
     if (apply) args.push("--apply");
@@ -952,6 +953,10 @@ export async function registerRoutes(
   };
   const readClipperTikTokMvpAutopilotBoundary = async () => {
     const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-proof-intake/autopilot-boundary.json", "utf8");
+    return JSON.parse(raw);
+  };
+  const readClipperTikTokMvpOperatingRefresh = async () => {
+    const raw = await readNodeFile("clippers_workspace/reports/tiktok-mvp-operating-refresh/operating-refresh.json", "utf8");
     return JSON.parse(raw);
   };
   const saveClipperTikTokMvpProofLinksAndRefresh = async (parsed: any) => {
@@ -3933,6 +3938,34 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP autopilot boundary" });
+    }
+  });
+
+  app.get("/api/clippers/tiktok-mvp-operating-refresh", async (_req, res) => {
+    try {
+      res.json({ tiktokMvpOperatingRefresh: await readClipperTikTokMvpOperatingRefresh() });
+    } catch (error: any) {
+      const status = error?.code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ error: error.message || (status === 404 ? "TikTok MVP operating refresh has not been prepared" : "TikTok MVP operating refresh could not be read") });
+    }
+  });
+
+  app.post("/api/clippers/prepare-tiktok-mvp-operating-refresh", async (_req, res) => {
+    try {
+      const run = await runClipperTikTokMvpOperatingRefresh();
+      const tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
+      res.json({
+        tiktokMvpOperatingRefresh: await readClipperTikTokMvpOperatingRefresh(),
+        tiktokMvpAutopilotBoundary: await readClipperTikTokMvpAutopilotBoundary().catch(() => null),
+        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
+        tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
+        tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification().catch(() => null),
+        tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
+        run,
+        tiktokNextActionRun,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to prepare TikTok MVP operating refresh" });
     }
   });
 

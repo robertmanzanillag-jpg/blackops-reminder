@@ -358,6 +358,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-closeout-wizard"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-autopilot-boundary"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-autopilot-boundary"/);
+  assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-operating-refresh"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-operating-refresh"/);
+  assert.match(routes, /runClipperTikTokMvpOperatingRefresh/);
+  assert.match(routes, /readClipperTikTokMvpOperatingRefresh/);
   assert.equal(await readFile(autopilotBoundaryPath, "utf8").then((source) => source.includes("Authorization from Robert is not treated as account ownership")), true);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-doctor"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-doctor"/);
@@ -498,6 +502,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   const autopilotBoundaryRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/prepare-tiktok-mvp-autopilot-boundary"',
+    'app.get("/api/clippers/tiktok-mvp-operating-refresh"',
+  );
+  const operatingRefreshRoute = requiredSlice(
+    routes,
+    'app.post("/api/clippers/prepare-tiktok-mvp-operating-refresh"',
     'app.get("/api/clippers/tiktok-mvp-proof-doctor"',
   );
   const operatorButtonHelper = requiredSlice(
@@ -555,6 +564,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /clipperMetricoolBridgeEvidenceCsvPath/);
   assert.match(routes, /Public TikTok profile URL/);
   assert.match(routes, /Metricool connection proof/);
+  assert.match(page, /prepare-clippers-tiktok-mvp-operating-refresh-button/);
+  assert.match(page, /clippers-tiktok-mvp-operating-refresh-panel/);
+  assert.match(page, /tiktokMvpOperatingRefreshMutation/);
+  assert.match(operatingRefreshRoute, /runClipperTikTokMvpOperatingRefresh/);
+  assert.match(operatingRefreshRoute, /readClipperTikTokMvpOperatingRefresh/);
+  assert.match(operatingRefreshRoute, /readClipperTikTokMvpAutopilotBoundary/);
+  assert.match(operatingRefreshRoute, /readClipperTikTokMvpProofHandoff/);
+  assert.doesNotMatch(operatingRefreshRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(routes, /isClipperMetricoolConnectionProofUrl/);
   assert.match(routes, /Google Drive\/Docs evidence URL/);
   assert.match(routes, /realPublishEnabled:\s*false/);

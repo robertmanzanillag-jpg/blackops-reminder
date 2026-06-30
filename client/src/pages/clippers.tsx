@@ -2847,6 +2847,55 @@ interface ClipperTikTokMvpAutopilotBoundarySummary {
   };
 }
 
+interface ClipperTikTokMvpOperatingRefreshSummary {
+  status: "blocked_external_account_proof" | "ready_for_metricool_approval_review";
+  launchDecision: "blocked_before_metricool" | "ready_for_metricool_approval_review";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  codexCanCreateExternalAccounts: boolean;
+  codexCanInventPermissions: boolean;
+  artifacts: {
+    sourceScoutStatus: string;
+    sourceScoutManifest: string;
+    permissionPackStatus: string;
+    permissionPackManifest: string;
+    sourceFileKitStatus: string;
+    sourceFileKitManifest: string;
+    dailySprintStatus: string;
+    dailySprintManifest: string;
+    weeklyFunnelStatus: string;
+    weeklyFunnelManifest: string;
+    boundaryStatus: string;
+    boundaryManifest: string;
+  };
+  totals: {
+    sourceCandidates: number;
+    sourceCandidatesBlockedRights: number;
+    sourceCandidatesExactUrls: number;
+    sourceCandidatesMetricoolFit: number;
+    weeklyTargetClips: number;
+    weeklySourceReadyAssets: number;
+    weeklyMetricoolApprovalQueued: number;
+    boundaryDeliverables: number;
+    boundaryDeliverablesDone: number;
+    externalActionsRequired: number;
+    minimumProofUrlsNeeded: number;
+  };
+  blockers: string[];
+  guardrails: string[];
+  nextStep: string;
+  paths: {
+    json: string;
+    markdown: string;
+    sourceScout: string;
+    weeklyFunnel: string;
+    boundary: string;
+  };
+}
+
 interface ClipperTikTokMvpCloseoutWizardSummary {
   status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence";
   launchDecision: "ready_for_confirmed_apply_only" | "blocked_before_apply";
@@ -11051,6 +11100,16 @@ export default function ClippersPage() {
       return data.tiktokMvpAutopilotBoundary as ClipperTikTokMvpAutopilotBoundarySummary;
     },
   });
+  const { data: tiktokMvpOperatingRefresh } = useQuery<ClipperTikTokMvpOperatingRefreshSummary | null>({
+    queryKey: ["/api/clippers/tiktok-mvp-operating-refresh"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/tiktok-mvp-operating-refresh");
+      const data = await response.json();
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(data.error || "No pude leer TikTok MVP operating refresh");
+      return data.tiktokMvpOperatingRefresh as ClipperTikTokMvpOperatingRefreshSummary;
+    },
+  });
   const { data: operationalReadiness } = useQuery<ClipperOperationalReadinessSummary | null>({
     queryKey: ["/api/clippers/operational-readiness"],
     queryFn: async () => {
@@ -12238,6 +12297,48 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude preparar autopilot boundary", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpOperatingRefreshMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/prepare-tiktok-mvp-operating-refresh", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No pude preparar TikTok MVP operating refresh");
+      return data as {
+        tiktokMvpOperatingRefresh: ClipperTikTokMvpOperatingRefreshSummary;
+        tiktokMvpAutopilotBoundary: ClipperTikTokMvpAutopilotBoundarySummary | null;
+        tiktokMvpProofHandoff: ClipperTikTokMvpProofHandoffSummary | null;
+        tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
+        tiktokMvpLocalVerification: ClipperTikTokMvpLocalVerificationSummary | null;
+        tiktokNextAction: ClipperTikTokNextActionSummary | null;
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-operating-refresh"], data.tiktokMvpOperatingRefresh);
+      if (data.tiktokMvpAutopilotBoundary) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-autopilot-boundary"], data.tiktokMvpAutopilotBoundary);
+      }
+      if (data.tiktokMvpProofHandoff) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
+      }
+      if (data.tiktokMvpCloseoutWizard) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+      }
+      if (data.tiktokMvpLocalVerification) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-local-verification"], data.tiktokMvpLocalVerification);
+      }
+      if (data.tiktokNextAction) {
+        queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
+      }
+      toast({
+        title: data.tiktokMvpOperatingRefresh.status === "ready_for_metricool_approval_review" ? "Operating refresh listo" : "Operating refresh bloqueado",
+        description: data.tiktokMvpOperatingRefresh.nextStep,
+        variant: data.tiktokMvpOperatingRefresh.status === "ready_for_metricool_approval_review" ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar operating refresh", description: error.message, variant: "destructive" });
     },
   });
 
@@ -16769,6 +16870,7 @@ export default function ClippersPage() {
     || tiktokMvpLocalVerificationMutation.isPending
     || tiktokMvpCloseoutWizardMutation.isPending
     || tiktokMvpAutopilotBoundaryMutation.isPending
+    || tiktokMvpOperatingRefreshMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const buildTikTokMvpMetricoolFastPathPaste = () => {
@@ -18090,6 +18192,18 @@ export default function ClippersPage() {
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
+                onClick={() => tiktokMvpOperatingRefreshMutation.mutate()}
+                disabled={tiktokProofFlowBusy || isLoading}
+                className="h-8 border-teal-300/20 bg-transparent text-teal-100 hover:bg-teal-300/10"
+                data-testid="prepare-clippers-tiktok-mvp-operating-refresh-button"
+              >
+                {tiktokMvpOperatingRefreshMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Gauge className="mr-2 h-3.5 w-3.5" />}
+                Operating refresh
+              </Button>
+              <Button
+                type="button"
+                size="sm"
                 onClick={() => tiktokMvpProofQuickFillMutation.mutate()}
                 disabled={tiktokProofFlowBusy || isLoading}
                 className="h-8 bg-violet-200 text-zinc-950 hover:bg-violet-100"
@@ -18987,6 +19101,64 @@ export default function ClippersPage() {
                   <p>Direct APIs: {tiktokMvpAutopilotBoundary.directSocialApisRequired ? "required" : "not required"}</p>
                   <p className="break-all">Report: {tiktokMvpAutopilotBoundary.paths.markdown}</p>
                   <p className="break-all">CSV: {tiktokMvpAutopilotBoundary.paths.csv}</p>
+                </div>
+              </div>
+            )}
+            {tiktokMvpOperatingRefresh && (
+              <div className={cn(
+                "mt-2 rounded-md border bg-black/20 p-2 text-[11px] leading-4",
+                tiktokMvpOperatingRefresh.status === "ready_for_metricool_approval_review"
+                  ? "border-emerald-300/15 text-emerald-100/80"
+                  : "border-teal-300/15 text-teal-100/80"
+              )} data-testid="clippers-tiktok-mvp-operating-refresh-panel">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={cn(
+                    "border text-[10px]",
+                    tiktokMvpOperatingRefresh.status === "ready_for_metricool_approval_review"
+                      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      : "border-teal-300/30 bg-teal-300/10 text-teal-100"
+                  )}>
+                    operating {tiktokMvpOperatingRefresh.status}
+                  </Badge>
+                  <span>decision {tiktokMvpOperatingRefresh.launchDecision}</span>
+                  <span>candidates {tiktokMvpOperatingRefresh.totals.sourceCandidates}</span>
+                  <span>exact {tiktokMvpOperatingRefresh.totals.sourceCandidatesExactUrls}</span>
+                  <span>source-ready {tiktokMvpOperatingRefresh.totals.weeklySourceReadyAssets}</span>
+                  <span>queue {tiktokMvpOperatingRefresh.totals.weeklyMetricoolApprovalQueued}</span>
+                  <span>URLs {tiktokMvpOperatingRefresh.totals.minimumProofUrlsNeeded}</span>
+                </div>
+                <p className="mt-1">{tiktokMvpOperatingRefresh.nextStep}</p>
+                <div className="mt-2 grid gap-1 md:grid-cols-3" data-testid="clippers-tiktok-mvp-operating-refresh-artifacts">
+                  <div className="rounded border border-white/10 bg-black/20 p-2">
+                    <p className="font-medium text-teal-100">Source Scout: {tiktokMvpOperatingRefresh.artifacts.sourceScoutStatus}</p>
+                    <p className="mt-1 text-zinc-400">Blocked rights: {tiktokMvpOperatingRefresh.totals.sourceCandidatesBlockedRights}</p>
+                    <p className="text-zinc-400">Metricool fit: {tiktokMvpOperatingRefresh.totals.sourceCandidatesMetricoolFit}</p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-black/20 p-2">
+                    <p className="font-medium text-teal-100">Weekly funnel: {tiktokMvpOperatingRefresh.artifacts.weeklyFunnelStatus}</p>
+                    <p className="mt-1 text-zinc-400">Target clips: {tiktokMvpOperatingRefresh.totals.weeklyTargetClips}</p>
+                    <p className="text-zinc-400">Approval queue: {tiktokMvpOperatingRefresh.totals.weeklyMetricoolApprovalQueued}</p>
+                  </div>
+                  <div className="rounded border border-white/10 bg-black/20 p-2">
+                    <p className="font-medium text-teal-100">Boundary: {tiktokMvpOperatingRefresh.artifacts.boundaryStatus}</p>
+                    <p className="mt-1 text-zinc-400">Codex {tiktokMvpOperatingRefresh.totals.boundaryDeliverablesDone}/{tiktokMvpOperatingRefresh.totals.boundaryDeliverables}</p>
+                    <p className="text-zinc-400">External actions: {tiktokMvpOperatingRefresh.totals.externalActionsRequired}</p>
+                  </div>
+                </div>
+                {tiktokMvpOperatingRefresh.blockers.length > 0 && (
+                  <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-operating-refresh-blockers">
+                    {tiktokMvpOperatingRefresh.blockers.map((item) => (
+                      <p key={item} className="rounded border border-teal-300/10 bg-black/20 p-2 text-teal-100">{item}</p>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
+                  <p>Creates external accounts: {tiktokMvpOperatingRefresh.codexCanCreateExternalAccounts ? "yes" : "no"}</p>
+                  <p>Invents permissions: {tiktokMvpOperatingRefresh.codexCanInventPermissions ? "yes" : "no"}</p>
+                  <p>Real publish: {tiktokMvpOperatingRefresh.realPublishEnabled ? "enabled" : "disabled"}</p>
+                  <p>Direct APIs: {tiktokMvpOperatingRefresh.directSocialApisRequired ? "required" : "not required"}</p>
+                  <p className="break-all">Report: {tiktokMvpOperatingRefresh.paths.markdown}</p>
+                  <p className="break-all">Weekly funnel: {tiktokMvpOperatingRefresh.paths.weeklyFunnel}</p>
                 </div>
               </div>
             )}
