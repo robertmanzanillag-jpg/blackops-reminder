@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-30T12:02:56.874Z",
+  "generatedAt": "2026-06-30T12:09:37.389Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,7 @@
     "filesIndexed": 363,
     "imports": 1368,
     "routes": 94,
-    "symbols": 8849
+    "symbols": 8858
   },
   "directories": {
     ".agents/skills": {
@@ -6500,6 +6500,10 @@
       "exports": [],
       "symbols": [
         "appliedToIntake",
+        "bridgeCsvPath",
+        "bridgeHeader",
+        "bridgeRowForLane",
+        "bridgeRows",
         "cells",
         "char",
         "combinedCsvPath",
@@ -6529,6 +6533,7 @@
         "raw",
         "rawCombined",
         "readJson",
+        "renderBridgeCsv",
         "renderCombinedCsv",
         "renderMarkdown",
         "reportsDir",
@@ -6538,6 +6543,7 @@
         "rowForLane",
         "runJson",
         "safeHttpsUrl",
+        "scheduledDir",
         "summary",
         "text",
         "unsafeProofQueryParamPattern",
@@ -14417,6 +14423,9 @@
         "applyOutput",
         "applyRoute",
         "before",
+        "bridge",
+        "bridgeAfter",
+        "bridgeBefore",
         "bridgeCsvPath",
         "bridgeHeader",
         "bridgeTarget",

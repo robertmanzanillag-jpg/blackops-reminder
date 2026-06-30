@@ -1067,10 +1067,14 @@ test("TikTok MVP proof unblocker consolidates open proof fixes without applying"
 test("TikTok MVP proof quick fill rejects placeholders without writing combined intake", async () => {
   const previousCombined = await readFile(defaultCombinedProofCsvPath, "utf8").catch(() => null);
   const previousInput = await readFile(quickFillInputPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
   try {
     await mkdir(path.dirname(defaultCombinedProofCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, cleanCombinedCsv());
+    await writeFile(targetBridgeCsvPath, cleanBridgeCsv());
     const before = await readFile(defaultCombinedProofCsvPath, "utf8");
+    const bridgeBefore = await readFile(targetBridgeCsvPath, "utf8");
     await writeFile(quickFillInputPath, JSON.stringify({
       lanes: {
         "sports-daily:tiktok": {
@@ -1100,6 +1104,8 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
 
     const after = await readFile(defaultCombinedProofCsvPath, "utf8");
     assert.equal(after, before);
+    const bridgeAfter = await readFile(targetBridgeCsvPath, "utf8");
+    assert.equal(bridgeAfter, bridgeBefore);
     const source = await readFile(proofQuickFillPath, "utf8");
     assert.match(source, /unsafeProofQueryParamPattern/);
     assert.match(source, /x-amz-signature/);
@@ -1110,6 +1116,8 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);
     if (previousInput === null) await unlink(quickFillInputPath).catch(() => undefined);
     else await writeFile(quickFillInputPath, previousInput);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
     spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-unblocker.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -1117,11 +1125,13 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
   }
 });
 
-test("TikTok MVP proof quick fill writes clean proof only to combined intake", async () => {
+test("TikTok MVP proof quick fill writes clean proof to combined intake and bridge CSV", async () => {
   const previousCombined = await readFile(defaultCombinedProofCsvPath, "utf8").catch(() => null);
   const previousInput = await readFile(quickFillInputPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
   try {
     await mkdir(path.dirname(defaultCombinedProofCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, [
       combinedHeader,
       "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
@@ -1158,15 +1168,23 @@ test("TikTok MVP proof quick fill writes clean proof only to combined intake", a
     assert.match(combined, /https:\/\/drive\.google\.com\/file\/d\/sports-daily-tiktok-proof\/view/);
     assert.match(combined, /https:\/\/app\.metricool\.com\/planner\/meme-radar-tiktok-proof/);
     assert.doesNotMatch(combined, /<paste|example\.com|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
+    const bridge = await readFile(targetBridgeCsvPath, "utf8");
+    assert.match(bridge, /^account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes/m);
+    assert.match(bridge, /"sports-daily","tiktok","SPORT","","https:\/\/www\.tiktok\.com\/@sportsdaily","https:\/\/app\.metricool\.com\/planner\/sports-daily-tiktok-proof"/);
+    assert.match(bridge, /"meme-radar","tiktok","memes","","https:\/\/www\.tiktok\.com\/@memeradar","https:\/\/app\.metricool\.com\/planner\/meme-radar-tiktok-proof"/);
+    assert.doesNotMatch(bridge, /<paste|example\.com|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
     assert.equal(report.launchMode, "metricool_approval_required");
     assert.equal(report.directSocialApisRequired, false);
     assert.equal(report.appliedToIntake, true);
+    assert.equal(report.paths.metricoolBridgeCsv, targetBridgeCsvPath);
   } finally {
     if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);
     if (previousInput === null) await unlink(quickFillInputPath).catch(() => undefined);
     else await writeFile(quickFillInputPath, previousInput);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
     spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-unblocker.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",

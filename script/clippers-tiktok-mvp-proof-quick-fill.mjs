@@ -4,8 +4,10 @@ import path from "node:path";
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
 const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
+const scheduledDir = path.join(rootDir, "scheduled");
 const quickFillInputPath = path.join(reportsDir, "proof-quick-fill-input.json");
 const combinedCsvPath = path.join(reportsDir, "combined-proof-intake.csv");
+const bridgeCsvPath = path.join(scheduledDir, "metricool-tiktok-bridge-evidence.csv");
 const outJsonPath = path.join(reportsDir, "proof-quick-fill.json");
 const outMarkdownPath = path.join(reportsDir, "proof-quick-fill.md");
 
@@ -43,6 +45,16 @@ const combinedHeader = [
   "metricool_notes",
   "copy_to_account_csv",
   "copy_to_bridge_csv",
+];
+
+const bridgeHeader = [
+  "account_id",
+  "platform",
+  "metricool_brand_name",
+  "metricool_blog_id",
+  "profile_url",
+  "proof",
+  "notes",
 ];
 
 function runJson(args) {
@@ -210,6 +222,27 @@ function renderCombinedCsv(rows) {
   ].join("\n");
 }
 
+function renderBridgeCsv(rows) {
+  return [
+    bridgeHeader.join(","),
+    ...rows.map((row) => bridgeHeader.map((key) => csvCell(row[key] || "")).join(",")),
+    "",
+  ].join("\n");
+}
+
+function bridgeRowForLane(input, lane) {
+  const row = lanePayload(input, lane);
+  return {
+    account_id: lane.accountId,
+    platform: lane.platform,
+    metricool_brand_name: lane.metricoolBrandName,
+    metricool_blog_id: "",
+    profile_url: lane.profileUrl,
+    proof: normalize(row.metricoolConnectionProofUrl),
+    notes: normalize(row.metricoolNotes),
+  };
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Proof Quick Fill",
@@ -240,6 +273,7 @@ function renderMarkdown(summary) {
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
+  await mkdir(scheduledDir, { recursive: true });
   const input = await readJson(quickFillInputPath, {});
   const rawCombined = await readFile(combinedCsvPath, "utf8").catch(() => "");
   const existingRows = parseCsv(rawCombined);
@@ -251,6 +285,8 @@ async function main() {
   if (appliedToIntake) {
     const nextRows = lanes.map((lane) => rowForLane(existingRows, input, lane));
     await writeFile(combinedCsvPath, renderCombinedCsv(nextRows));
+    const bridgeRows = lanes.map((lane) => bridgeRowForLane(input, lane));
+    await writeFile(bridgeCsvPath, renderBridgeCsv(bridgeRows));
     refreshRun = runJson(["script/clippers-tiktok-mvp-proof-refresh.mjs"]);
     unblockerRun = runJson(["script/clippers-tiktok-mvp-proof-unblocker.mjs"]);
   }
@@ -280,17 +316,18 @@ async function main() {
       markdown: outMarkdownPath,
       inputJson: quickFillInputPath,
       combinedCsv: combinedCsvPath,
+      metricoolBridgeCsv: bridgeCsvPath,
       refreshJson: path.join(reportsDir, "proof-refresh.json"),
       unblockerJson: path.join(reportsDir, "proof-unblocker.json"),
     },
     guardrails: [
-      "Quick fill only updates combined-proof-intake.csv after all required proof fields pass validation.",
+      "Quick fill only updates combined-proof-intake.csv and the local Metricool bridge CSV after all required proof fields pass validation.",
       "This does not apply final evidence, publish, schedule, or enable direct social APIs.",
       "Metricool remains approval_required.",
       "Do not paste passwords, cookies, tokens, private screenshots, recovery codes, or private keys.",
     ],
     nextStep: appliedToIntake
-      ? "Run Import preview and Evidence closeout preview; apply only when both say ready_to_apply."
+      ? "Load the prepared Metricool bridge CSV, preview rows, then import only after review."
       : "Fix the listed quick-fill issues and submit again.",
   };
 
