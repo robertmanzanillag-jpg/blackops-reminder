@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T21:36:17.062Z
+Generated: 2026-06-30T21:41:43.301Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 434 | 366 | 1385 | 101 | 9062 |
+| 434 | 366 | 1385 | 101 | 9063 |
 
 ## Entrypoints
 - `client/src/App.tsx`

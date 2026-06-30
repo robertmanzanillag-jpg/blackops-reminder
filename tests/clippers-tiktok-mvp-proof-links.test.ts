@@ -154,6 +154,41 @@ test("TikTok MVP proof links audit accepts Google Drive Metricool screenshots as
   assert.equal(audit.realPublishEnabled, false);
 });
 
+test("TikTok MVP proof links JSON starter stays blocked until real proof URLs are filled", () => {
+  const starter = {
+    lanes: {
+      "sports-daily:tiktok": {
+        accountOwnershipProofUrl: "",
+        metricoolConnectionProofUrl: "",
+        accountNotes: "Sports Daily Clips TikTok ownership and 2FA/security proof verified by Robert without secrets.",
+        metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+      },
+      "meme-radar:tiktok": {
+        accountOwnershipProofUrl: "",
+        metricoolConnectionProofUrl: "",
+        accountNotes: "Meme Radar TikTok ownership and 2FA/security proof verified by Robert without secrets.",
+        metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+      },
+    },
+  };
+
+  assert.equal(validateClipperTikTokMvpProofLinks(starter), "");
+  const audit = auditClipperTikTokMvpProofLinks(starter);
+  assert.equal(audit.status, "blocked");
+  assert.equal(audit.readyForProofDrop, false);
+  assert.equal(audit.realPublishEnabled, false);
+  assert.equal(audit.directSocialApisRequired, false);
+  assert.equal(audit.goalBoardImpact.status, "blocked_proof_actions");
+  assert.equal(audit.goalBoardImpact.readyProofFields, 4);
+  assert.equal(audit.goalBoardImpact.totalProofFields, 8);
+  assert.equal(audit.goalBoardImpact.nextSafeButton, "preview_proof_links");
+  assert.equal(audit.goalBoardImpact.nextLockedButton, "save_proof_links");
+  assert.deepEqual(audit.goalBoardImpact.unlocksOperatorActions, []);
+  assert.match(audit.issues.join("\n"), /accountOwnershipProofUrl must be a real safe HTTPS proof URL/);
+  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or Google Drive\/Docs evidence URL/);
+  assert.doesNotMatch(JSON.stringify(audit), /"readyToSend"\s*:\s*true|realPublishEnabled\s*[:=]\s*true|video\.publish|autopublish/i);
+});
+
 test("TikTok MVP proof links validator rejects secrets anywhere in JSON", () => {
   const proofLinks = {
     lanes: {
