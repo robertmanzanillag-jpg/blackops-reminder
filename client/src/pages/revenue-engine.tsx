@@ -218,6 +218,37 @@ type RevenueSnapshot = {
     estimatedOfferUsd: number;
     status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
   }>;
+  recentPublicLeadCandidates: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    evidence: string;
+    painPoint: string;
+    estimatedOfferUsd: number;
+    status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+    verificationStatus: "needs_review" | "verified_public" | "blocked";
+    publicEvidenceVerified: boolean;
+    approvalToImport: boolean;
+    importReady: boolean;
+    blockedReasons: string[];
+    batchRow: string;
+    qualification: RevenueLeadResult["qualification"];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      persistsLead: boolean;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+  }>;
   recentOutreach: Array<{
     id: string;
     createdAt: string;
@@ -698,6 +729,21 @@ type RevenueMoneySprint = {
     evidenceToCapture: string[];
     blockedActions: string[];
   }>;
+  scoutWorkPack: {
+    targetRows: number;
+    batchHeader: string;
+    copyableBatchTemplate: string;
+    subagentBrief: string;
+    importInstructions: string[];
+    qualityGate: string[];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      paidDataSpendUsd: number;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+  };
   recordedLeads: Array<{
     lead: RevenueSnapshot["recentLeads"][number];
     qualification: RevenueLeadResult["qualification"];
@@ -757,6 +803,15 @@ type RevenueMoneySprintPreview = {
     sendsOutreach: boolean;
     nextAction: string;
   };
+};
+
+type RevenuePublicLeadCandidateResult = {
+  status: "ready_for_preview" | "needs_review";
+  candidate: RevenueSnapshot["recentPublicLeadCandidates"][number];
+  importBatchText: string;
+  importableCount: number;
+  nextAction: string;
+  snapshot: RevenueSnapshot;
 };
 
 type RevenueMockupTemplatePack = {
@@ -1123,7 +1178,9 @@ function statusTone(status: string) {
   if (status === "scale_carefully") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_preview") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "needs_spend_approval") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_review") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "needs_lead_evidence") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "empty") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "pending_allowed") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
@@ -1183,6 +1240,8 @@ export default function RevenueEnginePage() {
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
   const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
   const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
+  const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
+  const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
@@ -1977,6 +2036,41 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicLeadCandidateMutation = useMutation<RevenuePublicLeadCandidateResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: leadBusinessName,
+          area: leadArea,
+          niche: leadNiche,
+          websiteStatus: leadWebsiteStatus,
+          contactChannel: leadContactChannel,
+          contactValue: leadContactValue,
+          evidence: leadEvidence,
+          painPoint: leadPainPoint,
+          estimatedOfferUsd: leadEstimatedOfferUsd,
+          status: "research",
+          sourceUrl: leadSourceUrl,
+          recipientEmail: leadRecipientEmail,
+          contactName: leadContactName,
+          businessSummary: leadBusinessSummary,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo guardar candidato publico");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.importBatchText);
       refetchSnapshot();
     },
   });
@@ -3270,6 +3364,47 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
                       </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-zinc-500">Scout work pack</p>
+                            <p className="mt-1 text-sm text-zinc-300">
+                              {moneySprintMutation.data.scoutWorkPack.targetRows} filas · {moneySprintMutation.data.scoutWorkPack.safety.allowedAction}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.copyableBatchTemplate)}
+                              data-testid="button-copy-scout-batch-template"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy rows
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.subagentBrief)}
+                              data-testid="button-copy-scout-brief"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy brief
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutWorkPack.importInstructions.map((item) => (
+                            <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                       {moneySprintMutation.data.previews.length > 0 && (
                         <div>
                           <p className="text-xs uppercase tracking-wide text-zinc-500">Previews</p>
@@ -3550,6 +3685,30 @@ export default function RevenueEnginePage() {
                           Incluir este lead en Money sprint para crear preview y outreach draft si pasa los gates.
                         </span>
                       </label>
+                      <div className="grid gap-2 text-sm text-zinc-300">
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-public-verified">
+                          <input
+                            id="candidate-public-verified"
+                            type="checkbox"
+                            checked={candidatePublicEvidenceVerified}
+                            onChange={(event) => setCandidatePublicEvidenceVerified(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-public-verified"
+                          />
+                          <span>Verifique que la fuente/contacto/evidencia son publicos y reales.</span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-approval-import">
+                          <input
+                            id="candidate-approval-import"
+                            type="checkbox"
+                            checked={candidateApprovalToImport}
+                            onChange={(event) => setCandidateApprovalToImport(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-approval-import"
+                          />
+                          <span>Aprobar solo esta fila para Preview batch. No contacta, no scrapea, no gasta.</span>
+                        </label>
+                      </div>
                       <Button
                         type="submit"
                         disabled={leadMutation.isPending}
@@ -3559,11 +3718,48 @@ export default function RevenueEnginePage() {
                         {leadMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                         Calificar lead
                       </Button>
+                      <Button
+                        type="button"
+                        disabled={publicLeadCandidateMutation.isPending}
+                        onClick={() => publicLeadCandidateMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-record-public-candidate"
+                      >
+                        {publicLeadCandidateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Guardar candidato publico
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
 
                 <div className="space-y-4">
+                  {publicLeadCandidateMutation.data && (
+                    <Card className="border-zinc-800 bg-zinc-950/80">
+                      <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">{publicLeadCandidateMutation.data.candidate.businessName}</CardTitle>
+                            <p className="mt-1 text-sm text-zinc-500">{publicLeadCandidateMutation.data.nextAction}</p>
+                          </div>
+                          <Badge variant="outline" className={cn(statusTone(publicLeadCandidateMutation.data.status), "shrink-0")}>
+                            {publicLeadCandidateMutation.data.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 md:grid-cols-[1fr_220px]">
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Batch row</p>
+                          <p className="mt-2 break-all text-xs leading-5 text-zinc-300">{publicLeadCandidateMutation.data.candidate.batchRow}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300">
+                          <p>{publicLeadCandidateMutation.data.importableCount} listos para preview</p>
+                          <p className="mt-2 text-xs text-zinc-500">
+                            Lead real: {publicLeadCandidateMutation.data.candidate.safety.persistsLead ? "yes" : "no"} · Outreach: {publicLeadCandidateMutation.data.candidate.safety.sendsOutreach ? "yes" : "no"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {leadMutation.data && (
                     <Card className="border-zinc-800 bg-zinc-950/80">
                       <CardHeader>
