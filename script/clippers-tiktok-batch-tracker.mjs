@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
 const scheduledDir = path.join(rootDir, "scheduled");
@@ -12,7 +10,6 @@ const masterEvidenceCsvPath = path.join(rootDir, "evidence-drop", "metricool-100
 const outJsonPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.md");
 const outCsvPath = path.join(reportsDir, "clippers-tiktok-batch-tracker.csv");
-const execFileAsync = promisify(execFile);
 
 async function readRequiredJson(filePath) {
   const raw = await readFile(filePath, "utf8");
@@ -68,6 +65,16 @@ function numberValue(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function hasMp4FileTypeBox(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+  const boxSize = buffer.readUInt32BE(0);
+  const boxType = buffer.subarray(4, 8).toString("latin1");
+  if (boxType !== "ftyp") return false;
+  if (boxSize < 12 || boxSize > buffer.length) return false;
+  const majorBrand = buffer.subarray(8, 12).toString("latin1");
+  return /^[A-Za-z0-9 ]{4}$/.test(majorBrand);
+}
+
 async function sourceFileStatus(sourcePath) {
   const text = String(sourcePath || "").trim();
   if (!text) return { sourceExists: false, sourceBytes: 0, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "missing", sourceBlocker: "source_file_missing" };
@@ -76,40 +83,24 @@ async function sourceFileStatus(sourcePath) {
   const ext = path.extname(text).toLowerCase();
   if (![".mp4", ".mov", ".m4v"].includes(ext)) return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "extension", sourceBlocker: "source_file_unsupported_extension" };
   if (fileStat.size < 1024) return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "size", sourceBlocker: "source_file_too_small" };
+  let handle;
   try {
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v",
-      "error",
-      "-select_streams",
-      "v:0",
-      "-show_entries",
-      "stream=codec_type,duration:format=duration",
-      "-of",
-      "json",
-      text,
-    ], { timeout: 5000, maxBuffer: 1024 * 1024 });
-    const probe = JSON.parse(stdout || "{}");
-    const stream = Array.isArray(probe.streams) ? probe.streams.find((item) => item.codec_type === "video") : null;
-    const durationCandidates = [Number(stream?.duration), Number(probe.format?.duration)].filter((value) => Number.isFinite(value));
-    const duration = durationCandidates.length ? Math.max(...durationCandidates) : 0;
-    if (!stream) return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "ffprobe", sourceBlocker: "source_file_not_video" };
-    if (!Number.isFinite(duration) || duration <= 0) return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "ffprobe", sourceBlocker: "source_file_invalid_duration" };
-    return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: true, sourceDurationSeconds: duration, sourceProbe: "ffprobe", sourceBlocker: "" };
-  } catch (error) {
-    if (error?.code && error.code !== "ENOENT") {
-      return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "ffprobe", sourceBlocker: "source_file_probe_failed" };
-    }
-    const header = await readFile(text).catch(() => Buffer.alloc(0));
-    const signature = header.subarray(0, 4096).toString("latin1");
-    const looksLikeMp4 = signature.includes("ftyp");
+    handle = await open(text, "r");
+    const buffer = Buffer.alloc(4096);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const looksLikeMp4 = hasMp4FileTypeBox(buffer.subarray(0, bytesRead));
     return {
       sourceExists: true,
       sourceBytes: fileStat.size,
       sourceVideoValid: looksLikeMp4,
       sourceDurationSeconds: 0,
-      sourceProbe: "mp4_signature_fallback",
+      sourceProbe: "mp4_signature",
       sourceBlocker: looksLikeMp4 ? "" : "source_file_probe_failed",
     };
+  } catch (error) {
+    return { sourceExists: true, sourceBytes: fileStat.size, sourceVideoValid: false, sourceDurationSeconds: 0, sourceProbe: "mp4_signature", sourceBlocker: "source_file_probe_failed" };
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 }
 
@@ -481,7 +472,7 @@ async function main() {
       "Scheduled rows are not counted as published.",
       "Published rows require a public TikTok URL and nonzero 24h metrics.",
       "Rows with missing or invalid local source files are blocked before Metricool review.",
-      "Rows must probe as local video files before Metricool review; fake .mp4 files are blocked.",
+      "Rows must pass local extension, size, and MP4/MOV signature checks before Metricool review.",
       "Do not paste tokens, cookies, passwords, private URLs, or screenshots with secrets.",
     ],
     nextStep,

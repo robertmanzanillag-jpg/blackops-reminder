@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, rm, symlink, unlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, symlink, unlink, utimes, writeFile } from "node:fs/promises";
 import test from "node:test";
 import path from "node:path";
 
@@ -2939,12 +2939,12 @@ test("TikTok batch tracker tracks current batch without counting placeholders", 
   assert.equal(tracker.rows[0].sourceExists, true);
   assert.ok(tracker.rows[0].sourceBytes > 1024);
   assert.equal(tracker.rows[0].sourceVideoValid, true);
-  assert.ok(tracker.rows[0].sourceDurationSeconds > 0);
-  assert.match(tracker.rows[0].sourceProbe, /ffprobe|mp4_signature_fallback/);
+  assert.equal(tracker.rows[0].sourceDurationSeconds, 0);
+  assert.equal(tracker.rows[0].sourceProbe, "mp4_signature");
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("Scheduled rows are not counted as published")));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("public TikTok URL and nonzero 24h metrics")));
   assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("missing or invalid local source files")));
-  assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("fake .mp4 files are blocked")));
+  assert.ok(tracker.guardrails.some((guardrail) => guardrail.includes("MP4/MOV signature checks")));
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-tiktok-batch-tracker.md"), "utf8");
   assert.match(markdown, /Clippers TikTok Batch Tracker/);
@@ -3097,7 +3097,7 @@ test("TikTok batch tracker rejects mismatched evidence and missing workbook rows
 
     const fakeVideoWorkbook = JSON.parse(originalWorkbook);
     fakeVideoWorkbook.rows[0].sourcePath = fakeVideoPath;
-    await writeFile(fakeVideoPath, "not a video".repeat(200));
+    await writeFile(fakeVideoPath, `not a real video but it says ftyp here\n${"padding".repeat(400)}`);
     await writeFile(workbookPath, JSON.stringify(fakeVideoWorkbook, null, 2));
     await writeFile(evidencePath, originalEvidence);
     const fakeVideoResult = spawnSync(process.execPath, ["script/clippers-tiktok-batch-tracker.mjs"], {
@@ -3130,18 +3130,16 @@ test("TikTok batch tracker rejects mismatched evidence and missing workbook rows
   }
 });
 
-test("TikTok batch tracker accepts ffprobe format duration when stream duration is unavailable", async () => {
+test("TikTok batch tracker uses local MP4 signature checks without ffprobe", async () => {
   const fakeBinDir = path.join(rootDir, "tmp/fake-ffprobe-bin");
   const fakeFfprobePath = path.join(fakeBinDir, "ffprobe");
   try {
     await mkdir(fakeBinDir, { recursive: true });
     await writeFile(fakeFfprobePath, [
       "#!/bin/sh",
-      "cat <<'JSON'",
-      '{"streams":[{"codec_type":"video","duration":"N/A"}],"format":{"duration":"6.250000"}}',
-      "JSON",
+      "echo 'tracker should not execute ffprobe' >&2",
+      "exit 99",
     ].join("\n") + "\n");
-    await chmod(fakeFfprobePath, 0o755);
 
     const result = spawnSync(process.execPath, ["script/clippers-tiktok-batch-tracker.mjs"], {
       cwd: process.cwd(),
@@ -3155,9 +3153,9 @@ test("TikTok batch tracker accepts ffprobe format duration when stream duration 
     const tracker = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-tiktok-batch-tracker.json"), "utf8"));
     assert.equal(tracker.status, "ready_for_metricool_review");
     assert.equal(tracker.rows[0].sourceVideoValid, true);
-    assert.equal(tracker.rows[0].sourceProbe, "ffprobe");
-    assert.equal(tracker.rows[0].sourceDurationSeconds, 6.25);
-    assert.doesNotMatch(tracker.rows[0].blocker, /source_file_invalid_duration|source_file_probe_failed/);
+    assert.equal(tracker.rows[0].sourceProbe, "mp4_signature");
+    assert.equal(tracker.rows[0].sourceDurationSeconds, 0);
+    assert.doesNotMatch(tracker.rows[0].blocker, /source_file_probe_failed/);
   } finally {
     await rm(fakeBinDir, { recursive: true, force: true });
     spawnSync(process.execPath, ["script/clippers-tiktok-batch-tracker.mjs"], {
