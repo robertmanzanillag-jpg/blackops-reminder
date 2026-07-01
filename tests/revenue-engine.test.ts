@@ -114,11 +114,13 @@ const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
+const originalSessionSecret = process.env.SESSION_SECRET;
 const testDatabaseUrl = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
 
 test.beforeEach(() => {
   delete process.env.DATABASE_URL;
   delete process.env.NODE_ENV;
+  delete process.env.SESSION_SECRET;
   delete process.env.RESEND_API_KEY;
   delete process.env.REVENUE_ENGINE_FROM_EMAIL;
   delete process.env.RESEND_FROM_EMAIL;
@@ -179,6 +181,8 @@ test.afterEach(() => {
   else process.env.DATABASE_URL = originalDatabaseUrl;
   if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = originalNodeEnv;
+  if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
+  else process.env.SESSION_SECRET = originalSessionSecret;
 });
 
 function sellWebsiteOpportunityForTest(input: {
@@ -2250,6 +2254,11 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /npm run build/);
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Deployment approval packet/);
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /explicit Robert deploy approval/);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status, "blocked");
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "blocked"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "blocked"), true);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket, /npm run ceo:db-check -- --json/);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket, /No pegar DATABASE_URL/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
@@ -2286,8 +2295,40 @@ test("snapshot launch readiness starts only with production persistence ready", 
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "ready"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "robert_deploy_approval" && item.status === "blocked"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status, "blocked");
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "blocked"), true);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
+});
+
+test("production setup packet is ready only with database and session secret", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+  process.env.SESSION_SECRET = "revenue-engine-production-session-secret";
+
+  const packet = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist.productionSetupPacket;
+
+  assert.equal(packet.status, "ready");
+  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(packet.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "ready"), true);
+  assert.match(packet.copyableSetupPacket, /Revenue Engine production setup packet/);
+  assert.match(packet.copyableSetupPacket, /npm run ceo:doctor -- --json/);
+  assert.match(packet.copyableSetupPacket, /No operar leads\/cobros\/entregas reales con local_file persistence/);
+});
+
+test("production setup packet blocks weak session secret", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+  process.env.SESSION_SECRET = "short";
+
+  const packet = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist.productionSetupPacket;
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(packet.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "blocked"), true);
+  assert.match(packet.copyableSetupPacket, /SESSION_SECRET no detectado como secret real/);
+  assert.match(packet.copyableSetupPacket, /npm run ceo:doctor -- --json/);
 });
 
 test("money activation evidence gate mirrors public lead import readiness", () => {

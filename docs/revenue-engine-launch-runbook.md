@@ -131,10 +131,15 @@ Antes de produccion:
 
 - `npm run build` debe pasar.
 - `node --import tsx --test tests/revenue-engine.test.ts` debe pasar.
-- Configurar `DATABASE_URL` del entorno final.
-- Configurar auth/session secrets del entorno final.
+- Configurar `DATABASE_URL` del entorno final como secret del deployment, nunca en git, PRs, issues o chat publico.
+- Configurar `SESSION_SECRET` largo como secret del deployment.
+- Copiar el `Production persistence setup packet` del panel `/revenue-engine` y completar sus pasos.
+- Ejecutar `npm run ceo:db-check -- --json` y confirmar que `databaseUrlConfigured` esta listo.
+- Ejecutar `npm run ceo:doctor -- --json` antes de pedir deploy para validar secrets y readiness general.
 - Opcional para envio API: `RESEND_API_KEY` y `REVENUE_ENGINE_FROM_EMAIL`.
 - Mantener `credentials/`, `secrets/` y `revenue_engine_data/` fuera de git.
+- Repetir App QA contra la URL objetivo; cualquier warning/failure bloquea deploy.
+- Replit/custom deployment requiere aprobacion explicita de Robert despues del resumen PR/QA/riesgos/rollback.
 
 ## Primer sprint recomendado
 

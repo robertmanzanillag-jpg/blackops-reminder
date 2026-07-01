@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { hasRealValue } from "./ceo-doctor-cli";
+import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { resolveDatabaseConnectionString } from "./database-url";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
@@ -5858,6 +5858,66 @@ function buildRevenueMoneyActivationPlan(input: {
       ...input.publicLeadImportQueue.safety.blockedActions,
     ])),
   };
+  const productionDatabaseReady = !hardMissing.some((item) => item.id === "production_database");
+  const sessionSecretReady = hasStrongSecret(process.env.SESSION_SECRET);
+  const productionSetupPacket = {
+    status: productionDatabaseReady && sessionSecretReady ? "ready" as const : "blocked" as const,
+    title: "Production persistence setup packet",
+    requiredEnv: [
+      {
+        key: "DATABASE_URL",
+        status: productionDatabaseReady ? "ready" as const : "blocked" as const,
+        evidence: productionPersistence?.evidence || "Production persistence status unavailable.",
+        nextStep: productionDatabaseReady
+          ? "Correr npm run ceo:db-check -- --json antes del merge/deploy final."
+          : "Crear Postgres en Replit o proveedor gestionado y guardar DATABASE_URL como deployment secret, no en git.",
+        verifyCommand: "npm run ceo:db-check -- --json",
+      },
+      {
+        key: "SESSION_SECRET",
+        status: sessionSecretReady ? "ready" as const : "blocked" as const,
+        evidence: sessionSecretReady
+          ? "SESSION_SECRET detectado sin exponer su valor."
+          : "SESSION_SECRET no detectado como secret real.",
+        nextStep: sessionSecretReady
+          ? "Mantener SESSION_SECRET solo como deployment secret."
+          : "Configurar SESSION_SECRET largo como deployment secret antes de produccion.",
+        verifyCommand: "npm run ceo:doctor -- --json",
+      },
+    ],
+    operatorSteps: [
+      "Crear/confirmar Postgres persistente del entorno final.",
+      "Guardar DATABASE_URL y SESSION_SECRET solo como secrets del deploy.",
+      "Ejecutar npm run ceo:db-check -- --json y confirmar databaseUrlConfigured=true.",
+      "Ejecutar npm run check, npm run build y npm run test:revenue-engine antes de quitar draft al PR.",
+      "Repetir App QA contra la URL objetivo y pedir aprobacion explicita de Robert antes de Replit deploy.",
+    ],
+    guardrails: [
+      "No pegar DATABASE_URL en issues, PRs, logs publicos o chat.",
+      "No operar leads/cobros/entregas reales con local_file persistence.",
+      "No desplegar si App QA tiene warning/failure.",
+      "No desplegar Replit sin aprobacion humana explicita.",
+    ],
+  };
+  const copyableProductionSetupPacket = [
+    "Revenue Engine production setup packet",
+    "",
+    `Status: ${productionSetupPacket.status}`,
+    "",
+    "Required env:",
+    ...productionSetupPacket.requiredEnv.map((item) => [
+      `- ${item.key}: ${item.status}`,
+      `  Evidence: ${item.evidence}`,
+      `  Next: ${item.nextStep}`,
+      `  Verify: ${item.verifyCommand}`,
+    ].join("\n")),
+    "",
+    "Operator steps:",
+    ...productionSetupPacket.operatorSteps.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Guardrails:",
+    ...productionSetupPacket.guardrails.map((guardrail) => `- ${guardrail}`),
+  ].join("\n");
   const requiredLaunchEvidence = [
       {
         id: "production_database",
@@ -6113,6 +6173,10 @@ function buildRevenueMoneyActivationPlan(input: {
     evidenceGate,
     productionLaunchChecklist: {
       ...productionLaunchChecklist,
+      productionSetupPacket: {
+        ...productionSetupPacket,
+        copyableSetupPacket: copyableProductionSetupPacket,
+      },
       copyableChecklist: copyableProductionLaunchChecklist,
     },
     firstSprintPlan: {

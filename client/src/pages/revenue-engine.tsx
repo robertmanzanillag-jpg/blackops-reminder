@@ -213,6 +213,20 @@ type RevenueSnapshot = {
         deployApprovalAsk: string;
         blockedUntil: string[];
       };
+      productionSetupPacket: {
+        status: "ready" | "blocked";
+        title: string;
+        requiredEnv: Array<{
+          key: string;
+          status: "ready" | "blocked";
+          evidence: string;
+          nextStep: string;
+          verifyCommand: string;
+        }>;
+        operatorSteps: string[];
+        guardrails: string[];
+        copyableSetupPacket: string;
+      };
       copyableChecklist: string;
     };
     firstSprintPlan: {
@@ -4052,6 +4066,41 @@ export default function RevenueEnginePage() {
                   <p className="mt-1 text-xs leading-5 text-zinc-500">
                     Rollback: {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan || "Pendiente"}
                   </p>
+                </div>
+                <div className="mt-3 rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2" data-testid="panel-production-setup-packet">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-cyan-100">
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.title || "Production setup packet"}
+                    </p>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status || "blocked"), "shrink-0 text-[10px]")}>
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status || "blocked"}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv || []).slice(0, 2).map((item) => (
+                      <div key={item.key} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">{item.key}</p>
+                          <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0 text-[10px]")}>
+                            {item.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        <p className="mt-1 font-mono text-[11px] leading-5 text-cyan-100/80">{item.verifyCommand}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 h-7 border-cyan-500/30 bg-black text-xs text-cyan-100 hover:bg-cyan-500/10"
+                    onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket || "")}
+                    data-testid="button-copy-production-setup-packet"
+                  >
+                    <Copy className="mr-1.5 h-3 w-3" />
+                    Copy setup
+                  </Button>
                 </div>
               </div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Falta para money mode real</p>
