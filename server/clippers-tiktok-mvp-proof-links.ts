@@ -31,7 +31,11 @@ export function safeClipperMetricoolProofUrl(value: unknown): boolean {
   if (!safeClipperHttpsProofUrl(value)) return false;
   try {
     const parsed = new URL(String(value || "").trim());
-    return /(^|\.)metricool\.com$/i.test(parsed.hostname);
+    if (!/(^|\.)metricool\.com$/i.test(parsed.hostname)) return false;
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+    if (!normalizedPath || normalizedPath === "/") return false;
+    if (/^\/(?:login|signin|sign-in|signup|sign-up|pricing|plans|blog|help|support|features|product|products|about|en|es|pt|fr|it|de)(?:\/|$)/i.test(normalizedPath)) return false;
+    return normalizedPath.split("/").filter(Boolean).join("").length >= 8;
   } catch {
     return false;
   }

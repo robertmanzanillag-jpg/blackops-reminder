@@ -193,6 +193,39 @@ test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof 
   assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
 });
 
+test("TikTok MVP proof links audit rejects generic Metricool pages as proof", () => {
+  for (const metricoolConnectionProofUrl of [
+    "https://metricool.com/",
+    "https://app.metricool.com/",
+    "https://app.metricool.com/login",
+    "https://metricool.com/pricing",
+  ]) {
+    const proofLinks = {
+      lanes: {
+        ...cleanProofLinks.lanes,
+        "sports-daily:tiktok": {
+          ...cleanProofLinks.lanes["sports-daily:tiktok"],
+          metricoolConnectionProofUrl,
+        },
+      },
+    };
+
+    assert.equal(
+      safeClipperMetricoolProofUrl(metricoolConnectionProofUrl),
+      false,
+      `${metricoolConnectionProofUrl} should not count as concrete Metricool proof`,
+    );
+    assert.equal(
+      safeClipperMetricoolConnectionProofUrl(metricoolConnectionProofUrl),
+      false,
+      `${metricoolConnectionProofUrl} should not count as concrete connection proof`,
+    );
+    const audit = auditClipperTikTokMvpProofLinks(proofLinks);
+    assert.equal(audit.status, "blocked", `${metricoolConnectionProofUrl} should keep the proof gate blocked`);
+    assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
+  }
+});
+
 test("TikTok MVP proof links audit accepts Google Drive Metricool screenshots as non-secret evidence", () => {
   const proofLinks = {
     lanes: {
