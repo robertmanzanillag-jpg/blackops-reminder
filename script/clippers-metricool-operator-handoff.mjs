@@ -974,6 +974,171 @@ function renderCurrentBatchOperatorSessionCsv(session) {
   ].join("\n");
 }
 
+async function writeBlockedApprovalRunSummary({ approvalRun, rows, blocker, nextStep }) {
+  const evidenceFields = [
+    "metricool_queue_item_id",
+    "metricool_approval_url",
+    "published_post_url",
+    "final_status=scheduled|published|rejected",
+    "views_24h",
+    "likes_24h",
+    "comments_24h",
+    "shares_24h",
+    "operator_notes",
+  ];
+  const emptyWorkbook = {
+    status: "blocked_approval_run",
+    generatedAt: new Date().toISOString(),
+    batchId: "metricool-batch-01",
+    batchRows: "0",
+    rows: [],
+    evidenceFields,
+    guardrails: [
+      "This workbook is blocked because the active Metricool 100 approval run is not ready.",
+      "Do not process stale rows from older handoffs.",
+      "Do not count any row as published until proof, scheduling evidence, public URL, and metrics are real.",
+    ],
+    paths: {
+      json: currentBatchJsonPath,
+      markdown: currentBatchMarkdownPath,
+      csv: currentBatchCsvPath,
+      batchEvidenceCsv: path.join(batchEvidenceImportsDir, "metricool-batch-01-evidence-import.csv"),
+      sourceRunSheet: runSheetPath,
+      evidenceCsv: evidenceCsvPath,
+    },
+    nextStep,
+  };
+  const emptySession = {
+    status: "blocked_approval_run",
+    generatedAt: new Date().toISOString(),
+    batchId: "metricool-batch-01",
+    rows: [],
+    checklist: [
+      "Do not open Metricool from this handoff while the approval run is blocked.",
+      "Import real SPORT/memes TikTok Metricool proof, preview it, save it only if clean, then regenerate the approval run.",
+      "Regenerate this operator handoff after the approval run is ready.",
+    ],
+    doneCriteria: [
+      "Active Metricool 100 approval run is ready_for_operator.",
+      "Run sheet matches the active approval run.",
+      "Metricool remains approval_required and readyToSend stays zero.",
+    ],
+    paths: {
+      json: currentBatchSessionJsonPath,
+      markdown: currentBatchSessionMarkdownPath,
+      csv: currentBatchSessionCsvPath,
+      workbookCsv: currentBatchCsvPath,
+      batchEvidenceCsv: emptyWorkbook.paths.batchEvidenceCsv,
+      globalEvidenceCsv: evidenceCsvPath,
+    },
+    nextStep,
+  };
+  const summary = {
+    status: "blocked_approval_run",
+    generatedAt: new Date().toISOString(),
+    paths: {
+      json: handoffJsonPath,
+      markdown: handoffMarkdownPath,
+      csv: handoffCsvPath,
+      runSheet: runSheetPath,
+      evidenceCsv: evidenceCsvPath,
+      approvalRun: approvalRunPath,
+    },
+    scheduleRollForward: { applied: false, reason: "approval_run_blocked", deltaMs: 0, firstBefore: "", firstAfter: "", rowsAdjusted: 0 },
+    totals: {
+      rows: 0,
+      staleRunSheetRows: rows.length,
+      batches: 0,
+      sports: 0,
+      memes: 0,
+      streamers: 0,
+      readyToSend: approvalRun.totals?.readyToSend || 0,
+    },
+    batches: [],
+    operatorConsole: {
+      status: "blocked_approval_run",
+      currentBatchId: "metricool-batch-01",
+      currentBatchRows: "0",
+      currentBatchEvidenceStatus: "blocked_approval_run",
+      completedBatches: 0,
+      evidenceCsvStatus: "blocked_until_metricool_100_approval_run_ready",
+      publishedRowsCounted: 0,
+      checklist: emptySession.checklist,
+      evidenceFields,
+      paths: {
+        runSheet: runSheetPath,
+        evidenceCsv: evidenceCsvPath,
+        currentBatchJson: currentBatchJsonPath,
+        currentBatchMarkdown: currentBatchMarkdownPath,
+        currentBatchCsv: currentBatchCsvPath,
+        currentBatchSessionJson: currentBatchSessionJsonPath,
+        currentBatchSessionMarkdown: currentBatchSessionMarkdownPath,
+        currentBatchSessionCsv: currentBatchSessionCsvPath,
+        batchWorkbooksDir,
+        batchEvidenceImportsDir,
+        currentBatchEvidenceCsv: emptyWorkbook.paths.batchEvidenceCsv,
+      },
+      currentBatchWorkbook: {
+        status: emptyWorkbook.status,
+        rows: 0,
+        jsonPath: emptyWorkbook.paths.json,
+        markdownPath: emptyWorkbook.paths.markdown,
+        csvPath: emptyWorkbook.paths.csv,
+      },
+      currentBatchOperatorSession: {
+        status: emptySession.status,
+        rows: 0,
+        sourceGateTotals: { rows: 0, ready: 0, blocked: 0, pending: 0 },
+        jsonPath: emptySession.paths.json,
+        markdownPath: emptySession.paths.markdown,
+        csvPath: emptySession.paths.csv,
+      },
+      batchWorkbooks: [],
+      nextStep,
+    },
+    guardrails: [
+      "Metricool remains approval_required; this handoff cannot publish automatically.",
+      approvalRun.realPublishEnabled === false
+        ? "realPublishEnabled is false."
+        : "Blocked because realPublishEnabled is not false; do not use this handoff.",
+      (approvalRun.totals?.readyToSend || 0) === 0
+        ? "readyToSend is zero."
+        : `Blocked because readyToSend is ${approvalRun.totals?.readyToSend || 0}; do not use this handoff.`,
+      "Stale run sheet rows are not operator-ready.",
+      "Do not process Metricool batches until the active approval run is ready_for_operator.",
+      "Never paste tokens, cookies, passwords, recovery codes, private screenshots, or secret URLs into evidence CSVs.",
+    ],
+    blocker,
+    nextStep,
+  };
+
+  await mkdir(scheduledDir, { recursive: true });
+  await mkdir(reportsDir, { recursive: true });
+  await mkdir(batchWorkbooksDir, { recursive: true });
+  await mkdir(batchEvidenceImportsDir, { recursive: true });
+  await writeFile(handoffJsonPath, JSON.stringify(summary, null, 2));
+  await writeFile(handoffMarkdownPath, renderMarkdown(summary));
+  await writeFile(handoffCsvPath, renderCsv(summary));
+  await writeFile(currentBatchJsonPath, JSON.stringify(emptyWorkbook, null, 2));
+  await writeFile(currentBatchMarkdownPath, renderCurrentBatchMarkdown(emptyWorkbook));
+  await writeFile(currentBatchCsvPath, renderCurrentBatchCsv(emptyWorkbook));
+  await writeFile(currentBatchSessionJsonPath, JSON.stringify(emptySession, null, 2));
+  await writeFile(currentBatchSessionMarkdownPath, renderCurrentBatchOperatorSessionMarkdown(emptySession));
+  await writeFile(currentBatchSessionCsvPath, renderCurrentBatchOperatorSessionCsv(emptySession));
+  await writeFile(summaryReportPath, JSON.stringify(summary, null, 2));
+  console.log(JSON.stringify({
+    status: summary.status,
+    rows: summary.totals.rows,
+    staleRunSheetRows: summary.totals.staleRunSheetRows,
+    batches: summary.totals.batches,
+    readyToSend: summary.totals.readyToSend,
+    blocker,
+    markdownPath: handoffMarkdownPath,
+    csvPath: handoffCsvPath,
+    nextStep,
+  }, null, 2));
+}
+
 async function main() {
   const approvalRun = JSON.parse(await readFile(approvalRunPath, "utf8"));
   let rows = parseCsv(await readFile(runSheetPath, "utf8"));
@@ -986,11 +1151,26 @@ async function main() {
   rows = rollForward.rows;
   const tracker = JSON.parse(await readFile(trackerPath, "utf8").catch(() => '{"rows":[]}'));
   const trackerById = new Map((tracker.rows || []).map((row) => [row.metricoolQueueItemId, row]));
-  if (approvalRun.realPublishEnabled !== false) throw new Error("Metricool handoff blocked: realPublishEnabled must be false.");
-  if (approvalRun.approvalRequired !== true) throw new Error("Metricool handoff blocked: approvalRequired must be true.");
-  if ((approvalRun.totals?.readyToSend || 0) !== 0) throw new Error("Metricool handoff blocked: readyToSend must be zero.");
-  if (approvalRun.status !== "ready_for_operator") throw new Error(`Metricool handoff blocked: approval run status is ${approvalRun.status || "missing"}.`);
-  if (rows.length !== 100) throw new Error(`Metricool handoff blocked: expected 100 run sheet rows, found ${rows.length}.`);
+  const approvalRunBlocker = approvalRun.realPublishEnabled !== false
+    ? "realPublishEnabled must be false"
+    : approvalRun.approvalRequired !== true
+      ? "approvalRequired must be true"
+      : (approvalRun.totals?.readyToSend || 0) !== 0
+        ? "readyToSend must be zero"
+        : approvalRun.status !== "ready_for_operator"
+          ? `approval run status is ${approvalRun.status || "missing"}`
+          : rows.length !== 100
+            ? `expected 100 run sheet rows, found ${rows.length}`
+            : "";
+  if (approvalRunBlocker) {
+    await writeBlockedApprovalRunSummary({
+      approvalRun,
+      rows,
+      blocker: approvalRunBlocker,
+      nextStep: "Import real SPORT/memes TikTok Metricool proof, preview links, save only if clean, regenerate the Metricool 100 approval run, then regenerate this handoff.",
+    });
+    return;
+  }
   const unsafeRow = rows.find((row) => row.status === "ready_to_send" || row.queue_status === "ready_to_send" || /true/i.test(row.can_send_now || ""));
   if (unsafeRow) throw new Error(`Metricool handoff blocked: row ${unsafeRow.rank || unsafeRow.metricool_queue_item_id || "unknown"} can send now.`);
 

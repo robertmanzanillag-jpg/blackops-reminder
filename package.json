@@ -69,6 +69,7 @@
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
     "clippers:generate-owned-gap-sources": "node script/clippers-generate-owned-gap-sources.mjs",
     "clippers:generate-owned-active-tiktok-mvp-sources": "node script/clippers-generate-owned-active-tiktok-mvp-sources.mjs",
+    "clippers:sync-active-tiktok-mvp-sources": "node script/clippers-sync-active-tiktok-mvp-sources.mjs",
     "clippers:account-permission-readiness": "node script/clippers-account-permission-readiness.mjs",
     "clippers:external-closeout-pack": "node script/clippers-external-closeout-pack.mjs",
     "clippers:import-external-closeout-evidence": "node --import tsx script/clippers-import-external-closeout-evidence.ts",

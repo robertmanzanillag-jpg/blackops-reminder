@@ -2506,6 +2506,19 @@ test("owned source generator commands have timeout and process group cleanup", a
   assert.match(ownedRightsRegistrar, /no third-party footage, raw footage, creator clips/i);
 });
 
+test("active TikTok MVP source sync uses stable 60/40 source targets without publishing", async () => {
+  const syncScript = await readFile(path.join(process.cwd(), "script/clippers-sync-active-tiktok-mvp-sources.mjs"), "utf8");
+  assert.match(syncScript, /sports:\s*\{\s*count:\s*60/);
+  assert.match(syncScript, /memes:\s*\{\s*count:\s*40/);
+  assert.match(syncScript, /streamers:\s*0/);
+  assert.match(syncScript, /fileNameFor\(category, index\)/);
+  assert.match(syncScript, /copyFile\(sourceDropPath, targetPath\)/);
+  assert.doesNotMatch(syncScript, /uniqueSourceTargetPath|counter\s*\+=|-\$\{counter\}/);
+  assert.match(syncScript, /does not create external TikTok or Metricool accounts/);
+  assert.match(syncScript, /Metricool remains approval_required/);
+  assert.match(syncScript, /realPublishEnabled must stay false/);
+});
+
 test("Metricool 100 operator handoff batches approval-only rows without publishing", async () => {
   const result = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
     cwd: process.cwd(),
@@ -2513,6 +2526,18 @@ test("Metricool 100 operator handoff batches approval-only rows without publishi
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const output = JSON.parse(result.stdout);
+  if (output.status === "blocked_approval_run") {
+    assert.equal(output.rows, 0);
+    assert.equal(output.readyToSend, 0);
+    assert.match(output.blocker, /approval run status|readyToSend|approvalRequired|realPublishEnabled|expected 100/);
+    const blockedHandoff = JSON.parse(await readFile(path.join(rootDir, "scheduled/metricool-100-operator-handoff.json"), "utf8"));
+    assert.equal(blockedHandoff.status, "blocked_approval_run");
+    assert.equal(blockedHandoff.operatorConsole.status, "blocked_approval_run");
+    assert.equal(blockedHandoff.totals.readyToSend, 0);
+    assert.equal(blockedHandoff.totals.rows, 0);
+    assert.doesNotMatch(JSON.stringify(blockedHandoff), /"status":"ready_for_operator"|"status": "ready_for_operator"/);
+    return;
+  }
   assert.equal(output.status, "ready_for_operator");
   assert.equal(output.rows, 100);
   assert.equal(output.batches, 10);
@@ -2699,6 +2724,115 @@ test("Metricool 100 operator handoff rolls stale pending schedules forward", asy
       cwd: process.cwd(),
       encoding: "utf8",
     });
+  }
+});
+
+test("Metricool 100 operator handoff overwrites stale ready handoff when approval run is blocked", async () => {
+  const approvalRunPath = path.join(rootDir, "scheduled/metricool-100-approval-run.json");
+  const handoffPath = path.join(rootDir, "scheduled/metricool-100-operator-handoff.json");
+  const handoffMarkdownPath = path.join(rootDir, "scheduled/metricool-100-operator-handoff.md");
+  const currentBatchPath = path.join(rootDir, "scheduled/metricool-100-current-batch-workbook.json");
+  const sessionPath = path.join(rootDir, "scheduled/metricool-100-current-batch-operator-session.json");
+  const reportPath = path.join(rootDir, "reports/clippers-metricool-100-operator-handoff.json");
+  const filesToRestore = [approvalRunPath, handoffPath, handoffMarkdownPath, currentBatchPath, sessionPath, reportPath];
+  const originals = await Promise.all(filesToRestore.map(async (filePath) => [filePath, await readFile(filePath, "utf8").catch(() => null)] as const));
+  try {
+    const approvalRun = JSON.parse(originals.find(([filePath]) => filePath === approvalRunPath)?.[1] || "{}");
+    await writeFile(approvalRunPath, JSON.stringify({
+      ...approvalRun,
+      status: "needs_review",
+      realPublishEnabled: false,
+      approvalRequired: true,
+      totals: {
+        ...(approvalRun.totals || {}),
+        readyToSend: 0,
+        metricoolQueuedForApproval: 0,
+      },
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_approval_run");
+    assert.equal(output.rows, 0);
+    assert.match(output.blocker, /approval run status is needs_review/);
+
+    const handoff = JSON.parse(await readFile(handoffPath, "utf8"));
+    assert.equal(handoff.status, "blocked_approval_run");
+    assert.equal(handoff.operatorConsole.status, "blocked_approval_run");
+    assert.equal(handoff.totals.rows, 0);
+    assert.ok(handoff.totals.staleRunSheetRows >= 0);
+    assert.equal(handoff.totals.readyToSend, 0);
+    assert.match(handoff.nextStep, /Import real SPORT\/memes TikTok Metricool proof/);
+    assert.doesNotMatch(JSON.stringify(handoff), /"status":"ready_for_operator"|"status": "ready_for_operator"/);
+
+    const markdown = await readFile(handoffMarkdownPath, "utf8");
+    assert.match(markdown, /blocked_approval_run/);
+    assert.match(markdown, /Stale run sheet rows are not operator-ready/);
+    assert.doesNotMatch(markdown, /ready_to_send|autopublish/i);
+
+    const workbook = JSON.parse(await readFile(currentBatchPath, "utf8"));
+    assert.equal(workbook.status, "blocked_approval_run");
+    assert.equal(workbook.rows.length, 0);
+    const session = JSON.parse(await readFile(sessionPath, "utf8"));
+    assert.equal(session.status, "blocked_approval_run");
+    assert.equal(session.rows.length, 0);
+  } finally {
+    for (const [filePath, content] of originals) {
+      if (content === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, content);
+    }
+  }
+});
+
+test("Metricool 100 operator handoff blocked summary does not hide unsafe publish flags", async () => {
+  const approvalRunPath = path.join(rootDir, "scheduled/metricool-100-approval-run.json");
+  const handoffPath = path.join(rootDir, "scheduled/metricool-100-operator-handoff.json");
+  const filesToRestore = [
+    approvalRunPath,
+    handoffPath,
+    path.join(rootDir, "scheduled/metricool-100-operator-handoff.md"),
+    path.join(rootDir, "scheduled/metricool-100-current-batch-workbook.json"),
+    path.join(rootDir, "scheduled/metricool-100-current-batch-operator-session.json"),
+    path.join(rootDir, "reports/clippers-metricool-100-operator-handoff.json"),
+  ];
+  const originals = await Promise.all(filesToRestore.map(async (filePath) => [filePath, await readFile(filePath, "utf8").catch(() => null)] as const));
+  try {
+    const approvalRun = JSON.parse(originals.find(([filePath]) => filePath === approvalRunPath)?.[1] || "{}");
+    await writeFile(approvalRunPath, JSON.stringify({
+      ...approvalRun,
+      status: "ready_for_operator",
+      realPublishEnabled: true,
+      approvalRequired: true,
+      totals: {
+        ...(approvalRun.totals || {}),
+        readyToSend: 3,
+      },
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_approval_run");
+    assert.match(output.blocker, /realPublishEnabled must be false/);
+
+    const handoff = JSON.parse(await readFile(handoffPath, "utf8"));
+    assert.equal(handoff.status, "blocked_approval_run");
+    assert.equal(handoff.totals.readyToSend, 3);
+    assert.ok(handoff.guardrails.some((guardrail) => guardrail.includes("realPublishEnabled is not false")));
+    assert.ok(handoff.guardrails.some((guardrail) => guardrail.includes("readyToSend is 3")));
+    assert.equal(handoff.guardrails.some((guardrail) => guardrail === "realPublishEnabled is false and readyToSend is zero."), false);
+  } finally {
+    for (const [filePath, content] of originals) {
+      if (content === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, content);
+    }
   }
 });
 

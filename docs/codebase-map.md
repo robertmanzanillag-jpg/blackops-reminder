@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-01T06:41:40.661Z
+Generated: 2026-07-01T06:54:41.942Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 435 | 367 | 1388 | 101 | 9283 |
+| 436 | 368 | 1390 | 101 | 9320 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `client/src` | 108 | 107 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
 | `server` | 95 | 91 | server:95 |
-| `script` | 68 | 66 | script:68 |
+| `script` | 69 | 67 | script:69 |
 | `tests` | 62 | 59 | test:62 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
@@ -160,10 +160,11 @@ Package: `rest-express`
 - `script/clippers-metricool-current-batch-session-packet.mjs` (script; 50 symbols, 2 imports)
 - `script/clippers-metricool-current-batch-upload-pack.mjs` (script; 77 symbols, 2 imports)
 - `script/clippers-metricool-mcp-preflight.ts` (script; 29 symbols, 3 imports)
-- `script/clippers-metricool-operator-handoff.mjs` (script; 159 symbols, 3 imports)
+- `script/clippers-metricool-operator-handoff.mjs` (script; 163 symbols, 3 imports)
 - `script/clippers-operational-readiness.mjs` (script; 53 symbols, 4 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
 - `script/clippers-record-owned-source-rights.mjs` (script; 91 symbols, 3 imports)
+- `script/clippers-sync-active-tiktok-mvp-sources.mjs` (script; 33 symbols, 2 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-batch-closeout-verifier.mjs` (script; 47 symbols, 2 imports)
 - `script/clippers-tiktok-batch-evidence-sync.mjs` (script; 96 symbols, 4 imports)
@@ -196,7 +197,6 @@ Package: `rest-express`
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
 - `script/create-local-user.ts` (script; 5 symbols, 3 imports)
-- `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

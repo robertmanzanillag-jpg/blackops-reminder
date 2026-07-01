@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-01T06:41:40.661Z",
+  "generatedAt": "2026-07-01T06:54:41.942Z",
   "repoRoot": "/private/tmp/asistente-clippers-pr",
   "packageName": "rest-express",
   "scripts": {
@@ -68,6 +68,7 @@
     "radio:upload-edits": "tsx script/upload-radio-edits-to-drive.ts",
     "clippers:generate-owned-gap-sources": "node script/clippers-generate-owned-gap-sources.mjs",
     "clippers:generate-owned-active-tiktok-mvp-sources": "node script/clippers-generate-owned-active-tiktok-mvp-sources.mjs",
+    "clippers:sync-active-tiktok-mvp-sources": "node script/clippers-sync-active-tiktok-mvp-sources.mjs",
     "clippers:account-permission-readiness": "node script/clippers-account-permission-readiness.mjs",
     "clippers:external-closeout-pack": "node script/clippers-external-closeout-pack.mjs",
     "clippers:import-external-closeout-evidence": "node --import tsx script/clippers-import-external-closeout-evidence.ts",
@@ -94,18 +95,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 435,
-    "filesIndexed": 367,
-    "imports": 1388,
+    "filesVisible": 436,
+    "filesIndexed": 368,
+    "imports": 1390,
     "routes": 101,
-    "symbols": 9283
+    "symbols": 9320
   },
   "directories": {
     "script": {
-      "files": 68,
-      "indexed": 66,
+      "files": 69,
+      "indexed": 67,
       "kinds": {
-        "script": 68
+        "script": 69
       }
     },
     ".agents/skills": {
@@ -5172,6 +5173,7 @@
         "accounts",
         "allBatchesSourcesReady",
         "approvalRun",
+        "approvalRunBlocker",
         "approvalRunPath",
         "approvalUrl",
         "base",
@@ -5213,6 +5215,8 @@
         "currentTime",
         "deltaMs",
         "emptyEvidenceValue",
+        "emptySession",
+        "emptyWorkbook",
         "evidence",
         "evidenceByIdFromRaw",
         "evidenceCsvPath",
@@ -5326,7 +5330,8 @@
         "unsafeRow",
         "updatedRows",
         "validateOperatorNotes",
-        "value"
+        "value",
+        "writeBlockedApprovalRunSummary"
       ],
       "routes": []
     },
@@ -5519,6 +5524,51 @@
         "validateEvidenceFile",
         "validateSourceMediaFile",
         "writeAllowlistFile"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-sync-active-tiktok-mvp-sources.mjs",
+      "kind": "script",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "activeTargets",
+        "bytesRead",
+        "categories",
+        "copiedCheck",
+        "dropCategoryDir",
+        "existingAfter",
+        "existingBefore",
+        "existingCheck",
+        "file",
+        "fileName",
+        "fileNameFor",
+        "force",
+        "handle",
+        "head",
+        "main",
+        "minUsableSourceVideoBytes",
+        "renderMarkdown",
+        "reportMarkdownPath",
+        "reportPath",
+        "reportsDir",
+        "rootDir",
+        "rows",
+        "sourceCategoryDir",
+        "sourceCheck",
+        "sourceDropDir",
+        "sourceDropPath",
+        "sourcesDir",
+        "status",
+        "summary",
+        "syncCategory",
+        "targetPath",
+        "totals",
+        "usableMp4"
       ],
       "routes": []
     },

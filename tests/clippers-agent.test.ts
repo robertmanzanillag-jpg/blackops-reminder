@@ -3966,6 +3966,12 @@ test("prepareClipperMetricool100ApprovalRun prepares 100 approval-only Metricool
     assert.equal(result.metricool100ApprovalRun.totals.metricoolBlocked, 0);
     assert.equal(result.metricool100ApprovalRun.totals.readyToSend, 0);
     assert.deepEqual(new Set(result.metricool100ApprovalRun.eligibleAccountIds), new Set(["sports-daily", "meme-radar"]));
+    assert.deepEqual(result.metricool100ApprovalRun.productionByAccount, {
+      "sports-daily": 60,
+      "meme-radar": 40,
+    });
+    assert.equal(result.queue.items.filter((item) => item.accountId === "sports-daily").length, 60);
+    assert.equal(result.queue.items.filter((item) => item.accountId === "meme-radar").length, 40);
     assert.equal(result.queue.items.some((item) => item.accountId === "streamer-pulse"), false);
     assert.equal(result.metricoolExecutionQueue.items.some((item) => item.accountId === "streamer-pulse"), false);
     assert.equal(result.metricoolExecutionQueue.items.every((item) => item.approvalRequired && item.canSendNow === false), true);

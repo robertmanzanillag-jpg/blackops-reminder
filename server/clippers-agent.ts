@@ -9795,10 +9795,30 @@ function productionSlotCountsByAccount(accounts: ClipperAccount[], targetClips: 
   if (!targetClips) {
     return new Map(accounts.map((account) => [account.id, Math.max(1, Math.min(account.dailyClipTarget, 40))]));
   }
+  const activeTikTokMvpAccounts = new Set(["sports-daily", "meme-radar"]);
+  if (
+    accounts.length === activeTikTokMvpAccounts.size
+    && accounts.every((account) => activeTikTokMvpAccounts.has(account.id))
+  ) {
+    return weightedProductionSlotCounts(accounts, targetClips, {
+      "sports-daily": 60,
+      "meme-radar": 40,
+    });
+  }
   const totalDailyTarget = accounts.reduce((sum, account) => sum + Math.max(0, account.dailyClipTarget), 0);
   if (totalDailyTarget <= 0) return new Map(accounts.map((account) => [account.id, 0]));
+  return weightedProductionSlotCounts(
+    accounts,
+    targetClips,
+    Object.fromEntries(accounts.map((account) => [account.id, Math.max(0, account.dailyClipTarget)]))
+  );
+}
+
+function weightedProductionSlotCounts(accounts: ClipperAccount[], targetClips: number, weights: Record<string, number>): Map<string, number> {
+  const totalWeight = accounts.reduce((sum, account) => sum + Math.max(0, weights[account.id] || 0), 0);
+  if (totalWeight <= 0) return new Map(accounts.map((account) => [account.id, 0]));
   const slots = accounts.map((account) => {
-    const exact = targetClips * (Math.max(0, account.dailyClipTarget) / totalDailyTarget);
+    const exact = targetClips * (Math.max(0, weights[account.id] || 0) / totalWeight);
     return {
       accountId: account.id,
       base: Math.floor(exact),
@@ -47946,7 +47966,7 @@ export async function getClipperMetricoolLaunchSummary(userId = getSystemUserId(
 
 function renderMetricool100ApprovalRunMarkdown(summary: ClipperMetricool100ApprovalRunSummary): string {
   return [
-    "# Clippers Metricool 100 Schedule Run",
+    "# Clippers Metricool 100 Approval Run",
     "",
     "One-click operator pack for preparing 100 Clippers items through Metricool approval_required review. This does not publish automatically.",
     "",
@@ -48425,7 +48445,7 @@ export async function prepareClipperMetricool100ApprovalRun(userId = getSystemUs
       "Only Metricool-ready accounts are included; disconnected lanes stay out.",
     ],
     nextStep: metricoolExecutionQueue.totals.queuedForApproval >= approvalQueueTarget
-      ? `Open the operator handoff ${METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH}, process the current Metricool batch, then fill the matching CSV under ${METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR} after scheduled posts are live. The master evidence CSV is a sync target; do not edit it directly.`
+      ? `Open Metricool with the operator handoff ${METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH}, process the current Metricool batch, then fill the matching CSV under ${METRICOOL_100_BATCH_EVIDENCE_IMPORTS_DIR} after scheduled posts are live. The master evidence CSV is a sync target; do not edit it directly.`
       : metricoolExecutionQueue.nextStep,
   }, metricoolApprovalQuickRun);
   const status = await getClipperStatus(userId);
