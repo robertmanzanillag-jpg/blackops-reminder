@@ -17097,6 +17097,9 @@ export default function ClippersPage() {
     ].join("\n");
     setTiktokMvpProofLinksPasteText(packetText);
     setTiktokMvpProofLinksPastePreview(null);
+    setTiktokMvpProofLinksText("");
+    setTiktokMvpProofLinksPreview(null);
+    setTiktokMvpProofLinksSaveReceipt(null);
     tiktokMvpProofLinksPasteMutation.mutate(packetText);
   };
   const getTikTokMvpOperatorButtonLabel = (button?: string) => {
@@ -18808,7 +18811,12 @@ export default function ClippersPage() {
                   </div>
                   <Textarea
                     value={tiktokMvpProofLinksPasteText}
-                    onChange={(event) => setTiktokMvpProofLinksPasteText(event.target.value)}
+                    onChange={(event) => {
+                      setTiktokMvpProofLinksPasteText(event.target.value);
+                      setTiktokMvpProofLinksPastePreview(null);
+                      setTiktokMvpProofLinksPreview(null);
+                      setTiktokMvpProofLinksSaveReceipt(null);
+                    }}
                     placeholder={"SPORT Metricool: https://app.metricool.com/...\nmemes Metricool: https://app.metricool.com/...\nOptional ownership URLs can be separate Drive/Docs proof links."}
                     className="mt-2 min-h-28 border-cyan-300/20 bg-black/40 font-mono text-xs text-cyan-50"
                     data-testid="clippers-tiktok-mvp-proof-links-paste-textarea"
