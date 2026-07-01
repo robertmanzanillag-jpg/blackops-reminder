@@ -1156,6 +1156,9 @@ export async function registerRoutes(
         nextBlockedBy: tiktokNextAction?.operatorGate?.blockedBy || [],
         uploadPackStatus: metricoolCurrentBatchUploadPack?.status || "missing",
         sessionPacketStatus: metricoolCurrentBatchSessionPacket?.status || "missing",
+        goalAuditStatus: goalCompletionAudit?.status || "missing",
+        goalAuditStartGateStatus: goalCompletionAudit?.tiktokMvpStartGate?.status || "missing",
+        goalAuditNextStep: goalCompletionAudit?.nextStep || "",
       },
       nextSafeButton: tiktokMvpReadinessVerifier?.status === "pass" ? "apply_tiktok_mvp_evidence_closeout" : "prepare_tiktok_mvp_proof_doctor",
       nextStep: postProofRefreshError
@@ -1192,6 +1195,8 @@ export async function registerRoutes(
       `- TikTok next action: ${tiktokMvpProofLinksSaveReceipt.refreshedArtifacts.tiktokNextAction}`,
       `- Upload pack: ${tiktokMvpProofLinksSaveReceipt.refreshedArtifacts.metricoolCurrentBatchUploadPack}`,
       `- Session packet: ${tiktokMvpProofLinksSaveReceipt.refreshedArtifacts.metricoolCurrentBatchSessionPacket}`,
+      `- Goal audit: ${tiktokMvpProofLinksSaveReceipt.gateSummary.goalAuditStatus}`,
+      `- Goal start gate: ${tiktokMvpProofLinksSaveReceipt.gateSummary.goalAuditStartGateStatus}`,
       `- Blocked by: ${tiktokMvpProofLinksSaveReceipt.gateSummary.nextBlockedBy.join(", ") || "none"}`,
       "",
       "## Guardrails",

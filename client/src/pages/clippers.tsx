@@ -2730,6 +2730,9 @@ interface ClipperTikTokMvpProofLinksSaveReceiptSummary {
     nextBlockedBy: string[];
     uploadPackStatus: string;
     sessionPacketStatus: string;
+    goalAuditStatus?: string;
+    goalAuditStartGateStatus?: string;
+    goalAuditNextStep?: string;
   };
   nextSafeButton: "apply_tiktok_mvp_evidence_closeout" | "prepare_tiktok_mvp_proof_doctor";
   nextStep: string;
@@ -19363,6 +19366,8 @@ export default function ClippersPage() {
                         <p className="break-all text-[10px] text-zinc-500">Proof links: {tiktokMvpProofLinksSaveReceipt.paths.proofLinksJson}</p>
                         <p className="text-[10px] text-zinc-500">Upload pack: {tiktokMvpProofLinksSaveReceipt.gateSummary.uploadPackStatus}</p>
                         <p className="text-[10px] text-zinc-500">Session packet: {tiktokMvpProofLinksSaveReceipt.gateSummary.sessionPacketStatus}</p>
+                        <p className="text-[10px] text-zinc-500">Goal audit: {tiktokMvpProofLinksSaveReceipt.gateSummary.goalAuditStatus || "missing"}</p>
+                        <p className="text-[10px] text-zinc-500">Start gate: {tiktokMvpProofLinksSaveReceipt.gateSummary.goalAuditStartGateStatus || "missing"}</p>
                       </div>
                       {tiktokMvpProofLinksSaveReceipt.gateSummary.nextBlockedBy.length > 0 && (
                         <p className="mt-1 text-[10px] text-amber-100/80">Blocked by {tiktokMvpProofLinksSaveReceipt.gateSummary.nextBlockedBy.join(", ")}</p>

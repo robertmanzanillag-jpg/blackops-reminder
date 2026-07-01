@@ -746,6 +746,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveHelper, /readClipperMetricoolCurrentBatchUploadPack/);
   assert.match(proofLinksSaveHelper, /readClipperMetricoolCurrentBatchSessionPacket/);
   assert.match(proofLinksSaveHelper, /readClipperGoalCompletionAudit/);
+  assert.match(proofLinksSaveHelper, /goalAuditStatus/);
+  assert.match(proofLinksSaveHelper, /goalAuditStartGateStatus/);
+  assert.match(proofLinksSaveHelper, /Goal audit:/);
+  assert.match(proofLinksSaveHelper, /Goal start gate:/);
   assert.match(proofLinksSaveHelper, /tiktokNextAction/);
   assert.match(proofLinksSaveHelper, /metricoolCurrentBatchUploadPack/);
   assert.match(proofLinksSaveHelper, /metricoolCurrentBatchSessionPacket/);
@@ -989,6 +993,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-links-goal-impact/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-save-receipt/);
   assert.match(page, /tiktokMvpProofLinksSaveReceipt/);
+  assert.match(page, /Goal audit: \{tiktokMvpProofLinksSaveReceipt\.gateSummary\.goalAuditStatus \|\| "missing"\}/);
+  assert.match(page, /Start gate: \{tiktokMvpProofLinksSaveReceipt\.gateSummary\.goalAuditStartGateStatus \|\| "missing"\}/);
   assert.match(page, /goalBoardImpact/);
   assert.match(page, /unlocksOperatorActions/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-preview-lanes/);
