@@ -12113,7 +12113,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? "Proof handoff listo" : "Proof handoff actualizado",
+        title: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? "Proof handoff listo para apply review" : "Proof handoff actualizado",
         description: data.tiktokMvpProofHandoff.nextAction,
         variant: data.tiktokMvpProofHandoff.status === "ready_for_operator_apply_review" ? undefined : "destructive",
       });
@@ -12143,7 +12143,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? "Proof doctor listo" : "Proof doctor encontro blockers",
+        title: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? "Proof doctor listo para review" : "Proof doctor encontro blockers",
         description: `${data.tiktokMvpProofDoctor.totals.ready}/${data.tiktokMvpProofDoctor.totals.lanes} lanes listas; ${data.tiktokMvpProofDoctor.totals.blocked} bloqueadas.`,
         variant: data.tiktokMvpProofDoctor.status === "ready_to_apply" ? undefined : "destructive",
       });
@@ -12286,7 +12286,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? "Proof refresh listo" : "Proof refresh bloqueado",
+        title: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? "Proof refresh listo para review" : "Proof refresh bloqueado",
         description: data.tiktokMvpProofRefresh.nextStep,
         variant: data.tiktokMvpProofRefresh.status === "ready_to_apply" ? undefined : "destructive",
       });
@@ -12320,7 +12320,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? "Proof unblocker listo" : "Proof unblocker bloqueado",
+        title: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? "Proof unblocker listo para apply preview" : "Proof unblocker bloqueado",
         description: data.tiktokMvpProofUnblocker.nextStep,
         variant: data.tiktokMvpProofUnblocker.status === "unblocked_ready_for_apply_preview" ? undefined : "destructive",
       });
@@ -12390,7 +12390,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? "Closeout wizard listo" : "Closeout wizard bloqueado",
+        title: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? "Closeout wizard listo para apply review" : "Closeout wizard bloqueado",
         description: data.tiktokMvpCloseoutWizard.nextStep,
         variant: data.tiktokMvpCloseoutWizard.status === "ready_for_operator_apply_review" ? undefined : "destructive",
       });
@@ -12428,7 +12428,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review" ? "Boundary listo" : "Boundary bloqueado",
+        title: data.tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review" ? "Boundary listo para apply review" : "Boundary bloqueado",
         description: data.tiktokMvpAutopilotBoundary.nextStep,
         variant: data.tiktokMvpAutopilotBoundary.status === "ready_for_operator_apply_review" ? undefined : "destructive",
       });

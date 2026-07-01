@@ -805,6 +805,18 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /Proof CSVs stageados/);
   assert.doesNotMatch(page, /Proof import aplicado/);
   assert.doesNotMatch(page, />\s*Apply import\s*</);
+  assert.match(page, /Proof handoff listo para apply review/);
+  assert.match(page, /Proof doctor listo para review/);
+  assert.match(page, /Proof refresh listo para review/);
+  assert.match(page, /Proof unblocker listo para apply preview/);
+  assert.match(page, /Closeout wizard listo para apply review/);
+  assert.match(page, /Boundary listo para apply review/);
+  assert.doesNotMatch(page, /"Proof handoff listo"/);
+  assert.doesNotMatch(page, /"Proof doctor listo"/);
+  assert.doesNotMatch(page, /"Proof refresh listo"/);
+  assert.doesNotMatch(page, /"Proof unblocker listo"/);
+  assert.doesNotMatch(page, /"Closeout wizard listo"/);
+  assert.doesNotMatch(page, /"Boundary listo"/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(page, /Open apply review/);
   assert.doesNotMatch(page, />\s*Apply closeout\s*</);
