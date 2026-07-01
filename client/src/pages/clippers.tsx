@@ -17075,6 +17075,8 @@ export default function ClippersPage() {
       case "local_verification": return "Run local verify";
       case "closeout_wizard": return "Refresh wizard";
       case "proof_handoff": return "Run proof handoff";
+      case "prepare_tiktok_mvp_proof_doctor": return "Run proof doctor";
+      case "apply_tiktok_mvp_evidence_closeout": return "Review apply gate";
       case "preview_or_save_proof_links": return "Preview links first";
       case "apply_closeout_with_confirmation": return "Apply stays guarded";
       default: return "Refresh wizard";
@@ -17097,6 +17099,12 @@ export default function ClippersPage() {
       case "proof_handoff":
         tiktokMvpProofHandoffMutation.mutate();
         break;
+      case "prepare_tiktok_mvp_proof_doctor":
+        tiktokMvpProofDoctorMutation.mutate();
+        break;
+      case "apply_tiktok_mvp_evidence_closeout":
+        tiktokMvpEvidenceCloseoutPreviewMutation.mutate();
+        break;
       case "closeout_wizard":
         tiktokMvpCloseoutWizardMutation.mutate();
         break;
@@ -17108,6 +17116,12 @@ export default function ClippersPage() {
     }
   };
   const activeTikTokMvpOperatorButton = tiktokMvpCloseoutWizard?.operatorSession?.recommendedButton || "";
+  const tiktokMvpProofLinksReceiptNextButton = tiktokMvpProofLinksSaveReceipt?.nextSafeButton || "";
+  const tiktokMvpProofLinksReceiptNextAllowed = tiktokMvpProofLinksReceiptNextButton !== "apply_tiktok_mvp_evidence_closeout";
+  const tiktokMvpProofLinksReceiptNextDisabled = tiktokProofFlowBusy
+    || isLoading
+    || !tiktokMvpProofLinksSaveReceipt
+    || !tiktokMvpProofLinksReceiptNextAllowed;
   const tiktokMvpOperatorButtonDisabled = tiktokProofFlowBusy
     || isLoading
     || activeTikTokMvpOperatorButton === "apply_closeout_with_confirmation"
@@ -18956,6 +18970,33 @@ export default function ClippersPage() {
                         <span>publish {tiktokMvpProofLinksSaveReceipt.realPublishEnabled ? "enabled" : "disabled"}</span>
                       </div>
                       <p className="mt-1 text-[11px] leading-4">{tiktokMvpProofLinksSaveReceipt.nextStep}</p>
+                      <div className="mt-2 flex flex-col gap-2 rounded border border-emerald-300/10 bg-emerald-950/10 p-2 sm:flex-row sm:items-center sm:justify-between" data-testid="clippers-tiktok-mvp-proof-links-save-next-action">
+                        <div>
+                          <p className="font-medium text-emerald-100">Next safe step</p>
+                          <p className="mt-1 text-[10px] leading-4 text-emerald-100/70">
+                            {tiktokMvpProofLinksReceiptNextAllowed
+                              ? "Runs the next local verification step only. It does not apply closeout, schedule, or publish."
+                              : "Closeout apply still requires the separate explicit apply review gate."}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={tiktokMvpProofLinksReceiptNextAllowed ? "default" : "outline"}
+                          onClick={() => runTikTokMvpOperatorButton(tiktokMvpProofLinksReceiptNextButton)}
+                          disabled={tiktokMvpProofLinksReceiptNextDisabled}
+                          className={cn(
+                            "h-8",
+                            tiktokMvpProofLinksReceiptNextAllowed
+                              ? "bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
+                              : "border-amber-300/20 bg-transparent text-amber-100 hover:bg-amber-300/10"
+                          )}
+                          data-testid="run-clippers-tiktok-mvp-proof-links-save-next-button"
+                        >
+                          {tiktokProofFlowBusy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                          {getTikTokMvpOperatorButtonLabel(tiktokMvpProofLinksReceiptNextButton)}
+                        </Button>
+                      </div>
                       <div className="mt-2 grid gap-1 md:grid-cols-2">
                         <p className="break-all text-[10px] text-zinc-500">Receipt: {tiktokMvpProofLinksSaveReceipt.paths.markdown}</p>
                         <p className="break-all text-[10px] text-zinc-500">Proof links: {tiktokMvpProofLinksSaveReceipt.paths.proofLinksJson}</p>

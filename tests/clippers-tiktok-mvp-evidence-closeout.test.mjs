@@ -923,8 +923,15 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /case "import_preview"/);
   assert.match(page, /case "closeout_preview"/);
   assert.match(page, /case "local_verification"/);
+  assert.match(page, /case "prepare_tiktok_mvp_proof_doctor"/);
+  assert.match(page, /case "apply_tiktok_mvp_evidence_closeout"/);
   assert.match(page, /activeTikTokMvpOperatorButton === "apply_closeout_with_confirmation"/);
   assert.doesNotMatch(operatorButtonHelper, /tiktokMvpEvidenceCloseoutApplyMutation\.mutate/);
+  assert.match(operatorButtonHelper, /case "apply_tiktok_mvp_evidence_closeout":[\s\S]*tiktokMvpEvidenceCloseoutPreviewMutation\.mutate\(\)/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-save-next-action/);
+  assert.match(page, /run-clippers-tiktok-mvp-proof-links-save-next-button/);
+  assert.match(page, /tiktokMvpProofLinksReceiptNextAllowed/);
+  assert.match(page, /Closeout apply still requires the separate explicit apply review gate/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-textarea/);
   assert.match(page, /stale_applied_result/);
