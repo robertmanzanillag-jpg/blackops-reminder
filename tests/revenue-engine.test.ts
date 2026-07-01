@@ -46,6 +46,7 @@ import {
   recordRevenuePublicLeadCandidate,
   recordRevenuePublicLeadCandidateBatch,
   recordRevenuePublicScoutEvidence,
+  recordRevenueVerifiedScoutConnectorResults,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   recordRevenueWebsiteOpportunity,
@@ -1392,6 +1393,177 @@ test("normalizes public scout evidence into candidates without creating leads", 
   assert.equal(result.snapshot.recentOutreach.length, 0);
   assert.equal(result.snapshot.recentPublicLeadCandidates.length, 1);
   assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("verified scout connector intake records review-only candidates without importing", () => {
+  const result = recordRevenueVerifiedScoutConnectorResults({
+    area: "Miami",
+    niche: "coffee shop",
+    connectorName: "Local browser scout",
+    connectorRunId: "connector-run-001",
+    sourceTaskId: "scout-task-connector",
+    results: [
+      {
+        businessName: "Connector Intake Cafe",
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@connectorintakecafe",
+        recipientEmail: "owner@connectorintake.example",
+        sourceUrl: "https://instagram.com/connectorintakecafe",
+        evidence: "Public Instagram profile has recent menu posts, no dedicated website link and visible owner email.",
+        painPoint: "Needs an online menu, catering lead capture and follow-up.",
+        estimatedOfferUsd: 4200,
+        contactName: "Owner",
+        businessSummary: "Connector Intake Cafe has public evidence of missing website and active demand.",
+      },
+      {
+        businessName: "Browser Scout Bakery",
+        websiteStatus: "weak_website",
+        contactChannel: "instagram",
+        contactValue: "@browserscoutbakery",
+        recipientEmail: "orders@browserscout.example",
+        sourceUrl: "https://instagram.com/browserscoutbakery",
+        evidence: "Public Instagram profile shows current catering posts and a weak link-in-bio instead of a conversion website.",
+        painPoint: "Needs a catering quote page and automated inquiry follow-up.",
+        estimatedOfferUsd: 3800,
+        contactName: "Owner",
+        businessSummary: "Browser Scout Bakery has public evidence of a weak website funnel.",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.connector.executionMode, "verified_connector_review_only");
+  assert.equal(result.connector.approvalLocked, true);
+  assert.equal(result.recordedCount, 2);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.blockedCount, 2);
+  assert.equal(result.evidenceResult.recorded.every((item) => item.status === "needs_review"), true);
+  assert.equal(
+    result.evidenceResult.recorded.every((item) => item.candidate.verificationStatus === "needs_review"),
+    true,
+  );
+  assert.equal(
+    result.evidenceResult.recorded.every((item) => item.candidate.publicEvidenceVerified === false && item.candidate.approvalToImport === false),
+    true,
+  );
+  assert.equal(result.safety.persistsCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.spendsMoney, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.requiresRobertReview, true);
+  assert.equal(result.safety.blockedActions.includes("run Money Sprint before Robert approval"), true);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(result.snapshot.publicLeadImportQueue.blockedCount, 2);
+  assert.equal(result.snapshot.recentPublicLeadCandidates.length, 2);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+  assert.equal(result.snapshot.recentLedger.length, 0);
+});
+
+test("verified scout connector rejects invalid rows before persisting partial candidates", () => {
+  assert.throws(
+    () => recordRevenueVerifiedScoutConnectorResults({
+      area: "Miami",
+      niche: "coffee shop",
+      connectorName: "Local browser scout",
+      connectorRunId: "connector-run-invalid",
+      results: [
+        {
+          businessName: "Valid First Connector Cafe",
+          websiteStatus: "no_website",
+          contactChannel: "instagram",
+          contactValue: "@validfirstconnector",
+          recipientEmail: "owner@validfirst.example",
+          sourceUrl: "https://instagram.com/validfirstconnector",
+          evidence: "Public Instagram profile has no dedicated website and current menu posts.",
+          painPoint: "Needs an online menu and follow-up.",
+        },
+        {
+          businessName: "Invalid Connector Cafe",
+          websiteStatus: "no_website",
+          contactChannel: "instagram",
+          contactValue: "@invalidconnector",
+          recipientEmail: "not-an-email",
+          sourceUrl: "https://instagram.com/invalidconnector",
+          evidence: "Public Instagram profile has no dedicated website and current menu posts.",
+          painPoint: "Needs an online menu and follow-up.",
+        },
+      ],
+    }),
+    /Invalid email/,
+  );
+
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 0);
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(snapshot.publicLeadImportQueue.blockedCount, 0);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("verified scout connector bounds long source task identifiers", () => {
+  const longSourceTaskId = `connector-${"source-".repeat(21)}`;
+  const longRunId = `run-${"token-".repeat(21)}`;
+  const result = recordRevenueVerifiedScoutConnectorResults({
+    area: "Miami",
+    niche: "coffee shop",
+    connectorName: "Local browser scout",
+    connectorRunId: longRunId,
+    sourceTaskId: longSourceTaskId,
+    results: [
+      {
+        businessName: "Bounded Connector Cafe",
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@boundedconnector",
+        recipientEmail: "owner@boundedconnector.example",
+        sourceUrl: "https://instagram.com/boundedconnector",
+        evidence: "Public Instagram profile has no dedicated website and a visible business email.",
+        painPoint: "Needs a conversion website and inquiry follow-up.",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.recordedCount, 1);
+  assert.equal(result.evidenceResult.recorded[0].candidate.sourceTaskId.length <= 160, true);
+  assert.match(result.evidenceResult.recorded[0].candidate.sourceTaskId, /^connector-source-/);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+});
+
+test("verified scout connector bounds composed evidence and notes before downstream intake", () => {
+  const longNotes = "n".repeat(1000);
+  const longEvidence = "Public Instagram profile shows no dedicated website, current menu posts, visible contact info and active customer demand. ".repeat(8);
+  const result = recordRevenueVerifiedScoutConnectorResults({
+    area: "Miami",
+    niche: "coffee shop",
+    connectorName: "Local browser scout",
+    connectorRunId: "connector-run-large",
+    notes: longNotes,
+    results: Array.from({ length: 20 }, (_, index) => ({
+      businessName: `Large Connector Cafe ${index + 1}`,
+      websiteStatus: "no_website" as const,
+      contactChannel: "instagram" as const,
+      contactValue: `@largeconnectorcafe${index + 1}`,
+      recipientEmail: `owner${index + 1}@largeconnector.example`,
+      sourceUrl: `https://instagram.com/largeconnectorcafe${index + 1}`,
+      evidence: longEvidence,
+      painPoint: "Needs an online menu, catering lead capture and follow-up.",
+      businessSummary: `Large Connector Cafe ${index + 1} has public evidence of missing website and active demand.`,
+    })),
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.recordedCount, 20);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.normalizedBatchText.includes("Large Connector Cafe 20"), true);
+  assert.equal(result.evidenceResult.recorded.every((item) => item.candidate.notes.length <= 1000), true);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(result.snapshot.publicLeadImportQueue.blockedCount, 20);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
 });
 
 test("blocks public scout evidence from private or local source urls", () => {

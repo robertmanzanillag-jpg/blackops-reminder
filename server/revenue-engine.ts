@@ -529,6 +529,37 @@ export const revenuePublicScoutEvidenceSchema = z.object({
 
 export type RevenuePublicScoutEvidenceInput = z.infer<typeof revenuePublicScoutEvidenceSchema>;
 
+const revenueVerifiedScoutConnectorResultSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120).optional(),
+  niche: z.string().trim().min(2).max(120).optional(),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  contactChannel: z.enum(["email", "phone", "instagram", "contact_form", "unknown"]).default("unknown"),
+  contactValue: z.string().trim().max(240).default(""),
+  recipientEmail: z.union([z.string().email(), z.literal("")]).optional().default(""),
+  sourceUrl: z.string().trim().url().max(300),
+  evidence: z.string().trim().min(12).max(1200),
+  painPoint: z.string().trim().min(8).max(500).default("Needs a stronger website, lead capture and follow-up."),
+  estimatedOfferUsd: z.coerce.number().min(1500).max(100000).default(3500),
+  contactName: z.string().trim().max(120).optional().default("Owner"),
+  businessSummary: z.string().trim().max(800).optional().default(""),
+});
+
+export const revenueVerifiedScoutConnectorSchema = z.object({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("med spas"),
+  connectorName: z.string().trim().min(2).max(120),
+  connectorRunId: z.string().trim().min(2).max(160),
+  missionId: z.string().trim().max(160).optional().default(""),
+  sourceTaskId: z.string().trim().max(160).optional().default("verified-scout-connector"),
+  results: z.array(revenueVerifiedScoutConnectorResultSchema).min(1).max(20),
+  publicEvidenceVerified: z.literal(false).default(false),
+  approvalToImport: z.literal(false).default(false),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenueVerifiedScoutConnectorInput = z.infer<typeof revenueVerifiedScoutConnectorSchema>;
+
 export const revenueDailyScoutSprintSubmitSchema = revenuePublicScoutEvidenceSchema.extend({
   sprintId: z.string().trim().min(1).max(160),
   taskId: z.string().trim().max(160).optional().default(""),
@@ -6807,6 +6838,87 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
         ? "Fix blocked evidence fields before Money Sprint."
         : "Review normalized candidates, verify public evidence, then approve import.",
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function revenueVerifiedScoutConnectorEvidenceText(input: RevenueVerifiedScoutConnectorInput) {
+  return input.results.map((result, index) => [
+    `Business: ${result.businessName}`,
+    `Area: ${result.area || input.area}`,
+    `Niche: ${result.niche || input.niche}`,
+    `Website: ${result.websiteStatus}`,
+    `Contact: ${result.contactValue}`,
+    result.recipientEmail ? `Email: ${result.recipientEmail}` : null,
+    `Source: ${result.sourceUrl}`,
+    `Evidence: ${result.evidence}`,
+    `Pain: ${result.painPoint}`,
+    `Offer: ${result.estimatedOfferUsd}`,
+    `Contact name: ${result.contactName || "Owner"}`,
+    `Summary: ${result.businessSummary || `${result.businessName} was returned by ${input.connectorName} as public scout result ${index + 1}.`}`,
+  ].filter((line): line is string => Boolean(line)).join("\n")).join("\n\n").slice(0, 30000);
+}
+
+function revenueVerifiedScoutConnectorSourceTaskId(input: RevenueVerifiedScoutConnectorInput) {
+  const base = slugifyRevenueValue(input.sourceTaskId || "verified-scout-connector").slice(0, 80) || "verified-scout-connector";
+  const run = slugifyRevenueValue(input.connectorRunId).slice(0, 48) || "run";
+  return `${base}-${run}`.slice(0, 150);
+}
+
+export function recordRevenueVerifiedScoutConnectorResults(input: RevenueVerifiedScoutConnectorInput) {
+  const parsed = revenueVerifiedScoutConnectorSchema.parse(input);
+  const evidenceText = revenueVerifiedScoutConnectorEvidenceText(parsed);
+  const notes = [
+    `Connector: ${parsed.connectorName}`,
+    `Run: ${parsed.connectorRunId}`,
+    parsed.notes || "Verified scout connector intake; Robert review required before import.",
+  ].join(" | ").slice(0, 1000);
+  const evidenceResult = recordRevenuePublicScoutEvidence({
+    area: parsed.area,
+    niche: parsed.niche,
+    evidenceText,
+    missionId: parsed.missionId,
+    sourceTaskId: revenueVerifiedScoutConnectorSourceTaskId(parsed),
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+    defaultOfferUsd: 3500,
+    maxCandidates: parsed.results.length,
+    notes,
+  });
+
+  return {
+    status: evidenceResult.recordedCount > 0 ? "needs_review" as const : evidenceResult.status,
+    reason: "Connector results recorded as review-only public candidates; Robert must verify evidence and approve import before Money Sprint.",
+    connector: {
+      name: parsed.connectorName,
+      runId: parsed.connectorRunId,
+      resultCount: parsed.results.length,
+      executionMode: "verified_connector_review_only" as const,
+      approvalLocked: true,
+    },
+    evidenceResult,
+    normalizedBatchText: evidenceResult.normalizedBatchText,
+    recordedCount: evidenceResult.recordedCount,
+    importableCount: evidenceResult.importableCount,
+    blockedCount: evidenceResult.blockedCount,
+    safety: {
+      persistsCandidates: evidenceResult.safety.persistsCandidates,
+      persistsLeads: false,
+      sendsOutreach: false,
+      spendsMoney: false,
+      writesPreviewFiles: false,
+      requiresRobertReview: true,
+      blockedActions: [
+        "mark connector results import-ready",
+        "send outreach",
+        "buy data",
+        "run Money Sprint before Robert approval",
+        "publish preview",
+        "deploy website",
+      ],
+    },
+    nextAction: "Review connector candidates, verify each public source, then approve import from the public lead review queue.",
+    snapshot: evidenceResult.snapshot,
   };
 }
 

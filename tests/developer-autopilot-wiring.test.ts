@@ -335,20 +335,26 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
 
   assert.match(engineSource, /recordRevenuePublicScoutEvidence/);
+  assert.match(engineSource, /recordRevenueVerifiedScoutConnectorResults/);
   assert.match(engineSource, /submitRevenueDailyScoutSprintEvidence/);
   assert.match(engineSource, /approveRevenuePublicLeadCandidate/);
   assert.match(engineSource, /recordRevenueDailyScoutSprintEvidenceProgress/);
   assert.match(engineSource, /runRevenuePublicScoutAgentCommand/);
   assert.match(engineSource, /requireRobertApprovalToContact: z\.literal\(true\)/);
   assert.match(engineSource, /maxPaidDataSpendUsd: z\.coerce\.number\(\)\.min\(0\)\.max\(0\)/);
+  assert.match(engineSource, /verificationStatus: "needs_review"/);
+  assert.match(engineSource, /approvalLocked: true/);
   assert.match(engineSource, /sourceUrl must be public/);
   assert.match(routeSource, /\/api\/revenue-engine\/daily-scout-sprint\/submit/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-lead-candidates\/approve/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-scout-evidence/);
+  assert.match(routeSource, /\/api\/revenue-engine\/public-scout-connector-intake/);
   assert.match(routeSource, /\/api\/revenue-engine\/public-scout-agent-command/);
   assert.match(routeSource, /revenueDailyScoutSprintSubmitSchema\.parse/);
   assert.match(routeSource, /revenuePublicLeadCandidateApproveSchema\.parse/);
   assert.match(routeSource, /revenuePublicScoutEvidenceSchema\.parse/);
+  assert.match(routeSource, /revenueVerifiedScoutConnectorSchema\.parse/);
+  assert.match(routeSource, /recordRevenueVerifiedScoutConnectorResults\(input\)/);
   assert.match(routeSource, /revenuePublicScoutAgentCommandSchema\.parse/);
   assert.match(uiSource, /publicScoutEvidenceMutation/);
   assert.match(uiSource, /publicScoutAgentCommandMutation/);
