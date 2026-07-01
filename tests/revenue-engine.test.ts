@@ -50,6 +50,7 @@ import {
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   recordRevenueWebsiteOpportunity,
+  revenuePublicLeadCandidateApproveSchema,
   revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
   approveRevenueOutreachDraft,
@@ -965,6 +966,7 @@ test("approves reviewed public lead candidate without creating leads or outreach
 
   const approved = approveRevenuePublicLeadCandidate({
     candidateId: candidate.candidate.id,
+    approvedByRobert: true,
     publicEvidenceVerified: true,
     approvalToImport: true,
     notes: "Robert verified public source and approved import.",
@@ -980,6 +982,88 @@ test("approves reviewed public lead candidate without creating leads or outreach
   assert.equal(approved.snapshot.publicLeadImportQueue.blockedCount, 0);
   assert.equal(approved.snapshot.recentLeads.length, 0);
   assert.equal(approved.snapshot.recentOutreach.length, 0);
+});
+
+test("public candidate approval requires explicit Robert approval", () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "Needs Robert Approval Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@needsrobert.example",
+    sourceUrl: "https://example.com/needs-robert-approval-cafe",
+    recipientEmail: "owner@needsrobert.example",
+    evidence: "Public listing has no website and a verified owner email.",
+    painPoint: "Needs online ordering and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  assert.throws(
+    () => revenuePublicLeadCandidateApproveSchema.parse({
+      candidateId: candidate.candidate.id,
+      publicEvidenceVerified: true,
+      approvalToImport: true,
+    }),
+    /approvedByRobert/,
+  );
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
+});
+
+test("public candidate approval route rejects missing Robert approval without mutating queue", async () => {
+  const candidate = recordRevenuePublicLeadCandidate({
+    businessName: "HTTP Robert Gate Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@httprobert.example",
+    sourceUrl: "https://example.com/http-robert-gate-cafe",
+    recipientEmail: "owner@httprobert.example",
+    evidence: "Public listing has no website and a verified owner email.",
+    painPoint: "Needs menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  const routeLayer = (app as any)._router.stack.find((layer: any) =>
+    layer.route?.path === "/api/revenue-engine/public-lead-candidates/approve" && layer.route.methods.post
+  );
+  assert.ok(routeLayer, "public candidate approval route should be registered");
+  const handler = routeLayer.route.stack[0].handle;
+  const result = { statusCode: 200, body: null as unknown };
+  const res = {
+    status(code: number) {
+      result.statusCode = code;
+      return res;
+    },
+    json(payload: unknown) {
+      result.body = payload;
+      return res;
+    },
+  };
+
+  await handler({
+    body: {
+      candidateId: candidate.candidate.id,
+      publicEvidenceVerified: true,
+      approvalToImport: true,
+    },
+  }, res);
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.readyCount, 0);
+  assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
 });
 
 test("public candidate approval keeps incomplete candidates blocked", () => {
@@ -1003,6 +1087,7 @@ test("public candidate approval keeps incomplete candidates blocked", () => {
 
   const approved = approveRevenuePublicLeadCandidate({
     candidateId: candidate.candidate.id,
+    approvedByRobert: true,
     publicEvidenceVerified: true,
     approvalToImport: true,
     notes: "Operator tried to approve before contact was fixed.",
@@ -3947,6 +4032,19 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.codexBuildHandoff.status, "needs_pr");
   assert.equal(handoff.workspace?.codexBuildHandoff.codexBrief.includes("PR-First Rules"), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.publicBuildBrief.includes("PR-First Rules"), true);
+  assert.match(handoff.workspace?.codexBuildHandoff.githubIssueTitle || "", /Handoff Cafe/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /PR-first client build handoff/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Target branch: codex\/client-handoff-cafe-website/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Public source: https:\/\/example\.com\/handoff-cafe-listing/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Mockup preview:/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /First viewport/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Commercial Context/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Setup: \$/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Retainer:/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Deposit paid:/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Cash collected for deposit/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Operator notes/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Client said yes/);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.publicOnly, true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.sections.some((section) => section.includes("First viewport")), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.assets.some((asset) => asset.includes(preview.previewUrl)), true);
@@ -4047,6 +4145,84 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(qaReady.status, "ready");
   assert.equal(qaReady.workspace?.codexBuildHandoff.status, "ready_for_qa");
   assert.equal(qaReady.workspace?.approvalSummary.canLaunch, true);
+});
+
+test("copyable GitHub issue body redacts public handoff sale wording", () => {
+  const workspaceResult = recordRevenueDeliveryWorkspace({
+    workspaceName: "Hostile issue body workspace",
+    clientName: "Hostile $4,200 Paid Cafe bank reference ABC123 Stripe pi_12345 ACH-777 Venmo refs VMO999",
+    projectType: "website",
+    packageName: "Website $4,200 deposit paid retainer setup transfer ref XYZ789 Venmo VMO123 wire ref WIRE555 wire refs WIRE999",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 35,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a public website from approved facts.",
+    sourceUrl: "https://example.com/hostile-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/hostile-cafe",
+    repoFullName: "robert/hostile-cafe",
+    branchName: "codex/client-hostile-cafe-website",
+  });
+  const publicSurfaces = [
+    workspaceResult.workspace.codexBuildHandoff.copyableGithubIssueBody,
+    workspaceResult.workspace.codexBuildHandoff.publicBuildBrief,
+    workspaceResult.workspace.codexBuildHandoff.buildPack.copyableBuildPack,
+  ];
+
+  for (const surface of publicSurfaces) {
+    assert.match(surface, /Target branch: codex\/client-hostile-cafe-website|Branch: codex\/client-hostile-cafe-website/);
+    assert.match(surface, /Public source: https:\/\/example\.com\/hostile-cafe/);
+    assert.match(surface, /Mockup preview: \/api\/revenue-engine\/mockup-previews\/hostile-cafe|Approved mockup: \/api\/revenue-engine\/mockup-previews\/hostile-cafe/);
+    assert.match(surface, /amount-redacted|private-sale-detail-redacted|private-sale-reference-redacted/);
+    assert.doesNotMatch(surface, /\$4,200/);
+    assert.doesNotMatch(surface, /deposit paid/i);
+    assert.doesNotMatch(surface, /\bretainer\b/i);
+    assert.doesNotMatch(surface, /\bsetup\b/i);
+    assert.doesNotMatch(surface, /ABC123/);
+    assert.doesNotMatch(surface, /XYZ789/);
+    assert.doesNotMatch(surface, /pi_12345/);
+    assert.doesNotMatch(surface, /ACH-777/);
+    assert.doesNotMatch(surface, /VMO123/);
+    assert.doesNotMatch(surface, /WIRE555/);
+    assert.doesNotMatch(surface, /VMO999/);
+    assert.doesNotMatch(surface, /WIRE999/);
+  }
+});
+
+test("copyable GitHub issue body follows updated PR-first branch", () => {
+  const workspaceResult = recordRevenueDeliveryWorkspace({
+    workspaceName: "Branch sync workspace",
+    clientName: "Branch Sync Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 35,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a public website from approved facts.",
+    sourceUrl: "https://example.com/branch-sync-cafe",
+    mockupUrl: "/api/revenue-engine/mockup-previews/branch-sync-cafe",
+    repoFullName: "robert/branch-sync-cafe",
+    branchName: "codex/client-branch-sync-cafe-website",
+  });
+
+  const updated = updateRevenueDeliveryWorkspaceQa({
+    workspaceId: workspaceResult.workspace.id,
+    repoFullName: "robert/branch-sync-cafe",
+    branchName: "codex/custom-branch-sync-cafe-website",
+  });
+
+  assert.equal(updated.workspace?.codexBuildHandoff.branchName, "codex/custom-branch-sync-cafe-website");
+  assert.match(updated.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Target branch: codex\/custom-branch-sync-cafe-website/);
+  assert.doesNotMatch(updated.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Target branch: codex\/client-branch-sync-cafe-website/);
 });
 
 test("website build queue excludes workspaces without verified public data", () => {

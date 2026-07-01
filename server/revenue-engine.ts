@@ -509,6 +509,7 @@ export type RevenuePublicLeadCandidateBatchInput = z.infer<typeof revenuePublicL
 
 export const revenuePublicLeadCandidateApproveSchema = z.object({
   candidateId: z.string().trim().min(1).max(160),
+  approvedByRobert: z.literal(true),
   publicEvidenceVerified: z.literal(true),
   approvalToImport: z.literal(true),
   notes: z.string().trim().max(1000).optional().default("Approved from public candidate review queue."),
@@ -9385,6 +9386,21 @@ function normalizeRevenueFingerprintPart(value: string | number | boolean | unde
     .slice(0, 240);
 }
 
+function sanitizeRevenuePublicHandoffField(value: string | undefined | null, fallback: string) {
+  const sanitized = String(value ?? "")
+    .replace(/\b((?:bank|transfer|payment|wire|venmo|zelle|cashapp|cash app)\s+(?:references?|refs?))(?:\s*[:#-]\s*|\s+)[A-Za-z0-9_.-]+/gi, "private-sale-reference-redacted")
+    .replace(/\b(bank references?|bank refs?|transfer references?|transfer refs?|payment references?|payment refs?|wire references?|wire refs?|venmo references?|venmo refs?|invoice id|receipt url|stripe payment id|zelle references?|zelle refs?|cashapp references?|cashapp refs?)(?:\s*[:#-]\s*|\s+)[A-Za-z0-9_.-]+/gi, "private-sale-reference-redacted")
+    .replace(/\b(stripe|venmo|zelle|cashapp|cash app|ach|wire|bank|invoice|receipt|payment|transfer)\s+(?:id|refs?|references?|token|code|number)?\s*[:#-]?\s*[A-Za-z0-9_.-]+/gi, "private-sale-reference-redacted")
+    .replace(/\b(?:pi|in|ch|cs|txn|tx|ach|wire|venmo|zelle|cashapp)_[A-Za-z0-9_.-]+/gi, "private-sale-reference-redacted")
+    .replace(/\b(?:ACH|WIRE|VENMO|ZELLE|CASHAPP)[-_\s]?[A-Za-z0-9_.-]{3,}\b/g, "private-sale-reference-redacted")
+    .replace(/\$[\d,]+(?:\.\d{2})?/g, "amount-redacted")
+    .replace(/\b(setup|retainer|deposit|payment|paid|cash collected|invoice|stripe|zelle|cashapp|bank reference|transfer|receipt)\b/gi, "private-sale-detail-redacted")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  return sanitized || fallback;
+}
+
 function buildAutomationSaleFingerprint(input: Pick<
   RevenueAutomationAgentCommandInput,
   "businessName" | "industry" | "request" | "currentTools" | "monthlyBudgetUsd" | "urgency" | "knownAnswers"
@@ -9449,6 +9465,8 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const deploymentApprovalStatus = input.deploymentApprovalStatus || "not_requested";
   const deploymentApprovalUrl = (input.deploymentApprovalUrl || "").trim();
   const releaseGateHeadSha = (input.releaseGateHeadSha || "").trim();
+  const publicClientName = sanitizeRevenuePublicHandoffField(input.clientName, "Revenue client");
+  const publicPackageName = sanitizeRevenuePublicHandoffField(input.packageName, "Approved website package");
   const missing = [
     isWebsiteBuild && !input.publicDataVerified && "data publica verificada",
     isWebsiteBuild && !repoFullName && "repo GitHub del website",
@@ -9482,11 +9500,11 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "Capture desktop and mobile verification notes before PR handoff.",
   ];
   const copyableBuildPack = [
-    `${title} build pack`,
+    `[Revenue Website Build] ${publicClientName} - ${publicPackageName} build pack`,
     "",
     "Build target:",
-    `- Client: ${input.clientName}`,
-    `- Package: ${input.packageName}`,
+    `- Client: ${publicClientName}`,
+    `- Package: ${publicPackageName}`,
     `- Project type: ${input.projectType}`,
     `- Repo: ${repoFullName || "pending"}`,
     `- Branch: ${branchName}`,
@@ -9518,7 +9536,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     `- Deposit paid: ${input.depositPaid ? "yes" : "no"}`,
     `- Scope approved: ${input.scopeApproved ? "yes" : "no"}`,
     `- Public data verified: ${input.publicDataVerified ? "yes" : "no"}`,
-    input.mockupUrl && `- Mockup: ${input.mockupUrl}`,
+    input.mockupUrl && `- Mockup preview: ${input.mockupUrl}`,
     "",
     "Client Request / Evidence",
     input.clientRequest || "Use Revenue Engine workspace context.",
@@ -9539,16 +9557,17 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "- PR includes tests/checks run, QA summary, risks, and rollback.",
   ].filter(Boolean).join("\n");
   const publicBuildBrief = [
-    title,
+    `[Revenue Website Build] ${publicClientName} - ${publicPackageName}`,
     "",
     "Goal",
-    `Build the approved ${input.projectType} delivery for ${input.clientName} using public business facts, the approved mockup, and the Revenue Engine workspace.`,
+    `Build the approved ${input.projectType} delivery for ${publicClientName} using public business facts, the approved mockup, and the Revenue Engine workspace.`,
     "",
     "Public Build Context",
     `- Repo: ${repoFullName || "pending"}`,
     `- Branch: ${branchName}`,
     `- Public data verified: ${input.publicDataVerified ? "yes" : "no"}`,
-    input.mockupUrl && `- Mockup: ${input.mockupUrl}`,
+    input.sourceUrl && `- Public source: ${input.sourceUrl}`,
+    input.mockupUrl && `- Mockup preview: ${input.mockupUrl}`,
     "",
     "Client Request / Evidence",
     "Use the public source URL, approved mockup, package name, and Revenue Engine workspace context. Keep payment status, amounts, operator notes, and private client details out of public GitHub text.",
@@ -9568,6 +9587,35 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "- Any automation in scope has test data, failure behavior, and manual fallback.",
     "- PR includes tests/checks run, QA summary, risks, and rollback.",
   ].filter(Boolean).join("\n");
+  const githubIssueTitle = `[Revenue Client Build] ${publicClientName}`;
+  const copyableGithubIssueBody = [
+    "PR-first client build handoff from Revenue Engine.",
+    "",
+    `Revenue workspace client: ${publicClientName}`,
+    `Project type: ${input.projectType}`,
+    `Package: ${publicPackageName}`,
+    `Target branch: ${branchName}`,
+    input.sourceUrl ? `Public source: ${input.sourceUrl}` : null,
+    input.mockupUrl ? `Mockup preview: ${input.mockupUrl}` : null,
+    "",
+    "Build pack:",
+    ...buildPackSections.map((section) => `- ${section}`),
+    "",
+    "Public assets:",
+    ...buildPackAssets.map((asset) => `- ${asset}`),
+    "",
+    "Required gates before delivery:",
+    "- Open a pull request before merge.",
+    "- Second-agent review must pass.",
+    "- App QA gate must pass.",
+    "- Replit/custom deploy requires explicit Robert approval.",
+    "- Include tests/checks run, QA summary, risks, and rollback notes in the PR.",
+    "",
+    "Public issue privacy rules:",
+    "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
+    "- Do not include private client data or non-public evidence.",
+    "- Use only public source/mockup context and the sanitized scope above.",
+  ].filter((line): line is string => line !== null).join("\n");
 
   return {
     status: !isWebsiteBuild ? "not_required" as const : missing.length > 0 ? "needs_pr" as const : "ready_for_qa" as const,
@@ -9585,6 +9633,8 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     title,
     codexBrief,
     publicBuildBrief,
+    githubIssueTitle,
+    copyableGithubIssueBody,
     buildPack: {
       sections: buildPackSections,
       assets: buildPackAssets,

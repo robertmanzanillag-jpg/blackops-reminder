@@ -5253,7 +5253,7 @@ export async function registerRoutes(
         return res.status(404).json(lookup);
       }
 
-      const workspace = lookup.workspace;
+      let workspace = lookup.workspace;
       if (workspace.input.projectType === "automation") {
         return res.status(422).json({
           status: "not_required",
@@ -5320,55 +5320,22 @@ export async function registerRoutes(
           snapshot: lookup.snapshot,
         });
       }
-      const publicIssueTitle = `[Revenue Client Build] ${workspace.id}`;
-      const sanitizedBuildBrief = [
-        "Sanitized build context:",
-        `- Client/workspace name: ${workspace.input.clientName}`,
-        `- Revenue workspace: ${workspace.id}`,
-        `- Project type: ${workspace.input.projectType}`,
-        `- Package: ${workspace.input.packageName}`,
-        `- Target branch: ${branchName}`,
-        workspace.input.sourceUrl ? `- Public source: ${workspace.input.sourceUrl}` : null,
-        workspace.input.mockupUrl ? `- Mockup preview: ${workspace.input.mockupUrl}` : null,
-        "",
-        "Approved scope summary:",
-        "Use the public source URL, mockup preview, package name, and Revenue Engine workspace context. Sensitive sale details and private operator notes are intentionally withheld.",
-        "",
-        "Build acceptance criteria:",
-        ...workspace.codexBuildHandoff.acceptanceCriteria.map((item) => `- ${item}`),
-        "- Website experience must match the approved scope and public business facts.",
-        "- Mobile and desktop layouts must be checked.",
-        "- CTA/contact paths must work or be clearly stubbed for Robert/client approval.",
-        "- Include tests/checks run, QA summary, risks, and rollback notes in the PR.",
-        "",
-        "Public issue privacy rules:",
-        "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
-        "- Do not include private client data or non-public evidence.",
-        "- Use only public source/mockup context and the sanitized scope above.",
-      ].filter((line): line is string => line !== null).join("\n");
-      const publicIssueDescription = [
-        "PR-first client build handoff from Revenue Engine.",
-        "",
-        `Revenue workspace: ${workspace.id}`,
-        `Project type: ${workspace.input.projectType}`,
-        `Target branch: ${branchName}`,
-        "",
-        sanitizedBuildBrief,
-        "",
-        "Required gates before delivery:",
-        "- Open a pull request before merge.",
-        "- Second-agent review must pass.",
-        "- App QA gate must pass.",
-        "- Replit/custom deploy requires explicit Robert approval.",
-        "- Include tests/checks run, QA summary, risks, and rollback notes in the PR.",
-      ].join("\n");
+      if (branchName !== workspace.codexBuildHandoff.branchName || branchName !== workspace.input.branchName) {
+        const refreshed = updateRevenueDeliveryWorkspaceQa({
+          workspaceId: workspace.id,
+          repoFullName,
+          branchName,
+        });
+        if (!refreshed.workspace) return res.status(404).json(refreshed);
+        workspace = refreshed.workspace;
+      }
       const developerHandoff = await createDeveloperAutopilotHandoffFromRequest(userId, {
         source: "manual",
         repoFullName,
         appName: "Revenue client build",
         kind: "client_build",
-        title: publicIssueTitle,
-        description: publicIssueDescription,
+        title: workspace.codexBuildHandoff.githubIssueTitle,
+        description: workspace.codexBuildHandoff.copyableGithubIssueBody,
         severity: "medium",
         evidence: [
           `Revenue workspace: ${workspace.id}`,

@@ -912,6 +912,8 @@ type RevenueSnapshot = {
       title: string;
       codexBrief: string;
       publicBuildBrief: string;
+      githubIssueTitle: string;
+      copyableGithubIssueBody: string;
       buildPack: {
         sections: string[];
         assets: string[];
@@ -3499,6 +3501,7 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           candidateId,
+          approvedByRobert: true,
           publicEvidenceVerified: true,
           approvalToImport: true,
           notes: "Approved from Revenue Engine public candidate queue.",
@@ -9104,6 +9107,17 @@ export default function RevenueEnginePage() {
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy public brief
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.copyableGithubIssueBody)}
+                                    data-testid={`button-copy-codex-issue-body-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy issue body
                                   </Button>
                                   <Button
                                     type="button"
