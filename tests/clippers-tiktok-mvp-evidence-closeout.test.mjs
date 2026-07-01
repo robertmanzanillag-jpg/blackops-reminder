@@ -601,6 +601,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksDropStatusRoute, /buildClipperTikTokMvpProofLinksDropStatus/);
   assert.match(proofLinksDropStatusHelper, /checklistTotals/);
   assert.match(proofLinksDropStatusHelper, /nextButton/);
+  assert.match(proofLinksDropStatusHelper, /two real non-secret SPORT and memes Metricool\/Drive TikTok proof URLs/);
+  assert.match(proofLinksDropStatusHelper, /four-field fallback when ownership proof is separate/);
+  assert.match(proofLinksDropStatusHelper, /Metricool\/Drive proof can be reused only when it clearly proves ownership\/control/);
+  assert.doesNotMatch(proofLinksDropStatusHelper, /four non-secret proof URLs|four non-secret TikTok\/Metricool proof links/);
   assert.match(routes, /TikTok ownership proof/);
   assert.match(routes, /Metricool connection proof/);
   assert.match(routes, /does not return raw paste text/);
