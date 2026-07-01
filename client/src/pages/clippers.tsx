@@ -2775,6 +2775,8 @@ interface ClipperTikTokMvpLocalVerificationSummary {
 interface ClipperTikTokMvpProofHandoffSummary {
   status: "blocked_needs_proof_links" | "blocked_needs_quick_fill" | "blocked_needs_import_preview" | "blocked_needs_closeout_preview" | "ready_for_operator_apply_review" | "review_required";
   nextButton: "save_proof_links" | "quick_fill" | "import_preview" | "preview_closeout" | "operator_confirmed_apply" | "closeout_wizard";
+  nextSafeButton?: "preview_proof_links" | "save_proof_links" | "quick_fill" | "import_preview" | "preview_closeout" | "operator_confirmed_apply" | "closeout_wizard";
+  nextLockedButton?: "save_proof_links" | "none";
   nextAction: string;
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
@@ -19302,7 +19304,10 @@ export default function ClippersPage() {
                   )}>
                     handoff {tiktokMvpProofHandoff.status}
                   </Badge>
-                  <span>next: {tiktokMvpProofHandoff.nextButton}</span>
+                  <span>safe: {tiktokMvpProofHandoff.nextSafeButton || tiktokMvpProofHandoff.nextButton}</span>
+                  {tiktokMvpProofHandoff.nextLockedButton && tiktokMvpProofHandoff.nextLockedButton !== "none" && (
+                    <span>locked: {tiktokMvpProofHandoff.nextLockedButton}</span>
+                  )}
                   <span>proof issues {tiktokMvpProofHandoff.totals.proofIssues}</span>
                   <span>packets needed {tiktokMvpProofHandoff.totals.proofPacketsNeeded}</span>
                   <span>URLs needed {tiktokMvpProofHandoff.totals.minimumProofUrlsNeeded}</span>

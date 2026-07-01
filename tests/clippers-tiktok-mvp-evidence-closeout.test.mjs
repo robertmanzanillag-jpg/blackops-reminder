@@ -926,6 +926,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-fixes/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-panel/);
+  assert.match(page, /nextSafeButton\?: "preview_proof_links"/);
+  assert.match(page, /safe: \{tiktokMvpProofHandoff\.nextSafeButton \|\| tiktokMvpProofHandoff\.nextButton\}/);
+  assert.match(page, /locked: \{tiktokMvpProofHandoff\.nextLockedButton\}/);
+  assert.doesNotMatch(page, /next: \{tiktokMvpProofHandoff\.nextButton\}/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblock-board/);
   assert.match(page, /clippers-tiktok-mvp-proof-fast-path-rows/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblock-board-rows/);
