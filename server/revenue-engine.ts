@@ -1111,6 +1111,8 @@ type RevenuePublicLeadImportQueue = {
     candidateId: string;
     businessName: string;
     reason: string;
+    repairBatchRow: string;
+    copyableRepairPacket: string;
     nextAction: string;
   }>;
   safety: {
@@ -6826,6 +6828,56 @@ function revenueSeedLeadFromPublicCandidate(candidate: RevenuePublicLeadCandidat
   };
 }
 
+function buildRevenuePublicCandidateRepairPacket(candidate: RevenuePublicLeadCandidate) {
+  const safeCandidate: RevenuePublicLeadCandidateInput = {
+    businessName: candidate.businessName,
+    area: candidate.area,
+    niche: candidate.niche,
+    websiteStatus: candidate.websiteStatus === "unknown" ? "weak_website" : candidate.websiteStatus,
+    contactChannel: candidate.contactChannel === "unknown" ? "email" : candidate.contactChannel,
+    contactValue: candidate.contactValue || "REPLACE_PUBLIC_CONTACT_PATH",
+    sourceUrl: candidate.sourceUrl || "https://REPLACE_PUBLIC_SOURCE_URL",
+    recipientEmail: candidate.recipientEmail || (candidate.contactChannel === "email" ? candidate.contactValue : ""),
+    evidence: candidate.evidence && candidate.evidence.length >= 20
+      ? candidate.evidence
+      : "REPLACE with public listing/profile evidence: no/weak website signal, recent activity and visible contact path.",
+    painPoint: candidate.painPoint && candidate.painPoint.length >= 12
+      ? candidate.painPoint
+      : "REPLACE with specific website or lead-capture problem.",
+    estimatedOfferUsd: candidate.estimatedOfferUsd || 3500,
+    status: candidate.status,
+    contactName: candidate.contactName || "Owner",
+    businessSummary: candidate.businessSummary || `REPLACE with one-sentence public summary for ${candidate.businessName}.`,
+    missionId: candidate.missionId,
+    sourceTaskId: candidate.sourceTaskId,
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Repair blocked candidate after Robert verifies public evidence.",
+  };
+  const repairBatchRow = revenueCandidateBatchRow(safeCandidate);
+  const copyableRepairPacket = [
+    `Public candidate repair packet: ${candidate.businessName}`,
+    `Candidate: ${candidate.id}`,
+    `Blocked reason: ${candidate.blockedReasons.join("; ") || "candidate needs review"}`,
+    "",
+    "Repair row:",
+    "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+    repairBatchRow,
+    "",
+    "Before import:",
+    "- Replace every REPLACE value with real public evidence.",
+    "- Verify sourceUrl is public and tied to the business/contact.",
+    "- Set publicEvidenceVerified=true and approvalToImport=true only after Robert review.",
+    "- Do not contact, buy data, publish preview or create leads until the candidate is importReady.",
+  ].join("\n");
+
+  return {
+    repairBatchRow,
+    copyableRepairPacket,
+  };
+}
+
 function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQueue {
   loadRevenuePublicLeadCandidates();
   loadRevenueLeads();
@@ -6857,10 +6909,13 @@ function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQ
     }
 
     if (!candidate.importReady) {
+      const repair = buildRevenuePublicCandidateRepairPacket(candidate);
       blocked.push({
         candidateId: candidate.id,
         businessName: candidate.businessName,
         reason: candidate.blockedReasons.join("; ") || "candidate needs review",
+        repairBatchRow: repair.repairBatchRow,
+        copyableRepairPacket: repair.copyableRepairPacket,
         nextAction: "Verificar fuente publica, contacto y aprobacion antes de importar.",
       });
     }

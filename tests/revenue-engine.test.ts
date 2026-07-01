@@ -977,6 +977,41 @@ test("public candidate approval keeps incomplete candidates blocked", () => {
   assert.equal(approved.snapshot.recentLeads.length, 0);
 });
 
+test("blocked public candidates expose a repair packet without creating leads", () => {
+  recordRevenuePublicLeadCandidate({
+    businessName: "Repair Needed Spa",
+    area: "Miami",
+    niche: "spa",
+    websiteStatus: "unknown",
+    contactChannel: "unknown",
+    contactValue: "",
+    sourceUrl: "",
+    recipientEmail: "",
+    evidence: "short",
+    painPoint: "Needs review.",
+    estimatedOfferUsd: 2500,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+  const blocked = snapshot.publicLeadImportQueue.blocked[0];
+
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(snapshot.publicLeadImportQueue.blockedCount, 1);
+  assert.equal(blocked.businessName, "Repair Needed Spa");
+  assert.match(blocked.copyableRepairPacket, /Public candidate repair packet: Repair Needed Spa/);
+  assert.match(blocked.copyableRepairPacket, /business\|area\|niche\|website\|channel\|contact\|sourceUrl/);
+  assert.match(blocked.copyableRepairPacket, /REPLACE_PUBLIC_CONTACT_PATH/);
+  assert.match(blocked.copyableRepairPacket, /REPLACE_PUBLIC_SOURCE_URL/);
+  assert.match(blocked.copyableRepairPacket, /publicEvidenceVerified=true/);
+  assert.match(blocked.repairBatchRow, /Repair Needed Spa\|Miami\|spa/);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
 test("public lead candidates require source urls tied to business or contact evidence", () => {
   const unrelated = recordRevenuePublicLeadCandidate({
     businessName: "Generic Source Cafe",

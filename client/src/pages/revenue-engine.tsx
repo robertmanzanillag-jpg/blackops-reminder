@@ -505,6 +505,8 @@ type RevenueSnapshot = {
       candidateId: string;
       businessName: string;
       reason: string;
+      repairBatchRow: string;
+      copyableRepairPacket: string;
       nextAction: string;
     }>;
     safety: {
@@ -5957,18 +5959,31 @@ export default function RevenueEnginePage() {
                         <div key={item.candidateId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                           <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
                           <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={publicLeadCandidateApproveMutation.isPending}
-                            onClick={() => publicLeadCandidateApproveMutation.mutate(item.candidateId)}
-                            className="mt-2 h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
-                            data-testid={`button-approve-public-candidate-${item.candidateId}`}
-                          >
-                            {publicLeadCandidateApproveMutation.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
-                            Aprobar import
-                          </Button>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableRepairPacket)}
+                              className="h-7 border-zinc-700 bg-black text-xs text-zinc-100 hover:bg-zinc-900"
+                              data-testid={`button-copy-public-candidate-repair-${item.candidateId}`}
+                            >
+                              <Copy className="mr-1.5 h-3 w-3" />
+                              Copy repair
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={publicLeadCandidateApproveMutation.isPending}
+                              onClick={() => publicLeadCandidateApproveMutation.mutate(item.candidateId)}
+                              className="h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
+                              data-testid={`button-approve-public-candidate-${item.candidateId}`}
+                            >
+                              {publicLeadCandidateApproveMutation.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+                              Aprobar import
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
