@@ -7987,6 +7987,10 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /La meta completa sigue pendiente/);
   assert.match(page, /clippers-goal-operator-next-actions/);
   assert.match(page, /Operator next actions/);
+  assert.match(page, /clippers-goal-primary-proof-fast-path/);
+  assert.match(page, /Paste these two Metricool proof lines first/);
+  assert.match(page, /goalCompletionPrimaryFastPathLines/);
+  assert.match(page, /fastPathPasteLines\?: string\[\]/);
   assert.match(page, /Next actions CSV:/);
   assert.match(page, /goalCompletionAudit\.operatorNextActions/);
   assert.match(page, /tiktokExternalCloseoutTasks/);

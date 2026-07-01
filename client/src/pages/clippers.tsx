@@ -732,6 +732,7 @@ interface ClipperGoalCompletionAuditSummary {
     owner: string;
     buttonOrFile: string;
     proofLine: string;
+    fastPathPasteLines?: string[];
     guardrail: string;
     nextAction: string;
   }>;
@@ -16973,6 +16974,8 @@ export default function ClippersPage() {
     evidenceHtml: tiktokEvidenceChecklist?.paths.html || tiktokOperatorCockpit?.paths.evidenceHtml || "",
     evidenceCsv: effectiveMetricoolUploadPack?.paths.batchEvidenceCsv || statusBatchTrackerForDisplay?.paths.evidenceCsv || tiktokMvpReadinessVerifier?.paths.currentBatchEvidenceCsv || "",
   };
+  const goalCompletionPrimaryAction = goalCompletionAudit?.operatorNextActions?.[0] || null;
+  const goalCompletionPrimaryFastPathLines = goalCompletionPrimaryAction?.fastPathPasteLines || [];
   const tiktokMvpNowBlocked = tiktokMvpNow.status.startsWith("blocked") || tiktokMvpNow.status === "fail" || tiktokMvpNow.status === "needs_evidence_fix";
   const tiktokMvpNowImportReady = tiktokMvpNow.status === "ready_for_import_review" || tiktokMvpNow.readyToImport > 0;
   const tiktokMetricoolBridgeRows = accountPermissionReadiness?.tiktokMvpAccountCloseout?.rows || [];
@@ -22264,6 +22267,28 @@ export default function ClippersPage() {
                     {formatNumber(goalCompletionAudit.operatorNextActions.length)} steps
                   </Badge>
                 </div>
+                {goalCompletionPrimaryAction && goalCompletionPrimaryFastPathLines.length > 0 && (
+                  <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/20 p-3" data-testid="clippers-goal-primary-proof-fast-path">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-100">Paste these two Metricool proof lines first</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-100/75">{goalCompletionPrimaryAction.nextAction}</p>
+                      </div>
+                      <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                        {goalCompletionPrimaryAction.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {goalCompletionPrimaryFastPathLines.map((line) => (
+                        <p key={line} className="break-all rounded border border-amber-300/15 bg-black/30 p-2 font-mono text-[11px] leading-4 text-amber-50">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                    <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.buttonOrFile}</p>
+                    <p className="mt-1 text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.guardrail}</p>
+                  </div>
+                )}
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {goalCompletionAudit.operatorNextActions.slice(0, 8).map((action) => (
                     <div key={`${action.priority}-${action.title}`} className="rounded-md border border-white/10 bg-black/25 p-2 text-xs">
