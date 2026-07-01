@@ -18512,7 +18512,7 @@ export default function ClippersPage() {
                 data-testid="apply-clippers-tiktok-mvp-evidence-closeout-button"
               >
                 {tiktokMvpEvidenceCloseoutApplyMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileCheck2 className="mr-2 h-3.5 w-3.5" />}
-                Apply closeout
+                Open apply review
               </Button>
             </div>
           </div>
@@ -18538,6 +18538,9 @@ export default function ClippersPage() {
               {tiktokMvpEvidenceCloseout?.rows.find((row) => row.reasons.length)?.reasons[0]
                 || tiktokMvpEvidenceCloseout?.nextStep
                 || "Run preview after adding real account proof and Metricool proof rows. This does not publish."}
+            </p>
+            <p className="mt-1 text-[10px] leading-4 text-emerald-100/70">
+              Open apply review only writes validated local evidence rows after the explicit operator gate; it does not post, schedule, or enable real publishing.
             </p>
             {tiktokMvpEvidenceCloseout && (
               <div className="mt-2 grid gap-1 text-[11px] text-zinc-500 md:grid-cols-2">

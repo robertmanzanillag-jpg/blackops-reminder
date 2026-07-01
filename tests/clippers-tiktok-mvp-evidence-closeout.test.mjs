@@ -801,6 +801,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /preview-clippers-tiktok-mvp-proof-intake-import-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-proof-intake-import-button/);
   assert.match(page, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
+  assert.match(page, /Open apply review/);
+  assert.doesNotMatch(page, />\s*Apply closeout\s*</);
   assert.match(page, /const tiktokProofFlowBusy =/);
   assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading/);
   assert.match(page, /ClipperTikTokMvpEvidenceCloseoutPreviewGateSummary/);
@@ -981,6 +983,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     'data-testid="clippers-metricool-bridge-required-fields"',
   );
   assert.match(closeoutPanel, /This does not publish/);
+  assert.match(closeoutPanel, /does not post, schedule, or enable real publishing/);
   assert.match(closeoutPanel, /Account CSV/);
   assert.match(closeoutPanel, /Bridge CSV/);
   assert.doesNotMatch(closeoutPanel, /ready to publish/i);
