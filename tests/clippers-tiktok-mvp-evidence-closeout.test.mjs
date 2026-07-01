@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import test from "node:test";
 import path from "node:path";
+import express from "express";
+import { registerRoutes } from "../server/routes";
 
 const rootDir = path.join(process.cwd(), "clippers_workspace");
 const tmpDir = path.join(rootDir, "tmp");
@@ -2816,6 +2820,97 @@ test("Goal completion audit blocks automation when preview is clean but operatin
     else await writeFile(tiktokMvpOperatingRefreshPath, previousOperatingRefresh);
     if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
     else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
+  }
+});
+
+test("TikTok MVP proof links save route rejects malformed ready-looking preview gates", async () => {
+  const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  const proofLinks = {
+    lanes: {
+      "sports-daily:tiktok": {
+        accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+        metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+        accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok under his control without secrets.",
+        metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+      },
+      "meme-radar:tiktok": {
+        accountOwnershipProofUrl: "https://docs.google.com/document/d/meme-radar-account-proof/edit",
+        metricoolConnectionProofUrl: "https://app.metricool.com/planner/meme-radar-tiktok-proof",
+        accountNotes: "Robert confirms this Metricool proof shows Meme Radar TikTok under his control without secrets.",
+        metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+      },
+    },
+  };
+  const raw = JSON.stringify(proofLinks);
+  const rawHash = createHash("sha256").update(raw).digest("hex");
+  const validGate = {
+    status: "ready_for_save",
+    generatedAt: new Date().toISOString(),
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    rawHash,
+    rawStored: false,
+    totals: {
+      readyProofFields: 4,
+      totalProofFields: 4,
+      issues: 0,
+    },
+  };
+  const malformedCases = [
+    ["wrong scope", { scope: "all_platforms" }, /wrong scope/i],
+    ["wrong launch mode", { launchMode: "auto_after_connection" }, /approval_required/i],
+    ["direct APIs enabled", { directSocialApisRequired: true }, /direct social APIs/i],
+    ["real publishing enabled", { realPublishEnabled: true }, /real publishing/i],
+    ["raw text stored", { rawStored: true }, /store raw proof link text/i],
+    ["missing hash", { rawHash: "" }, /missing its hash/i],
+  ];
+
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await mkdir(path.dirname(proofLinksPreviewGatePath), { recursive: true });
+    await mkdir(path.dirname(proofLinksPath), { recursive: true });
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    for (const [label, override, messagePattern] of malformedCases) {
+      await writeFile(proofLinksPreviewGatePath, JSON.stringify({ ...validGate, ...override }, null, 2));
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/clippers/save-tiktok-mvp-proof-links`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ proofLinksText: raw, previewHash: rawHash }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, 400, `${label}: ${JSON.stringify(body)}`);
+      assert.match(body.error, messagePattern, label);
+      assert.equal(body.tiktokMvpProofLinksPreviewGate.status, "blocked_missing_or_stale_preview", label);
+      assert.equal(body.tiktokMvpProofLinksPreviewGate.directSocialApisRequired, false, label);
+      assert.equal(body.tiktokMvpProofLinksPreviewGate.realPublishEnabled, false, label);
+      assert.equal(body.tiktokMvpProofLinksPreviewGate.rawStored, false, label);
+      assert.doesNotMatch(JSON.stringify(body), /ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i, label);
+      const currentProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+      assert.equal(currentProofLinks, previousProofLinks, label);
+    }
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
+    if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
+    else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
   }
 });
 
