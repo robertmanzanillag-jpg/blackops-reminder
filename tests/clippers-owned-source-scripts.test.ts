@@ -2817,12 +2817,16 @@ test("TikTok MVP go-live packet rewrites stale packet when current workbook is e
     assert.equal(output.status, "blocked_prerequisite_refresh");
     assert.equal(output.realPublishEnabled, false);
     assert.equal(output.directSocialApisRequired, false);
+    assert.match(output.blocker, /clippers-tiktok-batch-tracker\.mjs/);
     assert.match(output.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
 
     const packet = JSON.parse(await readFile(packetPath, "utf8"));
     assert.equal(packet.status, "blocked_prerequisite_refresh");
     assert.equal(packet.realPublishEnabled, false);
     assert.equal(packet.directSocialApisRequired, false);
+    assert.equal(packet.totals.accountRows, 0);
+    assert.equal(packet.totals.readyToImport, 0);
+    assert.equal(packet.operatorSteps[0].id, "prerequisite-refresh");
     assert.ok(packet.prerequisiteFailures.some((failure) => /clippers-tiktok-batch-tracker\.mjs/.test(failure.script)));
     assert.match(packet.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
     assert.doesNotMatch(JSON.stringify(packet), /ready_for_metricool_operator|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|autopublish/i);
@@ -2837,6 +2841,21 @@ test("TikTok MVP go-live packet rewrites stale packet when current workbook is e
     assert.match(csv, /blocked_prerequisite_refresh/);
     assert.match(csv, /Preview links first; save only if the preview gate is clean\/current/);
     assert.doesNotMatch(csv, /ready_to_send|realPublishEnabled=true|video\.publish|autopublish/i);
+
+    const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
+    const goLivePostRoute = routes.slice(
+      routes.indexOf('app.post("/api/clippers/prepare-tiktok-mvp-go-live-packet"'),
+      routes.indexOf('app.post("/api/clippers/prepare-metricool-approval-quick-run"'),
+    );
+    assert.match(goLivePostRoute, /safeRun/);
+    assert.match(goLivePostRoute, /readClipperTikTokMvpGoLivePacket/);
+    assert.match(goLivePostRoute, /clippers-tiktok-batch-evidence-sync\.mjs/);
+    assert.match(goLivePostRoute, /--all-batches/);
+
+    const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+    assert.match(page, /blocked_prerequisite_refresh/);
+    assert.match(page, /clippers-tiktok-mvp-go-live-prerequisite-block/);
+    assert.match(page, /TikTok go-live packet bloqueado/);
   } finally {
     for (const [filePath, content] of originals) {
       if (content === null) await unlink(filePath).catch(() => undefined);
@@ -4623,6 +4642,8 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   assert.match(goLivePostRoute, /clippers-tiktok-batch-evidence-sync\.mjs/);
   assert.match(goLivePostRoute, /--all-batches/);
   assert.match(goLivePostRoute, /clippers-tiktok-evidence-checklist\.mjs/);
+  assert.match(goLivePostRoute, /safeRun/);
+  assert.match(goLivePostRoute, /readClipperTikTokMvpGoLivePacket/);
   const goLiveScript = await readFile(path.join(process.cwd(), "script/clippers-tiktok-mvp-go-live-packet.mjs"), "utf8");
   assert.match(goLiveScript, /const readOnlyMode = process\.argv\.includes\("--read-only"\)/);
   assert.match(goLiveScript, /if \(!readOnlyMode\) \{[\s\S]*clippers-tiktok-batch-evidence-sync\.mjs[\s\S]*--all-batches/);
@@ -4634,6 +4655,8 @@ test("TikTok MVP go-live packet combines account closeout and batch runbook safe
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
   assert.match(page, /prepare-clippers-tiktok-mvp-go-live-packet-button/);
   assert.match(page, /clippers-tiktok-mvp-go-live-packet-panel/);
+  assert.match(page, /blocked_prerequisite_refresh/);
+  assert.match(page, /clippers-tiktok-mvp-go-live-prerequisite-block/);
   assert.match(page, /clippers-tiktok-mvp-metricool-100-summary/);
   assert.match(page, /Metricool 100 run/);
   assert.match(page, /clippers-tiktok-only-operating-mode/);

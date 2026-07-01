@@ -1440,7 +1440,7 @@ interface ClipperTikTokBatchRunbookSummary {
 }
 
 interface ClipperTikTokMvpGoLivePacketSummary {
-  status: "ready_for_metricool_operator" | "in_progress";
+  status: "ready_for_metricool_operator" | "in_progress" | "blocked_prerequisite_refresh";
   generatedAt: string;
   launchMode: "metricool_approval_required";
   operatingMode?: {
@@ -1467,6 +1467,12 @@ interface ClipperTikTokMvpGoLivePacketSummary {
   };
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
+  blocker?: string;
+  prerequisiteFailures?: Array<{
+    script: string;
+    status?: number;
+    error: string;
+  }>;
   paths: {
     json: string;
     markdown: string;
@@ -14146,9 +14152,16 @@ export default function ClippersPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-go-live-packet"], data.tiktokMvpGoLivePacket);
+      const totals = data.tiktokMvpGoLivePacket.totals || {
+        accountReady: 0,
+        accountRows: 0,
+        notStarted: 0,
+      };
       toast({
-        title: "TikTok go-live packet listo",
-        description: `${data.tiktokMvpGoLivePacket.totals.accountReady}/${data.tiktokMvpGoLivePacket.totals.accountRows} cuentas; ${data.tiktokMvpGoLivePacket.totals.notStarted} filas pendientes.`,
+        title: data.tiktokMvpGoLivePacket.status === "blocked_prerequisite_refresh" ? "TikTok go-live packet bloqueado" : "TikTok go-live packet listo",
+        description: data.tiktokMvpGoLivePacket.status === "blocked_prerequisite_refresh"
+          ? data.tiktokMvpGoLivePacket.nextStep
+          : `${totals.accountReady}/${totals.accountRows} cuentas; ${totals.notStarted} filas pendientes.`,
       });
       refreshMetricoolCaches();
     },
@@ -22058,6 +22071,26 @@ export default function ClippersPage() {
                 </div>
               </div>
             </div>
+            {tiktokMvpGoLivePacket.status === "blocked_prerequisite_refresh" && (
+              <div className="mt-3 rounded-md border border-red-300/20 bg-red-950/15 p-3" data-testid="clippers-tiktok-mvp-go-live-prerequisite-block">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-red-200">Prerequisite refresh blocked</p>
+                    <p className="mt-1 text-xs leading-5 text-red-100/80">
+                      Fix the failed prerequisite before using this go-live packet. The app rewrote the packet as blocked so stale Metricool instructions are not used.
+                    </p>
+                    {(tiktokMvpGoLivePacket.prerequisiteFailures || []).slice(0, 3).map((failure) => (
+                      <p key={`${failure.script}-${failure.status || "failed"}`} className="mt-1 break-all text-[11px] leading-4 text-red-100/70">
+                        {failure.script}: {failure.error.split("\n")[0]}
+                      </p>
+                    ))}
+                  </div>
+                  <Badge className="w-fit border border-red-300/30 bg-red-300/10 text-[10px] text-red-100">
+                    {tiktokMvpGoLivePacket.blocker || "prerequisite_refresh_failed"}
+                  </Badge>
+                </div>
+              </div>
+            )}
             {tiktokMvpGoLivePacket.proofGate && (
               <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-tiktok-mvp-go-live-proof-gate">
                 <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">

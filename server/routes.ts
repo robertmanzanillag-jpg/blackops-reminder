@@ -4962,12 +4962,23 @@ export async function registerRoutes(
 
   app.post("/api/clippers/prepare-tiktok-mvp-go-live-packet", async (req, res) => {
     try {
-      const accountRun = await runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness");
-      const syncRun = await runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync");
-      const trackerRun = await runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker");
-      const runbookRun = await runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook");
-      const evidenceChecklistRun = await runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist");
-      const auditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit");
+      const safeRun = async (runner: () => Promise<any>, label: string) => {
+        try {
+          return await runner();
+        } catch (error: any) {
+          return {
+            ok: false,
+            label,
+            error: error.message || String(error),
+          };
+        }
+      };
+      const accountRun = await safeRun(() => runClipperJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness"), "Account permission readiness");
+      const syncRun = await safeRun(() => runClipperNodeJson(["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"], "TikTok batch evidence sync"), "TikTok batch evidence sync");
+      const trackerRun = await safeRun(() => runClipperJsonScript("script/clippers-tiktok-batch-tracker.mjs", "TikTok batch tracker"), "TikTok batch tracker");
+      const runbookRun = await safeRun(() => runClipperJsonScript("script/clippers-tiktok-batch-runbook.mjs", "TikTok batch runbook"), "TikTok batch runbook");
+      const evidenceChecklistRun = await safeRun(() => runClipperJsonScript("script/clippers-tiktok-evidence-checklist.mjs", "TikTok evidence checklist"), "TikTok evidence checklist");
+      const auditRun = await safeRun(() => runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit"), "Goal completion audit");
       const run = await runClipperJsonScript("script/clippers-tiktok-mvp-go-live-packet.mjs", "TikTok MVP go-live packet");
       const tiktokMvpGoLivePacket = await readClipperTikTokMvpGoLivePacket();
       res.json({ tiktokMvpGoLivePacket, run, accountRun, syncRun, trackerRun, runbookRun, evidenceChecklistRun, auditRun });
