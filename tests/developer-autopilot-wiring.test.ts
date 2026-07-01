@@ -229,6 +229,8 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(serverSource, /ready_for_money_mode/);
   assert.match(serverSource, /missingBeforeRealMoney/);
   assert.match(serverSource, /blockedUntilApproved/);
+  assert.match(serverSource, /evidenceGate/);
+  assert.match(serverSource, /run Money Sprint from placeholders/);
   assert.match(serverSource, /firstSprintPlan/);
   assert.match(serverSource, /\/api\/revenue-engine\/daily-scout-sprint/);
   assert.match(serverSource, /approve_contact_or_collect/);
@@ -241,6 +243,10 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(uiSource, /moneyActivationPlan\.canBuildWebsites/);
   assert.match(uiSource, /moneyActivationPlan\.missingBeforeRealMoney/);
   assert.match(uiSource, /moneyActivationPlan\.blockedUntilApproved/);
+  assert.match(uiSource, /Gate de evidencia/);
+  assert.match(uiSource, /moneyActivationPlan\.evidenceGate\.readyCandidates/);
+  assert.match(uiSource, /moneyActivationPlan\.evidenceGate\.blockedCandidates/);
+  assert.match(uiSource, /moneyActivationPlan\.evidenceGate\.requiredFields/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan/);
   assert.doesNotMatch(uiSource, /moneyActivationPlan\.firstSprintPlan\.steps \|\| \[\]\)\.slice\(0, 3\)/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.copyableBrief/);

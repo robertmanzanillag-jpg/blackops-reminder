@@ -1753,10 +1753,17 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/daily-scout-sprint");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps.some((step) => step.id === "approve_contact_or_collect" && step.approvalRequired), true);
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.blockedActions.includes("charge client"), true);
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.status, "empty");
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.readyCandidates, 0);
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.requiredFields.includes("sourceUrl"), true);
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.blockedActions.includes("run Money Sprint from placeholders"), true);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Blocked until Robert approval/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /First sprint steps/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Evidence gate before import\/contact/);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
@@ -1781,6 +1788,60 @@ test("snapshot launch readiness starts only with production persistence ready", 
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.targetRows <= 10, true);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
+});
+
+test("money activation evidence gate mirrors public lead import readiness", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+
+  recordRevenuePublicLeadCandidate({
+    businessName: "Gate Ready Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@gateready.example",
+    sourceUrl: "https://example.com/gate-ready-cafe",
+    recipientEmail: "owner@gateready.example",
+    evidence: "Public listing shows no dedicated website, current menu photos and a verified owner email.",
+    painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Gate Ready Cafe has public evidence of no dedicated website and a clear website opportunity.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  recordRevenuePublicLeadCandidate({
+    businessName: "Gate Blocked Spa",
+    area: "Miami",
+    niche: "spa",
+    websiteStatus: "unknown",
+    contactChannel: "unknown",
+    contactValue: "",
+    sourceUrl: "https://example.com/gate-blocked-spa",
+    recipientEmail: "",
+    evidence: "Short note needs more public verification.",
+    painPoint: "Needs review before import.",
+    estimatedOfferUsd: 1000,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(snapshot.publicLeadImportQueue.status, "ready");
+  assert.equal(snapshot.publicLeadImportQueue.readyCount, 1);
+  assert.equal(snapshot.publicLeadImportQueue.blockedCount, 1);
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.status, "ready");
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.readyCandidates, snapshot.publicLeadImportQueue.readyCount);
+  assert.equal(snapshot.moneyActivationPlan.evidenceGate.blockedCandidates, snapshot.publicLeadImportQueue.blockedCount);
+  assert.match(snapshot.moneyActivationPlan.evidenceGate.nextAction, /Money Sprint/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Ready candidates: 1/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Blocked candidates: 1/);
 });
 
 test("records sold apps and automations into revenue metrics", () => {

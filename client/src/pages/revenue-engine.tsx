@@ -176,6 +176,14 @@ type RevenueSnapshot = {
       nextStep: string;
     }>;
     blockedUntilApproved: string[];
+    evidenceGate: {
+      status: "ready" | "needs_review" | "empty";
+      readyCandidates: number;
+      blockedCandidates: number;
+      requiredFields: string[];
+      nextAction: string;
+      blockedActions: string[];
+    };
     firstSprintPlan: {
       title: string;
       area: string;
@@ -3616,6 +3624,20 @@ export default function RevenueEnginePage() {
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/daily-scout-sprint"}
                 </p>
+                <div className="mt-3 rounded-md border border-cyan-500/15 bg-cyan-500/5 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-cyan-100">Gate de evidencia</p>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.evidenceGate.status || "review"), "shrink-0")}>
+                      {snapshot?.moneyActivationPlan.evidenceGate.readyCandidates ?? 0} listos
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-cyan-100/80">
+                    {snapshot?.moneyActivationPlan.evidenceGate.blockedCandidates ?? 0} bloqueados · {snapshot?.moneyActivationPlan.evidenceGate.nextAction || "Guardar candidatos con evidencia publica verificable."}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">
+                    Campos: {(snapshot?.moneyActivationPlan.evidenceGate.requiredFields || []).slice(0, 6).join(", ") || "business, sourceUrl, evidence"}
+                  </p>
+                </div>
                 <Button
                   type="button"
                   size="sm"

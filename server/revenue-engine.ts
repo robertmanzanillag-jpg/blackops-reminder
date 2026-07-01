@@ -5312,6 +5312,7 @@ function buildRevenueMoneyActivationPlan(input: {
   launchReadiness: ReturnType<typeof applyRevenueProductionPersistenceGate>["launchReadiness"];
   dailyMoneyCommand: RevenueDailyMoneyCommand;
   businessScoutQueue: RevenueBusinessScoutQueue;
+  publicLeadImportQueue: RevenuePublicLeadImportQueue;
   systemReadiness: ReturnType<typeof buildRevenueSystemReadiness>;
   agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
 }) {
@@ -5353,6 +5354,19 @@ function buildRevenueMoneyActivationPlan(input: {
     ...input.dailyMoneyCommand.safety.blockedActions,
     ...input.agentOperatingContract.requiresHumanApproval,
   ]));
+  const evidenceGate = {
+    status: input.publicLeadImportQueue.status,
+    readyCandidates: input.publicLeadImportQueue.readyCount,
+    blockedCandidates: input.publicLeadImportQueue.blockedCount,
+    requiredFields: input.launchReadiness.todayExecutionPack.requiredEvidenceFields,
+    nextAction: input.publicLeadImportQueue.nextAction,
+    blockedActions: Array.from(new Set([
+      "import unverified public evidence",
+      "run Money Sprint from placeholders",
+      "contact business before Robert approval",
+      ...input.publicLeadImportQueue.safety.blockedActions,
+    ])),
+  };
   const firstSprintPlan = {
     title: `${input.businessScoutQueue.area} ${input.businessScoutQueue.niche} first revenue sprint`,
     area: input.businessScoutQueue.area,
@@ -5415,6 +5429,13 @@ function buildRevenueMoneyActivationPlan(input: {
       `   Approval required: ${step.approvalRequired ? "yes" : "no"}`,
     ].join("\n")),
     "",
+    "Evidence gate:",
+    `- Status: ${evidenceGate.status}`,
+    `- Ready candidates: ${evidenceGate.readyCandidates}`,
+    `- Blocked candidates: ${evidenceGate.blockedCandidates}`,
+    `- Required fields: ${evidenceGate.requiredFields.join(", ")}`,
+    `- Next action: ${evidenceGate.nextAction}`,
+    "",
     "Blocked until Robert approval:",
     ...firstSprintPlan.blockedActions.map((action) => `- ${action}`),
   ].join("\n");
@@ -5455,6 +5476,7 @@ function buildRevenueMoneyActivationPlan(input: {
     ])).slice(0, 8),
     missingBeforeRealMoney: dedupedMissing,
     blockedUntilApproved: approvals,
+    evidenceGate,
     firstSprintPlan: {
       ...firstSprintPlan,
       copyableBrief: firstSprintCopyableBrief,
@@ -5481,6 +5503,14 @@ function buildRevenueMoneyActivationPlan(input: {
       "",
       "First sprint steps:",
       ...firstSprintPlan.steps.map((step, index) => `${index + 1}. ${step.label}: ${step.action}`),
+      "",
+      "Evidence gate before import/contact:",
+      `- Status: ${evidenceGate.status}`,
+      `- Ready candidates: ${evidenceGate.readyCandidates}`,
+      `- Blocked candidates: ${evidenceGate.blockedCandidates}`,
+      `- Required fields: ${evidenceGate.requiredFields.join(", ")}`,
+      `- Next action: ${evidenceGate.nextAction}`,
+      ...evidenceGate.blockedActions.map((action) => `- Blocked: ${action}`),
       "",
       "Missing before real money mode:",
       ...(dedupedMissing.length > 0 ? dedupedMissing.map((item) => `- ${item.label}: ${item.nextStep}`) : ["- none"]),
@@ -5667,6 +5697,7 @@ export function getRevenueEngineSnapshot() {
     launchReadiness,
     dailyMoneyCommand,
     businessScoutQueue,
+    publicLeadImportQueue,
     systemReadiness,
     agentOperatingContract,
   });
