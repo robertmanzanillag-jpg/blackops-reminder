@@ -17098,6 +17098,12 @@ export default function ClippersPage() {
     : !tiktokMvpProofQuickFillIssuesValid
       ? "Quick fill report is malformed; rerun Quick fill with real non-secret proof before trusting this result."
       : tiktokMvpProofQuickFillIssues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
+  const clearTikTokMvpProofLinksGeneratedState = () => {
+    setTiktokMvpProofLinksPastePreview(null);
+    setTiktokMvpProofLinksText("");
+    setTiktokMvpProofLinksPreview(null);
+    setTiktokMvpProofLinksSaveReceipt(null);
+  };
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
@@ -18792,7 +18798,10 @@ export default function ClippersPage() {
                         <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">SPORT Metricool/Drive proof</Label>
                         <Input
                           value={tiktokMvpFastPathSportProofUrl}
-                          onChange={(event) => setTiktokMvpFastPathSportProofUrl(event.target.value)}
+                          onChange={(event) => {
+                            setTiktokMvpFastPathSportProofUrl(event.target.value);
+                            clearTikTokMvpProofLinksGeneratedState();
+                          }}
                           className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
                           placeholder="https://app.metricool.com/... or https://drive.google.com/..."
                           data-testid="clippers-tiktok-mvp-fast-path-sport-input"
@@ -18802,7 +18811,10 @@ export default function ClippersPage() {
                         <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">memes Metricool/Drive proof</Label>
                         <Input
                           value={tiktokMvpFastPathMemesProofUrl}
-                          onChange={(event) => setTiktokMvpFastPathMemesProofUrl(event.target.value)}
+                          onChange={(event) => {
+                            setTiktokMvpFastPathMemesProofUrl(event.target.value);
+                            clearTikTokMvpProofLinksGeneratedState();
+                          }}
                           className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
                           placeholder="https://app.metricool.com/... or https://docs.google.com/..."
                           data-testid="clippers-tiktok-mvp-fast-path-memes-input"

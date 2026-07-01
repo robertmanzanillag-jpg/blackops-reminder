@@ -580,6 +580,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /sports-daily:tiktok\.metricoolConnectionProofUrl=\$\{sportUrl\}/);
   assert.match(page, /meme-radar:tiktok\.accountOwnershipProofUrl=\$\{memesUrl\}/);
   assert.match(page, /meme-radar:tiktok\.metricoolConnectionProofUrl=\$\{memesUrl\}/);
+  assert.match(page, /const clearTikTokMvpProofLinksGeneratedState = \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?\};/);
+  assert.match(page, /setTiktokMvpFastPathSportProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
+  assert.match(page, /setTiktokMvpFastPathMemesProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
   assert.match(page, /setTiktokMvpProofLinksText\(""\)/);
   assert.match(page, /setTiktokMvpProofLinksSaveReceipt\(null\)/);
   assert.match(page, /setTiktokMvpProofLinksPasteText\(event\.target\.value\)/);
