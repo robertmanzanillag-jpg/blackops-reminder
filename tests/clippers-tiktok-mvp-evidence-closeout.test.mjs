@@ -2403,6 +2403,58 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
     assert.equal(sameUrlOutput.quickFillStatus, "not_run");
     const sameUrlReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
     assert.match(sameUrlReport.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/);
+
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+          accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control; no API keys were shared.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without API keys or secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit",
+          accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control; no API keys were shared.",
+          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without API keys or secrets.",
+        },
+      },
+    }, null, 2));
+    const safeWordsRun = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-drop-kit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(safeWordsRun.status, 0, safeWordsRun.stderr || safeWordsRun.stdout);
+    const safeWordsOutput = JSON.parse(safeWordsRun.stdout);
+    assert.equal(safeWordsOutput.readyForQuickFill, true);
+    const safeWordsReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
+    assert.doesNotMatch(safeWordsReport.issues.join("\n"), /accountNotes|metricoolNotes/);
+
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view?api_key=never",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+          accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit",
+          accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control without secrets.",
+          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without secrets.",
+        },
+      },
+    }, null, 2));
+    const secretRun = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-drop-kit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(secretRun.status, 0, secretRun.stderr || secretRun.stdout);
+    const secretOutput = JSON.parse(secretRun.stdout);
+    assert.equal(secretOutput.readyForQuickFill, false);
+    const secretReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
+    assert.match(secretReport.issues.join("\n"), /accountOwnershipProofUrl must be a real safe HTTPS proof URL/);
   } finally {
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);

@@ -84,7 +84,9 @@ function normalize(value) {
 const unsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
 
 function containsSecret(value) {
-  return /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || "")) || unsafeProofQueryParamPattern.test(String(value || ""));
+  return /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i.test(String(value || ""))
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
+    || unsafeProofQueryParamPattern.test(String(value || ""));
 }
 
 function hasPlaceholder(value) {
