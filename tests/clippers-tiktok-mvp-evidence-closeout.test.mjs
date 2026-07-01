@@ -1917,6 +1917,10 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /isFreshGeneratedAt\(proofRefresh\.generatedAt\)/);
   assert.match(source, /currentWithProofRefresh/);
   assert.match(source, /proofRefreshFresh/);
+  assert.match(source, /nextSafeButton/);
+  assert.match(source, /nextLockedButton/);
+  assert.match(source, /preview_proof_links/);
+  assert.match(source, /Locked until clean preview/);
   assert.doesNotMatch(source, /quickFillGeneratedAt >= proofRefreshGeneratedAt/);
   assert.match(source, /Proof handoff never applies evidence, publishes, schedules, or enables direct social APIs/);
   assert.doesNotMatch(source, /--apply/);
@@ -1950,6 +1954,8 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(report.unblockBoard.fastPathAvailable, true);
   assert.equal(report.totals.minimumProofUrlsNeeded, 2);
   assert.equal(report.totals.fastPathAvailable, true);
+  assert.equal(report.nextSafeButton, "preview_proof_links");
+  assert.equal(report.nextLockedButton, "save_proof_links");
   assert.equal(report.unblockBoard.impact.metricool100Rows, 100);
   assert.equal(report.unblockBoard.impact.metricool100SourceReadyBatches, 10);
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
@@ -2026,7 +2032,9 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(oneScreen, /Minimum real proof URLs needed: 2/);
   assert.match(oneScreen, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
-  assert.match(oneScreen, /Next safe button: save_proof_links/);
+  assert.match(oneScreen, /Next safe button: preview_proof_links/);
+  assert.match(oneScreen, /Locked until clean preview: save_proof_links/);
+  assert.doesNotMatch(oneScreen, /Next safe button: save_proof_links/);
   assert.match(oneScreen, /This file does not apply evidence, schedule posts, publish, or enable direct social APIs/);
   assert.doesNotMatch(oneScreen, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 });

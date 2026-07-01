@@ -384,6 +384,8 @@ function buildProofLinksJsonStarter() {
 function renderOneScreenProofFill(summary) {
   const rows = summary.unblockBoard.rows.length ? summary.unblockBoard.rows : buildUnblockBoard(summary.collectionPackets, summary.gates).rows;
   const fastPathRows = summary.unblockBoard.fastPathRows || [];
+  const nextSafeButton = summary.nextSafeButton || summary.nextButton;
+  const nextLockedButton = summary.nextLockedButton || "none";
   return [
     "TikTok MVP proof fill - one screen",
     "",
@@ -423,7 +425,8 @@ function renderOneScreenProofFill(summary) {
     "",
     `Paste packet: ${summary.paths.pastePacketTxt}`,
     `Unblock board CSV: ${summary.paths.unblockBoardCsv}`,
-    `Next safe button: ${summary.nextButton}`,
+    `Next safe button: ${nextSafeButton}`,
+    `Locked until clean preview: ${nextLockedButton}`,
     `Next action: ${summary.nextAction}`,
     "",
     "This file does not apply evidence, schedule posts, publish, or enable direct social APIs.",
@@ -438,6 +441,8 @@ function renderMarkdown(summary) {
     `Generated: ${summary.generatedAt}`,
     `Status: ${summary.status}`,
     `Next button: ${summary.nextButton}`,
+    `Next safe button: ${summary.nextSafeButton}`,
+    `Locked until clean preview: ${summary.nextLockedButton}`,
     "",
     "## Decision",
     "",
@@ -563,6 +568,8 @@ async function main() {
       proofRefreshFresh,
       proofRefreshGeneratedAt: proofRefresh?.generatedAt || "missing",
     },
+    nextSafeButton: decision.status === "blocked_needs_proof_links" ? "preview_proof_links" : decision.nextButton,
+    nextLockedButton: decision.status === "blocked_needs_proof_links" ? "save_proof_links" : "none",
     gates,
     collectionPackets,
     unblockBoard,
