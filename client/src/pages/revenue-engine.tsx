@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
+import { buildPublicScoutConnectorIntakePayload } from "@/lib/revenue-engine-public-scout-connector";
 
 type RevenueDailyScoutSprintSnapshot = {
   id: string;
@@ -3572,29 +3573,19 @@ export default function RevenueEnginePage() {
 
   const publicScoutConnectorIntakeMutation = useMutation<RevenueVerifiedScoutConnectorIntakeResult>({
     mutationFn: async () => {
-      let results: unknown;
-      try {
-        results = JSON.parse(publicScoutConnectorResultsJson);
-      } catch {
-        throw new Error("JSON del connector invalido");
-      }
-      if (!Array.isArray(results)) {
-        throw new Error("El connector debe enviar un array de resultados");
-      }
+      const payload = buildPublicScoutConnectorIntakePayload(publicScoutConnectorResultsJson, {
+        activeScoutArea,
+        activeScoutNiche,
+        missionId: snapshot?.latestDailyScoutSprint?.id || "",
+        sourceTaskId: activeScoutSourceTaskId,
+        connectorName: publicScoutConnectorName,
+        connectorRunId: publicScoutConnectorRunId,
+      });
 
       const response = await fetch("/api/revenue-engine/public-scout-connector-intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          area: activeScoutArea,
-          niche: activeScoutNiche,
-          missionId: snapshot?.latestDailyScoutSprint?.id || "",
-          sourceTaskId: activeScoutSourceTaskId,
-          connectorName: publicScoutConnectorName,
-          connectorRunId: publicScoutConnectorRunId,
-          results,
-          notes: "Recorded from Revenue Engine verified connector intake UI.",
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || data.reason || "No se pudo guardar connector intake");
@@ -5219,7 +5210,7 @@ export default function RevenueEnginePage() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-results">
-                            Connector results JSON
+                            Connector payload or results JSON
                           </label>
                           <Textarea
                             id="public-scout-connector-results"
@@ -5794,11 +5785,11 @@ export default function RevenueEnginePage() {
                             size="sm"
                             variant="outline"
                             className="border-cyan-500/30 bg-black"
-                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableBrief || "")}
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyablePayloadTemplate || "")}
                             data-testid="button-copy-scout-connector-intake"
                           >
                             <Copy className="mr-2 h-3.5 w-3.5" />
-                            Copy connector JSON
+                            Copy payload template
                           </Button>
                         </div>
                       </div>

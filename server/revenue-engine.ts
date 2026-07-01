@@ -5962,6 +5962,7 @@ function buildRevenueMoneyActivationPlan(input: {
       "npm run revenue:money-readiness -- --mode=first-sprint --json",
       "npm run revenue:money-readiness -- --mode=production-launch --json",
       "npm run test:revenue-engine",
+      "npm run test:revenue-public-scout-connector",
       "npm run test:revenue-money-readiness-cli",
       "npm run test:developer-autopilot",
       "npm run check",
