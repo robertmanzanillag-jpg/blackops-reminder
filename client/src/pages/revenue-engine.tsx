@@ -1053,6 +1053,14 @@ type RevenueScoutDispatchResult = {
       searchUrls: string[];
       copyableBrief: string;
     }>;
+    connectorIntake: {
+      endpoint: string;
+      executionMode: "verified_connector_review_only";
+      maxResults: number;
+      approvalLocked: boolean;
+      copyablePayloadTemplate: string;
+      copyableBrief: string;
+    };
     copyableDispatchBrief: string;
     safety: RevenueDailyScoutSprintSnapshot["safety"];
   };
@@ -5638,6 +5646,17 @@ export default function RevenueEnginePage() {
                           </Badge>
                         </div>
                         <p className="mt-2 text-xs leading-5 text-cyan-100/80">{scoutDispatchMutation.data.nextAction}</p>
+                        <div className="mt-3 rounded-md border border-cyan-500/20 bg-black px-3 py-2" data-testid="panel-scout-connector-intake-contract">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-cyan-100">Connector intake</p>
+                            <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-100">
+                              {scoutDispatchMutation.data.dispatch.connectorIntake.executionMode}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">
+                            POST {scoutDispatchMutation.data.dispatch.connectorIntake.endpoint} · max {scoutDispatchMutation.data.dispatch.connectorIntake.maxResults} resultados · import {scoutDispatchMutation.data.dispatch.connectorIntake.approvalLocked ? "bloqueado" : "activo"}
+                          </p>
+                        </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
                             type="button"
@@ -5660,6 +5679,17 @@ export default function RevenueEnginePage() {
                           >
                             <Copy className="mr-2 h-3.5 w-3.5" />
                             Copy agent briefs
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableBrief || "")}
+                            data-testid="button-copy-scout-connector-intake"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy connector JSON
                           </Button>
                         </div>
                       </div>

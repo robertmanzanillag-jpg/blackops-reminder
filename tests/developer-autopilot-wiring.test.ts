@@ -261,9 +261,12 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(routeSource, /runRevenueScoutDispatch\(input\)/);
   assert.match(serverSource, /runRevenueScoutDispatch/);
   assert.match(serverSource, /manual_subagent_dispatch/);
+  assert.match(serverSource, /connectorIntake/);
+  assert.match(serverSource, /approvalLocked: true/);
   assert.match(serverSource, /dispatchSummary/);
   assert.match(serverSource, /searchPlaybook/);
   assert.match(serverSource, /public business search playbook/);
+  assert.match(serverSource, /\/api\/revenue-engine\/public-scout-connector-intake/);
   assert.match(uiSource, /dailyScoutSprintMutation/);
   assert.match(uiSource, /scoutDispatchMutation/);
   assert.match(uiSource, /const dispatchScoutArea = snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);
@@ -277,6 +280,8 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /panel-scout-dispatch/);
   assert.match(uiSource, /button-copy-scout-dispatch/);
   assert.match(uiSource, /button-copy-scout-dispatch-agents/);
+  assert.match(uiSource, /panel-scout-connector-intake-contract/);
+  assert.match(uiSource, /button-copy-scout-connector-intake/);
   assert.match(uiSource, /panel-business-search-playbook/);
   assert.match(uiSource, /button-copy-business-search-playbook/);
   assert.match(uiSource, /businessScoutQueue\.workPack\.searchPlaybook\.prioritizedSources/);

@@ -5123,6 +5123,8 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
   const executionMode = "manual_evidence_required" as const;
   const blockedUntil = "public evidence is pasted and verified, or a verified public-search scout connector is added";
   const requiredExecutionBridge = "bounded public-search/browser scout that opens generated URLs, extracts candidate fields, records source evidence, and stores candidates as needs_review before Robert approval";
+  const connectorIntakeEndpoint = "/api/revenue-engine/public-scout-connector-intake";
+  const connectorRunId = `${sprint.id}-connector-run`;
   const agentAssignments = sprint.agentBriefs.map((brief) => {
     const tasks = sprint.tasks.filter((task) => brief.taskIds.includes(task.taskId));
     return {
@@ -5134,6 +5136,53 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
       copyableBrief: brief.copyableBrief,
     };
   });
+  const connectorIntakePayloadTemplate = {
+    area: sprint.area,
+    niche: sprint.niche,
+    missionId: sprint.id,
+    sourceTaskId: sprint.tasks[0]?.taskId || "daily-scout-task",
+    connectorName: "browser-public-scout",
+    connectorRunId,
+    results: [
+      {
+        businessName: "REPLACE business name",
+        area: sprint.area,
+        niche: sprint.niche,
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@REPLACE_PUBLIC_HANDLE_OR_CONTACT",
+        recipientEmail: "",
+        sourceUrl: "https://REPLACE_PUBLIC_SOURCE_URL",
+        evidence: "REPLACE with 12+ words from public listing/profile showing no or weak website, recent activity and a contact path.",
+        painPoint: "REPLACE with specific website, lead capture, booking, menu or follow-up problem.",
+        estimatedOfferUsd: 3500,
+        contactName: "Owner",
+        businessSummary: "REPLACE one sentence public business summary.",
+      },
+    ],
+    notes: "Verified public-search scout connector intake; Robert review required before import.",
+  };
+  const copyableConnectorIntakeBrief = [
+    "Revenue Engine verified scout connector intake",
+    "",
+    `Endpoint: POST ${connectorIntakeEndpoint}`,
+    `Execution mode: verified_connector_review_only`,
+    `Sprint: ${sprint.id}`,
+    "",
+    "Required result fields:",
+    "- businessName, sourceUrl, evidence, painPoint",
+    "- websiteStatus: no_website | weak_website | has_website | unknown",
+    "- contactChannel: email | phone | instagram | contact_form | unknown",
+    "- recipientEmail can be empty for manual channels.",
+    "",
+    "Safety:",
+    "- Results are recorded as needs_review only.",
+    "- Do not set publicEvidenceVerified or approvalToImport.",
+    "- Do not contact businesses, buy data, create leads, publish previews or deploy websites.",
+    "",
+    "JSON payload template:",
+    JSON.stringify(connectorIntakePayloadTemplate, null, 2),
+  ].join("\n");
   const copyableDispatchBrief = [
     "Revenue Engine scout dispatch",
     "",
@@ -5151,8 +5200,11 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
     `- Required bridge: ${requiredExecutionBridge}.`,
     "- Use only public search/profile/listing pages.",
     "- Return real evidence blocks; do not invent businesses.",
+    `- Preferred structured return path: POST ${connectorIntakeEndpoint} with the connector intake JSON template below.`,
     "- Do not contact businesses, buy data, scrape at scale, send outreach, publish previews or deploy websites.",
     "- Paste completed blocks into Public scout evidence and import only after Robert verifies public evidence.",
+    "",
+    copyableConnectorIntakeBrief,
   ].join("\n");
 
   return {
@@ -5165,6 +5217,14 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
     taskCount: sprint.tasks.length,
     slotCount: sprint.tasks.reduce((total, task) => total + task.resultSlots.length, 0),
     agentAssignments,
+    connectorIntake: {
+      endpoint: connectorIntakeEndpoint,
+      executionMode: "verified_connector_review_only" as const,
+      maxResults: 20,
+      approvalLocked: true,
+      copyablePayloadTemplate: JSON.stringify(connectorIntakePayloadTemplate, null, 2),
+      copyableBrief: copyableConnectorIntakeBrief,
+    },
     copyableDispatchBrief,
     safety: sprint.safety,
   };
