@@ -16510,6 +16510,18 @@ export default function ClippersPage() {
     }
   };
 
+  const loadGoalMetricoolProofFastPath = () => {
+    const cleanPacket = goalCompletionPrimaryFastPathLines.join("\n").trim();
+    if (!cleanPacket) return;
+    setTiktokMvpProofLinksPasteText(cleanPacket);
+    setTiktokMvpProofLinksPastePreview(null);
+    setTiktokMvpProofLinksPreview(null);
+    toast({
+      title: "Metricool proof lines loaded",
+      description: "Add real non-secret URLs after each equals sign, then run Preview links before saving.",
+    });
+  };
+
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
     const uniqueEnvVars = Array.from(new Set(envVars.map((envVar) => envVar.trim()).filter(Boolean)));
     if (!uniqueEnvVars.length) return;
@@ -22305,6 +22317,17 @@ export default function ClippersPage() {
                     >
                       <Copy className="mr-2 h-3.5 w-3.5" />
                       Copy proof lines
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={loadGoalMetricoolProofFastPath}
+                      className="ml-0 mt-2 h-8 border-cyan-300/20 bg-transparent text-xs text-cyan-100 hover:bg-cyan-300/10 sm:ml-2"
+                      data-testid="load-clippers-goal-primary-proof-fast-path-button"
+                    >
+                      <FileText className="mr-2 h-3.5 w-3.5" />
+                      Load into Proof Links
                     </Button>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       {goalCompletionPrimaryFastPathLines.map((line) => (
