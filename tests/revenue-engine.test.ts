@@ -488,13 +488,21 @@ test("dispatches scout agents without creating candidates leads outreach or spen
 
   assert.equal(result.status, "dispatch_ready");
   assert.equal(result.dispatch.mode, "manual_subagent_dispatch");
+  assert.equal(result.dispatch.executionMode, "manual_evidence_required");
+  assert.match(result.dispatch.blockedUntil, /public evidence is pasted and verified/);
+  assert.match(result.dispatch.requiredExecutionBridge, /public-search\/browser scout/);
   assert.equal(result.dispatch.readyToAssign, true);
   assert.equal(result.sprint.dispatchMode, "manual_subagent_dispatch");
+  assert.equal(result.sprint.executionMode, "manual_evidence_required");
+  assert.match(result.sprint.blockedUntil || "", /verified public-search scout connector/);
+  assert.match(result.sprint.requiredExecutionBridge || "", /stores candidates as needs_review/);
   assert.match(result.sprint.dispatchSummary || "", /agents/);
   assert.equal(result.dispatch.taskCount, result.sprint.tasks.length);
   assert.equal(result.dispatch.slotCount, result.sprint.tasks.reduce((total, task) => total + task.resultSlots.length, 0));
   assert.equal(result.dispatch.agentAssignments.length, result.dispatch.agentCount);
   assert.match(result.dispatch.copyableDispatchBrief, /Revenue Engine scout dispatch/);
+  assert.match(result.dispatch.copyableDispatchBrief, /does not autonomously browse or prove businesses/);
+  assert.match(result.dispatch.copyableDispatchBrief, /Required bridge/);
   assert.match(result.dispatch.copyableDispatchBrief, /Do not contact businesses/);
   assert.equal(result.safety.persistsScoutRun, true);
   assert.equal(result.safety.persistsCandidates, false);
@@ -504,9 +512,13 @@ test("dispatches scout agents without creating candidates leads outreach or spen
   assert.equal(result.safety.deploys, false);
   assert.equal(snapshot.latestDailyScoutSprint?.id, result.sprint.id);
   assert.equal(snapshot.latestDailyScoutSprint?.dispatchMode, "manual_subagent_dispatch");
+  assert.equal(snapshot.latestDailyScoutSprint?.executionMode, "manual_evidence_required");
+  assert.match(snapshot.latestDailyScoutSprint?.blockedUntil || "", /public evidence is pasted/);
   assert.match(snapshot.latestDailyScoutSprint?.dispatchSummary || "", /public evidence slots/);
   assert.equal(result.snapshot.latestDailyScoutSprint?.id, result.sprint.id);
   assert.equal(result.snapshot.latestDailyScoutSprint?.dispatchMode, "manual_subagent_dispatch");
+  assert.equal(result.snapshot.latestDailyScoutSprint?.executionMode, "manual_evidence_required");
+  assert.match(result.snapshot.latestDailyScoutSprint?.requiredExecutionBridge || "", /bounded public-search/);
   assert.match(result.snapshot.latestDailyScoutSprint?.dispatchSummary || "", /public evidence slots/);
   assert.equal(snapshot.recentPublicLeadCandidates.length, 0);
   assert.equal(snapshot.recentLeads.length, 0);

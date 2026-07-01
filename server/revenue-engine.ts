@@ -726,6 +726,9 @@ type RevenueDailyScoutSprint = {
   updatedAt: string;
   status: "open" | "completed" | "blocked";
   dispatchMode?: "manual_subagent_dispatch";
+  executionMode?: "manual_evidence_required";
+  blockedUntil?: string;
+  requiredExecutionBridge?: string;
   dispatchedAt?: string;
   dispatchSummary?: string;
   source: "latest_scouting_mission" | "manual_override" | "default_market";
@@ -1424,6 +1427,9 @@ const persistedRevenueDailyScoutSprintSchema: z.ZodType<RevenueDailyScoutSprint>
   updatedAt: z.string().trim().min(1),
   status: z.enum(["open", "completed", "blocked"]),
   dispatchMode: z.enum(["manual_subagent_dispatch"]).optional(),
+  executionMode: z.enum(["manual_evidence_required"]).optional(),
+  blockedUntil: z.string().optional(),
+  requiredExecutionBridge: z.string().optional(),
   dispatchedAt: z.string().optional(),
   dispatchSummary: z.string().optional(),
   source: z.enum(["latest_scouting_mission", "manual_override", "default_market"]),
@@ -5083,6 +5089,9 @@ export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailySco
 }
 
 function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
+  const executionMode = "manual_evidence_required" as const;
+  const blockedUntil = "public evidence is pasted and verified, or a verified public-search scout connector is added";
+  const requiredExecutionBridge = "bounded public-search/browser scout that opens generated URLs, extracts candidate fields, records source evidence, and stores candidates as needs_review before Robert approval";
   const agentAssignments = sprint.agentBriefs.map((brief) => {
     const tasks = sprint.tasks.filter((task) => brief.taskIds.includes(task.taskId));
     return {
@@ -5106,6 +5115,9 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
     ...agentAssignments.map((agent) => `- ${agent.ownerAgent}: ${agent.taskCount} tasks / ${agent.slotCount} evidence slots`),
     "",
     "Rules:",
+    `- Execution mode: ${executionMode}. This dispatch does not autonomously browse or prove businesses by itself.`,
+    `- Blocked until: ${blockedUntil}.`,
+    `- Required bridge: ${requiredExecutionBridge}.`,
     "- Use only public search/profile/listing pages.",
     "- Return real evidence blocks; do not invent businesses.",
     "- Do not contact businesses, buy data, scrape at scale, send outreach, publish previews or deploy websites.",
@@ -5114,6 +5126,9 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
 
   return {
     mode: "manual_subagent_dispatch" as const,
+    executionMode,
+    blockedUntil,
+    requiredExecutionBridge,
     readyToAssign: agentAssignments.length > 0,
     agentCount: agentAssignments.length,
     taskCount: sprint.tasks.length,
@@ -5132,6 +5147,9 @@ export function runRevenueScoutDispatch(input: z.input<typeof revenueDailyScoutS
   const dispatch = buildRevenueScoutDispatchSummary(result.sprint);
   const dispatchedAt = new Date().toISOString();
   result.sprint.dispatchMode = dispatch.mode;
+  result.sprint.executionMode = dispatch.executionMode;
+  result.sprint.blockedUntil = dispatch.blockedUntil;
+  result.sprint.requiredExecutionBridge = dispatch.requiredExecutionBridge;
   result.sprint.dispatchedAt = dispatchedAt;
   result.sprint.dispatchSummary = `${dispatch.agentCount} agents / ${dispatch.taskCount} tasks / ${dispatch.slotCount} public evidence slots`;
   result.sprint.updatedAt = dispatchedAt;

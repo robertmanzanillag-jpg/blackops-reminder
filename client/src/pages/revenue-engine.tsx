@@ -39,6 +39,9 @@ type RevenueDailyScoutSprintSnapshot = {
   createdAt: string;
   status: "open" | "completed" | "blocked";
   dispatchMode?: "manual_subagent_dispatch";
+  executionMode?: "manual_evidence_required";
+  blockedUntil?: string;
+  requiredExecutionBridge?: string;
   dispatchedAt?: string;
   dispatchSummary?: string;
   source: "latest_scouting_mission" | "manual_override" | "default_market";
@@ -1035,6 +1038,9 @@ type RevenueScoutDispatchResult = {
   sprint: RevenueDailyScoutSprintSnapshot;
   dispatch: {
     mode: "manual_subagent_dispatch";
+    executionMode: "manual_evidence_required";
+    blockedUntil: string;
+    requiredExecutionBridge: string;
     readyToAssign: boolean;
     agentCount: number;
     taskCount: number;
@@ -5477,6 +5483,11 @@ export default function RevenueEnginePage() {
                             {snapshot.latestDailyScoutSprint.dispatchMode && (
                               <p className="mt-1 text-xs text-emerald-100/80">
                                 Dispatch: {snapshot.latestDailyScoutSprint.dispatchSummary || snapshot.latestDailyScoutSprint.dispatchMode}
+                              </p>
+                            )}
+                            {snapshot.latestDailyScoutSprint.executionMode && (
+                              <p className="mt-1 text-xs text-amber-100/90">
+                                Execution: {snapshot.latestDailyScoutSprint.executionMode}. Blocked until {snapshot.latestDailyScoutSprint.blockedUntil || "public evidence is verified"}.
                               </p>
                             )}
                           </div>
