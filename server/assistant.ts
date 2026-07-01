@@ -1693,7 +1693,8 @@ export function registerAssistantRoutes(app: Express): void {
             estimatedApiCostUsd: previewCostUsd,
             modelRoute,
           })}\n\n`);
-          const result = await getGeminiClient().models.generateContent({
+          const geminiClient = await getGeminiClient();
+          const result = await geminiClient.models.generateContent({
             model: geminiModel,
             contents: [{ role: "user", parts: [{ text: cheapPrompt }] }],
           });

@@ -48,12 +48,33 @@ export type AppQaRouteProbe = {
   path: string;
   label: string;
   expectedClicks: string[];
+  expectedControls?: string[];
+  expectedControlGroups?: Array<{
+    name: string;
+    controls: string[];
+    activationControls?: string[];
+  }>;
+  visualTextTabs?: string[];
   status: AppQaStatus;
   notes: string[];
 };
 
+export type AppQaTargetContext = {
+  kind: "developer_autopilot_pr" | "revenue_delivery_workspace";
+  workspaceId?: string;
+  clientName?: string;
+  projectType?: string;
+  repoFullName?: string;
+  prUrl?: string;
+  prHeadSha?: string;
+  branchName?: string;
+  routePath?: string;
+  expectedControls?: string[];
+};
+
 export type AppQaScanResult = {
   scannedAt: string;
+  targetContext?: AppQaTargetContext;
   totalApps: number;
   totalGithubRepos: number;
   totalGithubAppRepos: number;
@@ -216,7 +237,57 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
   { path: "/code-agent", label: "Code Agent", expectedClicks: ["Leer archivo", "Guardar cambio"], status: "pass", notes: [] },
   { path: "/github-agent", label: "GitHub Agent", expectedClicks: ["Revisar repo"], status: "pass", notes: [] },
-  { path: "/revenue-engine", label: "Revenue Engine", expectedClicks: ["Crear plan", "QA delivery"], status: "pass", notes: [] },
+  {
+    path: "/revenue-engine",
+    label: "Revenue Engine",
+    expectedClicks: [
+      "Guardar candidato publico",
+      "Guardar connector review-only",
+      "Preview batch",
+      "Money sprint",
+      "Copy packet",
+      "Crear oportunidad",
+      "Copy close",
+      "Registrar deposito y vender",
+      "Reply",
+      "Deposit",
+      "Crear workspace",
+      "Copy brief",
+      "Guardar workspace",
+      "Create issue",
+      "Revalidar con checks marcados",
+      "Run App QA",
+      "Registrar release gate",
+      "Entregar aprobado",
+      "Correr QA",
+    ],
+    expectedControls: ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControlGroups: [
+      {
+        name: "website_sales_packet",
+        controls: ["Copy packet", "Crear oportunidad"],
+        activationControls: ["Copy packet", "Crear oportunidad"],
+      },
+      {
+        name: "website_closure",
+        controls: ["Copy close", "Registrar deposito y vender", "Reply", "Deposit"],
+        activationControls: ["Copy close", "Registrar deposito y vender"],
+      },
+      {
+        name: "website_delivery_workspace",
+        controls: ["Crear workspace", "Copy brief", "Guardar workspace"],
+        activationControls: ["Crear workspace", "Copy brief", "Guardar workspace"],
+      },
+      {
+        name: "website_release_gate",
+        controls: ["Create issue", "Revalidar con checks marcados", "Run App QA", "Registrar release gate", "Entregar aprobado"],
+        activationControls: ["Create issue", "Revalidar con checks marcados", "Run App QA", "Registrar release gate", "Entregar aprobado"],
+      },
+    ],
+    visualTextTabs: ["Pipeline", "Leads", "QA entrega", "Outbox"],
+    status: "pass",
+    notes: ["Outcome, delivery, GitHub handoff and delivery controls are data-dependent and validated as grouped scenario controls when state is present."],
+  },
   { path: "/dropshipping-ceo", label: "Dropshipping CEO", expectedClicks: ["Ciclo diario", "Launch pack"], status: "pass", notes: [] },
   { path: "/marketing-command-center", label: "Marketing HQ", expectedClicks: ["Run day", "Review analytics"], status: "pass", notes: [] },
   { path: "/portfolio", label: "Portfolio", expectedClicks: ["Ver inversion", "Actualizar datos"], status: "pass", notes: [] },
@@ -479,10 +550,12 @@ function shouldRunVisualScout(input: {
   userId: string;
   notify: boolean;
   allowDailyDigest: boolean;
+  targetContext?: AppQaTargetContext;
   now?: Date;
 }): boolean {
   const mode = getVisualMode();
   if (mode === "off") return false;
+  if (input.targetContext?.kind === "revenue_delivery_workspace") return true;
   if (mode === "every_scan") return true;
   if (mode === "manual") return input.notify;
   return input.notify || (input.allowDailyDigest && shouldRunDailyVisual(input.userId, input.now));
@@ -600,7 +673,7 @@ function describeAppQaStorageError(error: unknown): string {
   return text || "Storage unavailable";
 }
 
-function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date()): AppQaScanResult {
+function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date(), targetContext?: AppQaTargetContext): AppQaScanResult {
   const detail = describeAppQaStorageError(error);
   const visualReport = buildSkippedVisualScoutReport();
   const githubReport = buildDependencyUnavailableReport("github-scout", "GitHub Scout", detail) as AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] };
@@ -627,6 +700,7 @@ function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date
 
   return {
     scannedAt: startedAt.toISOString(),
+    targetContext,
     totalApps: 0,
     totalGithubRepos: 0,
     totalGithubAppRepos: 0,
@@ -834,6 +908,93 @@ function normalizeVisualText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasExpectedVisualControl(bodyText: string, expectedControl: string): boolean {
+  const normalizedBody = normalizeVisualText(bodyText);
+  const normalizedControl = normalizeVisualText(expectedControl);
+  if (!normalizedControl) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedControl)}($|[^a-z0-9])`).test(normalizedBody);
+}
+
+function findMissingExpectedVisualControls(bodyText: string, expectedClicks: string[]): string[] {
+  return expectedClicks.filter((click) => !hasExpectedVisualControl(bodyText, click));
+}
+
+function countExpectedVisualControls(route: AppQaRouteProbe): number {
+  const groupedControls = (route.expectedControlGroups || []).reduce(
+    (sum, group) => sum + group.controls.length,
+    0,
+  );
+  return (route.expectedControls?.length || 0) + groupedControls;
+}
+
+type VisualRouteTextSnapshot = {
+  label: string;
+  bodyText: string;
+};
+
+function evaluateExpectedVisualControls(bodyText: string, route: AppQaRouteProbe): string[] {
+  return evaluateExpectedVisualControlSnapshots([{ label: "visible", bodyText }], route);
+}
+
+function evaluateExpectedVisualControlSnapshots(snapshots: VisualRouteTextSnapshot[], route: AppQaRouteProbe): string[] {
+  const notes: string[] = [];
+  const combinedBodyText = snapshots.map((snapshot) => snapshot.bodyText).join("\n");
+  const missingExpectedControls = findMissingExpectedVisualControls(combinedBodyText, route.expectedControls || []);
+
+  if (missingExpectedControls.length) {
+    notes.push(`Controles esperados no visibles: ${missingExpectedControls.join(", ")}`);
+  }
+
+  for (const group of route.expectedControlGroups || []) {
+    for (const snapshot of snapshots) {
+      const activationControls = group.activationControls || group.controls;
+      const activationVisible = activationControls.some((control) =>
+        !findMissingExpectedVisualControls(snapshot.bodyText, [control]).length
+      );
+      if (!activationVisible) continue;
+
+      const missingGroupControls = findMissingExpectedVisualControls(snapshot.bodyText, group.controls);
+      if (missingGroupControls.length) {
+        notes.push(`Controles de escenario ${group.name} incompletos en ${snapshot.label}: ${missingGroupControls.join(", ")}`);
+      }
+    }
+  }
+
+  return notes;
+}
+
+async function collectVisualRouteTextSnapshots(page: any, route: AppQaRouteProbe): Promise<VisualRouteTextSnapshot[]> {
+  const snapshots: VisualRouteTextSnapshot[] = [];
+  const readBody = async (label: string) => {
+    const text = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).trim();
+    if (text) snapshots.push({ label, bodyText: text });
+  };
+
+  await readBody("initial");
+  for (const tabLabel of route.visualTextTabs || []) {
+    const tab = page.getByRole("tab", { name: tabLabel }).first();
+    if (!(await tab.count().catch(() => 0))) continue;
+    await tab.click({ timeout: 3000 }).catch(() => undefined);
+    await page.waitForTimeout(100).catch(() => undefined);
+    await readBody(tabLabel);
+  }
+
+  const restoreTabLabel = route.visualTextTabs?.[0];
+  if (restoreTabLabel) {
+    const restoreTab = page.getByRole("tab", { name: restoreTabLabel }).first();
+    if (await restoreTab.count().catch(() => 0)) {
+      await restoreTab.click({ timeout: 3000 }).catch(() => undefined);
+      await page.waitForTimeout(100).catch(() => undefined);
+    }
+  }
+
+  return snapshots;
+}
+
 function isVisualAuthScreen(bodyText: string): boolean {
   const normalized = normalizeVisualText(bodyText);
   return normalized.includes("blackops ceo")
@@ -905,7 +1066,7 @@ export function analyzeRoutes(routes = LOCAL_ROUTE_MAP): AppQaSubAgentReport {
     status: statusFromFindings(findings),
     summary: findings.length
       ? `Mapa de rutas con ${findings.length} puntos por completar.`
-      : `Mapa local listo: ${routes.length} paginas y ${routes.reduce((sum, route) => sum + route.expectedClicks.length, 0)} clicks esperados.`,
+      : `Mapa local listo: ${routes.length} paginas, ${routes.reduce((sum, route) => sum + route.expectedClicks.length, 0)} clicks esperados y ${routes.reduce((sum, route) => sum + countExpectedVisualControls(route), 0)} controles visuales.`,
     checked: routes.length,
     findings,
   };
@@ -1026,6 +1187,19 @@ export function analyzeImprovementIdeas(apps: AppProject[], routes = LOCAL_ROUTE
         "Agregar health endpoint",
         `${app.name} esta en produccion sin healthUrl dedicada.`,
         "Crear /health con status de DB, auth basica, jobs criticos y version de deploy.",
+        publicAppUrl(app)
+      ));
+    }
+
+    if (!app.testCommand || !app.buildCommand) {
+      findings.push(createFinding(
+        app,
+        "improvement-scout",
+        "Release metadata",
+        "medium",
+        "Agregar comandos de test/build",
+        `${app.name} esta en produccion sin testCommand/buildCommand completos para handoffs PR-first.`,
+        "Guardar los comandos exactos de test y build en Developer Health para que Codex/App QA puedan verificar cada release.",
         publicAppUrl(app)
       ));
     }
@@ -1164,7 +1338,8 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         const response = await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
         title = await page.title().catch(() => null);
         const statusCode = response?.status?.() || 0;
-        const bodyText = (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).trim();
+        const bodySnapshots = await collectVisualRouteTextSnapshots(page, route);
+        const bodyText = bodySnapshots.map((snapshot) => snapshot.bodyText).join("\n");
         const authSeed = await page.evaluate(() => ({
           seeded: Boolean((window as any).__visualQaAuthSeeded),
           errored: Boolean((window as any).__visualQaAuthSeedError),
@@ -1190,6 +1365,11 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         if (consoleErrors.length) {
           status = "fail";
           notes.push(`${consoleErrors.length} errores de consola`);
+        }
+        const controlNotes = evaluateExpectedVisualControlSnapshots(bodySnapshots, route);
+        if (controlNotes.length) {
+          status = "fail";
+          notes.push(...controlNotes);
         }
 
         const links = page.locator('a[href^="/"]');
@@ -1256,8 +1436,13 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
   };
 }
 
-export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRepo[]): Promise<AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] }> {
-  const connectedRepos = new Set(apps.map(normalizeRepo).filter((repo): repo is string => Boolean(repo)));
+export async function analyzeGithubAppRepos(
+  apps: AppProject[],
+  repos: GithubRepo[],
+  probe = probeUrl,
+): Promise<AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] }> {
+  const connectedAppsByRepo = new Map(apps.map((app) => [normalizeRepo(app), app]).filter(([repo]) => Boolean(repo)) as Array<[string, AppProject]>);
+  const connectedRepos = new Set(connectedAppsByRepo.keys());
   const findings: AppQaFinding[] = [];
   const githubApps: AppQaGithubRepoCheck[] = [];
   const syntheticApp = { name: "GitHub" } as AppProject;
@@ -1265,6 +1450,8 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
 
   for (const repo of likelyRepos) {
     const connectedToInventory = connectedRepos.has(repo.full_name.toLowerCase());
+    const connectedApp = connectedAppsByRepo.get(repo.full_name.toLowerCase());
+    const inventoryUrl = connectedApp ? publicAppUrl(connectedApp) : null;
     const homepage = repo.homepage?.trim() || null;
     const notes: string[] = [];
     let status: AppQaStatus = "pass";
@@ -1305,7 +1492,7 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
       ));
     }
 
-    if (!homepage && !repo.archived && !repo.disabled) {
+    if (!homepage && !inventoryUrl && !repo.archived && !repo.disabled) {
       status = status === "fail" ? status : "warn";
       notes.push("Sin homepage/deploy");
       findings.push(createFinding(
@@ -1320,66 +1507,70 @@ export async function analyzeGithubAppRepos(apps: AppProject[], repos: GithubRep
       ));
     }
 
-    if (homepage) {
-      checkedUrl = homepage;
-      if (!isValidUrl(homepage)) {
+    if (homepage || inventoryUrl) {
+      const urlToCheck = homepage || inventoryUrl!;
+      checkedUrl = urlToCheck;
+      if (!homepage && inventoryUrl) {
+        notes.push("URL conectada en Developer Health");
+      }
+      if (!isValidUrl(urlToCheck)) {
         status = "fail";
-        notes.push("Homepage invalida");
+        notes.push(homepage ? "Homepage invalida" : "URL inventario invalida");
         findings.push(createFinding(
           syntheticApp,
           "github-scout",
           "GitHub deploy",
           "high",
-          "Homepage invalida en GitHub",
-          `${repo.full_name} tiene homepage invalida: ${homepage}.`,
-          "Corregir homepage en GitHub o mover la URL real a Apps.",
+          homepage ? "Homepage invalida en GitHub" : "URL de inventario invalida",
+          `${repo.full_name} tiene URL invalida: ${urlToCheck}.`,
+          "Corregir homepage en GitHub o la URL real en Apps.",
           repo.html_url
         ));
       } else {
-        if (!homepage.startsWith("https://")) {
+        if (!urlToCheck.startsWith("https://")) {
           status = "fail";
-          notes.push("Homepage sin HTTPS");
+          notes.push(homepage ? "Homepage sin HTTPS" : "URL inventario sin HTTPS");
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "high",
-            "Homepage sin HTTPS",
-            `${repo.full_name} publica ${homepage} sin HTTPS.`,
+            homepage ? "Homepage sin HTTPS" : "URL de inventario sin HTTPS",
+            `${repo.full_name} publica ${urlToCheck} sin HTTPS.`,
             "Mover el deploy a HTTPS antes de manejar usuarios, sesiones, pagos o webhooks.",
-            homepage
+            urlToCheck
           ));
         }
 
-        const probe = await probeUrl(homepage);
-        if (!probe.ok) {
+        const probeResult = await probe(urlToCheck);
+        if (!probeResult.ok) {
           status = "fail";
-          notes.push(`Homepage fallo: ${probe.statusCode || probe.error || "sin status"}`);
+          notes.push(`Homepage fallo: ${probeResult.statusCode || probeResult.error || "sin status"}`);
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "high",
             "Homepage de repo no responde bien",
-            `${repo.full_name} apunta a ${homepage}, pero respondio ${probe.statusCode || probe.error || "sin status"} en ${probe.responseTimeMs}ms.`,
-            "Revisar deploy/dominio y actualizar GitHub homepage si la URL cambio.",
-            homepage
+            `${repo.full_name} apunta a ${urlToCheck}, pero respondio ${probeResult.statusCode || probeResult.error || "sin status"} en ${probeResult.responseTimeMs}ms.`,
+            "Revisar deploy/dominio y actualizar GitHub homepage o Apps si la URL cambio.",
+            urlToCheck
           ));
-        } else if (probe.responseTimeMs > 3000) {
+        } else if (probeResult.responseTimeMs > 3000) {
           status = status === "fail" ? status : "warn";
-          notes.push(`Homepage lenta: ${probe.responseTimeMs}ms`);
+          notes.push(`Homepage lenta: ${probeResult.responseTimeMs}ms`);
           findings.push(createFinding(
             syntheticApp,
             "github-scout",
             "GitHub deploy",
             "medium",
             "Homepage lenta desde GitHub",
-            `${repo.full_name} respondio en ${probe.responseTimeMs}ms.`,
+            `${repo.full_name} respondio en ${probeResult.responseTimeMs}ms.`,
             "Revisar cold starts, assets y servidor del deploy.",
-            homepage
+            urlToCheck
           ));
         } else {
-          notes.push(`Homepage ok: ${probe.statusCode}`);
+          notes.push(`Homepage ok: ${probeResult.statusCode}`);
         }
       }
     }
@@ -1597,13 +1788,19 @@ async function analyzeApis(apps: AppProject[]): Promise<AppQaSubAgentReport> {
   };
 }
 
-export async function runAppQaScan(userId: string, notify = false, recordHistory = false, allowDailyDigest = false): Promise<AppQaScanResult> {
+export async function runAppQaScan(
+  userId: string,
+  notify = false,
+  recordHistory = false,
+  allowDailyDigest = false,
+  targetContext?: AppQaTargetContext,
+): Promise<AppQaScanResult> {
   const startedAt = new Date();
   let apps: AppProject[];
   try {
     apps = await storage.getAppProjects(userId);
   } catch (error) {
-    const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt);
+    const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt, targetContext);
     if (recordHistory) {
       await recordAppQaHistory(userId, unavailableResult, startedAt);
     }
@@ -1635,7 +1832,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, now: startedAt })
+  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1667,6 +1864,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
 
   const result: AppQaScanResult = {
     scannedAt: new Date().toISOString(),
+    targetContext,
     totalApps: apps.length,
     totalGithubRepos,
     totalGithubAppRepos: githubReport.githubApps.length,
@@ -1735,6 +1933,7 @@ async function recordAppQaHistory(userId: string, result: AppQaScanResult, start
         githubConnected: result.githubConnected,
         telegramSent: result.telegramSent,
         dailyDigestSent: result.dailyDigestSent,
+        targetContext: result.targetContext,
         bugPatrol: {
           enabled: result.bugPatrol.enabled,
           candidates: result.bugPatrol.candidates,
@@ -1789,6 +1988,9 @@ export const __appQaAgentInternals = {
   emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  evaluateExpectedVisualControlSnapshots,
+  evaluateExpectedVisualControls,
+  findMissingExpectedVisualControls,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,
   isVisualAuthScreen,

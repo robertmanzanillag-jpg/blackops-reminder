@@ -21,7 +21,7 @@ import { getPortfolioSummary, analyzeRebalancing, checkPriceOpportunities, gener
 import { listAllActions, executeAction, executeMultipleActions, getActionsByCategory } from "./agent-actions";
 import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTableSchema, executeQuery, getProjectStructure, addColumnToTable, createTable, getTableInfo } from "./code-agent";
 import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
-import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview } from "./github-client";
+import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview, getGitHubPullRequestReleaseStatus, parseGitHubPullRequestUrl } from "./github-client";
 import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-context";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
@@ -36,13 +36,13 @@ import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getSho
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
-import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { answerRevenueAutomationIntake, approveRevenueOutreachDraft, approveRevenuePublicLeadCandidate, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, closeRevenueWebsiteOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, createWebsiteDeliveryWorkspaceFromLead, deliverRevenueDeliveryWorkspace, deliverRevenueDeliveryWorkspaceFromTrustedApproval, deliveryReviewSchema, getRevenueDeliveryWorkspaceById, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, getRevenueWebsiteWorkspaceSaleGate, improvementReviewSchema, isRevenueCodexBranchName, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryReleaseGate, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueOutreachOutcome, recordRevenuePublicLeadCandidate, recordRevenuePublicLeadCandidateBatch, recordRevenuePublicScoutEvidence, recordRevenueSalesAutopilot, recordRevenueScoutingMission, recordRevenueVerifiedScoutConnectorResults, recordRevenueWebsiteOpportunity, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDailyScoutSprintSchema, revenueDailyScoutSprintSubmitSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceGithubHandoffSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintFromPublicCandidatesSchema, revenueMoneySprintSchema, revenueOutreachApproveSchema, revenueOutreachDraftSchema, revenueOutreachOutcomeSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateApproveSchema, revenuePublicLeadCandidateBatchSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutAgentCommandSchema, revenuePublicScoutEvidenceSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, revenueVerifiedScoutConnectorSchema, revenueWebsiteDeliveryWorkspaceSchema, revenueWebsiteOpportunityCloseSchema, revenueWebsiteOpportunitySchema, runRevenueAutomationAgentCommand, runRevenueDailyScoutSprint, runRevenueMoneySprint, runRevenueMoneySprintFromPublicCandidates, runRevenuePublicScoutAgentCommand, runRevenueScoutDispatch, sendRevenueOutreachDraft, setRevenueUserDataScope, submitRevenueDailyScoutSprintEvidence, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
-import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
+import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 
 function escapeHtml(value: unknown): string {
@@ -4895,6 +4895,45 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/daily-scout-sprint", async (req, res) => {
+    try {
+      const input = revenueDailyScoutSprintSchema.parse(req.body);
+      res.json(runRevenueDailyScoutSprint(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to start revenue daily scout sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/scout-dispatch", async (req, res) => {
+    try {
+      const input = revenueDailyScoutSprintSchema.parse(req.body);
+      res.json(runRevenueScoutDispatch(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to dispatch revenue scout sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/daily-scout-sprint/submit", async (req, res) => {
+    try {
+      const input = revenueDailyScoutSprintSubmitSchema.parse(req.body);
+      const result = submitRevenueDailyScoutSprintEvidence(input);
+      if (result.status === "not_found") return res.status(404).json(result);
+      if (result.status === "blocked") return res.status(422).json(result);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to submit revenue daily scout sprint evidence" });
+    }
+  });
+
   app.post("/api/revenue-engine/lead-radar", async (req, res) => {
     try {
       const input = revenueLeadRadarSchema.parse(req.body);
@@ -4904,6 +4943,116 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue lead radar" });
+    }
+  });
+
+  app.post("/api/revenue-engine/money-sprint", async (req, res) => {
+    try {
+      const input = revenueMoneySprintSchema.parse(req.body);
+      res.json(runRevenueMoneySprint(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue money sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/money-sprint-preview", async (req, res) => {
+    try {
+      const input = revenueMoneySprintSchema.parse(req.body);
+      res.json(previewRevenueMoneySprintSeeds(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to preview revenue money sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/money-sprint/public-candidates", async (req, res) => {
+    try {
+      const input = revenueMoneySprintFromPublicCandidatesSchema.parse(req.body);
+      res.json(runRevenueMoneySprintFromPublicCandidates(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue money sprint from public candidates" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates", async (req, res) => {
+    try {
+      const input = revenuePublicLeadCandidateSchema.parse(req.body);
+      res.json(recordRevenuePublicLeadCandidate(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public lead candidate" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/approve", async (req, res) => {
+    try {
+      const input = revenuePublicLeadCandidateApproveSchema.parse(req.body);
+      const result = approveRevenuePublicLeadCandidate(input);
+      if (result.status === "not_found") return res.status(404).json(result);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to approve revenue public lead candidate" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/batch", async (req, res) => {
+    try {
+      const input = revenuePublicLeadCandidateBatchSchema.parse(req.body);
+      res.json(recordRevenuePublicLeadCandidateBatch(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public lead candidate batch" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-scout-evidence", async (req, res) => {
+    try {
+      const input = revenuePublicScoutEvidenceSchema.parse(req.body);
+      res.json(recordRevenuePublicScoutEvidence(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to normalize revenue public scout evidence" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-scout-connector-intake", async (req, res) => {
+    try {
+      const input = revenueVerifiedScoutConnectorSchema.parse(req.body);
+      res.json(recordRevenueVerifiedScoutConnectorResults(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public scout connector intake" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-scout-agent-command", async (req, res) => {
+    try {
+      const input = revenuePublicScoutAgentCommandSchema.parse(req.body);
+      res.json(runRevenuePublicScoutAgentCommand(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue public scout agent command" });
     }
   });
 
@@ -5030,12 +5179,206 @@ export async function registerRoutes(
   app.post("/api/revenue-engine/delivery-workspaces", async (req, res) => {
     try {
       const input = revenueDeliveryWorkspaceSchema.parse(req.body);
-      res.json(recordRevenueDeliveryWorkspace(input));
+      if (input.projectType !== "automation") {
+        return res.status(422).json({
+          status: "blocked",
+          reason: "Website/bundle delivery debe crearse desde /api/revenue-engine/website-delivery-workspace con oportunidad vendida y deposito manual registrado.",
+        });
+      }
+      res.json(recordRevenueDeliveryWorkspace({
+        ...input,
+        githubIssueUrl: "",
+        prUrl: "",
+        secondReviewStatus: "pending",
+        appQaStatus: "pending",
+        deploymentApprovalStatus: "not_requested",
+        deploymentApprovalUrl: "",
+      }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to record delivery workspace" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-delivery-workspace", async (req, res) => {
+    try {
+      const input = revenueWebsiteDeliveryWorkspaceSchema.parse(req.body);
+      res.json(createWebsiteDeliveryWorkspaceFromLead(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create website delivery workspace" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-opportunities", async (req, res) => {
+    try {
+      const input = revenueWebsiteOpportunitySchema.parse(req.body);
+      res.json(recordRevenueWebsiteOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record website opportunity" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-opportunities/close", async (req, res) => {
+    try {
+      const input = revenueWebsiteOpportunityCloseSchema.parse(req.body);
+      res.json(closeRevenueWebsiteOpportunity(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to close website opportunity" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/github-handoff", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine GitHub handoffs are limited to the configured single-user owner while GitHub connectors are shared.",
+      });
+    }
+
+    try {
+      const input = revenueDeliveryWorkspaceGithubHandoffSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      let workspace = lookup.workspace;
+      if (workspace.input.projectType === "automation") {
+        return res.status(422).json({
+          status: "not_required",
+          reason: "Automation-only workspace no requiere handoff GitHub de website.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      if (input.repoFullName && workspace.input.repoFullName && input.repoFullName !== workspace.input.repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El repo enviado no coincide con el repo guardado en este workspace. Guarda el repo correcto en el workspace antes de crear el issue.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (!repoFullName) {
+        return res.status(422).json({
+          status: "needs_repo",
+          reason: "Guarda el repo GitHub owner/repo en este workspace antes de crear el handoff.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      if (!workspace.input.publicDataVerified || workspace.projectPlan.decision.status !== "ready_to_build") {
+        return res.status(422).json({
+          status: "blocked",
+          reason: "Verifica data publica y deja el project plan ready_to_build antes de crear el handoff GitHub.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const saleGate = getRevenueWebsiteWorkspaceSaleGate(workspace.id);
+      if (!saleGate.passed) {
+        return res.status(422).json({
+          status: "blocked",
+          reason: saleGate.reason,
+          blockers: saleGate.blockers,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      if (workspace.input.githubIssueUrl) {
+        return res.json({
+          status: "already_created",
+          reason: "Este workspace ya tiene GitHub handoff issue registrado.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const branchName = input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+      if (!isRevenueCodexBranchName(branchName)) {
+        return res.status(422).json({
+          status: "blocked",
+          reason: "Branch codex/... requerido antes de crear GitHub handoff PR-first.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+      if (branchName !== workspace.codexBuildHandoff.branchName || branchName !== workspace.input.branchName) {
+        const refreshed = updateRevenueDeliveryWorkspaceQa({
+          workspaceId: workspace.id,
+          repoFullName,
+          branchName,
+        });
+        if (!refreshed.workspace) return res.status(404).json(refreshed);
+        workspace = refreshed.workspace;
+      }
+      const developerHandoff = await createDeveloperAutopilotHandoffFromRequest(userId, {
+        source: "manual",
+        repoFullName,
+        appName: "Revenue client build",
+        kind: "client_build",
+        title: workspace.codexBuildHandoff.githubIssueTitle,
+        description: workspace.codexBuildHandoff.copyableGithubIssueBody,
+        severity: "medium",
+        evidence: [
+          `Revenue workspace: ${workspace.id}`,
+          workspace.input.sourceUrl ? `Public source: ${workspace.input.sourceUrl}` : "",
+          workspace.input.mockupUrl ? `Mockup preview: ${workspace.input.mockupUrl}` : "",
+          "Sensitive sale details and private client data intentionally withheld from GitHub issue.",
+        ].filter(Boolean),
+      });
+
+      if ((developerHandoff.status === "created" || developerHandoff.status === "codex_dispatched") && developerHandoff.issueUrl) {
+        const updated = updateRevenueDeliveryWorkspaceQa({
+          workspaceId: workspace.id,
+          repoFullName: developerHandoff.repoFullName || repoFullName,
+          branchName,
+          githubIssueUrl: developerHandoff.issueUrl,
+          notes: `GitHub handoff issue creado desde Revenue Engine: ${developerHandoff.issueUrl}`,
+        }, {
+          allowGithubIssueEvidence: true,
+        });
+
+        return res.status(201).json({
+          status: "created",
+          developerHandoff,
+          reason: updated.reason,
+          workspace: updated.workspace,
+          snapshot: updated.snapshot,
+        });
+      }
+
+      return res
+        .status(developerHandoff.status === "needs_repo" ? 422 : developerHandoff.status === "github_unavailable" ? 503 : 400)
+        .json({
+          status: developerHandoff.status,
+          reason: developerHandoff.message,
+          developerHandoff,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create revenue GitHub handoff" });
     }
   });
 
@@ -5051,15 +5394,348 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/delivery-workspaces/pr-status", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine PR status checks require the configured owner account.",
+      });
+    }
+
+    const prStatusSchema = z.object({
+      workspaceId: z.string().trim().min(1).max(200),
+      prUrl: z.string().trim().url().max(500).or(z.literal("")).optional(),
+    });
+
+    try {
+      const input = prStatusSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const prUrl = input.prUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl;
+      if (!prUrl) {
+        return res.status(422).json({
+          status: "needs_pr",
+          reason: "Guarda el PR URL antes de revisar estado GitHub.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const parsedPr = parseGitHubPullRequestUrl(prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          routePath: "/revenue-engine",
+        },
+      });
+
+      return res.json({
+        status: prStatus.readyForReleaseEvidence ? "ready" : "blocked",
+        reason: prStatus.readyForReleaseEvidence
+          ? "PR listo como evidencia tecnica; Robert deployment approval sigue siendo manual."
+          : prStatus.blockers[0] || "PR todavia tiene blockers.",
+        prStatus,
+        workspace,
+        snapshot: lookup.snapshot,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      if (error?.status === 404 || error?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String(error?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: error.message });
+      }
+      res.status(500).json({ error: "Failed to check revenue delivery PR status" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/app-qa-gate", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine App QA gates require the configured owner account.",
+      });
+    }
+
+    const appQaGateSchema = z.object({
+      workspaceId: z.string().trim().min(1).max(200),
+      prUrl: z.string().trim().url().max(500),
+      notify: z.boolean().optional().default(false),
+    });
+
+    try {
+      const input = appQaGateSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const parsedPr = parseGitHubPullRequestUrl(input.prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const expectedBranch = workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: expectedBranch,
+          routePath: "/revenue-engine",
+        },
+      });
+      const branchMismatch = prStatus.blockers.find((blocker) => /Branch del PR/i.test(blocker));
+      if (branchMismatch) {
+        return res.status(409).json({
+          status: "branch_mismatch",
+          reason: branchMismatch,
+          prStatus,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const appQaTargetContext = {
+        kind: "revenue_delivery_workspace" as const,
+        workspaceId: workspace.id,
+        clientName: workspace.input.clientName,
+        projectType: workspace.input.projectType,
+        repoFullName: parsedPr.repoFullName,
+        prUrl: prStatus.pr.htmlUrl,
+        prHeadSha: prStatus.pr.headSha,
+        branchName: prStatus.pr.headRef,
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      };
+      const scan = await runAppQaScan(userId, input.notify, true, false, appQaTargetContext);
+      const gate = evaluateDeveloperReleaseGate(scan, {
+        prUrl: prStatus.pr.htmlUrl,
+        requiredTargetContext: appQaTargetContext,
+      });
+      const appQaPrCommentBody = gate.status === "pass"
+        ? [
+          `App QA passed for ${prStatus.pr.headSha}. no blockers.`,
+          "",
+          "App QA target: revenue_delivery_workspace",
+          `Revenue workspace: ${workspace.id}`,
+          `Client target: ${workspace.input.clientName}`,
+          `Repo target: ${parsedPr.repoFullName}`,
+          `PR: ${prStatus.pr.htmlUrl}`,
+          `Branch target: ${prStatus.pr.headRef}`,
+          `PR head target: ${prStatus.pr.headSha}`,
+          "Route target: /revenue-engine",
+          `Summary: ${scan.summary}`,
+          "",
+          "Subagents:",
+          ...scan.subAgents.map((agent) => `- ${agent.name}: ${agent.status}`),
+          "",
+          "No deployment approval is granted by this comment. Robert approval and the Revenue Engine release gate are still required.",
+        ].join("\n")
+        : "";
+
+      return res.json({
+        status: gate.status === "pass" ? "pass" : "blocked",
+        reason: gate.status === "pass"
+          ? "App QA paso. Pega el comentario sugerido en el PR y vuelve a correr Check PR status para anclar evidencia al head."
+          : gate.reasons[0] || "App QA bloqueo el release.",
+        scan,
+        gate,
+        prStatus,
+        appQaEvidenceUrl: gate.status === "pass" ? prStatus.appQaEvidenceUrl || "" : "",
+        appQaPrCommentBody,
+        safety: {
+          persistsReleaseGate: false,
+          approvesDeployment: false,
+          requiresPrCommentEvidence: true,
+          requiresWorkspaceTargetEvidence: true,
+          requiresRobertApproval: true,
+        },
+        workspace,
+        snapshot: lookup.snapshot,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      if (error?.status === 404 || error?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String(error?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: error.message });
+      }
+      res.status(500).json({ error: "Failed to run revenue delivery App QA gate" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/release-gate", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine release gates require the configured owner account.",
+      });
+    }
+
+    try {
+      const input = revenueDeliveryWorkspaceUpdateSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const prUrl = input.prUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl;
+      if (!prUrl) {
+        return res.status(422).json({
+          status: "needs_pr",
+          reason: "Release gate requiere PR URL y PR status check antes de persistir evidencia.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const parsedPr = parseGitHubPullRequestUrl(prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = input.repoFullName || workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch: input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          routePath: "/revenue-engine",
+        },
+      });
+      if (!prStatus.readyForReleaseEvidence) {
+        return res.status(409).json({
+          status: "blocked",
+          reason: prStatus.blockers[0] || "PR status check no esta listo para release.",
+          prStatus,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      res.json(recordRevenueDeliveryReleaseGate(input, {
+        verifiedPrStatusReady: true,
+        verifiedPrHeadSha: prStatus.pr.headSha,
+      }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      if ((error as any)?.status === 404 || (error as any)?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String((error as any)?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: (error as any).message });
+      }
+      res.status(500).json({ error: "Failed to record delivery workspace release gate" });
+    }
+  });
+
   app.post("/api/revenue-engine/delivery-workspaces/deliver", async (req, res) => {
     try {
       const input = revenueDeliveryWorkspaceDeliverSchema.parse(req.body);
-      res.json(deliverRevenueDeliveryWorkspace(input));
+      res.json(deliverRevenueDeliveryWorkspace({
+        ...input,
+        approvedByRobert: false,
+      }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to deliver revenue workspace" });
+    }
+  });
+
+  app.post("/api/revenue-engine/delivery-workspaces/trusted-deliver", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine delivery approval requires the configured owner account.",
+      });
+    }
+
+    try {
+      const input = revenueDeliveryWorkspaceDeliverSchema.parse(req.body);
+      res.json(deliverRevenueDeliveryWorkspaceFromTrustedApproval(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to deliver revenue workspace from trusted approval" });
     }
   });
 
@@ -5111,6 +5787,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/outreach-drafts/approve", async (req, res) => {
+    try {
+      const input = revenueOutreachApproveSchema.parse(req.body);
+      res.json(approveRevenueOutreachDraft(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to approve outreach draft" });
+    }
+  });
+
   app.post("/api/revenue-engine/outreach-send", async (req, res) => {
     try {
       const input = revenueOutreachSendSchema.parse(req.body);
@@ -5120,6 +5808,18 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to send outreach draft" });
+    }
+  });
+
+  app.post("/api/revenue-engine/outreach-outcome", async (req, res) => {
+    try {
+      const input = revenueOutreachOutcomeSchema.parse(req.body);
+      res.json(recordRevenueOutreachOutcome(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record outreach outcome" });
     }
   });
 
@@ -5204,6 +5904,25 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue mockup" });
+    }
+  });
+
+  app.get("/api/revenue-engine/mockup-previews/:slug", async (req, res) => {
+    let previewPath: string;
+    try {
+      previewPath = getRevenueMockupPreviewPath(String(req.params.slug || ""));
+    } catch {
+      return res.status(400).json({ error: "Invalid mockup preview slug" });
+    }
+
+    try {
+      const html = await readNodeFile(previewPath, "utf8");
+      res.type("html").send(html);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") {
+        return res.status(404).json({ error: "Mockup preview not found" });
+      }
+      res.status(500).json({ error: "Failed to read mockup preview" });
     }
   });
 

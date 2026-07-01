@@ -1,9 +1,9 @@
-import type { AppQaScanResult, AppQaStatus } from "./app-qa-agent";
+import type { AppQaScanResult, AppQaStatus, AppQaTargetContext } from "./app-qa-agent";
 import { createIssue, createIssueComment, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
 
-export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa";
+export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa" | "client_build";
 export type SubscriptionHandoffKind = "marketing" | "design" | "strategy" | "analysis" | "business_ops";
 export type DeveloperAutopilotSource = "web_chat" | "telegram" | "app_qa" | "cybersecurity" | "health_monitor" | "manual";
 
@@ -121,6 +121,20 @@ function redactSensitiveText(value: string): string {
   return SENSITIVE_TEXT_PATTERNS.reduce((text, pattern) => text.replace(pattern, "[redacted]"), value);
 }
 
+function sanitizeClientBuildPublicText(value: string): string {
+  const sensitiveLinePattern = /\b(cash collected|cash recorded|payment confirmation)\b/i;
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !sensitiveLinePattern.test(line))
+    .join("\n")
+    .replace(/\b(?:stripe\s+)?pi_[A-Za-z0-9_-]+\b/gi, "[transfer-ref-redacted]")
+    .replace(/\b(?:payment\s*(?:ref|reference)\b|zelle|ach|wire|paypal|venmo|cashapp)(?:\s+(?:ref|reference|id|code|confirmation))?\s*[:#-]?\s+[A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+){0,3}\b/gi, "[transfer-ref-redacted]")
+    .replace(/\b(?:ach|wire|zelle|paypal|venmo|cashapp)-[A-Za-z0-9_.-]+\b/gi, "[transfer-ref-redacted]")
+    .replace(/\$\s?\d[\d,]*(?:\.\d{2})?(?:\s?\/\s?(?:mo|month))?/gi, "[amount-redacted]")
+    .replace(/\b(?:deposit|payment|paid|pricing|price|commercial|invoice|cash)\b/gi, "[commercial-term-redacted]")
+    .trim();
+}
+
 function removeUrls(value: string): string {
   return value.replace(/\bhttps?:\/\/\S+/gi, " ");
 }
@@ -130,11 +144,15 @@ function inferFixKind(message: string): DeveloperFixKind | null {
   const hasIssueTerm = /\b(bug|error|fallo|amenaza|vulnerabilidad|security|seguridad|hack|ataque|exploit|token|secreto|secret|qa|caido|caida|incidente|incident)\b/.test(text);
   const hasFixVerb = /\b(arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa)\b/.test(text);
   const hasDeveloperTarget = /\b(codigo|code|github|repo|repositorio|app|website|site|api|deploy|replit|pr|pull request)\b/.test(text) || Boolean(extractExplicitRepo(message));
-  const mentionsWork = hasIssueTerm || (hasFixVerb && hasDeveloperTarget);
-  if (!mentionsWork) return null;
   if (/\b(amenaza|vulnerabilidad|security|seguridad|hack|ataque|exploit|token|secreto|secret)\b/.test(text)) return "security";
   if (/\b(caido|caida|incidente|incident|produccion rota|production down)\b/.test(text)) return "incident";
   if (/\b(qa|patrulla|check|chequeo)\b/.test(text)) return "qa";
+  const hasClientBuildIntent = /\b(build|construye|construir|crea|crear|haz|hacer|levanta|monta|desarrolla|implementa)\b/.test(text)
+    && /\b(website|site|sitio|pagina|landing|web|client|cliente|negocio|business|mockup)\b/.test(text)
+    && (hasDeveloperTarget || /\b(github|repo|repositorio|pr|pull request|codex)\b/.test(text));
+  if (hasClientBuildIntent) return "client_build";
+  const mentionsWork = hasIssueTerm || (hasFixVerb && hasDeveloperTarget);
+  if (!mentionsWork) return null;
   return "bug";
 }
 
@@ -225,9 +243,13 @@ function selectRepoForRequest(
 function titleFromMessage(message: string, kind: DeveloperFixKind): string {
   const cleaned = redactSensitiveText(message)
     .replace(/\s+/g, " ")
-    .replace(/^.*?\b(?:arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa)\b[:\s-]*/i, "")
+    .replace(/^.*?\b(?:arregla|acomoda|corrige|fix|repara|resuelve|investiga|revisa|build|construye|construir|crea|crear|haz|hacer|levanta|monta|desarrolla|implementa)\b[:\s-]*/i, "")
     .trim();
-  const fallback = kind === "security" || kind === "threat" ? "Security fix request" : "Bug fix request";
+  const fallback = kind === "security" || kind === "threat"
+    ? "Security fix request"
+    : kind === "client_build"
+      ? "Client website build request"
+      : "Bug fix request";
   return (cleaned || fallback).slice(0, 120);
 }
 
@@ -281,6 +303,10 @@ function safetyLines(kind: DeveloperFixKind): string[] {
   if (kind === "security" || kind === "threat") {
     lines.push("Keep exploit details private or sanitized; do not publish secrets, tokens, private URLs, or customer data in public issue/PR text.");
   }
+  if (kind === "client_build") {
+    lines.push("For client website builds, use only approved scope, public business facts, and Robert/client-approved assets before publishing previews.");
+    lines.push("Treat launch as blocked until the PR, independent review, App QA, and Robert's explicit deploy approval are recorded.");
+  }
 
   return lines;
 }
@@ -318,13 +344,16 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
 }
 
 export function buildCodexDispatchComment(request: DeveloperAutopilotRequest): string {
+  const safeTask = request.kind === "client_build"
+    ? sanitizeClientBuildPublicText(redactSensitiveText(request.description))
+    : request.description;
   return [
     "@codex fix this issue PR-first.",
     "",
     "Use the signed-in Codex/GitHub integration. Do not use BlackOps OpenAI API spend.",
     "",
     "Task:",
-    request.description,
+    safeTask,
     "",
     "Rules:",
     "- Work only on this PR branch/context.",
@@ -380,10 +409,13 @@ export function buildSubscriptionHandoffBrief(request: SubscriptionHandoffReques
 export function buildCodexGitHubIssueTitle(request: DeveloperAutopilotRequest, repo?: MinimalRepo): string {
   const prefix = request.kind === "security" || request.kind === "threat"
     ? "[Codex PR-first][security]"
+    : request.kind === "client_build"
+      ? "[Codex PR-first][client-build]"
     : "[Codex PR-first]";
   const isPublicSecurity = (request.kind === "security" || request.kind === "threat") && repo?.private === false;
   const title = isPublicSecurity ? "Security-sensitive fix request" : request.title;
-  return `${prefix} ${title}`.slice(0, 200);
+  const safeTitle = request.kind === "client_build" ? sanitizeClientBuildPublicText(title) : title;
+  return `${prefix} ${safeTitle || "Client build request"}`.slice(0, 200);
 }
 
 export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, repo: MinimalRepo): string {
@@ -396,14 +428,19 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
       }
     : {
         ...request,
-        description: redactSensitiveText(request.description),
-        evidence: normalizeEvidence(request.evidence).map(redactSensitiveText),
+        description: request.kind === "client_build"
+          ? sanitizeClientBuildPublicText(redactSensitiveText(request.description))
+          : redactSensitiveText(request.description),
+        evidence: normalizeEvidence(request.evidence)
+          .map(redactSensitiveText)
+          .map((item) => request.kind === "client_build" ? sanitizeClientBuildPublicText(item) : item)
+          .filter(Boolean),
       };
 
   return [
     "## Codex PR-first handoff",
     "",
-    "This issue is a handoff for Codex using the signed-in ChatGPT/Codex subscription workflow. Do not use OpenAI API spend for this repair.",
+    "This issue is a handoff for Codex using the signed-in ChatGPT/Codex subscription workflow. Do not use OpenAI API spend for this work.",
     "",
     "## Task brief",
     "",
@@ -434,48 +471,24 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
   ].join("\n");
 }
 
-export async function createDeveloperAutopilotHandoff(
+export async function createDeveloperAutopilotHandoffFromRequest(
   userId: string,
-  message: string,
-  source: DeveloperAutopilotSource,
+  request: DeveloperAutopilotRequest,
   deps: DeveloperAutopilotDeps = defaultDeveloperAutopilotDeps,
 ): Promise<DeveloperAutopilotHandoff> {
-  const request = parseDeveloperAutopilotRequest(message, source);
-  if (!request) {
-    const subscriptionRequest = parseSubscriptionHandoffRequest(message, source);
-    if (!subscriptionRequest) {
-      return {
-        status: "invalid_request",
-        request: null,
-        message: "No detecte un bug, amenaza, solicitud de fix o trabajo pesado para handoff de membresia.",
-      };
-    }
-
-    const subscriptionBrief = buildSubscriptionHandoffBrief(subscriptionRequest);
-    return {
-      status: "subscription_brief",
-      request: null,
-      subscriptionRequest,
-      subscriptionBrief,
-      handoffType: "subscription_work",
-      message: [
-        "Listo. Prepare un brief para trabajarlo con tu membresia ChatGPT/Codex Pro, sin quemar API del app.",
-        "",
-        "Pegalo en Codex/ChatGPT Pro cuando quieras usar el cerebro fuerte:",
-        "",
-        "```text",
-        subscriptionBrief,
-        "```",
-      ].join("\n"),
-    };
-  }
+  const repoSelectionText = [
+    request.repoFullName || "",
+    request.appName || "",
+    request.title,
+    request.description,
+  ].filter(Boolean).join("\n");
 
   try {
     const [projects, repos] = await Promise.all([
       deps.getAppProjects(userId),
       deps.listRepositories(),
     ]);
-    const repo = selectRepoForRequest(message, repos, projects);
+    const repo = selectRepoForRequest(repoSelectionText, repos, projects);
     if (!repo) {
       return {
         status: "needs_repo",
@@ -548,13 +561,59 @@ export async function createDeveloperAutopilotHandoff(
   }
 }
 
+export async function createDeveloperAutopilotHandoff(
+  userId: string,
+  message: string,
+  source: DeveloperAutopilotSource,
+  deps: DeveloperAutopilotDeps = defaultDeveloperAutopilotDeps,
+): Promise<DeveloperAutopilotHandoff> {
+  const request = parseDeveloperAutopilotRequest(message, source);
+  if (!request) {
+    const subscriptionRequest = parseSubscriptionHandoffRequest(message, source);
+    if (!subscriptionRequest) {
+      return {
+        status: "invalid_request",
+        request: null,
+        message: "No detecte un bug, amenaza, solicitud de fix o trabajo pesado para handoff de membresia.",
+      };
+    }
+
+    const subscriptionBrief = buildSubscriptionHandoffBrief(subscriptionRequest);
+    return {
+      status: "subscription_brief",
+      request: null,
+      subscriptionRequest,
+      subscriptionBrief,
+      handoffType: "subscription_work",
+      message: [
+        "Listo. Prepare un brief para trabajarlo con tu membresia ChatGPT/Codex Pro, sin quemar API del app.",
+        "",
+        "Pegalo en Codex/ChatGPT Pro cuando quieras usar el cerebro fuerte:",
+        "",
+        "```text",
+        subscriptionBrief,
+        "```",
+      ].join("\n"),
+    };
+  }
+
+  return createDeveloperAutopilotHandoffFromRequest(userId, request, deps);
+}
+
 export function evaluateDeveloperReleaseGate(
-  scan: Pick<AppQaScanResult, "failCount" | "warnCount" | "summary" | "subAgents">,
-  input: { prUrl?: string | null } = {},
+  scan: Pick<AppQaScanResult, "failCount" | "warnCount" | "summary" | "subAgents"> & Partial<Pick<AppQaScanResult, "targetContext" | "visualScans">>,
+  input: { prUrl?: string | null; requiredTargetContext?: AppQaTargetContext } = {},
 ): DeveloperReleaseGate {
   const failingAgents = scan.subAgents.filter((agent) => agent.status !== "pass");
   const prUrl = input.prUrl?.trim() || null;
   const reasons: string[] = [];
+  const requiredTargetContext = input.requiredTargetContext;
+  const targetContextMismatches = requiredTargetContext
+    ? getAppQaTargetContextMismatches(scan.targetContext, requiredTargetContext)
+    : [];
+  const targetVisualMismatches = requiredTargetContext
+    ? getAppQaTargetVisualMismatches(scan.visualScans, requiredTargetContext)
+    : [];
 
   if (!prUrl) {
     reasons.push("A pull request URL is required before sending the fix to Robert for approval.");
@@ -567,6 +626,12 @@ export function evaluateDeveloperReleaseGate(
   }
   if (failingAgents.length > 0) {
     reasons.push(`Subagents not passing: ${failingAgents.map((agent) => `${agent.name}=${agent.status}`).join(", ")}.`);
+  }
+  if (targetContextMismatches.length > 0) {
+    reasons.push(`App QA target context mismatch: ${targetContextMismatches.join(", ")}.`);
+  }
+  if (targetVisualMismatches.length > 0) {
+    reasons.push(`App QA visual target mismatch: ${targetVisualMismatches.join(", ")}.`);
   }
 
   const passed = reasons.length === 0;
@@ -581,6 +646,53 @@ export function evaluateDeveloperReleaseGate(
     reasons: passed ? [`PR can be sent to Robert for approval: ${prUrl}. Replit deployment is still blocked until explicit approval.`] : reasons,
     qaSummary: scan.summary,
   };
+}
+
+function getAppQaTargetContextMismatches(actual: AppQaTargetContext | undefined, required: AppQaTargetContext): string[] {
+  if (!actual) return ["missing targetContext"];
+  const mismatches: string[] = [];
+  const keys: Array<keyof AppQaTargetContext> = [
+    "kind",
+    "workspaceId",
+    "clientName",
+    "projectType",
+    "repoFullName",
+    "prUrl",
+    "prHeadSha",
+    "branchName",
+    "routePath",
+  ];
+
+  for (const key of keys) {
+    const requiredValue = required[key];
+    if (typeof requiredValue !== "string" || !requiredValue.trim()) continue;
+    const actualValue = actual[key];
+    if (typeof actualValue !== "string" || actualValue.trim() !== requiredValue.trim()) {
+      mismatches.push(String(key));
+    }
+  }
+
+  if (required.expectedControls?.length) {
+    const actualControls = new Set((actual.expectedControls || []).map((control) => control.trim().toLowerCase()).filter(Boolean));
+    const missingControls = required.expectedControls.filter((control) => !actualControls.has(control.trim().toLowerCase()));
+    if (missingControls.length) mismatches.push(`expectedControls:${missingControls.join("|")}`);
+  }
+
+  return mismatches;
+}
+
+function getAppQaTargetVisualMismatches(
+  visualScans: AppQaScanResult["visualScans"] | undefined,
+  required: AppQaTargetContext,
+): string[] {
+  if (required.kind !== "revenue_delivery_workspace") return [];
+  const routePath = required.routePath?.trim();
+  if (!routePath) return ["missing routePath"];
+  if (!visualScans?.length) return ["missing visualScans"];
+  const routeScan = visualScans.find((scan) => scan.path === routePath);
+  if (!routeScan) return [`missing visual scan for ${routePath}`];
+  if (routeScan.status !== "pass") return [`${routePath}=${routeScan.status}`];
+  return [];
 }
 
 export function buildReadyForApprovalMessage(input: {

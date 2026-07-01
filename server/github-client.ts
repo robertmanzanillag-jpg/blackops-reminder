@@ -1,5 +1,6 @@
 // GitHub integration using Replit Connectors
 import { Octokit } from '@octokit/rest';
+import { hasRealValue } from "./ceo-doctor-cli";
 
 let connectionSettings: any;
 
@@ -19,6 +20,13 @@ const BLOCKED_GITHUB_FILE_NAMES = new Set([
   'id_rsa',
   'id_ed25519',
 ]);
+
+export function getConfiguredGitHubToken(env: NodeJS.ProcessEnv = process.env): string | null {
+  return [env.GITHUB_TOKEN, env.GH_TOKEN]
+    .filter(hasRealValue)
+    .map((token) => token.trim())
+    .find((token) => /^(ghp|github_pat|gho|ghu|ghs|ghr)_[A-Za-z0-9_]+$/.test(token)) || null;
+}
 
 function githubInputError(message: string): Error & { status?: number; statusCode?: number } {
   const error = new Error(message) as Error & { status?: number; statusCode?: number };
@@ -76,6 +84,95 @@ export function validateGitHubIssueNumber(value: number, label = 'Issue/PR numbe
   return null;
 }
 
+export type GitHubPullRequestUrlParts = {
+  owner: string;
+  repo: string;
+  repoFullName: string;
+  pullNumber: number;
+};
+
+export type GitHubPullRequestReleaseStatus = {
+  pr: {
+    number: number;
+    title: string;
+    htmlUrl: string;
+    state: string;
+    draft: boolean;
+    merged: boolean;
+    baseRef: string;
+    headRef: string;
+    headSha: string;
+    author: string;
+    updatedAt: string | null;
+  };
+  checks: {
+    total: number;
+    passed: number;
+    pending: number;
+    failed: number;
+  };
+  statuses: {
+    total: number;
+    passed: number;
+    pending: number;
+    failed: number;
+    state: string;
+  };
+  approvedReviews: Array<{
+    reviewer: string;
+    htmlUrl: string;
+    submittedAt: string | null;
+  }>;
+  changesRequestedReviews: Array<{
+    reviewer: string;
+    htmlUrl: string;
+    submittedAt: string | null;
+  }>;
+  secondReviewEvidenceUrl: string;
+  appQaEvidenceUrl: string;
+  blockers: string[];
+  warnings: string[];
+  readyForReleaseEvidence: boolean;
+};
+
+export type GitHubAppQaTargetEvidence = {
+  workspaceId?: string;
+  clientName?: string;
+  repoFullName?: string;
+  branchName?: string;
+  routePath?: string;
+};
+
+export function parseGitHubPullRequestUrl(value: string): GitHubPullRequestUrlParts | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return null;
+  }
+
+  if (!['github.com', 'www.github.com'].includes(parsed.hostname.toLowerCase())) return null;
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  if (segments.length !== 4 || segments[2] !== 'pull') return null;
+
+  const [owner, repo, , pullNumberText] = segments;
+  const pullNumber = Number(pullNumberText);
+  if (
+    validateGitHubRepoNamePart(owner, 'Owner')
+    || validateGitHubRepoNamePart(repo, 'Repo')
+    || validateGitHubIssueNumber(pullNumber, 'Pull request number')
+  ) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo,
+    repoFullName: `${owner}/${repo}`,
+    pullNumber,
+  };
+}
+
 export function validateGitHubFileWriteInput(input: {
   owner: string;
   repo: string;
@@ -90,7 +187,58 @@ export function validateGitHubFileWriteInput(input: {
     || (Buffer.byteLength(input.content, 'utf8') > MAX_GITHUB_FILE_WRITE_BYTES ? 'Archivo demasiado grande para escritura remota desde el asistente' : null);
 }
 
+function latestReviewByReviewer(reviews: Array<Record<string, any>>): Array<Record<string, any>> {
+  const latest = new Map<string, Record<string, any>>();
+  for (const review of reviews) {
+    const reviewer = String(review.user?.login || '');
+    if (!reviewer) continue;
+    const current = latest.get(reviewer);
+    const currentTime = current?.submitted_at ? new Date(current.submitted_at).getTime() : 0;
+    const nextTime = review.submitted_at ? new Date(review.submitted_at).getTime() : 0;
+    if (!current || nextTime >= currentTime) latest.set(reviewer, review);
+  }
+  return [...latest.values()];
+}
+
+function isTrustedPrEvidenceComment(comment: Record<string, any>): boolean {
+  const association = String(comment.author_association || '').toUpperCase();
+  return ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(association);
+}
+
+function commentIncludesAppQaTargetEvidence(body: string, target?: GitHubAppQaTargetEvidence): boolean {
+  if (!target) return true;
+  const normalized = body.toLowerCase();
+  if (!normalized.includes('app qa target')) return false;
+  const requiredValues = [
+    target.workspaceId,
+    target.clientName,
+    target.repoFullName,
+    target.branchName,
+    target.routePath,
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return requiredValues.every((value) => normalized.includes(value));
+}
+
+function isPassingAppQaCommentForHead(comment: Record<string, any>, headSha: string, target?: GitHubAppQaTargetEvidence): boolean {
+  const body = String(comment.body || '');
+  const normalized = body.toLowerCase();
+  return /\bapp\s*qa\b/.test(normalized)
+    && /\b(pass|passed|approve|approved|green|ok|no blockers|sin blockers|aprobado|aprobada)\b/.test(normalized)
+    && headSha.length >= 7
+    && normalized.includes(headSha.toLowerCase())
+    && commentIncludesAppQaTargetEvidence(body, target)
+    && isTrustedPrEvidenceComment(comment);
+}
+
 async function getAccessToken() {
+  const configuredToken = getConfiguredGitHubToken();
+  if (configuredToken) {
+    return configuredToken;
+  }
+
   if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
     return connectionSettings.settings.access_token;
   }
@@ -190,6 +338,174 @@ export async function getRepositoryOverview(owner: string, repo: string) {
     open_issues: issues.data.total_count,
     open_prs: prs.data.total_count,
   };
+}
+
+export function summarizeGitHubPullRequestReleaseStatus(input: {
+  pr: Record<string, any>;
+  reviews: Array<Record<string, any>>;
+  comments: Array<Record<string, any>>;
+  checksData: Record<string, any>;
+  statusesData: Record<string, any>;
+  checksUnavailable?: boolean;
+  statusesUnavailable?: boolean;
+  expectedBranch?: string;
+  appQaTargetEvidence?: GitHubAppQaTargetEvidence;
+}): GitHubPullRequestReleaseStatus {
+  const pr = input.pr;
+  const latestReviews = latestReviewByReviewer(input.reviews);
+  const approvedReviews = latestReviews
+    .filter((review) => review.state === 'APPROVED' && review.commit_id === pr.head.sha)
+    .map((review) => ({
+      reviewer: String(review.user?.login || 'unknown'),
+      htmlUrl: String(review.html_url || ''),
+      submittedAt: review.submitted_at ? String(review.submitted_at) : null,
+    }))
+    .filter((review) => review.htmlUrl);
+  const changesRequestedReviews = latestReviews
+    .filter((review) => review.state === 'CHANGES_REQUESTED')
+    .map((review) => ({
+      reviewer: String(review.user?.login || 'unknown'),
+      htmlUrl: String(review.html_url || ''),
+      submittedAt: review.submitted_at ? String(review.submitted_at) : null,
+    }))
+    .filter((review) => review.htmlUrl);
+
+  const checkRuns = Array.isArray(input.checksData?.check_runs) ? input.checksData.check_runs as Array<Record<string, any>> : [];
+  const completedChecks = checkRuns.filter((check) => check.status === 'completed');
+  const failedChecks = completedChecks.filter((check) => !['success', 'neutral', 'skipped'].includes(String(check.conclusion || '')));
+  const pendingChecks = checkRuns.filter((check) => check.status !== 'completed');
+
+  const statusList = Array.isArray(input.statusesData?.statuses) ? input.statusesData.statuses as Array<Record<string, any>> : [];
+  const failedStatuses = statusList.filter((status) => ['failure', 'error'].includes(String(status.state || '')));
+  const pendingStatuses = statusList.filter((status) => String(status.state || '') === 'pending');
+  const passedStatuses = statusList.filter((status) => String(status.state || '') === 'success');
+
+  const appQaComment = [...input.comments]
+    .reverse()
+    .find((comment) => isPassingAppQaCommentForHead(comment, String(pr.head.sha || ''), input.appQaTargetEvidence));
+
+  const expectedBranch = input.expectedBranch?.trim();
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
+  if (pr.state !== 'open') blockers.push('PR no esta abierto.');
+  if (pr.draft) blockers.push('PR esta en draft.');
+  if (pr.merged) blockers.push('PR ya esta merged.');
+  if (expectedBranch && pr.head.ref !== expectedBranch) {
+    blockers.push(`Branch del PR (${pr.head.ref}) no coincide con el workspace (${expectedBranch}).`);
+  }
+  if (changesRequestedReviews.length > 0) blockers.push('Hay review con changes requested pendiente.');
+  if (approvedReviews.length === 0) blockers.push('Falta second-agent review aprobado en el PR head actual.');
+  if (input.checksUnavailable) blockers.push('No se pudo verificar GitHub checks.');
+  if (input.statusesUnavailable) blockers.push('No se pudo verificar GitHub statuses.');
+  if (failedChecks.length > 0) blockers.push('Hay GitHub checks fallando.');
+  if (failedStatuses.length > 0) blockers.push('Hay GitHub statuses fallando.');
+  if (pendingChecks.length > 0) blockers.push('Hay GitHub checks pendientes.');
+  if (pendingStatuses.length > 0) blockers.push('Hay GitHub statuses pendientes.');
+  if (!appQaComment) blockers.push(input.appQaTargetEvidence
+    ? 'Falta comentario/evidencia App QA pass para el PR head actual con target del workspace.'
+    : 'Falta comentario/evidencia App QA pass para el PR head actual.');
+
+  if (!input.checksUnavailable && !input.statusesUnavailable && checkRuns.length === 0 && statusList.length === 0) {
+    warnings.push('GitHub no reporto checks/statuses; registra checks manuales y App QA antes del release gate.');
+  }
+
+  return {
+    pr: {
+      number: Number(pr.number),
+      title: String(pr.title || ''),
+      htmlUrl: String(pr.html_url || ''),
+      state: String(pr.state || ''),
+      draft: Boolean(pr.draft),
+      merged: Boolean(pr.merged),
+      baseRef: String(pr.base?.ref || ''),
+      headRef: String(pr.head?.ref || ''),
+      headSha: String(pr.head?.sha || ''),
+      author: pr.user?.login || 'unknown',
+      updatedAt: pr.updated_at || null,
+    },
+    checks: {
+      total: checkRuns.length,
+      passed: completedChecks.length - failedChecks.length,
+      pending: pendingChecks.length,
+      failed: failedChecks.length,
+    },
+    statuses: {
+      total: statusList.length,
+      passed: passedStatuses.length,
+      pending: pendingStatuses.length,
+      failed: failedStatuses.length,
+      state: String(input.statusesData?.state || 'unknown'),
+    },
+    approvedReviews,
+    changesRequestedReviews,
+    secondReviewEvidenceUrl: approvedReviews[0]?.htmlUrl || '',
+    appQaEvidenceUrl: String(appQaComment?.html_url || ''),
+    blockers,
+    warnings,
+    readyForReleaseEvidence: blockers.length === 0,
+  };
+}
+
+export async function getGitHubPullRequestReleaseStatus(input: {
+  repoFullName: string;
+  pullNumber: number;
+  expectedBranch?: string;
+  appQaTargetEvidence?: GitHubAppQaTargetEvidence;
+}): Promise<GitHubPullRequestReleaseStatus> {
+  const [owner = '', repo = ''] = input.repoFullName.split('/');
+  const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
+  const repoError = validateGitHubRepoNamePart(repo, 'Repo');
+  const numberError = validateGitHubIssueNumber(input.pullNumber, 'Pull request number');
+  if (!owner || !repo || ownerError || repoError || numberError) {
+    throw githubInputError(ownerError || repoError || numberError || 'GitHub PR input invalido');
+  }
+
+  const octokit = await getGitHubClient();
+  const pull = await octokit.pulls.get({
+    owner,
+    repo,
+    pull_number: input.pullNumber,
+  });
+
+  const pr = pull.data;
+  const [reviews, comments, checksResult, statusesResult] = await Promise.all([
+    octokit.paginate(octokit.pulls.listReviews, {
+      owner,
+      repo,
+      pull_number: input.pullNumber,
+      per_page: 100,
+    }),
+    octokit.paginate(octokit.issues.listComments, {
+      owner,
+      repo,
+      issue_number: input.pullNumber,
+      per_page: 100,
+    }),
+    octokit.checks.listForRef({
+      owner,
+      repo,
+      ref: pr.head.sha,
+      per_page: 100,
+    }).then((result) => ({ ok: true as const, data: result.data })).catch(() => ({ ok: false as const, data: { check_runs: [] } })),
+    octokit.repos.getCombinedStatusForRef({
+      owner,
+      repo,
+      ref: pr.head.sha,
+    }).then((result) => ({ ok: true as const, data: result.data })).catch(() => ({ ok: false as const, data: { state: 'unknown', statuses: [] } })),
+  ]);
+
+  return summarizeGitHubPullRequestReleaseStatus({
+    pr,
+    reviews: reviews as Array<Record<string, any>>,
+    comments: comments as Array<Record<string, any>>,
+    checksData: checksResult.data,
+    statusesData: statusesResult.data,
+    checksUnavailable: !checksResult.ok,
+    statusesUnavailable: !statusesResult.ok,
+    expectedBranch: input.expectedBranch,
+    appQaTargetEvidence: input.appQaTargetEvidence,
+  });
 }
 
 // Get repository contents (files/folders)
@@ -415,7 +731,8 @@ export async function getAuthenticatedUser() {
 // Check if GitHub is connected
 export async function isGitHubConnected(): Promise<boolean> {
   try {
-    await getAccessToken();
+    const client = await getGitHubClient();
+    await client.users.getAuthenticated();
     return true;
   } catch {
     return false;

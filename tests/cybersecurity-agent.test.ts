@@ -23,6 +23,8 @@ function appProject(overrides: Partial<AppProject> = {}): AppProject {
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -116,7 +118,9 @@ test("treats DROPKIT as an important app repo for inventory import", () => {
   const input = __cybersecurityAgentInternals.githubRepoToAppProjectInput(repo);
   assert.equal(input.githubRepo, "robertmanzanillag-jpg/DROPKIT");
   assert.equal(input.priority, "high");
-  assert.deepEqual(input.tags, ["github-import", "needs-health-url"]);
+  assert.equal(input.testCommand, null);
+  assert.equal(input.buildCommand, null);
+  assert.deepEqual(input.tags, ["github-import", "needs-health-url", "needs-test-command", "needs-build-command"]);
 });
 
 test("automatic Telegram alerts ignore inventory-only cybersecurity gaps", () => {

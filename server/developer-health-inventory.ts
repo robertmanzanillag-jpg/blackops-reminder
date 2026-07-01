@@ -20,20 +20,22 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     slug: "br-website",
     description: "Black Room website repo. GitHub: robertmanzanillag-jpg/br-website.",
     environment: "production",
-    publicUrl: null,
+    publicUrl: "https://blackroomus.com",
     healthUrl: null,
     repoOwner: "robertmanzanillag-jpg",
     repoName: "br-website",
     githubRepo: "robertmanzanillag-jpg/br-website",
-    deploymentProvider: null,
+    deploymentProvider: "custom-domain",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-public-url", "needs-health-url", "needs-deploy-provider"],
+    tags: ["known-github-inventory", "verified-public-url", "needs-health-url"],
   },
   {
     name: "Blackops Reminder",
@@ -41,39 +43,43 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     description: "BlackOps Reminder full-stack TypeScript PWA, also referred to as Dialer Planner when running from its alternate Replit deployment. GitHub: robertmanzanillag-jpg/blackops-reminder.",
     environment: "production",
     publicUrl: "https://robplanner.replit.app",
-    healthUrl: null,
+    healthUrl: "https://robplanner.replit.app/api/health",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "blackops-reminder",
     githubRepo: "robertmanzanillag-jpg/blackops-reminder",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run test:ceo-assistant && npm run test:revenue-engine && npm run test:developer-autopilot && npm run test:app-qa-agent",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-health-url", "alias-dialer-planner", "alternate-replit-deployment"],
+    tags: ["known-github-inventory", "alias-dialer-planner", "alternate-replit-deployment", "liveness-health-endpoint"],
   },
   {
     name: "DROPKIT",
     slug: "dropkit",
     description: "Dropkit app repo. GitHub: robertmanzanillag-jpg/DROPKIT.",
     environment: "production",
-    publicUrl: null,
+    publicUrl: "https://dropkit.replit.app",
     healthUrl: null,
     repoOwner: "robertmanzanillag-jpg",
     repoName: "DROPKIT",
     githubRepo: "robertmanzanillag-jpg/DROPKIT",
-    deploymentProvider: null,
+    deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "needs-public-url", "needs-health-url", "needs-deploy-provider"],
+    tags: ["known-github-inventory", "verified-public-url", "needs-health-url"],
   },
   {
     name: "Kong Nightlife",
@@ -87,6 +93,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "EXPO_PUBLIC_DOMAIN=kong--app.replit.app npm run expo:static:build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -109,8 +117,24 @@ function mergeTags(existing: unknown, incoming: unknown): string[] {
   return Array.from(new Set([...tags(existing), ...tags(incoming)]));
 }
 
+function normalizeKnownAppTags(existing: AppProject, known: InsertAppProject, mergedTags: string[]): string[] {
+  const hasPublicUrl = Boolean(known.publicUrl || existing.publicUrl);
+  const hasDeploymentProvider = Boolean(known.deploymentProvider || existing.deploymentProvider);
+  const hasHealthUrl = Boolean(known.healthUrl || existing.healthUrl);
+  const hasTestCommand = Boolean(known.testCommand || existing.testCommand);
+  const hasBuildCommand = Boolean(known.buildCommand || existing.buildCommand);
+  return mergedTags.filter((tag) => {
+    if (hasPublicUrl && tag === "needs-public-url") return false;
+    if (hasDeploymentProvider && tag === "needs-deploy-provider") return false;
+    if (hasHealthUrl && tag === "needs-health-url") return false;
+    if (hasTestCommand && tag === "needs-test-command") return false;
+    if (hasBuildCommand && tag === "needs-build-command") return false;
+    return true;
+  });
+}
+
 function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<AppProject> {
-  const mergedTags = mergeTags(existing.tags, known.tags);
+  const mergedTags = normalizeKnownAppTags(existing, known, mergeTags(existing.tags, known.tags));
   const updates: Partial<AppProject> = {};
 
   const fields: Array<keyof InsertAppProject> = [
@@ -124,6 +148,8 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
     "repoName",
     "githubRepo",
     "deploymentProvider",
+    "testCommand",
+    "buildCommand",
     "priority",
     "ownerLabel",
   ];
@@ -131,6 +157,11 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
   for (const field of fields) {
     const nextValue = known[field];
     if (nextValue === null || nextValue === undefined || nextValue === "") continue;
+    if (field === "deploymentProvider" && existing.deploymentProvider === "github-homepage") {
+      updates.deploymentProvider = String(nextValue);
+      continue;
+    }
+    if (["publicUrl", "healthUrl", "deploymentProvider"].includes(field) && (existing as any)[field]) continue;
     if ((existing as any)[field] !== nextValue) {
       (updates as any)[field] = nextValue;
     }

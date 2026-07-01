@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -8,9 +8,11 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Copy,
+  Eye,
   ExternalLink,
   FileCheck2,
   Gauge,
+  GitPullRequest,
   Loader2,
   MessageSquareText,
   Rocket,
@@ -30,6 +32,88 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
+import { buildCopyableTrustedDeliverRequest, isTrustedDeliveryRequestReady } from "@/lib/revenue-engine-delivery-requests";
+import { buildPublicScoutConnectorIntakeRequest } from "@/lib/revenue-engine-public-scout-connector";
+
+type RevenueDailyScoutSprintSnapshot = {
+  id: string;
+  createdAt: string;
+  status: "open" | "completed" | "blocked";
+  dispatchMode?: "manual_subagent_dispatch";
+  executionMode?: "manual_evidence_required";
+  blockedUntil?: string;
+  requiredExecutionBridge?: string;
+  dispatchedAt?: string;
+  dispatchSummary?: string;
+  source: "latest_scouting_mission" | "manual_override" | "default_market";
+  area: string;
+  niche: string;
+  offerFocus: "websites" | "automations" | "both";
+  targetRows: number;
+  tasks: Array<{
+    taskId: string;
+    ownerAgent: string;
+    source: string;
+    query: string;
+    url: string;
+    targetRows: number;
+    status: "open" | "submitted" | "blocked";
+    resultSlots: Array<{
+      slotId: string;
+      status: "open" | "filled" | "rejected";
+      evidenceTemplate: string;
+      copyableEvidenceBlock: string;
+      acceptanceCriteria: string[];
+    }>;
+    allowedAction: string;
+    blockedActions: string[];
+  }>;
+  agentBriefs: Array<{
+    ownerAgent: string;
+    taskIds: string[];
+    copyableBrief: string;
+  }>;
+  copyableBatchTemplate: string;
+  copyableOperatorBrief: string;
+  qualityGate: string[];
+  nextAction: string;
+  safety: {
+    researchesPublicSources: true;
+    persistsScoutRun: true;
+    persistsCandidates: false;
+    persistsLeads: false;
+    sendsOutreach: false;
+    spendsMoney: false;
+    deploys: false;
+    requiresRobertApprovalToContact: true;
+    blockedActions: string[];
+  };
+};
+
+const DAILY_MONEY_SAFE_RUN_ENDPOINTS = new Set([
+  "/api/revenue-engine/scout-dispatch",
+  "/api/revenue-engine/money-sprint/public-candidates",
+  "/api/revenue-engine/website-opportunities",
+  "/api/revenue-engine/website-delivery-workspace",
+  "/api/revenue-engine/delivery-workspaces/github-handoff",
+]);
+
+function parseDailyMoneyRunRequest(value: string | undefined) {
+  if (!value?.trim()) {
+    return { ok: false as const, reason: "No hay request listo.", payload: null };
+  }
+
+  try {
+    return { ok: true as const, reason: "", payload: JSON.parse(value) as Record<string, unknown> };
+  } catch {
+    return { ok: false as const, reason: "El request no es JSON valido.", payload: null };
+  }
+}
+
+function hasDailyMoneyRunPlaceholders(value: string | undefined) {
+  return /\bREPLACE_|"owner\/repo"|codex\/client-website-build/.test(value || "");
+}
 
 type RevenueSnapshot = {
   metrics: {
@@ -75,6 +159,132 @@ type RevenueSnapshot = {
       approvalQueue: number;
     };
   };
+  dailyMoneyCommand: {
+    status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+    headline: string;
+    primaryAction: string;
+    target: string;
+    funnel: {
+      researchTarget: number;
+      candidatesReady: number;
+      salesPacketsReady: number;
+      manualContactsReady: number;
+      websiteClosuresPending: number;
+      deliveryHandoffsReady: number;
+      buildHandoffsOpen: number;
+      cashCollectedUsd: number;
+    };
+    steps: Array<{
+      id: string;
+      label: string;
+      metric: string;
+      nextAction: string;
+      status: "ready" | "waiting" | "blocked";
+    }>;
+    runPacket: {
+      status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+      apiAction: string;
+      input: string;
+      output: string;
+      gate: string;
+      copyableApiRequest: string;
+      copyableRunPacket: string;
+    };
+    copyableOperatorBrief: string;
+    safety: {
+      sendsOutreach: false;
+      spendsMoney: false;
+      deploys: false;
+      requiresHumanApproval: string[];
+      blockedActions: string[];
+    };
+  };
+  moneyActivationPlan: {
+    status: "ready_for_money_mode" | "ready_for_first_sprint" | "dry_run_research_only" | "blocked";
+    headline: string;
+    canStartToday: boolean;
+    canContactBusinesses: boolean;
+    canCollectMoney: boolean;
+    canBuildWebsites: boolean;
+    allowedToday: string[];
+    missingBeforeRealMoney: Array<{
+      id: string;
+      label: string;
+      reason: string;
+      nextStep: string;
+    }>;
+    blockedUntilApproved: string[];
+    evidenceGate: {
+      status: "ready" | "needs_review" | "empty";
+      readyCandidates: number;
+      blockedCandidates: number;
+      requiredFields: string[];
+      nextAction: string;
+      blockedActions: string[];
+    };
+    productionLaunchChecklist: {
+      status: "ready" | "blocked";
+      requiredEvidence: Array<{
+        id: string;
+        label: string;
+        status: "ready" | "blocked";
+        evidence: string;
+        nextStep: string;
+      }>;
+      verificationCommands: string[];
+      blockedActions: string[];
+      deploymentApprovalPacket: {
+        status: "waiting_for_external_evidence" | "approved";
+        requiredSummaryFields: string[];
+        rollbackPlan: string;
+        deployApprovalAsk: string;
+        blockedUntil: string[];
+      };
+      productionSetupPacket: {
+        status: "ready" | "blocked";
+        title: string;
+        requiredEnv: Array<{
+          key: string;
+          status: "ready" | "blocked";
+          evidence: string;
+          nextStep: string;
+          verifyCommand: string;
+        }>;
+        operatorSteps: string[];
+        guardrails: string[];
+        copyableSetupPacket: string;
+      };
+      copyableChecklist: string;
+    };
+    firstSprintPlan: {
+      title: string;
+      area: string;
+      niche: string;
+      offerFocus: "websites" | "automations" | "both";
+      targetRows: number;
+      nextApiAction: string;
+      copyableDispatchRequest: string;
+      revenuePath: Array<{
+        id: string;
+        label: string;
+        input: string;
+        output: string;
+        gate: string;
+        apiAction: string;
+      }>;
+      steps: Array<{
+        id: string;
+        label: string;
+        action: string;
+        apiAction: string;
+        approvalRequired: boolean;
+      }>;
+      blockedActions: string[];
+      copyableBrief: string;
+    };
+    nextRobertAction: string;
+    copyableBrief: string;
+  };
   systemReadiness: {
     score: number;
     ready: number;
@@ -111,6 +321,24 @@ type RevenueSnapshot = {
       nextStep: string;
     }>;
     manualStartPlan: string[];
+    todayExecutionPack: {
+      status: "ready" | "blocked";
+      ownerAgent: string;
+      mission: string;
+      copyableAgentCommand: string;
+      runLimits: {
+        researchTarget: number;
+        maxQualifiedRowsToImport: number;
+        maxMockups: number;
+        maxManualContacts: number;
+        maxPaidSpendUsd: number;
+      };
+      sourcePriority: string[];
+      requiredEvidenceFields: string[];
+      copyableBatchHeader: string;
+      nextApiAction: string;
+      approvalRequiredBefore: string[];
+    };
     contactScripts: {
       contactForm: string;
       phonePermission: string;
@@ -131,6 +359,306 @@ type RevenueSnapshot = {
     requiresHumanApproval: string[];
     blockedActions: string[];
     currentInstruction: string;
+  };
+  businessScoutQueue: {
+    status: "ready" | "needs_context";
+    source: "latest_scouting_mission" | "default_market";
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations" | "both";
+    dailyResearchTarget: number;
+    tasks: Array<{
+      id: string;
+      source: string;
+      query: string;
+      url: string;
+      ownerAgent: string;
+      allowedAction: string;
+      evidenceToCapture: string[];
+      blockedActions: string[];
+    }>;
+    workPack: {
+      targetRows: number;
+      batchHeader: string;
+      copyableBatchTemplate: string;
+      subagentBrief: string;
+      searchPlaybook: {
+        prioritizedSources: Array<{
+          source: string;
+          query: string;
+          evidenceGoal: string;
+        }>;
+        opportunitySignals: string[];
+        dailyOperatingCadence: string[];
+        copyableBrief: string;
+      };
+      importInstructions: string[];
+      qualityGate: string[];
+      safety: {
+        allowedAction: string;
+        blockedActions: string[];
+        paidDataSpendUsd: number;
+        sendsOutreach: boolean;
+        writesPreviewFiles: boolean;
+      };
+    };
+    nextAction: string;
+    safety: {
+      researchesPublicSources: true;
+      persistsCandidates: false;
+      sendsOutreach: false;
+      spendsMoney: false;
+      blockedActions: string[];
+    };
+  };
+  latestDailyScoutSprint: RevenueDailyScoutSprintSnapshot | null;
+  recentDailyScoutSprints: RevenueDailyScoutSprintSnapshot[];
+  websiteSalesPacketQueue: {
+    status: "ready" | "needs_context" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    items: Array<{
+      leadId: string;
+      outreachDraftId: string;
+      businessName: string;
+      area: string;
+      niche: string;
+      websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+      leadStatus: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+      grade: string;
+      score: number;
+      sourceUrl: string;
+      mockupUrl: string;
+      contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+      contactValue: string;
+      draftStatus: "draft" | "approved" | "blocked";
+      estimatedSetupUsd: number;
+      depositUsd: number;
+      monthlyRetainerUsd: number;
+      primaryOffer: string;
+      copyableSalesPacket: string;
+      copyableOpportunityRequest: string;
+      closePlan: {
+        requiredDepositUsd: number;
+        paymentEvidenceRequired: string[];
+        scopeApprovalRequired: true;
+        nextCloseAction: string;
+        copyableClosePacket: string;
+        copyableCloseRequest: string;
+        blockedActions: string[];
+      };
+      readiness: string[];
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      leadId: string;
+      businessName: string;
+      reason: string;
+      nextAction: string;
+    }>;
+    safety: {
+      sendsOutreach: false;
+      publishesWebsite: false;
+      requiresHumanApprovalToContact: true;
+      requiresDepositBeforeBuild: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
+  manualOutreachQueue: {
+    status: "ready" | "needs_approval" | "empty";
+    dailyContactLimit: number;
+    readyCount: number;
+    blockedCount: number;
+    overflowCount: number;
+    items: Array<{
+      draftId: string;
+      businessName: string;
+      channel: "email" | "gmail" | "mailto" | "instagram" | "contact_form";
+      subject: string;
+      manualAction: string;
+      priority: "high" | "medium";
+      contactUrl: string;
+      fallbackUrl: string;
+      estimatedSetupUsd: number;
+      depositUsd: number;
+      monthlyRetainerUsd: number;
+      paymentEvidenceRequired: string[];
+      copyableContactPacket: string;
+      copyableCloseEvidencePacket: string;
+      copyableOutcomeRequests: {
+        contacted: string;
+        reply: string;
+        callBooked: string;
+        depositCollected: string;
+        lost: string;
+      };
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      draftId: string;
+      businessName: string;
+      status: "draft" | "approved" | "blocked";
+      reason: string;
+    }>;
+    nextAction: string;
+    safety: {
+      sendsOutreach: false;
+      requiresHumanApproval: true;
+      blockedActions: string[];
+    };
+  };
+  websiteClosureQueue: {
+    status: "ready" | "empty";
+    readyCount: number;
+    items: Array<{
+      id: string;
+      opportunityId: string;
+      leadId: string;
+      outreachDraftId: string;
+      sourceLeadId: string;
+      sourceOutreachDraftId: string;
+      businessName: string;
+      projectType: "website" | "bundle";
+      status: "quoted" | "scope_approved" | "sold" | "blocked";
+      sourceUrl: string;
+      mockupUrl: string;
+      setupUsd: number;
+      requiredDepositUsd: number;
+      cashCollectedUsd: number;
+      monthlyRetainerUsd: number;
+      depositPaid: boolean;
+      scopeApproved: boolean;
+      paymentConfirmation: string;
+      closureStage: "collect_deposit" | "approve_scope" | "collect_deposit_and_scope";
+      priority: "high" | "medium";
+      readiness: string[];
+      copyableClosurePacket: string;
+      copyableCloseRequest: string;
+      nextAction: string;
+    }>;
+    safety: {
+      sendsOutreach: false;
+      collectsPaymentAutomatically: false;
+      createsWorkspace: false;
+      requiresPaymentEvidence: true;
+      requiresScopeApproval: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
+  publicLeadImportQueue: {
+    status: "ready" | "needs_review" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    copyableMoneySprintRequest: string;
+    items: Array<{
+      candidateId: string;
+      businessName: string;
+      area: string;
+      niche: string;
+      websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+      contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+      sourceUrl: string;
+      recipientEmail: string;
+      estimatedOfferUsd: number;
+      grade: string;
+      score: number;
+      batchRow: string;
+      copyableApprovalRequest: string;
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      candidateId: string;
+      businessName: string;
+      reason: string;
+      repairBatchRow: string;
+      copyableRepairPacket: string;
+      copyableApprovalRequest: string;
+      nextAction: string;
+    }>;
+    safety: {
+      persistsLeadOnlyAfterSprint: true;
+      sendsOutreach: false;
+      spendsMoney: false;
+      requiresPublicEvidence: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
+  websiteDeliveryHandoffQueue: {
+    status: "ready" | "needs_context" | "empty";
+    readyCount: number;
+    blockedCount: number;
+    items: Array<{
+      opportunityId: string;
+      leadId: string;
+      outreachDraftId: string;
+      businessName: string;
+      leadStatus: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+      projectType: "website" | "bundle";
+      estimatedSetupUsd: number;
+      requiredDepositUsd: number;
+      cashCollectedUsd: number;
+      monthlyRetainerUsd: number;
+      mockupUrl: string;
+      sourceUrl: string;
+      repoRequired: true;
+      repoFullNamePattern: string;
+      suggestedBranchName: string;
+      copyableWorkspaceSetupPacket: string;
+      copyableWorkspaceRequest: string;
+      nextAction: string;
+    }>;
+    blocked: Array<{
+      leadId: string;
+      businessName: string;
+      reason: string;
+      nextAction: string;
+    }>;
+    safety: {
+      createsWorkspaceOnly: true;
+      doesNotDeploy: true;
+      requiresDepositAndScopeForBuild: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
+  };
+  websiteBuildHandoffQueue: {
+    status: "ready" | "empty";
+    openCount: number;
+    items: Array<{
+      workspaceId: string;
+      clientName: string;
+      projectType: "website" | "bundle";
+      packageName: string;
+      setupUsd: number;
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      codexBrief: string;
+      publicBuildBrief: string;
+      copyableGithubHandoffRequest: string;
+      copyableReleaseGateRequest: string;
+      buildPack: {
+        sections: string[];
+        assets: string[];
+        qaCommands: string[];
+        publicOnly: boolean;
+        copyableBuildPack: string;
+      };
+      missing: string[];
+      blockedActions: string[];
+      nextAction: string;
+    }>;
+    safety: {
+      createsPrOnly: true;
+      deploys: false;
+      requiresSecondReviewAndAppQa: true;
+      blockedActions: string[];
+    };
+    nextAction: string;
   };
   profitGuard: {
     status: "pause_spend" | "collect_first" | "review_queue" | "scale_carefully";
@@ -155,7 +683,7 @@ type RevenueSnapshot = {
   };
   approvalQueueItems: Array<{
     id: string;
-    source: "profit_guard" | "outbox" | "agent_run" | "automation_opportunity" | "delivery_workspace";
+    source: "profit_guard" | "outbox" | "agent_run" | "automation_opportunity" | "website_opportunity" | "delivery_workspace";
     title: string;
     status: string;
     priority: "high" | "medium";
@@ -217,6 +745,37 @@ type RevenueSnapshot = {
     estimatedOfferUsd: number;
     status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
   }>;
+  recentPublicLeadCandidates: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    evidence: string;
+    painPoint: string;
+    estimatedOfferUsd: number;
+    status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+    verificationStatus: "needs_review" | "verified_public" | "blocked";
+    publicEvidenceVerified: boolean;
+    approvalToImport: boolean;
+    importReady: boolean;
+    blockedReasons: string[];
+    batchRow: string;
+    qualification: RevenueLeadResult["qualification"];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      persistsLead: boolean;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+  }>;
   recentOutreach: Array<{
     id: string;
     createdAt: string;
@@ -244,6 +803,10 @@ type RevenueSnapshot = {
       externalMessageId?: string;
       sentAt?: string;
       lastAttemptAt?: string;
+      outcome?: RevenueOutreachOutcome;
+      outcomeAt?: string;
+      outcomeNotes?: string;
+      outcomeCashCollectedUsd?: number;
     };
     links: ProposalEmail["links"];
     qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
@@ -290,7 +853,33 @@ type RevenueSnapshot = {
     status: "intake" | "quoted" | "approved" | "sold" | "in_delivery" | "delivered" | "blocked";
     clientApprovedScope: boolean;
     depositPaid: boolean;
+    paymentConfirmation: string;
     quote: AutomationQuote;
+    qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
+    nextAction: string;
+  }>;
+  recentWebsiteOpportunities: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    leadId: string;
+    outreachDraftId: string;
+    projectType: "website" | "bundle";
+    notes: string;
+    status: "quoted" | "scope_approved" | "sold" | "blocked";
+    businessName: string;
+    sourceLeadId: string;
+    sourceOutreachDraftId: string;
+    mockupUrl: string;
+    sourceUrl: string;
+    setupUsd: number;
+    requiredDepositUsd: number;
+    cashCollectedUsd: number;
+    monthlyRetainerUsd: number;
+    estimatedInternalCostUsd: number;
+    depositPaid: boolean;
+    scopeApproved: boolean;
+    paymentConfirmation: string;
     qaGates: Array<{ gate: string; passed: boolean; fix: string }>;
     nextAction: string;
   }>;
@@ -327,16 +916,59 @@ type RevenueSnapshot = {
       includesAutomation: boolean;
       launchTargetDays: number;
       clientRequest: string;
+      sourceUrl: string;
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      secondReviewStatus: "pending" | "pass" | "blocked";
+      secondReviewEvidenceUrl: string;
+      appQaStatus: "pending" | "pass" | "blocked";
+      appQaEvidenceUrl: string;
+      deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
+      deploymentApprovalUrl: string;
+      releaseGateHeadSha: string;
       visualQaPassed: boolean;
       technicalQaPassed: boolean;
       automationQaPassed: boolean;
       clientHandoffReady: boolean;
     };
     status: "ready_to_deliver" | "needs_corrections" | "blocked";
+    projectPlan: RevenueProjectPlan;
     deliveryReview: DeliveryReview;
     correctionQueue: Array<{ agent: string; priority: "high" | "medium"; action: string; blocksDelivery: boolean }>;
     runbook: Array<{ phase: string; ownerAgent: string; checklist: string[] }>;
     approvalSummary: { canShowClientPreview: boolean; canLaunch: boolean; requiredBeforeClient: string[] };
+    codexBuildHandoff: {
+      status: "not_required" | "needs_pr" | "ready_for_qa";
+      repoFullName: string;
+      branchName: string;
+      githubIssueUrl: string;
+      prUrl: string;
+      secondReviewStatus: "pending" | "pass" | "blocked";
+      secondReviewEvidenceUrl: string;
+      appQaStatus: "pending" | "pass" | "blocked";
+      appQaEvidenceUrl: string;
+      deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
+      deploymentApprovalUrl: string;
+      releaseGateHeadSha: string;
+      title: string;
+      codexBrief: string;
+      publicBuildBrief: string;
+      githubIssueTitle: string;
+      copyableGithubIssueBody: string;
+      buildPack: {
+        sections: string[];
+        assets: string[];
+        qaCommands: string[];
+        publicOnly: boolean;
+        copyableBuildPack: string;
+      };
+      acceptanceCriteria: string[];
+      blockedActions: string[];
+      missing: string[];
+      nextAction: string;
+    };
     learningNote: string;
   }>;
   recentApprovalDecisions: Array<{
@@ -476,6 +1108,68 @@ type RevenueScoutingMissionResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenueDailyScoutSprintResult = {
+  status: "started";
+  sprint: RevenueDailyScoutSprintSnapshot;
+  safety: RevenueDailyScoutSprintSnapshot["safety"];
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueScoutDispatchResult = {
+  status: "dispatch_ready";
+  reason: string;
+  sprint: RevenueDailyScoutSprintSnapshot;
+  dispatch: {
+    mode: "manual_subagent_dispatch";
+    executionMode: "manual_evidence_required";
+    blockedUntil: string;
+    requiredExecutionBridge: string;
+    readyToAssign: boolean;
+    agentCount: number;
+    taskCount: number;
+    slotCount: number;
+    agentAssignments: Array<{
+      ownerAgent: string;
+      taskIds: string[];
+      taskCount: number;
+      slotCount: number;
+      searchUrls: string[];
+      copyableBrief: string;
+    }>;
+    connectorIntake: {
+      endpoint: string;
+      executionMode: "verified_connector_review_only";
+      maxResults: number;
+      approvalLocked: boolean;
+      copyablePayloadTemplate: string;
+      copyableBrief: string;
+      copyableWorkOrders: string;
+      copyableSubagentCommands: string;
+      workOrders: Array<{
+        taskId: string;
+        ownerAgent: string;
+        sourceAgent: string;
+        source: string;
+        query: string;
+        sourceQuery: string;
+        searchUrl: string;
+        targetRows: number;
+        resultSlotIds: string[];
+        endpoint: string;
+        payload: Record<string, unknown>;
+        copyableSubagentCommand: string;
+        copyableWorkOrder: string;
+      }>;
+    };
+    copyableDispatchBrief: string;
+    safety: RevenueDailyScoutSprintSnapshot["safety"];
+  };
+  safety: RevenueDailyScoutSprintSnapshot["safety"];
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
 type AutomationQuote = {
   input: {
     businessName: string;
@@ -537,6 +1231,7 @@ type DeliveryReview = {
     linksChecked: boolean;
     automationTested: boolean;
     rollbackPlanReady: boolean;
+    clientHandoffReady: boolean;
     notes: string;
   };
   status: "ready_to_deliver" | "needs_fix" | "blocked";
@@ -617,6 +1312,21 @@ type OutreachDraftResult = {
   snapshot: RevenueSnapshot;
 };
 
+type OutreachApproveResult = {
+  status: "approved" | "blocked";
+  reason: string;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  snapshot: RevenueSnapshot;
+  safety?: {
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    createsLedger: boolean;
+    createsDelivery: boolean;
+  };
+};
+
 type OutreachSendResult = {
   status: "sent" | "blocked" | "failed";
   provider: RevenueSnapshot["emailProvider"];
@@ -624,6 +1334,18 @@ type OutreachSendResult = {
   reason?: string;
   sendResult?: { id: string };
   draft: RevenueSnapshot["recentOutreach"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueOutreachOutcome = "contacted" | "reply" | "call_booked" | "deposit_collected" | "lost";
+
+type OutreachOutcomeResult = {
+  status: "recorded" | "blocked";
+  reason: string;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
+  websiteOpportunity?: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
   snapshot: RevenueSnapshot;
 };
 
@@ -682,6 +1404,243 @@ type RevenueLeadRadar = {
   };
   recommendation: string;
   nextActions: string[];
+};
+
+type RevenueMoneySprint = {
+  status: "ready_to_start" | "needs_spend_approval" | "needs_lead_evidence";
+  mode: string;
+  scoutQueue: Array<{
+    id: string;
+    source: string;
+    query: string;
+    url: string;
+    ownerAgent: string;
+    allowedAction: string;
+    evidenceToCapture: string[];
+    blockedActions: string[];
+  }>;
+  scoutWorkPack: {
+    targetRows: number;
+    batchHeader: string;
+    copyableBatchTemplate: string;
+    subagentBrief: string;
+    searchPlaybook: {
+      prioritizedSources: Array<{
+        source: string;
+        query: string;
+        evidenceGoal: string;
+      }>;
+      opportunitySignals: string[];
+      dailyOperatingCadence: string[];
+      copyableBrief: string;
+    };
+    importInstructions: string[];
+    qualityGate: string[];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      paidDataSpendUsd: number;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+  };
+  recordedLeads: Array<{
+    lead: RevenueSnapshot["recentLeads"][number];
+    qualification: RevenueLeadResult["qualification"];
+    deduped: boolean;
+  }>;
+  previews: Array<{
+    status: "mockup_ready" | "needs_evidence";
+    slug: string;
+    previewUrl: string;
+    fileWritten: boolean;
+    htmlBytes: number;
+    nextAction: string;
+  }>;
+  outreachDrafts: RevenueSnapshot["recentOutreach"];
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  operatingLimits: {
+    maxQualifiedLeadsToday: number;
+    maxMockupsToday: number;
+    maxContactsToday: number;
+    maxPaidDataSpendUsd: number;
+    externalContactMode: string;
+  };
+  approvalGates: string[];
+  nextActions: string[];
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueMoneySprintPreview = {
+  status: "ready_to_import" | "needs_spend_approval" | "needs_lead_evidence" | "empty";
+  acceptedSeeds: Array<{
+    rowNumber: number;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    estimatedOfferUsd: number;
+    qualification: RevenueLeadResult["qualification"];
+    mockupReady: boolean;
+    draftReady: boolean;
+    missingForDraft: string[];
+  }>;
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  totals: {
+    accepted: number;
+    blocked: number;
+    mockupReady: number;
+    draftReady: number;
+    maxImportable: number;
+  };
+  safety: {
+    persistsData: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    nextAction: string;
+  };
+};
+
+type RevenuePublicLeadCandidateResult = {
+  status: "ready_for_preview" | "needs_review";
+  candidate: RevenueSnapshot["recentPublicLeadCandidates"][number];
+  importBatchText: string;
+  importableCount: number;
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenuePublicLeadCandidateApproveResult = {
+  status: "approved" | "needs_review" | "not_found";
+  reason: string;
+  candidate: RevenueSnapshot["recentPublicLeadCandidates"][number] | null;
+  importableCount: number;
+  importBatchText?: string;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+  };
+  snapshot: RevenueSnapshot;
+};
+
+type RevenuePublicLeadCandidateBatchResult = {
+  status: "ready_for_preview" | "needs_review" | "empty";
+  recordedCount: number;
+  importableCount: number;
+  blockedCount: number;
+  recorded: Array<{
+    status: "ready_for_preview" | "needs_review";
+    candidate: RevenueSnapshot["recentPublicLeadCandidates"][number];
+    nextAction: string;
+  }>;
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    requiresPublicEvidence: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueScoutSprintProgress = {
+  sprintId: string;
+  taskId: string;
+  status: "open" | "completed" | "blocked";
+  filledSlots: number;
+  newlyFilledSlots: number;
+  rejectedSlots: number;
+  openSlots: number;
+  targetRows: number;
+  nextAction: string;
+};
+
+type RevenuePublicScoutEvidenceResult = RevenuePublicLeadCandidateBatchResult & {
+  normalizedBatchText: string;
+  parsedCount: number;
+  sprintProgress?: RevenueScoutSprintProgress | null;
+};
+
+type RevenueDailyScoutSprintSubmitResult = {
+  status: "submitted" | "needs_review" | "not_found" | "blocked";
+  reason: string;
+  evidenceResult: RevenuePublicScoutEvidenceResult | null;
+  sprintProgress: RevenueScoutSprintProgress | null;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenuePublicCandidateSprintResult = {
+  status: "started" | "blocked" | "needs_spend_approval";
+  reason: string;
+  importedCandidateIds: string[];
+  blockedCandidates: Array<{ candidateId: string; businessName: string; reason: string }>;
+  sprint: RevenueMoneySprint | null;
+  safety: {
+    persistsData: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+  };
+  snapshot: RevenueSnapshot;
+};
+
+type RevenuePublicScoutAgentCommandResult = {
+  status: "candidates_ready" | "needs_review" | "blocked" | "sprint_started";
+  reason: string;
+  evidenceResult: RevenuePublicScoutEvidenceResult;
+  sprintResult: RevenuePublicCandidateSprintResult | null;
+  readyCandidateIds: string[];
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    deploys: boolean;
+    requiresApprovalToContact: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueVerifiedScoutConnectorIntakeResult = {
+  status: "needs_review" | "ready_for_preview" | "empty";
+  reason: string;
+  connector: {
+    name: string;
+    runId: string;
+    resultCount: number;
+    executionMode: "verified_connector_review_only";
+    approvalLocked: boolean;
+  };
+  evidenceResult: RevenuePublicScoutEvidenceResult;
+  normalizedBatchText: string;
+  recordedCount: number;
+  importableCount: number;
+  blockedCount: number;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    requiresRobertReview: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
 };
 
 type RevenueMockupTemplatePack = {
@@ -782,9 +1741,116 @@ type AutomationOpportunityDeliveryResult = {
   snapshot: RevenueSnapshot;
 };
 
+type WebsiteDeliveryHandoffResult = {
+  status: "created" | "already_created" | "blocked" | "not_found";
+  reason: string;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
+  outreachDraft: RevenueSnapshot["recentOutreach"][number] | null;
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type WebsiteOpportunityResult = {
+  status: "quoted" | "already_sold" | "blocked";
+  reason: string;
+  opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
+  gates: Array<{ gate: string; passed: boolean; fix: string }>;
+  snapshot: RevenueSnapshot;
+};
+
+type WebsiteOpportunityCloseResult = {
+  status: "sold" | "blocked";
+  reason: string;
+  opportunity: RevenueSnapshot["recentWebsiteOpportunities"][number] | null;
+  lead: RevenueSnapshot["recentLeads"][number] | null;
+  draft: RevenueSnapshot["recentOutreach"][number] | null;
+  entry: RevenueLedgerResult["entry"] | null;
+  snapshot: RevenueSnapshot;
+};
+
 type DeliveryWorkspaceQaUpdateResult = {
   status: "ready" | "needs_corrections" | "not_found";
   reason: string;
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type DeliveryWorkspaceGithubHandoffResult = {
+  status: "created" | "already_created" | "needs_repo" | "not_required" | "not_found" | "repo_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  developerHandoff?: {
+    status: string;
+    issueUrl?: string;
+    repoFullName?: string;
+    message: string;
+  };
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type DeliveryWorkspaceReleaseGateInput = {
+  prUrl?: string;
+  secondReviewEvidenceUrl?: string;
+  appQaEvidenceUrl?: string;
+  deploymentApprovalUrl?: string;
+  secondReviewPassed?: boolean;
+  appQaPassed?: boolean;
+  robertApprovedDeploy?: boolean;
+};
+
+type DeliveryWorkspacePrStatusResult = {
+  status: "ready" | "blocked" | "needs_pr" | "not_found" | "repo_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  prStatus?: {
+    pr: {
+      number: number;
+      title: string;
+      htmlUrl: string;
+      state: string;
+      draft: boolean;
+      merged: boolean;
+      baseRef: string;
+      headRef: string;
+      headSha: string;
+      author: string;
+      updatedAt: string | null;
+    };
+    checks: { total: number; passed: number; pending: number; failed: number };
+    statuses: { total: number; passed: number; pending: number; failed: number; state: string };
+    approvedReviews: Array<{ reviewer: string; htmlUrl: string; submittedAt: string | null }>;
+    changesRequestedReviews: Array<{ reviewer: string; htmlUrl: string; submittedAt: string | null }>;
+    secondReviewEvidenceUrl: string;
+    appQaEvidenceUrl: string;
+    blockers: string[];
+    warnings: string[];
+    readyForReleaseEvidence: boolean;
+  };
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
+type DeliveryWorkspaceAppQaGateResult = {
+  status: "pass" | "blocked" | "not_found" | "repo_mismatch" | "branch_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  scan?: {
+    summary: string;
+    failCount: number;
+    warnCount: number;
+    subAgents: Array<{ name: string; status: string; summary: string }>;
+  };
+  gate?: {
+    status: "pass" | "blocked";
+    reasons: string[];
+  };
+  prStatus?: DeliveryWorkspacePrStatusResult["prStatus"];
+  appQaEvidenceUrl?: string;
+  appQaPrCommentBody?: string;
+  safety?: {
+    persistsReleaseGate: boolean;
+    approvesDeployment: boolean;
+    requiresPrCommentEvidence: boolean;
+    requiresRobertApproval: boolean;
+  };
   workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
   snapshot: RevenueSnapshot;
 };
@@ -1036,8 +2102,105 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+function slugifyClientBranchValue(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "client";
+}
+
+function isGithubRepoFullName(value: string) {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value.trim());
+}
+
+function isCodexBranchName(value: string) {
+  return /^codex\/[A-Za-z0-9._/-]+$/.test(value.trim());
+}
+
+function buildCopyableGithubHandoffRequest(workspaceId: string, repoFullName: string, branchName: string) {
+  const trimmedRepoFullName = repoFullName.trim();
+  const trimmedBranchName = branchName.trim();
+  return JSON.stringify({
+    workspaceId,
+    ...(isGithubRepoFullName(trimmedRepoFullName) ? { repoFullName: trimmedRepoFullName } : {}),
+    ...(isCodexBranchName(trimmedBranchName) ? { branchName: trimmedBranchName } : {}),
+  }, null, 2);
+}
+
+function buildCopyableReleaseGateRequest(
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number],
+  releaseGateInput: Required<DeliveryWorkspaceReleaseGateInput>,
+) {
+  const branchName = workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+  return JSON.stringify({
+    workspaceId: workspace.id,
+    repoFullName: workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName,
+    branchName,
+    githubIssueUrl: workspace.input.githubIssueUrl || workspace.codexBuildHandoff.githubIssueUrl,
+    prUrl: releaseGateInput.prUrl,
+    secondReviewStatus: releaseGateInput.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+    secondReviewEvidenceUrl: releaseGateInput.secondReviewEvidenceUrl,
+    appQaStatus: releaseGateInput.appQaPassed ? "pass" : workspace.input.appQaStatus,
+    appQaEvidenceUrl: releaseGateInput.appQaEvidenceUrl,
+    deploymentApprovalStatus: releaseGateInput.robertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
+    deploymentApprovalUrl: releaseGateInput.deploymentApprovalUrl,
+    releaseGateHeadSha: workspace.input.releaseGateHeadSha || workspace.codexBuildHandoff.releaseGateHeadSha,
+    notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${branchName}, client ${workspace.input.clientName}. second review=${releaseGateInput.secondReviewPassed ? "pass" : "pending"} app qa=${releaseGateInput.appQaPassed ? "pass" : "pending"} Robert approval=${releaseGateInput.robertApprovedDeploy ? "approved" : "pending"}.`,
+  }, null, 2);
+}
+
+const genericPaymentEvidence = new Set([
+  "paid",
+  "cash",
+  "deposit",
+  "payment",
+  "received",
+  "collected",
+  "paid cash",
+  "cash paid",
+  "deposit paid",
+  "payment received",
+  "robert confirmed deposit",
+]);
+
+function normalizePaymentEvidence(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[$,]/g, "")
+    .replace(/[^\p{L}\p{N}_\- ]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasVerifiablePaymentEvidence(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) return false;
+
+  const normalized = normalizePaymentEvidence(trimmed);
+  if (genericPaymentEvidence.has(normalized)) return false;
+  if (/^(paid|cash|deposit|payment|received|collected)\s+\$?\d+(\.\d{1,2})?$/.test(normalized)) return false;
+  if (/\b(?:pi|ch)_[a-z0-9]{6,}\b/i.test(trimmed)) return true;
+
+  const lower = trimmed.toLowerCase();
+  const hasPaymentProvider = /\b(zelle|venmo|cashapp|cash app|paypal|stripe|square|clover|ach|wire|bank transfer)\b/.test(lower);
+  const hasReferenceLabel = /\b(ref|reference|receipt|invoice|txn|transaction|confirmation|confirmacion|comprobante|payment id|charge id)\b/.test(lower);
+  const normalizedTokens = normalized.split(" ");
+  const hasSpecificToken = /\b\d{3,}\b/.test(normalized)
+    || normalizedTokens.some((token) => token.length >= 6 && /[a-z]/.test(token) && /\d/.test(token))
+    || /\b[a-z]{2,}[-_][a-z0-9][a-z0-9_-]{2,}\b/i.test(trimmed);
+
+  return hasSpecificToken && (hasPaymentProvider || hasReferenceLabel);
+}
+
 function statusTone(status: string) {
   if (status === "pass") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (["contact", "collect", "build", "sell", "sprint"].includes(status)) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "search") return "border-sky-500/40 bg-sky-500/10 text-sky-200";
+  if (status === "waiting") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "ready_to_deliver") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "needs_fix") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "block") return "border-red-500/40 bg-red-500/10 text-red-200";
@@ -1047,6 +2210,18 @@ function statusTone(status: string) {
   if (status === "collect_first") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "scale_carefully") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_money_mode") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_first_sprint") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "dry_run_research_only") return "border-cyan-500/40 bg-cyan-500/10 text-cyan-200";
+  if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_preview") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_qa") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "needs_pr") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "not_required") return "border-zinc-700 bg-zinc-900 text-zinc-300";
+  if (status === "needs_spend_approval") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_review") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_lead_evidence") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "empty") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "pending_allowed") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "iterate_small_batch") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "sent") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -1102,8 +2277,39 @@ export default function RevenueEnginePage() {
   const [leadRadarDailyResearchTarget, setLeadRadarDailyResearchTarget] = useState(120);
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
+  const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
+  const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
+  const [publicScoutEvidenceText, setPublicScoutEvidenceText] = useState("");
+  const [publicScoutConnectorName, setPublicScoutConnectorName] = useState("browser-public-scout");
+  const [publicScoutConnectorRunId, setPublicScoutConnectorRunId] = useState("daily-run-001");
+  const [publicScoutConnectorResultsJson, setPublicScoutConnectorResultsJson] = useState(
+    JSON.stringify(
+      [
+        {
+          businessName: "No Site Cafe",
+          area: "Miami",
+          niche: "coffee shop",
+          websiteStatus: "no_website",
+          contactName: "Owner",
+          recipientEmail: "owner@example.com",
+          sourceUrl: "https://instagram.com/nositecafe",
+          evidence: "Instagram activo, no website en bio, menu solo en posts publicos.",
+          painPoint: "Necesita menu online, captura de catering y follow-up.",
+        },
+      ],
+      null,
+      2,
+    ),
+  );
+  const [selectedDailyScoutTaskId, setSelectedDailyScoutTaskId] = useState("");
+  const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
+  const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
+  const [candidateRobertApprovedImport, setCandidateRobertApprovedImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
+  const [selectedApprovalTargetId, setSelectedApprovalTargetId] = useState("");
+  const [approvalDecisionValue, setApprovalDecisionValue] = useState<"approved" | "rejected" | "needs_changes">("approved");
+  const [approvalMaxSpendUsd, setApprovalMaxSpendUsd] = useState(0);
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
   const [automationIndustry, setAutomationIndustry] = useState("restaurant");
   const [automationRequest, setAutomationRequest] = useState("Quiero automatizar seguimiento de leads, reservas y mensajes para que nadie se pierda.");
@@ -1115,6 +2321,7 @@ export default function RevenueEnginePage() {
   const [automationDepositPaid, setAutomationDepositPaid] = useState(false);
   const [automationLifecycleTarget, setAutomationLifecycleTarget] = useState<"quote" | "opportunity" | "sale" | "delivery">("opportunity");
   const [automationCashCollectedUsd, setAutomationCashCollectedUsd] = useState(0);
+  const [automationPaymentConfirmation, setAutomationPaymentConfirmation] = useState("");
   const [automationIntakeAnswers, setAutomationIntakeAnswers] = useState("Trigger, accion, herramienta actual y resultado esperado del cliente.");
   const [reviewProjectName, setReviewProjectName] = useState("Prospect Restaurant launch");
   const [reviewProjectType, setReviewProjectType] = useState<"website" | "automation" | "bundle">("bundle");
@@ -1129,7 +2336,31 @@ export default function RevenueEnginePage() {
     linksChecked: false,
     automationTested: false,
     rollbackPlanReady: false,
+    clientHandoffReady: false,
   });
+  const [websiteOpportunityScopeApprovals, setWebsiteOpportunityScopeApprovals] = useState<Record<string, boolean>>({});
+  const [websiteOpportunityCloseInputs, setWebsiteOpportunityCloseInputs] = useState<Record<string, {
+    cashCollectedUsd?: string;
+    paymentConfirmation?: string;
+    notes?: string;
+  }>>({});
+  const [websiteDeliveryRepoInputs, setWebsiteDeliveryRepoInputs] = useState<Record<string, {
+    repoFullName?: string;
+    branchName?: string;
+  }>>({});
+  const requestDepositPaymentConfirmation = (businessName: string, amountUsd: number) => {
+    const value = window.prompt(
+      `Referencia verificable de pago para ${businessName} (${money.format(amountUsd)}): Stripe payment id, Zelle/bank ref, invoice/receipt id.`,
+    )?.trim() || "";
+    return hasVerifiablePaymentEvidence(value) ? value : null;
+  };
+  const automationHasPaymentConfirmation = hasVerifiablePaymentEvidence(automationPaymentConfirmation);
+  const automationCloseRequiresPaymentEvidence = automationCashCollectedUsd > 0 || automationLifecycleTarget === "sale" || automationLifecycleTarget === "delivery";
+  const automationOpportunityRequiresPaymentEvidence = automationDepositPaid || ["sold", "in_delivery", "delivered"].includes(automationOpportunityStatus);
+  const automationAgentPaymentBlocked = automationCloseRequiresPaymentEvidence && !automationHasPaymentConfirmation;
+  const automationOpportunityPaymentBlocked = automationOpportunityRequiresPaymentEvidence && !automationHasPaymentConfirmation;
+  const [reviewRepoFullName, setReviewRepoFullName] = useState("");
+  const [releaseGateInputsByWorkspace, setReleaseGateInputsByWorkspace] = useState<Record<string, DeliveryWorkspaceReleaseGateInput>>({});
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
   const [proposalRecipientEmail, setProposalRecipientEmail] = useState("robert.manzanillag@gmail.com");
   const [proposalContactName, setProposalContactName] = useState("Robert");
@@ -1185,6 +2416,10 @@ export default function RevenueEnginePage() {
   const [leadEvidence, setLeadEvidence] = useState("Instagram activo, no website en bio, menu solo en posts.");
   const [leadPainPoint, setLeadPainPoint] = useState("Necesita menu online, captura de catering y follow-up.");
   const [leadEstimatedOfferUsd, setLeadEstimatedOfferUsd] = useState(2500);
+  const [leadSourceUrl, setLeadSourceUrl] = useState("https://instagram.com/nositecafe");
+  const [leadRecipientEmail, setLeadRecipientEmail] = useState("");
+  const [leadContactName, setLeadContactName] = useState("Owner");
+  const [leadBusinessSummary, setLeadBusinessSummary] = useState("Cafe activo en Miami con social profile, menu en posts y sin website dedicado.");
   const [mockupBusinessName, setMockupBusinessName] = useState("No Site Cafe");
   const [mockupArea, setMockupArea] = useState("Miami");
   const [mockupNiche, setMockupNiche] = useState("coffee shop");
@@ -1225,6 +2460,29 @@ export default function RevenueEnginePage() {
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
 
+  const buildReleaseGateInput = (workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number]): Required<DeliveryWorkspaceReleaseGateInput> => {
+    const stored = releaseGateInputsByWorkspace[workspace.id] || {};
+    return {
+      prUrl: stored.prUrl ?? (workspace.input.prUrl || workspace.codexBuildHandoff.prUrl || ""),
+      secondReviewEvidenceUrl: stored.secondReviewEvidenceUrl ?? (workspace.input.secondReviewEvidenceUrl || workspace.codexBuildHandoff.secondReviewEvidenceUrl || ""),
+      appQaEvidenceUrl: stored.appQaEvidenceUrl ?? (workspace.input.appQaEvidenceUrl || workspace.codexBuildHandoff.appQaEvidenceUrl || ""),
+      deploymentApprovalUrl: stored.deploymentApprovalUrl ?? (workspace.input.deploymentApprovalUrl || workspace.codexBuildHandoff.deploymentApprovalUrl || ""),
+      secondReviewPassed: stored.secondReviewPassed ?? (workspace.input.secondReviewStatus === "pass" || workspace.codexBuildHandoff.secondReviewStatus === "pass"),
+      appQaPassed: stored.appQaPassed ?? (workspace.input.appQaStatus === "pass" || workspace.codexBuildHandoff.appQaStatus === "pass"),
+      robertApprovedDeploy: stored.robertApprovedDeploy ?? (workspace.input.deploymentApprovalStatus === "approved" || workspace.codexBuildHandoff.deploymentApprovalStatus === "approved"),
+    };
+  };
+
+  const updateReleaseGateInput = (workspaceId: string, patch: DeliveryWorkspaceReleaseGateInput) => {
+    setReleaseGateInputsByWorkspace((current) => ({
+      ...current,
+      [workspaceId]: {
+        ...current[workspaceId],
+        ...patch,
+      },
+    }));
+  };
+
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
     queryFn: async () => {
@@ -1233,6 +2491,60 @@ export default function RevenueEnginePage() {
       return response.json();
     },
   });
+  const approvalQueue = snapshot?.approvalQueueItems || [];
+  const selectedApprovalQueueItem = approvalQueue.find((item) => item.id === selectedApprovalTargetId) || null;
+  const approvalActionForSubmit = selectedApprovalQueueItem?.action || approvalAction;
+  const activeScoutArea = snapshot?.latestDailyScoutSprint?.area || snapshot?.businessScoutQueue.area || scoutingArea;
+  const activeScoutNiche = snapshot?.latestDailyScoutSprint?.niche || snapshot?.businessScoutQueue.niche || scoutingNiche;
+  const activeScoutOfferFocus = snapshot?.latestDailyScoutSprint?.offerFocus || snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
+  const activeScoutTarget = snapshot?.latestDailyScoutSprint?.targetRows || snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
+  const dispatchScoutArea = snapshot?.businessScoutQueue.area || scoutingArea;
+  const dispatchScoutNiche = snapshot?.businessScoutQueue.niche || scoutingNiche;
+  const dispatchScoutOfferFocus = snapshot?.businessScoutQueue.offerFocus || scoutingOfferFocus;
+  const dispatchScoutTarget = snapshot?.businessScoutQueue.dailyResearchTarget || scoutingTargetLeadCount;
+  const selectedDailyScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.taskId === selectedDailyScoutTaskId) || null;
+  const selectedDailyScoutTaskHasOpenSlots = Boolean(selectedDailyScoutTask?.resultSlots.some((slot) => slot.status === "open"));
+  const firstOpenDailyScoutTask = snapshot?.latestDailyScoutSprint?.tasks.find((task) => task.resultSlots.some((slot) => slot.status === "open")) || null;
+  const activeScoutTask = selectedDailyScoutTaskHasOpenSlots
+    ? selectedDailyScoutTask
+    : firstOpenDailyScoutTask || snapshot?.latestDailyScoutSprint?.tasks[0] || null;
+  const activeScoutSourceTaskId = activeScoutTask?.taskId || snapshot?.latestDailyScoutSprint?.id || "ui-scout-evidence";
+  const latestDailyScoutSlotText = useMemo(() => (
+    (activeScoutTask ? [activeScoutTask] : snapshot?.latestDailyScoutSprint?.tasks || [])
+      .flatMap((task) => task.resultSlots.filter((slot) => slot.status === "open").map((slot) => slot.copyableEvidenceBlock))
+      .join("\n\n") || ""
+  ), [activeScoutTask, snapshot?.latestDailyScoutSprint]);
+  const dailyMoneyRunPacket = snapshot?.dailyMoneyCommand.runPacket;
+  const dailyMoneyRunRequest = useMemo(
+    () => parseDailyMoneyRunRequest(dailyMoneyRunPacket?.copyableApiRequest),
+    [dailyMoneyRunPacket?.copyableApiRequest],
+  );
+  const dailyMoneyRunIsSafeEndpoint = DAILY_MONEY_SAFE_RUN_ENDPOINTS.has(dailyMoneyRunPacket?.apiAction || "");
+  const dailyMoneyRunHasPlaceholders = hasDailyMoneyRunPlaceholders(dailyMoneyRunPacket?.copyableApiRequest);
+  const dailyMoneyRunBlockedReason = !dailyMoneyRunPacket
+    ? "Cargando run packet."
+    : snapshot?.dailyMoneyCommand.status === "blocked"
+      ? "Daily Money Command esta bloqueado por guardrails."
+      : !dailyMoneyRunIsSafeEndpoint
+        ? "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
+        : dailyMoneyRunHasPlaceholders
+          ? "El request todavia tiene placeholders."
+          : !dailyMoneyRunRequest.ok
+            ? dailyMoneyRunRequest.reason
+            : "";
+  const canRunDailyMoneyNextAction = Boolean(dailyMoneyRunPacket && dailyMoneyRunIsSafeEndpoint && !dailyMoneyRunHasPlaceholders && dailyMoneyRunRequest.ok && snapshot?.dailyMoneyCommand.status !== "blocked");
+
+  useEffect(() => {
+    if (approvalQueue.length === 0) {
+      if (selectedApprovalTargetId) setSelectedApprovalTargetId("");
+      return;
+    }
+    if (!selectedApprovalQueueItem) {
+      const nextItem = approvalQueue[0];
+      setSelectedApprovalTargetId(nextItem.id);
+      setApprovalAction(nextItem.action);
+    }
+  }, [approvalQueue, selectedApprovalQueueItem, selectedApprovalTargetId]);
 
   const planMutation = useMutation<RevenuePlan>({
     mutationFn: async () => {
@@ -1271,6 +2583,86 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const dailyScoutSprintMutation = useMutation<RevenueDailyScoutSprintResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/daily-scout-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: dispatchScoutArea,
+          niche: dispatchScoutNiche,
+          offerFocus: dispatchScoutOfferFocus,
+          targetLeadCount: dispatchScoutTarget,
+          maxTasks: 5,
+          resultSlotsPerTask: 2,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          notes: "Started from Revenue Engine UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo iniciar daily scout sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const scoutDispatchMutation = useMutation<RevenueScoutDispatchResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/scout-dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: dispatchScoutArea,
+          niche: dispatchScoutNiche,
+          offerFocus: dispatchScoutOfferFocus,
+          targetLeadCount: dispatchScoutTarget,
+          maxTasks: 5,
+          resultSlotsPerTask: 2,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          notes: "Scout dispatch created from Revenue Engine UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo despachar scout agents");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const dailyMoneyRunMutation = useMutation<Record<string, unknown>, Error>({
+    mutationFn: async () => {
+      const apiAction = snapshot?.dailyMoneyCommand.runPacket.apiAction || "";
+      const request = parseDailyMoneyRunRequest(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest);
+      if (!DAILY_MONEY_SAFE_RUN_ENDPOINTS.has(apiAction)) {
+        throw new Error("Este endpoint no esta habilitado para ejecucion segura desde Daily Money Command.");
+      }
+      if (hasDailyMoneyRunPlaceholders(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest)) {
+        throw new Error("El request todavia tiene placeholders.");
+      }
+      if (!request.ok) {
+        throw new Error(request.reason);
+      }
+
+      const response = await fetch(apiAction, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request.payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo correr la siguiente accion segura");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
   const leadRadarMutation = useMutation<RevenueLeadRadar>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/lead-radar", {
@@ -1292,6 +2684,113 @@ export default function RevenueEnginePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear el radar de leads");
       return data;
+    },
+  });
+
+  const buildMoneySprintPayload = () => {
+    const seedLeadReady = Boolean(
+      includeLeadInMoneySprint
+      && leadBusinessName.trim()
+      && leadArea.trim()
+      && leadNiche.trim()
+      && leadEvidence.trim().length >= 12
+      && leadPainPoint.trim()
+      && leadContactChannel !== "unknown"
+      && leadContactValue.trim()
+    );
+    const seedLeads = seedLeadReady
+      ? [{
+        businessName: leadBusinessName,
+        area: leadArea,
+        niche: leadNiche,
+        websiteStatus: leadWebsiteStatus,
+        contactChannel: leadContactChannel,
+        contactValue: leadContactValue,
+        evidence: leadEvidence,
+        painPoint: leadPainPoint,
+        estimatedOfferUsd: leadEstimatedOfferUsd,
+        status: "research",
+        sourceUrl: leadSourceUrl,
+        recipientEmail: leadRecipientEmail,
+        contactName: leadContactName,
+        businessSummary: leadBusinessSummary,
+      }]
+      : [];
+
+    return {
+      area: activeScoutArea,
+      niche: activeScoutNiche,
+      offerFocus: activeScoutOfferFocus,
+      dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+      dailyQualifiedLeadLimit: activeScoutTarget,
+      dailyMockupLimit: leadRadarMockupLimit,
+      dailyContactLimit: leadRadarContactLimit,
+      maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+      requireRobertApprovalToContact: true,
+      writePreviewFiles: true,
+      seedLeads,
+      seedLeadBatchText,
+    };
+  };
+
+  const moneySprintPreviewMutation = useMutation<RevenueMoneySprintPreview>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildMoneySprintPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo previsualizar money sprint");
+      return data;
+    },
+  });
+
+  const moneySprintMutation = useMutation<RevenueMoneySprint>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildMoneySprintPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr money sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicCandidateSprintMutation = useMutation<RevenuePublicCandidateSprintResult>({
+    mutationFn: async () => {
+      const candidateIds = (snapshot?.publicLeadImportQueue.items || []).map((item) => item.candidateId);
+      const readyCandidateCount = snapshot?.publicLeadImportQueue.readyCount || 0;
+      const visibleCandidateIdsCoverReadyQueue = candidateIds.length >= readyCandidateCount;
+      const response = await fetch("/api/revenue-engine/money-sprint/public-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          offerFocus: activeScoutOfferFocus,
+          dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+          dailyQualifiedLeadLimit: activeScoutTarget,
+          dailyMockupLimit: leadRadarMockupLimit,
+          dailyContactLimit: leadRadarContactLimit,
+          maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+          requireRobertApprovalToContact: true,
+          writePreviewFiles: true,
+          candidateIds: visibleCandidateIdsCoverReadyQueue ? candidateIds : [],
+          maxCandidates: Math.min(Math.max(readyCandidateCount, candidateIds.length, 1), 25),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr sprint con candidatos publicos");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
     },
   });
 
@@ -1385,13 +2884,14 @@ export default function RevenueEnginePage() {
           clientApprovedScope: automationScopeApproved,
           depositPaid: automationDepositPaid,
           cashCollectedUsd: automationCashCollectedUsd > 0 ? automationCashCollectedUsd : undefined,
+          paymentConfirmation: automationPaymentConfirmation,
           createDeliveryWorkspaceIfSold: automationLifecycleTarget === "delivery",
           workspaceName: `${automationBusinessName} automation delivery`,
           publicDataVerified: reviewChecks.publicDataVerified,
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested,
-          clientHandoffReady: reviewChecks.rollbackPlanReady,
+          clientHandoffReady: reviewChecks.clientHandoffReady,
           launchTargetDays: projectLaunchTargetDays,
         }),
       });
@@ -1419,6 +2919,7 @@ export default function RevenueEnginePage() {
           status: automationOpportunityStatus,
           clientApprovedScope: automationScopeApproved,
           depositPaid: automationDepositPaid,
+          paymentConfirmation: automationPaymentConfirmation,
         }),
       });
       const data = await response.json();
@@ -1491,10 +2992,11 @@ export default function RevenueEnginePage() {
           includesAutomation: reviewProjectType !== "website",
           launchTargetDays: 7,
           clientRequest: reviewNotes,
+          repoFullName: reviewRepoFullName,
           visualQaPassed: reviewChecks.responsiveChecked,
           technicalQaPassed: reviewChecks.linksChecked,
           automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
-          clientHandoffReady: deliveryReviewMutation.data?.requiredFixes.length === 0 && reviewChecks.depositPaid,
+          clientHandoffReady: reviewChecks.clientHandoffReady,
         }),
       });
       const data = await response.json();
@@ -1531,14 +3033,139 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number }>({
-    mutationFn: async ({ opportunityId, cashCollectedUsd }) => {
+  const websiteDeliveryHandoffMutation = useMutation<WebsiteDeliveryHandoffResult, Error, RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number]>({
+    mutationFn: async (item) => {
+      const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+      const repoFullName = (repoInput.repoFullName || "").trim();
+      const branchName = (repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
+      const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: item.leadId,
+          outreachDraftId: item.outreachDraftId,
+          websiteOpportunityId: item.opportunityId,
+          mockupUrl: item.mockupUrl,
+          repoFullName,
+          branchName,
+          projectType: item.projectType,
+          depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
+          scopeApproved: true,
+          cashCollectedUsd: item.cashCollectedUsd,
+          publicDataVerified: reviewChecks.publicDataVerified,
+          visualQaPassed: reviewChecks.responsiveChecked,
+          technicalQaPassed: reviewChecks.linksChecked,
+          automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
+          clientHandoffReady: false,
+          launchTargetDays: projectLaunchTargetDays,
+          notes: "Created from Revenue Engine website handoff queue.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde lead");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const websiteOpportunityMutation = useMutation<WebsiteOpportunityResult, Error, RevenueSnapshot["websiteSalesPacketQueue"]["items"][number]>({
+    mutationFn: async (item) => {
+      const response = await fetch("/api/revenue-engine/website-opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: item.leadId,
+          outreachDraftId: item.outreachDraftId,
+          projectType: item.primaryOffer.includes("Automation") ? "bundle" : "website",
+          notes: "Quoted from Revenue Engine website sales packet.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo crear oportunidad website");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const websiteOpportunityCloseMutation = useMutation<
+    WebsiteOpportunityCloseResult,
+    Error,
+    {
+      opportunity: RevenueSnapshot["websiteClosureQueue"]["items"][number];
+      scopeApproved: boolean;
+      cashCollectedUsd: number;
+      paymentConfirmation: string;
+      notes: string;
+      recordDepositOutcome: boolean;
+    }
+  >({
+    mutationFn: async ({ opportunity, scopeApproved, cashCollectedUsd, paymentConfirmation, notes, recordDepositOutcome }) => {
+      if (recordDepositOutcome) {
+        const outcomeResponse = await fetch("/api/revenue-engine/outreach-outcome", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            draftId: opportunity.sourceOutreachDraftId,
+            outcome: "deposit_collected",
+            outcomeRecordedByRobert: true,
+            cashCollectedUsd,
+            paymentConfirmation,
+            notes: paymentConfirmation || notes || "Manual deposit recorded from website opportunity close.",
+          }),
+        });
+        const outcomeData = await outcomeResponse.json();
+        if (!outcomeResponse.ok || outcomeData.status === "blocked") {
+          throw new Error(outcomeData.error || outcomeData.reason || "No se pudo registrar deposito manual");
+        }
+      }
+      const response = await fetch("/api/revenue-engine/website-opportunities/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opportunityId: opportunity.id,
+          depositPaid: cashCollectedUsd > 0,
+          scopeApproved,
+          cashCollectedUsd,
+          paymentConfirmation,
+          notes: notes || "Closed from Revenue Engine website opportunity UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo cerrar oportunidad website");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.opportunity?.id) {
+        setWebsiteOpportunityScopeApprovals((current) => {
+          const next = { ...current };
+          delete next[data.opportunity!.id];
+          return next;
+        });
+        if (data.status === "sold") {
+          setWebsiteOpportunityCloseInputs((current) => {
+            const next = { ...current };
+            delete next[data.opportunity!.id];
+            return next;
+          });
+        }
+      }
+      refetchSnapshot();
+    },
+  });
+
+  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; paymentConfirmation: string }>({
+    mutationFn: async ({ opportunityId, cashCollectedUsd, paymentConfirmation }) => {
       const response = await fetch("/api/revenue-engine/automation-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunityId,
           cashCollectedUsd,
+          paymentConfirmation,
           markScopeApproved: true,
           notes: "Registrado desde Revenue Engine opportunities.",
         }),
@@ -1552,19 +3179,14 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const deliveryWorkspaceQaMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, string>({
-    mutationFn: async (workspaceId) => {
+  const deliveryWorkspaceQaMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
       const response = await fetch("/api/revenue-engine/delivery-workspaces/qa", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workspaceId,
-          publicDataVerified: true,
-          visualQaPassed: true,
-          technicalQaPassed: true,
-          automationQaPassed: true,
-          clientHandoffReady: true,
-          notes: "Subagentes marcaron correcciones resueltas y handoff listo para revalidacion.",
+          ...buildDeliveryWorkspaceQaPayload(workspace, reviewChecks),
+          repoFullName: reviewRepoFullName || workspace.input.repoFullName,
         }),
       });
       const data = await response.json();
@@ -1576,16 +3198,123 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const deliveryWorkspaceDeliverMutation = useMutation<DeliveryWorkspaceDeliverResult, Error, string>({
-    mutationFn: async (workspaceId) => {
-      const response = await fetch("/api/revenue-engine/delivery-workspaces/deliver", {
+  const deliveryWorkspaceReleaseGateMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/release-gate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workspaceId,
-          approvedByRobert: true,
-          notes: "Entrega aprobada desde Revenue Engine despues de QA.",
+          ...buildDeliveryWorkspaceQaPayload(workspace, reviewChecks),
+          repoFullName: reviewRepoFullName || workspace.input.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          githubIssueUrl: workspace.input.githubIssueUrl,
+          prUrl: releaseGateInput.prUrl,
+          secondReviewStatus: releaseGateInput.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+          secondReviewEvidenceUrl: releaseGateInput.secondReviewEvidenceUrl,
+          appQaStatus: releaseGateInput.appQaPassed ? "pass" : workspace.input.appQaStatus,
+          appQaEvidenceUrl: releaseGateInput.appQaEvidenceUrl,
+          deploymentApprovalStatus: releaseGateInput.robertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
+          deploymentApprovalUrl: releaseGateInput.deploymentApprovalUrl,
+          notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${workspace.input.branchName || workspace.codexBuildHandoff.branchName}, client ${workspace.input.clientName}. second review=${releaseGateInput.secondReviewPassed ? "pass" : "pending"} app qa=${releaseGateInput.appQaPassed ? "pass" : "pending"} Robert approval=${releaseGateInput.robertApprovedDeploy ? "approved" : "pending"}.`,
         }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo registrar release gate");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const deliveryWorkspacePrStatusMutation = useMutation<DeliveryWorkspacePrStatusResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/pr-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          prUrl: releaseGateInput.prUrl,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo revisar el PR");
+      return data;
+    },
+    onSuccess: (data) => {
+      const workspaceId = data.workspace?.id;
+      if (!workspaceId) return;
+      const patch: DeliveryWorkspaceReleaseGateInput = {};
+      if (data.prStatus?.pr.htmlUrl) patch.prUrl = data.prStatus.pr.htmlUrl;
+      if (data.prStatus?.secondReviewEvidenceUrl) {
+        patch.secondReviewEvidenceUrl = data.prStatus.secondReviewEvidenceUrl;
+        patch.secondReviewPassed = true;
+      }
+      if (data.prStatus?.appQaEvidenceUrl) {
+        patch.appQaEvidenceUrl = data.prStatus.appQaEvidenceUrl;
+        patch.appQaPassed = true;
+      }
+      updateReleaseGateInput(workspaceId, patch);
+    },
+  });
+
+  const deliveryWorkspaceAppQaGateMutation = useMutation<DeliveryWorkspaceAppQaGateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/app-qa-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          prUrl: releaseGateInput.prUrl,
+          notify: false,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo correr App QA");
+      return data;
+    },
+    onSuccess: (data) => {
+      const workspaceId = data.workspace?.id;
+      if (!workspaceId) return;
+      const patch: DeliveryWorkspaceReleaseGateInput = {};
+      if (data.prStatus?.pr.htmlUrl) patch.prUrl = data.prStatus.pr.htmlUrl;
+      if (data.status === "pass" && data.appQaEvidenceUrl) {
+        patch.appQaEvidenceUrl = data.appQaEvidenceUrl;
+        patch.appQaPassed = true;
+      }
+      updateReleaseGateInput(workspaceId, patch);
+    },
+  });
+
+  const deliveryWorkspaceGithubHandoffMutation = useMutation<DeliveryWorkspaceGithubHandoffResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/github-handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          repoFullName: workspace.input.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo crear el handoff GitHub");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const deliveryWorkspaceDeliverMutation = useMutation<DeliveryWorkspaceDeliverResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/trusted-deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: buildCopyableTrustedDeliverRequest(workspace),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo marcar entrega");
@@ -1623,18 +3352,24 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const approvalDecisionMutation = useMutation<{ decision: RevenueSnapshot["recentApprovalDecisions"][number]; snapshot: RevenueSnapshot }>({
-    mutationFn: async () => {
-      const firstQueueItem = snapshot?.approvalQueueItems?.[0];
+  const approvalDecisionMutation = useMutation<
+    { decision: RevenueSnapshot["recentApprovalDecisions"][number]; snapshot: RevenueSnapshot },
+    Error,
+    RevenueSnapshot["approvalQueueItems"][number] | null
+  >({
+    mutationFn: async (queueItem) => {
+      if (approvalQueue.length > 0 && !queueItem) {
+        throw new Error("Selecciona un item de approval queue antes de registrar la decision");
+      }
       const response = await fetch("/api/revenue-engine/approval-decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          targetId: firstQueueItem?.id || "manual",
-          targetType: firstQueueItem?.source || "manual",
-          decision: "approved",
-          approvedAction: approvalAction,
-          maxSpendUsd: 0,
+          targetId: queueItem?.id || "manual",
+          targetType: queueItem?.source || "manual",
+          decision: approvalDecisionValue,
+          approvedAction: queueItem?.action || approvalAction,
+          maxSpendUsd: approvalMaxSpendUsd,
           notes: approvalNotes,
         }),
       });
@@ -1734,6 +3469,26 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const outreachApproveMutation = useMutation<OutreachApproveResult, Error, string>({
+    mutationFn: async (draftId) => {
+      const response = await fetch("/api/revenue-engine/outreach-drafts/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId,
+          approvedByRobert: true,
+          notes: "Robert aprobo este draft para cola manual; no enviar automaticamente.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo aprobar el draft");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
   const outreachSendMutation = useMutation<OutreachSendResult, Error, string>({
     mutationFn: async (draftId) => {
       const response = await fetch("/api/revenue-engine/outreach-send", {
@@ -1746,6 +3501,33 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo enviar el outreach");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const outreachOutcomeMutation = useMutation<
+    OutreachOutcomeResult,
+    Error,
+    { draftId: string; outcome: RevenueOutreachOutcome; cashCollectedUsd?: number; paymentConfirmation?: string; notes?: string }
+  >({
+    mutationFn: async ({ draftId, outcome, cashCollectedUsd = 0, paymentConfirmation = "", notes = "" }) => {
+      const response = await fetch("/api/revenue-engine/outreach-outcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftId,
+          outcome,
+          outcomeRecordedByRobert: true,
+          cashCollectedUsd,
+          paymentConfirmation,
+          notes,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo registrar el outcome");
       return data;
     },
     onSuccess: () => {
@@ -1817,6 +3599,189 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicLeadCandidateMutation = useMutation<RevenuePublicLeadCandidateResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: leadBusinessName,
+          area: leadArea,
+          niche: leadNiche,
+          websiteStatus: leadWebsiteStatus,
+          contactChannel: leadContactChannel,
+          contactValue: leadContactValue,
+          evidence: leadEvidence,
+          painPoint: leadPainPoint,
+          estimatedOfferUsd: leadEstimatedOfferUsd,
+          status: "research",
+          sourceUrl: leadSourceUrl,
+          recipientEmail: leadRecipientEmail,
+          contactName: leadContactName,
+          businessSummary: leadBusinessSummary,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo guardar candidato publico");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.importBatchText);
+      setCandidateRobertApprovedImport(false);
+      refetchSnapshot();
+    },
+  });
+
+  const publicLeadCandidateApproveMutation = useMutation<RevenuePublicLeadCandidateApproveResult, Error, string>({
+    mutationFn: async (candidateId) => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateId,
+          approvedByRobert: true,
+          publicEvidenceVerified: true,
+          approvalToImport: true,
+          notes: "Approved from Revenue Engine public candidate queue.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo aprobar candidato publico");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.importBatchText) setSeedLeadBatchText(data.importBatchText);
+      refetchSnapshot();
+    },
+  });
+
+  const publicLeadCandidateBatchMutation = useMutation<RevenuePublicLeadCandidateBatchResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          batchText: seedLeadBatchText,
+          sourceTaskId: activeScoutSourceTaskId,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
+          notes: "Recorded from Revenue Engine batch candidates UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo guardar batch publico");
+      return data;
+    },
+    onSuccess: () => {
+      setCandidateRobertApprovedImport(false);
+      refetchSnapshot();
+    },
+  });
+
+  const publicScoutEvidenceMutation = useMutation<RevenuePublicScoutEvidenceResult | RevenueDailyScoutSprintSubmitResult>({
+    mutationFn: async () => {
+      const hasActiveSprint = Boolean(snapshot?.latestDailyScoutSprint?.id);
+      const response = await fetch(hasActiveSprint ? "/api/revenue-engine/daily-scout-sprint/submit" : "/api/revenue-engine/public-scout-evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(hasActiveSprint ? { sprintId: snapshot?.latestDailyScoutSprint?.id, taskId: activeScoutSourceTaskId } : {}),
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          evidenceText: publicScoutEvidenceText,
+          missionId: snapshot?.latestDailyScoutSprint?.id || "",
+          sourceTaskId: activeScoutSourceTaskId,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
+          defaultOfferUsd: leadEstimatedOfferUsd,
+          maxCandidates: Math.min(activeScoutTarget, 50),
+          notes: "Normalized from Revenue Engine public scout evidence UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo normalizar evidencia publica");
+      return data;
+    },
+    onSuccess: (data) => {
+      const evidenceResult = "evidenceResult" in data ? data.evidenceResult : data;
+      setSeedLeadBatchText(evidenceResult?.normalizedBatchText || "");
+      setCandidateRobertApprovedImport(false);
+      refetchSnapshot();
+    },
+  });
+
+  const publicScoutConnectorIntakeMutation = useMutation<RevenueVerifiedScoutConnectorIntakeResult>({
+    mutationFn: async () => {
+      const request = buildPublicScoutConnectorIntakeRequest(publicScoutConnectorResultsJson, {
+        activeScoutArea,
+        activeScoutNiche,
+        missionId: snapshot?.latestDailyScoutSprint?.id || "",
+        sourceTaskId: activeScoutSourceTaskId,
+        connectorName: publicScoutConnectorName,
+        connectorRunId: publicScoutConnectorRunId,
+      });
+
+      const response = await fetch(request.endpoint, request.init);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo guardar connector intake");
+      return data;
+    },
+    onSuccess: (data) => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicScoutAgentCommandMutation = useMutation<RevenuePublicScoutAgentCommandResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-scout-agent-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          offerFocus: activeScoutOfferFocus,
+          evidenceText: publicScoutEvidenceText,
+          missionId: snapshot?.latestDailyScoutSprint?.id || "",
+          sourceTaskId: activeScoutSourceTaskId,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
+          defaultOfferUsd: leadEstimatedOfferUsd,
+          maxCandidates: Math.min(activeScoutTarget, 50),
+          dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
+          dailyQualifiedLeadLimit: activeScoutTarget,
+          dailyMockupLimit: leadRadarMockupLimit,
+          dailyContactLimit: leadRadarContactLimit,
+          maxPaidDataSpendUsd: 0,
+          requireRobertApprovalToContact: true,
+          writePreviewFiles: true,
+          runMoneySprintIfReady: true,
+          maxSprintCandidates: Math.min(activeScoutTarget, 25),
+          notes: "Executed from Revenue Engine public scout agent command UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr scout agent command");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.evidenceResult.normalizedBatchText);
+      setCandidateRobertApprovedImport(false);
       refetchSnapshot();
     },
   });
@@ -1978,6 +3943,17 @@ export default function RevenueEnginePage() {
       ? { run: salesAutopilot.agentRun, snapshot: salesAutopilot.snapshot }
       : undefined
   );
+  const publicScoutEvidenceResult = publicScoutEvidenceMutation.data
+    ? "evidenceResult" in publicScoutEvidenceMutation.data
+      ? publicScoutEvidenceMutation.data.evidenceResult
+      : publicScoutEvidenceMutation.data
+    : null;
+  const publicScoutEvidenceSummary = publicScoutEvidenceMutation.data
+    ? "evidenceResult" in publicScoutEvidenceMutation.data
+      ? publicScoutEvidenceMutation.data.reason
+      : publicScoutEvidenceMutation.data.nextAction
+    : "";
+  const publicScoutEvidenceStatus = publicScoutEvidenceMutation.data?.status || "review";
 
   function toggleReviewCheck(key: keyof typeof reviewChecks) {
     setReviewChecks((current) => ({ ...current, [key]: !current[key] }));
@@ -2071,6 +4047,243 @@ export default function RevenueEnginePage() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6 border-cyan-500/20 bg-zinc-950/90">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[1fr_1fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Rocket className="h-4 w-4 text-cyan-200" />
+                <p className="text-sm font-medium text-white">Activacion de dinero</p>
+                <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.status || "review"), "shrink-0")}>
+                  {snapshot?.moneyActivationPlan.status || "loading"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-lg font-semibold leading-7 text-white">
+                {snapshot?.moneyActivationPlan.headline || "Calculando modo de arranque."}
+              </p>
+              <p className="mt-2 rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2 text-sm leading-6 text-cyan-100">
+                {snapshot?.moneyActivationPlan.nextRobertAction || "Preparar research publico sin contacto externo."}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-3 border-cyan-500/30 bg-black text-cyan-100 hover:bg-cyan-500/10"
+                onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.copyableBrief || "")}
+                data-testid="button-copy-money-activation-brief"
+              >
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Copiar brief
+              </Button>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canStartToday ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-red-500/20 bg-red-500/5 text-red-100")}>
+                  Start {snapshot?.moneyActivationPlan.canStartToday ? "yes" : "no"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canContactBusinesses ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-amber-500/20 bg-amber-500/5 text-amber-100")}>
+                  Contact {snapshot?.moneyActivationPlan.canContactBusinesses ? "yes" : "approval"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canCollectMoney ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-amber-500/20 bg-amber-500/5 text-amber-100")}>
+                  Collect {snapshot?.moneyActivationPlan.canCollectMoney ? "approval" : "wait"}
+                </div>
+                <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canBuildWebsites ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-zinc-800 bg-black text-zinc-300")}>
+                  Build {snapshot?.moneyActivationPlan.canBuildWebsites ? "ready" : "wait"}
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Puede hacer hoy</p>
+              <div className="space-y-2">
+                {(snapshot?.moneyActivationPlan.allowedToday || ["buscar negocios publicos"]).slice(0, 5).map((action) => (
+                  <div key={action} className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    {action}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 mb-2 text-xs uppercase tracking-wide text-zinc-500">Primer sprint</p>
+              <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                <p className="text-sm font-medium text-white">
+                  {snapshot?.moneyActivationPlan.firstSprintPlan.title || "First revenue sprint"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">
+                  {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/scout-dispatch"}
+                </p>
+                <div className="mt-3 rounded-md border border-cyan-500/15 bg-cyan-500/5 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-cyan-100">Gate de evidencia</p>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.evidenceGate.status || "review"), "shrink-0")}>
+                      {snapshot?.moneyActivationPlan.evidenceGate.readyCandidates ?? 0} listos
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-cyan-100/80">
+                    {snapshot?.moneyActivationPlan.evidenceGate.blockedCandidates ?? 0} bloqueados · {snapshot?.moneyActivationPlan.evidenceGate.nextAction || "Guardar candidatos con evidencia publica verificable."}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">
+                    Campos: {(snapshot?.moneyActivationPlan.evidenceGate.requiredFields || []).slice(0, 6).join(", ") || "business, sourceUrl, evidence"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+                  onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.firstSprintPlan.copyableBrief || "")}
+                  data-testid="button-copy-first-sprint-brief"
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copiar sprint
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 ml-2 border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                  onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.firstSprintPlan.copyableDispatchRequest || "")}
+                  data-testid="button-copy-first-sprint-dispatch-request"
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copiar dispatch
+                </Button>
+                <div className="mt-3 space-y-2">
+                  {(snapshot?.moneyActivationPlan.firstSprintPlan.steps || []).map((step) => (
+                    <div key={step.id} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-medium text-zinc-100">{step.label}</p>
+                        {step.approvalRequired && (
+                          <Badge variant="outline" className={cn(statusTone("approval_required"), "shrink-0")}>
+                            approval
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{step.action}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-revenue-path-to-paid-build">
+                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-100">Ruta a website cobrado</p>
+                  <div className="mt-2 space-y-2">
+                    {(snapshot?.moneyActivationPlan.firstSprintPlan.revenuePath || []).map((stage) => (
+                      <div key={stage.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">{stage.label}</p>
+                          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-100">
+                            {stage.apiAction}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{stage.output}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{stage.gate}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Checklist produccion</p>
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3" data-testid="panel-production-launch-checklist">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.productionLaunchChecklist.status || "blocked"), "shrink-0")}>
+                    {snapshot?.moneyActivationPlan.productionLaunchChecklist.status || "blocked"}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
+                    onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.productionLaunchChecklist.copyableChecklist || "")}
+                    data-testid="button-copy-production-launch-checklist"
+                  >
+                    <Copy className="mr-1.5 h-3 w-3" />
+                    Copy
+                  </Button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(snapshot?.moneyActivationPlan.productionLaunchChecklist.requiredEvidence || []).slice(0, 4).map((item) => (
+                    <div key={item.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-medium text-amber-100">{item.label}</p>
+                        <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0 text-[10px]")}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-md border border-zinc-800 bg-black px-3 py-2" data-testid="panel-deployment-approval-packet">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-amber-100">Deploy approval packet</p>
+                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-100">
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.status || "waiting"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">
+                    {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.deployApprovalAsk || "Esperando evidencia PR/QA/rollback."}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    Rollback: {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan || "Pendiente"}
+                  </p>
+                </div>
+                <div className="mt-3 rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2" data-testid="panel-production-setup-packet">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-cyan-100">
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.title || "Production setup packet"}
+                    </p>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status || "blocked"), "shrink-0 text-[10px]")}>
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status || "blocked"}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv || []).slice(0, 2).map((item) => (
+                      <div key={item.key} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">{item.key}</p>
+                          <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0 text-[10px]")}>
+                            {item.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                        <p className="mt-1 font-mono text-[11px] leading-5 text-cyan-100/80">{item.verifyCommand}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 h-7 border-cyan-500/30 bg-black text-xs text-cyan-100 hover:bg-cyan-500/10"
+                    onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket || "")}
+                    data-testid="button-copy-production-setup-packet"
+                  >
+                    <Copy className="mr-1.5 h-3 w-3" />
+                    Copy setup
+                  </Button>
+                </div>
+              </div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Falta para money mode real</p>
+              <div className="space-y-2">
+                {(snapshot?.moneyActivationPlan.missingBeforeRealMoney || []).slice(0, 4).map((item) => (
+                  <div key={item.id} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                    <p className="text-sm font-medium text-amber-100">{item.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-amber-100/80">{item.nextStep}</p>
+                  </div>
+                ))}
+                {snapshot?.moneyActivationPlan.missingBeforeRealMoney.length === 0 && (
+                  <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    Sin bloqueos de activacion.
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 mb-2 text-xs uppercase tracking-wide text-zinc-500">Bloqueado hasta aprobar</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(snapshot?.moneyActivationPlan.blockedUntilApproved || []).slice(0, 6).map((item) => (
+                  <div key={item} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-300">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="mb-6 border-emerald-500/20 bg-zinc-950/90">
           <CardContent className="grid gap-4 p-4 xl:grid-cols-[260px_1fr_360px]">
             <div>
@@ -2097,6 +4310,39 @@ export default function RevenueEnginePage() {
                     {step}
                   </div>
                 ))}
+              </div>
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-100">Paquete ejecutable de hoy</p>
+                    <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+                      {snapshot?.launchReadiness.todayExecutionPack?.mission || "Buscar negocios publicos con evidencia verificable."}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={cn(statusTone(snapshot?.launchReadiness.todayExecutionPack?.status || "review"), "shrink-0")}>
+                    {snapshot?.launchReadiness.todayExecutionPack?.status || "review"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Owner {snapshot?.launchReadiness.todayExecutionPack?.ownerAgent || "lead-scout"}
+                </p>
+                <p className="mt-3 rounded-md border border-black/30 bg-black/40 px-3 py-2 text-xs leading-5 text-zinc-300">
+                  {snapshot?.launchReadiness.todayExecutionPack?.copyableAgentCommand || "Find public no-website leads. Do not contact or spend."}
+                </p>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Research {snapshot?.launchReadiness.todayExecutionPack?.runLimits.researchTarget ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Import {snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxQualifiedRowsToImport ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Mockups {snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxMockups ?? 0}
+                  </div>
+                  <div className="rounded-md border border-zinc-800 bg-black px-2 py-2 text-zinc-300">
+                    Spend ${snapshot?.launchReadiness.todayExecutionPack?.runLimits.maxPaidSpendUsd ?? 0}
+                  </div>
+                </div>
               </div>
             </div>
             <div>
@@ -2245,8 +4491,61 @@ export default function RevenueEnginePage() {
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Decision manual</p>
               <div className="space-y-2">
+                <select
+                  value={selectedApprovalTargetId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    const nextItem = approvalQueue.find((item) => item.id === nextId) || null;
+                    setSelectedApprovalTargetId(nextId);
+                    if (nextItem) setApprovalAction(nextItem.action);
+                  }}
+                  className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm text-white"
+                  data-testid="select-approval-target"
+                >
+                  {approvalQueue.length === 0 ? (
+                    <option value="">Manual</option>
+                  ) : (
+                    approvalQueue.map((item) => (
+                      <option key={`${item.source}-${item.id}`} value={item.id}>
+                        {item.source}: {item.title} - {item.status}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={approvalDecisionValue}
+                    onChange={(event) => setApprovalDecisionValue(event.target.value as typeof approvalDecisionValue)}
+                    className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm text-white"
+                    data-testid="select-approval-decision"
+                  >
+                    <option value="approved">Aprobar</option>
+                    <option value="needs_changes">Cambios</option>
+                    <option value="rejected">Rechazar</option>
+                  </select>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={approvalMaxSpendUsd}
+                    onChange={(event) => setApprovalMaxSpendUsd(Number(event.target.value))}
+                    className="border-zinc-800 bg-black"
+                    data-testid="input-approval-max-spend"
+                  />
+                </div>
+                {selectedApprovalQueueItem && (
+                  <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-medium text-white">{selectedApprovalQueueItem.title}</p>
+                      <Badge variant="outline" className={cn(statusTone(selectedApprovalQueueItem.priority === "high" ? "blocked" : "draft"), "shrink-0")}>
+                        {selectedApprovalQueueItem.source}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">{selectedApprovalQueueItem.action}</p>
+                  </div>
+                )}
                 <Input
-                  value={approvalAction}
+                  value={approvalActionForSubmit}
                   onChange={(event) => setApprovalAction(event.target.value)}
                   className="border-zinc-800 bg-black"
                   data-testid="input-approval-action"
@@ -2259,8 +4558,8 @@ export default function RevenueEnginePage() {
                 />
                 <Button
                   type="button"
-                  disabled={approvalDecisionMutation.isPending}
-                  onClick={() => approvalDecisionMutation.mutate()}
+                  disabled={approvalDecisionMutation.isPending || (approvalQueue.length > 0 && !selectedApprovalQueueItem)}
+                  onClick={() => approvalDecisionMutation.mutate(selectedApprovalQueueItem)}
                   className="w-full bg-sky-600 text-white hover:bg-sky-500"
                   data-testid="button-record-approval-decision"
                 >
@@ -2280,6 +4579,246 @@ export default function RevenueEnginePage() {
                     <p className="mt-1 text-xs text-zinc-500">{decision.guardrail.reason}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-emerald-500/20 bg-zinc-950/90">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[240px_1fr_320px]">
+            <div>
+              <div className="flex items-center gap-2">
+                <MessageSquareText className="h-4 w-4 text-emerald-200" />
+                <p className="text-sm font-medium text-white">Outreach manual hoy</p>
+              </div>
+              <Badge variant="outline" className={cn("mt-3", statusTone(snapshot?.manualOutreachQueue.status || "review"))}>
+                {snapshot?.manualOutreachQueue.status || "loading"}
+              </Badge>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-100">
+                  Listos {snapshot?.manualOutreachQueue.readyCount ?? 0}/{snapshot?.manualOutreachQueue.dailyContactLimit ?? 10}
+                </div>
+                <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-amber-100">
+                  Bloqueados {snapshot?.manualOutreachQueue.blockedCount ?? 0}
+                </div>
+                <div className="rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-sky-100">
+                  Overflow {snapshot?.manualOutreachQueue.overflowCount ?? 0}
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-zinc-400">
+                {snapshot?.manualOutreachQueue.nextAction || "Cargando cola de contacto manual."}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Contactar</p>
+              <div className="grid max-h-[260px] gap-2 overflow-auto pr-1 md:grid-cols-2">
+                {(snapshot?.manualOutreachQueue.items || []).length === 0 ? (
+                  <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-400">
+                    Sin drafts aprobados para contacto manual.
+                  </div>
+                ) : (
+                  (snapshot?.manualOutreachQueue.items || []).map((item) => (
+                    <div key={item.draftId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">{item.businessName}</p>
+                          <p className="mt-1 truncate text-xs text-zinc-500">{item.subject}</p>
+                        </div>
+                        <Badge variant="outline" className={cn(item.priority === "high" ? statusTone("ready_to_start") : statusTone("draft"), "shrink-0")}>
+                          {item.channel}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">{item.manualAction}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a href={item.contactUrl} target="_blank" rel="noreferrer">
+                          <Button type="button" size="sm" className="h-8 bg-emerald-600 text-white hover:bg-emerald-500">
+                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            Abrir
+                          </Button>
+                        </a>
+                        {item.fallbackUrl && (
+                          <a href={item.fallbackUrl}>
+                            <Button type="button" size="sm" variant="outline" className="h-8 border-zinc-700">
+                              <Send className="mr-2 h-3.5 w-3.5" />
+                              Mailto
+                            </Button>
+                          </a>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-zinc-700"
+                          onClick={() => navigator.clipboard.writeText(item.copyableContactPacket)}
+                          data-testid={`button-copy-manual-outreach-packet-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy message
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableCloseEvidencePacket)}
+                          data-testid={`button-copy-manual-close-evidence-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy close
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-sky-700 text-sky-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableOutcomeRequests.contacted)}
+                          data-testid={`button-copy-manual-outreach-contacted-request-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy contacted
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableOutcomeRequests.depositCollected)}
+                          data-testid={`button-copy-manual-outreach-deposit-request-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy deposit
+                        </Button>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300">
+                          Setup {money.format(item.estimatedSetupUsd)}
+                        </div>
+                        <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2 py-1.5 text-emerald-100">
+                          Deposito {money.format(item.depositUsd)}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-zinc-700"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "contacted",
+                            notes: "Robert registro contacto manual desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-contacted-${item.draftId}`}
+                        >
+                          Contacted
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-sky-700 text-sky-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "reply",
+                            notes: "Robert registro reply manual desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-reply-${item.draftId}`}
+                        >
+                          Reply
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-violet-700 text-violet-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "call_booked",
+                            notes: "Robert registro llamada agendada desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-call-${item.draftId}`}
+                        >
+                          Call
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          disabled={outreachOutcomeMutation.isPending || item.depositUsd <= 0}
+                          onClick={() => {
+                            const paymentConfirmation = requestDepositPaymentConfirmation(item.businessName, item.depositUsd);
+                            if (!paymentConfirmation) return;
+                            outreachOutcomeMutation.mutate({
+                              draftId: item.draftId,
+                              outcome: "deposit_collected",
+                              cashCollectedUsd: item.depositUsd,
+                              paymentConfirmation,
+                              notes: "Robert confirmo deposito manual desde la cola diaria; cerrar oportunidad website con scope antes de delivery.",
+                            });
+                          }}
+                          data-testid={`button-record-manual-outreach-deposit-${item.draftId}`}
+                        >
+                          Deposit
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-red-900 text-red-100"
+                          disabled={outreachOutcomeMutation.isPending}
+                          onClick={() => outreachOutcomeMutation.mutate({
+                            draftId: item.draftId,
+                            outcome: "lost",
+                            notes: "Robert marco el lead como perdido desde la cola diaria.",
+                          })}
+                          data-testid={`button-record-manual-outreach-lost-${item.draftId}`}
+                        >
+                          Lost
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">No tocar todavia</p>
+              <div className="max-h-[260px] space-y-2 overflow-auto pr-1">
+                {(snapshot?.manualOutreachQueue.blocked || []).length === 0 ? (
+                  <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-100">
+                    Sin drafts bloqueados.
+                  </div>
+                ) : (
+                  (snapshot?.manualOutreachQueue.blocked || []).map((item) => (
+                    <div key={item.draftId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium text-white">{item.businessName}</p>
+                        <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0")}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{item.reason}</p>
+                      {item.status === "draft" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={outreachApproveMutation.isPending}
+                          onClick={() => outreachApproveMutation.mutate(item.draftId)}
+                          className="mt-2 h-8 border-sky-700 text-sky-100"
+                          data-testid={`button-approve-manual-outreach-draft-${item.draftId}`}
+                        >
+                          {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-2 h-3.5 w-3.5" />}
+                          Aprobar draft
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </CardContent>
@@ -2745,6 +5284,150 @@ export default function RevenueEnginePage() {
                           Incluir websites debiles
                         </label>
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="seed-lead-batch">
+                          Batch leads
+                        </label>
+                        <Textarea
+                          id="seed-lead-batch"
+                          value={seedLeadBatchText}
+                          onChange={(event) => setSeedLeadBatchText(event.target.value)}
+                          className="min-h-[110px] border-zinc-800 bg-black"
+                          placeholder="Business | Area | Niche | no_website | email | owner@site.com | https://source-url | owner@site.com | public evidence | pain point | 3500"
+                          data-testid="textarea-seed-lead-batch"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-evidence">
+                          Evidencia publica scout
+                        </label>
+                        <Textarea
+                          id="public-scout-evidence"
+                          value={publicScoutEvidenceText}
+                          onChange={(event) => setPublicScoutEvidenceText(event.target.value)}
+                          className="min-h-[150px] border-zinc-800 bg-black"
+                          placeholder={"Business: No Site Cafe\nArea: Miami\nNiche: coffee shop\nWebsite: no website\nContact: @nositecafe\nEmail: owner@example.com\nSource: https://instagram.com/nositecafe\nEvidence: Instagram activo, no website en bio, menu solo en posts publicos.\nPain: Necesita menu online, captura de catering y follow-up."}
+                          data-testid="textarea-public-scout-evidence"
+                        />
+                        <div className="grid gap-2 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300 md:grid-cols-3">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidatePublicEvidenceVerified}
+                              onChange={(event) => setCandidatePublicEvidenceVerified(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-evidence-verified"
+                            />
+                            Evidencia publica verificada
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidateApprovalToImport}
+                              onChange={(event) => setCandidateApprovalToImport(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-approval-import"
+                            />
+                            Aprobar import a Money Sprint
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidateRobertApprovedImport}
+                              onChange={(event) => setCandidateRobertApprovedImport(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-robert-approved-import"
+                            />
+                            Robert aprobó import
+                          </label>
+                        </div>
+                        <Button
+                          type="button"
+                          disabled={publicScoutEvidenceMutation.isPending || publicScoutEvidenceText.trim().length < 10}
+                          onClick={() => publicScoutEvidenceMutation.mutate()}
+                          className="w-full bg-cyan-700 text-white hover:bg-cyan-600"
+                          data-testid="button-normalize-public-scout-evidence"
+                        >
+                          {publicScoutEvidenceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                          {snapshot?.latestDailyScoutSprint ? "Submitir slot del sprint" : "Normalizar evidencia publica"}
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={!latestDailyScoutSlotText}
+                          onClick={() => {
+                            setSelectedDailyScoutTaskId(activeScoutSourceTaskId);
+                            setPublicScoutEvidenceText(latestDailyScoutSlotText);
+                          }}
+                          className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                          data-testid="button-load-daily-scout-slots"
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Cargar slots del sprint
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={publicScoutAgentCommandMutation.isPending || publicScoutEvidenceText.trim().length < 10}
+                          onClick={() => publicScoutAgentCommandMutation.mutate()}
+                          className="w-full bg-emerald-700 text-white hover:bg-emerald-600"
+                          data-testid="button-run-public-scout-agent-command"
+                        >
+                          {publicScoutAgentCommandMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                          Scout a Money Sprint
+                        </Button>
+                      </div>
+                      <div className="space-y-3 rounded-md border border-zinc-800 bg-black p-3">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-name">
+                              Connector
+                            </label>
+                            <Input
+                              id="public-scout-connector-name"
+                              value={publicScoutConnectorName}
+                              onChange={(event) => setPublicScoutConnectorName(event.target.value)}
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-public-scout-connector-name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-run">
+                              Run id
+                            </label>
+                            <Input
+                              id="public-scout-connector-run"
+                              value={publicScoutConnectorRunId}
+                              onChange={(event) => setPublicScoutConnectorRunId(event.target.value)}
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-public-scout-connector-run"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-results">
+                            Connector payload or results JSON
+                          </label>
+                          <Textarea
+                            id="public-scout-connector-results"
+                            value={publicScoutConnectorResultsJson}
+                            onChange={(event) => setPublicScoutConnectorResultsJson(event.target.value)}
+                            className="min-h-[150px] border-zinc-800 bg-black font-mono text-xs"
+                            data-testid="textarea-public-scout-connector-results"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          disabled={publicScoutConnectorIntakeMutation.isPending || publicScoutConnectorResultsJson.trim().length < 5}
+                          onClick={() => publicScoutConnectorIntakeMutation.mutate()}
+                          className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                          data-testid="button-record-public-scout-connector-intake"
+                        >
+                          {publicScoutConnectorIntakeMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                          Guardar connector review-only
+                        </Button>
+                        <p className="text-xs leading-5 text-zinc-500">
+                          Connector intake guarda candidatos para revision; no importa leads, no manda outreach, no gasta y no publica websites.
+                        </p>
+                      </div>
                       <Button
                         type="submit"
                         disabled={scoutingMissionMutation.isPending}
@@ -2763,6 +5446,39 @@ export default function RevenueEnginePage() {
                       >
                         {leadRadarMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
                         Radar 24/7
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={moneySprintPreviewMutation.isPending}
+                        onClick={() => moneySprintPreviewMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-preview-money-sprint"
+                      >
+                        {moneySprintPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                        Preview batch
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={publicLeadCandidateBatchMutation.isPending || seedLeadBatchText.trim().length === 0}
+                        onClick={() => publicLeadCandidateBatchMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-save-public-candidate-batch"
+                      >
+                        {publicLeadCandidateBatchMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Guardar batch publico
+                      </Button>
+                      <p className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs leading-5 text-zinc-500">
+                        Usa los checks de evidencia/aprobacion para todas las filas del batch pegado; guarda candidatos, no leads reales ni mensajes.
+                      </p>
+                      <Button
+                        type="button"
+                        disabled={moneySprintMutation.isPending}
+                        onClick={() => moneySprintMutation.mutate()}
+                        className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                        data-testid="button-run-money-sprint"
+                      >
+                        {moneySprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                        Money sprint
                       </Button>
                     </form>
                   </CardContent>
@@ -2874,8 +5590,619 @@ export default function RevenueEnginePage() {
                       </div>
                     )}
                   </CardContent>
-                </Card>
+              </Card>
               </div>
+
+              <Card className="mb-4 border-sky-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">{snapshot?.dailyMoneyCommand.headline || "Comando diario de dinero"}</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.dailyMoneyCommand.primaryAction || "Cargando siguiente accion."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.dailyMoneyCommand.status || "review"), "shrink-0")}>
+                      {snapshot?.dailyMoneyCommand.status || "loading"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-4 xl:grid-cols-[1fr_320px]">
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                      <p className="text-xs uppercase tracking-wide text-sky-200">Target</p>
+                      <p className="mt-2 text-lg font-semibold text-white">{snapshot?.dailyMoneyCommand.target || "Preparando target."}</p>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.dailyMoneyCommand.steps || []).map((step) => (
+                        <div key={step.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{step.label}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{step.metric}</p>
+                            </div>
+                            <Badge variant="outline" className={cn(statusTone(step.status), "shrink-0")}>{step.status}</Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">{step.nextAction}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Funnel hoy</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Research</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.researchTarget ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Candidatos</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.candidatesReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Paquetes</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.salesPacketsReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Contactos</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.manualContactsReady ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Scope</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.websiteClosuresPending ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Build PR</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{snapshot?.dailyMoneyCommand.funnel.buildHandoffsOpen ?? 0}</p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs text-zinc-500">Cash</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{money.format(snapshot?.dailyMoneyCommand.funnel.cashCollectedUsd ?? 0)}</p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full border-zinc-700 bg-zinc-950"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.copyableOperatorBrief || "")}
+                      data-testid="button-copy-daily-money-command"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy daily command
+                    </Button>
+                    <div className="mt-3 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2" data-testid="panel-daily-run-packet">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-sky-100">Next run packet</p>
+                        <Badge variant="outline" className={cn(statusTone(snapshot?.dailyMoneyCommand.runPacket.status || "review"), "shrink-0")}>
+                          {snapshot?.dailyMoneyCommand.runPacket.status || "loading"}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        {snapshot?.dailyMoneyCommand.runPacket.apiAction || "/api/revenue-engine/scout-dispatch"}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">
+                        {snapshot?.dailyMoneyCommand.runPacket.gate || "Esperando guardrails."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.runPacket.copyableRunPacket || "")}
+                      data-testid="button-copy-daily-run-packet"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy next run
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 w-full border-zinc-700 bg-zinc-950"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest || "")}
+                      data-testid="button-copy-daily-run-api-request"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy API request
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!canRunDailyMoneyNextAction || dailyMoneyRunMutation.isPending}
+                      className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                      onClick={() => dailyMoneyRunMutation.mutate()}
+                      data-testid="button-run-daily-money-safe-action"
+                    >
+                      {dailyMoneyRunMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Rocket className="mr-2 h-3.5 w-3.5" />}
+                      Run next safe action
+                    </Button>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500" data-testid="text-daily-money-safe-action-gate">
+                      {canRunDailyMoneyNextAction
+                        ? `Safe direct run: ${dailyMoneyRunPacket?.apiAction}`
+                        : dailyMoneyRunBlockedReason}
+                    </p>
+                    {dailyMoneyRunMutation.data && (
+                      <div className="mt-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2" data-testid="panel-daily-money-safe-action-result">
+                        <p className="text-xs font-medium text-emerald-100">
+                          Resultado: {String(dailyMoneyRunMutation.data.status || "ok")}
+                        </p>
+                        {"reason" in dailyMoneyRunMutation.data && (
+                          <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+                            {String(dailyMoneyRunMutation.data.reason || "")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {dailyMoneyRunMutation.error && (
+                      <p className="mt-2 text-xs leading-5 text-red-300" data-testid="text-daily-money-safe-action-error">
+                        {dailyMoneyRunMutation.error.message}
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {(snapshot?.websiteBuildHandoffQueue.openCount ?? 0) > 0 && (
+                <Card className="mb-4 border-sky-500/20 bg-zinc-950/80" data-testid="panel-website-build-handoff-queue">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="text-base">Builds website PR-first</CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {snapshot?.websiteBuildHandoffQueue.nextAction}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">
+                        {snapshot?.websiteBuildHandoffQueue.openCount ?? 0} abiertos
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 xl:grid-cols-2">
+                    {(snapshot?.websiteBuildHandoffQueue.items || []).map((item) => (
+                      <div key={item.workspaceId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">{item.clientName}</p>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {item.projectType} · {money.format(item.setupUsd)} · {item.workspaceId}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">needs PR</Badge>
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge variant="outline" className="border-zinc-700 text-zinc-300">{item.branchName}</Badge>
+                          {item.repoFullName && (
+                            <Badge variant="outline" className="border-zinc-700 text-zinc-300">{item.repoFullName}</Badge>
+                          )}
+                        </div>
+                        {item.missing.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {item.missing.slice(0, 4).map((missing) => (
+                              <p key={`${item.workspaceId}-${missing}`} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1 text-xs text-amber-100">
+                                {missing}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-zinc-700"
+                            onClick={() => navigator.clipboard.writeText(item.publicBuildBrief)}
+                            data-testid={`button-copy-website-build-brief-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy public brief
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                            onClick={() => navigator.clipboard.writeText(item.buildPack.copyableBuildPack)}
+                            data-testid={`button-copy-website-build-pack-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy build pack
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-zinc-700"
+                            onClick={() => navigator.clipboard.writeText(item.copyableGithubHandoffRequest)}
+                            data-testid={`button-copy-website-github-handoff-request-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy handoff JSON
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-indigo-500/30 text-indigo-100"
+                            onClick={() => navigator.clipboard.writeText(item.copyableReleaseGateRequest)}
+                            data-testid={`button-copy-website-release-gate-request-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy release JSON
+                          </Button>
+                          {item.githubIssueUrl && (
+                            <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Issue
+                              </Button>
+                            </a>
+                          )}
+                          {item.prUrl && (
+                            <a href={item.prUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                PR
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Cola de busqueda publica</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.businessScoutQueue.nextAction || "Cargando cola de busqueda."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.businessScoutQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.businessScoutQueue.source === "latest_scouting_mission" ? "mision activa" : "default"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-4 xl:grid-cols-[1fr_360px]">
+                  <div className="space-y-3">
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.businessScoutQueue.tasks || []).slice(0, 6).map((task) => (
+                        <a
+                          key={task.id}
+                          href={task.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-lg border border-zinc-800 bg-black p-3 transition hover:border-emerald-500/40"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{task.query}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{task.ownerAgent} · {task.source}</p>
+                            </div>
+                            <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-500">{task.evidenceToCapture.join(" · ")}</p>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Work pack</p>
+                    <p className="mt-2 text-sm text-zinc-300">
+                      {snapshot?.businessScoutQueue.area || "Miami"} · {snapshot?.businessScoutQueue.niche || "restaurants"} · {snapshot?.businessScoutQueue.workPack.targetRows ?? 0} filas
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-emerald-400 text-black hover:bg-emerald-300"
+                        onClick={() => dailyScoutSprintMutation.mutate()}
+                        disabled={dailyScoutSprintMutation.isPending}
+                        data-testid="button-start-daily-scout-sprint"
+                      >
+                        {dailyScoutSprintMutation.isPending ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Search className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Start scout sprint
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-cyan-600 text-white hover:bg-cyan-500"
+                        onClick={() => scoutDispatchMutation.mutate()}
+                        disabled={scoutDispatchMutation.isPending}
+                        data-testid="button-dispatch-scout-agents"
+                      >
+                        {scoutDispatchMutation.isPending ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Bot className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        Dispatch scouts
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 bg-zinc-950"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.copyableBatchTemplate || "")}
+                        data-testid="button-copy-live-scout-batch-template"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy rows
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 bg-zinc-950"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.subagentBrief || "")}
+                        data-testid="button-copy-live-scout-brief"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy brief
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-emerald-500/30 bg-zinc-950 text-emerald-100 hover:bg-emerald-500/10"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.searchPlaybook.copyableBrief || "")}
+                        data-testid="button-copy-business-search-playbook"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy playbook
+                      </Button>
+                    </div>
+                    <div className="mt-3 rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-3" data-testid="panel-business-search-playbook">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wide text-emerald-200">Playbook de busqueda</p>
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                          {(snapshot?.businessScoutQueue.workPack.searchPlaybook.prioritizedSources || []).length} fuentes
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {(snapshot?.businessScoutQueue.workPack.searchPlaybook.prioritizedSources || []).slice(0, 3).map((item) => (
+                          <div key={`${item.source}-${item.query}`} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                            <p className="text-xs font-medium text-white">{item.source}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{item.query}</p>
+                            <p className="mt-1 text-xs leading-5 text-emerald-100/80">{item.evidenceGoal}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {(snapshot?.businessScoutQueue.workPack.searchPlaybook.opportunitySignals || []).slice(0, 4).map((signal) => (
+                          <div key={signal} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-300">
+                            {signal}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {dailyScoutSprintMutation.error && (
+                      <p className="mt-2 text-xs text-red-300">{dailyScoutSprintMutation.error.message}</p>
+                    )}
+                    {scoutDispatchMutation.error && (
+                      <p className="mt-2 text-xs text-red-300">{scoutDispatchMutation.error.message}</p>
+                    )}
+                    {scoutDispatchMutation.data && (
+                      <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3" data-testid="panel-scout-dispatch">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-cyan-200">Scout dispatch</p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {scoutDispatchMutation.data.dispatch.agentCount} agentes · {scoutDispatchMutation.data.dispatch.taskCount} tareas · {scoutDispatchMutation.data.dispatch.slotCount} slots
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-100">
+                            listo
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-cyan-100/80">{scoutDispatchMutation.data.nextAction}</p>
+                        <div className="mt-3 rounded-md border border-cyan-500/20 bg-black px-3 py-2" data-testid="panel-scout-connector-intake-contract">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-cyan-100">Connector intake</p>
+                            <Badge variant="outline" className="border-cyan-500/30 bg-cyan-500/10 text-cyan-100">
+                              {scoutDispatchMutation.data.dispatch.connectorIntake.executionMode}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">
+                            POST {scoutDispatchMutation.data.dispatch.connectorIntake.endpoint} · max {scoutDispatchMutation.data.dispatch.connectorIntake.maxResults} resultados · import {scoutDispatchMutation.data.dispatch.connectorIntake.approvalLocked ? "bloqueado" : "activo"}
+                          </p>
+                          <p className="mt-1 text-xs text-cyan-100/80">
+                            {scoutDispatchMutation.data.dispatch.connectorIntake.workOrders.length} work orders task-bound
+                          </p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.copyableDispatchBrief || "")}
+                            data-testid="button-copy-scout-dispatch"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy dispatch
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.agentAssignments.map((agent) => agent.copyableBrief).join("\n\n") || "")}
+                            data-testid="button-copy-scout-dispatch-agents"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy agent briefs
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyablePayloadTemplate || "")}
+                            data-testid="button-copy-scout-connector-intake"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy payload template
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableWorkOrders || "")}
+                            data-testid="button-copy-scout-connector-work-orders"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy work orders
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableSubagentCommands || "")}
+                            data-testid="button-copy-scout-subagent-commands"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy subagent commands
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {snapshot?.latestDailyScoutSprint && (
+                      <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-latest-daily-scout-sprint">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-emerald-200">Daily scout sprint</p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {snapshot.latestDailyScoutSprint.area} · {snapshot.latestDailyScoutSprint.niche} · {snapshot.latestDailyScoutSprint.targetRows} slots
+                            </p>
+                            {snapshot.latestDailyScoutSprint.dispatchMode && (
+                              <p className="mt-1 text-xs text-emerald-100/80">
+                                Dispatch: {snapshot.latestDailyScoutSprint.dispatchSummary || snapshot.latestDailyScoutSprint.dispatchMode}
+                              </p>
+                            )}
+                            {snapshot.latestDailyScoutSprint.executionMode && (
+                              <p className="mt-1 text-xs text-amber-100/90">
+                                Execution: {snapshot.latestDailyScoutSprint.executionMode}. Blocked until {snapshot.latestDailyScoutSprint.blockedUntil || "public evidence is verified"}.
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className={cn(statusTone(snapshot.latestDailyScoutSprint.status), "shrink-0")}>
+                            {snapshot.latestDailyScoutSprint.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-emerald-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(snapshot.latestDailyScoutSprint?.copyableOperatorBrief || "")}
+                            data-testid="button-copy-daily-scout-sprint-brief"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy sprint
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-emerald-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(snapshot.latestDailyScoutSprint?.agentBriefs.map((brief) => brief.copyableBrief).join("\n\n") || "")}
+                            data-testid="button-copy-daily-scout-agent-briefs"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy agents
+                          </Button>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {snapshot.latestDailyScoutSprint.tasks.map((task) => {
+                            const openSlotText = task.resultSlots
+                              .filter((slot) => slot.status === "open")
+                              .map((slot) => slot.copyableEvidenceBlock)
+                              .join("\n\n");
+                            return (
+                              <div key={task.taskId} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-medium text-white">{task.taskId} · {task.ownerAgent}</p>
+                                  <span className="text-xs text-zinc-500">
+                                    {task.resultSlots.filter((slot) => slot.status === "filled").length} filled · {task.resultSlots.filter((slot) => slot.status === "open").length} open
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-zinc-500">{task.query}</p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {task.resultSlots.map((slot) => (
+                                    <Badge key={slot.slotId} variant="outline" className={cn("text-[10px]", statusTone(slot.status === "filled" ? "ready" : slot.status === "rejected" ? "blocked" : "review"))}>
+                                      {slot.status}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <Button
+                                    asChild
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                  >
+                                    <a href={task.url} target="_blank" rel="noreferrer" data-testid={`link-open-daily-scout-task-${task.taskId}`}>
+                                      <ExternalLink className="mr-1.5 h-3 w-3" />
+                                      Open search
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                    disabled={!openSlotText}
+                                    onClick={() => {
+                                      setSelectedDailyScoutTaskId(task.taskId);
+                                      setPublicScoutEvidenceText(openSlotText);
+                                    }}
+                                    data-testid={`button-load-daily-scout-task-slots-${task.taskId}`}
+                                  >
+                                    <FileCheck2 className="mr-1.5 h-3 w-3" />
+                                    Load open slots
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 border-zinc-700 bg-zinc-950 text-xs"
+                                    onClick={() => navigator.clipboard.writeText(task.resultSlots.map((slot) => slot.copyableEvidenceBlock).join("\n\n"))}
+                                    data-testid={`button-copy-daily-scout-slots-${task.taskId}`}
+                                  >
+                                    <Copy className="mr-1.5 h-3 w-3" />
+                                    Copy slots
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-3 space-y-2">
+                      {(snapshot?.businessScoutQueue.workPack.importInstructions || []).map((item) => (
+                        <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {leadRadarMutation.data && (
                 <Card className="mb-4 border-fuchsia-500/20 bg-zinc-950/80">
@@ -2955,6 +6282,881 @@ export default function RevenueEnginePage() {
                   </CardContent>
                 </Card>
               )}
+
+              {moneySprintPreviewMutation.data && (
+                <Card className="mb-4 border-zinc-700 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Eye className="h-4 w-4 text-zinc-200" />
+                          Batch preview
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">{moneySprintPreviewMutation.data.safety.nextAction}</p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintPreviewMutation.data.status), "shrink-0")}>
+                        {moneySprintPreviewMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_320px]">
+                    <div className="space-y-3">
+                      {moneySprintPreviewMutation.data.acceptedSeeds.slice(0, 8).map((seed) => (
+                        <div key={`${seed.rowNumber}-${seed.businessName}`} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-white">{seed.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{seed.area} · {seed.niche} · {seed.contactChannel}</p>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-100">
+                              Grade {seed.qualification.grade} · {seed.qualification.score}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            <span className={cn("rounded border px-2 py-1", seed.mockupReady ? "border-emerald-500/30 text-emerald-100" : "border-zinc-700 text-zinc-400")}>
+                              mockup {seed.mockupReady ? "ready" : "blocked"}
+                            </span>
+                            <span className={cn("rounded border px-2 py-1", seed.draftReady ? "border-sky-500/30 text-sky-100" : "border-zinc-700 text-zinc-400")}>
+                              draft {seed.draftReady ? "ready" : "blocked"}
+                            </span>
+                          </div>
+                          {seed.missingForDraft.length > 0 && (
+                            <p className="mt-2 text-xs leading-5 text-amber-100">{seed.missingForDraft.join(" · ")}</p>
+                          )}
+                        </div>
+                      ))}
+                      {moneySprintPreviewMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Blocked rows</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintPreviewMutation.data.blockedSeeds.slice(0, 8).map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Totals</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-zinc-300">
+                          <p>Accepted: {moneySprintPreviewMutation.data.totals.accepted}</p>
+                          <p>Blocked: {moneySprintPreviewMutation.data.totals.blocked}</p>
+                          <p>Mockups: {moneySprintPreviewMutation.data.totals.mockupReady}</p>
+                          <p>Drafts: {moneySprintPreviewMutation.data.totals.draftReady}</p>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Safety</p>
+                        <div className="mt-2 space-y-2 text-sm text-zinc-300">
+                          <p>Persist: {moneySprintPreviewMutation.data.safety.persistsData ? "yes" : "no"}</p>
+                          <p>Preview files: {moneySprintPreviewMutation.data.safety.writesPreviewFiles ? "yes" : "no"}</p>
+                          <p>Outreach send: {moneySprintPreviewMutation.data.safety.sendsOutreach ? "yes" : "no"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {moneySprintMutation.data && (
+                <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <BadgeDollarSign className="h-4 w-4 text-emerald-200" />
+                          Money sprint
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {moneySprintMutation.data.operatingLimits.maxQualifiedLeadsToday} leads · {moneySprintMutation.data.operatingLimits.maxMockupsToday} previews · {moneySprintMutation.data.operatingLimits.externalContactMode}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintMutation.data.status), "shrink-0")}>
+                        {moneySprintMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_360px]">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Scout queue</p>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutQueue.slice(0, 8).map((task) => (
+                            <a
+                              key={task.id}
+                              href={task.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-zinc-800 bg-black p-3 transition hover:border-emerald-500/40"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{task.query}</p>
+                                  <p className="mt-1 text-xs text-zinc-500">{task.ownerAgent} · {task.source}</p>
+                                </div>
+                                <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{task.evidenceToCapture.join(" · ")}</p>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-zinc-500">Scout work pack</p>
+                            <p className="mt-1 text-sm text-zinc-300">
+                              {moneySprintMutation.data.scoutWorkPack.targetRows} filas · {moneySprintMutation.data.scoutWorkPack.safety.allowedAction}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.copyableBatchTemplate)}
+                              data-testid="button-copy-scout-batch-template"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy rows
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.subagentBrief)}
+                              data-testid="button-copy-scout-brief"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy brief
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutWorkPack.importInstructions.map((item) => (
+                            <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {moneySprintMutation.data.previews.length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Previews</p>
+                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            {moneySprintMutation.data.previews.map((preview) => (
+                              <a
+                                key={preview.slug}
+                                href={preview.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 transition hover:border-emerald-400/50"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white">{preview.slug}</p>
+                                  <ExternalLink className="h-4 w-4 shrink-0 text-emerald-200" />
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-zinc-400">{preview.nextAction}</p>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Approval gates</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.approvalGates.map((gate) => (
+                            <div key={gate} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                              {gate}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Next actions</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.nextActions.map((action) => (
+                            <div key={action} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                              {action}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(moneySprintMutation.data.recordedLeads.length > 0 || moneySprintMutation.data.outreachDrafts.length > 0) && (
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Created</p>
+                          <p className="mt-2 text-sm text-zinc-300">
+                            {moneySprintMutation.data.recordedLeads.length} leads · {moneySprintMutation.data.outreachDrafts.length} drafts
+                          </p>
+                        </div>
+                      )}
+                      {moneySprintMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Seed blocked</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintMutation.data.blockedSeeds.map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="mb-4 border-zinc-800 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Candidatos verificados</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.publicLeadImportQueue.nextAction || "Cargando candidatos publicos."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.publicLeadImportQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.publicLeadImportQueue.readyCount ?? 0} listos
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {publicScoutEvidenceResult && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-cyan-100">{publicScoutEvidenceSummary}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutEvidenceStatus), "shrink-0")}>
+                          {publicScoutEvidenceStatus}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutEvidenceResult.parsedCount} detectados · {publicScoutEvidenceResult.recordedCount} guardados · {publicScoutEvidenceResult.importableCount} listos · {publicScoutEvidenceResult.blockedCount} bloqueados
+                      </p>
+                      {publicScoutEvidenceResult.blockedSeeds.length > 0 && (
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {publicScoutEvidenceResult.blockedSeeds.slice(0, 4).map((seed) => (
+                            <div key={`${seed.businessName}-${seed.reason}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                              {seed.businessName}: {seed.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {publicScoutAgentCommandMutation.data && (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-emerald-100">{publicScoutAgentCommandMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutAgentCommandMutation.data.status), "shrink-0")}>
+                          {publicScoutAgentCommandMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutAgentCommandMutation.data.evidenceResult.recordedCount} candidatos · {publicScoutAgentCommandMutation.data.readyCandidateIds.length} listos · {publicScoutAgentCommandMutation.data.sprintResult?.importedCandidateIds.length ?? 0} sprint
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Outreach {publicScoutAgentCommandMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Spend {publicScoutAgentCommandMutation.data.safety.spendsMoney ? "activo" : "cero"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Deploy {publicScoutAgentCommandMutation.data.safety.deploys ? "activo" : "bloqueado"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {publicScoutConnectorIntakeMutation.data && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-cyan-100">{publicScoutConnectorIntakeMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutConnectorIntakeMutation.data.status), "shrink-0")}>
+                          {publicScoutConnectorIntakeMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutConnectorIntakeMutation.data.connector.name} · {publicScoutConnectorIntakeMutation.data.connector.resultCount} enviados · {publicScoutConnectorIntakeMutation.data.recordedCount} guardados · {publicScoutConnectorIntakeMutation.data.importableCount} importables · {publicScoutConnectorIntakeMutation.data.blockedCount} bloqueados
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Review {publicScoutConnectorIntakeMutation.data.safety.requiresRobertReview ? "requerido" : "libre"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Import {publicScoutConnectorIntakeMutation.data.connector.approvalLocked ? "bloqueado" : "activo"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Outreach {publicScoutConnectorIntakeMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {publicLeadCandidateBatchMutation.data && (
+                    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-sky-100">{publicLeadCandidateBatchMutation.data.nextAction}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicLeadCandidateBatchMutation.data.status), "shrink-0")}>
+                          {publicLeadCandidateBatchMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicLeadCandidateBatchMutation.data.recordedCount} guardados · {publicLeadCandidateBatchMutation.data.importableCount} listos · {publicLeadCandidateBatchMutation.data.blockedCount} bloqueados
+                      </p>
+                      {publicLeadCandidateBatchMutation.data.blockedSeeds.length > 0 && (
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {publicLeadCandidateBatchMutation.data.blockedSeeds.slice(0, 4).map((seed) => (
+                            <div key={`${seed.businessName}-${seed.reason}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                              {seed.businessName}: {seed.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {(snapshot?.publicLeadImportQueue.items || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin candidatos aprobados para Money Sprint.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      {(snapshot?.publicLeadImportQueue.items || []).map((item) => (
+                        <div key={item.candidateId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {item.niche} · {item.area} · Grade {item.grade}/{item.score}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                              verificado
+                            </Badge>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.sourceUrl && (
+                              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Fuente
+                                </Button>
+                              </a>
+                            )}
+                            <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+                              {money.format(item.estimatedOfferUsd)}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableApprovalRequest)}
+                              className="border-zinc-700"
+                              data-testid={`button-copy-public-candidate-approval-${item.candidateId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy approval JSON
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(snapshot?.publicLeadImportQueue.blocked || []).length > 0 && (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.publicLeadImportQueue.blocked || []).slice(0, 4).map((item) => (
+                        <div key={item.candidateId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                          <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableRepairPacket)}
+                              className="h-7 border-zinc-700 bg-black text-xs text-zinc-100 hover:bg-zinc-900"
+                              data-testid={`button-copy-public-candidate-repair-${item.candidateId}`}
+                            >
+                              <Copy className="mr-1.5 h-3 w-3" />
+                              Copy repair
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableApprovalRequest)}
+                              className="h-7 border-zinc-700 bg-black text-xs text-zinc-100 hover:bg-zinc-900"
+                              data-testid={`button-copy-public-candidate-approval-${item.candidateId}`}
+                            >
+                              <Copy className="mr-1.5 h-3 w-3" />
+                              Copy approval JSON
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={publicLeadCandidateApproveMutation.isPending}
+                              onClick={() => publicLeadCandidateApproveMutation.mutate(item.candidateId)}
+                              className="h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
+                              data-testid={`button-approve-public-candidate-${item.candidateId}`}
+                            >
+                              {publicLeadCandidateApproveMutation.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+                              Robert approve import
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {publicLeadCandidateApproveMutation.data && (
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-emerald-100">{publicLeadCandidateApproveMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicLeadCandidateApproveMutation.data.status), "shrink-0")}>
+                          {publicLeadCandidateApproveMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        Leads {publicLeadCandidateApproveMutation.data.safety.persistsLeads ? "creados" : "no creados"} · Outreach {publicLeadCandidateApproveMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"} · Spend {publicLeadCandidateApproveMutation.data.safety.spendsMoney ? "activo" : "cero"}
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      disabled={publicCandidateSprintMutation.isPending || (snapshot?.publicLeadImportQueue.readyCount || 0) === 0}
+                      onClick={() => publicCandidateSprintMutation.mutate()}
+                      className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      data-testid="button-run-money-sprint-public-candidates"
+                    >
+                      {publicCandidateSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                      Money sprint con candidatos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={(snapshot?.publicLeadImportQueue.readyCount || 0) === 0}
+                      onClick={() => navigator.clipboard.writeText(snapshot?.publicLeadImportQueue.copyableMoneySprintRequest || "")}
+                      className="border-zinc-700"
+                      data-testid="button-copy-public-candidate-money-sprint-request"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy sprint JSON
+                    </Button>
+                    {publicCandidateSprintMutation.data && (
+                      <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                        {publicCandidateSprintMutation.data.reason} {publicCandidateSprintMutation.data.importedCandidateIds.length} importados.
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4 border-sky-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Paquetes listos para vender website</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        {snapshot?.websiteSalesPacketQueue.nextAction || "Cargando paquetes de venta."}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn(statusTone(snapshot?.websiteSalesPacketQueue.status || "review"), "shrink-0")}>
+                      {snapshot?.websiteSalesPacketQueue.readyCount ?? 0} listos
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(snapshot?.websiteSalesPacketQueue.items || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin paquetes con mockup + oferta listos todavia.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {(snapshot?.websiteSalesPacketQueue.items || []).map((item) => (
+                        <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-white">{item.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {item.niche} · {item.area} · {item.primaryOffer}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="border-sky-500/30 bg-sky-500/10 text-sky-100">
+                              {item.grade}/{item.score}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2">
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Setup</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.estimatedSetupUsd)}</p>
+                            </div>
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Deposito</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.depositUsd)}</p>
+                            </div>
+                            <div className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                              <p className="text-xs text-zinc-500">Retainer</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{money.format(item.monthlyRetainerUsd)}</p>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                          <div className="mt-3 rounded-md border border-emerald-500/15 bg-emerald-500/5 px-3 py-2" data-testid={`panel-website-close-plan-${item.leadId}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-emerald-100">Plan de cierre</p>
+                              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                                {money.format(item.closePlan.requiredDepositUsd)} deposito
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-emerald-100/80">{item.closePlan.nextCloseAction}</p>
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">
+                              Evidencia: {(item.closePlan.paymentEvidenceRequired || []).slice(0, 2).join(" · ")}
+                            </p>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700"
+                              onClick={() => navigator.clipboard.writeText(item.copyableSalesPacket)}
+                              data-testid={`button-copy-website-sales-packet-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy packet
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-700 text-emerald-100"
+                              disabled={item.draftStatus !== "approved"}
+                              onClick={() => navigator.clipboard.writeText(item.closePlan.copyableClosePacket)}
+                              data-testid={`button-copy-website-close-plan-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy close
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700"
+                              onClick={() => navigator.clipboard.writeText(item.copyableOpportunityRequest)}
+                              data-testid={`button-copy-website-opportunity-request-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy opp JSON
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-700 text-emerald-100"
+                              onClick={() => navigator.clipboard.writeText(item.closePlan.copyableCloseRequest)}
+                              data-testid={`button-copy-website-close-request-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy close JSON
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={outreachApproveMutation.isPending || item.draftStatus === "approved"}
+                              onClick={() => outreachApproveMutation.mutate(item.outreachDraftId)}
+                              className="border-sky-700 text-sky-100"
+                              data-testid={`button-approve-website-sales-draft-${item.outreachDraftId}`}
+                            >
+                              {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                              {item.draftStatus === "approved" ? "Draft aprobado" : "Aprobar draft"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={websiteOpportunityMutation.isPending || item.draftStatus !== "approved"}
+                              onClick={() => websiteOpportunityMutation.mutate(item)}
+                              className="bg-sky-600 text-white hover:bg-sky-500"
+                              data-testid={`button-create-website-opportunity-${item.leadId}`}
+                            >
+                              {websiteOpportunityMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CircleDollarSign className="mr-2 h-4 w-4" />}
+                              Crear oportunidad
+                            </Button>
+                            {item.mockupUrl && (
+                              <a href={item.mockupUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Mockup
+                                </Button>
+                              </a>
+                            )}
+                            {item.sourceUrl && (
+                              <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Fuente
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {item.readiness.map((ready) => (
+                              <Badge key={ready} variant="outline" className="border-zinc-700 text-zinc-300">
+                                {ready}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(snapshot?.websiteSalesPacketQueue.blocked || []).length > 0 && (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {(snapshot?.websiteSalesPacketQueue.blocked || []).slice(0, 4).map((item) => (
+                        <div key={item.leadId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                          <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                <CardHeader>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <CardTitle className="text-base">Oportunidades website</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Cotizadas hasta que deposito y scope las convierten en delivery.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                      {snapshot?.websiteClosureQueue.readyCount ?? 0} por cerrar
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(snapshot?.websiteClosureQueue.items || []).length === 0 ? (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                      Sin oportunidades website pendientes de scope/deposito.
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {(snapshot?.websiteClosureQueue.items || []).map((opportunity) => {
+                        const scopeApprovedForClose = opportunity.scopeApproved || Boolean(websiteOpportunityScopeApprovals[opportunity.id]);
+                        const closeInput = websiteOpportunityCloseInputs[opportunity.id] || {};
+                        const closeCashValue = closeInput.cashCollectedUsd ?? String(opportunity.cashCollectedUsd || opportunity.requiredDepositUsd || 0);
+                        const closeCashCollectedUsd = Number(closeCashValue) || 0;
+                        const closePaymentConfirmation = closeInput.paymentConfirmation ?? opportunity.paymentConfirmation;
+                        const closeNotes = closeInput.notes ?? "";
+                        const closeHasPaymentConfirmation = hasVerifiablePaymentEvidence(closePaymentConfirmation);
+                        const closeHasCash = closeCashCollectedUsd > 0;
+                        const closeDepositCoversRequired = closeCashCollectedUsd >= opportunity.requiredDepositUsd;
+                        const shouldRecordDepositOutcome = closeDepositCoversRequired && (
+                          !opportunity.depositPaid
+                          || closeCashCollectedUsd !== opportunity.cashCollectedUsd
+                          || !opportunity.paymentConfirmation
+                        );
+                        return (
+                          <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-black p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-white">{opportunity.businessName}</p>
+                                <p className="mt-1 text-xs text-zinc-500">
+                                  {opportunity.projectType} · deposito {money.format(opportunity.requiredDepositUsd)} · cash {money.format(opportunity.cashCollectedUsd)}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className={cn(statusTone(opportunity.status), "shrink-0")}>{opportunity.status}</Badge>
+                            </div>
+                            <p className="mt-3 text-sm leading-6 text-zinc-400">{opportunity.nextAction}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Badge variant="outline" className={cn(opportunity.depositPaid ? statusTone("ready") : statusTone("blocked"))}>
+                                {opportunity.depositPaid ? "deposito registrado" : "falta deposito"}
+                              </Badge>
+                              <Badge variant="outline" className={cn(closeDepositCoversRequired ? statusTone("ready") : statusTone("blocked"))}>
+                                {closeDepositCoversRequired ? "monto suficiente" : "monto parcial"}
+                              </Badge>
+                              <Badge variant="outline" className={cn(opportunity.priority === "high" ? statusTone("ready_to_start") : statusTone("draft"))}>
+                                {opportunity.closureStage}
+                              </Badge>
+                              <label className="flex h-8 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-xs text-zinc-300">
+                                <input
+                                  type="checkbox"
+                                  checked={scopeApprovedForClose}
+                                  disabled={opportunity.status === "sold"}
+                                  onChange={() => {
+                                    setWebsiteOpportunityScopeApprovals((current) => ({
+                                      ...current,
+                                      [opportunity.id]: !scopeApprovedForClose,
+                                    }));
+                                  }}
+                                  data-testid={`checkbox-website-opportunity-scope-${opportunity.id}`}
+                                />
+                                Scope aprobado
+                              </label>
+                            </div>
+                            {opportunity.status !== "sold" && (
+                              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-cash-${opportunity.id}`}>
+                                    Deposito cobrado
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-cash-${opportunity.id}`}
+                                    type="number"
+                                    min={0}
+                                    value={closeCashValue}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          cashCollectedUsd: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    data-testid={`input-website-opportunity-cash-${opportunity.id}`}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-payment-${opportunity.id}`}>
+                                    Confirmacion
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-payment-${opportunity.id}`}
+                                    value={closePaymentConfirmation}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          paymentConfirmation: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    placeholder="Stripe pi_..., Zelle ref 123456, invoice INV-123"
+                                    data-testid={`input-website-opportunity-payment-${opportunity.id}`}
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[11px] uppercase tracking-wide text-zinc-500" htmlFor={`website-opportunity-notes-${opportunity.id}`}>
+                                    Nota de cierre
+                                  </label>
+                                  <Input
+                                    id={`website-opportunity-notes-${opportunity.id}`}
+                                    value={closeNotes}
+                                    onChange={(event) => {
+                                      setWebsiteOpportunityCloseInputs((current) => ({
+                                        ...current,
+                                        [opportunity.id]: {
+                                          ...current[opportunity.id],
+                                          notes: event.target.value,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                                    placeholder="Scope y deposito aprobados por Robert"
+                                    data-testid={`input-website-opportunity-close-notes-${opportunity.id}`}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {opportunity.status !== "sold" && (
+                              <div className="mt-3 grid gap-1 text-xs text-zinc-500">
+                                {!scopeApprovedForClose && <p>Falta aprobar scope.</p>}
+                                {!closeHasCash && <p>Falta monto de deposito.</p>}
+                                {closeHasCash && !closeDepositCoversRequired && <p>El monto capturado no cubre el deposito requerido.</p>}
+                                {!closeHasPaymentConfirmation && <p>Falta referencia verificable: Stripe/Zelle/bank ref, invoice, receipt o confirmation id.</p>}
+                                {shouldRecordDepositOutcome && <p>El cierre registrara primero el deposito manual en el outreach.</p>}
+                              </div>
+                            )}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-zinc-700"
+                                onClick={() => navigator.clipboard.writeText(opportunity.copyableClosurePacket)}
+                                data-testid={`button-copy-website-closure-packet-${opportunity.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy close
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-700 text-emerald-100"
+                                onClick={() => navigator.clipboard.writeText(opportunity.copyableCloseRequest)}
+                                data-testid={`button-copy-website-closure-request-${opportunity.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy request
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={
+                                  websiteOpportunityCloseMutation.isPending
+                                  || opportunity.status === "sold"
+                                  || !scopeApprovedForClose
+                                  || !closeHasCash
+                                  || !closeDepositCoversRequired
+                                  || !closeHasPaymentConfirmation
+                                }
+                                onClick={() => websiteOpportunityCloseMutation.mutate({
+                                  opportunity,
+                                  scopeApproved: scopeApprovedForClose,
+                                  cashCollectedUsd: closeCashCollectedUsd,
+                                  paymentConfirmation: closePaymentConfirmation,
+                                  notes: closeNotes,
+                                  recordDepositOutcome: shouldRecordDepositOutcome,
+                                })}
+                                className="bg-emerald-600 text-white hover:bg-emerald-500"
+                                data-testid={`button-close-website-opportunity-${opportunity.id}`}
+                              >
+                                {websiteOpportunityCloseMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                {closeDepositCoversRequired && scopeApprovedForClose ? "Registrar deposito y vender" : "Deposito completo + scope"}
+                              </Button>
+                              {opportunity.mockupUrl && (
+                                <a href={opportunity.mockupUrl} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Mockup
+                                  </Button>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {websiteOpportunityMutation.data && (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                      {websiteOpportunityMutation.data.reason}
+                    </div>
+                  )}
+                  {websiteOpportunityCloseMutation.data && (
+                    <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">
+                      {websiteOpportunityCloseMutation.data.reason}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 xl:grid-cols-[390px_1fr]">
                 <Card className="border-zinc-800 bg-zinc-950/80">
@@ -3076,6 +7278,47 @@ export default function RevenueEnginePage() {
                         </div>
                       </div>
                       <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-source-url">
+                          Fuente publica
+                        </label>
+                        <Input
+                          id="lead-source-url"
+                          value={leadSourceUrl}
+                          onChange={(event) => setLeadSourceUrl(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          placeholder="https://..."
+                          data-testid="input-lead-source-url"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-recipient-email">
+                            Email para draft
+                          </label>
+                          <Input
+                            id="lead-recipient-email"
+                            type="email"
+                            value={leadRecipientEmail}
+                            onChange={(event) => setLeadRecipientEmail(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            placeholder="owner@business.com"
+                            data-testid="input-lead-recipient-email"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-contact-name">
+                            Nombre
+                          </label>
+                          <Input
+                            id="lead-contact-name"
+                            value={leadContactName}
+                            onChange={(event) => setLeadContactName(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-lead-contact-name"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-evidence">
                           Evidencia publica
                         </label>
@@ -3099,6 +7342,66 @@ export default function RevenueEnginePage() {
                           data-testid="textarea-lead-pain"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-summary">
+                          Resumen para outreach
+                        </label>
+                        <Textarea
+                          id="lead-summary"
+                          value={leadBusinessSummary}
+                          onChange={(event) => setLeadBusinessSummary(event.target.value)}
+                          className="min-h-[76px] border-zinc-800 bg-black"
+                          data-testid="textarea-lead-summary"
+                        />
+                      </div>
+                      <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300" htmlFor="include-lead-money-sprint">
+                        <input
+                          id="include-lead-money-sprint"
+                          type="checkbox"
+                          checked={includeLeadInMoneySprint}
+                          onChange={(event) => setIncludeLeadInMoneySprint(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                          data-testid="checkbox-include-lead-money-sprint"
+                        />
+                        <span>
+                          Incluir este lead en Money sprint para crear preview y outreach draft si pasa los gates.
+                        </span>
+                      </label>
+                      <div className="grid gap-2 text-sm text-zinc-300">
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-public-verified">
+                          <input
+                            id="candidate-public-verified"
+                            type="checkbox"
+                            checked={candidatePublicEvidenceVerified}
+                            onChange={(event) => setCandidatePublicEvidenceVerified(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-public-verified"
+                          />
+                          <span>Verifique que la fuente/contacto/evidencia del lead o batch pegado son publicos y reales.</span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-approval-import">
+                          <input
+                            id="candidate-approval-import"
+                            type="checkbox"
+                            checked={candidateApprovalToImport}
+                            onChange={(event) => setCandidateApprovalToImport(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-approval-import"
+                          />
+                          <span>Aprobar el lead o todas las filas del batch pegado para la cola de candidatos. No contacta, no scrapea, no gasta.</span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-robert-approved-import">
+                          <input
+                            id="candidate-robert-approved-import"
+                            type="checkbox"
+                            checked={candidateRobertApprovedImport}
+                            onChange={(event) => setCandidateRobertApprovedImport(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-robert-approved-import"
+                          />
+                          <span>Robert aprobó explícitamente importar estos candidatos al Money Sprint. Sin esto quedan en revisión.</span>
+                        </label>
+                      </div>
                       <Button
                         type="submit"
                         disabled={leadMutation.isPending}
@@ -3108,11 +7411,48 @@ export default function RevenueEnginePage() {
                         {leadMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                         Calificar lead
                       </Button>
+                      <Button
+                        type="button"
+                        disabled={publicLeadCandidateMutation.isPending}
+                        onClick={() => publicLeadCandidateMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-record-public-candidate"
+                      >
+                        {publicLeadCandidateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Guardar candidato publico
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
 
                 <div className="space-y-4">
+                  {publicLeadCandidateMutation.data && (
+                    <Card className="border-zinc-800 bg-zinc-950/80">
+                      <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">{publicLeadCandidateMutation.data.candidate.businessName}</CardTitle>
+                            <p className="mt-1 text-sm text-zinc-500">{publicLeadCandidateMutation.data.nextAction}</p>
+                          </div>
+                          <Badge variant="outline" className={cn(statusTone(publicLeadCandidateMutation.data.status), "shrink-0")}>
+                            {publicLeadCandidateMutation.data.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 md:grid-cols-[1fr_220px]">
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Batch row</p>
+                          <p className="mt-2 break-all text-xs leading-5 text-zinc-300">{publicLeadCandidateMutation.data.candidate.batchRow}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300">
+                          <p>{publicLeadCandidateMutation.data.importableCount} listos para preview</p>
+                          <p className="mt-2 text-xs text-zinc-500">
+                            Lead real: {publicLeadCandidateMutation.data.candidate.safety.persistsLead ? "yes" : "no"} · Outreach: {publicLeadCandidateMutation.data.candidate.safety.sendsOutreach ? "yes" : "no"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {leadMutation.data && (
                     <Card className="border-zinc-800 bg-zinc-950/80">
                       <CardHeader>
@@ -4038,6 +8378,24 @@ export default function RevenueEnginePage() {
                           />
                         </div>
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="automation-payment-confirmation">
+                          Referencia de pago
+                        </label>
+                        <Input
+                          id="automation-payment-confirmation"
+                          value={automationPaymentConfirmation}
+                          onChange={(event) => setAutomationPaymentConfirmation(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          placeholder="Stripe pi_..., Zelle ref..., recibo..."
+                          data-testid="input-automation-payment-confirmation"
+                        />
+                        {(automationAgentPaymentBlocked || automationOpportunityPaymentBlocked) && (
+                          <p className="text-xs text-amber-300">
+                            Falta referencia verificable para cerrar venta o marcar deposito pagado.
+                          </p>
+                        )}
+                      </div>
                       <div className="grid gap-2">
                         {[
                           ["automation-scope-approved", "Scope aprobado", automationScopeApproved, setAutomationScopeApproved],
@@ -4057,7 +8415,7 @@ export default function RevenueEnginePage() {
                       </div>
                       <Button
                         type="button"
-                        disabled={automationAgentCommandMutation.isPending}
+                        disabled={automationAgentCommandMutation.isPending || automationAgentPaymentBlocked}
                         onClick={() => automationAgentCommandMutation.mutate()}
                         className="w-full bg-fuchsia-600 text-white hover:bg-fuchsia-500"
                         data-testid="button-run-automation-agent-command"
@@ -4088,7 +8446,7 @@ export default function RevenueEnginePage() {
                         </Button>
                         <Button
                           type="button"
-                          disabled={automationOpportunityMutation.isPending}
+                          disabled={automationOpportunityMutation.isPending || automationOpportunityPaymentBlocked}
                           variant="outline"
                           className="border-zinc-700"
                           onClick={() => automationOpportunityMutation.mutate()}
@@ -4682,6 +9040,7 @@ export default function RevenueEnginePage() {
                           ["linksChecked", "Links/formularios OK"],
                           ["automationTested", "Automation probada"],
                           ["rollbackPlanReady", "Rollback listo"],
+                          ["clientHandoffReady", "Handoff cliente listo"],
                         ].map(([key, label]) => (
                           <label
                             key={key}
@@ -4697,6 +9056,20 @@ export default function RevenueEnginePage() {
                             {label}
                           </label>
                         ))}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-repo">
+                          Repo
+                        </label>
+                        <Input
+                          id="review-repo"
+                          value={reviewRepoFullName}
+                          onChange={(event) => setReviewRepoFullName(event.target.value)}
+                          placeholder="owner/repo"
+                          className="border-zinc-800 bg-black"
+                          data-testid="input-review-repo"
+                        />
                       </div>
 
                       <div className="space-y-2">
@@ -4722,13 +9095,13 @@ export default function RevenueEnginePage() {
                       </Button>
                       <Button
                         type="button"
-                        disabled={deliveryWorkspaceMutation.isPending}
+                        disabled={deliveryWorkspaceMutation.isPending || reviewProjectType !== "automation"}
                         onClick={() => deliveryWorkspaceMutation.mutate()}
                         className="w-full bg-sky-600 text-white hover:bg-sky-500"
                         data-testid="button-save-delivery-workspace"
                       >
                         {deliveryWorkspaceMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                        Guardar workspace
+                        {reviewProjectType === "automation" ? "Guardar workspace" : "Usar website handoff"}
                       </Button>
                     </form>
                   </CardContent>
@@ -4843,6 +9216,172 @@ export default function RevenueEnginePage() {
 
                     <Card className="border-zinc-800 bg-zinc-950/80">
                       <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <CardTitle className="text-base">Handoff website</CardTitle>
+                          <Badge variant="outline" className={cn(statusTone(snapshot?.websiteDeliveryHandoffQueue.status || "review"), "shrink-0")}>
+                            {snapshot?.websiteDeliveryHandoffQueue.readyCount ?? 0} listos
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm leading-6 text-zinc-500">
+                          {snapshot?.websiteDeliveryHandoffQueue.nextAction || "Cargando handoffs de website."}
+                        </p>
+                        {(snapshot?.websiteDeliveryHandoffQueue.items || []).length === 0 ? (
+                          <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
+                            Sin oportunidades website vendidas listas para workspace.
+                          </div>
+                        ) : (
+                          snapshot?.websiteDeliveryHandoffQueue.items.map((item) => {
+                            const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
+                            const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+                            const repoFullName = repoInput.repoFullName || "";
+                            const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
+                            const repoReady = isGithubRepoFullName(repoFullName);
+                            const branchReady = isCodexBranchName(branchName);
+                            return (
+                              <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{item.businessName}</p>
+                                    <p className="mt-1 text-xs text-zinc-500">
+                                      {item.projectType} · {item.leadStatus} · cash {money.format(item.cashCollectedUsd)} / deposito {money.format(item.requiredDepositUsd)}
+                                    </p>
+                                  </div>
+                                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                                    vendida
+                                  </Badge>
+                                </div>
+                                <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Badge variant="outline" className={cn(depositCoversHandoff ? statusTone("ready") : statusTone("blocked"))}>
+                                    {depositCoversHandoff ? "deposito cubierto" : "deposito incompleto"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(statusTone("ready"))}>
+                                    scope vendido
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(repoReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {repoReady ? "repo listo" : "repo requerido"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(branchReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {branchReady ? "branch codex listo" : "branch codex requerido"}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <Input
+                                    value={repoFullName}
+                                    onChange={(event) =>
+                                      setWebsiteDeliveryRepoInputs((current) => ({
+                                        ...current,
+                                        [item.opportunityId]: {
+                                          ...current[item.opportunityId],
+                                          repoFullName: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    placeholder="owner/repo"
+                                    className="border-zinc-800 bg-zinc-950"
+                                    data-testid={`input-website-handoff-repo-${item.opportunityId}`}
+                                  />
+                                  <Input
+                                    value={branchName}
+                                    onChange={(event) =>
+                                      setWebsiteDeliveryRepoInputs((current) => ({
+                                        ...current,
+                                        [item.opportunityId]: {
+                                          ...current[item.opportunityId],
+                                          branchName: event.target.value,
+                                        },
+                                      }))
+                                    }
+                                    placeholder="codex/client-business-website"
+                                    className="border-zinc-800 bg-zinc-950"
+                                    data-testid={`input-website-handoff-branch-${item.opportunityId}`}
+                                  />
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-emerald-500/30 text-emerald-100"
+                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceSetupPacket)}
+                                    data-testid={`button-copy-website-workspace-setup-${item.opportunityId}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy repo setup
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-sky-500/30 text-sky-100"
+                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceRequest)}
+                                    data-testid={`button-copy-website-workspace-request-${item.opportunityId}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy workspace JSON
+                                  </Button>
+                                  <a href={item.mockupUrl} target="_blank" rel="noreferrer">
+                                    <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                      <ExternalLink className="mr-2 h-4 w-4" />
+                                      Mockup
+                                    </Button>
+                                  </a>
+                                  {item.sourceUrl && (
+                                    <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Fuente
+                                      </Button>
+                                    </a>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady}
+                                    onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
+                                    className="bg-sky-600 text-white hover:bg-sky-500"
+                                    data-testid={`button-create-website-workspace-${item.leadId}`}
+                                  >
+                                    {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                                    {depositCoversHandoff ? repoReady ? branchReady ? "Crear workspace" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                        {(snapshot?.websiteDeliveryHandoffQueue.blocked || []).length > 0 && (
+                          <div className="space-y-2">
+                            {(snapshot?.websiteDeliveryHandoffQueue.blocked || []).slice(0, 3).map((item) => (
+                              <div key={item.leadId} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                                <p className="text-sm font-medium text-amber-100">{item.businessName}</p>
+                                <p className="mt-1 text-xs leading-5 text-zinc-300">{item.reason} {item.nextAction}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data && !["created", "already_created"].includes(websiteDeliveryHandoffMutation.data.status) && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {websiteDeliveryHandoffMutation.data.reason}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data?.status === "created" && websiteDeliveryHandoffMutation.data.workspace && (
+                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100">
+                            Workspace creado: {websiteDeliveryHandoffMutation.data.workspace.input.clientName}
+                          </div>
+                        )}
+                        {websiteDeliveryHandoffMutation.data?.status === "already_created" && websiteDeliveryHandoffMutation.data.workspace && (
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100">
+                            Workspace reutilizado: {websiteDeliveryHandoffMutation.data.workspace.input.clientName}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-zinc-800 bg-zinc-950/80">
+                      <CardHeader>
                         <CardTitle className="text-base">Workspaces recientes</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
@@ -4851,7 +9390,11 @@ export default function RevenueEnginePage() {
                             Sin workspaces guardados todavia.
                           </div>
                         ) : (
-                          snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => (
+                          snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => {
+                            const releaseGateInput = buildReleaseGateInput(workspace);
+                            const buildHandoffBranchReady = !workspace.codexBuildHandoff.missing.includes("branch codex/... para PR-first");
+                            const trustedDeliveryReady = isTrustedDeliveryRequestReady(workspace);
+                            return (
                             <div key={workspace.id} className="rounded-lg border border-zinc-800 bg-black p-3">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -4886,30 +9429,322 @@ export default function RevenueEnginePage() {
                                   ))}
                                 </div>
                               )}
+                              <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-sky-200">Codex PR-first</p>
+                                    <p className="mt-1 text-sm leading-5 text-zinc-300">{workspace.codexBuildHandoff.nextAction}</p>
+                                  </div>
+                                  <Badge variant="outline" className={cn(statusTone(workspace.codexBuildHandoff.status), "shrink-0")}>
+                                    {workspace.codexBuildHandoff.status}
+                                  </Badge>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {workspace.codexBuildHandoff.repoFullName && (
+                                    <Badge variant="outline" className="border-zinc-700 text-zinc-300">{workspace.codexBuildHandoff.repoFullName}</Badge>
+                                  )}
+                                  {workspace.codexBuildHandoff.prUrl && (
+                                    <a href={workspace.codexBuildHandoff.prUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        PR
+                                      </Button>
+                                    </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.githubIssueUrl && (
+                                    <a href={workspace.codexBuildHandoff.githubIssueUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Issue
+                                      </Button>
+                                    </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.deploymentApprovalUrl && (
+                                    <a href={workspace.codexBuildHandoff.deploymentApprovalUrl} target="_blank" rel="noreferrer">
+                                      <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        Approval
+                                      </Button>
+                                    </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.releaseGateHeadSha && (
+                                    <Badge variant="outline" className="border-sky-500/30 bg-black font-mono text-[10px] text-sky-100">
+                                      head {workspace.codexBuildHandoff.releaseGateHeadSha.slice(0, 12)}
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.publicBuildBrief)}
+                                    data-testid={`button-copy-codex-build-handoff-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy public brief
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.copyableGithubIssueBody)}
+                                    data-testid={`button-copy-codex-issue-body-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy issue body
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.buildPack.copyableBuildPack)}
+                                    data-testid={`button-copy-codex-build-pack-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy build pack
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(buildCopyableGithubHandoffRequest(
+                                      workspace.id,
+                                      workspace.input.repoFullName,
+                                      workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+                                    ))}
+                                    data-testid={`button-copy-github-handoff-request-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy handoff JSON
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-indigo-500/30 text-indigo-100"
+                                    onClick={() => navigator.clipboard.writeText(buildCopyableReleaseGateRequest(workspace, releaseGateInput))}
+                                    data-testid={`button-copy-release-gate-request-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy release JSON
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={
+                                      deliveryWorkspaceGithubHandoffMutation.isPending
+                                      || workspace.codexBuildHandoff.status === "not_required"
+                                      || Boolean(workspace.input.githubIssueUrl)
+                                      || !workspace.input.repoFullName
+                                      || !workspace.input.publicDataVerified
+                                      || !buildHandoffBranchReady
+                                      || workspace.projectPlan.decision.status !== "ready_to_build"
+                                    }
+                                    className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                    onClick={() => deliveryWorkspaceGithubHandoffMutation.mutate(workspace)}
+                                    data-testid={`button-create-github-handoff-${workspace.id}`}
+                                  >
+                                    {deliveryWorkspaceGithubHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
+                                    Create issue
+                                  </Button>
+                                </div>
+                                {workspace.codexBuildHandoff.missing.length > 0 && (
+                                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                    {workspace.codexBuildHandoff.missing.slice(0, 4).map((item) => (
+                                      <div key={`${workspace.id}-${item}`} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs text-amber-100">
+                                        {item}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 disabled={deliveryWorkspaceQaMutation.isPending}
-                                onClick={() => deliveryWorkspaceQaMutation.mutate(workspace.id)}
+                                onClick={() => deliveryWorkspaceQaMutation.mutate(workspace)}
                                 className="mt-3 w-full border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
                                 data-testid={`button-revalidate-delivery-workspace-${workspace.id}`}
                               >
                                 {deliveryWorkspaceQaMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                Revalidar QA resuelto
+                                Revalidar con checks marcados
+                              </Button>
+                              <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3" data-testid={`panel-release-gate-inputs-${workspace.id}`}>
+                                <p className="text-xs uppercase tracking-wide text-zinc-500">Release gate de este workspace</p>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <Input
+                                    value={releaseGateInput.prUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { prUrl: event.target.value })}
+                                    placeholder="https://github.com/owner/repo/pull/1"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-pr-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.deploymentApprovalUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { deploymentApprovalUrl: event.target.value })}
+                                    placeholder="Robert approval comment URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-approval-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.secondReviewEvidenceUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { secondReviewEvidenceUrl: event.target.value })}
+                                    placeholder="Second review URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-second-review-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.appQaEvidenceUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { appQaEvidenceUrl: event.target.value })}
+                                    placeholder="App QA pass URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-app-qa-url-${workspace.id}`}
+                                  />
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                                  {[
+                                    ["second-review", "Second review pass", releaseGateInput.secondReviewPassed, () => updateReleaseGateInput(workspace.id, { secondReviewPassed: !releaseGateInput.secondReviewPassed })],
+                                    ["app-qa", "App QA pass", releaseGateInput.appQaPassed, () => updateReleaseGateInput(workspace.id, { appQaPassed: !releaseGateInput.appQaPassed })],
+                                    ["robert-approval", "Robert approved", releaseGateInput.robertApprovedDeploy, () => updateReleaseGateInput(workspace.id, { robertApprovedDeploy: !releaseGateInput.robertApprovedDeploy })],
+                                  ].map(([key, label, checked, toggle]) => (
+                                    <label
+                                      key={String(key)}
+                                      className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(checked)}
+                                        onChange={() => (toggle as () => void)()}
+                                        className="h-4 w-4 rounded border-zinc-700 bg-black"
+                                        data-testid={`checkbox-release-${key}-${workspace.id}`}
+                                      />
+                                      {String(label)}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                  deliveryWorkspacePrStatusMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !releaseGateInput.prUrl
+                                }
+                                onClick={() => deliveryWorkspacePrStatusMutation.mutate(workspace)}
+                                className="mt-2 w-full border-indigo-500/30 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
+                                data-testid={`button-check-pr-status-${workspace.id}`}
+                              >
+                                {deliveryWorkspacePrStatusMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
+                                Check PR status
                               </Button>
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={deliveryWorkspaceDeliverMutation.isPending}
-                                onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace.id)}
+                                disabled={
+                                  deliveryWorkspaceAppQaGateMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !releaseGateInput.prUrl
+                                }
+                                onClick={() => deliveryWorkspaceAppQaGateMutation.mutate(workspace)}
+                                className="mt-2 w-full border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
+                                data-testid={`button-run-workspace-app-qa-${workspace.id}`}
+                              >
+                                {deliveryWorkspaceAppQaGateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                Run App QA
+                              </Button>
+                              {deliveryWorkspaceAppQaGateMutation.data?.workspace?.id === workspace.id && (
+                                <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-workspace-app-qa-gate">
+                                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <p className="text-sm font-medium text-emerald-100">{deliveryWorkspaceAppQaGateMutation.data.reason}</p>
+                                    <Badge variant="outline" className={cn(statusTone(deliveryWorkspaceAppQaGateMutation.data.status), "shrink-0")}>
+                                      {deliveryWorkspaceAppQaGateMutation.data.status}
+                                    </Badge>
+                                  </div>
+                                  {deliveryWorkspaceAppQaGateMutation.data.scan && (
+                                    <p className="mt-2 text-xs leading-5 text-zinc-300">
+                                      {deliveryWorkspaceAppQaGateMutation.data.scan.summary} · fails {deliveryWorkspaceAppQaGateMutation.data.scan.failCount} · warnings {deliveryWorkspaceAppQaGateMutation.data.scan.warnCount}
+                                    </p>
+                                  )}
+                                  {deliveryWorkspaceAppQaGateMutation.data.appQaPrCommentBody && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="mt-3 border-emerald-500/30 text-emerald-100"
+                                      onClick={() => navigator.clipboard.writeText(deliveryWorkspaceAppQaGateMutation.data?.appQaPrCommentBody || "")}
+                                      data-testid={`button-copy-app-qa-pr-comment-${workspace.id}`}
+                                    >
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy App QA PR comment
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                  deliveryWorkspaceReleaseGateMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !releaseGateInput.prUrl
+                                  || !releaseGateInput.secondReviewEvidenceUrl
+                                  || !releaseGateInput.appQaEvidenceUrl
+                                  || !releaseGateInput.deploymentApprovalUrl
+                                  || !releaseGateInput.secondReviewPassed
+                                  || !releaseGateInput.appQaPassed
+                                  || !releaseGateInput.robertApprovedDeploy
+                                }
+                                onClick={() => deliveryWorkspaceReleaseGateMutation.mutate(workspace)}
+                                className="mt-2 w-full border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                data-testid={`button-record-release-gate-${workspace.id}`}
+                              >
+                                {deliveryWorkspaceReleaseGateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                Registrar release gate
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigator.clipboard.writeText(buildCopyableTrustedDeliverRequest(workspace))}
+                                className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                                data-testid={`button-copy-trusted-deliver-request-${workspace.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy delivery JSON
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                  deliveryWorkspaceDeliverMutation.isPending
+                                  || !trustedDeliveryReady
+                                }
+                                onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace)}
                                 className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                                 data-testid={`button-deliver-workspace-${workspace.id}`}
                               >
                                 {deliveryWorkspaceDeliverMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                 Entregar aprobado
                               </Button>
+                              {!trustedDeliveryReady && (
+                                <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100" data-testid={`panel-delivery-blocked-reason-${workspace.id}`}>
+                                  {workspace.codexBuildHandoff.missing[0]
+                                    || workspace.approvalSummary.requiredBeforeClient[0]
+                                    || (workspace.status !== "ready_to_deliver"
+                                      ? `workspace no esta listo: ${workspace.status}`
+                                      : "release gate, App QA, rollback y aprobacion Robert requeridos antes de entregar")}
+                                </div>
+                              )}
                               <Button
                                 type="button"
                                 size="sm"
@@ -4923,11 +9758,101 @@ export default function RevenueEnginePage() {
                                 Guardar review de mejora
                               </Button>
                             </div>
-                          ))
+                          );
+                          })
                         )}
                         {deliveryWorkspaceQaMutation.data && deliveryWorkspaceQaMutation.data.status !== "ready" && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
                             {deliveryWorkspaceQaMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspaceReleaseGateMutation.data && deliveryWorkspaceReleaseGateMutation.data.status !== "ready" && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceReleaseGateMutation.data.reason}
+                          </div>
+                        )}
+                        {deliveryWorkspacePrStatusMutation.data?.prStatus && (
+                          <div
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-xs",
+                              deliveryWorkspacePrStatusMutation.data.prStatus.readyForReleaseEvidence
+                                ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100"
+                                : "border-amber-500/20 bg-amber-500/5 text-amber-100",
+                            )}
+                            data-testid="panel-pr-status"
+                          >
+                            <p className="font-medium">
+                              PR #{deliveryWorkspacePrStatusMutation.data.prStatus.pr.number}: {deliveryWorkspacePrStatusMutation.data.reason}
+                            </p>
+                            <p className="mt-1 text-zinc-400">
+                              Checks {deliveryWorkspacePrStatusMutation.data.prStatus.checks.passed}/{deliveryWorkspacePrStatusMutation.data.prStatus.checks.total}
+                              {" "}Status {deliveryWorkspacePrStatusMutation.data.prStatus.statuses.state}
+                              {" "}Reviews {deliveryWorkspacePrStatusMutation.data.prStatus.approvedReviews.length}
+                            </p>
+                            {deliveryWorkspacePrStatusMutation.data.prStatus.blockers.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {deliveryWorkspacePrStatusMutation.data.prStatus.blockers.slice(0, 4).map((blocker) => (
+                                  <p key={blocker}>- {blocker}</p>
+                                ))}
+                              </div>
+                            )}
+                            {deliveryWorkspacePrStatusMutation.data.prStatus.warnings.length > 0 && (
+                              <div className="mt-2 space-y-1 text-zinc-400">
+                                {deliveryWorkspacePrStatusMutation.data.prStatus.warnings.slice(0, 3).map((warning) => (
+                                  <p key={warning}>- {warning}</p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {deliveryWorkspacePrStatusMutation.error && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspacePrStatusMutation.error.message}
+                          </div>
+                        )}
+                        {deliveryWorkspaceReleaseGateMutation.data?.status === "ready" && (
+                          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-100">
+                            Release gate registrado: PR, review, App QA y aprobacion listos para entrega controlada.
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.data?.status === "created" && deliveryWorkspaceGithubHandoffMutation.data.developerHandoff && (
+                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100" data-testid="panel-github-handoff-next-action">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div className="min-w-0">
+                                {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl && (
+                                  <p className="break-words">
+                                    GitHub issue creado: {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-sky-100">
+                                  {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.message}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="shrink-0 border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                onClick={() => navigator.clipboard.writeText([
+                                  deliveryWorkspaceGithubHandoffMutation.data?.developerHandoff?.message,
+                                  deliveryWorkspaceGithubHandoffMutation.data?.workspace?.codexBuildHandoff.publicBuildBrief,
+                                ].filter(Boolean).join("\n\n"))}
+                                data-testid="button-copy-github-handoff-next-action"
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy next action
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.data && deliveryWorkspaceGithubHandoffMutation.data.status !== "created" && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceGithubHandoffMutation.data.reason || deliveryWorkspaceGithubHandoffMutation.data.developerHandoff?.message || "No se pudo crear el handoff GitHub."}
+                          </div>
+                        )}
+                        {deliveryWorkspaceGithubHandoffMutation.error && (
+                          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">
+                            {deliveryWorkspaceGithubHandoffMutation.error.message}
                           </div>
                         )}
                         {deliveryWorkspaceDeliverMutation.data && deliveryWorkspaceDeliverMutation.data.status !== "delivered" && (
@@ -5339,25 +10264,36 @@ export default function RevenueEnginePage() {
                             type="button"
                             variant="outline"
                             className="border-emerald-700 text-emerald-100"
-                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent"}
+                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent" || !["email", "gmail", "mailto"].includes(outreachDraft.draft.channel)}
                             onClick={() => outreachSendMutation.mutate(outreachDraft.draft.id)}
                             data-testid="button-send-approved-outreach"
                           >
                             {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Enviar aprobado
                           </Button>
-                          <a href={outreachDraft.draft.links.gmailCompose} target="_blank" rel="noreferrer">
-                            <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-gmail">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Gmail
-                            </Button>
-                          </a>
-                          <a href={outreachDraft.draft.links.mailto}>
-                            <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-mailto">
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              Mail app
-                            </Button>
-                          </a>
+                          {["email", "gmail", "mailto"].includes(outreachDraft.draft.channel) ? (
+                            <>
+                              <a href={outreachDraft.draft.links.gmailCompose} target="_blank" rel="noreferrer">
+                                <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-gmail">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Gmail
+                                </Button>
+                              </a>
+                              <a href={outreachDraft.draft.links.mailto}>
+                                <Button type="button" variant="outline" className="border-zinc-700" data-testid="button-outreach-mailto">
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Mail app
+                                </Button>
+                              </a>
+                            </>
+                          ) : outreachDraft.draft.sourceUrl ? (
+                            <a href={outreachDraft.draft.sourceUrl} target="_blank" rel="noreferrer">
+                              <Button type="button" variant="outline" className="border-zinc-700">
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                Abrir canal
+                              </Button>
+                            </a>
+                          ) : null}
                         </div>
                       </CardContent>
                     </Card>
@@ -5411,6 +10347,28 @@ export default function RevenueEnginePage() {
                           </p>
                         </div>
                       )}
+                      {outreachOutcomeMutation.data && (
+                        <div className="mt-3 rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-white">Ultimo outcome</p>
+                            <Badge variant="outline" className={cn(statusTone(outreachOutcomeMutation.data.status), "shrink-0")}>
+                              {outreachOutcomeMutation.data.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-zinc-500">{outreachOutcomeMutation.data.reason}</p>
+                        </div>
+                      )}
+                      {outreachApproveMutation.data && (
+                        <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium text-emerald-100">Aprobacion de draft</p>
+                            <Badge variant="outline" className={cn(statusTone(outreachApproveMutation.data.status), "shrink-0")}>
+                              {outreachApproveMutation.data.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-zinc-500">{outreachApproveMutation.data.reason}</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -5438,27 +10396,120 @@ export default function RevenueEnginePage() {
                             <div className="mt-3 grid gap-2 text-sm text-zinc-400 md:grid-cols-3">
                               <p>{draft.channel}</p>
                               <p>{money.format(draft.pricing.totalSetupUsd)}</p>
-                              <p>{draft.delivery.sendStatus}</p>
+                              <p>{draft.delivery.outcome || draft.delivery.sendStatus}</p>
                             </div>
+                            {draft.delivery.outcomeNotes && (
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                                {draft.delivery.outcomeNotes}
+                                {draft.delivery.outcomeCashCollectedUsd ? ` · ${money.format(draft.delivery.outcomeCashCollectedUsd)} cash` : ""}
+                              </p>
+                            )}
                             <div className="mt-3 flex flex-wrap gap-2">
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
+                                className="border-sky-700 text-sky-100"
+                                disabled={outreachApproveMutation.isPending || draft.status === "approved" || draft.delivery.sendStatus === "sent"}
+                                onClick={() => outreachApproveMutation.mutate(draft.id)}
+                                data-testid={`button-approve-draft-${draft.id}`}
+                              >
+                                {outreachApproveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                Aprobar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
                                 className="border-emerald-700 text-emerald-100"
-                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent"}
+                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent" || !["email", "gmail", "mailto"].includes(draft.channel)}
                                 onClick={() => outreachSendMutation.mutate(draft.id)}
                                 data-testid={`button-send-draft-${draft.id}`}
                               >
                                 {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                 Enviar
                               </Button>
-                              <a href={draft.links.gmailCompose} target="_blank" rel="noreferrer">
-                                <Button type="button" size="sm" variant="outline" className="border-zinc-700">
-                                  <ExternalLink className="mr-2 h-4 w-4" />
-                                  Gmail
-                                </Button>
-                              </a>
+                              {["email", "gmail", "mailto"].includes(draft.channel) ? (
+                                <a href={draft.links.gmailCompose} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Gmail
+                                  </Button>
+                                </a>
+                              ) : draft.sourceUrl ? (
+                                <a href={draft.sourceUrl} target="_blank" rel="noreferrer">
+                                  <Button type="button" size="sm" variant="outline" className="border-zinc-700">
+                                    <ExternalLink className="mr-2 h-4 w-4" />
+                                    Canal
+                                  </Button>
+                                </a>
+                              ) : null}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-sky-700 text-sky-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "reply",
+                                  notes: "Robert registro reply manual del negocio.",
+                                })}
+                                data-testid="button-record-outreach-reply"
+                              >
+                                Reply
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-violet-700 text-violet-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "call_booked",
+                                  notes: "Robert registro llamada agendada.",
+                                })}
+                                data-testid="button-record-outreach-call"
+                              >
+                                Call
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-700 text-emerald-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved" || draft.pricing.depositUsd <= 0}
+                                onClick={() => {
+                                  const paymentConfirmation = requestDepositPaymentConfirmation(draft.businessName, draft.pricing.depositUsd);
+                                  if (!paymentConfirmation) return;
+                                  outreachOutcomeMutation.mutate({
+                                    draftId: draft.id,
+                                    outcome: "deposit_collected",
+                                    cashCollectedUsd: draft.pricing.depositUsd,
+                                    paymentConfirmation,
+                                    notes: "Robert confirmo deposito manual; crear delivery workspace para contabilizar venta.",
+                                  });
+                                }}
+                                data-testid="button-record-outreach-deposit"
+                              >
+                                Deposit
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-red-900 text-red-100"
+                                disabled={outreachOutcomeMutation.isPending || draft.status !== "approved"}
+                                onClick={() => outreachOutcomeMutation.mutate({
+                                  draftId: draft.id,
+                                  outcome: "lost",
+                                  notes: "Robert marco el lead como perdido.",
+                                })}
+                                data-testid="button-record-outreach-lost"
+                              >
+                                Lost
+                              </Button>
                             </div>
                           </div>
                         ))

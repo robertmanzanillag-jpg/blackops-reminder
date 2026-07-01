@@ -1,12 +1,13 @@
-import { GoogleGenAI } from "@google/genai";
+import type { GoogleGenAI } from "@google/genai";
 import { hasRealValue } from "./ceo-doctor-cli";
 
-export function getGeminiClient(): GoogleGenAI {
+export async function getGeminiClient(): Promise<GoogleGenAI> {
   const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
   if (!hasRealValue(apiKey)) {
     throw new Error("AI_INTEGRATIONS_GEMINI_API_KEY is not configured");
   }
 
+  const { GoogleGenAI } = await import("@google/genai");
   return new GoogleGenAI({
     apiKey,
     httpOptions: {
