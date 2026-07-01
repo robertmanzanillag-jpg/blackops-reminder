@@ -24964,7 +24964,11 @@ function buildExternalExecutionFocusRun(items: ClipperExternalExecutionSessionIt
 
 function buildMetricoolMvpFocusRun(source: ClipperExternalExecutionFocusRun): ClipperExternalExecutionFocusRun {
   const allowedItems = source.items
-    .filter((item) => item.type === "account")
+    .filter((item) =>
+      item.type === "account"
+      && item.platform === "tiktok"
+      && /sports-daily|meme-radar|@sportsdaily|@memeradar/i.test(`${item.id} ${item.sourceItemId} ${item.label} ${item.evidenceRow}`)
+    )
     .map<ClipperExternalExecutionFocusRunItem>((item, index) => ({
       ...item,
       rank: index + 1,
@@ -24973,29 +24977,29 @@ function buildMetricoolMvpFocusRun(source: ClipperExternalExecutionFocusRun): Cl
       nextStep: item.nextStep.replace(/\bOAuth\b/gi, "Metricool/account proof"),
     }));
   const metricoolReminder: ClipperExternalExecutionFocusRunItem = {
-    id: "focus-metricool-100-operator-handoff",
+    id: "focus-metricool-approval-session",
     rank: allowedItems.length + 1,
-    sourceItemId: "metricool-100-operator-handoff",
+    sourceItemId: "metricool-approval-session",
     platform: "tiktok",
     type: "account",
-    label: "Process Metricool 100 batch 01",
+    label: "Review Metricool approval session",
     actionMode: "open_portal",
     estimatedMinutes: 90,
     portalUrl: "https://app.metricool.com/",
-    executionUrl: "/api/clippers/prepare-metricool-100-operator-handoff",
+    executionUrl: "/api/clippers/prepare-metricool-approval-session",
     evidenceRow: "",
     credentialTemplate: "",
     checklist: [
-      "Open Metricool and process metricool-batch-01 first.",
+      "Open Metricool and review only the approval_required session items.",
       "Keep approval_required; do not enable direct publishing.",
       "Do not fill published evidence until a public post URL exists.",
     ],
     doneCriteria: [
-      "Batch 01 rows were reviewed in Metricool.",
+      "Approval session rows were reviewed in Metricool.",
       "No row is counted as published without final_status=published and a public post URL.",
       "No token, password, cookie, or private screenshot was stored.",
     ],
-    nextStep: "Open the Metricool 100 operator handoff, process metricool-batch-01 only, and leave evidence blank until public URLs and 24h metrics exist.",
+    nextStep: "Open the Metricool approval session and leave evidence blank until public URLs and 24h metrics exist.",
   };
   const items = [...allowedItems, metricoolReminder].slice(0, 7).map((item, index) => ({ ...item, rank: index + 1 }));
   return {
@@ -25008,6 +25012,10 @@ function buildMetricoolMvpFocusRun(source: ClipperExternalExecutionFocusRun): Cl
     portalUrls: Array.from(new Set(items.map((item) => item.portalUrl).filter(Boolean))),
     nextStep: metricoolReminder.nextStep,
   };
+}
+
+function isClipperMetricoolMvpActive(audit: Pick<ClipperGoLiveCompletionAuditSummary, "launchModes">): boolean {
+  return audit.launchModes?.directSocialApisRequiredForMvp === false;
 }
 
 function closeoutEvidenceCsvRow(row: Record<string, unknown>): string {
@@ -42177,6 +42185,7 @@ function buildRobertMetricoolMvpTunnel(input: {
   const run = input.metricool100ApprovalRun;
   const target = Math.max(run.approvalQueueTarget || run.totals.metricoolQueuedForApproval || input.metricoolApprovalSession.totals.readyForReview || 100, 1);
   const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady);
+  const metricoolMvpActive = isClipperMetricoolMvpActive(input.goLiveCompletionAudit);
   const queued = run.totals.metricoolQueuedForApproval || input.metricoolApprovalSession.totals.readyForReview;
   const readyForReview = run.totals.quickRunItems || input.metricoolApprovalSession.totals.readyForReview;
   const sourceReady = run.totals.sourceUploadReady || 0;
@@ -42201,7 +42210,11 @@ function buildRobertMetricoolMvpTunnel(input: {
       actionLabel: "Review Metricool launch pack",
       actionUrl: "/api/clippers/prepare-metricool-mvp-launch-pack",
       artifactPath: run.artifacts.metricoolPublishingPath,
-      nextStep: metricoolMvpReady ? "Metricool is the active MVP bridge; direct social APIs are backlog." : input.goLiveCompletionAudit.nextStep,
+      nextStep: metricoolMvpReady
+        ? "Metricool is the active MVP bridge; direct social APIs are backlog."
+        : metricoolMvpActive
+          ? "Complete the SPORT and memes TikTok/Metricool proof gate with real non-secret evidence before operator work."
+          : input.goLiveCompletionAudit.nextStep,
       unlocks: ["Metricool 100 schedule run", "Approval-required scheduling"],
     },
     {
@@ -42279,6 +42292,40 @@ function buildRobertMetricoolMvpTunnel(input: {
     gates,
     nextGate: nextGate?.label || null,
     nextStep: nextGate?.nextStep || "Metricool MVP run is complete; import metrics and keep optimizing.",
+  };
+}
+
+function buildMetricoolMvpConnectionTunnel(
+  tunnel: ClipperRobertConnectNowHandoff["metricoolMvpTunnel"],
+): ClipperRobertConnectNowHandoff["connectionTunnel"] {
+  const gates = tunnel.gates.map<ClipperRobertConnectionTunnelGate>((gate) => ({
+    id: gate.id,
+    rank: gate.rank,
+    label: gate.label,
+    status: gate.status,
+    done: gate.done,
+    total: gate.total,
+    blockers: gate.blockers,
+    actionLabel: gate.actionLabel,
+    actionUrl: gate.actionUrl,
+    artifactPath: gate.artifactPath,
+    nextStep: gate.nextStep,
+    unlocks: gate.unlocks,
+  }));
+  const nextGate = gates.find((gate) => gate.label === tunnel.nextGate)
+    || gates.find((gate) => gate.status === "blocked")
+    || gates.find((gate) => gate.status === "ready_to_execute")
+    || gates.find((gate) => gate.status === "waiting")
+    || null;
+  return {
+    status: tunnel.status,
+    progress: tunnel.progress,
+    blockedGates: tunnel.blockedGates,
+    readyGates: tunnel.readyGates,
+    doneGates: tunnel.doneGates,
+    gates,
+    nextGate,
+    nextStep: tunnel.nextStep,
   };
 }
 
@@ -42373,6 +42420,64 @@ function buildRobertOwnershipSplit(input: {
     ],
     nextRobertAction: robertReady[0]?.nextStep || "No local-only action is ready; wait for the next external proof drop.",
     nextUserAction: userRequired[0]?.nextStep || "External setup is complete; Robert can keep running publishing and reporting.",
+  };
+}
+
+function buildMetricoolMvpOwnershipSplit(input: {
+  metricoolMvpTunnel: ClipperRobertConnectNowHandoff["metricoolMvpTunnel"];
+  sourceCloseout: ClipperRobertSourceCloseoutQueue;
+}): ClipperRobertConnectNowHandoff["ownershipSplit"] {
+  const proofGate = input.metricoolMvpTunnel.gates.find((gate) => gate.id === "metricool-mvp-bridge");
+  const approvalGate = input.metricoolMvpTunnel.gates.find((gate) => gate.id === "metricool-approval-queue");
+  const sourceGate = input.metricoolMvpTunnel.gates.find((gate) => gate.id === "metricool-source-files");
+  const robertReady = [
+    proofGate
+      ? {
+        label: "Complete SPORT/memes proof gate",
+        count: proofGate.blockers || 1,
+        nextStep: proofGate.nextStep,
+      }
+      : null,
+    approvalGate && approvalGate.status === "ready_to_execute"
+      ? {
+        label: "Review Metricool approval queue",
+        count: approvalGate.done,
+        nextStep: approvalGate.nextStep,
+      }
+      : null,
+    {
+      label: "Refresh TikTok/Metricool audit packs",
+      count: input.metricoolMvpTunnel.gates.length,
+      nextStep: "After every proof or Metricool evidence import, refresh Robert Next Actions and the goal completion audit.",
+    },
+  ].filter((item): item is ClipperRobertConnectNowHandoff["ownershipSplit"]["robertReady"][number] => Boolean(item));
+  const userRequired = [
+    proofGate && proofGate.status === "blocked"
+      ? {
+        label: "Provide real SPORT/memes Metricool proof",
+        count: 2,
+        nextStep: "Paste real non-secret Metricool URLs or concrete Drive/Docs evidence for sports-daily:tiktok and meme-radar:tiktok.",
+      }
+      : null,
+    sourceGate && sourceGate.status === "blocked"
+      ? {
+        label: "Provide rights-cleared source files",
+        count: sourceGate.blockers || input.sourceCloseout.total,
+        nextStep: sourceGate.nextStep,
+      }
+      : null,
+  ].filter((item): item is ClipperRobertConnectNowHandoff["ownershipSplit"]["userRequired"][number] => Boolean(item));
+  return {
+    robertReady,
+    userRequired,
+    automationUnlockedBy: [
+      "SPORT and memes TikTok/Metricool proof gate ready",
+      "Metricool approval queue remains approval_required",
+      "Rights-cleared source inventory loaded",
+      "Real public post URLs and 24h metrics imported after posts are live",
+    ],
+    nextRobertAction: robertReady[0]?.nextStep || "Use Metricool approval mode and import real evidence after posts are live.",
+    nextUserAction: userRequired[0]?.nextStep || "External TikTok/Metricool proof is complete for the active MVP.",
   };
 }
 
@@ -42646,6 +42751,43 @@ function buildRobertPostConnectActivationBridge(input: {
   });
 }
 
+function buildMetricoolMvpPostConnectActivationBridge(
+  lanes: ClipperRobertConnectNowHandoff["postConnectActivationBridge"],
+  metricoolMvpTunnel: ClipperRobertConnectNowHandoff["metricoolMvpTunnel"],
+): ClipperRobertConnectNowHandoff["postConnectActivationBridge"] {
+  return lanes
+    .filter((lane) =>
+      lane.platform === "tiktok"
+      && ["sports-daily", "meme-radar"].includes(lane.accountId)
+    )
+    .map((lane) => ({
+      ...lane,
+      status: metricoolMvpTunnel.status === "blocked" ? "blocked" : lane.status,
+      developerAppStatus: "missing",
+      permissionsApproved: 0,
+      permissionsTotal: 0,
+      tokenSaved: false,
+      tokenSavedAt: null,
+      oauthStatus: "missing",
+      publisherConnectorStatus: "partial",
+      publishGate: "approval_required_ready",
+      blockers: metricoolMvpTunnel.status === "blocked"
+        ? [
+          "SPORT/memes TikTok/Metricool proof gate still needs real non-secret evidence.",
+          "Direct social API publishing is deferred and not required for this Metricool MVP.",
+        ]
+        : [
+          "Metricool remains approval_required; real publishing is disabled until Robert explicitly enables it.",
+        ],
+      nextLocalActions: [
+        "Complete the TikTok MVP proof packet and preview it before saving.",
+        "Use Metricool approval_required review; do not enable realPublishEnabled.",
+        "After posts are live, import real public post URLs and 24h metrics.",
+      ],
+      nextStep: metricoolMvpTunnel.nextStep,
+    }));
+}
+
 function buildRobertIntakeConsole(dropzoneReadyPack: ClipperDropzoneReadyPackSummary): ClipperRobertConnectNowHandoff["intakeConsole"] {
   const lanes = dropzoneReadyPack.items.map((item) => ({
     id: item.id,
@@ -42744,20 +42886,34 @@ async function buildRobertConnectNowHandoff(input: {
     metricoolApprovalSession: input.metricoolApprovalSession,
     metricool100ApprovalRun: input.metricool100ApprovalRun,
   });
-  const ownershipSplit = buildRobertOwnershipSplit({
-    ownerConnectPack: input.ownerConnectPack,
-    credentialCloseout,
-    sourceCloseout,
-    accountCloseout,
-    evidenceCloseout,
-    connectionTunnel,
-  });
-  const weeklyRunway = buildRobertWeeklyRunway({
+  const metricoolMvpActive = isClipperMetricoolMvpActive(input.goLiveCompletionAudit);
+  const connectionTunnelForMode = metricoolMvpActive ? buildMetricoolMvpConnectionTunnel(metricoolMvpTunnel) : connectionTunnel;
+  const ownershipSplit = metricoolMvpActive
+    ? buildMetricoolMvpOwnershipSplit({ metricoolMvpTunnel, sourceCloseout })
+    : buildRobertOwnershipSplit({
+      ownerConnectPack: input.ownerConnectPack,
+      credentialCloseout,
+      sourceCloseout,
+      accountCloseout,
+      evidenceCloseout,
+      connectionTunnel,
+    });
+  const baseWeeklyRunway = buildRobertWeeklyRunway({
     accounts,
     sourceCloseout,
-    connectionTunnel,
+    connectionTunnel: connectionTunnelForMode,
     goLiveCompletionAudit: input.goLiveCompletionAudit,
   });
+  const weeklyRunway = metricoolMvpActive
+    ? {
+      ...baseWeeklyRunway,
+      blockedGates: metricoolMvpTunnel.blockedGates,
+      readyToPublish: Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady),
+      nextStep: metricoolMvpTunnel.blockedGates > 0
+        ? metricoolMvpTunnel.nextStep
+        : "Use Metricool approval_required mode for SPORT and memes, then import real post URLs and 24h metrics after posts are live.",
+    }
+    : baseWeeklyRunway;
   const platformLaunchBridge = buildRobertPlatformLaunchBridge({
     accounts,
     ownerConnectPack: input.ownerConnectPack,
@@ -42775,6 +42931,9 @@ async function buildRobertConnectNowHandoff(input: {
     publisherConnectors: input.publisherConnectors,
     productionQueue: input.productionQueue,
   });
+  const postConnectActivationBridgeForMode = metricoolMvpActive
+    ? buildMetricoolMvpPostConnectActivationBridge(postConnectActivationBridge, metricoolMvpTunnel)
+    : postConnectActivationBridge;
   const intakeConsole = buildRobertIntakeConsole(input.dropzoneReadyPack);
   const launcherItems = input.externalExecutionSession.items;
   const externalPortalLauncher: ClipperRobertConnectNowHandoff["externalPortalLauncher"] = {
@@ -42804,23 +42963,30 @@ async function buildRobertConnectNowHandoff(input: {
       credentialReferenceTemplate.trim(),
     ].filter(Boolean).join("\n\n");
   const pendingCredentialEnvVars = extractPendingEnvVarsFromTemplate(credentialTemplate).filter((envVar) => envVar !== "PUBLIC_BASE_URL");
-  const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady);
-  const platformLaunchBridgeForHandoff = metricoolMvpReady
-    ? platformLaunchBridge.map((platform) => ({
-      ...platform,
-      status: "waiting" as const,
-      missingEnvVars: [],
-      scopes: [],
-      evidenceRows: [],
-      portalUrls: [],
-      blockers: ["Metricool MVP is active; direct platform API credentials and OAuth are backlog, not required for this 100-clip Metricool run."],
-      doneCriteria: ["Revisit direct API setup only after Metricool approval workflow proves volume and account quality."],
-      nextStep: "Use Metricool operator handoff first; defer direct API credentials/OAuth until full direct automation is explicitly requested.",
-    }))
+  const platformLaunchBridgeForHandoff = metricoolMvpActive
+    ? []
     : platformLaunchBridge;
+  const officialPermissionCloseoutForHandoff = metricoolMvpActive
+    ? {
+      ...officialPermissionCloseout,
+      totals: {
+        platforms: 0,
+        scopes: 0,
+        appReviewRequired: 0,
+        officialVerified: 0,
+        loginRequired: 0,
+        sourceBatches: 0,
+      },
+      nextRows: [],
+      approvalRows: [],
+      sourceBatches: [],
+      webProofTrail: [],
+      nextStep: "Direct platform permission review is deferred; TikTok posting runs through Metricool approval_required for this MVP.",
+    }
+    : officialPermissionCloseout;
   const directApiBacklogEnvVars: string[] = [];
-  const activePendingCredentialEnvVars = metricoolMvpReady ? [] : pendingCredentialEnvVars;
-  const credentialCloseoutForHandoff = metricoolMvpReady
+  const activePendingCredentialEnvVars = metricoolMvpActive ? [] : pendingCredentialEnvVars;
+  const credentialCloseoutForHandoff = metricoolMvpActive
     ? {
       ...credentialCloseout,
       importReady: false,
@@ -42847,39 +43013,76 @@ async function buildRobertConnectNowHandoff(input: {
       nextStep: "Metricool bridge is active; direct API credential drops are backlog for full automation.",
     }
     : credentialCloseout;
-  const accountCloseoutForHandoff = metricoolMvpReady
+  const metricoolMvpAccountProofBridge = accountCloseout.accountProofBridge.filter((item) =>
+    String(item.platform).includes("tiktok")
+    && !/streamer/i.test(`${item.accountId} ${item.handle} ${item.label} ${item.evidenceRow}`)
+  );
+  const metricoolMvpAccountPortalUrls = accountCloseout.portalUrls.filter((item) =>
+    item.lane === "account"
+    && String(item.platform).includes("tiktok")
+    && !/streamer/i.test(`${item.label} ${item.url}`)
+  );
+  const metricoolMvpAccountNextItems = accountCloseout.nextItems.filter((item) =>
+    item.lane === "account"
+    && String(item.platform).includes("tiktok")
+    && !/streamer/i.test(`${item.id} ${item.label} ${item.evidenceRows.join(" ")}`)
+  );
+  const accountCloseoutForHandoff = metricoolMvpActive
     ? {
       ...accountCloseout,
       totals: {
         ...accountCloseout.totals,
-        items: accountCloseout.accountProofBridge.length,
-        readyToExecute: accountCloseout.accountProofBridge.filter((item) => item.status === "ready_to_execute").length,
-        blocked: accountCloseout.accountProofBridge.filter((item) => item.status === "blocked").length,
-        waiting: accountCloseout.accountProofBridge.filter((item) => item.status === "waiting").length,
-        done: accountCloseout.accountProofBridge.filter((item) => item.status === "done").length,
-        portalUrls: accountCloseout.portalUrls.filter((item) => item.lane === "account").length,
-        evidenceRows: accountCloseout.accountProofBridge.filter((item) => item.evidenceRow).length,
-        accounts: accountCloseout.accountProofBridge.length,
+        items: metricoolMvpAccountProofBridge.length,
+        readyToExecute: metricoolMvpAccountProofBridge.filter((item) => item.status === "ready_to_execute").length,
+        blocked: metricoolMvpAccountProofBridge.filter((item) => item.status === "blocked").length,
+        waiting: metricoolMvpAccountProofBridge.filter((item) => item.status === "waiting").length,
+        done: metricoolMvpAccountProofBridge.filter((item) => item.status === "done").length,
+        portalUrls: metricoolMvpAccountPortalUrls.length,
+        evidenceRows: metricoolMvpAccountProofBridge.filter((item) => item.evidenceRow).length,
+        accounts: metricoolMvpAccountProofBridge.length,
         developerApps: 0,
         permissions: 0,
         oauth: 0,
         officialRechecks: 0,
       },
-      portalUrls: accountCloseout.portalUrls.filter((item) => item.lane === "account"),
-      evidenceRows: accountCloseout.accountProofBridge.map((item) => item.evidenceRow).filter(Boolean),
+      portalUrls: metricoolMvpAccountPortalUrls,
+      evidenceRows: metricoolMvpAccountProofBridge.map((item) => item.evidenceRow).filter(Boolean),
+      accountProofBridge: metricoolMvpAccountProofBridge,
       appPermissionBridge: [],
-      nextItems: accountCloseout.nextItems.filter((item) => item.lane === "account"),
-      nextStep: accountCloseout.accountProofBridge.length
+      nextItems: metricoolMvpAccountNextItems,
+      nextStep: metricoolMvpAccountProofBridge.length
         ? "Complete remaining account/profile proof, then use Metricool for approval-only scheduling."
         : "Account proof is covered for the active Metricool MVP.",
     }
     : accountCloseout;
-  const credentialMvpNote = metricoolMvpReady
+  const evidenceCloseoutForHandoff = metricoolMvpActive
+    ? {
+      ...evidenceCloseout,
+      total: 0,
+      byCategory: {
+        accountProof: 0,
+        developerApps: 0,
+        permissionProof: 0,
+        publicUrl: 0,
+        sourceRights: 0,
+        format: 0,
+        currentStateGaps: 0,
+        rejectedRows: 0,
+      },
+      nextRows: [],
+      importBridge: [],
+      nextItems: [],
+      nextStep: "Direct API/account evidence closeout is deferred; use TikTok/Metricool proof links and live Metricool evidence for this MVP.",
+    }
+    : evidenceCloseout;
+  const credentialMvpNote = metricoolMvpActive
     ? "Metricool MVP is active: direct TikTok/Meta/Google API credentials are backlog for full automation and are not required to review/schedule the current 100-clip Metricool run."
     : "Direct platform API credentials are still required before full direct autopublish/OAuth can be completed.";
-  const recommendedOrder = metricoolMvpReady
+  const recommendedOrder = metricoolMvpActive
     ? [
-      "Open Metricool and review the 100 approval_required items for SPORT and memes.",
+      "Complete SPORT and memes TikTok/Metricool proof first; use real non-secret Metricool URLs or concrete Drive/Docs evidence.",
+      "Preview proof links before saving; do not treat Metricool keys or placeholders as proof.",
+      "Once the proof gate is clean, open Metricool and review approval_required items for SPORT and memes.",
       "Keep realPublishEnabled=false; queued/scheduled rows are not published counts.",
       "After posts are live, fill the active Metricool evidence CSV with real post URLs and 24h metrics.",
       "Import Metricool published evidence and refresh analytics/reporting.",
@@ -42898,13 +43101,16 @@ async function buildRobertConnectNowHandoff(input: {
       "Run Prep Sweep and Completion Audit; continue until blocked is 0.",
       "Connect OAuth for each platform/account, then enable publishing only after the audit is ready.",
     ];
-  const focusRunForHandoff = metricoolMvpReady
+  const focusRunForHandoff = metricoolMvpActive
     ? buildMetricoolMvpFocusRun(input.externalExecutionSession.focusRun)
     : input.externalExecutionSession.focusRun;
-  const connectNowPortalUrls = metricoolMvpReady
+  const connectNowPortalUrls = metricoolMvpActive
     ? [
       ...accounts.flatMap((account) => account.platformAccounts
-        .filter((platformAccount) => platformAccount.platform !== "youtube")
+        .filter((platformAccount) =>
+          platformAccount.platform === "tiktok"
+          && ["sports-daily", "meme-radar"].includes(account.id)
+        )
         .map((platformAccount) => ({
           label: `Crear/verificar ${platformAccount.handle} en ${platformAccount.platform}`,
           url: PLATFORM_REQUIREMENTS.find((requirement) => requirement.platform === platformAccount.platform)?.accountCreationUrl || "",
@@ -42912,7 +43118,7 @@ async function buildRobertConnectNowHandoff(input: {
       { label: "Metricool", url: "https://app.metricool.com/" },
     ].filter((item) => item.url).slice(0, 12)
     : Array.from(portalUrls.values()).slice(0, 30);
-  const connectNowPublicUrls = metricoolMvpReady
+  const connectNowPublicUrls = metricoolMvpActive
     ? [
       { label: "PUBLIC_BASE_URL", url: publicBaseUrl },
       { label: "Privacy Policy", url: `${publicBaseUrl}/clippers/legal/privacy` },
@@ -42927,39 +43133,62 @@ async function buildRobertConnectNowHandoff(input: {
       { label: "Instagram OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/instagram/callback` },
       { label: "YouTube OAuth callback", url: `${publicBaseUrl}/api/clippers/oauth/youtube/callback` },
     ];
+  const blockersForMode: ClipperRobertConnectNowHandoff["blockers"] = metricoolMvpActive
+    ? [
+      {
+        label: "TikTok/Metricool proof gate",
+        count: Math.max(1, metricoolMvpTunnel.blockedGates),
+        nextStep: metricoolMvpTunnel.nextStep,
+      },
+      sourceVideosDrop && sourceVideosDrop.blockers.length
+        ? { label: sourceVideosDrop.label, count: sourceVideosDrop.blockers.length, nextStep: sourceVideosDrop.nextStep }
+        : null,
+    ].filter((item): item is ClipperRobertConnectNowHandoff["blockers"][number] => Boolean(item))
+    : [
+      credentialDrop ? { label: credentialDrop.label, count: credentialDrop.blockers.length, nextStep: credentialDrop.nextStep } : null,
+      launchEvidenceDrop ? { label: launchEvidenceDrop.label, count: launchEvidenceDrop.blockers.length, nextStep: launchEvidenceDrop.nextStep } : null,
+      sourceVideosDrop ? { label: sourceVideosDrop.label, count: sourceVideosDrop.blockers.length, nextStep: sourceVideosDrop.nextStep } : null,
+      { label: "Go-live requirements", count: input.goLiveCompletionAudit.totals.blocked + input.goLiveCompletionAudit.totals.needsEvidence, nextStep: input.goLiveCompletionAudit.nextStep },
+      { label: "Official permissions", count: input.officialPermissionMatrix.totals.loginRequired, nextStep: input.officialPermissionMatrix.nextStep },
+    ].filter((item): item is ClipperRobertConnectNowHandoff["blockers"][number] => Boolean(item));
 
   return {
     markdownPath: ROBERT_CONNECT_NOW_MARKDOWN_PATH,
-    launchMode: metricoolMvpReady ? "metricool_mvp" : "direct_api_full",
-    credentialMode: metricoolMvpReady ? "metricool_not_required" : "direct_api_required",
+    launchMode: metricoolMvpActive ? "metricool_mvp" : "direct_api_full",
+    credentialMode: metricoolMvpActive ? "metricool_not_required" : "direct_api_required",
     focusRun: focusRunForHandoff,
-    evidenceCloseout,
+    evidenceCloseout: evidenceCloseoutForHandoff,
     credentialCloseout: credentialCloseoutForHandoff,
     sourceCloseout,
     accountCloseout: accountCloseoutForHandoff,
-    officialPermissionCloseout,
-    connectionTunnel,
+    officialPermissionCloseout: officialPermissionCloseoutForHandoff,
+    connectionTunnel: connectionTunnelForMode,
     metricoolMvpTunnel,
     ownershipSplit,
     weeklyRunway,
     platformLaunchBridge: platformLaunchBridgeForHandoff,
     externalPortalLauncher,
     intakeConsole,
-    postConnectActivationBridge,
+    postConnectActivationBridge: postConnectActivationBridgeForMode,
     recommendedOrder,
     pendingCredentialEnvVars: activePendingCredentialEnvVars,
     directApiBacklogEnvVars,
     credentialMvpNote,
-    credentialTemplate: metricoolMvpReady ? "" : connectNowCredentialTemplate,
-    credentialDropDirs: metricoolMvpReady ? [] : credentialDrop?.dropDirs.length ? credentialDrop.dropDirs : [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
-    credentialCandidateFiles: metricoolMvpReady ? [] : credentialDrop?.expectedFiles || [],
+    credentialTemplate: metricoolMvpActive ? "" : connectNowCredentialTemplate,
+    credentialDropDirs: metricoolMvpActive ? [] : credentialDrop?.dropDirs.length ? credentialDrop.dropDirs : [CREDENTIAL_DROP_DIR, SECRET_DROP_DIR],
+    credentialCandidateFiles: metricoolMvpActive ? [] : credentialDrop?.expectedFiles || [],
     evidenceTemplatePath: LAUNCH_EVIDENCE_FIX_PACK_SUGGESTED_IMPORT_CSV_PATH,
     evidenceImportPath: OWNER_CONNECT_EVIDENCE_DROP_PATH,
-    launchEvidenceTemplate: metricoolMvpReady ? "" : launchEvidenceDrop?.copyReadyTemplate || "",
+    launchEvidenceTemplate: metricoolMvpActive ? "" : launchEvidenceDrop?.copyReadyTemplate || "",
     sourceDropDirs: sourceVideosDrop?.dropDirs.length ? sourceVideosDrop.dropDirs : [path.join(SOURCE_DROP_DIR, "sports"), path.join(SOURCE_DROP_DIR, "memes"), path.join(SOURCE_DROP_DIR, "streamers")],
     sourceIntakeTemplate: input.sourceSupplyDropKit.intakeBatchTemplate || sourceVideosDrop?.copyReadyTemplate || "",
     sourceAssetsRequired: sourceVideosDrop?.expectedFiles.length || input.sourceSupplyDropKit.totals.items || 0,
-    accountHandles: accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => ({
+    accountHandles: accounts.flatMap((account) => account.platformAccounts
+      .filter((platformAccount) =>
+        !metricoolMvpActive
+        || (platformAccount.platform === "tiktok" && ["sports-daily", "meme-radar"].includes(account.id))
+      )
+      .map((platformAccount) => ({
       accountId: account.id,
       accountName: account.name,
       platform: platformAccount.platform,
@@ -42967,13 +43196,7 @@ async function buildRobertConnectNowHandoff(input: {
     }))),
     portalUrls: connectNowPortalUrls,
     publicUrls: connectNowPublicUrls,
-    blockers: [
-      credentialDrop ? { label: credentialDrop.label, count: credentialDrop.blockers.length, nextStep: credentialDrop.nextStep } : null,
-      launchEvidenceDrop ? { label: launchEvidenceDrop.label, count: launchEvidenceDrop.blockers.length, nextStep: launchEvidenceDrop.nextStep } : null,
-      sourceVideosDrop ? { label: sourceVideosDrop.label, count: sourceVideosDrop.blockers.length, nextStep: sourceVideosDrop.nextStep } : null,
-      { label: "Go-live requirements", count: input.goLiveCompletionAudit.totals.blocked + input.goLiveCompletionAudit.totals.needsEvidence, nextStep: input.goLiveCompletionAudit.nextStep },
-      { label: "Official permissions", count: input.officialPermissionMatrix.totals.loginRequired, nextStep: input.officialPermissionMatrix.nextStep },
-    ].filter((item): item is ClipperRobertConnectNowHandoff["blockers"][number] => Boolean(item)),
+    blockers: blockersForMode,
   };
 }
 
@@ -43146,11 +43369,48 @@ async function buildRobertNextActionsSummary(input: {
   const externalCloseout = input.externalExecutionSession.closeoutRun;
   const externalCloseoutPending = externalCloseout.items.length > 0 || externalCloseout.totals.proofFilesNeedRealEvidence > 0;
   const externalCloseoutNextItem = externalCloseout.items[0] || externalCloseout.nextItems[0] || null;
+  const metricoolMvpActive = isClipperMetricoolMvpActive(input.goLiveCompletionAudit);
   const metricoolMvpReady = Boolean(input.goLiveCompletionAudit.launchModes?.metricoolMvpReady)
     && input.metricoolApprovalSession.status === "ready_for_operator"
     && input.metricoolApprovalSession.totals.readyForReview > 0
     && input.metricoolApprovalSession.approvalRequired
     && !input.metricoolApprovalSession.realPublishEnabled;
+  const metricoolProofGateItems: ClipperRobertNextActionItem[] = metricoolMvpActive && !metricoolMvpReady
+    ? [{
+      id: "metricool-tiktok-proof-gate",
+      rank: 0,
+      lane: "evidence",
+      label: "Fast path Metricool TikTok proof gate",
+      status: "ready_to_execute",
+      priority: "critical",
+      estimatedMinutes: 8,
+      platform: "tiktok",
+      actionUrl: "/api/clippers/prepare-tiktok-mvp-proof-handoff",
+      artifactPath: path.join(REPORTS_DIR, "tiktok-mvp-proof-intake", "proof-links-fast-path-paste-packet.txt"),
+      portalUrl: "https://app.metricool.com/",
+      dropDirs: [path.join(ROOT_DIR, "proof-drop", "tiktok-mvp")],
+      evidenceRows: [
+        "sports-daily:tiktok.metricoolConnectionProofUrl=",
+        "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      ],
+      operatorSteps: [
+        "Open Metricool and copy only non-secret SPORT/memes proof URLs or concrete Drive/Docs evidence URLs.",
+        "Paste SPORT and memes proof URLs plus real 20+ character confirmation notes into the TikTok MVP proof packet.",
+        "Run Preview links first; save only if the preview gate is clean/current.",
+        "Keep Metricool approval_required and realPublishEnabled=false.",
+      ],
+      blockers: [
+        "2 real non-secret SPORT/memes Metricool or concrete Drive/Docs proof URLs are still missing.",
+        "Metricool keys, placeholders, screenshots with secrets, cookies, tokens and passwords do not count as proof.",
+      ],
+      doneCriteria: [
+        "Proof preview reports ready_for_save for sports-daily:tiktok and meme-radar:tiktok.",
+        "Proof save/import leaves the TikTok MVP proof gate ready for operator review.",
+        "No direct social API credentials or OAuth scopes are required for this Metricool MVP.",
+      ],
+      nextStep: "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
+    }]
+    : [];
   const externalCloseoutPriorityItems: ClipperRobertNextActionItem[] = externalCloseoutPending
     ? externalCloseoutNextItem ? [{
       id: `external-closeout-${externalCloseoutNextItem.id}`,
@@ -43217,38 +43477,39 @@ async function buildRobertNextActionsSummary(input: {
     }]
     : [];
   const metricool100RunPrepared = input.metricool100ApprovalRun.status === "ready_for_operator";
-  const metricoolOperatorItemCount = metricool100RunPrepared
+  const useMetricool100OperatorHandoff = metricool100RunPrepared && !metricoolMvpActive;
+  const metricoolOperatorItemCount = useMetricool100OperatorHandoff
     ? input.metricool100ApprovalRun.totals.metricoolQueuedForApproval
     : input.metricoolApprovalSession.totals.readyForReview;
   const metricoolApprovalItems: ClipperRobertNextActionItem[] = input.metricoolApprovalSession.status === "ready_for_operator"
     && metricoolOperatorItemCount > 0
     ? [{
-      id: metricool100RunPrepared ? "metricool-100-operator-handoff" : "metricool-approval-session",
+      id: useMetricool100OperatorHandoff ? "metricool-100-operator-handoff" : "metricool-approval-session",
       rank: 0,
       lane: "external_portal",
-      label: metricool100RunPrepared ? "Process Metricool 100 batch 01" : "Review Metricool review session",
+      label: useMetricool100OperatorHandoff ? "Process Metricool 100 batch 01" : "Review Metricool review session",
       status: "ready_to_execute",
-      priority: "critical",
+      priority: metricoolMvpActive && !metricoolMvpReady ? "high" : "critical",
       estimatedMinutes: Math.max(15, Math.min(90, metricoolOperatorItemCount * 4)),
       platform: "mixed",
-      actionUrl: metricool100RunPrepared ? "/api/clippers/prepare-metricool-100-operator-handoff" : "/api/clippers/prepare-metricool-approval-session",
-      artifactPath: metricool100RunPrepared
+      actionUrl: useMetricool100OperatorHandoff ? "/api/clippers/prepare-metricool-100-operator-handoff" : "/api/clippers/prepare-metricool-approval-session",
+      artifactPath: useMetricool100OperatorHandoff
         ? METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH
         : input.metricoolApprovalSession.markdownPath,
       portalUrl: "https://app.metricool.com/",
       dropDirs: [],
       evidenceRows: input.metricoolApprovalSession.items.slice(0, 5).map((item) => item.evidenceCaptureRow),
       operatorSteps: [
-        metricool100RunPrepared
+        useMetricool100OperatorHandoff
           ? `Open the operator handoff: ${METRICOOL_100_OPERATOR_HANDOFF_MARKDOWN_PATH}.`
           : `Open the review session: ${input.metricoolApprovalSession.markdownPath}.`,
-        metricool100RunPrepared
+        useMetricool100OperatorHandoff
           ? `Start with metricool-batch-01 using: ${path.join(METRICOOL_100_BATCH_WORKBOOKS_DIR, "metricool-batch-01-workbook.csv")}.`
           : `Use the approval CSV: ${input.metricoolApprovalSession.csvPath}.`,
         "Open Metricool and switch to the listed SPORT or memes brand before reviewing each row.",
         "Schedule only items marked ready_for_review in the Metricool review session.",
         "Do not mark anything published until Metricool or the platform shows a real live post URL.",
-        `After posting, fill ${(metricool100RunPrepared ? input.metricool100ApprovalRun.artifacts.evidenceImportCsvPath : input.metricoolApprovalSession.evidenceImportCsvPath)} with real Metricool/post URLs and 24h metrics.`,
+        `After posting, fill ${(useMetricool100OperatorHandoff ? input.metricool100ApprovalRun.artifacts.evidenceImportCsvPath : input.metricoolApprovalSession.evidenceImportCsvPath)} with real Metricool/post URLs and 24h metrics.`,
         "Refresh Analytics Reporting and Robert Next Actions after importing real metrics.",
       ],
       blockers: [
@@ -43260,7 +43521,7 @@ async function buildRobertNextActionsSummary(input: {
         "Scheduled/live rows have real Metricool or platform URLs captured.",
         "Evidence import CSV is filled without tokens, cookies, passwords or private screenshots.",
       ],
-      nextStep: metricool100RunPrepared
+      nextStep: useMetricool100OperatorHandoff
         ? `Open the Metricool 100 operator handoff, process metricool-batch-01 only, and leave evidence blank until public URLs and 24h metrics exist.`
         : input.metricoolApprovalSession.nextStep,
     }]
@@ -43269,7 +43530,7 @@ async function buildRobertNextActionsSummary(input: {
   const isDirectSocialApiBacklogAction = (item: ClipperRobertNextActionItem): boolean => {
     if (item.id === "metricool-100-approval-run" || item.id === "metricool-100-operator-handoff") return false;
     if (item.id === "metricool-approval-session") return false;
-    if (item.id === "dropzone-credentials") return false;
+    if (item.id === "dropzone-credentials") return true;
     const text = `${item.id} ${item.label} ${item.nextStep} ${item.operatorSteps.join(" ")}`.toLowerCase();
     return (
       item.id === "launch-evidence-fixpack" ||
@@ -43286,7 +43547,15 @@ async function buildRobertNextActionsSummary(input: {
       text.includes("scope")
     );
   };
+  const isMetricoolMvpCurrentAction = (item: ClipperRobertNextActionItem): boolean => {
+    if (item.id === "metricool-tiktok-proof-gate" || item.id === "metricool-100-approval-run" || item.id === "metricool-approval-session") return true;
+    const text = `${item.id} ${item.label} ${item.nextStep} ${item.operatorSteps.join(" ")} ${item.evidenceRows.join(" ")}`.toLowerCase();
+    if (item.platform === "tiktok" && /(sports-daily|meme-radar|sportsdaily|memeradar)/i.test(text)) return true;
+    if (item.lane === "source_supply" && /(sports|meme)/i.test(text)) return true;
+    return false;
+  };
   const priorityCandidates = [
+    ...metricoolProofGateItems,
     ...(metricoolMvpReady ? metricoolApprovalItems : externalCloseoutPriorityItems),
     ...(metricoolMvpReady ? externalCloseoutPriorityItems : metricoolApprovalItems),
     ...dropItems,
@@ -43294,7 +43563,7 @@ async function buildRobertNextActionsSummary(input: {
     ...auditItems,
     ...sourceItems,
     ...launchEvidenceFixItems,
-  ].filter((item) => !metricoolMvpReady || !isDirectSocialApiBacklogAction(item));
+  ].filter((item) => !metricoolMvpActive || (isMetricoolMvpCurrentAction(item) && !isDirectSocialApiBacklogAction(item)));
 
   const deduped = new Map<string, ClipperRobertNextActionItem>();
   priorityCandidates.forEach((item) => {
@@ -43302,7 +43571,7 @@ async function buildRobertNextActionsSummary(input: {
     if (!deduped.has(key)) deduped.set(key, item);
   });
   const prioritizedItems = Array.from(deduped.values()).map((item) => {
-    if (!metricoolMvpReady || item.id === "metricool-100-approval-run" || item.id === "metricool-100-operator-handoff" || item.id === "metricool-approval-session" || item.priority !== "critical") return item;
+    if (!metricoolMvpActive || item.id === "metricool-tiktok-proof-gate" || item.id === "metricool-100-approval-run" || item.id === "metricool-100-operator-handoff" || item.id === "metricool-approval-session" || item.priority !== "critical") return item;
     return {
       ...item,
       priority: "high" as const,
@@ -43338,6 +43607,8 @@ async function buildRobertNextActionsSummary(input: {
     ? "not_prepared"
     : metricoolMvpReady
       ? "needs_action"
+      : metricoolMvpActive && metricoolProofGateItems.length
+        ? "blocked"
       : externalCloseoutPending || totals.critical > 0
       ? "blocked"
       : input.goLiveCompletionAudit.readyToPublish
@@ -43346,6 +43617,8 @@ async function buildRobertNextActionsSummary(input: {
   const connectNow = await buildRobertConnectNowHandoff(input);
   const nextStep = metricoolMvpReady && metricoolApprovalItems[0]
     ? metricoolApprovalItems[0].nextStep
+    : metricoolMvpActive && metricoolProofGateItems[0]
+      ? metricoolProofGateItems[0].nextStep
     : externalCloseoutPending
     ? externalCloseout.nextStep
     : items[0]?.nextStep || input.commandCenter.nextStep || "All launch actions are clear; run Completion audit before publishing.";
@@ -43370,7 +43643,9 @@ async function buildRobertNextActionsSummary(input: {
       metricoolQueuedForApproval: externalCloseout.totals.metricoolQueuedForApproval,
       metricoolReadyToSend: externalCloseout.totals.metricoolReadyToSend,
       artifactSafetyStatus: externalCloseout.artifactSafetyStatus,
-      nextStep: externalCloseout.nextStep,
+      nextStep: metricoolMvpActive && metricoolProofGateItems.length
+        ? metricoolProofGateItems[0].nextStep
+        : externalCloseout.nextStep,
     },
     items,
     sourceArtifacts: {
@@ -43498,6 +43773,13 @@ function renderRobertNextActionsMarkdown(summary: ClipperRobertNextActionsSummar
 
 function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary): string {
   const handoff = summary.connectNow;
+  const metricoolMvpMode = handoff.launchMode === "metricool_mvp";
+  const activePostConnectLanes = metricoolMvpMode
+    ? handoff.postConnectActivationBridge.filter((lane) =>
+      lane.platform === "tiktok"
+      && /(sportsdaily|memeradar|sports daily|meme radar)/i.test(`${lane.accountName} ${lane.handle}`)
+    )
+    : handoff.postConnectActivationBridge;
   return [
     "# Clippers: conectar cuentas y desbloquear go-live",
     "",
@@ -43607,15 +43889,20 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       `  next: ${category.nextStep}`,
     ]),
     "",
-    `## Platform Launch Bridge${handoff.launchMode === "metricool_mvp" ? " (Direct API backlog)" : ""}`,
+    "## Platform Launch Bridge",
     "",
-    ...handoff.platformLaunchBridge.flatMap((platform) => [
+    ...(metricoolMvpMode ? [
+      "- Active lane: TikTok through Metricool approval_required for SPORT and memes.",
+      "- Direct TikTok/Meta/Google APIs, developer apps, scopes and OAuth are backlog for later full automation.",
+      "- Current blocker: complete the SPORT/memes TikTok/Metricool proof gate with real non-secret evidence.",
+      "",
+    ] : handoff.platformLaunchBridge.flatMap((platform) => [
       `### ${platform.label}`,
       "",
       `- Status: ${platform.status}`,
       `- Account type: ${platform.accountType}`,
       `- Handles: ${platform.handles.join(", ") || "none"}`,
-      `- ${handoff.launchMode === "metricool_mvp" ? "Direct API missing env vars" : "Missing env vars"}: ${platform.missingEnvVars.join(", ") || "none"}`,
+      `- Missing env vars: ${platform.missingEnvVars.join(", ") || "none"}`,
       `- Scopes: ${platform.scopes.join(", ") || "none"}`,
       `- Account proof tasks: ${platform.accountProofCount}`,
       `- App/permission tasks: ${platform.appPermissionCount}`,
@@ -43630,38 +43917,57 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       "Done criteria:",
       ...platform.doneCriteria.map((criteria) => `- ${criteria}`),
       "",
-    ]),
+    ])),
     "",
     "## External Portal Launcher",
     "",
     `- HTML: ${handoff.externalPortalLauncher.htmlPath}`,
-    `- Portal URLs: ${handoff.externalPortalLauncher.totalPortals}`,
-    `- Do now: ${handoff.externalPortalLauncher.doNow}`,
-    `- Blocked: ${handoff.externalPortalLauncher.blocked}`,
-    `- Account tasks: ${handoff.externalPortalLauncher.accountTasks}`,
-    `- Developer app tasks: ${handoff.externalPortalLauncher.developerAppTasks}`,
-    `- Permission tasks: ${handoff.externalPortalLauncher.permissionTasks}`,
-    `- OAuth tasks: ${handoff.externalPortalLauncher.oauthTasks}`,
-    `- Credential tasks: ${handoff.externalPortalLauncher.credentialTasks}`,
-    `- Next step: ${handoff.externalPortalLauncher.nextStep}`,
+    ...(metricoolMvpMode ? [
+      "- Mode: backlog reference only for this TikTok/Metricool MVP.",
+      "- Active portal: https://app.metricool.com/",
+      `- Next step: ${handoff.metricoolMvpTunnel.nextStep}`,
+    ] : [
+      `- Portal URLs: ${handoff.externalPortalLauncher.totalPortals}`,
+      `- Do now: ${handoff.externalPortalLauncher.doNow}`,
+      `- Blocked: ${handoff.externalPortalLauncher.blocked}`,
+      `- Account tasks: ${handoff.externalPortalLauncher.accountTasks}`,
+      `- Developer app tasks: ${handoff.externalPortalLauncher.developerAppTasks}`,
+      `- Permission tasks: ${handoff.externalPortalLauncher.permissionTasks}`,
+      `- OAuth tasks: ${handoff.externalPortalLauncher.oauthTasks}`,
+      `- Credential tasks: ${handoff.externalPortalLauncher.credentialTasks}`,
+      `- Next step: ${handoff.externalPortalLauncher.nextStep}`,
+    ]),
     "",
     "## Go-Live Intake Console",
     "",
-    `- Status: ${handoff.intakeConsole.status}`,
-    `- Lanes: ${handoff.intakeConsole.totals.lanes}`,
-    `- Ready: ${handoff.intakeConsole.totals.ready}`,
-    `- Partial: ${handoff.intakeConsole.totals.partial}`,
-    `- Missing: ${handoff.intakeConsole.totals.missing}`,
-    `- Critical: ${handoff.intakeConsole.totals.critical}`,
-    `- Blockers: ${handoff.intakeConsole.totals.blockers}`,
-    `- Drop dirs: ${handoff.intakeConsole.totals.dropDirs}`,
-    `- Expected files: ${handoff.intakeConsole.totals.expectedFiles}`,
-    `- Next step: ${handoff.intakeConsole.nextStep}`,
-    "",
-    "Refresh sequence:",
-    ...handoff.intakeConsole.refreshSequence.map((step, index) => `${index + 1}. ${step}`),
-    "",
-    ...handoff.intakeConsole.lanes.flatMap((lane) => [
+    ...(metricoolMvpMode ? [
+      `- Status: ${handoff.intakeConsole.status}`,
+      "- Active lane: TikTok/Metricool proof, approval queue review, and live evidence import.",
+      "- Direct credential, OAuth and developer-app drop lanes are deferred for this MVP.",
+      `- Next step: ${handoff.metricoolMvpTunnel.nextStep}`,
+      "",
+      "Refresh sequence:",
+      "1. Preview/save TikTok MVP proof links after Robert provides real non-secret evidence.",
+      "2. Prepare Metricool approval session.",
+      "3. Import real public post URLs and 24h metrics only after posts are live.",
+      "",
+    ] : [
+      `- Status: ${handoff.intakeConsole.status}`,
+      `- Lanes: ${handoff.intakeConsole.totals.lanes}`,
+      `- Ready: ${handoff.intakeConsole.totals.ready}`,
+      `- Partial: ${handoff.intakeConsole.totals.partial}`,
+      `- Missing: ${handoff.intakeConsole.totals.missing}`,
+      `- Critical: ${handoff.intakeConsole.totals.critical}`,
+      `- Blockers: ${handoff.intakeConsole.totals.blockers}`,
+      `- Drop dirs: ${handoff.intakeConsole.totals.dropDirs}`,
+      `- Expected files: ${handoff.intakeConsole.totals.expectedFiles}`,
+      `- Next step: ${handoff.intakeConsole.nextStep}`,
+      "",
+      "Refresh sequence:",
+      ...handoff.intakeConsole.refreshSequence.map((step, index) => `${index + 1}. ${step}`),
+      "",
+    ]),
+    ...(!metricoolMvpMode ? handoff.intakeConsole.lanes.flatMap((lane) => [
       `### ${lane.rank}. ${lane.label}`,
       "",
       `- Status: ${lane.status}`,
@@ -43681,28 +43987,39 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
       lane.unlocks.length ? "Unlocks:" : "Unlocks: none",
       ...lane.unlocks.map((unlock) => `- ${unlock}`),
       "",
-    ]),
+    ]) : []),
     "",
     "## Post-Connect Activation Bridge",
     "",
-    handoff.postConnectActivationBridge.length ? "Account/platform activation lanes:" : "Account/platform activation lanes: none",
-    ...handoff.postConnectActivationBridge.flatMap((lane) => [
+    activePostConnectLanes.length ? "Account/platform activation lanes:" : "Account/platform activation lanes: none",
+    ...activePostConnectLanes.flatMap((lane) => [
       `### ${lane.accountName} / ${lane.platform}`,
       "",
       `- Status: ${lane.status}`,
       `- Handle: ${lane.handle}`,
-      `- Activation score: ${lane.activationScore}%`,
-      `- Account proof: ${lane.accountProofStatus}`,
-      `- Developer app: ${lane.developerAppStatus}`,
-      `- Permissions: ${lane.permissionsApproved}/${lane.permissionsTotal}`,
-      `- OAuth/token: ${lane.oauthStatus}${lane.tokenSavedAt ? ` (${lane.tokenSavedAt})` : ""}`,
-      `- Publisher connector: ${lane.publisherConnectorStatus}; gate ${lane.publishGate}`,
+      ...(metricoolMvpMode ? [
+        "- Mode: Metricool approval_required; direct developer app, permissions and OAuth are deferred.",
+        `- Metricool/source queue: ${lane.readyQueueItems} ready; ${lane.blockedQueueItems} blocked`,
+      ] : [
+        `- Activation score: ${lane.activationScore}%`,
+        `- Account proof: ${lane.accountProofStatus}`,
+        `- Developer app: ${lane.developerAppStatus}`,
+        `- Permissions: ${lane.permissionsApproved}/${lane.permissionsTotal}`,
+        `- OAuth/token: ${lane.oauthStatus}${lane.tokenSavedAt ? ` (${lane.tokenSavedAt})` : ""}`,
+        `- Publisher connector: ${lane.publisherConnectorStatus}; gate ${lane.publishGate}`,
+      ]),
       `- Queue: ${lane.readyQueueItems} ready; ${lane.blockedQueueItems} blocked`,
-      `- Next step: ${lane.nextStep}`,
+      `- Next step: ${metricoolMvpMode ? handoff.metricoolMvpTunnel.nextStep : lane.nextStep}`,
       lane.blockers.length ? "Blockers:" : "Blockers: none",
-      ...lane.blockers.map((blocker) => `- ${blocker}`),
+      ...(metricoolMvpMode ? [
+        "- SPORT/memes Metricool proof gate still needs real non-secret evidence.",
+        "- No direct social API publishing is enabled.",
+      ] : lane.blockers.map((blocker) => `- ${blocker}`)),
       lane.nextLocalActions.length ? "Next local actions:" : "Next local actions: none",
-      ...lane.nextLocalActions.map((action) => `- ${action}`),
+      ...(metricoolMvpMode ? [
+        "- Complete the TikTok MVP proof packet and preview it before saving.",
+        "- Keep Metricool approval_required and realPublishEnabled=false.",
+      ] : lane.nextLocalActions.map((action) => `- ${action}`)),
       "",
     ]),
     "",
@@ -43751,30 +44068,36 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     "",
     "## Official Permission Closeout",
     "",
-    `- Status: ${handoff.officialPermissionCloseout.status}`,
-    `- Verified at: ${handoff.officialPermissionCloseout.verifiedAt}`,
-    `- Matrix: ${handoff.officialPermissionCloseout.matrixPath}`,
-    `- CSV: ${handoff.officialPermissionCloseout.csvPath}`,
-    `- Platforms: ${handoff.officialPermissionCloseout.totals.platforms}`,
-    `- Scopes: ${handoff.officialPermissionCloseout.totals.scopes}`,
-    `- App-review required: ${handoff.officialPermissionCloseout.totals.appReviewRequired}`,
-    `- Official public verified: ${handoff.officialPermissionCloseout.totals.officialVerified}`,
-    `- Login-required: ${handoff.officialPermissionCloseout.totals.loginRequired}`,
-    `- Next step: ${handoff.officialPermissionCloseout.nextStep}`,
-    "",
-    handoff.officialPermissionCloseout.sourceBatches.length ? "Source batches:" : "Source batches: none",
-    ...handoff.officialPermissionCloseout.sourceBatches.flatMap((batch) => [
-      `- ${batch.label} (${batch.platform}/${batch.accessMode}/${batch.submitDecision})`,
-      `  scopes: ${batch.scopes.join(", ")}`,
-      `  blocker: ${batch.blocker || "none"}`,
-      `  next: ${batch.nextStep}`,
+    ...(metricoolMvpMode ? [
+      "- Mode: deferred direct-API permission backlog.",
+      "- Current MVP does not require Meta/Google/TikTok developer app scopes because Metricool handles the approval scheduling flow.",
+      "- Keep this closed until Robert explicitly asks for full direct API automation.",
+    ] : [
+      `- Status: ${handoff.officialPermissionCloseout.status}`,
+      `- Verified at: ${handoff.officialPermissionCloseout.verifiedAt}`,
+      `- Matrix: ${handoff.officialPermissionCloseout.matrixPath}`,
+      `- CSV: ${handoff.officialPermissionCloseout.csvPath}`,
+      `- Platforms: ${handoff.officialPermissionCloseout.totals.platforms}`,
+      `- Scopes: ${handoff.officialPermissionCloseout.totals.scopes}`,
+      `- App-review required: ${handoff.officialPermissionCloseout.totals.appReviewRequired}`,
+      `- Official public verified: ${handoff.officialPermissionCloseout.totals.officialVerified}`,
+      `- Login-required: ${handoff.officialPermissionCloseout.totals.loginRequired}`,
+      `- Next step: ${handoff.officialPermissionCloseout.nextStep}`,
+      "",
+      handoff.officialPermissionCloseout.sourceBatches.length ? "Source batches:" : "Source batches: none",
+      ...handoff.officialPermissionCloseout.sourceBatches.flatMap((batch) => [
+        `- ${batch.label} (${batch.platform}/${batch.accessMode}/${batch.submitDecision})`,
+        `  scopes: ${batch.scopes.join(", ")}`,
+        `  blocker: ${batch.blocker || "none"}`,
+        `  next: ${batch.nextStep}`,
+      ]),
+      "",
+      handoff.officialPermissionCloseout.nextRows.length ? "Requested permission evidence rows:" : "Requested permission evidence rows: none",
+      ...handoff.officialPermissionCloseout.nextRows.map((row) => `- ${row}`),
+      "",
+      handoff.officialPermissionCloseout.approvalRows.length ? "Approved permission evidence rows:" : "Approved permission evidence rows: none",
+      ...handoff.officialPermissionCloseout.approvalRows.map((row) => `- ${row}`),
     ]),
-    "",
-    handoff.officialPermissionCloseout.nextRows.length ? "Requested permission evidence rows:" : "Requested permission evidence rows: none",
-    ...handoff.officialPermissionCloseout.nextRows.map((row) => `- ${row}`),
-    "",
-    handoff.officialPermissionCloseout.approvalRows.length ? "Approved permission evidence rows:" : "Approved permission evidence rows: none",
-    ...handoff.officialPermissionCloseout.approvalRows.map((row) => `- ${row}`),
     "",
     "## Account/App/Permission Closeout",
     "",
@@ -43840,31 +44163,38 @@ function renderRobertConnectNowMarkdown(summary: ClipperRobertNextActionsSummary
     "",
     "## Evidence Closeout",
     "",
-    `- Open items: ${handoff.evidenceCloseout.total}`,
-    `- Fixpack CSV: ${handoff.evidenceCloseout.fixpackPath}`,
-    `- Final import CSV: ${handoff.evidenceCloseout.importTarget}`,
-    `- Account proof: ${handoff.evidenceCloseout.byCategory.accountProof}`,
-    `- Developer apps: ${handoff.evidenceCloseout.byCategory.developerApps}`,
-    `- Permission proof: ${handoff.evidenceCloseout.byCategory.permissionProof}`,
-    `- Public URLs: ${handoff.evidenceCloseout.byCategory.publicUrl}`,
-    `- Source rights: ${handoff.evidenceCloseout.byCategory.sourceRights}`,
-    `- Current-state gaps: ${handoff.evidenceCloseout.byCategory.currentStateGaps}`,
-    `- Rejected rows: ${handoff.evidenceCloseout.byCategory.rejectedRows}`,
-    `- Next step: ${handoff.evidenceCloseout.nextStep}`,
-    "",
-    handoff.evidenceCloseout.importBridge.length ? "Evidence import bridge:" : "Evidence import bridge: none",
-    ...handoff.evidenceCloseout.importBridge.flatMap((batch) => [
-      `- ${batch.label} (${batch.platform}/${batch.priority}): ${batch.count} row(s)`,
-      `  import target: ${batch.importTarget}`,
-      `  identifiers: ${batch.identifiers.join(", ") || "none"}`,
-      `  fixes: ${batch.requiredFixes.join(" | ") || "none"}`,
-      `  next: ${batch.nextStep}`,
-    ]),
-    "",
-    handoff.evidenceCloseout.nextItems.length ? "Next rows to complete/import:" : "Next rows to complete/import: none",
-    ...handoff.evidenceCloseout.nextItems.flatMap((item) => [
-      `- ${item.rank}. ${item.kind}/${item.fixCategory}: ${item.requiredFix}`,
-      `  ${item.suggestedReplacementRow}`,
+    ...(metricoolMvpMode ? [
+      "- Mode: direct API/account evidence backlog is deferred for this MVP.",
+      "- Active evidence required now: SPORT and memes TikTok/Metricool proof links plus real public post URLs/24h metrics after posts go live.",
+      `- Proof gate next step: ${handoff.metricoolMvpTunnel.nextStep}`,
+      "- Do not paste tokens, cookies, passwords, API keys or screenshots with secrets.",
+    ] : [
+      `- Open items: ${handoff.evidenceCloseout.total}`,
+      `- Fixpack CSV: ${handoff.evidenceCloseout.fixpackPath}`,
+      `- Final import CSV: ${handoff.evidenceCloseout.importTarget}`,
+      `- Account proof: ${handoff.evidenceCloseout.byCategory.accountProof}`,
+      `- Developer apps: ${handoff.evidenceCloseout.byCategory.developerApps}`,
+      `- Permission proof: ${handoff.evidenceCloseout.byCategory.permissionProof}`,
+      `- Public URLs: ${handoff.evidenceCloseout.byCategory.publicUrl}`,
+      `- Source rights: ${handoff.evidenceCloseout.byCategory.sourceRights}`,
+      `- Current-state gaps: ${handoff.evidenceCloseout.byCategory.currentStateGaps}`,
+      `- Rejected rows: ${handoff.evidenceCloseout.byCategory.rejectedRows}`,
+      `- Next step: ${handoff.evidenceCloseout.nextStep}`,
+      "",
+      handoff.evidenceCloseout.importBridge.length ? "Evidence import bridge:" : "Evidence import bridge: none",
+      ...handoff.evidenceCloseout.importBridge.flatMap((batch) => [
+        `- ${batch.label} (${batch.platform}/${batch.priority}): ${batch.count} row(s)`,
+        `  import target: ${batch.importTarget}`,
+        `  identifiers: ${batch.identifiers.join(", ") || "none"}`,
+        `  fixes: ${batch.requiredFixes.join(" | ") || "none"}`,
+        `  next: ${batch.nextStep}`,
+      ]),
+      "",
+      handoff.evidenceCloseout.nextItems.length ? "Next rows to complete/import:" : "Next rows to complete/import: none",
+      ...handoff.evidenceCloseout.nextItems.flatMap((item) => [
+        `- ${item.rank}. ${item.kind}/${item.fixCategory}: ${item.requiredFix}`,
+        `  ${item.suggestedReplacementRow}`,
+      ]),
     ]),
     "",
     "## Source Closeout",
@@ -45508,6 +45838,7 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
   });
   const externalCloseoutPending = statusBefore.externalExecutionSession.closeoutRun.items.length > 0
     || statusBefore.externalExecutionSession.closeoutRun.totals.proofFilesNeedRealEvidence > 0;
+  const metricoolMvpActive = isClipperMetricoolMvpActive(statusBefore.goLiveCompletionAudit);
   const metricoolMvpReady = Boolean(statusBefore.goLiveCompletionAudit.launchModes?.metricoolMvpReady)
     && statusBefore.metricoolApprovalSession.status === "ready_for_operator"
     && statusBefore.metricoolApprovalSession.totals.readyForReview > 0
@@ -45518,6 +45849,8 @@ export async function prepareClipperRobertNextActions(userId = getSystemUserId()
     generatedAt: new Date().toISOString(),
     status: metricoolMvpReady
       ? "needs_action"
+      : metricoolMvpActive && draftSummary.items.some((item) => item.id === "metricool-tiktok-proof-gate")
+        ? "blocked"
       : externalCloseoutPending || draftSummary.totals.critical > 0
       ? "blocked"
       : statusBefore.goLiveCompletionAudit.readyToPublish

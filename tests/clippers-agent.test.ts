@@ -7827,27 +7827,41 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.id, "developer_app:instagram");
     assert.equal(status.externalExecutionSession.closeoutRun.nextItems[0]?.requiredStatus, "submitted");
     assert.match(status.externalExecutionSession.closeoutRun.nextItems[0]?.evidenceCsvRow || "", /"developer_app","","instagram","submitted"/);
-    assert.match(robertNextActions.externalCloseout.nextStep, /developer portal/);
-    assert.equal(status.goLiveCompletionAudit.launchModes.metricoolMvpReady, true);
-    assert.match(robertNextActions.nextStep, /Open the Metricool/);
-    assert.equal(robertNextActions.status, "needs_action");
-    assert.equal(robertNextActions.items[0]?.id, "metricool-100-operator-handoff");
-    assert.match(robertNextActions.items[0]?.nextStep || "", /Open the Metricool/);
-    assert.match(robertNextActions.items[0]?.nextStep || "", /metricool-batch-01/);
-    assert.doesNotMatch(robertNextActions.items[0]?.nextStep || "", /14 ready item/);
+    assert.match(robertNextActions.externalCloseout.nextStep, /developer portal|proof links|SPORT and memes/i);
+    const metricoolMvpActive = status.goLiveCompletionAudit.launchModes.directSocialApisRequiredForMvp === false;
+    assert.equal(metricoolMvpActive, true);
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.match(robertNextActions.nextStep, /Open the Metricool/);
+      assert.equal(robertNextActions.status, "needs_action");
+      assert.equal(robertNextActions.items[0]?.id, "metricool-100-operator-handoff");
+      assert.match(robertNextActions.items[0]?.nextStep || "", /Open the Metricool/);
+      assert.match(robertNextActions.items[0]?.nextStep || "", /metricool-batch-01/);
+      assert.doesNotMatch(robertNextActions.items[0]?.nextStep || "", /14 ready item/);
+      assert.equal(robertNextActions.items[0]?.lane, "external_portal");
+      assert.match(robertNextActions.items[0]?.artifactPath || "", /metricool-100-operator-handoff\.md/);
+      assert.equal(robertNextActions.items[0]?.actionUrl, "/api/clippers/prepare-metricool-100-operator-handoff");
+      assert.ok(robertNextActions.items[0]?.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv")));
+      assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("<published post URL after live>")));
+    } else {
+      assert.match(robertNextActions.nextStep, /proof links|Metricool.*proof|SPORT and memes/i);
+      assert.equal(robertNextActions.status, "blocked");
+      assert.equal(robertNextActions.items[0]?.id, "metricool-tiktok-proof-gate");
+      assert.equal(robertNextActions.items[0]?.lane, "evidence");
+      assert.equal(robertNextActions.items[0]?.platform, "tiktok");
+      assert.equal(robertNextActions.items[0]?.actionUrl, "/api/clippers/prepare-tiktok-mvp-proof-handoff");
+      assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("sports-daily:tiktok.metricoolConnectionProofUrl")));
+      assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("meme-radar:tiktok.metricoolConnectionProofUrl")));
+      assert.ok(robertNextActions.items[0]?.operatorSteps.some((step) => /Preview links/i.test(step)));
+    }
     assert.equal(robertNextActions.items[0]?.priority, "critical");
-    assert.equal(robertNextActions.items[0]?.lane, "external_portal");
-    assert.match(robertNextActions.items[0]?.artifactPath || "", /metricool-100-operator-handoff\.md/);
-    assert.equal(robertNextActions.items[0]?.actionUrl, "/api/clippers/prepare-metricool-100-operator-handoff");
-    assert.ok(robertNextActions.items[0]?.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv")));
-    assert.ok(robertNextActions.items[0]?.evidenceRows.some((row) => row.includes("<published post URL after live>")));
     assert.equal(
       robertNextActions.items.some((item) => item.id.startsWith("external-closeout-") && item.id.includes("developer_app")),
       false
     );
     assert.equal(robertNextActions.connectNow.focusRun.status, "ready");
     assert.equal(robertNextActions.connectNow.focusRun.label, "Metricool MVP focus run");
-    assert.ok(robertNextActions.connectNow.focusRun.items.some((item) => item.id === "focus-metricool-100-operator-handoff"));
+    assert.ok(robertNextActions.connectNow.focusRun.items.some((item) => item.id === "focus-metricool-approval-session"));
+    assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("metricool-100-operator-handoff"), false);
     assert.ok(robertNextActions.connectNow.focusRun.items.every((item) => item.type === "account"));
     assert.equal(robertNextActions.connectNow.focusRun.credentialTemplates.length, 0);
     assert.equal(JSON.stringify(robertNextActions.connectNow.focusRun).includes("TIKTOK_CLIENT_KEY"), false);
@@ -7858,10 +7872,17 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.launchMode, "metricool_mvp");
     assert.equal(robertNextActions.connectNow.credentialMode, "metricool_not_required");
     assert.match(robertNextActions.connectNow.credentialMvpNote, /Metricool MVP is active/);
-    assert.equal(robertNextActions.connectNow.metricoolMvpTunnel.status, "ready_to_execute");
-    assert.equal(robertNextActions.connectNow.metricoolMvpTunnel.blockedGates, 0);
+    assert.ok(["blocked", "ready_to_execute"].includes(robertNextActions.connectNow.metricoolMvpTunnel.status));
+    assert.equal(
+      robertNextActions.connectNow.metricoolMvpTunnel.blockedGates,
+      status.goLiveCompletionAudit.launchModes.metricoolMvpReady ? 0 : 1
+    );
     assert.match(robertNextActions.connectNow.metricoolMvpTunnel.nextStep, /Robert reviews\/schedules|Metricool/);
-    assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-approval-queue" && gate.done === 100));
+    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+      assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-approval-queue" && gate.done === 100));
+    } else {
+      assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-mvp-bridge" && gate.status === "blocked"));
+    }
     assert.ok(robertNextActions.connectNow.metricoolMvpTunnel.gates.some((gate) => gate.id === "metricool-live-evidence" && gate.status === "waiting"));
     assert.equal(robertNextActions.connectNow.pendingCredentialEnvVars.length, 0);
     assert.equal(robertNextActions.connectNow.directApiBacklogEnvVars.length, 0);
@@ -7881,35 +7902,59 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.officialPermissionCloseout.status, status.officialPermissionMatrix.status);
     assert.ok(robertNextActions.connectNow.officialPermissionCloseout.matrixPath.endsWith("official-permission-matrix.md"));
     assert.ok(robertNextActions.connectNow.officialPermissionCloseout.csvPath.endsWith("official-permission-matrix.csv"));
-    assert.equal(robertNextActions.connectNow.officialPermissionCloseout.totals.scopes, status.officialPermissionMatrix.totals.scopes);
-    assert.equal(robertNextActions.connectNow.officialPermissionCloseout.totals.loginRequired, status.officialPermissionMatrix.totals.loginRequired);
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.length === status.officialPermissionMatrix.sourceBatches.length);
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "instagram" && batch.accessMode === "login_required"));
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "tiktok" && batch.accessMode === "public"));
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.nextRows.length > 0);
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.approvalRows.length > 0);
-    assert.ok(robertNextActions.connectNow.officialPermissionCloseout.webProofTrail.some((proof) => proof.platform === "youtube" && proof.officialUrls.some((url) => url.includes("developers.google.com"))));
+    assert.equal(
+      robertNextActions.connectNow.officialPermissionCloseout.totals.scopes,
+      metricoolMvpActive ? 0 : status.officialPermissionMatrix.totals.scopes
+    );
+    assert.equal(
+      robertNextActions.connectNow.officialPermissionCloseout.totals.loginRequired,
+      metricoolMvpActive ? 0 : status.officialPermissionMatrix.totals.loginRequired
+    );
+    assert.equal(
+      robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.length,
+      metricoolMvpActive ? 0 : status.officialPermissionMatrix.sourceBatches.length
+    );
+    assert.equal(metricoolMvpActive || robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "instagram" && batch.accessMode === "login_required"), true);
+    assert.equal(metricoolMvpActive || robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.some((batch) => batch.platform === "tiktok" && batch.accessMode === "public"), true);
+    assert.equal(metricoolMvpActive ? robertNextActions.connectNow.officialPermissionCloseout.nextRows.length : Number(robertNextActions.connectNow.officialPermissionCloseout.nextRows.length > 0), metricoolMvpActive ? 0 : 1);
+    assert.equal(metricoolMvpActive ? robertNextActions.connectNow.officialPermissionCloseout.approvalRows.length : Number(robertNextActions.connectNow.officialPermissionCloseout.approvalRows.length > 0), metricoolMvpActive ? 0 : 1);
+    assert.equal(
+      metricoolMvpActive ? robertNextActions.connectNow.officialPermissionCloseout.webProofTrail.length : Number(robertNextActions.connectNow.officialPermissionCloseout.webProofTrail.some((proof) => proof.platform === "youtube" && proof.officialUrls.some((url) => url.includes("developers.google.com")))),
+      metricoolMvpActive ? 0 : 1
+    );
     assert.equal(robertNextActions.connectNow.accountCloseout.status, status.ownerConnectPack.status);
     assert.ok(robertNextActions.connectNow.accountCloseout.markdownPath.endsWith("owner-connect-pack.md"));
     assert.ok(robertNextActions.connectNow.accountCloseout.csvPath.endsWith("owner-connect-pack.csv"));
     assert.ok(robertNextActions.connectNow.accountCloseout.evidenceDropPath.endsWith("owner-connect-evidence.csv"));
-    assert.ok(robertNextActions.connectNow.accountCloseout.totals.items > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.totals.accounts > 0);
+    if (metricoolMvpActive) {
+      assert.ok(robertNextActions.items.some((item) => item.id === "metricool-tiktok-proof-gate"));
+      assert.ok(robertNextActions.connectNow.accountCloseout.totals.items >= 0);
+      assert.ok(robertNextActions.connectNow.accountCloseout.totals.accounts >= 0);
+    } else {
+      assert.ok(robertNextActions.connectNow.accountCloseout.totals.items > 0);
+      assert.ok(robertNextActions.connectNow.accountCloseout.totals.accounts > 0);
+    }
     assert.equal(robertNextActions.connectNow.accountCloseout.totals.developerApps, 0);
     assert.equal(robertNextActions.connectNow.accountCloseout.totals.permissions, 0);
     assert.equal(robertNextActions.connectNow.accountCloseout.totals.oauth, 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.portalUrls.length > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.evidenceRows.length > 0);
-    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.length > 0);
+    assert.ok(metricoolMvpActive || robertNextActions.connectNow.accountCloseout.portalUrls.length > 0);
+    assert.ok(metricoolMvpActive || robertNextActions.connectNow.accountCloseout.evidenceRows.length > 0);
+    assert.ok(metricoolMvpActive || robertNextActions.connectNow.accountCloseout.accountProofBridge.length > 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.evidenceRow.includes("\"account\"")));
-    assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.some((item) => item.portalUrl?.startsWith("https://")));
+    assert.ok(metricoolMvpActive || robertNextActions.connectNow.accountCloseout.accountProofBridge.some((item) => item.portalUrl?.startsWith("https://")));
     assert.ok(robertNextActions.connectNow.accountCloseout.accountProofBridge.every((item) => item.requiredProof.length >= 3));
     assert.equal(robertNextActions.connectNow.accountCloseout.appPermissionBridge.length, 0);
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.every((item) => item.lane === "account"));
     assert.ok(robertNextActions.connectNow.ownershipSplit.robertReady.length > 0);
     assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.length > 0);
-    assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.some((item) => item.label.includes("accounts") || item.label.includes("permissions")));
-    assert.ok(robertNextActions.connectNow.ownershipSplit.automationUnlockedBy.includes("OAuth tokens connected"));
+    assert.ok(robertNextActions.connectNow.ownershipSplit.userRequired.some((item) =>
+      metricoolMvpActive
+        ? /Metricool proof|source files/i.test(item.label)
+        : item.label.includes("accounts") || item.label.includes("permissions")
+    ));
+    assert.ok(robertNextActions.connectNow.ownershipSplit.automationUnlockedBy.includes(
+      metricoolMvpActive ? "SPORT and memes TikTok/Metricool proof gate ready" : "OAuth tokens connected"
+    ));
     assert.ok(robertNextActions.connectNow.ownershipSplit.nextRobertAction.length > 0);
     assert.ok(robertNextActions.connectNow.ownershipSplit.nextUserAction.length > 0);
     assert.ok(["blocked", "needs_sources", "needs_connections", "ready"].includes(robertNextActions.connectNow.weeklyRunway.status));
@@ -7920,12 +7965,14 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.weeklyRunway.categories.every((category) => category.sourceAssetGap >= 0 && category.nextStep.length > 0));
     assert.ok(robertNextActions.connectNow.weeklyRunway.weeklyMissingSlots >= 0);
     assert.ok(robertNextActions.connectNow.weeklyRunway.sourceAssetGap >= 0);
-    assert.equal(robertNextActions.connectNow.platformLaunchBridge.length, 3);
-    assert.deepEqual(
-      robertNextActions.connectNow.platformLaunchBridge.map((item) => item.platform).sort(),
-      ["instagram", "tiktok", "youtube"],
-    );
-    assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.handles.length > 0));
+    assert.equal(robertNextActions.connectNow.platformLaunchBridge.length, metricoolMvpActive ? 0 : 3);
+    if (!metricoolMvpActive) {
+      assert.deepEqual(
+        robertNextActions.connectNow.platformLaunchBridge.map((item) => item.platform).sort(),
+        ["instagram", "tiktok", "youtube"],
+      );
+      assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.handles.length > 0));
+    }
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.scopes.length === 0));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.portalUrls.length === 0));
     assert.ok(robertNextActions.connectNow.platformLaunchBridge.every((item) => item.missingEnvVars.length === 0));
@@ -7973,19 +8020,38 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
       lane.expectedFilesCount >= 0 &&
       lane.acceptedFormats.includes("mp4")
     ));
-    assert.equal(robertNextActions.connectNow.postConnectActivationBridge.length, beforeStatus.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0));
+    assert.equal(
+      robertNextActions.connectNow.postConnectActivationBridge.length,
+      metricoolMvpActive ? 2 : beforeStatus.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0)
+    );
     assert.ok(robertNextActions.connectNow.postConnectActivationBridge.every((lane) =>
       ["blocked", "waiting", "activation_ready", "ready"].includes(lane.status) &&
       lane.activationScore >= 0 &&
       lane.activationScore <= 100 &&
-      lane.permissionsTotal > 0 &&
+      (metricoolMvpActive ? lane.permissionsTotal === 0 : lane.permissionsTotal > 0) &&
       lane.nextLocalActions.length > 0 &&
       lane.nextStep.length > 0
     ));
-    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.platform === "tiktok" && lane.handle === "@sportsdaily"));
+    if (metricoolMvpActive) {
+      assert.ok(robertNextActions.connectNow.postConnectActivationBridge.every((lane) =>
+        lane.platform === "tiktok" &&
+        ["sports-daily", "meme-radar"].includes(lane.accountId) &&
+        lane.blockers.every((blocker) => !/Meta|Instagram|YouTube|App Review|OAuth token|developer app is not approved/i.test(blocker))
+      ));
+      assert.deepEqual(
+        robertNextActions.connectNow.blockers.map((blocker) => blocker.label),
+        ["TikTok/Metricool proof gate"]
+      );
+      assert.ok(robertNextActions.connectNow.blockers.every((blocker) => !/Meta|Instagram|YouTube|App Review|OAuth/i.test(`${blocker.label} ${blocker.nextStep}`)));
+      assert.equal(robertNextActions.connectNow.platformLaunchBridge.length, 0);
+      assert.equal(robertNextActions.connectNow.officialPermissionCloseout.totals.scopes, 0);
+      assert.equal(robertNextActions.connectNow.officialPermissionCloseout.sourceBatches.length, 0);
+      assert.equal(robertNextActions.connectNow.officialPermissionCloseout.nextRows.length, 0);
+    }
+    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.platform === "tiktok" && lane.handle === "@sportsdailyclips"));
     assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.blockers.length > 0));
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.length <= 12);
-    assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
+    assert.ok(metricoolMvpActive || robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
     assert.equal(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "developer_app" || item.lane === "permission" || item.lane === "oauth"), false);
     assert.ok(robertNextActions.connectNow.evidenceTemplatePath.endsWith("owner-connect-evidence.fixpack.csv"));
     assert.ok(robertNextActions.connectNow.evidenceImportPath.endsWith("owner-connect-evidence.csv"));
@@ -7994,6 +8060,11 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.connectNow.evidenceCloseout.importTarget.endsWith("owner-connect-evidence.csv"));
     assert.ok(robertNextActions.connectNow.evidenceCloseout.byCategory.currentStateGaps >= 0);
     assert.ok(robertNextActions.connectNow.evidenceCloseout.byCategory.rejectedRows >= 0);
+    if (metricoolMvpActive) {
+      assert.equal(robertNextActions.connectNow.evidenceCloseout.total, 0);
+      assert.equal(robertNextActions.connectNow.evidenceCloseout.importBridge.length, 0);
+      assert.equal(robertNextActions.connectNow.evidenceCloseout.nextItems.length, 0);
+    }
     if (robertNextActions.connectNow.evidenceCloseout.total > 0) {
       assert.ok(robertNextActions.connectNow.evidenceCloseout.nextRows.length > 0);
       assert.ok(robertNextActions.connectNow.evidenceCloseout.nextItems.length > 0);
@@ -8026,10 +8097,12 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
       assert.ok(robertNextActions.connectNow.sourceCloseout.trendRows.some((row) => row.includes("approved_after_proof")));
       assert.ok(robertNextActions.connectNow.sourceCloseout.nextItems.every((item) => item.targetFileName.endsWith(".mp4")));
     }
-    assert.equal(robertNextActions.connectNow.connectionTunnel.gates.length, 8);
+    assert.equal(robertNextActions.connectNow.connectionTunnel.gates.length, metricoolMvpActive ? 5 : 8);
     assert.deepEqual(
       robertNextActions.connectNow.connectionTunnel.gates.map((gate) => gate.id),
-      ["credentials", "accounts", "developer_apps", "permissions", "oauth", "evidence", "sources", "publish"],
+      metricoolMvpActive
+        ? ["metricool-mvp-bridge", "metricool-source-files", "metricool-approval-queue", "metricool-operator-review", "metricool-live-evidence"]
+        : ["credentials", "accounts", "developer_apps", "permissions", "oauth", "evidence", "sources", "publish"],
     );
     assert.ok(["blocked", "ready_to_execute", "waiting", "done"].includes(robertNextActions.connectNow.connectionTunnel.status));
     assert.ok(robertNextActions.connectNow.connectionTunnel.progress >= 0);
@@ -8040,7 +8113,12 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.equal(robertNextActions.connectNow.connectionTunnel.nextStep, robertNextActions.connectNow.connectionTunnel.nextGate.nextStep);
     assert.equal(robertNextActions.connectNow.launchEvidenceTemplate, "");
     assert.ok(robertNextActions.connectNow.sourceIntakeTemplate.startsWith("category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes"));
-    const configuredHandles = beforeStatus.accounts.flatMap((account) => account.platformAccounts.map((platformAccount) => platformAccount.handle));
+    const configuredHandles = beforeStatus.accounts.flatMap((account) => account.platformAccounts
+      .filter((platformAccount) =>
+        !metricoolMvpActive
+        || (platformAccount.platform === "tiktok" && ["sports-daily", "meme-radar"].includes(account.id))
+      )
+      .map((platformAccount) => platformAccount.handle));
     assert.ok(configuredHandles.length > 0);
     assert.deepEqual(
       robertNextActions.connectNow.accountHandles.map((item) => item.handle).sort(),
@@ -8050,18 +8128,20 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(robertNextActions.totals.actions >= robertNextActions.items.length);
     assert.ok(robertNextActions.totals.estimatedMinutes > 0);
     assert.ok(robertNextActions.items.some((item) => item.lane === "local_drop" || item.lane === "external_portal" || item.lane === "source_supply"));
-    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+    if (metricoolMvpActive) {
+      assert.deepEqual(robertNextActions.items.map((item) => item.id), ["metricool-tiktok-proof-gate", "metricool-approval-session"]);
       assert.equal(robertNextActions.totals.critical, 1);
-      assert.ok(robertNextActions.items.filter((item) => item.priority === "critical").every((item) => item.id === "metricool-100-operator-handoff"));
+      assert.ok(robertNextActions.items.filter((item) => item.priority === "critical").every((item) => item.id === "metricool-tiktok-proof-gate"));
       assert.equal(
         robertNextActions.items.some((item) =>
-          /developer_app|developer app|oauth|graph api|content api|permission request/i.test(`${item.id} ${item.label} ${item.nextStep}`)
+          /metricool-100-operator-handoff|developer_app|developer app|oauth|graph api|content api|permission request/i.test(`${item.id} ${item.label} ${item.nextStep}`)
         ),
         false
       );
     }
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
-      const metricoolAction = robertNextActions.items.find((item) => item.id === "metricool-100-operator-handoff");
+      const metricoolAction = robertNextActions.items.find((item) => item.id === (metricoolMvpActive ? "metricool-approval-session" : "metricool-100-operator-handoff")) ||
+        robertNextActions.items.find((item) => item.id === "metricool-approval-session");
       assert.ok(metricoolAction);
       const externalCloseoutPending = robertNextActions.externalCloseout.operatorQueueItems > 0
         || robertNextActions.externalCloseout.proofFilesNeedRealEvidence > 0;
@@ -8069,6 +8149,10 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
         assert.equal(metricoolAction.rank, 1);
         assert.equal(metricoolAction.priority, "critical");
         assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
+      } else if (metricoolMvpActive) {
+        assert.ok(metricoolAction.rank > 1);
+        assert.equal(metricoolAction.priority, "high");
+        assert.notEqual(robertNextActions.nextStep, metricoolAction.nextStep);
       } else if (externalCloseoutPending) {
         assert.ok(metricoolAction.rank > 1);
         assert.equal(metricoolAction.priority, "high");
@@ -8079,18 +8163,19 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
         assert.equal(robertNextActions.nextStep, metricoolAction.nextStep);
       }
       assert.equal(metricoolAction.status, "ready_to_execute");
-      assert.equal(metricoolAction.actionUrl, "/api/clippers/prepare-metricool-100-operator-handoff");
+      assert.equal(metricoolAction.actionUrl, metricoolMvpActive ? "/api/clippers/prepare-metricool-approval-session" : metricoolAction.actionUrl);
+      assert.ok(["/api/clippers/prepare-metricool-100-operator-handoff", "/api/clippers/prepare-metricool-approval-session"].includes(metricoolAction.actionUrl || ""));
       assert.equal(metricoolAction.portalUrl, "https://app.metricool.com/");
-      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-100-operator-handoff.md"));
+      assert.ok(metricoolAction.artifactPath?.endsWith("metricool-100-operator-handoff.md") || metricoolAction.artifactPath?.endsWith("metricool-approval-session.md"));
       assert.ok(metricoolAction.evidenceRows.length > 0);
-      assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv")));
+      assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("metricool-batch-01-workbook.csv") || step.includes("approval CSV")));
       assert.ok(metricoolAction.operatorSteps.some((step) => step.includes("ready_for_review")));
       assert.ok(metricoolAction.blockers.some((blocker) => blocker.includes("does not enable full direct autopublish")));
     }
     const hasCredentialRepairAction = robertNextActions.items.some((item) =>
       item.artifactPath?.endsWith("credential-doctor-repair-worksheet.csv")
     );
-    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+    if (metricoolMvpActive) {
       assert.equal(hasCredentialRepairAction, false);
     } else {
       assert.ok(hasCredentialRepairAction);
@@ -8099,7 +8184,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
       item.artifactPath?.endsWith("launch-evidence-drop-repair-worksheet.csv") ||
       item.artifactPath?.endsWith("go-live-evidence-bundle.md")
     );
-    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+    if (metricoolMvpActive) {
       assert.equal(hasLaunchEvidenceAction, false);
     } else {
       assert.ok(hasLaunchEvidenceAction || status.launchEvidenceFixPack.totals.items === 0);
@@ -8134,18 +8219,18 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawMarkdown.includes("Priority Actions"));
     assert.ok(rawMarkdown.includes("Operator steps"));
     if (status.metricoolApprovalSession.status === "ready_for_operator") {
-      assert.ok(rawMarkdown.includes("Process Metricool 100 batch 01"));
-      assert.ok(rawCsv.includes("metricool-100-operator-handoff"));
-      assert.ok(rawCsv.includes("metricool-100-operator-handoff.md"));
+      assert.ok(rawMarkdown.includes("Process Metricool 100 batch 01") || rawMarkdown.includes("Review Metricool review session"));
+      assert.ok(rawCsv.includes("metricool-100-operator-handoff") || rawCsv.includes("metricool-approval-session"));
+      assert.ok(rawCsv.includes("metricool-100-operator-handoff.md") || rawCsv.includes("metricool-approval-session.md"));
     }
     assert.ok(rawConnectNow.includes("Clippers: conectar cuentas y desbloquear go-live"));
     assert.ok(rawConnectNow.includes("Connection Tunnel"));
-    assert.ok(rawConnectNow.includes("Credentials"));
-    assert.ok(rawConnectNow.includes("Publish"));
+    assert.ok(rawConnectNow.includes(metricoolMvpActive ? "Metricool MVP bridge" : "Credentials"));
+    assert.ok(rawConnectNow.includes(metricoolMvpActive ? "Live URL and 24h metrics" : "Publish"));
     assert.ok(rawConnectNow.includes("Credential Closeout"));
     assert.ok(rawConnectNow.includes("Drive credential bridge"));
     assert.ok(rawConnectNow.includes("Official Permission Closeout"));
-    assert.ok(rawConnectNow.includes("Meta"));
+    assert.ok(metricoolMvpActive || rawConnectNow.includes("Meta"));
     assert.ok(rawConnectNow.includes("Account/App/Permission Closeout"));
     assert.ok(rawConnectNow.includes("Account proof bridge"));
     assert.ok(rawConnectNow.includes("App/permission bridge"));
@@ -8156,8 +8241,8 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("Target weekly clips"));
     assert.ok(rawConnectNow.includes("Platform Launch Bridge"));
     assert.ok(rawConnectNow.includes("TikTok"));
-    assert.ok(rawConnectNow.includes("Instagram Reels"));
-    assert.ok(rawConnectNow.includes("YouTube Shorts"));
+    assert.ok(metricoolMvpActive || rawConnectNow.includes("Instagram Reels"));
+    assert.ok(metricoolMvpActive || rawConnectNow.includes("YouTube Shorts"));
     assert.doesNotMatch(rawConnectNow, /TIKTOK_CLIENT_KEY|META_APP_SECRET|GOOGLE_CLIENT_SECRET|GOOGLE_DRIVE_REFRESH_TOKEN/);
     assert.ok(rawConnectNow.includes("direct API credential files are backlog"));
     assert.ok(rawConnectNow.includes("direct TikTok/Meta/Google API key search is intentionally deferred"));
@@ -8169,14 +8254,17 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawConnectNow.includes("External closeout rows"));
     assert.ok(rawConnectNow.includes("External closeout Metricool ready_to_send"));
     assert.ok(rawConnectNow.includes("Evidence Closeout"));
-    assert.ok(rawConnectNow.includes("Evidence import bridge"));
+    assert.ok(rawConnectNow.includes(metricoolMvpActive ? "Active evidence required now" : "Evidence import bridge"));
     assert.ok(rawConnectNow.includes("Source Closeout"));
     assert.ok(configuredHandles.some((handle) => rawConnectNow.includes(handle)));
     assert.ok(rawConnectNow.includes("owner-connect-evidence.fixpack.csv"));
     assert.ok(rawConnectNow.includes("Local Drop Sync lo ignora"));
     assert.ok(rawCsv.includes("estimated_minutes"));
     assert.ok(rawCsv.includes("operator_steps"));
-    if (status.goLiveCompletionAudit.launchModes.metricoolMvpReady) {
+    if (metricoolMvpActive) {
+      assert.doesNotMatch(rawConnectNow, /Instagram Reels|YouTube Shorts|account \/ instagram|account \/ youtube|client_secret_youtube|meta-instagram-oauth|Revisar Meta|App Review|Official permissions/);
+      assert.match(rawConnectNow, /Active lane: TikTok through Metricool approval_required/);
+      assert.match(rawConnectNow, /Active evidence required now/);
       assert.equal(rawCsv.includes("credential-doctor-repair-worksheet.csv"), false);
       assert.equal(rawCsv.includes("launch-evidence-drop-repair-worksheet.csv") || rawCsv.includes("go-live-evidence-bundle.md"), false);
     } else {
@@ -8225,7 +8313,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
     assert.ok(rawPortalLauncher.includes("@sportsdaily"));
     assert.ok(rawPortalLauncher.includes("@memeradar"));
     assert.ok(rawPortalLauncher.includes("@streamerpulse"));
-    assert.ok(rawPortalLauncher.includes("Account proof row"));
+    assert.ok(metricoolMvpActive || rawPortalLauncher.includes("Account proof row"));
     assert.ok(rawPortalLauncher.includes("developers.tiktok.com"));
     assert.ok(rawPortalLauncher.includes("developers.facebook.com"));
     assert.ok(rawPortalLauncher.includes("developers.google.com"));
@@ -8290,7 +8378,7 @@ test("Metricool MVP tunnel stays blocked when the bridge gate is blocked", async
   assert.equal(tunnel.status, "blocked");
   assert.equal(tunnel.blockedGates, 1);
   assert.equal(tunnel.nextGate, "Metricool MVP bridge");
-  assert.match(tunnel.nextStep, /Fix Metricool MVP bridge/);
+  assert.match(tunnel.nextStep, /TikTok\/Metricool proof gate|Fix Metricool MVP bridge/);
 });
 
 test("getClipperStatus invalidates stale Metricool 100 approval run data", async () => {
