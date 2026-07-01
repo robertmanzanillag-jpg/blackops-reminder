@@ -91,6 +91,30 @@ type RevenueDailyScoutSprintSnapshot = {
   };
 };
 
+const DAILY_MONEY_SAFE_RUN_ENDPOINTS = new Set([
+  "/api/revenue-engine/scout-dispatch",
+  "/api/revenue-engine/money-sprint/public-candidates",
+  "/api/revenue-engine/website-opportunities",
+  "/api/revenue-engine/website-delivery-workspace",
+  "/api/revenue-engine/delivery-workspaces/github-handoff",
+]);
+
+function parseDailyMoneyRunRequest(value: string | undefined) {
+  if (!value?.trim()) {
+    return { ok: false as const, reason: "No hay request listo.", payload: null };
+  }
+
+  try {
+    return { ok: true as const, reason: "", payload: JSON.parse(value) as Record<string, unknown> };
+  } catch {
+    return { ok: false as const, reason: "El request no es JSON valido.", payload: null };
+  }
+}
+
+function hasDailyMoneyRunPlaceholders(value: string | undefined) {
+  return /\bREPLACE_|"owner\/repo"|codex\/client-website-build/.test(value || "");
+}
+
 type RevenueSnapshot = {
   metrics: {
     appsSold: number;
@@ -2489,6 +2513,25 @@ export default function RevenueEnginePage() {
       .flatMap((task) => task.resultSlots.filter((slot) => slot.status === "open").map((slot) => slot.copyableEvidenceBlock))
       .join("\n\n") || ""
   ), [activeScoutTask, snapshot?.latestDailyScoutSprint]);
+  const dailyMoneyRunPacket = snapshot?.dailyMoneyCommand.runPacket;
+  const dailyMoneyRunRequest = useMemo(
+    () => parseDailyMoneyRunRequest(dailyMoneyRunPacket?.copyableApiRequest),
+    [dailyMoneyRunPacket?.copyableApiRequest],
+  );
+  const dailyMoneyRunIsSafeEndpoint = DAILY_MONEY_SAFE_RUN_ENDPOINTS.has(dailyMoneyRunPacket?.apiAction || "");
+  const dailyMoneyRunHasPlaceholders = hasDailyMoneyRunPlaceholders(dailyMoneyRunPacket?.copyableApiRequest);
+  const dailyMoneyRunBlockedReason = !dailyMoneyRunPacket
+    ? "Cargando run packet."
+    : snapshot?.dailyMoneyCommand.status === "blocked"
+      ? "Daily Money Command esta bloqueado por guardrails."
+      : !dailyMoneyRunIsSafeEndpoint
+        ? "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
+        : dailyMoneyRunHasPlaceholders
+          ? "El request todavia tiene placeholders."
+          : !dailyMoneyRunRequest.ok
+            ? dailyMoneyRunRequest.reason
+            : "";
+  const canRunDailyMoneyNextAction = Boolean(dailyMoneyRunPacket && dailyMoneyRunIsSafeEndpoint && !dailyMoneyRunHasPlaceholders && dailyMoneyRunRequest.ok && snapshot?.dailyMoneyCommand.status !== "blocked");
 
   useEffect(() => {
     if (approvalQueue.length === 0) {
@@ -2584,6 +2627,34 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo despachar scout agents");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const dailyMoneyRunMutation = useMutation<Record<string, unknown>, Error>({
+    mutationFn: async () => {
+      const apiAction = snapshot?.dailyMoneyCommand.runPacket.apiAction || "";
+      const request = parseDailyMoneyRunRequest(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest);
+      if (!DAILY_MONEY_SAFE_RUN_ENDPOINTS.has(apiAction)) {
+        throw new Error("Este endpoint no esta habilitado para ejecucion segura desde Daily Money Command.");
+      }
+      if (hasDailyMoneyRunPlaceholders(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest)) {
+        throw new Error("El request todavia tiene placeholders.");
+      }
+      if (!request.ok) {
+        throw new Error(request.reason);
+      }
+
+      const response = await fetch(apiAction, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request.payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo correr la siguiente accion segura");
       return data;
     },
     onSuccess: () => {
@@ -5621,6 +5692,39 @@ export default function RevenueEnginePage() {
                       <Copy className="mr-2 h-3.5 w-3.5" />
                       Copy API request
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!canRunDailyMoneyNextAction || dailyMoneyRunMutation.isPending}
+                      className="mt-2 w-full bg-emerald-700 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                      onClick={() => dailyMoneyRunMutation.mutate()}
+                      data-testid="button-run-daily-money-safe-action"
+                    >
+                      {dailyMoneyRunMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Rocket className="mr-2 h-3.5 w-3.5" />}
+                      Run next safe action
+                    </Button>
+                    <p className="mt-2 text-xs leading-5 text-zinc-500" data-testid="text-daily-money-safe-action-gate">
+                      {canRunDailyMoneyNextAction
+                        ? `Safe direct run: ${dailyMoneyRunPacket?.apiAction}`
+                        : dailyMoneyRunBlockedReason}
+                    </p>
+                    {dailyMoneyRunMutation.data && (
+                      <div className="mt-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2" data-testid="panel-daily-money-safe-action-result">
+                        <p className="text-xs font-medium text-emerald-100">
+                          Resultado: {String(dailyMoneyRunMutation.data.status || "ok")}
+                        </p>
+                        {"reason" in dailyMoneyRunMutation.data && (
+                          <p className="mt-1 text-xs leading-5 text-emerald-100/80">
+                            {String(dailyMoneyRunMutation.data.reason || "")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {dailyMoneyRunMutation.error && (
+                      <p className="mt-2 text-xs leading-5 text-red-300" data-testid="text-daily-money-safe-action-error">
+                        {dailyMoneyRunMutation.error.message}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
