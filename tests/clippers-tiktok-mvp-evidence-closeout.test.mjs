@@ -243,6 +243,64 @@ test("TikTok MVP evidence closeout accepts Google Drive or Docs Metricool eviden
   }
 });
 
+test("TikTok MVP evidence closeout blocks assigned credential notes without blocking safe API key prose", async () => {
+  const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(accountCsvPath, [
+      accountHeader,
+      "account,sports-daily,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,Sports Daily TikTok account ownership and 2FA security proof verified by Robert; no API keys were shared",
+      "account,meme-radar,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,Meme Radar TikTok account ownership and 2FA security proof verified by Robert; no API keys were shared",
+    ].join("\n") + "\n");
+    await writeFile(bridgeCsvPath, [
+      bridgeHeader,
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok connection proof reviewed by Robert without API keys or secrets",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok connection proof reviewed by Robert without API keys or secrets",
+    ].join("\n") + "\n");
+
+    const safePreview = runCloseout();
+    assert.equal(safePreview.status, 0, safePreview.stderr || safePreview.stdout);
+    const safeOutput = JSON.parse(safePreview.stdout);
+    assert.equal(safeOutput.status, "ready_to_apply");
+    assert.equal(safeOutput.ready, 2);
+    assert.equal(safeOutput.applied, 0);
+
+    await writeFile(accountCsvPath, [
+      accountHeader,
+      "account,sports-daily,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,Sports Daily TikTok account ownership and 2FA security proof verified by Robert with api_key=neverpaste",
+      "account,meme-radar,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,Meme Radar TikTok account ownership and 2FA security proof verified by Robert; no API keys were shared",
+    ].join("\n") + "\n");
+
+    const blockedPreview = runCloseout();
+    assert.equal(blockedPreview.status, 0, blockedPreview.stderr || blockedPreview.stdout);
+    const blockedOutput = JSON.parse(blockedPreview.stdout);
+    assert.equal(blockedOutput.status, "blocked_invalid_evidence");
+    assert.equal(blockedOutput.applied, 0);
+    const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
+    assert.match(JSON.stringify(report), /secret-like text|placeholder, fake proof/);
+
+    await writeFile(accountCsvPath, [
+      accountHeader,
+      "account,sports-daily,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://not-real,Sports Daily TikTok account ownership and 2FA security proof verified by Robert; no API keys were shared",
+      "account,meme-radar,tiktok,verified,,,,,https://www.tiktok.com/signup,,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,replace this later with ownership proof details for Meme Radar TikTok verification",
+    ].join("\n") + "\n");
+
+    const fakePreview = runCloseout();
+    assert.equal(fakePreview.status, 0, fakePreview.stderr || fakePreview.stdout);
+    const fakeOutput = JSON.parse(fakePreview.stdout);
+    assert.equal(fakeOutput.status, "blocked_invalid_evidence");
+    assert.equal(fakeOutput.applied, 0);
+    const fakeReport = JSON.parse(await readFile(closeoutReportPath, "utf8"));
+    assert.match(JSON.stringify(fakeReport), /real safe HTTPS proof URL|placeholder or secret-like text|placeholder, fake proof/);
+  } finally {
+    if (previousSports === null) await unlink(sportsEvidencePath).catch(() => undefined);
+    else await writeFile(sportsEvidencePath, previousSports);
+    if (previousMemes === null) await unlink(memesEvidencePath).catch(() => undefined);
+    else await writeFile(memesEvidencePath, previousMemes);
+  }
+});
+
 test("TikTok MVP evidence closeout rejects mismatched TikTok handles", async () => {
   await mkdir(tmpDir, { recursive: true });
   await writeFile(accountCsvPath, cleanAccountCsv());

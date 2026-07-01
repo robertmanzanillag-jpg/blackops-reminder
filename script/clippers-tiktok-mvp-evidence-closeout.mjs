@@ -16,7 +16,9 @@ const activeLanes = [
 ];
 const activeLaneIds = new Set(activeLanes.map((lane) => `${lane.accountId}:tiktok`));
 const weakNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);
-const unsafePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
+const unsafeHostOrPlaceholderPattern = /<[^>]+>|\bpaste\b|\bplaceholder\b|replace this|not-real|not-metricool|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
+const secretTextPattern = /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i;
+const credentialUrlPattern = /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i;
 const unsafeParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
 
 function parseArgs(argv) {
@@ -72,10 +74,24 @@ function normalize(value) {
   return String(value || "").trim();
 }
 
+function containsUnsafeText(value) {
+  const text = String(value || "");
+  return unsafeHostOrPlaceholderPattern.test(text)
+    || secretTextPattern.test(text)
+    || credentialUrlPattern.test(text)
+    || unsafeParamPattern.test(text);
+}
+
 function isSafeHttpsUrl(value) {
   try {
     const url = new URL(normalize(value));
-    return url.protocol === "https:" && !url.username && !url.password && !unsafePattern.test(url.hostname) && !unsafeParamPattern.test(url.search);
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && url.hostname.includes(".")
+      && !unsafeHostOrPlaceholderPattern.test(url.hostname)
+      && !unsafeHostOrPlaceholderPattern.test(url.href)
+      && !unsafeParamPattern.test(url.search);
   } catch {
     return false;
   }
@@ -151,7 +167,7 @@ function validateNotes(notes) {
   const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   if (text.length < 20) return "notes must be at least 20 characters";
   if (weakNotes.has(normalized)) return "notes are too generic";
-  if (unsafePattern.test(text) || unsafeParamPattern.test(text)) return "notes contain placeholder or secret-like text";
+  if (containsUnsafeText(text)) return "notes contain placeholder or secret-like text";
   return "";
 }
 
@@ -169,7 +185,7 @@ function validateAccountRow(row) {
   if (!proof || !isSafeHttpsUrl(proof)) return { ok: false, reason: "account proof must be a real safe HTTPS proof URL" };
   const notesIssue = validateNotes(notes);
   if (notesIssue) return { ok: false, reason: notesIssue };
-  if (unsafePattern.test(combined) || unsafeParamPattern.test(combined)) return { ok: false, reason: "row contains placeholder, fake proof, or secret-like text" };
+  if (containsUnsafeText(combined)) return { ok: false, reason: "row contains placeholder, fake proof, or secret-like text" };
   if (!/(2fa|two-factor|two factor|security|ownership|owner|manager|verification|verified|verificad|captura|screenshot|proof)/i.test(notes)) {
     return { ok: false, reason: "account notes must mention ownership/security/verification proof" };
   }
@@ -194,7 +210,7 @@ function validateBridgeRow(row) {
   if (!isMetricoolConnectionProofUrl(proof)) return { ok: false, reason: "proof must be a real Metricool HTTPS URL or concrete Google Drive file/folder or Docs evidence URL" };
   const notesIssue = validateNotes(notes);
   if (notesIssue) return { ok: false, reason: notesIssue };
-  if (unsafePattern.test(combined) || unsafeParamPattern.test(combined)) return { ok: false, reason: "row contains placeholder, fake proof, or secret-like text" };
+  if (containsUnsafeText(combined)) return { ok: false, reason: "row contains placeholder, fake proof, or secret-like text" };
   return { ok: true, accountId, platform, brand, profileUrl, proof, notes };
 }
 
