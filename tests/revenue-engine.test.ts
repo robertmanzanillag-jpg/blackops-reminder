@@ -2980,7 +2980,7 @@ test("sales autopilot prepares lead mockup agent QA and draft without sending", 
     cashCollectedUsd: 0,
     recipientEmail: "owner@example.com",
     contactName: "Owner",
-    sourceUrl: "https://example.com/listing",
+    sourceUrl: "https://example.com/autopilot-cafe",
     businessSummary: "Autopilot Cafe has public evidence of no website and needs a stronger online menu, catering capture and follow-up system.",
     monthlyRetainerUsd: 750,
     approvalToContact: false,
@@ -2998,6 +2998,44 @@ test("sales autopilot prepares lead mockup agent QA and draft without sending", 
   assert.equal(result.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "agent_run" && item.title === "Autopilot Cafe"), true);
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Autopilot Cafe"), true);
+});
+
+test("sales autopilot blocks generic source urls before creating lead or outreach", () => {
+  const result = recordRevenueSalesAutopilot({
+    businessName: "Generic Autopilot Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@genericautopilot.example",
+    evidence: "Generic directory page claims many coffee shops need websites but does not tie this business to the contact path.",
+    painPoint: "Needs online menu, catering lead capture and follow-up.",
+    request: "Create a 3D website with lead capture, catering inquiry follow-up and weekly owner dashboard.",
+    projectType: "bundle",
+    estimatedOfferUsd: 4200,
+    estimatedInternalCostUsd: 54,
+    monthlyBudgetUsd: 100,
+    cashCollectedUsd: 0,
+    recipientEmail: "owner@genericautopilot.example",
+    contactName: "Owner",
+    sourceUrl: "https://example.com",
+    businessSummary: "Generic Autopilot Cafe should not create a sales packet from a generic homepage.",
+    monthlyRetainerUsd: 750,
+    approvalToContact: true,
+    approvalToSpend: false,
+    approvalToBuild: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.requiredBeforeExternalAction.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(result.lead, null);
+  assert.equal(result.mockup, null);
+  assert.equal(result.agentRun, null);
+  assert.equal(result.deliveryReview, null);
+  assert.equal(result.outreachDraft, null);
+  assert.equal(result.snapshot.recentLeads.length, 0);
+  assert.equal(result.snapshot.recentOutreach.length, 0);
+  assert.equal(result.snapshot.recentAgentRuns.length, 0);
 });
 
 test("money sprint creates scout queue previews leads and draft-only outreach", () => {
@@ -4570,6 +4608,76 @@ test("trusted release gate rejects PR tab URLs without review or comment anchors
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
 });
 
+test("trusted release gate rejects wrong evidence anchor types", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Wrong Anchor Cafe",
+    contactEmail: "owner@wronganchor.example",
+    sourceUrl: "https://example.com/wrong-anchor-cafe",
+    mockupSlug: "wrong-anchor-cafe",
+    projectType: "website",
+  });
+  const prUrl = "https://github.com/robert/wrong-anchor-cafe/pull/2";
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/wrong-anchor-cafe",
+    branchName: "codex/client-wrong-anchor-cafe-website",
+    githubIssueUrl: "https://github.com/robert/wrong-anchor-cafe/issues/1",
+    prUrl,
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: `${prUrl}#issuecomment-second-review`,
+    appQaStatus: "pass",
+    appQaEvidenceUrl: `${prUrl}#pullrequestreview-app-qa`,
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: `${prUrl}#pullrequestreview-approval`,
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-wrong-anchor-cafe-website, client Wrong Anchor Cafe.`,
+  }, {
+    verifiedPrStatusReady: true,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /secondReviewEvidenceUrl/);
+  assert.match(releaseGate.reason, /appQaEvidenceUrl/);
+  assert.match(releaseGate.reason, /deploymentApprovalUrl/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
+test("trusted release gate rejects PR subpath evidence even with valid anchors", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Subpath Evidence Cafe",
+    contactEmail: "owner@subpathevidence.example",
+    sourceUrl: "https://example.com/subpath-evidence-cafe",
+    mockupSlug: "subpath-evidence-cafe",
+    projectType: "website",
+  });
+  const prUrl = "https://github.com/robert/subpath-evidence-cafe/pull/2";
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/subpath-evidence-cafe",
+    branchName: "codex/client-subpath-evidence-cafe-website",
+    githubIssueUrl: "https://github.com/robert/subpath-evidence-cafe/issues/1",
+    prUrl,
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: `${prUrl}/files#pullrequestreview-1`,
+    appQaStatus: "pass",
+    appQaEvidenceUrl: `${prUrl}/files#issuecomment-app-qa`,
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: `${prUrl}/commits/abc#issuecomment-approval`,
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-subpath-evidence-cafe-website, client Subpath Evidence Cafe.`,
+  }, {
+    verifiedPrStatusReady: true,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /secondReviewEvidenceUrl/);
+  assert.match(releaseGate.reason, /appQaEvidenceUrl/);
+  assert.match(releaseGate.reason, /deploymentApprovalUrl/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
 test("trusted delivery endpoint helper delivers only after trusted release gate approval", () => {
   const created = createSoldWebsiteWorkspaceForTest({
     businessName: "Trusted Delivered Cafe",
@@ -5027,6 +5135,7 @@ test("sales autopilot blocks when internal cost breaks the starting cap", () => 
     monthlyBudgetUsd: 100,
     cashCollectedUsd: 0,
     recipientEmail: "owner@example.com",
+    sourceUrl: "https://example.com/expensive-automation",
     businessSummary: "Expensive Automation has a weak website and needs booking automation.",
     approvalToContact: true,
     approvalToSpend: false,

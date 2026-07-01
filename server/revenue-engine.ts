@@ -8190,6 +8190,23 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
     request: parsed.request,
     projectType: parsed.projectType,
   });
+  const sourceBlocker = revenueSeedLeadSourceBlocker(parsed);
+  if (sourceBlocker) {
+    return {
+      status: "blocked" as const,
+      guardrail: "Bloqueado por evidencia publica insuficiente; no crear lead, mockup, agent run ni outreach desde una fuente generica.",
+      lead: null,
+      leadQualification: null,
+      clarificationGate,
+      mockup: null,
+      agentRun: null,
+      deliveryReview: null,
+      outreachDraft: null,
+      requiredBeforeExternalAction: [sourceBlocker],
+      nextActions: ["Reemplazar sourceUrl con una fuente publica que coincida con el negocio/contacto.", "Volver a correr Sales Autopilot solo con evidencia verificable."],
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
   const leadResult = recordRevenueLead({
     businessName: parsed.businessName,
     area: parsed.area,
@@ -9594,14 +9611,16 @@ function parseGithubRepoUrl(value: string) {
   }
 }
 
-function isGithubEvidenceForPr(value: string | undefined, prPrefix: string) {
+function isGithubEvidenceForPr(value: string | undefined, prPrefix: string, expectedAnchor: "review" | "comment") {
   if (!value) return false;
   const parsed = parseGithubRepoUrl(value);
   if (!parsed || parsed.normalizedPrefix !== prPrefix) return false;
   try {
     const url = new URL(value);
-    const hasAnchor = url.hash.trim().length > 1;
-    return hasAnchor;
+    if (url.pathname.toLowerCase() !== prPrefix) return false;
+    const hash = url.hash.trim().toLowerCase();
+    if (expectedAnchor === "review") return /^#pullrequestreview-\w+/.test(hash);
+    return /^#issuecomment-\w+/.test(hash);
   } catch {
     return false;
   }
@@ -9633,9 +9652,9 @@ function validateRevenueReleaseGateEvidence(
     secondReviewStatus !== "pass" && "secondReviewStatus debe ser pass",
     appQaStatus !== "pass" && "appQaStatus debe ser pass",
     deploymentApprovalStatus !== "approved" && "deploymentApprovalStatus debe ser approved",
-    !pr || !isGithubEvidenceForPr(parsed.secondReviewEvidenceUrl, pr.normalizedPrefix) && "secondReviewEvidenceUrl debe apuntar al PR o comentario/review del PR",
-    !pr || !isGithubEvidenceForPr(parsed.appQaEvidenceUrl, pr.normalizedPrefix) && "appQaEvidenceUrl debe apuntar al PR o comentario de App QA del PR",
-    !pr || !isGithubEvidenceForPr(deploymentApprovalUrl, pr.normalizedPrefix) && "deploymentApprovalUrl debe apuntar al PR o comentario de aprobacion del PR",
+    !pr || !isGithubEvidenceForPr(parsed.secondReviewEvidenceUrl, pr.normalizedPrefix, "review") && "secondReviewEvidenceUrl debe apuntar al PR review aprobado del PR",
+    !pr || !isGithubEvidenceForPr(parsed.appQaEvidenceUrl, pr.normalizedPrefix, "comment") && "appQaEvidenceUrl debe apuntar al PR o comentario de App QA del PR",
+    !pr || !isGithubEvidenceForPr(deploymentApprovalUrl, pr.normalizedPrefix, "comment") && "deploymentApprovalUrl debe apuntar al PR o comentario de aprobacion del PR",
     !notes.includes("second review") && "notes debe mencionar evidencia de second review",
     !notes.includes("app qa") && "notes debe mencionar evidencia de App QA",
     !notes.includes("robert") && "notes debe mencionar aprobacion de Robert",
