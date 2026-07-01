@@ -189,8 +189,8 @@ function renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout) {
       return [
         `${key}.accountOwnershipProofUrl=`,
         `${key}.metricoolConnectionProofUrl=`,
-        `${key}.accountNotes=${row.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
-        `${key}.metricoolNotes=${metricoolBrandNameFor(row)} Metricool connection to ${row.handle} verified by Robert without secrets.`,
+        `${key}.accountNotes=`,
+        `${key}.metricoolNotes=`,
         "",
       ];
     }),

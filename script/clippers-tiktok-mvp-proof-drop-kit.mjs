@@ -207,8 +207,8 @@ function proofTemplate() {
     lanes: Object.fromEntries(lanes.map((lane) => [lane.key, {
       accountOwnershipProofUrl: "",
       metricoolConnectionProofUrl: "",
-      accountNotes: `${lane.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
-      metricoolNotes: `${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      accountNotes: "",
+      metricoolNotes: "",
     }])),
   };
 }

@@ -1103,6 +1103,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-drop-recommended-lines-button/);
   assert.match(page, /Copy ready packet/);
   assert.match(page, /Load ready packet/);
+  assert.match(page, /<write a real 20\+ character note after reviewing SPORT ownership\/control proof>/);
+  assert.match(page, /<write a real 20\+ character note after reviewing memes Metricool connection proof>/);
+  assert.doesNotMatch(page, /SPORT Metricool connection proof verifies Robert-controlled|proof reviewed by Robert/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-required-lines/);
   assert.match(page, /copyProofDropRequiredFastPathLines/);
   assert.match(page, /copy-clippers-tiktok-mvp-proof-links-drop-required-lines-button/);
@@ -1360,6 +1363,8 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.doesNotMatch(accountTemplate, /"verified".*<paste real public ownership proof URL/);
   assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
   assert.match(bridgeTemplate, /<paste real public Metricool proof URL or concrete Drive file\/folder\/Docs evidence URL for memes @memeradar>/);
+  assert.match(bridgeTemplate, /<write a real 20\+ character Metricool connection note after reviewing SPORT @sportsdaily proof>/);
+  assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}`, /reviewed by Robert|verified by Robert|confirmed by Robert|Robert confirms/i);
   assert.match(markdown, /Evidence quality:/);
   assert.match(markdown, /Current blocker: .*accountProofUrl/);
   assert.match(markdown, /Drive\/Docs Evidence Checklist/);

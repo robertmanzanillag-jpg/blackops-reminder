@@ -10666,14 +10666,14 @@ const tiktokMvpProofQuickFillTemplate = JSON.stringify({
     "sports-daily:tiktok": {
       accountOwnershipProofUrl: "<paste real public ownership proof URL>",
       metricoolConnectionProofUrl: "<paste real https://app.metricool.com proof URL>",
-      accountNotes: "Sports Daily TikTok ownership and 2FA proof reviewed by Robert without secrets.",
-      metricoolNotes: "SPORT TikTok profile is connected in Metricool approval_required mode without secrets.",
+      accountNotes: "<write a real 20+ character note after reviewing SPORT ownership/control proof>",
+      metricoolNotes: "<write a real 20+ character note after reviewing SPORT Metricool connection proof>",
     },
     "meme-radar:tiktok": {
       accountOwnershipProofUrl: "<paste real public ownership proof URL>",
       metricoolConnectionProofUrl: "<paste real https://app.metricool.com proof URL>",
-      accountNotes: "Meme Radar TikTok ownership and 2FA proof reviewed by Robert without secrets.",
-      metricoolNotes: "memes TikTok profile is connected in Metricool approval_required mode without secrets.",
+      accountNotes: "<write a real 20+ character note after reviewing memes ownership/control proof>",
+      metricoolNotes: "<write a real 20+ character note after reviewing memes Metricool connection proof>",
     },
   },
 }, null, 2);
@@ -17543,12 +17543,12 @@ export default function ClippersPage() {
     const packetText = [
       `sports-daily:tiktok.accountOwnershipProofUrl=${sportUrl}`,
       `sports-daily:tiktok.metricoolConnectionProofUrl=${sportUrl}`,
-      "sports-daily:tiktok.accountNotes=SPORT Metricool connection proof verifies Robert-controlled TikTok ownership and security without secrets.",
-      "sports-daily:tiktok.metricoolNotes=SPORT TikTok profile connected in Metricool approval_required mode with non-secret proof reviewed by Robert.",
+      "sports-daily:tiktok.accountNotes=",
+      "sports-daily:tiktok.metricoolNotes=",
       `meme-radar:tiktok.accountOwnershipProofUrl=${memesUrl}`,
       `meme-radar:tiktok.metricoolConnectionProofUrl=${memesUrl}`,
-      "meme-radar:tiktok.accountNotes=memes Metricool connection proof verifies Robert-controlled TikTok ownership and security without secrets.",
-      "meme-radar:tiktok.metricoolNotes=memes TikTok profile connected in Metricool approval_required mode with non-secret proof reviewed by Robert.",
+      "meme-radar:tiktok.accountNotes=",
+      "meme-radar:tiktok.metricoolNotes=",
     ].join("\n");
     setTiktokMvpProofLinksPasteText(packetText);
     setTiktokMvpProofLinksPastePreview(null);

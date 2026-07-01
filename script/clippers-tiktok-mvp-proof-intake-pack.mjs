@@ -81,7 +81,7 @@ function renderAccountCsv() {
       "https://www.tiktok.com/signup",
       "",
       `<paste real public ownership proof URL for ${lane.handle}; change status to verified only after proof is real and reviewed>`,
-      `${lane.accountName} ${lane.handle} ownership and 2FA/security proof pending real Robert review for Metricool TikTok MVP without secrets.`,
+      `<write a real 20+ character ownership/control note after reviewing ${lane.handle} proof>`,
     ].map(csvCell).join(",")),
     "",
   ].join("\n");
@@ -98,7 +98,7 @@ function renderBridgeCsv() {
       "",
       lane.profileUrl,
       `<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL for ${lane.metricoolBrandName} ${lane.handle}>`,
-      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret Metricool or Drive/Docs proof reviewed by Robert.`,
+      `<write a real 20+ character Metricool connection note after reviewing ${lane.metricoolBrandName} ${lane.handle} proof>`,
     ].map(csvCell).join(",")),
     "",
   ].join("\n");
@@ -130,8 +130,8 @@ function renderCombinedCsv() {
       lane.profileUrl,
       `<paste real public ownership proof URL for ${lane.handle}>`,
       `<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL for ${lane.metricoolBrandName} ${lane.handle}>`,
-      `${lane.accountName} ${lane.handle} ownership and 2FA/security proof reviewed by Robert for Metricool TikTok MVP without secrets.`,
-      `${lane.metricoolBrandName} TikTok profile ${lane.handle} is connected in Metricool approval_required mode; public non-secret Metricool or Drive/Docs proof reviewed by Robert.`,
+      `<write a real 20+ character ownership/control note after reviewing ${lane.handle} proof>`,
+      `<write a real 20+ character Metricool connection note after reviewing ${lane.metricoolBrandName} ${lane.handle} proof>`,
       accountCsvPath,
       bridgeCsvPath,
     ].map(csvCell).join(",")),

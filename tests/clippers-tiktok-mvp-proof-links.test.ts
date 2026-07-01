@@ -83,8 +83,10 @@ test("TikTok MVP proof links parser can reuse clean Metricool proof as account c
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "SPORT Metricool connected proof https://app.metricool.com/planner/sports-daily-tiktok-proof",
     "sports-daily:tiktok.accountNotes=Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
+    "sports-daily:tiktok.metricoolNotes=SPORT TikTok profile connection reviewed in Metricool approval_required mode without secrets.",
     "memes Metricool connected proof https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
     "meme-radar:tiktok.accountNotes=Robert confirms this Drive proof shows Meme Radar TikTok connected under Robert control without secrets.",
+    "meme-radar:tiktok.metricoolNotes=memes TikTok profile connection reviewed in Metricool approval_required mode without secrets.",
   ].join("\n"));
 
   assert.equal(parsed.status, "ready_for_proof_links_preview");

@@ -279,10 +279,8 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
     return [spec.key, {
       accountOwnershipProofUrl,
       metricoolConnectionProofUrl,
-      accountNotes: explicitLane.accountNotes || (usesMetricoolProofAsAccountControl
-        ? ""
-        : `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`),
-      metricoolNotes: explicitLane.metricoolNotes || `${spec.metricoolBrandName} TikTok profile connected in Metricool approval_required mode without secrets.`,
+      accountNotes: explicitLane.accountNotes || "",
+      metricoolNotes: explicitLane.metricoolNotes || "",
     }];
   }));
   const proofLinks = { lanes };
