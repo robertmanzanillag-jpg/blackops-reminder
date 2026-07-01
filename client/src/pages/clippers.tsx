@@ -19245,7 +19245,7 @@ export default function ClippersPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-cyan-100">Paste proof packet</p>
-                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes. A clean Metricool or concrete Drive file/folder/Docs proof can count as ownership/control when it shows the TikTok profile connected.</p>
+                      <p className="mt-1 text-zinc-500">Minimum path: 2 real proof URLs, one for SPORT and one for memes. A clean Metricool or concrete Drive file/folder/Docs proof can count as ownership/control only when it shows the TikTok profile connected under Robert control.</p>
                     </div>
                     <Button
                       type="button"

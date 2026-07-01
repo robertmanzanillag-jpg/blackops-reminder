@@ -1168,6 +1168,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-links-drop-status"\]/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-fast-path-packet-button/);
+  assert.match(page, /Minimum path: 2 real proof URLs, one for SPORT and one for memes/);
   assert.match(page, /tiktokMvpProofHandoff\?\.fastPathPastePacketText/);
   assert.match(page, /loadTiktokMvpProofHandoffPacket/);
   const proofHandoffLoadHelperStart = page.indexOf("const loadTiktokMvpProofHandoffPacket = (packetText?: string) => {");
