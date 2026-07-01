@@ -5408,10 +5408,10 @@ function buildRevenueDailyMoneyCommand(input: {
   const status: RevenueDailyMoneyCommand["status"] =
     input.profitGuard.status === "pause_spend"
       ? "blocked"
-      : input.websiteDeliveryHandoffQueue.readyCount > 0 || input.websiteClosureQueue.readyCount > 0
-        ? "collect"
-        : buildHandoffsOpen > 0
-          ? "build"
+      : buildHandoffsOpen > 0
+        ? "build"
+        : input.websiteDeliveryHandoffQueue.readyCount > 0 || input.websiteClosureQueue.readyCount > 0
+          ? "collect"
           : input.manualOutreachQueue.readyCount > 0
             ? "contact"
             : input.websiteSalesPacketQueue.readyCount > 0
@@ -5959,7 +5959,10 @@ function buildRevenueMoneyActivationPlan(input: {
     status: blockedLaunchEvidence.length === 0 ? "ready" as const : "blocked" as const,
     requiredEvidence: requiredLaunchEvidence,
     verificationCommands: [
+      "npm run revenue:money-readiness -- --mode=first-sprint --json",
+      "npm run revenue:money-readiness -- --mode=production-launch --json",
       "npm run test:revenue-engine",
+      "npm run test:revenue-money-readiness-cli",
       "npm run test:developer-autopilot",
       "npm run check",
       "npm run build",

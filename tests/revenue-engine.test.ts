@@ -4130,7 +4130,7 @@ test("website build queue excludes direct workspaces without sold opportunity ch
   assert.equal(snapshot.dailyMoneyCommand.funnel.buildHandoffsOpen, 0);
 });
 
-test("daily money command keeps delivery collection ahead of open website builds", () => {
+test("daily money command prioritizes open PR-first website builds before more delivery collection", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
 
   const { lead: buildLead, draft: buildDraft } = createApprovedWebsiteDraftForTest({
@@ -4181,16 +4181,18 @@ test("daily money command keeps delivery collection ahead of open website builds
   assert.equal(snapshot.websiteBuildHandoffQueue.items[0].workspaceId, buildHandoff.workspace?.id);
   assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
   assert.equal(snapshot.websiteDeliveryHandoffQueue.items[0].leadId, collectLead.id);
-  assert.equal(snapshot.dailyMoneyCommand.status, "collect");
+  assert.equal(snapshot.dailyMoneyCommand.status, "build");
   assert.equal(snapshot.dailyMoneyCommand.funnel.buildHandoffsOpen, 1);
   assert.equal(snapshot.dailyMoneyCommand.funnel.deliveryHandoffsReady, 1);
-  assert.match(snapshot.dailyMoneyCommand.target, /1 handoffs listos/);
+  assert.match(snapshot.dailyMoneyCommand.target, /1 builds esperando PR-first/);
   assert.match(snapshot.dailyMoneyCommand.steps.find((step) => step.id === "collect")?.metric || "", /1 delivery \/ 1 PR/);
   assert.equal(
-    snapshot.dailyMoneyCommand.steps.find((step) => step.id === "collect")?.nextAction,
-    snapshot.websiteDeliveryHandoffQueue.nextAction,
+    snapshot.dailyMoneyCommand.runPacket.apiAction,
+    "/api/revenue-engine/delivery-workspaces/github-handoff",
   );
+  assert.match(snapshot.dailyMoneyCommand.runPacket.gate, /No merge\/deploy\/client preview/);
   assert.equal(snapshot.dailyMoneyCommand.copyableOperatorBrief.includes(`- Website builds needing PR-first handoff: 1`), true);
+  assert.equal(snapshot.dailyMoneyCommand.copyableOperatorBrief.includes(buildHandoff.workspace?.id || ""), true);
 });
 
 test("website delivery handoff blocks incomplete deposits before closing or ledger", () => {

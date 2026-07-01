@@ -16,7 +16,12 @@ Arrancar el Revenue Engine para vender websites premium, mockups y automatizacio
 
 ## Estado listo para empezar
 
-El sistema esta listo para generar dinero cuando `/revenue-engine` muestre `Launch readiness: ready_to_start`.
+El sistema esta listo para empezar a moverse cuando `/revenue-engine` muestre el `Revenue Engine activation brief` y el comando local confirme el modo correcto:
+
+- Research/dry-run: `npm run revenue:money-readiness -- --mode=research`
+- Primer sprint con dinero controlado: `npm run revenue:money-readiness -- --mode=first-sprint`
+- Money mode completo: `npm run revenue:money-readiness -- --mode=money-mode`
+- Launch/deploy: `npm run revenue:money-readiness -- --mode=production-launch`
 
 La unica pieza permitida como pendiente por ahora es:
 
@@ -114,7 +119,7 @@ Cada mockup debe incluir:
 ## Dia 1 operativo
 
 1. Abrir `/revenue-engine`.
-2. Confirmar `Launch readiness: ready_to_start`.
+2. Ejecutar `npm run revenue:money-readiness -- --mode=research` para confirmar que se puede buscar negocios sin outreach, gasto o deploy.
 3. En `Leads`, generar Lead Radar para Miami / med spas.
 4. Buscar 120 candidatos publicos.
 5. Guardar 20-30 leads con evidencia.
@@ -131,6 +136,7 @@ Antes de produccion:
 
 - `npm run build` debe pasar.
 - `node --import tsx --test tests/revenue-engine.test.ts` debe pasar.
+- `npm run revenue:money-readiness -- --mode=first-sprint --json` debe pasar antes de operar leads/cobros reales.
 - Configurar `DATABASE_URL` del entorno final como secret del deployment, nunca en git, PRs, issues o chat publico.
 - Configurar `SESSION_SECRET` largo como secret del deployment.
 - Copiar el `Production persistence setup packet` del panel `/revenue-engine` y completar sus pasos.
