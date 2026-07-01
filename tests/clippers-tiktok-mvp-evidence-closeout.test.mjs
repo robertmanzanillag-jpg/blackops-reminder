@@ -291,7 +291,11 @@ test("TikTok MVP proof links preview rejects embedded credential proof URLs", as
 
   assert.equal(safeClipperHttpsProofUrl("https://viewer:secret@drive.google.com/file/d/sports-daily-tiktok-proof/view"), false);
   assert.equal(safeClipperMetricoolConnectionProofUrl("https://viewer:secret@docs.google.com/document/d/meme-radar-proof/edit"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://drive.google.com/drive/search?q=metricool"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://drive.google.com/drive/my-drive"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://docs.google.com/"), false);
   assert.equal(safeClipperMetricoolConnectionProofUrl("https://docs.google.com/document/d/meme-radar-proof/edit"), true);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://drive.google.com/open?id=sports-daily-proof"), true);
 
   const proofLinks = {
     lanes: {
@@ -314,7 +318,7 @@ test("TikTok MVP proof links preview rejects embedded credential proof URLs", as
   assert.equal(preview.readyForProofDrop, false);
   assert.equal(preview.status, "blocked");
   assert.ok(preview.issues.some((issue) => issue.includes("accountOwnershipProofUrl must be a real safe HTTPS proof URL")));
-  assert.ok(preview.issues.some((issue) => issue.includes("metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL")));
+  assert.ok(preview.issues.some((issue) => issue.includes("metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL")));
 
   const pastePreview = extractClipperTikTokMvpProofLinksPaste([
     "SPORT https://viewer:secret@drive.google.com/file/d/sports-daily-proof/view",
@@ -379,6 +383,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksModule, /containsClipperSecretLikeText/);
   assert.match(proofLinksModule, /clipperUnsafeProofQueryParamPattern/);
   assert.match(routes, /auditClipperTikTokMvpProofLinks/);
+  assert.match(routes, /function isClipperGoogleEvidenceProofUrl/);
+  assert.ok(routes.includes('^\\/file\\/d\\/[^/]+'));
+  assert.ok(routes.includes('^\\/drive\\/(?:u\\/\\d+\\/)?folders\\/[^/]+'));
+  assert.ok(routes.includes('pathname === "/open" || pathname === "/folderview"'));
+  assert.ok(routes.includes('^\\/(?:document|spreadsheets|presentation|forms|drawings)\\/d\\/[^/]+'));
   assert.match(routes, /extractClipperTikTokMvpProofLinksPaste/);
   assert.match(proofLinksModule, /doesNotUnlock/);
   assert.match(proofLinksModule, /Does not apply account or Metricool evidence/);
@@ -643,7 +652,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(operatingRefreshRoute, /readClipperTikTokMvpProofHandoff/);
   assert.doesNotMatch(operatingRefreshRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(routes, /isClipperMetricoolConnectionProofUrl/);
-  assert.match(routes, /Google Drive\/Docs evidence URL/);
+  assert.match(routes, /concrete Google Drive file\/folder or Docs evidence URL/);
   assert.match(routes, /realPublishEnabled:\s*false/);
   assert.doesNotMatch(metricoolBridgeCsvStatusRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule|send posts/i);
   assert.doesNotMatch(metricoolBridgeCsvLoadRoute, /writeNodeFile|recordClipperMetricoolBridgeEvidenceBatch|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true/);
@@ -656,9 +665,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksDropStatusRoute, /buildClipperTikTokMvpProofLinksDropStatus/);
   assert.match(proofLinksDropStatusHelper, /checklistTotals/);
   assert.match(proofLinksDropStatusHelper, /nextButton/);
-  assert.match(proofLinksDropStatusHelper, /two real non-secret SPORT and memes Metricool\/Drive TikTok proof URLs/);
+  assert.match(proofLinksDropStatusHelper, /two real non-secret SPORT and memes Metricool URLs or concrete Drive file\/folder\/Docs TikTok proof URLs/);
   assert.match(proofLinksDropStatusHelper, /four-field fallback when ownership proof is separate/);
-  assert.match(proofLinksDropStatusHelper, /Metricool\/Drive proof can be reused only when it clearly proves ownership\/control/);
+  assert.match(proofLinksDropStatusHelper, /Metricool or concrete Drive file\/folder\/Docs proof can be reused only when it clearly proves ownership\/control/);
   assert.doesNotMatch(proofLinksDropStatusHelper, /four non-secret proof URLs|four non-secret TikTok\/Metricool proof links/);
   assert.match(routes, /TikTok ownership proof/);
   assert.match(routes, /Metricool connection proof/);
@@ -1643,7 +1652,7 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     assert.match(source, /unsafeProofQueryParamPattern/);
     assert.match(source, /x-amz-signature/);
     assert.match(source, /validMetricoolReuseConfirmationNotes/);
-    assert.match(source, /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
+    assert.match(source, /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/);
     assert.doesNotMatch(source, /ready_to_send|video\.publish|directSocialApisRequired:\s*true|runClipperTikTokMvpEvidenceCloseout\(true\)/);
     assert.match(source, /does not apply final evidence, publish, schedule/);
 
@@ -1676,7 +1685,7 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     const sameProofBridgeAfter = await readFile(targetBridgeCsvPath, "utf8");
     assert.equal(sameProofBridgeAfter, bridgeBefore);
     const sameProofReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
-    assert.match(sameProofReport.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
+    assert.match(sameProofReport.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/);
 
     await writeFile(quickFillInputPath, JSON.stringify({
       lanes: {
@@ -2126,8 +2135,8 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(pastePacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
   assert.match(pastePacket, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
-  assert.match(pastePacket, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
-  assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com\/\.\.\. or Google Drive\/Docs evidence URLs/);
+  assert.match(pastePacket, /Fast path: if the Metricool or concrete Drive file\/folder\/Docs proof clearly shows the TikTok profile connected under Robert control/);
+  assert.match(pastePacket, /Metricool proof URLs must be https:\/\/\*\.metricool\.com\/\.\.\. or concrete Google Drive file\/folder or Docs evidence URLs/);
   assert.doesNotMatch(pastePacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 
   const jsonStarter = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-json-starter.json"), "utf8"));
@@ -2141,7 +2150,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
 
   const oneScreen = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fill-one-screen.txt"), "utf8");
   assert.match(oneScreen, /TikTok MVP proof fill - one screen/);
-  assert.match(oneScreen, /Fast path first: paste these 2 real non-secret Metricool\/Drive proof URLs/);
+  assert.match(oneScreen, /Fast path first: paste these 2 real non-secret Metricool URLs or concrete Drive file\/folder\/Docs proof URLs/);
   assert.match(oneScreen, /Expanded fields the app prepares from the fast path/);
   assert.doesNotMatch(oneScreen, /undefined/);
   assert.doesNotMatch(oneScreen, /preview confirms/i);
@@ -2151,7 +2160,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(oneScreen, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(oneScreen, /Minimum real proof URLs needed: 2/);
-  assert.match(oneScreen, /Fast path: if the Metricool\/Drive proof clearly shows the TikTok profile connected under Robert control/);
+  assert.match(oneScreen, /Fast path: if the Metricool or concrete Drive file\/folder\/Docs proof clearly shows the TikTok profile connected under Robert control/);
   assert.match(oneScreen, /Next safe button: preview_proof_links/);
   assert.match(oneScreen, /Locked until clean preview: save_proof_links/);
   assert.doesNotMatch(oneScreen, /Next safe button: save_proof_links/);
@@ -2177,7 +2186,7 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.match(source, /x-amz-signature/);
   assert.match(source, /URLs with x-amz\/signature\/expires\/session\/token query params are blocked/);
   assert.match(source, /validMetricoolReuseConfirmationNotes/);
-  assert.match(source, /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
+  assert.match(source, /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/);
   assert.match(source, /Local files are inventory only; closeout still requires real public\/non-secret HTTPS proof URLs/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
@@ -2262,7 +2271,7 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
     assert.equal(sameUrlOutput.readyForQuickFill, false);
     assert.equal(sameUrlOutput.quickFillStatus, "not_run");
     const sameUrlReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
-    assert.match(sameUrlReport.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
+    assert.match(sameUrlReport.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/);
   } finally {
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);

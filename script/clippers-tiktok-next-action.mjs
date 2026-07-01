@@ -73,10 +73,10 @@ function nextStepFor(summary) {
   if (summary.status === "blocked_account_or_metricool_connection") {
     if (summary.proofGate?.status && !isProofGateReady(summary.proofGate)) {
       return [
-        summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence, preview links, then save only if the preview is clean.",
+        summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence, preview links, then save only if the preview is clean.",
         summary.proofGate.paths?.oneScreenGuide ? `One-screen guide: ${summary.proofGate.paths.oneScreenGuide}.` : "",
         summary.proofGate.paths?.proofLinksJson ? `Proof JSON: ${summary.proofGate.paths.proofLinksJson}.` : "",
-        summary.proofGate.fastPathAvailable ? "Fast path: paste one real Metricool/Drive proof URL for SPORT and one for memes; the app builds explicit proof fields before preview." : "",
+        summary.proofGate.fastPathAvailable ? "Fast path: paste one real Metricool URL or concrete Drive file/folder/Docs proof URL for SPORT and one for memes; the app builds explicit proof fields before preview." : "",
         "Do not use direct social APIs for this TikTok MVP; Metricool proof only needs safe public/non-secret evidence.",
       ].filter(Boolean).join(" ");
     }
@@ -94,7 +94,7 @@ function nextStepFor(summary) {
     return [
       "Record non-secret Metricool bridge evidence for SPORT and memes TikTok before scheduling clips.",
       blockedLabels ? `Blocked lanes: ${blockedLabels}.` : "",
-      "Use the Metricool bridge evidence batch panel with public TikTok profile URL, real https Metricool proof URL or Google Drive/Docs evidence URL, and 20+ character notes; do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+      "Use the Metricool bridge evidence batch panel with public TikTok profile URL, real https Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL, and 20+ character notes; do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
     ].filter(Boolean).join(" ");
   }
   if (summary.status === "blocked_evidence_fix") {
@@ -127,7 +127,7 @@ function taskRowsFor(summary) {
       evidence: `${summary.account.readyLanes}/${summary.account.totalLanes} TikTok MVP lanes ready`,
       nextAction: summary.account.ready
         ? "Use SPORT and memes TikTok lanes only."
-        : "Import Metricool bridge evidence rows for SPORT/memes TikTok with public profile URL, real https Metricool proof URL or Google Drive/Docs evidence URL, and safe notes.",
+        : "Import Metricool bridge evidence rows for SPORT/memes TikTok with public profile URL, real https Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL, and safe notes.",
     },
     {
       id: "upload_pack",
@@ -175,7 +175,7 @@ function taskRowsFor(summary) {
       label: "TikTok Metricool proof gate",
       status: isProofGateReady(summary.proofGate) ? "done" : "blocked",
       evidence: `${summary.proofGate.minimumProofUrlsNeeded} proof URLs needed; ${summary.proofGate.blockedBy.length} blockers`,
-      nextAction: summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence.",
+      nextAction: summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence.",
     });
   }
   if ((summary.externalCloseout?.activeTasks || 0) > 0) {
@@ -466,7 +466,7 @@ function operatorPacketFor(summary) {
     summary.proofGate?.status ? `Operating proof gate: ${summary.proofGate.status}` : "",
     summary.proofGate?.minimumProofUrlsNeeded ? `Proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}` : "",
     summary.proofGate?.paths?.oneScreenGuide ? `One-screen proof guide: ${summary.proofGate.paths.oneScreenGuide}` : "",
-    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool/Drive proof URLs in the two input boxes; preview links first, then save only if the preview is clean." : "",
+    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool URLs or concrete Drive file/folder/Docs proof URLs in the two input boxes; preview links first, then save only if the preview is clean." : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
     summary.operatingRefresh?.status ? `Operating refresh: ${summary.operatingRefresh.status}` : "",

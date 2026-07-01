@@ -222,7 +222,17 @@ function isClipperGoogleEvidenceProofUrl(value: unknown): boolean {
   if (!isClipperSafeHttpsUrl(value)) return false;
   try {
     const parsed = new URL(String(value || "").trim());
-    return /^(drive|docs)\.google\.com$/i.test(parsed.hostname);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname;
+    if (hostname === "drive.google.com") {
+      return /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+        || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+        || ((pathname === "/open" || pathname === "/folderview") && Boolean(parsed.searchParams.get("id")?.trim()));
+    }
+    if (hostname === "docs.google.com") {
+      return /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+    }
+    return false;
   } catch {
     return false;
   }
@@ -417,7 +427,7 @@ async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
           field: "proof",
           label: "Metricool connection proof",
           status: isClipperMetricoolConnectionProofUrl(record.proof) ? "ready" : "missing_or_invalid",
-          required: "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL, no tokens/cookies/signed params",
+          required: "real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL, no tokens/cookies/signed params",
         },
         {
           field: "notes",
@@ -466,7 +476,7 @@ async function buildClipperMetricoolBridgeEvidenceCsvStatus() {
       ],
       nextStep: readyRows === rows.length
         ? "Load the CSV into the bridge evidence box, preview rows, then import only after review."
-        : "Edit the local bridge CSV with real public/non-secret Metricool proof URLs or Google Drive/Docs evidence URLs and notes.",
+        : "Edit the local bridge CSV with real public/non-secret Metricool proof URLs or concrete Google Drive file/folder or Docs evidence URLs and notes.",
     };
   } catch (error: any) {
     return {
@@ -547,7 +557,7 @@ async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: 
     try {
       const pasteText = await readNodeFile(sourcePath, "utf8");
       if (!pasteText.trim()) {
-        throw new Error(`${sourcePath} is empty; paste two real non-secret Metricool/Drive TikTok proof URLs first, or use the four-field fallback when ownership proof is separate.`);
+        throw new Error(`${sourcePath} is empty; paste two real non-secret Metricool URLs or concrete Drive file/folder/Docs TikTok proof URLs first, or use the four-field fallback when ownership proof is separate.`);
       }
       return { sourcePath, pasteText, bytes: Buffer.byteLength(pasteText, "utf8") };
     } catch (error: any) {
@@ -555,7 +565,7 @@ async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: 
       throw error;
     }
   }
-  const error = new Error(`No TikTok MVP proof links drop file found. Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with two real non-secret SPORT and memes Metricool/Drive TikTok proof URLs, or use the four-field fallback when ownership proof is separate.`);
+  const error = new Error(`No TikTok MVP proof links drop file found. Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with two real non-secret SPORT and memes Metricool URLs or concrete Drive file/folder/Docs TikTok proof URLs, or use the four-field fallback when ownership proof is separate.`);
   (error as NodeJS.ErrnoException).code = "ENOENT";
   throw error;
 }
@@ -572,7 +582,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
         field: "accountOwnershipProofUrl",
         label: "TikTok ownership proof",
         status: lane.accountProofReady ? "ready" : "missing_or_invalid",
-        required: "real safe HTTPS proof URL, no tokens/cookies/signed params; Metricool/Drive proof can be reused only when it clearly proves ownership/control",
+        required: "real safe HTTPS proof URL, no tokens/cookies/signed params; Metricool or concrete Drive file/folder/Docs proof can be reused only when it clearly proves ownership/control",
       },
       {
         laneKey: lane.key,
@@ -580,7 +590,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
         field: "metricoolConnectionProofUrl",
         label: "Metricool connection proof",
         status: lane.metricoolProofReady ? "ready" : "missing_or_invalid",
-        required: "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL, no tokens/cookies/signed params",
+        required: "real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL, no tokens/cookies/signed params",
       },
       {
         laneKey: lane.key,
@@ -658,12 +668,12 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       })),
       checklistTotals: { ready: 0, total: 8, missing: 8 },
       nextButton: "create_starter",
-      issues: [error?.message || `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with two real non-secret SPORT and memes Metricool/Drive TikTok proof URLs, or use the four-field fallback when ownership proof is separate.`],
+      issues: [error?.message || `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with two real non-secret SPORT and memes Metricool URLs or concrete Drive file/folder/Docs TikTok proof URLs, or use the four-field fallback when ownership proof is separate.`],
       guardrails: [
         "Drop status does not create proof files or write evidence.",
         "It does not apply evidence, queue Metricool, create calendar rows, or send posts.",
       ],
-      nextStep: `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with SPORT and memes ownership plus Metricool proof URLs or Google Drive/Docs evidence URLs.`,
+      nextStep: `Create ${clipperTikTokMvpProofLinksDropPastePaths[0]} with SPORT and memes ownership plus Metricool proof URLs or concrete Google Drive file/folder or Docs evidence URLs.`,
     };
   }
 }

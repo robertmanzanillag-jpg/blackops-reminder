@@ -172,7 +172,17 @@ function googleEvidenceProofUrl(value) {
   if (!safeHttpsUrl(text)) return false;
   try {
     const url = new URL(text);
-    return /^(drive|docs)\.google\.com$/i.test(url.hostname);
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname;
+    if (hostname === "drive.google.com") {
+      return /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+        || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+        || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()));
+    }
+    if (hostname === "docs.google.com") {
+      return /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+    }
+    return false;
   } catch {
     return false;
   }
@@ -244,7 +254,7 @@ function validateInput(input) {
       issues.push(`${lane.key}: accountOwnershipProofUrl must be a real safe HTTPS proof URL.`);
     }
     if (!metricoolConnectionProofUrl(row.metricoolConnectionProofUrl)) {
-      issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.`);
+      issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL.`);
     }
     const reusesConnectionProofAsOwnership = Boolean(
       row.accountOwnershipProofUrl
@@ -255,7 +265,7 @@ function validateInput(input) {
       && (!reusesConnectionProofAsOwnership || validMetricoolReuseConfirmationNotes(row.accountNotes));
     if (!accountNotesReady) {
       issues.push(reusesConnectionProofAsOwnership
-        ? `${lane.key}: accountNotes must confirm this Metricool/Drive proof shows the TikTok profile under Robert control.`
+        ? `${lane.key}: accountNotes must confirm this Metricool or concrete Drive file/folder/Docs proof shows the TikTok profile under Robert control.`
         : `${lane.key}: accountNotes must be 20+ chars and contain no placeholders or secrets.`);
     }
     if (!validNotes(row.metricoolNotes)) {

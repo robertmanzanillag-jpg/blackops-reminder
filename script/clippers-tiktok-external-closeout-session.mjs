@@ -59,7 +59,7 @@ async function evidenceImportFreshness() {
 
 function taskAction(row) {
   if (row.lane === "metricool_bridge") {
-    return "Add the real non-secret Metricool proof URL or Google Drive/Docs evidence URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
+    return "Add the real non-secret Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL and 20+ character notes, then Load/Preview/Import the bridge CSV only after the preview gate is clean.";
   }
   if (row.lane === "account") {
     return "Confirm the TikTok account/profile is real and connected, then add non-secret ownership/security proof and update the CSV row.";
@@ -116,7 +116,7 @@ function copyPacketFor(row, nextAction = taskAction(row)) {
 
 function mvpProofTaskCsvRow(row, proofType) {
   if (proofType === "metricool_bridge") {
-    return `"${row.accountId}","tiktok","${metricoolBrandNameFor(row)}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL or Drive/Docs evidence URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
+    return `"${row.accountId}","tiktok","${metricoolBrandNameFor(row)}","","https://www.tiktok.com/${row.handle || ""}","<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>","Replace with a real 20+ character note confirming this TikTok profile is connected in Metricool."`;
   }
   return `"account","${row.accountId}","tiktok","verified","","","","","https://www.tiktok.com/signup","","<paste real public/non-secret ownership proof URL>","Replace with a real 20+ character note confirming the TikTok account ownership and safety setup."`;
 }
@@ -181,7 +181,7 @@ function renderActiveMvpProofLinksPastePacket(tiktokMvpCloseout) {
   return [
     "# TikTok MVP proof-links paste packet",
     "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
-    "# Metricool proof URLs must be https://*.metricool.com/... or Google Drive/Docs evidence URLs",
+    "# Metricool proof URLs must be https://*.metricool.com/... or concrete Google Drive file/folder or Docs evidence URLs",
     "# Save the filled copy to clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt or paste it into the Proof Links Assistant.",
     "",
     ...activeRows.flatMap((row) => {
@@ -462,7 +462,7 @@ async function main() {
       checklist: proofLinksOperatorChecklist(),
       guardrails: [
         "This packet is a template and does not save evidence by itself.",
-        "Metricool URLs must be real HTTPS metricool.com URLs or Google Drive/Docs evidence URLs.",
+        "Metricool URLs must be real HTTPS metricool.com URLs or concrete Google Drive file/folder or Docs evidence URLs.",
         "Ownership proof URLs must be safe HTTPS URLs without token, signature, session, or expiry query params.",
       ],
     },

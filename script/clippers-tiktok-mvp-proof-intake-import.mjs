@@ -180,7 +180,7 @@ function requiredValueForCloseoutIssue(item) {
     if (/notes/i.test(item.reason)) return "20+ character Metricool connection note without placeholders or secrets";
     if (/profile_url/i.test(item.reason)) return "exact public TikTok profile URL for the active lane";
     if (/metricool_brand_name/i.test(item.reason)) return "exact active Metricool brand name";
-    return "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL";
+    return "real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL";
   }
   return "real non-secret proof value";
 }

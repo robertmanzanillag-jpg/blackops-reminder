@@ -202,7 +202,7 @@ function nextStepForFailedChecks(failed, accountReadiness) {
     return [
       "Preview/import real non-secret Metricool bridge evidence for SPORT and memes TikTok.",
       bridgeCsvPath ? `Use bridge CSV: ${bridgeCsvPath}.` : "",
-      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL or Google Drive/Docs evidence URL, and 20+ character notes. Do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL, and 20+ character notes. Do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
     ].filter(Boolean).join(" ");
   }
   return failed[0]?.nextAction || "Open Metricool and process metricool-batch-01; keep evidence blank until real scheduling proof exists.";

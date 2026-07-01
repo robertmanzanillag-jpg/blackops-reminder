@@ -10534,8 +10534,8 @@ const sourceIntakeBatchHeader = "category,title,url,source,platform,target_file_
 const sourceScoutIntakeBatchHeader = "candidate_id,title,category,platform,url,source,status,evidence_type,proof,notes,target_file_name,source_drop_path,recreate_plan,views,likes,comments,shares";
 const metricoolBridgeEvidenceTemplate = [
   "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
-  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool proof URL or Drive/Docs evidence URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
-  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool proof URL or Drive/Docs evidence URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
+  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
+  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
 ].join("\n");
 const tiktokMvpProofQuickFillTemplate = JSON.stringify({
   lanes: {
@@ -10723,7 +10723,7 @@ function getMetricoolBridgeEvidenceClientCheck(raw: string) {
       return;
     }
     if (!isMetricoolProofUrl(proof)) {
-      issues.push(`Row ${rowNumber}: proof must be a Metricool HTTPS proof URL or Google Drive/Docs evidence URL.`);
+      issues.push(`Row ${rowNumber}: proof must be a Metricool HTTPS proof URL or concrete Google Drive file/folder or Docs evidence URL.`);
       return;
     }
     validRows += 1;
@@ -17125,7 +17125,7 @@ export default function ClippersPage() {
     ? "Quick fill result is older than or no longer matches the current Proof refresh; rerun Quick fill with real non-secret proof before trusting this result."
     : !tiktokMvpProofQuickFillIssuesValid
       ? "Quick fill report is malformed; rerun Quick fill with real non-secret proof before trusting this result."
-      : tiktokMvpProofQuickFillIssues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
+      : tiktokMvpProofQuickFillIssues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool URLs or concrete Drive file/folder/Docs proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
   const clearTikTokMvpProofLinksGeneratedState = () => {
     setTiktokMvpProofLinksPastePreview(null);
     setTiktokMvpProofLinksText("");
@@ -18723,7 +18723,7 @@ export default function ClippersPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-cyan-100">Paste proof packet</p>
-                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes. A clean Metricool/Drive proof can count as ownership/control when it shows the TikTok profile connected.</p>
+                      <p className="mt-1 text-zinc-500">Labels needed: SPORT/sports and memes. A clean Metricool or concrete Drive file/folder/Docs proof can count as ownership/control when it shows the TikTok profile connected.</p>
                     </div>
                     <Button
                       type="button"
@@ -18838,7 +18838,7 @@ export default function ClippersPage() {
                   <div className="mt-2 rounded-md border border-emerald-300/10 bg-emerald-950/10 p-2" data-testid="clippers-tiktok-mvp-metricool-fast-path-panel">
                     <div className="flex flex-col gap-2 md:flex-row md:items-end">
                       <div className="min-w-0 flex-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">SPORT Metricool/Drive proof</Label>
+                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">SPORT Metricool or concrete Drive file/folder/Docs proof</Label>
                         <Input
                           value={tiktokMvpFastPathSportProofUrl}
                           onChange={(event) => {
@@ -18852,7 +18852,7 @@ export default function ClippersPage() {
                         />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">memes Metricool/Drive proof</Label>
+                        <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">memes Metricool or concrete Drive file/folder/Docs proof</Label>
                         <Input
                           value={tiktokMvpFastPathMemesProofUrl}
                           onChange={(event) => {
@@ -19017,7 +19017,7 @@ export default function ClippersPage() {
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
                   />
-                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL or Google Drive/Docs evidence URL. It can also satisfy ownership/control when the proof clearly shows the TikTok profile connected. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private keys.</p>
+                  <p className="mt-2 text-zinc-500">Metricool connection proof must be a real metricool.com HTTPS URL or a concrete Google Drive file/folder or Docs evidence URL. It can also satisfy ownership/control when the proof clearly shows the TikTok profile connected. Preview must be clean before Save links turns on. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or private keys.</p>
                   {tiktokMvpProofLinksPreview && (
                     <div className={cn(
                       "mt-2 rounded-md border bg-black/20 p-2",
@@ -19800,7 +19800,7 @@ export default function ClippersPage() {
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4" data-testid="clippers-metricool-bridge-required-fields">
             {[
               "Public TikTok profile URL",
-              "Real HTTPS Metricool proof URL or Google Drive/Docs evidence URL",
+              "Real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL",
               "20+ character operator notes",
               "No passwords, tokens, cookies or private screenshots",
             ].map((item) => (
@@ -22441,7 +22441,7 @@ export default function ClippersPage() {
                       ))}
                     </div>
                     <p className="mt-2 text-[10px] leading-4 text-amber-100/80">
-                      Empty lines are not evidence. The gate stays blocked until real non-secret Metricool or Drive/Docs proof URLs are pasted and Preview links passes cleanly.
+                      Empty lines are not evidence. The gate stays blocked until real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs are pasted and Preview links passes cleanly.
                     </p>
                     <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.buttonOrFile}</p>
                     <p className="mt-1 text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.guardrail}</p>

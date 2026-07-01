@@ -195,7 +195,7 @@ test("TikTok MVP operating refresh preserves Metricool queue artifacts byte for 
   assert.equal(report.proofGate.minimumProofUrlsNeeded, 2);
   assert.equal(report.proofGate.nextSafeButton, "preview_proof_links");
   assert.equal(report.proofGate.nextLockedButton, "save_proof_links");
-  assert.ok(report.proofGate.blockedBy.some((item) => item.includes("real non-secret Metricool/Drive proof")));
+  assert.ok(report.proofGate.blockedBy.some((item) => item.includes("real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs")));
   assert.ok(report.proofGate.failedVerifierChecks.includes("metricool_brands_ready"));
   assert.ok(report.proofGate.failedPreflightChecks.includes("tiktok_mvp_verifier_passed"));
   assert.match(report.proofGate.paths.proofLinksJson, /proof-links\.json$/);

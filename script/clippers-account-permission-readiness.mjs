@@ -121,8 +121,16 @@ function isGoogleEvidenceUrl(value) {
   try {
     const url = new URL(String(value || "").trim());
     const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname;
+    const concreteDriveEvidence = hostname === "drive.google.com" && (
+      /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+      || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+      || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()))
+    );
+    const concreteDocsEvidence = hostname === "docs.google.com"
+      && /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
     return isSafeEvidenceUrl(value)
-      && (hostname === "drive.google.com" || hostname === "docs.google.com");
+      && (concreteDriveEvidence || concreteDocsEvidence);
   } catch {
     return false;
   }
@@ -170,7 +178,7 @@ function activeTikTokMvpEvidenceIssues(account, platform, evidence) {
   return [
     !isExactTikTokProfileUrl(profileUrl, account.handle) ? `profileUrl must be the exact public TikTok profile ${exactTikTokProfileUrlFor(account.handle)}` : null,
     !isSafeEvidenceUrl(accountProofUrl) ? "accountProofUrl must be a real safe HTTPS ownership/security proof URL" : null,
-    !isMetricoolConnectionEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL or Google Drive/Docs evidence URL" : null,
+    !isMetricoolConnectionEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL" : null,
     evidenceNotesIssue(notes),
     unsafeEvidencePattern.test(combined) || unsafeEvidenceParamPattern.test(combined) ? "evidence contains placeholder or secret-like text" : null,
   ].filter(Boolean);
@@ -298,7 +306,7 @@ function activeMvpNextStep({ metricoolMvpReady, activeMvpReadyLanes, activeMvpTa
     return [
       "Preview/import real non-secret Metricool bridge evidence for SPORT and memes TikTok.",
       bridgeEvidenceCsvPath ? `Use bridge CSV: ${bridgeEvidenceCsvPath}.` : "",
-      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL or Google Drive/Docs evidence URL, and 20+ character notes. Direct social API keys are not required for this TikTok MVP.",
+      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL, and 20+ character notes. Direct social API keys are not required for this TikTok MVP.",
     ].filter(Boolean).join(" ");
   }
   return "Use Metricool in approval_required mode for connected TikTok lanes. Add Instagram/YouTube later when Robert is ready.";
@@ -615,7 +623,7 @@ function tiktokMetricoolBridgeEvidenceRows(closeout) {
       metricoolBrandName,
       "",
       profileUrl,
-      "<paste real public Metricool proof URL or Drive/Docs evidence URL>",
+      "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
       `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
     ].map(csvCell).join(",");
   });
@@ -635,7 +643,7 @@ function tiktokMetricoolBridgeOperatorCards(closeout) {
       metricoolBrandName,
       "",
       profileUrl,
-      "<paste real public Metricool proof URL or Drive/Docs evidence URL>",
+      "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
       `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
     ].map(csvCell).join(",");
     const copyPacket = [
@@ -656,7 +664,7 @@ function tiktokMetricoolBridgeOperatorCards(closeout) {
       platform: "tiktok",
       metricoolBrandName,
       profileUrl,
-      proofPlaceholder: "<paste real public Metricool proof URL or Drive/Docs evidence URL>",
+      proofPlaceholder: "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
       notesPlaceholder: `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
       csvRowTemplate,
       copyPacket,
@@ -684,7 +692,7 @@ function buildTikTokMetricoolBridgeProofPack(closeout, bridgeOperatorCards, sour
     requiredProof: [
       "public TikTok profile URL",
       "real account ownership/security proof URL",
-      "real HTTPS Metricool proof URL or Google Drive/Docs evidence URL",
+      "real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL",
       "20+ character operator notes",
     ],
     accountEvidenceFields: [

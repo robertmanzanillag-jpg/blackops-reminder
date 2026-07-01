@@ -163,7 +163,7 @@ function buildCollectionPackets(proofDrop) {
         acceptedProof: [
           `Public/non-secret proof that Robert controls ${lane.handle}.`,
           "Ownership or security screen/ticket stored as a non-secret Drive/doc URL.",
-          `Fast path: the same Metricool/Drive proof can be used here if it clearly shows ${lane.metricoolBrandName} connected to ${lane.handle} under Robert control.`,
+          `Fast path: the same Metricool or concrete Drive file/folder/Docs proof can be used here if it clearly shows ${lane.metricoolBrandName} connected to ${lane.handle} under Robert control.`,
           "Notes must be 20+ characters and mention ownership/security verification.",
         ],
         rejectIf: [
@@ -182,17 +182,17 @@ function buildCollectionPackets(proofDrop) {
         metricoolBrandName: lane.metricoolBrandName,
         field: "metricoolConnectionProofUrl",
         status: state.metricoolProofReady && state.metricoolNotesReady ? "ready" : "needed",
-        proofUrlRule: "Must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
+        proofUrlRule: "Must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
         acceptedProof: [
           `Metricool brand/profile ${lane.metricoolBrandName} shows TikTok connected to ${lane.handle}.`,
           "Metricool planner/profile proof URL that does not expose secret account data.",
           "Notes must be 20+ characters and mention Metricool connection proof.",
         ],
         rejectIf: [
-          "The URL is not on metricool.com or Google Drive/Docs.",
+          "The URL is not on metricool.com or concrete Google Drive file/folder or Docs.",
           "The proof is a placeholder, private credential page, screenshot with secrets, signed URL, temporary URL, or contains auth material.",
         ],
-        copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
+        copyPrompt: `Collect Metricool connection proof for ${lane.metricoolBrandName} -> ${lane.handle}. Paste only a real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL into metricoolConnectionProofUrl and keep metricoolNotes at 20+ characters.`,
       },
     ];
   });
@@ -284,7 +284,7 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
       reuseAsOwnershipLine: `${packet.lane}.accountOwnershipProofUrl=`,
       status: packet.status,
       proofUrlRule: packet.proofUrlRule,
-      operatorAction: `Paste one real Metricool/Drive proof URL for ${packet.metricoolBrandName} -> ${packet.handle}. Robert/operator must confirm the proof content clearly shows the TikTok profile connected under Robert control before the app reuses that same URL for ownership proof.`,
+      operatorAction: `Paste one real Metricool URL or concrete Drive file/folder/Docs proof URL for ${packet.metricoolBrandName} -> ${packet.handle}. Robert/operator must confirm the proof content clearly shows the TikTok profile connected under Robert control before the app reuses that same URL for ownership proof.`,
     }))
     : [];
   const readyRows = collectionPackets.filter((packet) => packet.status === "ready").length;
@@ -309,12 +309,12 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
         : "All proof links are present; run the proof drop/import preview before any operator apply step.",
     },
     nextAction: rows.length
-      ? "Fast path: paste one real Metricool/Drive proof URL per active TikTok lane; the app can reuse it as ownership/control proof when it clearly shows the connected profile. Preview, then save only if validation stays clean."
+      ? "Fast path: paste one real Metricool URL or concrete Drive file/folder/Docs proof URL per active TikTok lane; the app can reuse it as ownership/control proof when it clearly shows the connected profile. Preview, then save only if validation stays clean."
       : "Run Proof drop and Import preview; Metricool still stays approval_required.",
     guardrails: [
       "Do not paste passwords, tokens, cookies, recovery codes, client secrets, API keys, signed URLs, or private screenshots.",
       "Do not use search/explore/example/placeholder URLs as proof.",
-      "Metricool connection proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.",
+      "Metricool connection proof must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL.",
       "This board does not apply evidence, schedule posts, publish, or enable direct social APIs.",
     ],
   };
@@ -357,8 +357,8 @@ function renderProofLinksPastePacket() {
   return [
     "# TikTok MVP proof-links paste packet",
     "# Fill only real non-secret HTTPS proof URLs. Do not paste passwords, tokens, cookies, recovery codes, signed/temporary URLs, or screenshots with secrets.",
-    "# Metricool proof URLs must be https://*.metricool.com/... or Google Drive/Docs evidence URLs",
-    "# Fast path: if the Metricool/Drive proof clearly shows the TikTok profile connected under Robert control, you may fill only metricoolConnectionProofUrl and the app will reuse it as ownership/control proof.",
+    "# Metricool proof URLs must be https://*.metricool.com/... or concrete Google Drive file/folder or Docs evidence URLs",
+    "# Fast path: if the Metricool or concrete Drive file/folder/Docs proof clearly shows the TikTok profile connected under Robert control, you may fill only metricoolConnectionProofUrl and the app will reuse it as ownership/control proof.",
     "",
     ...lanes.flatMap((lane) => [
       `${lane.key}.accountOwnershipProofUrl=`,
@@ -389,7 +389,7 @@ function renderOneScreenProofFill(summary) {
   return [
     "TikTok MVP proof fill - one screen",
     "",
-    `Fast path first: paste these ${summary.unblockBoard.minimumProofUrlsNeeded} real non-secret Metricool/Drive proof URLs.`,
+    `Fast path first: paste these ${summary.unblockBoard.minimumProofUrlsNeeded} real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs.`,
     `Minimum real proof URLs needed: ${summary.unblockBoard.minimumProofUrlsNeeded}`,
     `Fast path available: ${summary.unblockBoard.fastPathAvailable}`,
     "",
@@ -415,8 +415,8 @@ function renderOneScreenProofFill(summary) {
     "",
     "Required:",
     "- Account ownership proof can be a safe HTTPS Drive/doc/proof URL showing account ownership/security review.",
-    "- Metricool connection proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL showing the TikTok profile connected in Metricool.",
-    "- Fast path: if the Metricool/Drive proof clearly shows the TikTok profile connected under Robert control, fill the metricoolConnectionProofUrl line and the app can reuse it as ownership/control proof.",
+    "- Metricool connection proof must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL showing the TikTok profile connected in Metricool.",
+    "- Fast path: if the Metricool or concrete Drive file/folder/Docs proof clearly shows the TikTok profile connected under Robert control, fill the metricoolConnectionProofUrl line and the app can reuse it as ownership/control proof.",
     "- Notes already exist in the paste packet; keep them concrete and 20+ characters.",
     "",
     "Never paste:",

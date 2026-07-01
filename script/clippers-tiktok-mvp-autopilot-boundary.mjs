@@ -154,7 +154,7 @@ function buildExternalActions({ proofHandoff, proofUnblocker, readinessVerifier 
     lane: row.lane || "",
     field: row.field || "proof",
     action: row.operatorAction || readinessVerifier?.nextStep || "Paste real non-secret proof and rerun the proof flow.",
-    evidenceNeeded: row.proofUrlRule || "Real HTTPS Metricool/Drive/Docs proof URL; no secrets, signed URLs, passwords, tokens, cookies, or recovery codes.",
+    evidenceNeeded: row.proofUrlRule || "Real HTTPS Metricool URL or concrete Drive file/folder/Docs proof URL; no secrets, signed URLs, passwords, tokens, cookies, or recovery codes.",
     exactPasteLine: row.exactPasteLine || "",
   }));
 }

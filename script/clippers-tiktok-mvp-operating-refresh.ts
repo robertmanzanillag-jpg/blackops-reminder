@@ -101,7 +101,7 @@ export function collectBoundaryBlockers(boundaryRun: any, boundary: any) {
       ? `Autopilot boundary launch decision is ${boundary.launchDecision}.`
       : "",
     boundary?.status === "blocked_external_account_proof" ? "SPORT and memes TikTok Metricool proof URLs are still missing." : "",
-    Number(boundary?.totals?.minimumProofUrlsNeeded || 0) > 0 ? `${boundary.totals.minimumProofUrlsNeeded} real Metricool/Drive proof URL(s) still needed.` : "",
+    Number(boundary?.totals?.minimumProofUrlsNeeded || 0) > 0 ? `${boundary.totals.minimumProofUrlsNeeded} real Metricool URLs or concrete Drive file/folder/Docs proof URLs still needed.` : "",
   ].filter(Boolean);
   return Array.from(new Set(blockers));
 }
@@ -217,7 +217,7 @@ export function buildProofGate({ proofHandoff, preflight, verifier, boundary, bo
       ...missingRequiredReports,
       ...boundaryNotReady,
       preflightNotReady,
-      minimumProofUrlsNeeded > 0 ? `${minimumProofUrlsNeeded} real non-secret Metricool/Drive proof URL(s) needed` : "",
+      minimumProofUrlsNeeded > 0 ? `${minimumProofUrlsNeeded} real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs needed` : "",
       proofHandoffBlocked ? `Proof handoff status is ${proofHandoff.status}` : "",
       ...failedVerifierChecks.map((id: string) => `TikTok MVP verifier check failed: ${id}`),
       ...failedPreflightChecks.map((id: string) => `Metricool MCP preflight snapshot check failed: ${id}`),
@@ -241,7 +241,7 @@ export function buildProofGate({ proofHandoff, preflight, verifier, boundary, bo
     ],
     nextStep: status === "ready_for_operator_review"
       ? "Run operator review with Metricool approval_required; do not enable real publishing."
-      : "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence, preview links, then save only if the preview is clean.",
+      : "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence, preview links, then save only if the preview is clean.",
   };
 }
 

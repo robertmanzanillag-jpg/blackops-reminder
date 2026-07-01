@@ -363,7 +363,7 @@ async function main() {
       owner: "app",
       action: operatingProofGateReady
         ? "Use the approved SPORT and memes TikTok Metricool proof gate for operator review."
-        : proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence before processing the batch.",
+        : proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence before processing the batch.",
       proof: proofGate.paths?.oneScreenGuide || operatingRefreshPath,
       blocker: operatingProofGateReady ? "" : "tiktok_metricool_proof_gate_not_ready",
     },
@@ -488,7 +488,7 @@ async function main() {
       "Direct social APIs are not required for this TikTok MVP.",
     ],
     nextStep: !operatingProofGateReady
-      ? proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool/Drive evidence before processing the batch."
+      ? proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence before processing the batch."
       : readyForOperator
       ? metricool100.ready
         ? `Open Metricool and process ${metricool100.currentBatchId || "metricool-batch-01"} first; after scheduling, fill scheduled evidence. Add public TikTok URLs and 24h metrics only after posts are live.`

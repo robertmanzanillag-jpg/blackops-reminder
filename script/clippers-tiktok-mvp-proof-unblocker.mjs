@@ -92,7 +92,7 @@ function requiredValueFor(field, lane) {
     return `Real public/non-secret HTTPS proof that Robert controls ${lane.handle} and 2FA/security is enabled.`;
   }
   if (field === "metricool_connection_proof_url") {
-    return `Real HTTPS metricool.com proof or Google Drive/Docs evidence URL showing Metricool brand ${lane.metricoolBrandName} is connected to ${lane.handle}.`;
+    return `Real HTTPS metricool.com proof or concrete Google Drive file/folder or Docs evidence URL showing Metricool brand ${lane.metricoolBrandName} is connected to ${lane.handle}.`;
   }
   if (field === "handle") return lane.handle;
   if (field === "public_profile_url") return lane.profileUrl;
@@ -105,7 +105,7 @@ function nextActionFor(field, lane) {
     return `Replace the ownership proof placeholder for ${lane.accountName} with a real public/non-secret URL, then keep account_notes at 20+ characters.`;
   }
   if (field === "metricool_connection_proof_url") {
-    return `Replace the Metricool proof placeholder for ${lane.metricoolBrandName} with a real metricool.com HTTPS URL or Google Drive/Docs evidence URL, then keep metricool_notes at 20+ characters.`;
+    return `Replace the Metricool proof placeholder for ${lane.metricoolBrandName} with a real metricool.com HTTPS URL or concrete Google Drive file/folder or Docs evidence URL, then keep metricool_notes at 20+ characters.`;
   }
   return `Set ${field} exactly to ${requiredValueFor(field, lane)}.`;
 }

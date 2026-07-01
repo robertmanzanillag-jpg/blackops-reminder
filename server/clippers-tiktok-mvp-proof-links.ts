@@ -41,7 +41,17 @@ export function safeClipperGoogleEvidenceProofUrl(value: unknown): boolean {
   if (!safeClipperHttpsProofUrl(value)) return false;
   try {
     const parsed = new URL(String(value || "").trim());
-    return /^(drive|docs)\.google\.com$/i.test(parsed.hostname);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname;
+    if (hostname === "drive.google.com") {
+      return /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+        || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+        || ((pathname === "/open" || pathname === "/folderview") && Boolean(parsed.searchParams.get("id")?.trim()));
+    }
+    if (hostname === "docs.google.com") {
+      return /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+    }
+    return false;
   } catch {
     return false;
   }
@@ -133,9 +143,9 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
       && metricoolReuseConfirmed;
     const issues = [
       safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl) ? null : "accountOwnershipProofUrl must be a real safe HTTPS proof URL",
-      metricoolConnectionProofReady ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL",
+      metricoolConnectionProofReady ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL",
       accountNotesReady ? null : reusesConnectionProofAsOwnership
-        ? "accountNotes must confirm this Metricool/Drive proof shows the TikTok profile under Robert control"
+        ? "accountNotes must confirm this Metricool or concrete Drive file/folder/Docs proof shows the TikTok profile under Robert control"
         : "accountNotes must be 20+ chars and mention ownership/security proof",
       validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i) ? null : "metricoolNotes must be 20+ chars and mention Metricool connection proof",
     ].filter(Boolean);
@@ -255,9 +265,9 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
       || validMetricoolReuseConfirmationNotes(explicitLane.accountNotes);
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
     if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
-    if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com or Google Drive/Docs connection proof URL.`);
+    if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com or concrete Google Drive file/folder or Docs connection proof URL.`);
     if (!metricoolReuseConfirmed) {
-      issues.push(`${spec.key}: add accountNotes confirming the Metricool/Drive proof shows this TikTok profile under Robert control before reusing it as ownership proof.`);
+      issues.push(`${spec.key}: add accountNotes confirming the Metricool or concrete Drive file/folder/Docs proof shows this TikTok profile under Robert control before reusing it as ownership proof.`);
     }
     return [spec.key, {
       accountOwnershipProofUrl,

@@ -171,7 +171,7 @@ test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof 
   assert.equal(audit.realPublishEnabled, false);
   assert.equal(audit.goalBoardImpact.status, "blocked_proof_actions");
   assert.ok(audit.goalBoardImpact.readyProofFields < audit.goalBoardImpact.totalProofFields);
-  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or Google Drive\/Docs evidence URL/);
+  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
 });
 
 test("TikTok MVP proof links audit accepts Google Drive Metricool screenshots as non-secret evidence", () => {

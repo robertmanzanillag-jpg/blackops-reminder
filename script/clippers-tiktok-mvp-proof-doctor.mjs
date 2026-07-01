@@ -75,7 +75,7 @@ function laneNextAction(row) {
   if (!row) return "Add account and Metricool proof rows.";
   if (row.status === "ready") return "No proof fix needed for this lane; wait for readiness gate.";
   if (row.reasons.some((reason) => /account/i.test(reason))) return "Fix the account proof row with a real safe HTTPS ownership/security proof URL and 20+ character notes.";
-  if (row.reasons.some((reason) => /Metricool|bridge/i.test(reason))) return "Fix the Metricool bridge row with the exact TikTok profile URL, real metricool.com proof URL or Google Drive/Docs evidence URL, and 20+ character notes.";
+  if (row.reasons.some((reason) => /Metricool|bridge/i.test(reason))) return "Fix the Metricool bridge row with the exact TikTok profile URL, real metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL, and 20+ character notes.";
   return row.reasons[0] || "Run proof intake pack, replace placeholders, then preview closeout again.";
 }
 
@@ -100,7 +100,7 @@ function rejectedNextAction(row) {
     return "Paste a real public/non-secret ownership or 2FA/security proof URL, then keep notes at 20+ characters.";
   }
   if (row.source === "bridge") {
-    return "Paste the real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL for the connected TikTok profile, then keep notes at 20+ characters.";
+    return "Paste the real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL for the connected TikTok profile, then keep notes at 20+ characters.";
   }
   return "Replace the rejected placeholder with real non-secret evidence and rerun proof doctor.";
 }
@@ -114,7 +114,7 @@ function normalizeFixQueueItem(row, paths) {
     column: rejectedColumn(row),
     reason: row.reason,
     requiredValue: row.source === "bridge"
-      ? "real HTTPS metricool.com proof URL or Google Drive/Docs evidence URL"
+      ? "real HTTPS metricool.com proof URL or concrete Google Drive file/folder or Docs evidence URL"
       : "real safe HTTPS ownership/security proof URL",
     nextAction: rejectedNextAction(row),
   };
@@ -284,7 +284,7 @@ async function main() {
       },
       {
         key: "sports-daily:tiktok.metricoolConnectionProofUrl",
-        description: "Real public/non-secret HTTPS Metricool proof URL or Google Drive/Docs evidence URL showing Sports Daily TikTok is connected in Metricool.",
+        description: "Real public/non-secret HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL showing Sports Daily TikTok is connected in Metricool.",
       },
       {
         key: "meme-radar:tiktok.accountOwnershipProofUrl",
@@ -292,13 +292,13 @@ async function main() {
       },
       {
         key: "meme-radar:tiktok.metricoolConnectionProofUrl",
-        description: "Real public/non-secret HTTPS Metricool proof URL or Google Drive/Docs evidence URL showing Meme Radar TikTok is connected in Metricool.",
+        description: "Real public/non-secret HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL showing Meme Radar TikTok is connected in Metricool.",
       },
     ],
     recommendedProofFlow: {
       title: "TikTok Metricool proof-links bridge",
       steps: [
-        `Fill ${proofLinksPastePacketPath} and save the completed copy as ${proofLinksFilledDropPath}, or write two Metricool/Drive fast-path URLs plus optional separate ownership URLs to ${proofLinksJsonDropPath}.`,
+        `Fill ${proofLinksPastePacketPath} and save the completed copy as ${proofLinksFilledDropPath}, or write two Metricool URLs or concrete Drive file/folder/Docs fast-path URLs plus optional separate ownership URLs to ${proofLinksJsonDropPath}.`,
         "Use Safe ingest drop or Save proof links so the app validates proof URLs and notes before touching any bridge CSV.",
         `Let quick-fill generate the Metricool bridge CSV at ${paths.bridgeCsv} only from accepted non-secret proof links.`,
         "Use Load bridge CSV, then Preview bridge rows; Import bridge rows stays blocked until the preview gate is clean and current.",
@@ -315,7 +315,7 @@ async function main() {
       ? "Open the explicit TikTok MVP closeout apply review gate only after manually confirming every proof URL is real and non-secret; this doctor did not apply anything."
       : previewFailed
         ? "Fix the closeout preview command, then rerun proof doctor; stale reports are ignored."
-        : "Fill the proof links drop with two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",
+        : "Fill the proof links drop with two real Metricool URLs or concrete Drive file/folder/Docs proof URLs, or separate ownership plus Metricool URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));

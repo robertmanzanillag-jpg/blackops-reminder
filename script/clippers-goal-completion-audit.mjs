@@ -392,12 +392,12 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       fastPathPasteLines: Number(proofGate.minimumProofUrlsNeeded || 0) > 0
         ? [
           "sports-daily:tiktok.metricoolConnectionProofUrl=",
-          "sports-daily:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
+          "sports-daily:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
           "meme-radar:tiktok.metricoolConnectionProofUrl=",
-          "meme-radar:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
+          "meme-radar:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
         ]
         : [],
-      guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs and keep the confirmation notes true.",
+      guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs and keep the confirmation notes true.",
       nextAction: proofGateFixFirst
         ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs, preview links first, then save only if the preview is clean.`
         : proofRefreshNextAction,
@@ -425,7 +425,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       owner: "Robert",
       buttonOrFile: oneScreenProofPath,
       proofLine: `${accountId}:tiktok.metricoolConnectionProofUrl=`,
-      guardrail: "Metricool proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; keep Metricool approval_required.",
+      guardrail: "Metricool proof must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL; keep Metricool approval_required.",
       nextAction: activeMvpProofReady
         ? "Already covered by applied TikTok MVP evidence."
         : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, preview links first, then save only if the preview is clean.`,

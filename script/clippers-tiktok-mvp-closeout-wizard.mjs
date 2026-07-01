@@ -134,7 +134,7 @@ function buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerifi
       proofDropReady ? "done" : "blocked",
       proofDropReady
         ? "Run Quick fill or Import preview."
-        : "Add two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, to proof-links.json, then rerun Proof drop.",
+        : "Add two real Metricool URLs or concrete Drive file/folder/Docs proof URLs, or separate ownership plus Metricool URLs, to proof-links.json, then rerun Proof drop.",
       {
         issues: proofDrop?.issues || [],
         warnings: proofDrop?.warnings || [],

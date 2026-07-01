@@ -33242,7 +33242,7 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
       continue;
     }
     if (!isMetricoolConnectionProofUrl(proof)) {
-      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a real Metricool proof URL or Google Drive/Docs evidence URL." });
+      skipped.push({ row: rowNumber, accountId, platform: platform || platformRaw, reason: "TikTok MVP bridge evidence requires a real Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL." });
       continue;
     }
 
@@ -33276,7 +33276,7 @@ async function buildClipperMetricoolBridgeEvidenceBatch(input: { raw?: unknown }
     nextStep: recorded.length
       ? options.write
         ? "Refresh account permission readiness, then keep remaining external proof rows blocked until real account/security evidence exists."
-        : "Preview accepted these rows. Import only if the proof URLs are real, public, non-secret Metricool/TikTok or Google Drive/Docs evidence."
+        : "Preview accepted these rows. Import only if the proof URLs are real, public, non-secret Metricool/TikTok or concrete Google Drive file/folder or Docs evidence."
       : `Paste rows using header: ${METRICOOL_BRIDGE_EVIDENCE_TEMPLATE}`,
   };
   return { metricoolBridgeEvidenceBatch, status: options.write ? await getClipperStatus(userId) : null };

@@ -124,10 +124,18 @@ function isGoogleEvidenceProofUrl(value) {
   try {
     const url = new URL(normalize(value));
     const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname;
+    const concreteDriveEvidence = hostname === "drive.google.com" && (
+      /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+      || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+      || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()))
+    );
+    const concreteDocsEvidence = hostname === "docs.google.com"
+      && /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
     return url.protocol === "https:"
       && !url.username
       && !url.password
-      && (hostname === "drive.google.com" || hostname === "docs.google.com")
+      && (concreteDriveEvidence || concreteDocsEvidence)
       && !unsafeParamPattern.test(url.search);
   } catch {
     return false;
@@ -183,7 +191,7 @@ function validateBridgeRow(row) {
   if (!brand || brand !== lane?.brand) return { ok: false, reason: `metricool_brand_name must be ${lane?.brand || "the active brand"}` };
   if (!isTikTokProfileUrl(profileUrl)) return { ok: false, reason: "profile_url must be a public TikTok profile URL" };
   if (tiktokHandleFromProfileUrl(profileUrl) !== lane?.handle.toLowerCase()) return { ok: false, reason: `profile_url must match ${lane?.handle || "the active account handle"}` };
-  if (!isMetricoolConnectionProofUrl(proof)) return { ok: false, reason: "proof must be a real Metricool HTTPS URL or Google Drive/Docs evidence URL" };
+  if (!isMetricoolConnectionProofUrl(proof)) return { ok: false, reason: "proof must be a real Metricool HTTPS URL or concrete Google Drive file/folder or Docs evidence URL" };
   const notesIssue = validateNotes(notes);
   if (notesIssue) return { ok: false, reason: notesIssue };
   if (unsafePattern.test(combined) || unsafeParamPattern.test(combined)) return { ok: false, reason: "row contains placeholder, fake proof, or secret-like text" };

@@ -6246,7 +6246,7 @@ test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", asy
       ["meme-radar:tiktok", "sports-daily:tiktok"],
     );
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("public TikTok profile_url")));
-    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("Metricool proof URL or Google Drive/Docs")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("Metricool proof URL or concrete Google Drive")));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "youtube"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.platform === "instagram"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.accountId === "streamer-pulse" && item.platform === "tiktok"));
@@ -6284,7 +6284,7 @@ test("Metricool bridge evidence batch rejects non-concrete Google proof pages", 
     assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
     assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 3);
     assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
-    assert.equal(metricoolBridgeEvidenceBatch.skipped.filter((item) => item.reason.includes("Metricool proof URL or Google Drive/Docs")).length, 3);
+    assert.equal(metricoolBridgeEvidenceBatch.skipped.filter((item) => item.reason.includes("Metricool proof URL or concrete Google Drive")).length, 3);
     assert.equal(await readFile(sportsPath, "utf8").catch(() => null), null);
     assert.equal(await readFile(memesPath, "utf8").catch(() => null), null);
   } finally {
