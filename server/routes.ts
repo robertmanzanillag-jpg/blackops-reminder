@@ -46,7 +46,7 @@ import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
-import { auditClipperTikTokMvpProofLinks, containsClipperSecretLikeText, extractClipperTikTokMvpProofLinksPaste, validateClipperTikTokMvpProofLinks } from "./clippers-tiktok-mvp-proof-links";
+import { auditClipperTikTokMvpProofLinks, classifyClipperTikTokMvpProofUrl, containsClipperSecretLikeText, extractClipperTikTokMvpProofLinksPaste, validateClipperTikTokMvpProofLinks } from "./clippers-tiktok-mvp-proof-links";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -3648,6 +3648,14 @@ export async function registerRoutes(
       res.json({ tiktokMvpProofLinksPreview, tiktokMvpProofLinksPreviewGate });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview TikTok MVP proof links" });
+    }
+  });
+
+  app.post("/api/clippers/check-tiktok-mvp-proof-url", async (req, res) => {
+    try {
+      res.json({ tiktokMvpProofUrlCheck: classifyClipperTikTokMvpProofUrl(req.body?.proofUrl ?? req.body?.url) });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || "Failed to check TikTok MVP proof URL" });
     }
   });
 

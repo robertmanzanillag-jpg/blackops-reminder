@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   auditClipperTikTokMvpProofLinks,
+  classifyClipperTikTokMvpProofUrl,
   extractClipperTikTokMvpProofLinksPaste,
   safeClipperMetricoolConnectionProofUrl,
   safeClipperMetricoolProofUrl,
@@ -58,6 +59,36 @@ test("TikTok MVP proof links parser accepts explicit packet fields", () => {
     "https://app.metricool.com/planner/sports-daily-tiktok-proof",
   );
   assert.doesNotMatch(parsed.proofLinksText, /ready_to_send|realPublishEnabled\s*:\s*true|publish/i);
+});
+
+test("TikTok MVP proof URL classifier previews proof shape without unlocking gates", () => {
+  const metricool = classifyClipperTikTokMvpProofUrl("https://app.metricool.com/planner/sports-daily-tiktok-proof");
+  assert.equal(metricool.status, "ready_metricool_proof_url");
+  assert.equal(metricool.acceptedAsMetricoolConnectionProof, true);
+  assert.equal(metricool.acceptedAsOwnershipProof, false);
+  assert.equal(metricool.realPublishEnabled, false);
+  assert.equal(metricool.rawStored, false);
+  assert.match(metricool.nextStep, /Preview links before saving/);
+
+  const docs = classifyClipperTikTokMvpProofUrl("https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing");
+  assert.equal(docs.status, "ready_google_evidence_url");
+  assert.equal(docs.acceptedAsMetricoolConnectionProof, true);
+  assert.equal(docs.realPublishEnabled, false);
+
+  const generic = classifyClipperTikTokMvpProofUrl("https://app.metricool.com/dashboard");
+  assert.equal(generic.status, "blocked_generic_metricool_url");
+  assert.equal(generic.acceptedAsMetricoolConnectionProof, false);
+  assert.match(generic.issues.join("\n"), /too generic/);
+
+  const secret = classifyClipperTikTokMvpProofUrl("https://app.metricool.com/planner/sports-daily?token=neverpaste");
+  assert.equal(secret.status, "blocked_secret_like");
+  assert.equal(secret.rawStored, false);
+  assert.equal(secret.realPublishEnabled, false);
+  assert.doesNotMatch(JSON.stringify(secret), /neverpaste|token=neverpaste/i);
+
+  const placeholder = classifyClipperTikTokMvpProofUrl("<paste real Metricool proof>");
+  assert.equal(placeholder.status, "blocked_placeholder");
+  assert.equal(placeholder.acceptedAsMetricoolConnectionProof, false);
 });
 
 test("TikTok MVP proof links parser ignores instruction URLs in comments", () => {

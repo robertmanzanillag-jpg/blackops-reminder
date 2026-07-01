@@ -66,6 +66,93 @@ export function safeClipperMetricoolConnectionProofUrl(value: unknown): boolean 
   return safeClipperMetricoolProofUrl(value) || safeClipperGoogleEvidenceProofUrl(value);
 }
 
+export function classifyClipperTikTokMvpProofUrl(value: unknown) {
+  const text = String(value || "").trim();
+  const base = {
+    generatedAt: new Date().toISOString(),
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    rawStored: false,
+  };
+  const blocked = (status: string, issue: string, nextStep: string, details: Record<string, unknown> = {}) => ({
+    ...base,
+    status,
+    acceptedAsMetricoolConnectionProof: false,
+    acceptedAsOwnershipProof: false,
+    issues: [issue],
+    guardrails: [
+      "URL check does not save proof links, apply evidence, queue Metricool, schedule, or publish.",
+      "Do not paste passwords, cookies, tokens, recovery codes, API keys, signed URLs, or private screenshots.",
+      "Metricool remains approval_required and realPublishEnabled=false.",
+    ],
+    nextStep,
+    ...details,
+  });
+  if (!text) {
+    return blocked("blocked_empty", "Paste one non-secret Metricool or concrete Drive/Docs proof URL first.", "Paste a real HTTPS Metricool planner/brand/report URL or concrete Drive file/folder/Docs evidence URL.");
+  }
+  if (containsClipperSecretLikeText(text)) {
+    return blocked("blocked_secret_like", "URL contains credential-like or signed/temporary text.", "Remove tokens, cookies, passwords, signed query params, or private credential material before previewing proof.", { unsafeBlocked: true });
+  }
+  if (hasClipperProofPlaceholder(text)) {
+    return blocked("blocked_placeholder", "URL is a placeholder/example/instruction, not real proof.", "Replace the placeholder with a real non-secret proof URL from Metricool or concrete Drive/Docs evidence.");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(text);
+  } catch {
+    return blocked("blocked_invalid_url", "URL is not parseable.", "Paste a complete HTTPS URL.");
+  }
+  const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  const safeHttps = safeClipperHttpsProofUrl(text);
+  if (!safeHttps) {
+    return blocked("blocked_not_safe_https", "URL must be safe HTTPS with no username/password, tokens, or signed query params.", "Use a safe HTTPS proof URL with no credentials or temporary access parameters.", { hostname });
+  }
+  if (/(^|\.)metricool\.com$/i.test(parsed.hostname)) {
+    if (safeClipperMetricoolProofUrl(text)) {
+      return {
+        ...base,
+        status: "ready_metricool_proof_url",
+        acceptedAsMetricoolConnectionProof: true,
+        acceptedAsOwnershipProof: false,
+        proofKind: "metricool",
+        hostname,
+        issues: [],
+        guardrails: [
+          "URL check only validates proof URL shape; Robert/operator still must confirm the page proves SPORT/memes TikTok is connected.",
+          "If reusing this URL as account ownership/control proof, write a real 20+ character note after reviewing the proof content.",
+          "URL check does not save proof links, apply evidence, queue Metricool, schedule, or publish.",
+        ],
+        nextStep: "Use this URL in metricoolConnectionProofUrl, add real confirmation notes, then run Preview links before saving.",
+      };
+    }
+    return blocked("blocked_generic_metricool_url", "Metricool URL is too generic to prove a TikTok connection.", "Use a concrete Metricool planner, brand, post, publication, analytics, or report URL with an identifier.", { proofKind: "metricool", hostname });
+  }
+  if (hostname === "drive.google.com" || hostname === "docs.google.com") {
+    if (safeClipperGoogleEvidenceProofUrl(text)) {
+      return {
+        ...base,
+        status: "ready_google_evidence_url",
+        acceptedAsMetricoolConnectionProof: true,
+        acceptedAsOwnershipProof: false,
+        proofKind: hostname === "drive.google.com" ? "google_drive" : "google_docs",
+        hostname,
+        issues: [],
+        guardrails: [
+          "URL check only validates Drive/Docs proof URL shape; Robert/operator still must confirm the evidence proves the TikTok profile is connected in Metricool.",
+          "Do not use Drive/Docs links that expose secrets, private screenshots with credentials, signed URLs, or temporary access tokens.",
+          "URL check does not save proof links, apply evidence, queue Metricool, schedule, or publish.",
+        ],
+        nextStep: "Use this URL in metricoolConnectionProofUrl, add real confirmation notes, then run Preview links before saving.",
+      };
+    }
+    return blocked("blocked_non_concrete_google_evidence_url", "Google URL is not a concrete Drive file/folder/open ID or Docs evidence URL.", "Use a concrete Google Drive file/folder URL or a Docs/Sheets/Slides document URL that contains the proof.", { proofKind: "google_evidence", hostname });
+  }
+  return blocked("blocked_unsupported_domain", "Proof URL must be Metricool or concrete Google Drive/Docs evidence for this MVP.", "Use a real Metricool URL or a concrete Drive file/folder/Docs proof URL for SPORT or memes TikTok.", { hostname });
+}
+
 function validClipperProofNotes(value: unknown, pattern: RegExp): boolean {
   const text = String(value || "").trim();
   return text.length >= 20 && !hasClipperProofPlaceholder(text) && !containsClipperSecretLikeText(text) && pattern.test(text);

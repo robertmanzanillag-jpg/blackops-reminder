@@ -2819,6 +2819,40 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
   nextStep: string;
 }
 
+interface ClipperTikTokMvpProofUrlCheckSummary {
+  status:
+    | "ready_metricool_proof_url"
+    | "ready_google_evidence_url"
+    | "blocked_empty"
+    | "blocked_secret_like"
+    | "blocked_placeholder"
+    | "blocked_invalid_url"
+    | "blocked_not_safe_https"
+    | "blocked_generic_metricool_url"
+    | "blocked_non_concrete_google_evidence_url"
+    | "blocked_unsupported_domain";
+  generatedAt: string;
+  scope: "tiktok_only_metricool_mvp";
+  launchMode: "metricool_approval_required";
+  directSocialApisRequired: boolean;
+  realPublishEnabled: boolean;
+  rawStored: boolean;
+  acceptedAsMetricoolConnectionProof: boolean;
+  acceptedAsOwnershipProof: boolean;
+  proofKind?: string;
+  hostname?: string;
+  unsafeBlocked?: boolean;
+  issues: string[];
+  guardrails: string[];
+  nextStep: string;
+}
+
+interface ClipperTikTokMvpProofUrlCheckResult {
+  sportUrl: string;
+  memesUrl: string;
+  checks: Record<"sport" | "memes", ClipperTikTokMvpProofUrlCheckSummary>;
+}
+
 interface ClipperTikTokMvpProofLinksDropStarterSummary {
   status: "created" | "preserved_existing" | "blocked_secret_like_existing";
   generatedAt: string;
@@ -10979,6 +11013,7 @@ export default function ClippersPage() {
   const [metricoolBridgeEvidenceBatchText, setMetricoolBridgeEvidenceBatchText] = useState(metricoolBridgeEvidenceTemplate);
   const [metricoolBridgeEvidenceBatch, setMetricoolBridgeEvidenceBatch] = useState<ClipperMetricoolBridgeEvidenceBatchResult | null>(null);
   const [metricoolBridgeEvidenceBatchPreview, setMetricoolBridgeEvidenceBatchPreview] = useState<{ raw: string; result: ClipperMetricoolBridgeEvidenceBatchResult; previewGate: ClipperMetricoolBridgePreviewGate | null } | null>(null);
+  const [tiktokMvpProofUrlCheckResult, setTiktokMvpProofUrlCheckResult] = useState<ClipperTikTokMvpProofUrlCheckResult | null>(null);
   const metricoolBridgeEvidenceClientCheck = useMemo(
     () => getMetricoolBridgeEvidenceClientCheck(metricoolBridgeEvidenceBatchText),
     [metricoolBridgeEvidenceBatchText]
@@ -12151,6 +12186,55 @@ export default function ClippersPage() {
     },
     onError: (error: Error) => {
       toast({ title: "No pude revisar proof links", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const tiktokMvpProofUrlCheckMutation = useMutation({
+    mutationFn: async () => {
+      const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
+      const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
+      const entries = [
+        ["sport", sportUrl],
+        ["memes", memesUrl],
+      ] as const;
+      const results = await Promise.all(entries.map(async ([lane, proofUrl]) => {
+        const response = await fetch("/api/clippers/check-tiktok-mvp-proof-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ proofUrl }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `No pude revisar URL ${lane}`);
+        return [lane, data.tiktokMvpProofUrlCheck as ClipperTikTokMvpProofUrlCheckSummary] as const;
+      }));
+      return {
+        sportUrl,
+        memesUrl,
+        checks: Object.fromEntries(results) as Record<"sport" | "memes", ClipperTikTokMvpProofUrlCheckSummary>,
+      };
+    },
+    onSuccess: (result) => {
+      const currentSportUrl = tiktokMvpFastPathSportProofUrl.trim();
+      const currentMemesUrl = tiktokMvpFastPathMemesProofUrl.trim();
+      if (result.sportUrl !== currentSportUrl || result.memesUrl !== currentMemesUrl) {
+        setTiktokMvpProofUrlCheckResult(null);
+        toast({
+          title: "Proof URL check stale",
+          description: "Las URLs cambiaron mientras revisaba; corre Check URLs otra vez antes de usar el resultado.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setTiktokMvpProofUrlCheckResult(result);
+      const readyCount = Object.values(result.checks).filter((check) => check.acceptedAsMetricoolConnectionProof).length;
+      toast({
+        title: readyCount === 2 ? "Proof URLs pasan shape check" : "Proof URLs tienen blockers",
+        description: `${readyCount}/2 URLs parecen usables como Metricool/Drive proof. Esto no guarda evidencia; corre Preview links despues.`,
+        variant: readyCount === 2 ? undefined : "destructive",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude revisar proof URLs", description: error.message, variant: "destructive" });
     },
   });
 
@@ -17475,6 +17559,7 @@ export default function ClippersPage() {
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofLinksPasteMutation.isPending
+    || tiktokMvpProofUrlCheckMutation.isPending
     || tiktokMvpProofLinksDropImportMutation.isPending
     || tiktokMvpProofLinksDropStarterMutation.isPending
     || tiktokMvpProofLinksDropIngestMutation.isPending
@@ -17535,6 +17620,7 @@ export default function ClippersPage() {
     setTiktokMvpProofLinksPreviewGate(null);
     markGoalCompletionProofLinksPreviewGateStale();
     setTiktokMvpFastPathOwnershipConfirmed(false);
+    setTiktokMvpProofUrlCheckResult(null);
   };
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
@@ -19337,6 +19423,7 @@ export default function ClippersPage() {
                           value={tiktokMvpFastPathSportProofUrl}
                           onChange={(event) => {
                             setTiktokMvpFastPathSportProofUrl(event.target.value);
+                            setTiktokMvpProofUrlCheckResult(null);
                             setTiktokMvpFastPathOwnershipConfirmed(false);
                             clearTikTokMvpProofLinksGeneratedState();
                           }}
@@ -19354,6 +19441,7 @@ export default function ClippersPage() {
                           value={tiktokMvpFastPathMemesProofUrl}
                           onChange={(event) => {
                             setTiktokMvpFastPathMemesProofUrl(event.target.value);
+                            setTiktokMvpProofUrlCheckResult(null);
                             setTiktokMvpFastPathOwnershipConfirmed(false);
                             clearTikTokMvpProofLinksGeneratedState();
                           }}
@@ -19369,6 +19457,18 @@ export default function ClippersPage() {
                         type="button"
                         size="sm"
                         variant="outline"
+                        onClick={() => tiktokMvpProofUrlCheckMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading || (!tiktokMvpFastPathSportProofUrl.trim() && !tiktokMvpFastPathMemesProofUrl.trim())}
+                        className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                        data-testid="check-clippers-tiktok-mvp-proof-urls-button"
+                      >
+                        {tiktokMvpProofUrlCheckMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                        Check URLs
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
                         onClick={buildTikTokMvpMetricoolFastPathPaste}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathCanBuild}
                         className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
@@ -19378,6 +19478,36 @@ export default function ClippersPage() {
                         Build & preview 2 URLs
                       </Button>
                     </div>
+                    {tiktokMvpProofUrlCheckResult && (
+                      <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-url-check-results">
+                        {([
+                          ["sport", "SPORT", tiktokMvpProofUrlCheckResult.checks.sport],
+                          ["memes", "memes", tiktokMvpProofUrlCheckResult.checks.memes],
+                        ] as const).map(([key, label, check]) => check && (
+                          <div
+                            key={key}
+                            className={cn(
+                              "rounded border p-2 text-[10px] leading-4",
+                              check.acceptedAsMetricoolConnectionProof
+                                ? "border-emerald-300/20 bg-emerald-300/5 text-emerald-100/80"
+                                : "border-amber-300/20 bg-amber-300/5 text-amber-100/80"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={cn(
+                                "border text-[10px]",
+                                check.acceptedAsMetricoolConnectionProof
+                                  ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                  : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                              )}>{label} {check.status}</Badge>
+                              <span>raw stored {check.rawStored ? "yes" : "no"}</span>
+                              <span>publish {check.realPublishEnabled ? "enabled" : "disabled"}</span>
+                            </div>
+                            <p className="mt-1">{check.issues[0] || check.nextStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <label className="mt-2 flex items-start gap-2 rounded border border-emerald-300/10 bg-black/20 p-2 text-[10px] leading-4 text-emerald-100/80">
                       <Checkbox
                         checked={tiktokMvpFastPathOwnershipConfirmed}

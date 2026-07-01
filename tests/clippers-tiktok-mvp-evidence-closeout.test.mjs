@@ -477,6 +477,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/prepare-tiktok-mvp-proof-drop-kit"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/tiktok-mvp-proof-links"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/preview-tiktok-mvp-proof-links"/);
+  assert.match(routes, /app\.post\("\/api\/clippers\/check-tiktok-mvp-proof-url"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/metricool-bridge-evidence-csv-status"/);
   assert.match(routes, /app\.get\("\/api\/clippers\/metricool-bridge-preview-gate"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/load-metricool-bridge-evidence-csv"/);
@@ -487,6 +488,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /app\.post\("\/api\/clippers\/ingest-tiktok-mvp-proof-links-drop"/);
   assert.match(routes, /app\.post\("\/api\/clippers\/save-tiktok-mvp-proof-links"/);
   assert.match(proofLinksModule, /containsClipperSecretLikeText/);
+  assert.match(proofLinksModule, /classifyClipperTikTokMvpProofUrl/);
   assert.match(proofLinksModule, /clipperUnsafeProofQueryParamPattern/);
   assert.match(routes, /auditClipperTikTokMvpProofLinks/);
   assert.match(routes, /function isClipperGoogleEvidenceProofUrl/);
@@ -749,6 +751,15 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpFastPathSportProofReady = isMetricoolProofUrl\(tiktokMvpFastPathSportProofUrl\)/);
   assert.match(page, /tiktokMvpFastPathMemesProofReady = isMetricoolProofUrl\(tiktokMvpFastPathMemesProofUrl\)/);
   assert.match(page, /tiktokMvpFastPathCanBuild = tiktokMvpFastPathSportProofReady/);
+  assert.match(page, /tiktokMvpProofUrlCheckMutation/);
+  assert.match(page, /tiktokMvpProofUrlCheckResult/);
+  assert.match(page, /result\.sportUrl !== currentSportUrl \|\| result\.memesUrl !== currentMemesUrl/);
+  assert.match(page, /Proof URL check stale/);
+  assert.match(page, /\/api\/clippers\/check-tiktok-mvp-proof-url/);
+  assert.match(page, /check-clippers-tiktok-mvp-proof-urls-button/);
+  assert.match(page, /clippers-tiktok-mvp-proof-url-check-results/);
+  assert.match(page, /raw stored \{check\.rawStored \? "yes" : "no"\}/);
+  assert.match(page, /publish \{check\.realPublishEnabled \? "enabled" : "disabled"\}/);
   assert.match(page, /\(token\|access\|refresh\|auth\|signature\|signed\|session\|cookie\|key\|secret\|password\|passcode\|recovery\)=/);
   assert.match(page, /Fast path requiere confirmacion/);
   assert.match(page, /Proof URLs no validos/);
@@ -758,7 +769,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-fast-path-ownership-confirmation/);
   assert.match(page, /!tiktokMvpFastPathOwnershipConfirmed/);
   assert.match(page, /shows the TikTok profile connected under Robert control/);
-  assert.match(page, /const clearTikTokMvpProofLinksGeneratedState = \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);[\s\S]*?\};/);
+  assert.match(page, /const clearTikTokMvpProofLinksGeneratedState = \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);[\s\S]*?setTiktokMvpProofUrlCheckResult\(null\);[\s\S]*?\};/);
   assert.match(page, /setTiktokMvpFastPathSportProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
   assert.match(page, /setTiktokMvpFastPathMemesProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
   assert.match(page, /setTiktokMvpProofLinksText\(""\)/);
@@ -3094,6 +3105,56 @@ test("TikTok MVP proof links preview route writes a hash-only clean save gate", 
     else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);
+  }
+});
+
+test("TikTok MVP proof URL check route classifies URLs without storing raw proof", async () => {
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    const readyResponse = await fetch(`http://127.0.0.1:${address.port}/api/clippers/check-tiktok-mvp-proof-url`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof" }),
+    });
+    const readyBody = await readyResponse.json();
+    assert.equal(readyResponse.status, 200, JSON.stringify(readyBody));
+    assert.equal(readyBody.tiktokMvpProofUrlCheck.status, "ready_metricool_proof_url");
+    assert.equal(readyBody.tiktokMvpProofUrlCheck.acceptedAsMetricoolConnectionProof, true);
+    assert.equal(readyBody.tiktokMvpProofUrlCheck.rawStored, false);
+    assert.equal(readyBody.tiktokMvpProofUrlCheck.realPublishEnabled, false);
+    assert.match(readyBody.tiktokMvpProofUrlCheck.nextStep, /Preview links before saving/);
+
+    const secretResponse = await fetch(`http://127.0.0.1:${address.port}/api/clippers/check-tiktok-mvp-proof-url`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proofUrl: "https://app.metricool.com/planner/sports-daily?token=neverpaste-this-value" }),
+    });
+    const secretBody = await secretResponse.json();
+    assert.equal(secretResponse.status, 200, JSON.stringify(secretBody));
+    assert.equal(secretBody.tiktokMvpProofUrlCheck.status, "blocked_secret_like");
+    assert.equal(secretBody.tiktokMvpProofUrlCheck.acceptedAsMetricoolConnectionProof, false);
+    assert.equal(secretBody.tiktokMvpProofUrlCheck.rawStored, false);
+    assert.equal(secretBody.tiktokMvpProofUrlCheck.realPublishEnabled, false);
+    assert.doesNotMatch(JSON.stringify(secretBody), /neverpaste-this-value|token=neverpaste/i);
+    assert.equal(await readFile(proofLinksPath, "utf8").catch(() => null), previousProofLinks);
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
   }
 });
 
