@@ -103,7 +103,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(githubHandoffRoute, /updateRevenueDeliveryWorkspaceQa\(\{/);
   assert.doesNotMatch(githubHandoffRoute, /workspace\.codexBuildHandoff\.codexBrief/);
   assert.match(uiSource, /button-create-github-handoff/);
+  assert.match(uiSource, /panel-github-handoff-next-action/);
+  assert.match(uiSource, /button-copy-github-handoff-next-action/);
+  assert.match(uiSource, /developerHandoff\?\.message/);
   assert.match(uiSource, /workspace\.codexBuildHandoff\.publicBuildBrief/);
+  assert.match(uiSource, /workspace\?\.codexBuildHandoff\.publicBuildBrief/);
   assert.doesNotMatch(uiSource, /workspace\.codexBuildHandoff\.publicBuildBrief \|\| workspace\.codexBuildHandoff\.codexBrief/);
   assert.match(uiSource, /item\.publicBuildBrief/);
   assert.doesNotMatch(uiSource, /item\.publicBuildBrief \|\| item\.codexBrief/);

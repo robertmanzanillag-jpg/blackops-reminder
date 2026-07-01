@@ -8860,9 +8860,34 @@ export default function RevenueEnginePage() {
                             Release gate registrado: PR, review, App QA y aprobacion listos para entrega controlada.
                           </div>
                         )}
-                        {deliveryWorkspaceGithubHandoffMutation.data?.status === "created" && deliveryWorkspaceGithubHandoffMutation.data.developerHandoff?.issueUrl && (
-                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100">
-                            GitHub issue creado: {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl}
+                        {deliveryWorkspaceGithubHandoffMutation.data?.status === "created" && deliveryWorkspaceGithubHandoffMutation.data.developerHandoff && (
+                          <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs text-sky-100" data-testid="panel-github-handoff-next-action">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div className="min-w-0">
+                                {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl && (
+                                  <p className="break-words">
+                                    GitHub issue creado: {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.issueUrl}
+                                  </p>
+                                )}
+                                <p className="mt-1 text-sky-100">
+                                  {deliveryWorkspaceGithubHandoffMutation.data.developerHandoff.message}
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="shrink-0 border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                onClick={() => navigator.clipboard.writeText([
+                                  deliveryWorkspaceGithubHandoffMutation.data?.developerHandoff?.message,
+                                  deliveryWorkspaceGithubHandoffMutation.data?.workspace?.codexBuildHandoff.publicBuildBrief,
+                                ].filter(Boolean).join("\n\n"))}
+                                data-testid="button-copy-github-handoff-next-action"
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy next action
+                              </Button>
+                            </div>
                           </div>
                         )}
                         {deliveryWorkspaceGithubHandoffMutation.data && deliveryWorkspaceGithubHandoffMutation.data.status !== "created" && (
