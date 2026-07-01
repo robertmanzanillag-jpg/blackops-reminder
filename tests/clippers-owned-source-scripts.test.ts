@@ -8273,12 +8273,14 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(audit.operatorNextActions[0].fastPathPacketPath, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(audit.operatorNextActions[0].fastPathPacketText, /TikTok MVP Metricool fast-path proof packet/);
   assert.match(audit.operatorNextActions[0].fastPathPacketText, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
-  assert.doesNotMatch(audit.operatorNextActions[0].fastPathPacketText, /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
+  assert.match(audit.operatorNextActions[0].fastPathPacketText, /sports-daily:tiktok\.accountNotes=/);
+  assert.match(audit.operatorNextActions[0].fastPathPacketText, /meme-radar:tiktok\.metricoolNotes=/);
+  assert.doesNotMatch(audit.operatorNextActions[0].fastPathPacketText, /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=|cookie=|password=|confirmed by Robert|verified by Robert|Robert confirms/i);
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
-    "sports-daily:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
+    "sports-daily:tiktok.accountNotes=",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
-    "meme-radar:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
+    "meme-radar:tiktok.accountNotes=",
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);

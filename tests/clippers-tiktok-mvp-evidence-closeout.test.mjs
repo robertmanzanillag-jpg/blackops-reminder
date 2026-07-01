@@ -2411,7 +2411,9 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(report.fastPathPastePacketText, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(report.fastPathPastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(report.fastPathPastePacketText, /Preview links first/);
-  assert.doesNotMatch(report.fastPathPastePacketText, /ready_to_send|realPublishEnabled=true|video\.publish/i);
+  assert.match(report.fastPathPastePacketText, /sports-daily:tiktok\.accountNotes=/);
+  assert.match(report.fastPathPastePacketText, /meme-radar:tiktok\.metricoolNotes=/);
+  assert.doesNotMatch(report.fastPathPastePacketText, /ready_to_send|realPublishEnabled=true|video\.publish|confirmed by Robert|verified by Robert|Robert confirms/i);
   assert.ok([0, 100].includes(report.unblockBoard.impact.metricool100Rows));
   assert.ok([0, 10].includes(report.unblockBoard.impact.metricool100SourceReadyBatches));
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
@@ -2431,18 +2433,20 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.doesNotMatch(JSON.stringify(report.unblockBoard), /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(report.pastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(report.pastePacketText, /sports-daily:tiktok\.accountNotes=/);
+  assert.doesNotMatch(report.pastePacketText, /confirmed by Robert|verified by Robert|Robert confirms/i);
   const fastPathPacket = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-fast-path-paste-packet.txt"), "utf8");
   assert.match(fastPathPacket, /TikTok MVP Metricool fast-path proof packet/);
   assert.match(fastPathPacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(fastPathPacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
-  assert.doesNotMatch(fastPathPacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
+  assert.doesNotMatch(fastPathPacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish|confirmed by Robert|verified by Robert|Robert confirms/i);
   assert.match(report.paths.jsonStarter, /proof-links-json-starter\.json$/);
   assert.deepEqual(Object.keys(report.jsonStarter.lanes).sort(), ["meme-radar:tiktok", "sports-daily:tiktok"]);
   for (const lane of Object.values(report.jsonStarter.lanes)) {
     assert.equal(lane.accountOwnershipProofUrl, "");
     assert.equal(lane.metricoolConnectionProofUrl, "");
-    assert.match(lane.accountNotes, /ownership|2FA|security/i);
-    assert.match(lane.metricoolNotes, /Metricool connection/i);
+    assert.equal(lane.accountNotes, "");
+    assert.equal(lane.metricoolNotes, "");
   }
   assert.match(report.paths.oneScreenTxt, /proof-fill-one-screen\.txt$/);
   assert.doesNotMatch(JSON.stringify(report.jsonStarter), /https:\/\/example\.com|placeholder|ready_to_send|realPublishEnabled=true|video\.publish/i);
@@ -2850,6 +2854,13 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
       "meme-radar:tiktok.metricoolConnectionProofUrl=",
     ]);
+    assert.deepEqual(report.operatorNextActions[0].fastPathPasteLines, [
+      "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "sports-daily:tiktok.accountNotes=",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.accountNotes=",
+    ]);
+    assert.doesNotMatch(JSON.stringify(report.operatorNextActions[0].fastPathPasteLines), /Robert confirms|connected under Robert control/i);
     assert.doesNotMatch(JSON.stringify(report.externalActionGate), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
 
     const markdown = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.md"), "utf8");

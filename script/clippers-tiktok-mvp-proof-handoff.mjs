@@ -370,8 +370,8 @@ function renderProofLinksPastePacket() {
     ...lanes.flatMap((lane) => [
       `${lane.key}.accountOwnershipProofUrl=`,
       `${lane.key}.metricoolConnectionProofUrl=`,
-      `${lane.key}.accountNotes=${lane.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
-      `${lane.key}.metricoolNotes=${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      `${lane.key}.accountNotes=`,
+      `${lane.key}.metricoolNotes=`,
       "",
     ]),
   ].join("\n");
@@ -388,8 +388,8 @@ function renderFastPathProofLinksPastePacket() {
     ...lanes.flatMap((lane) => [
       `${lane.key}.metricoolConnectionProofUrl=`,
       `${lane.key}.accountOwnershipProofUrl=`,
-      `${lane.key}.accountNotes=${lane.accountName} TikTok ownership/control confirmed by Robert from the Metricool or concrete Drive/Docs proof without secrets.`,
-      `${lane.key}.metricoolNotes=${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      `${lane.key}.accountNotes=`,
+      `${lane.key}.metricoolNotes=`,
       "",
     ]),
   ].join("\n");
@@ -400,8 +400,8 @@ function buildProofLinksJsonStarter() {
     lanes: Object.fromEntries(lanes.map((lane) => [lane.key, {
       accountOwnershipProofUrl: "",
       metricoolConnectionProofUrl: "",
-      accountNotes: `${lane.accountName} TikTok ownership and 2FA/security proof verified by Robert without secrets.`,
-      metricoolNotes: `${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      accountNotes: "",
+      metricoolNotes: "",
     }])),
   };
 }

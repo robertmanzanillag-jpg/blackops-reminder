@@ -16841,7 +16841,7 @@ export default function ClippersPage() {
       await navigator.clipboard.writeText(`${cleanPacket}\n`);
       toast({
         title: "Metricool proof lines copied",
-        description: "Paste real non-secret proof URLs after each equals sign. Preview links first; save only if the preview gate is clean/current.",
+        description: "Paste real non-secret proof URLs and your own confirmation notes. Preview links first.",
       });
     } catch {
       toast({
@@ -16933,9 +16933,12 @@ export default function ClippersPage() {
     setTiktokMvpProofLinksPasteText(cleanPacket);
     setTiktokMvpProofLinksPastePreview(null);
     setTiktokMvpProofLinksPreview(null);
+    setTiktokMvpProofLinksSaveReceipt(null);
+    setTiktokMvpProofLinksPreviewGate(null);
+    markGoalCompletionProofLinksPreviewGateStale();
     toast({
       title: "Metricool proof lines loaded",
-      description: "Add real non-secret URLs after each equals sign, then run Preview links before saving.",
+      description: "Add real non-secret URLs and your own confirmation notes, then run Preview links before saving.",
     });
   };
 
