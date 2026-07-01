@@ -301,6 +301,16 @@ type RevenueSnapshot = {
       batchHeader: string;
       copyableBatchTemplate: string;
       subagentBrief: string;
+      searchPlaybook: {
+        prioritizedSources: Array<{
+          source: string;
+          query: string;
+          evidenceGoal: string;
+        }>;
+        opportunitySignals: string[];
+        dailyOperatingCadence: string[];
+        copyableBrief: string;
+      };
       importInstructions: string[];
       qualityGate: string[];
       safety: {
@@ -1253,6 +1263,16 @@ type RevenueMoneySprint = {
     batchHeader: string;
     copyableBatchTemplate: string;
     subagentBrief: string;
+    searchPlaybook: {
+      prioritizedSources: Array<{
+        source: string;
+        query: string;
+        evidenceGoal: string;
+      }>;
+      opportunitySignals: string[];
+      dailyOperatingCadence: string[];
+      copyableBrief: string;
+    };
     importInstructions: string[];
     qualityGate: string[];
     safety: {
@@ -5161,6 +5181,41 @@ export default function RevenueEnginePage() {
                         <Copy className="mr-2 h-3.5 w-3.5" />
                         Copy brief
                       </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-emerald-500/30 bg-zinc-950 text-emerald-100 hover:bg-emerald-500/10"
+                        onClick={() => navigator.clipboard.writeText(snapshot?.businessScoutQueue.workPack.searchPlaybook.copyableBrief || "")}
+                        data-testid="button-copy-business-search-playbook"
+                      >
+                        <Copy className="mr-2 h-3.5 w-3.5" />
+                        Copy playbook
+                      </Button>
+                    </div>
+                    <div className="mt-3 rounded-lg border border-emerald-500/15 bg-emerald-500/5 p-3" data-testid="panel-business-search-playbook">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wide text-emerald-200">Playbook de busqueda</p>
+                        <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                          {(snapshot?.businessScoutQueue.workPack.searchPlaybook.prioritizedSources || []).length} fuentes
+                        </Badge>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        {(snapshot?.businessScoutQueue.workPack.searchPlaybook.prioritizedSources || []).slice(0, 3).map((item) => (
+                          <div key={`${item.source}-${item.query}`} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                            <p className="text-xs font-medium text-white">{item.source}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{item.query}</p>
+                            <p className="mt-1 text-xs leading-5 text-emerald-100/80">{item.evidenceGoal}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {(snapshot?.businessScoutQueue.workPack.searchPlaybook.opportunitySignals || []).slice(0, 4).map((signal) => (
+                          <div key={signal} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-300">
+                            {signal}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                     {dailyScoutSprintMutation.error && (
                       <p className="mt-2 text-xs text-red-300">{dailyScoutSprintMutation.error.message}</p>

@@ -9567,6 +9567,36 @@ function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: R
   ];
   const targetRows = Math.min(parsed.dailyQualifiedLeadLimit, 10);
   const safeNiche = parsed.niche.split(",").map((item) => item.trim()).filter(Boolean)[0] || parsed.niche;
+  const prioritizedSources = [
+    {
+      source: "Google Maps",
+      query: `${safeNiche} ${parsed.area}`,
+      evidenceGoal: "Confirmar campo website vacio/debil, reviews recientes, telefono/contacto y fotos/servicios activos.",
+    },
+    {
+      source: "Google Search",
+      query: `${safeNiche} ${parsed.area} no website`,
+      evidenceGoal: "Encontrar directorios/listings publicos donde el negocio aparece sin website dedicado o con presencia incompleta.",
+    },
+    {
+      source: "Instagram public",
+      query: `${safeNiche} ${parsed.area} site:instagram.com`,
+      evidenceGoal: "Validar actividad reciente, bio/contacto publico y ausencia de link a website fuerte.",
+    },
+  ];
+  const opportunitySignals = [
+    "no website field on Google Maps or public listing",
+    "weak/mobile-poor website with no booking, menu, quote or lead form",
+    "recent reviews/posts/photos proving the business is active",
+    "public email, phone, contact form or DM handle visible without private data",
+    "clear paid website use case: menu, booking, quote request, gallery, lead capture or follow-up",
+  ];
+  const dailyOperatingCadence = [
+    `Morning: assign ${Math.min(scoutQueue.length, 6)} scout tasks across subagents and fill public evidence slots only.`,
+    `Midday: approve only rows with ${columns.join(", ")} complete and sourceUrl tied to the business.`,
+    "Afternoon: run Money Sprint preview from verified candidates; keep outreach as drafts until Robert approves contact.",
+    "End of day: record replies/deposits only from manual outcomes with payment evidence; do not deploy without PR/App QA/Robert approval.",
+  ];
   const placeholderRow = [
     "REPLACE_BUSINESS_NAME",
     parsed.area,
@@ -9582,6 +9612,29 @@ function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: R
     "Owner",
     `REPLACE_BUSINESS_NAME in ${parsed.area} has public evidence of a missing or weak website and a clear ${parsed.offerFocus} opportunity.`,
   ].join("|");
+  const copyableSearchPlaybook = [
+    "Revenue Engine public business search playbook",
+    "",
+    `Market: ${parsed.area}`,
+    `Niche: ${safeNiche}`,
+    `Offer focus: ${parsed.offerFocus}`,
+    `Target verified rows today: ${targetRows}`,
+    "",
+    "Prioritized sources:",
+    ...prioritizedSources.map((item, index) => `${index + 1}. ${item.source}: ${item.query} -- ${item.evidenceGoal}`),
+    "",
+    "Opportunity signals:",
+    ...opportunitySignals.map((signal) => `- ${signal}`),
+    "",
+    "Daily cadence:",
+    ...dailyOperatingCadence.map((step) => `- ${step}`),
+    "",
+    "Safety:",
+    "- Use public research only.",
+    "- Do not contact businesses before Robert approval.",
+    "- Do not buy data, scrape at scale, publish previews or deploy.",
+    "- Do not import placeholders; every row needs public evidence and approvalToImport.",
+  ].join("\n");
 
   return {
     targetRows,
@@ -9596,6 +9649,12 @@ function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: R
       "Do not contact businesses, buy data, scrape at scale, publish previews, or invent evidence.",
       "Return rows using the exact pipe-delimited batch header so Revenue Engine can preview, qualify and create draft-only outreach.",
     ].join(" "),
+    searchPlaybook: {
+      prioritizedSources,
+      opportunitySignals,
+      dailyOperatingCadence,
+      copyableBrief: copyableSearchPlaybook,
+    },
     importInstructions: [
       "Open the scout links.",
       "Capture real public evidence for each business.",

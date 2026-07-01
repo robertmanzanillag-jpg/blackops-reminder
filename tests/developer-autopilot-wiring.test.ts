@@ -181,6 +181,8 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(serverSource, /runRevenueScoutDispatch/);
   assert.match(serverSource, /manual_subagent_dispatch/);
   assert.match(serverSource, /dispatchSummary/);
+  assert.match(serverSource, /searchPlaybook/);
+  assert.match(serverSource, /public business search playbook/);
   assert.match(uiSource, /dailyScoutSprintMutation/);
   assert.match(uiSource, /scoutDispatchMutation/);
   assert.match(uiSource, /const dispatchScoutArea = snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);
@@ -194,6 +196,10 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /panel-scout-dispatch/);
   assert.match(uiSource, /button-copy-scout-dispatch/);
   assert.match(uiSource, /button-copy-scout-dispatch-agents/);
+  assert.match(uiSource, /panel-business-search-playbook/);
+  assert.match(uiSource, /button-copy-business-search-playbook/);
+  assert.match(uiSource, /businessScoutQueue\.workPack\.searchPlaybook\.prioritizedSources/);
+  assert.match(uiSource, /businessScoutQueue\.workPack\.searchPlaybook\.opportunitySignals/);
   assert.match(uiSource, /latestDailyScoutSprint\.dispatchSummary/);
   assert.match(uiSource, /panel-latest-daily-scout-sprint/);
   assert.match(uiSource, /const activeScoutArea = snapshot\?\.latestDailyScoutSprint\?\.area \|\| snapshot\?\.businessScoutQueue\.area \|\| scoutingArea/);

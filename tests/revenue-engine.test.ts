@@ -377,6 +377,11 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(initial.businessScoutQueue.safety.sendsOutreach, false);
   assert.equal(initial.businessScoutQueue.safety.persistsCandidates, false);
   assert.match(initial.businessScoutQueue.workPack.copyableBatchTemplate, /business\|area\|niche/);
+  assert.equal(initial.businessScoutQueue.workPack.searchPlaybook.prioritizedSources.length, 3);
+  assert.equal(initial.businessScoutQueue.workPack.searchPlaybook.opportunitySignals.some((signal) => signal.includes("no website")), true);
+  assert.equal(initial.businessScoutQueue.workPack.searchPlaybook.dailyOperatingCadence.some((step) => step.includes("Money Sprint preview")), true);
+  assert.match(initial.businessScoutQueue.workPack.searchPlaybook.copyableBrief, /public business search playbook/);
+  assert.match(initial.businessScoutQueue.workPack.searchPlaybook.copyableBrief, /Do not contact businesses before Robert approval/);
   assert.equal(initial.dailyMoneyCommand.status, "search");
   assert.match(initial.dailyMoneyCommand.primaryAction, /Buscar negocios publicos/);
   assert.equal(initial.dailyMoneyCommand.funnel.researchTarget, initial.businessScoutQueue.dailyResearchTarget);
@@ -400,6 +405,8 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(updated.businessScoutQueue.niche, "roofers");
   assert.equal(updated.businessScoutQueue.offerFocus, "websites");
   assert.equal(updated.businessScoutQueue.tasks.some((task) => task.query.includes("roofers")), true);
+  assert.equal(updated.businessScoutQueue.workPack.searchPlaybook.prioritizedSources.some((source) => source.query.includes("roofers Orlando")), true);
+  assert.match(updated.businessScoutQueue.workPack.searchPlaybook.copyableBrief, /Market: Orlando/);
   assert.match(updated.dailyMoneyCommand.copyableOperatorBrief, /Revenue Engine daily money command/);
 });
 
@@ -2783,6 +2790,8 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
 
   assert.equal(result.status, "ready_to_start");
   assert.equal(result.scoutQueue.length > 0, true);
+  assert.equal(result.scoutWorkPack.searchPlaybook.prioritizedSources.some((source) => source.query.includes("coffee shop Miami")), true);
+  assert.match(result.scoutWorkPack.searchPlaybook.copyableBrief, /Do not contact businesses before Robert approval/);
   assert.equal(result.operatingLimits.maxPaidDataSpendUsd, 0);
   assert.equal(result.recordedLeads.length, 1);
   assert.equal(result.recordedLeads[0].qualification.grade, "A");
