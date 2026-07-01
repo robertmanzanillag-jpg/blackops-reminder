@@ -1167,6 +1167,9 @@ test("TikTok external closeout session surfaces active Metricool MVP proof block
     "rerun_readiness",
   ]);
   assert.ok(session.proofLinksFlow.checklist.every((item) => item.expectedGate && item.nextButton));
+  assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "save_and_ingest")?.nextButton || "", /Preview clean, then Save proof links/);
+  assert.match(session.proofLinksFlow.nextStep, /Parse\/Preview; save only if the preview is clean/);
+  assert.doesNotMatch(JSON.stringify(session.proofLinksFlow), /Proof Links Assistant -> Parse -> Save proof links|Save proof links, then Safe ingest drop/i);
   assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "preview_bridge_rows")?.expectedGate || "", /ready_for_import/);
   assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "rerun_readiness")?.expectedGate || "", /without enabling real publishing/);
   assert.doesNotMatch(JSON.stringify(session.proofLinksFlow), /ready_to_send|realPublishEnabled\s*:\s*true|access_token=|refresh_token=|client_secret=/i);

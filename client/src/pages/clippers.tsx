@@ -12271,7 +12271,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofQuickFill.appliedToIntake ? "Proof quick fill guardado" : "Proof quick fill bloqueado",
+        title: data.tiktokMvpProofQuickFill.appliedToIntake ? "Proof quick fill stageado" : "Proof quick fill bloqueado",
         description: data.tiktokMvpProofQuickFill.nextStep,
         variant: data.tiktokMvpProofQuickFill.appliedToIntake ? undefined : "destructive",
       });
@@ -12373,7 +12373,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpLocalVerification.status === "pass" ? "TikTok MVP verificado" : "TikTok MVP bloqueado",
+        title: data.tiktokMvpLocalVerification.status === "pass" ? "TikTok MVP local check limpio" : "TikTok MVP bloqueado",
         description: data.tiktokMvpLocalVerification.nextStep,
         variant: data.tiktokMvpLocalVerification.status === "pass" ? undefined : "destructive",
       });
@@ -13586,7 +13586,7 @@ export default function ClippersPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
       toast({
-        title: data.tiktokMvpReadinessVerifier.status === "pass" ? "TikTok MVP verificado" : "TikTok MVP bloqueado",
+        title: data.tiktokMvpReadinessVerifier.status === "pass" ? "TikTok MVP readiness check limpio" : "TikTok MVP bloqueado",
         description: `${data.tiktokMvpReadinessVerifier.totals.passed}/${data.tiktokMvpReadinessVerifier.totals.checks} checks; ${data.tiktokMvpReadinessVerifier.launchDecision}.`,
         variant: data.tiktokMvpReadinessVerifier.status === "pass" ? undefined : "destructive",
       });
@@ -16533,11 +16533,11 @@ export default function ClippersPage() {
       await navigator.clipboard.writeText(`${cleanPacket}\n`);
       toast({
         title: "Metricool proof lines copied",
-        description: "Paste real non-secret proof URLs after each equals sign, then preview before saving.",
+        description: "Paste real non-secret proof URLs after each equals sign; preview links first, then save only if clean.",
       });
     } catch {
       toast({
-        title: "Metricool proof lines ready",
+        title: "Metricool proof lines visibles",
         description: "No pude copiar al clipboard; copia las dos lineas visibles manualmente.",
       });
     }

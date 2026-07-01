@@ -229,7 +229,7 @@ function proofLinksOperatorChecklist() {
       owner: "operator",
       target: proofLinksJsonDropPath,
       expectedGate: "proof-links validation accepted",
-      nextButton: "Save proof links, then Safe ingest drop",
+      nextButton: "Preview clean, then Save proof links and Safe ingest drop",
     },
     {
       id: "load_bridge_csv",
@@ -458,7 +458,7 @@ async function main() {
       pastePacketPath: outProofLinksPastePacketPath,
       filledDropPath: proofLinksFilledDropPath,
       proofLinksJsonPath: proofLinksJsonDropPath,
-      nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse -> Save proof links -> Safe ingest drop.",
+      nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse/Preview; save only if the preview is clean, then Safe ingest drop.",
       checklist: proofLinksOperatorChecklist(),
       guardrails: [
         "This packet is a template and does not save evidence by itself.",

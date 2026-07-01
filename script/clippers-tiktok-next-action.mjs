@@ -466,7 +466,7 @@ function operatorPacketFor(summary) {
     summary.proofGate?.status ? `Operating proof gate: ${summary.proofGate.status}` : "",
     summary.proofGate?.minimumProofUrlsNeeded ? `Proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}` : "",
     summary.proofGate?.paths?.oneScreenGuide ? `One-screen proof guide: ${summary.proofGate.paths.oneScreenGuide}` : "",
-    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool/Drive proof URLs in the two input boxes; preview before saving." : "",
+    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool/Drive proof URLs in the two input boxes; preview links first, then save only if the preview is clean." : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
     summary.operatingRefresh?.status ? `Operating refresh: ${summary.operatingRefresh.status}` : "",
