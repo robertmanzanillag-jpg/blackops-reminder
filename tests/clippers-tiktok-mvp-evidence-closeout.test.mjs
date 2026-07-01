@@ -903,6 +903,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-local-verification-commands/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-panel/);
   assert.match(page, /clippers-tiktok-mvp-closeout-wizard-steps/);
+  assert.match(page, /clippers-tiktok-mvp-closeout-proof-gate/);
   assert.match(page, /clippers-tiktok-mvp-operator-session/);
   assert.match(page, /run-clippers-tiktok-mvp-operator-recommended-button/);
   assert.match(page, /runTikTokMvpOperatorButton/);
@@ -935,7 +936,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpLocalVerificationMutation\.isPending/);
   assert.match(page, /tiktokMvpCloseoutWizardMutation\.isPending/);
   assert.match(page, /tiktokMvpProofQuickFillMutation\.isPending/);
-  assert.match(page, /tiktokMvpEvidenceCloseout\?\.status !== "ready_to_apply"/);
+  assert.match(page, /const tiktokMvpCloseoutApplyAllowed = tiktokMvpEvidenceCloseout\?\.status === "ready_to_apply"\s+&& tiktokMvpCloseoutWizard\?\.status === "ready_for_operator_apply_review"/);
+  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| !tiktokMvpCloseoutApplyAllowed\}/);
   const closeoutPanel = requiredSlice(
     page,
     'data-testid="clippers-tiktok-mvp-evidence-closeout-panel"',
@@ -1263,18 +1265,136 @@ test("TikTok MVP proof refresh runs import and doctor sequentially without apply
     assert.equal(output.readyLanes, 0);
     assert.equal(output.importFixQueue, 4);
     assert.equal(output.doctorFixQueue, 4);
+    assert.ok(output.blockers.includes("import_status_blocked_invalid_intake"));
+    assert.ok(output.blockers.includes("doctor_status_needs_proof_fix"));
     assert.match(output.reportJsonPath, /proof-refresh\.json$/);
 
     const source = await readFile(proofRefreshPath, "utf8");
     assert.doesNotMatch(source, /--apply|ready_to_send|video\.publish|directSocialApisRequired:\s*true|runClipperTikTokMvpEvidenceCloseout\(true\)/);
     assert.match(source, /Metricool remains approval_required/);
+    assert.match(source, /const status = blockers\.length === 0 \? "ready_to_apply" : "blocked"/);
 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.json"), "utf8"));
     assert.equal(report.launchMode, "metricool_approval_required");
     assert.equal(report.directSocialApisRequired, false);
+    assert.equal(report.readyChecks.importReady, false);
+    assert.equal(report.readyChecks.doctorReady, false);
+    assert.ok(report.blockers.includes("import_fix_queue_4"));
     assert.match(report.guardrails.join("\n"), /does not apply evidence, publish, schedule/);
     assert.match(report.paths.importFixQueueCsv, /proof-intake-import-fix-queue\.csv$/);
     assert.match(report.paths.doctorFixQueueCsv, /proof-fix-queue\.csv$/);
+  } finally {
+    if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
+    else await writeFile(defaultCombinedProofCsvPath, previousCombined);
+    if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
+    else await writeFile(targetAccountCsvPath, previousAccount);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("TikTok MVP proof refresh stays blocked when import preview has fixes even if target proof rows are ready", async () => {
+  const previousCombined = await readFile(defaultCombinedProofCsvPath, "utf8").catch(() => null);
+  const previousAccount = await readFile(targetAccountCsvPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(defaultCombinedProofCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetAccountCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
+    await writeFile(defaultCombinedProofCsvPath, [
+      combinedHeader,
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+    ].join("\n") + "\n");
+    await writeFile(targetAccountCsvPath, cleanAccountCsv());
+    await writeFile(targetBridgeCsvPath, cleanBridgeCsv());
+
+    const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(output.status, "blocked");
+    assert.equal(output.importStatus, "blocked_invalid_intake");
+    assert.equal(output.doctorStatus, "ready_to_apply");
+    assert.equal(output.readyLanes, 2);
+    assert.ok(output.importFixQueue > 0);
+    assert.equal(output.doctorFixQueue, 0);
+    assert.ok(output.blockers.includes("import_status_blocked_invalid_intake"));
+    assert.ok(output.blockers.some((item) => /^import_fix_queue_/.test(item)));
+    assert.ok(!output.blockers.includes("doctor_status_ready_to_apply"));
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.json"), "utf8"));
+    assert.equal(report.readyChecks.doctorReady, true);
+    assert.equal(report.readyChecks.lanesReady, true);
+    assert.equal(report.readyChecks.importReady, false);
+    assert.equal(report.readyChecks.noImportFixes, false);
+    assert.match(report.nextStep, /Fix the combined proof intake rows/);
+  } finally {
+    if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
+    else await writeFile(defaultCombinedProofCsvPath, previousCombined);
+    if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
+    else await writeFile(targetAccountCsvPath, previousAccount);
+    if (previousBridge === null) await unlink(targetBridgeCsvPath).catch(() => undefined);
+    else await writeFile(targetBridgeCsvPath, previousBridge);
+    spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
+});
+
+test("TikTok MVP proof refresh points to proof doctor when import is clean but target proof rows are blocked", async () => {
+  const previousCombined = await readFile(defaultCombinedProofCsvPath, "utf8").catch(() => null);
+  const previousAccount = await readFile(targetAccountCsvPath, "utf8").catch(() => null);
+  const previousBridge = await readFile(targetBridgeCsvPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(defaultCombinedProofCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetAccountCsvPath), { recursive: true });
+    await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
+    await writeFile(defaultCombinedProofCsvPath, cleanCombinedCsv());
+    await writeFile(targetAccountCsvPath, [
+      accountHeader,
+      "account,sports-daily,tiktok,submitted,,,,,https://www.tiktok.com/signup,,<paste proof>,Replace with real ownership/security proof",
+      "account,meme-radar,tiktok,submitted,,,,,https://www.tiktok.com/signup,,https://example.com/not-real,ok",
+    ].join("\n") + "\n");
+    await writeFile(targetBridgeCsvPath, [
+      bridgeHeader,
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real public Metricool proof URL>,Replace this placeholder later",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://example.com/not-metricool,ok",
+    ].join("\n") + "\n");
+
+    const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(output.status, "blocked");
+    assert.equal(output.importStatus, "ready_to_apply");
+    assert.equal(output.doctorStatus, "needs_proof_fix");
+    assert.equal(output.importFixQueue, 0);
+    assert.equal(output.doctorFixQueue, 4);
+    assert.ok(output.blockers.includes("doctor_status_needs_proof_fix"));
+    assert.ok(output.blockers.includes("doctor_fix_queue_4"));
+    assert.ok(!output.blockers.includes("import_status_ready_to_apply"));
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.json"), "utf8"));
+    assert.equal(report.readyChecks.importReady, true);
+    assert.equal(report.readyChecks.noImportFixes, true);
+    assert.equal(report.readyChecks.doctorReady, false);
+    assert.match(report.nextStep, /proof doctor fix queue/);
+    assert.doesNotMatch(report.nextStep, /combined proof intake rows/);
+
+    const source = await readFile(proofRefreshPath, "utf8");
+    assert.match(source, /function nextStepForRefresh/);
   } finally {
     if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);

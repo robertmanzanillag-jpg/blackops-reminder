@@ -54,6 +54,11 @@ function renderMarkdown(summary) {
     `Ready lanes: ${summary.readyLanes}/${summary.targetLanes}`,
     `Import fixes: ${summary.importFixQueue}`,
     `Doctor fixes: ${summary.doctorFixQueue}`,
+    `Blockers: ${summary.blockers.length ? summary.blockers.join(", ") : "none"}`,
+    "",
+    "## Ready Checks",
+    "",
+    ...Object.entries(summary.readyChecks).map(([key, value]) => `- ${key}: ${value ? "pass" : "blocked"}`),
     "",
     "## Files",
     "",
@@ -73,6 +78,19 @@ function renderMarkdown(summary) {
   ].join("\n");
 }
 
+function nextStepForRefresh({ status, importReady, noImportFixes, doctorReady, lanesReady, noDoctorFixes, readyLanes, targetLanes }) {
+  if (status === "ready_to_apply") {
+    return "Review proof URLs manually, then run the guarded TikTok MVP evidence closeout apply.";
+  }
+  if (!importReady || !noImportFixes) {
+    return "Fix the combined proof intake rows in the import fix queue, rerun Proof refresh, and apply only after preview is ready.";
+  }
+  if (!doctorReady || !lanesReady || !noDoctorFixes) {
+    return `Fix the target account/Metricool proof rows in the proof doctor fix queue, rerun Proof refresh, and apply only after proof doctor is clean (${readyLanes}/${targetLanes} lanes ready).`;
+  }
+  return "Rerun Proof refresh; at least one proof readiness check is blocked.";
+}
+
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   const importRun = runJson(["script/clippers-tiktok-mvp-proof-intake-import.mjs"]);
@@ -83,9 +101,30 @@ async function main() {
   const targetLanes = proofDoctor?.totals?.lanes || 2;
   const importFixQueue = Array.isArray(proofImport?.fixQueue) ? proofImport.fixQueue.length : 0;
   const doctorFixQueue = Array.isArray(proofDoctor?.fixQueue) ? proofDoctor.fixQueue.length : proofDoctor?.totals?.fixQueue || 0;
-  const status = importRun.ok && doctorRun.ok && readyLanes >= targetLanes
-    ? "ready_to_apply"
-    : "blocked";
+  const importReady = proofImport?.status === "ready_to_apply" || proofImport?.status === "applied";
+  const doctorReady = proofDoctor?.status === "ready_to_apply";
+  const lanesReady = targetLanes > 0 && readyLanes >= targetLanes;
+  const noImportFixes = importFixQueue === 0;
+  const noDoctorFixes = doctorFixQueue === 0;
+  const readyChecks = {
+    importRunOk: importRun.ok,
+    doctorRunOk: doctorRun.ok,
+    importReady,
+    doctorReady,
+    lanesReady,
+    noImportFixes,
+    noDoctorFixes,
+  };
+  const blockers = [
+    !importRun.ok ? "import_run_failed" : null,
+    !doctorRun.ok ? "doctor_run_failed" : null,
+    !importReady ? `import_status_${proofImport?.status || "unknown"}` : null,
+    !doctorReady ? `doctor_status_${proofDoctor?.status || "unknown"}` : null,
+    !lanesReady ? `lanes_ready_${readyLanes}_of_${targetLanes}` : null,
+    !noImportFixes ? `import_fix_queue_${importFixQueue}` : null,
+    !noDoctorFixes ? `doctor_fix_queue_${doctorFixQueue}` : null,
+  ].filter(Boolean);
+  const status = blockers.length === 0 ? "ready_to_apply" : "blocked";
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -98,6 +137,8 @@ async function main() {
     targetLanes,
     importFixQueue,
     doctorFixQueue,
+    readyChecks,
+    blockers,
     runs: {
       importRun,
       doctorRun,
@@ -116,9 +157,16 @@ async function main() {
       "Metricool remains approval_required.",
       "Do not paste passwords, cookies, tokens, private screenshots, recovery codes, or private keys.",
     ],
-    nextStep: readyLanes >= targetLanes
-      ? "Review proof URLs manually, then run the guarded TikTok MVP evidence closeout apply."
-      : "Fix the combined proof intake rows in the import fix queue, rerun Proof refresh, and apply only after preview is ready.",
+    nextStep: nextStepForRefresh({
+      status,
+      importReady,
+      noImportFixes,
+      doctorReady,
+      lanesReady,
+      noDoctorFixes,
+      readyLanes,
+      targetLanes,
+    }),
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
@@ -131,6 +179,7 @@ async function main() {
     targetLanes: summary.targetLanes,
     importFixQueue: summary.importFixQueue,
     doctorFixQueue: summary.doctorFixQueue,
+    blockers: summary.blockers,
     reportJsonPath: outJsonPath,
     nextStep: summary.nextStep,
   }, null, 2));

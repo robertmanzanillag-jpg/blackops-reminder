@@ -2444,6 +2444,8 @@ interface ClipperTikTokMvpProofRefreshSummary {
   targetLanes: number;
   importFixQueue: number;
   doctorFixQueue: number;
+  readyChecks?: Record<string, boolean>;
+  blockers?: string[];
   paths: {
     json: string;
     markdown: string;
@@ -18983,6 +18985,8 @@ export default function ClippersPage() {
                 <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
                   <p>Import fixes: {tiktokMvpProofRefresh.importFixQueue}</p>
                   <p>Doctor fixes: {tiktokMvpProofRefresh.doctorFixQueue}</p>
+                  <p>Blockers: {(tiktokMvpProofRefresh.blockers || []).length}</p>
+                  <p>Checks: {Object.values(tiktokMvpProofRefresh.readyChecks || {}).filter(Boolean).length}/{Object.keys(tiktokMvpProofRefresh.readyChecks || {}).length || 7}</p>
                   <p className="break-all">Refresh report: {tiktokMvpProofRefresh.paths.markdown}</p>
                   <p className="break-all">Import fix queue: {tiktokMvpProofRefresh.paths.importFixQueueCsv}</p>
                   <p className="break-all">Doctor fix queue: {tiktokMvpProofRefresh.paths.doctorFixQueueCsv}</p>
