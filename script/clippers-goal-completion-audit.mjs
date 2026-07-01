@@ -15,6 +15,7 @@ const paths = {
   tiktokMvpOperatingRefresh: path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json"),
   tiktokMvpProofRefresh: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-refresh.json"),
   tiktokMvpProofQuickFill: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-quick-fill.json"),
+  tiktokMvpProofHandoff: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-handoff.json"),
   tiktokMvpProofLinksPreviewGate: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-links-preview-gate.json"),
   masterEvidenceCsv: path.join(rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv"),
   batchEvidenceDir: path.join(scheduledDir, "metricool-100-batch-evidence-imports"),
@@ -302,6 +303,7 @@ function renderMarkdown(summary) {
       `- Owner: ${row.owner}`,
       `- Button/file: ${row.buttonOrFile}`,
       `- Proof line: ${row.proofLine || "n/a"}`,
+      ...(row.fastPathPacketPath ? [`- Fast path packet: ${row.fastPathPacketPath}`] : []),
       ...(Array.isArray(row.fastPathPasteLines) && row.fastPathPasteLines.length
         ? [
           "- Fast path paste lines:",
@@ -340,7 +342,7 @@ function renderCsv(summary) {
 }
 
 function renderNextActionsCsv(summary) {
-  const header = ["priority", "title", "status", "owner", "button_or_file", "proof_line", "fast_path_paste_lines", "guardrail", "next_action"];
+  const header = ["priority", "title", "status", "owner", "button_or_file", "proof_line", "fast_path_packet_path", "fast_path_paste_lines", "guardrail", "next_action"];
   return [
     header.map(csvCell).join(","),
     ...summary.operatorNextActions.map((row) => [
@@ -350,6 +352,7 @@ function renderNextActionsCsv(summary) {
       row.owner,
       row.buttonOrFile,
       row.proofLine,
+      row.fastPathPacketPath || "",
       (row.fastPathPasteLines || []).join(" | "),
       row.guardrail,
       row.nextAction,
@@ -485,9 +488,11 @@ function shouldPrioritizeProofGateFix(proofGate = {}, proofGateReady = false) {
     );
 }
 
-function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh, proofQuickFill, proofQuickFillCurrent }) {
+function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh, proofQuickFill, proofQuickFillCurrent, proofHandoff }) {
   const proofHandoffDir = path.join(reportsDir, "tiktok-mvp-proof-intake");
   const oneScreenProofPath = path.join(proofHandoffDir, "proof-fill-one-screen.txt");
+  const fastPathProofPacketPath = proofHandoff?.paths?.fastPathPastePacketTxt || path.join(proofHandoffDir, "proof-links-fast-path-paste-packet.txt");
+  const fastPathProofPacketText = String(proofHandoff?.fastPathPastePacketText || "").trim();
   const rows = [];
   const accountRows = Array.isArray(accountReadiness.tiktokMvpAccountCloseout?.rows)
     ? accountReadiness.tiktokMvpAccountCloseout.rows
@@ -515,9 +520,11 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       status: "blocked_needs_valid_metricool_tiktok_proof_gate",
       owner: "Robert",
       buttonOrFile: proofGateFixFirst
-        ? proofGate.paths?.oneScreenGuide || oneScreenProofPath
+        ? fastPathProofPacketPath
         : proofRefreshPath,
       proofLine: (proofGate.requiredLanes || []).join(" + "),
+      fastPathPacketPath: fastPathProofPacketPath,
+      fastPathPacketText: fastPathProofPacketText,
       fastPathPasteLines: Number(proofGate.minimumProofUrlsNeeded || 0) > 0
         ? [
           "sports-daily:tiktok.metricoolConnectionProofUrl=",
@@ -599,7 +606,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, proofLinksPreviewGateRaw, evidenceRaw] = await Promise.all([
+  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, proofHandoff, proofLinksPreviewGateRaw, evidenceRaw] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.metricoolMvpLaunchPack),
     readJson(paths.metricool100ApprovalRun),
@@ -609,6 +616,7 @@ async function main() {
     readJson(paths.tiktokMvpOperatingRefresh, {}),
     readJson(paths.tiktokMvpProofRefresh, {}),
     readJson(paths.tiktokMvpProofQuickFill, {}),
+    readJson(paths.tiktokMvpProofHandoff, {}),
     readJson(paths.tiktokMvpProofLinksPreviewGate, {}),
     readFile(paths.masterEvidenceCsv, "utf8").catch(() => ""),
   ]);
@@ -802,6 +810,7 @@ async function main() {
     proofRefresh,
     proofQuickFill,
     proofQuickFillCurrent,
+    proofHandoff,
   });
 
   const totals = requirements.reduce((sum, row) => {

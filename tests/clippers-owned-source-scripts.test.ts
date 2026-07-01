@@ -8242,13 +8242,17 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.operatorNextActions.length, 8);
   assert.equal(audit.operatorNextActions[0].title, "Fast path Metricool TikTok proof gate");
   assert.equal(audit.operatorNextActions[0].proofLine, "sports-daily:tiktok + meme-radar:tiktok");
+  assert.match(audit.operatorNextActions[0].fastPathPacketPath, /proof-links-fast-path-paste-packet\.txt$/);
+  assert.match(audit.operatorNextActions[0].fastPathPacketText, /TikTok MVP Metricool fast-path proof packet/);
+  assert.match(audit.operatorNextActions[0].fastPathPacketText, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+  assert.doesNotMatch(audit.operatorNextActions[0].fastPathPacketText, /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
     "sports-daily:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
     "meme-radar:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
   ]);
-  assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
+  assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);
   assert.match(audit.operatorNextActions[1].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
   assert.match(audit.operatorNextActions[2].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
@@ -8262,12 +8266,13 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(audit.operatorNextActions[5].buttonOrFile, /apply-clippers-tiktok-mvp-evidence-closeout-button/);
   assert.match(audit.operatorNextActions[6].buttonOrFile, /prepare-metricool-current-batch-upload-pack/);
   assert.match(audit.operatorNextActions[7].buttonOrFile, /metricool-batch-01-evidence-import\.csv/);
-  assert.ok(audit.operatorNextActions.every((row) => !/password=|access_token=|refresh_token=|client_secret=|cookie=|ready_to_send|realPublishEnabled=true|autopublish/i.test(JSON.stringify(row))));
+  assert.ok(audit.operatorNextActions.every((row) => !/password=|access_token=|refresh_token=|client_secret=|cookie=|ready_to_send|realPublishEnabled=true|\bautopublish\b/i.test(JSON.stringify(row))));
   assert.notEqual(audit.status, "complete");
 
   const markdown = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.md"), "utf8");
   assert.match(markdown, /Full goal status: blocked_external_actions/);
   assert.match(markdown, /Operator Next Actions/);
+  assert.match(markdown, /Fast path packet: .*proof-links-fast-path-paste-packet\.txt/);
   assert.match(markdown, /Fast path paste lines/);
   assert.match(markdown, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(markdown, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
@@ -8306,7 +8311,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /current batch evidence CSV .*metricool-100-batch-evidence-imports\/metricool-batch-01-evidence-import\.csv/);
   assert.match(markdown, /fill only the current batch evidence CSV/);
   assert.doesNotMatch(markdown, /paste public TikTok URLs and 24h metrics into the evidence CSV/i);
-  assert.doesNotMatch(markdown, /autopublish|ready_to_send/i);
+  assert.doesNotMatch(markdown, /\bautopublish\b|ready_to_send/i);
 
   const csv = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.csv"), "utf8");
   assert.match(csv, /requirement_id/);
@@ -8316,7 +8321,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
 
   const nextActionsCsv = await readFile(path.join(rootDir, "reports/clippers-goal-completion-next-actions.csv"), "utf8");
   assert.match(nextActionsCsv, /Fast path Metricool TikTok proof gate/);
-  assert.match(nextActionsCsv, /proof-fill-one-screen\.txt/);
+  assert.match(nextActionsCsv, /fast_path_packet_path/);
+  assert.match(nextActionsCsv, /proof-links-fast-path-paste-packet\.txt/);
   assert.match(nextActionsCsv, /fast_path_paste_lines/);
   assert.match(nextActionsCsv, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.doesNotMatch(nextActionsCsv, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
@@ -8325,7 +8331,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(nextActionsCsv, /Preview links first; save only if the preview gate is clean\/current/);
   assert.doesNotMatch(nextActionsCsv, /preview\/save proof links|then save proof links/i);
   assert.match(nextActionsCsv, /prepare-metricool-current-batch-upload-pack \+ prepare-metricool-current-batch-session-packet/);
-  assert.doesNotMatch(nextActionsCsv, /password=|access_token=|refresh_token=|client_secret=|cookie=|ready_to_send|realPublishEnabled=true|autopublish/i);
+  assert.doesNotMatch(nextActionsCsv, /password=|access_token=|refresh_token=|client_secret=|cookie=|ready_to_send|realPublishEnabled=true|\bautopublish\b/i);
 
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
   assert.match(routes, /\/api\/clippers\/goal-completion-audit/);
@@ -8367,6 +8373,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /Paste these two Metricool proof lines first/);
   assert.match(page, /copy-clippers-goal-primary-proof-fast-path-button/);
   assert.match(page, /copyGoalMetricoolProofFastPath/);
+  assert.match(page, /goalCompletionPrimaryAction\?\.fastPathPacketText/);
   assert.match(page, /Metricool proof lines copied/);
   assert.match(page, /load-clippers-goal-primary-proof-fast-path-button/);
   assert.match(page, /loadGoalMetricoolProofFastPath/);
@@ -8375,7 +8382,10 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /setTiktokMvpProofLinksPreview\(null\)/);
   assert.match(page, /Empty lines are not evidence/);
   assert.match(page, /Preview links passes cleanly/);
+  assert.match(page, /Fast-path packet:/);
   assert.match(page, /goalCompletionPrimaryFastPathLines/);
+  assert.match(page, /fastPathPacketPath\?: string/);
+  assert.match(page, /fastPathPacketText\?: string/);
   assert.match(page, /fastPathPasteLines\?: string\[\]/);
   assert.match(page, /Next actions CSV:/);
   assert.match(page, /goalCompletionAudit\.operatorNextActions/);

@@ -768,6 +768,8 @@ interface ClipperGoalCompletionAuditSummary {
     owner: string;
     buttonOrFile: string;
     proofLine: string;
+    fastPathPacketPath?: string;
+    fastPathPacketText?: string;
     fastPathPasteLines?: string[];
     guardrail: string;
     nextAction: string;
@@ -16706,7 +16708,7 @@ export default function ClippersPage() {
   };
 
   const copyGoalMetricoolProofFastPath = async () => {
-    const cleanPacket = goalCompletionPrimaryFastPathLines.join("\n").trim();
+    const cleanPacket = (goalCompletionPrimaryAction?.fastPathPacketText || goalCompletionPrimaryFastPathLines.join("\n")).trim();
     if (!cleanPacket) return;
     try {
       await navigator.clipboard.writeText(`${cleanPacket}\n`);
@@ -16723,7 +16725,7 @@ export default function ClippersPage() {
   };
 
   const loadGoalMetricoolProofFastPath = () => {
-    const cleanPacket = goalCompletionPrimaryFastPathLines.join("\n").trim();
+    const cleanPacket = (goalCompletionPrimaryAction?.fastPathPacketText || goalCompletionPrimaryFastPathLines.join("\n")).trim();
     if (!cleanPacket) return;
     setTiktokMvpProofLinksPasteText(cleanPacket);
     setTiktokMvpProofLinksPastePreview(null);
@@ -22763,6 +22765,11 @@ export default function ClippersPage() {
                     <p className="mt-2 text-[10px] leading-4 text-amber-100/80">
                       Empty lines are not evidence. The gate stays blocked until real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs are pasted and Preview links passes cleanly.
                     </p>
+                    {goalCompletionPrimaryAction.fastPathPacketPath && (
+                      <p className="mt-2 break-all text-[10px] leading-4 text-cyan-100/70">
+                        Fast-path packet: {goalCompletionPrimaryAction.fastPathPacketPath}
+                      </p>
+                    )}
                     <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.buttonOrFile}</p>
                     <p className="mt-1 text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.guardrail}</p>
                   </div>
