@@ -63,8 +63,13 @@ function isPlaceholder(value) {
 }
 
 function hasSecretSignal(record) {
-  const text = Object.values(record).join(" ").toLowerCase();
-  return /\b(token|password|passwd|secret|cookie|bearer|authorization|recovery code|api[_ -]?key)\b/.test(text);
+  const text = Object.values(record).join(" ");
+  return /(?:^|[\s"'[{,?&#;])(access[_-]?token|refresh[_-]?token|client[_-]?secret|cookie|password|passwd|passcode|recovery|api[_ -]?key|private[_ -]?key|authorization)["']?\s*[:=]/i.test(text)
+    || /(?:^|[\s"'[{,?&#;])bearer\s*(?:[:=]\s*[a-z0-9._-]+|[ \t]+[a-z0-9._-]{12,})/i.test(text)
+    || /authorization\s*[:=]\s*bearer\s+[a-z0-9._-]+/i.test(text)
+    || /sk-[a-z0-9_-]+/i.test(text)
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(text)
+    || /(?:^|[?&#;])(token|code|auth|authorization|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i.test(text);
 }
 
 function normalized(value) {

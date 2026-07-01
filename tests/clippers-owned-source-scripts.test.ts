@@ -3947,6 +3947,23 @@ test("TikTok batch evidence sync merges only valid current batch rows", async ()
   }
 });
 
+test("TikTok batch evidence sync secret detector allows safe prose and blocks assigned secrets", async () => {
+  const source = await readFile(path.join(process.cwd(), "script/clippers-tiktok-batch-evidence-sync.mjs"), "utf8");
+  const match = source.match(/function hasSecretSignal\(record\) \{([\s\S]*?)\n\}/);
+  assert.ok(match, "hasSecretSignal helper should exist");
+  const hasSecretSignal = new Function("record", `${match[1]}`) as (record: Record<string, string>) => boolean;
+
+  assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool; no API keys were shared by Robert." }), false);
+  assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool; no bearer tokens were shared by Robert." }), false);
+  assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool with api_key=neverpaste." }), true);
+  assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool with client_secret = neverpaste." }), true);
+  assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool with access_token = neverpaste." }), true);
+  assert.equal(hasSecretSignal({ operator_notes: "Authorization: Bearer abcdef1234567890" }), true);
+  assert.equal(hasSecretSignal({ metricool_approval_url: "https://viewer:secret@app.metricool.com/planner/real" }), true);
+  assert.equal(hasSecretSignal({ published_post_url: "https://www.tiktok.com/@memeradar/video/123?token=neverpaste" }), true);
+  assert.doesNotMatch(source, /\\b\(token\|password\|passwd\|secret\|cookie\|bearer\|authorization\|recovery code\|api\[_ -\]\?key\)\\b/);
+});
+
 test("TikTok all-batches evidence sync preserves scheduled prior batch without handoff advance", async () => {
   const batchOneEvidencePath = path.join(rootDir, "scheduled/metricool-100-batch-evidence-imports/metricool-batch-01-evidence-import.csv");
   const masterEvidencePath = path.join(rootDir, "evidence-drop/metricool-100-approval-evidence-import.csv");
