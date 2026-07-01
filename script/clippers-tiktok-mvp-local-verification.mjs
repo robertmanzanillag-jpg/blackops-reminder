@@ -24,9 +24,14 @@ const commands = [
   },
   {
     id: "proof_tests",
-    label: "TikTok MVP proof tests",
+    label: "TikTok MVP local/proof guardrail tests",
     command: process.execPath,
-    args: ["--test", "tests/clippers-tiktok-mvp-evidence-closeout.test.mjs"],
+    args: [
+      "--test",
+      "--test-name-pattern",
+      "TikTok MVP local verification|TikTok MVP proof drop kit prepares local inventory",
+      "tests/clippers-tiktok-mvp-evidence-closeout.test.mjs",
+    ],
     required: true,
   },
   {
@@ -130,6 +135,7 @@ function renderMarkdown(summary) {
     "",
     `Generated: ${summary.generatedAt}`,
     `Status: ${summary.status}`,
+    `Business blocker: ${summary.businessBlocker}`,
     `Launch decision: ${summary.launchDecision}`,
     "",
     "This verifier runs local build/typecheck/tests and proof gates. It does not apply evidence, publish, schedule, or enable direct social APIs.",
@@ -184,8 +190,16 @@ async function main() {
     && proofRefresh?.status === "ready_to_apply"
     && proofUnblocker?.status === "unblocked_ready_for_apply_preview";
   const status = requiredFailures.length === 0 && proofReady ? "pass" : "blocked";
+  const businessBlocker = requiredFailures.length > 0
+    ? "blocked_local_command_failure"
+    : proofReady
+      ? "none"
+      : quickFillCurrent
+        ? "blocked_proof_refresh_or_unblocker"
+        : "blocked_needs_real_metricool_tiktok_proof";
   const summary = {
     status,
+    businessBlocker,
     launchDecision: status === "pass" ? "ready_for_metricool_approval_review" : "blocked_before_metricool_approval_review",
     generatedAt: new Date().toISOString(),
     scope: "tiktok_only_metricool_mvp",
@@ -216,7 +230,7 @@ async function main() {
         ? "Run Import preview and Evidence closeout preview, then apply only if both say ready_to_apply."
         : quickFillCurrent
           ? "Proof refresh or unblocker is still blocked; rerun Proof refresh and fix the listed proof queue before Metricool."
-          : "Paste real SPORT/memes TikTok and Metricool proof into Quick fill, then rerun local verification.",
+          : "Paste real SPORT/memes TikTok and Metricool proof into Quick fill. Preview links first; save only if the preview gate is clean/current, then rerun local verification.",
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,
@@ -230,6 +244,7 @@ async function main() {
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   console.log(JSON.stringify({
     status: summary.status,
+    businessBlocker: summary.businessBlocker,
     launchDecision: summary.launchDecision,
     commandsPassed: commandResults.filter((row) => row.status === "pass").length,
     commands: commandResults.length,

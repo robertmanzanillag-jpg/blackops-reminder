@@ -1950,6 +1950,8 @@ test("TikTok MVP local verification is wired as a blocked guardrail check", asyn
   assert.match(source, /npm",\s*args: \["run", "check"\]/);
   assert.match(source, /npm",\s*args: \["run", "build"\]/);
   assert.match(source, /tests\/clippers-tiktok-mvp-evidence-closeout\.test\.mjs/);
+  assert.match(source, /--test-name-pattern/);
+  assert.match(source, /TikTok MVP local verification\|TikTok MVP proof drop kit prepares local inventory/);
   assert.match(source, /clippers:tiktok-mvp-proof-drop-kit/);
   assert.match(source, /clippers:tiktok-mvp-proof-quick-fill/);
   assert.match(source, /clippers:tiktok-mvp-proof-unblocker/);
@@ -1960,6 +1962,8 @@ test("TikTok MVP local verification is wired as a blocked guardrail check", asyn
   assert.match(source, /isFreshGeneratedAt\(quickFill\.generatedAt\)/);
   assert.match(source, /isFreshGeneratedAt\(proofRefresh\.generatedAt\)/);
   assert.match(source, /quickFillCurrent/);
+  assert.match(source, /businessBlocker/);
+  assert.match(source, /blocked_needs_real_metricool_tiktok_proof/);
   assert.match(source, /quickFillIssuesValid/);
   assert.match(source, /proofRefreshFresh/);
   assert.match(source, /proofRefresh\?\.status === "ready_to_apply"/);
@@ -1968,6 +1972,8 @@ test("TikTok MVP local verification is wired as a blocked guardrail check", asyn
   assert.match(routes, /prepare-tiktok-mvp-local-verification/);
   assert.match(routes, /tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh\(\)/);
   assert.match(source, /blocked_before_metricool_approval_review/);
+  const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+  assert.match(page, /tiktokMvpLocalVerification\.businessBlocker/);
   assert.match(source, /Metricool remains approval_required/);
   assert.match(source, /Published counts remain zero until real public TikTok post evidence is imported/);
 });

@@ -2812,6 +2812,7 @@ interface ClipperTikTokMvpProofLinksDropIngestSummary {
 
 interface ClipperTikTokMvpLocalVerificationSummary {
   status: "pass" | "blocked";
+  businessBlocker?: "none" | "blocked_local_command_failure" | "blocked_proof_refresh_or_unblocker" | "blocked_needs_real_metricool_tiktok_proof" | string;
   launchDecision: "ready_for_metricool_approval_review" | "blocked_before_metricool_approval_review";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
@@ -19833,6 +19834,9 @@ export default function ClippersPage() {
                   <span>{tiktokMvpLocalVerification.proofState.quickFillIssues} quick-fill issues</span>
                   <span>refresh {tiktokMvpLocalVerification.proofState.proofRefreshFresh ? "fresh" : "stale"}</span>
                   <span>{tiktokMvpLocalVerification.proofState.openFixes} open fixes</span>
+                  {tiktokMvpLocalVerification.businessBlocker && (
+                    <span>blocker {tiktokMvpLocalVerification.businessBlocker}</span>
+                  )}
                 </div>
                 <p className="mt-1">{tiktokMvpLocalVerification.nextStep}</p>
                 <div className="mt-2 grid gap-1 text-zinc-500 md:grid-cols-2">
