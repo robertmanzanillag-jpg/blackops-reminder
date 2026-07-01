@@ -397,7 +397,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
         : [],
       guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs.",
       nextAction: proofGateFixFirst
-        ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs and preview before saving.`
+        ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs, preview links first, then save only if the preview is clean.`
         : proofRefreshNextAction,
     });
   }
@@ -414,7 +414,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       guardrail: "Use only a safe HTTPS proof URL; no passwords, cookies, tokens, recovery codes, signed URLs, or private screenshots.",
       nextAction: activeMvpProofReady
         ? "Already covered by applied TikTok MVP evidence."
-        : `Paste real ownership/security proof for ${row.handle || accountId}, then preview/save proof links.`,
+        : `Paste real ownership/security proof for ${row.handle || accountId}, preview links first, then save only if the preview is clean.`,
     });
     rows.push({
       priority: priority++,
@@ -426,7 +426,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       guardrail: "Metricool proof must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; keep Metricool approval_required.",
       nextAction: activeMvpProofReady
         ? "Already covered by applied TikTok MVP evidence."
-        : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, then preview/save proof links.`,
+        : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, preview links first, then save only if the preview is clean.`,
     });
   }
   rows.push({

@@ -1925,6 +1925,8 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /nextLockedButton/);
   assert.match(source, /preview_proof_links/);
   assert.match(source, /Locked until clean preview/);
+  assert.match(source, /preview links first, then save only if the preview is clean/);
+  assert.doesNotMatch(source, /then save proof links/);
   assert.doesNotMatch(source, /quickFillGeneratedAt >= proofRefreshGeneratedAt/);
   assert.match(source, /Proof handoff never applies evidence, publishes, schedules, or enables direct social APIs/);
   assert.doesNotMatch(source, /--apply/);

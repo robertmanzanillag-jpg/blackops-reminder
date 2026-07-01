@@ -103,7 +103,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
     return {
       status: "blocked_needs_proof_links",
       nextButton: "save_proof_links",
-      nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes Metricool proof URLs, or separate ownership plus Metricool URLs, then save proof links.",
+      nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes Metricool proof URLs, or separate ownership plus Metricool URLs, preview links first, then save only if the preview is clean.",
     };
   }
   if (!quickFill?.currentWithProofRefresh) {
