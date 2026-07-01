@@ -1749,6 +1749,11 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.allowedToday.includes("buscar negocios publicos"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("production DATABASE_URL"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("client charge/deposit confirmation"), true);
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.nextApiAction, "/api/revenue-engine/daily-scout-sprint");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/daily-scout-sprint");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps.some((step) => step.id === "approve_contact_or_collect" && step.approvalRequired), true);
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.blockedActions.includes("charge client"), true);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /First sprint steps/);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
@@ -1769,6 +1774,8 @@ test("snapshot launch readiness starts only with production persistence ready", 
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("outreach send"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("cobrar cliente"), true);
   assert.equal(snapshot.moneyActivationPlan.canCollectMoney, true);
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.area, "Miami");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.targetRows <= 10, true);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
 });

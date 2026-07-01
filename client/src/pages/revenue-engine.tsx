@@ -176,6 +176,22 @@ type RevenueSnapshot = {
       nextStep: string;
     }>;
     blockedUntilApproved: string[];
+    firstSprintPlan: {
+      title: string;
+      area: string;
+      niche: string;
+      offerFocus: "websites" | "automations" | "both";
+      targetRows: number;
+      nextApiAction: string;
+      steps: Array<{
+        id: string;
+        label: string;
+        action: string;
+        apiAction: string;
+        approvalRequired: boolean;
+      }>;
+      blockedActions: string[];
+    };
     nextRobertAction: string;
     copyableBrief: string;
   };
@@ -3590,6 +3606,30 @@ export default function RevenueEnginePage() {
                     {action}
                   </div>
                 ))}
+              </div>
+              <p className="mt-3 mb-2 text-xs uppercase tracking-wide text-zinc-500">Primer sprint</p>
+              <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                <p className="text-sm font-medium text-white">
+                  {snapshot?.moneyActivationPlan.firstSprintPlan.title || "First revenue sprint"}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">
+                  {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/daily-scout-sprint"}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {(snapshot?.moneyActivationPlan.firstSprintPlan.steps || []).map((step) => (
+                    <div key={step.id} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-medium text-zinc-100">{step.label}</p>
+                        {step.approvalRequired && (
+                          <Badge variant="outline" className={cn(statusTone("approval_required"), "shrink-0")}>
+                            approval
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{step.action}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div>

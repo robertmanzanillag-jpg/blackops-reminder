@@ -5311,6 +5311,7 @@ function applyRevenueProductionPersistenceGate(input: {
 function buildRevenueMoneyActivationPlan(input: {
   launchReadiness: ReturnType<typeof applyRevenueProductionPersistenceGate>["launchReadiness"];
   dailyMoneyCommand: RevenueDailyMoneyCommand;
+  businessScoutQueue: RevenueBusinessScoutQueue;
   systemReadiness: ReturnType<typeof buildRevenueSystemReadiness>;
   agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
 }) {
@@ -5352,6 +5353,52 @@ function buildRevenueMoneyActivationPlan(input: {
     ...input.dailyMoneyCommand.safety.blockedActions,
     ...input.agentOperatingContract.requiresHumanApproval,
   ]));
+  const firstSprintPlan = {
+    title: `${input.businessScoutQueue.area} ${input.businessScoutQueue.niche} first revenue sprint`,
+    area: input.businessScoutQueue.area,
+    niche: input.businessScoutQueue.niche,
+    offerFocus: input.businessScoutQueue.offerFocus,
+    targetRows: Math.min(input.businessScoutQueue.dailyResearchTarget, 10),
+    nextApiAction: "/api/revenue-engine/daily-scout-sprint",
+    steps: [
+      {
+        id: "start_scout_sprint",
+        label: "Start daily scout sprint",
+        action: "Crear slots por subagente desde la cola publica actual.",
+        apiAction: "/api/revenue-engine/daily-scout-sprint",
+        approvalRequired: false,
+      },
+      {
+        id: "dispatch_public_research",
+        label: "Dispatch scouts",
+        action: "Asignar briefs a subagentes; solo abrir fuentes publicas y llenar evidencia real.",
+        apiAction: "/api/revenue-engine/scout-dispatch",
+        approvalRequired: false,
+      },
+      {
+        id: "submit_public_evidence",
+        label: "Submit public evidence",
+        action: "Pegar bloques completos, verificar URL publica y aprobar import solo si la evidencia es real.",
+        apiAction: "/api/revenue-engine/daily-scout-sprint/submit",
+        approvalRequired: false,
+      },
+      {
+        id: "preview_money_sprint",
+        label: "Preview Money Sprint",
+        action: "Crear mockups y outreach drafts desde candidatos verificados sin enviar contacto externo.",
+        apiAction: "/api/revenue-engine/money-sprint-preview",
+        approvalRequired: false,
+      },
+      {
+        id: "approve_contact_or_collect",
+        label: "Robert approval gate",
+        action: "Aprobar manualmente contacto/cobro/deposito antes de enviar, cobrar o construir.",
+        apiAction: "/api/revenue-engine/approval-decisions",
+        approvalRequired: true,
+      },
+    ],
+    blockedActions: ["contact business", "send email/DM/form", "buy paid data", "charge client", "start build", "deploy"],
+  };
   const status =
     input.launchReadiness.status === "ready_to_start"
     && hardMissing.length === 0
@@ -5389,6 +5436,7 @@ function buildRevenueMoneyActivationPlan(input: {
     ])).slice(0, 8),
     missingBeforeRealMoney: dedupedMissing,
     blockedUntilApproved: approvals,
+    firstSprintPlan,
     nextRobertAction: dedupedMissing[0]?.nextStep
       || input.dailyMoneyCommand.primaryAction
       || "Aprobar el siguiente batch controlado.",
@@ -5408,6 +5456,9 @@ function buildRevenueMoneyActivationPlan(input: {
         "crear mockups internos",
         "preparar outreach/propuesta en draft",
       ])).map((item) => `- ${item}`),
+      "",
+      "First sprint steps:",
+      ...firstSprintPlan.steps.map((step, index) => `${index + 1}. ${step.label}: ${step.action}`),
       "",
       "Missing before real money mode:",
       ...(dedupedMissing.length > 0 ? dedupedMissing.map((item) => `- ${item.label}: ${item.nextStep}`) : ["- none"]),
@@ -5593,6 +5644,7 @@ export function getRevenueEngineSnapshot() {
   const moneyActivationPlan = buildRevenueMoneyActivationPlan({
     launchReadiness,
     dailyMoneyCommand,
+    businessScoutQueue,
     systemReadiness,
     agentOperatingContract,
   });
