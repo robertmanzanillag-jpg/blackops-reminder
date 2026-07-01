@@ -1310,6 +1310,15 @@ test("TikTok MVP proof refresh runs import and doctor sequentially without apply
     assert.doesNotMatch(source, /--apply|ready_to_send|video\.publish|directSocialApisRequired:\s*true|runClipperTikTokMvpEvidenceCloseout\(true\)/);
     assert.match(source, /Metricool remains approval_required/);
     assert.match(source, /const status = blockers\.length === 0 \? "ready_to_apply" : "blocked"/);
+    assert.match(source, /explicit TikTok MVP closeout apply review gate/);
+    assert.doesNotMatch(source, /run the guarded TikTok MVP evidence closeout apply/);
+
+    const proofDoctorSource = await readFile(path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-doctor.mjs"), "utf8");
+    assert.match(proofDoctorSource, /explicit TikTok MVP closeout apply review gate/);
+    assert.doesNotMatch(proofDoctorSource, /Run TikTok MVP evidence closeout apply only/);
+    const proofImportSource = await readFile(path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-intake-import.mjs"), "utf8");
+    assert.match(proofImportSource, /explicit apply review gate/);
+    assert.doesNotMatch(proofImportSource, /Run TikTok MVP evidence closeout apply only/);
 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.json"), "utf8"));
     assert.equal(report.launchMode, "metricool_approval_required");

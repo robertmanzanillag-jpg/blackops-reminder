@@ -416,13 +416,13 @@ async function main() {
       "This import only prepares proof CSVs; it does not apply final evidence records.",
       "Metricool remains approval_required; this script does not publish or schedule posts.",
       "Do not paste passwords, cookies, tokens, private screenshots, recovery codes, or private keys.",
-      "The closeout validator must say ready_to_apply before apply writes target CSVs.",
+      "The closeout validator must say ready_to_apply before the explicit apply review gate can write target CSVs.",
     ],
     nextStep: applied
-      ? "Run TikTok MVP evidence closeout apply only after manually confirming proof URLs are real and non-secret."
+      ? "Open the explicit TikTok MVP closeout apply review gate only after manually confirming proof URLs are real and non-secret."
       : closeoutReady
-        ? "Run this import with --apply to copy validated CSVs to the target paths, then run evidence closeout apply."
-        : "Fix combined proof intake rows, rerun preview import, and do not apply until closeout preview says ready_to_apply.",
+        ? "Run this import with --apply only to copy validated proof CSVs to target paths, then use the explicit closeout apply review gate."
+        : "Fix combined proof intake rows, rerun preview import, and do not use the explicit apply review gate until closeout preview says ready_to_apply.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));

@@ -312,7 +312,7 @@ async function main() {
       "Placeholders must remain blocked until replaced with real public/non-secret proof URLs.",
     ],
     nextStep: status === "ready_to_apply"
-      ? "Run TikTok MVP evidence closeout apply only after manually confirming every proof URL is real and non-secret."
+      ? "Open the explicit TikTok MVP closeout apply review gate only after manually confirming every proof URL is real and non-secret; this doctor did not apply anything."
       : previewFailed
         ? "Fix the closeout preview command, then rerun proof doctor; stale reports are ignored."
         : "Fill the proof links drop with two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, run Safe ingest drop, then Load/Preview/Import the Metricool bridge CSV only when the preview gate is ready.",

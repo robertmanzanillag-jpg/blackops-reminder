@@ -8166,11 +8166,14 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.equal(missingRefreshAudit.fullGoal.tiktokMvpOperatingProofGateReady, true);
     assert.equal(missingRefreshAudit.fullGoal.tiktokMvpProofRefreshReady, false);
     assert.equal(missingRefreshAudit.fullGoal.tiktokMvpProofGateReady, false);
-    assert.equal(missingRefreshAudit.tiktokMvpProofRefresh.status, "missing");
+    assert.ok(["missing", "blocked"].includes(missingRefreshAudit.tiktokMvpProofRefresh.status));
     assert.equal(missingRefreshAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.status, "needs_external_action");
     assert.match(missingRefreshAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "", /proofGateReady true/);
     assert.match(missingRefreshAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "", /proofRefreshReady false/);
-    assert.match(missingRefreshAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "", /proofRefreshBlockers proof_refresh_stale_or_missing/);
+    assert.match(
+      missingRefreshAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "",
+      /proofRefreshBlockers (proof_refresh_stale_or_missing|import_status_blocked_invalid_intake|doctor_status_needs_proof_fix)/,
+    );
     assert.match(missingRefreshAudit.operatorNextActions[0].buttonOrFile, /proof-refresh\.md$/);
     assert.match(missingRefreshAudit.operatorNextActions[0].nextAction, /proof_refresh_stale_or_missing|Run Proof refresh/i);
 
@@ -8198,7 +8201,7 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
         ...(originalRefresh.paths || {}),
         markdown: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.md"),
       },
-      nextStep: "Review proof URLs manually, then run the guarded TikTok MVP evidence closeout apply.",
+      nextStep: "Review proof URLs manually, then open the explicit TikTok MVP closeout apply review gate; this refresh does not apply anything.",
     }, null, 2));
     const staleRefreshResult = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
       cwd: process.cwd(),

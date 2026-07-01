@@ -80,13 +80,13 @@ function renderMarkdown(summary) {
 
 function nextStepForRefresh({ status, importReady, noImportFixes, doctorReady, lanesReady, noDoctorFixes, readyLanes, targetLanes }) {
   if (status === "ready_to_apply") {
-    return "Review proof URLs manually, then run the guarded TikTok MVP evidence closeout apply.";
+    return "Review proof URLs manually, then open the explicit TikTok MVP closeout apply review gate; this refresh does not apply anything.";
   }
   if (!importReady || !noImportFixes) {
-    return "Fix the combined proof intake rows in the import fix queue, rerun Proof refresh, and apply only after preview is ready.";
+    return "Fix the combined proof intake rows in the import fix queue, rerun Proof refresh, and use the explicit apply review gate only after preview is ready.";
   }
   if (!doctorReady || !lanesReady || !noDoctorFixes) {
-    return `Fix the target account/Metricool proof rows in the proof doctor fix queue, rerun Proof refresh, and apply only after proof doctor is clean (${readyLanes}/${targetLanes} lanes ready).`;
+    return `Fix the target account/Metricool proof rows in the proof doctor fix queue, rerun Proof refresh, and use the explicit apply review gate only after proof doctor is clean (${readyLanes}/${targetLanes} lanes ready).`;
   }
   return "Rerun Proof refresh; at least one proof readiness check is blocked.";
 }
