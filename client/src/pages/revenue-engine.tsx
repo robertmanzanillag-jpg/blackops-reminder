@@ -162,6 +162,7 @@ type RevenueSnapshot = {
       input: string;
       output: string;
       gate: string;
+      copyableApiRequest: string;
       copyableRunPacket: string;
     };
     copyableOperatorBrief: string;
@@ -5519,6 +5520,17 @@ export default function RevenueEnginePage() {
                     >
                       <Copy className="mr-2 h-3.5 w-3.5" />
                       Copy next run
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 w-full border-zinc-700 bg-zinc-950"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.runPacket.copyableApiRequest || "")}
+                      data-testid="button-copy-daily-run-api-request"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy API request
                     </Button>
                   </div>
                 </CardContent>

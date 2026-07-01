@@ -1033,6 +1033,7 @@ type RevenueDailyMoneyCommand = {
     input: string;
     output: string;
     gate: string;
+    copyableApiRequest: string;
     copyableRunPacket: string;
   };
   copyableOperatorBrief: string;
@@ -5537,48 +5538,99 @@ function buildRevenueDailyMoneyCommand(input: {
   const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
     ? baseSteps.map((step) => ({ ...step, status: "blocked" as const }))
     : baseSteps;
+  const searchDispatchRequest = {
+    area: input.businessScoutQueue.area,
+    niche: input.businessScoutQueue.niche,
+    offerFocus: input.businessScoutQueue.offerFocus,
+    targetLeadCount: input.businessScoutQueue.dailyResearchTarget,
+    maxTasks: Math.min(Math.max(input.businessScoutQueue.tasks.length, 1), 5),
+    resultSlotsPerTask: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    notes: "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
+  };
   const runPacketByStatus: Record<RevenueDailyMoneyCommand["status"], Omit<RevenueDailyMoneyCommand["runPacket"], "status" | "copyableRunPacket">> = {
     search: {
       apiAction: "/api/revenue-engine/scout-dispatch",
       input: "area, niche, offerFocus, targetLeadCount, maxTasks, resultSlotsPerTask, maxPaidDataSpendUsd=0",
       output: "Subagent briefs plus connector intake JSON for real public businesses.",
       gate: "Only public sources; connector rows stay needs_review until Robert verifies evidence.",
+      copyableApiRequest: JSON.stringify(searchDispatchRequest, null, 2),
     },
     sprint: {
       apiAction: "/api/revenue-engine/money-sprint/public-candidates",
       input: "candidateIds from verified publicLeadImportQueue, writePreviewFiles=true, requireRobertApprovalToContact=true",
       output: "Mockups, website sales packets and draft-only outreach for approved candidates.",
       gate: "No outreach send, paid data spend or placeholder candidates.",
+      copyableApiRequest: JSON.stringify({
+        candidateIds: "REPLACE_WITH_VERIFIED_PUBLIC_CANDIDATE_IDS",
+        writePreviewFiles: true,
+        requireRobertApprovalToContact: true,
+        maxPaidDataSpendUsd: 0,
+      }, null, 2),
     },
     sell: {
       apiAction: "/api/revenue-engine/outreach-drafts/approve",
       input: "draftId, approvedByRobert=true, notes with manual approval context",
       output: "Approved manual contact queue entry and close packet.",
       gate: "Robert approval required before any business contact.",
+      copyableApiRequest: JSON.stringify({
+        draftId: "REPLACE_WITH_REVIEWED_DRAFT_ID",
+        approvedByRobert: true,
+        notes: "Robert approved manual contact after reviewing public evidence, mockup, pricing and channel.",
+      }, null, 2),
     },
     contact: {
       apiAction: "/api/revenue-engine/outreach-outcome",
       input: "draftId, manual outcome, notes, optional cash/payment reference only when verified",
       output: "Reply/call/deposit outcome captured without auto-send.",
       gate: "Manual-only channels stay manual; deposit requires verifiable payment evidence.",
+      copyableApiRequest: JSON.stringify({
+        draftId: "REPLACE_WITH_MANUAL_CONTACT_DRAFT_ID",
+        outcome: "reply",
+        notes: "REPLACE with manual outreach outcome. Do not include secrets or private customer data.",
+      }, null, 2),
     },
     collect: {
       apiAction: "/api/revenue-engine/website-delivery-workspace",
       input: "leadId, outreachDraftId, websiteOpportunityId, repoFullName, branchName=codex/..., depositPaid=true, scopeApproved=true, publicDataVerified=true",
       output: "QA-gated delivery workspace plus GitHub PR-first build handoff.",
       gate: "No workspace/build until deposit, scope and payment evidence pass.",
+      copyableApiRequest: JSON.stringify({
+        leadId: "REPLACE_WITH_SOLD_LEAD_ID",
+        outreachDraftId: "REPLACE_WITH_APPROVED_DRAFT_ID",
+        websiteOpportunityId: "REPLACE_WITH_SOLD_WEBSITE_OPPORTUNITY_ID",
+        repoFullName: "owner/repo",
+        branchName: "codex/client-website-build",
+        depositPaid: true,
+        scopeApproved: true,
+        publicDataVerified: true,
+        notes: "Deposit, scope and public data verified before creating PR-first workspace.",
+      }, null, 2),
     },
     build: {
       apiAction: "/api/revenue-engine/delivery-workspaces/github-handoff",
       input: "workspaceId, repoFullName, branchName and public build pack",
       output: "GitHub handoff issue/PR-first brief for second-agent review and App QA.",
       gate: "No merge/deploy/client preview until PR, review, App QA and Robert deploy approval.",
+      copyableApiRequest: JSON.stringify({
+        workspaceId: "REPLACE_WITH_DELIVERY_WORKSPACE_ID",
+        repoFullName: "owner/repo",
+        branchName: "codex/client-website-build",
+        notes: "Create PR-first GitHub handoff. No deploy without PR review, App QA and Robert approval.",
+      }, null, 2),
     },
     blocked: {
       apiAction: "/api/revenue-engine/expense-preflight",
       input: "concept, amountUsd=0, estimatedInternalCostUsd=0, notes describing the blocked guardrail",
       output: "Blocked reason and safe next action.",
       gate: "Resolve Profit Guard or production persistence before operating with real money.",
+      copyableApiRequest: JSON.stringify({
+        concept: "blocked-money-command-preflight",
+        amountUsd: 0,
+        estimatedInternalCostUsd: 0,
+        notes: "Resolve guardrail before real revenue operation.",
+      }, null, 2),
     },
   };
   const runPacketCore = status === "collect" && input.websiteDeliveryHandoffQueue.readyCount === 0 && input.websiteClosureQueue.readyCount > 0
@@ -5587,6 +5639,14 @@ function buildRevenueDailyMoneyCommand(input: {
         input: "opportunityId, depositPaid, scopeApproved, cashCollectedUsd, paymentConfirmation, notes",
         output: "Sold website opportunity once deposit and scope evidence are complete.",
         gate: "No delivery workspace, ledger sale or build until deposit evidence and scope approval are both recorded.",
+        copyableApiRequest: JSON.stringify({
+          opportunityId: "REPLACE_WITH_WEBSITE_OPPORTUNITY_ID",
+          depositPaid: true,
+          scopeApproved: true,
+          cashCollectedUsd: "REPLACE_WITH_VERIFIED_CASH_AMOUNT",
+          paymentConfirmation: "REPLACE_WITH_STRIPE_OR_BANK_REFERENCE",
+          notes: "Verified manual deposit and scope approval before closing sale.",
+        }, null, 2),
       }
     : runPacketByStatus[status];
   const copyableRunPacket = [
@@ -5598,6 +5658,9 @@ function buildRevenueDailyMoneyCommand(input: {
     `Input: ${runPacketCore.input}`,
     `Output: ${runPacketCore.output}`,
     `Gate: ${runPacketCore.gate}`,
+    "",
+    "Copyable API request:",
+    runPacketCore.copyableApiRequest,
     "",
     "Safety:",
     "- Do not auto-send outreach.",
@@ -5696,6 +5759,12 @@ function applyRevenueProductionPersistenceGate(input: {
     input: "concept, amountUsd=0, estimatedInternalCostUsd=0, notes=production DATABASE_URL missing",
     output: "Blocked reason and safe next action.",
     gate: "Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+    copyableApiRequest: JSON.stringify({
+      concept: "production-persistence-required",
+      amountUsd: 0,
+      estimatedInternalCostUsd: 0,
+      notes: "Configure real DATABASE_URL and strong SESSION_SECRET before operating with real leads, payments or delivery.",
+    }, null, 2),
     copyableRunPacket: [
       "Revenue Engine next run packet",
       "",
@@ -5705,6 +5774,14 @@ function applyRevenueProductionPersistenceGate(input: {
       "Input: concept, amountUsd=0, estimatedInternalCostUsd=0, notes=production DATABASE_URL missing",
       "Output: Blocked reason and safe next action.",
       "Gate: Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+      "",
+      "Copyable API request:",
+      JSON.stringify({
+        concept: "production-persistence-required",
+        amountUsd: 0,
+        estimatedInternalCostUsd: 0,
+        notes: "Configure real DATABASE_URL and strong SESSION_SECRET before operating with real leads, payments or delivery.",
+      }, null, 2),
       "",
       "Safety:",
       "- Do not run public lead workflows with real money state until production persistence is configured.",

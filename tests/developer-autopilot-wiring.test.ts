@@ -262,7 +262,9 @@ test("Revenue Engine exposes the daily money command panel", () => {
 
   assert.match(serverSource, /buildRevenueDailyMoneyCommand/);
   assert.match(serverSource, /dailyMoneyCommand/);
+  assert.match(serverSource, /copyableApiRequest/);
   assert.match(uiSource, /button-copy-daily-money-command/);
+  assert.match(uiSource, /button-copy-daily-run-api-request/);
   assert.match(routeSource, /\/api\/revenue-engine\/daily-scout-sprint/);
   assert.match(routeSource, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(routeSource, /revenueDailyScoutSprintSchema\.parse/);

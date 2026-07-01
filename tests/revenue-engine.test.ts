@@ -396,7 +396,14 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(initial.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/scout-dispatch");
   assert.match(initial.dailyMoneyCommand.runPacket.output, /connector intake JSON/);
   assert.match(initial.dailyMoneyCommand.runPacket.gate, /needs_review/);
+  const initialSearchRequest = JSON.parse(initial.dailyMoneyCommand.runPacket.copyableApiRequest);
+  assert.equal(initialSearchRequest.area, initial.businessScoutQueue.area);
+  assert.equal(initialSearchRequest.niche, initial.businessScoutQueue.niche);
+  assert.equal(initialSearchRequest.maxPaidDataSpendUsd, 0);
+  assert.equal(initialSearchRequest.requireRobertApprovalToContact, true);
   assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /Revenue Engine next run packet/);
+  assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /Copyable API request/);
+  assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /scout dispatch: public research only/);
   assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /Do not auto-send outreach/);
   assert.equal(initial.dailyMoneyCommand.safety.sendsOutreach, false);
   assert.equal(initial.dailyMoneyCommand.safety.spendsMoney, false);
