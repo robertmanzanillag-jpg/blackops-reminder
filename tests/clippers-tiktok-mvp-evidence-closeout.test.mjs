@@ -580,7 +580,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /sports-daily:tiktok\.metricoolConnectionProofUrl=\$\{sportUrl\}/);
   assert.match(page, /meme-radar:tiktok\.accountOwnershipProofUrl=\$\{memesUrl\}/);
   assert.match(page, /meme-radar:tiktok\.metricoolConnectionProofUrl=\$\{memesUrl\}/);
-  assert.match(page, /const clearTikTokMvpProofLinksGeneratedState = \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?\};/);
+  assert.match(page, /tiktokMvpFastPathOwnershipConfirmed/);
+  assert.match(page, /Fast path requiere confirmacion/);
+  assert.match(page, /clippers-tiktok-mvp-fast-path-ownership-confirmation/);
+  assert.match(page, /!tiktokMvpFastPathOwnershipConfirmed/);
+  assert.match(page, /shows the TikTok profile connected under Robert control/);
+  assert.match(page, /const clearTikTokMvpProofLinksGeneratedState = \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);[\s\S]*?\};/);
   assert.match(page, /setTiktokMvpFastPathSportProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
   assert.match(page, /setTiktokMvpFastPathMemesProofUrl\(event\.target\.value\);[\s\S]*?clearTikTokMvpProofLinksGeneratedState\(\);/);
   assert.match(page, /setTiktokMvpProofLinksText\(""\)/);
@@ -913,9 +918,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /signed\/temporary URLs/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-starter-button/);
-  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofLinks\?\.raw \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
-  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofHandoffJsonStarterText \|\| tiktokMvpProofDropKit\.proofLinksStarterText \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
-  assert.match(page, /setTiktokMvpProofLinksText\(event\.target\.value\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
+  assert.match(page, /build-clippers-tiktok-mvp-metricool-fast-path-button/);
+  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| !tiktokMvpFastPathSportProofUrl\.trim\(\) \|\| !tiktokMvpFastPathMemesProofUrl\.trim\(\) \|\| !tiktokMvpFastPathOwnershipConfirmed\}/);
+  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofLinks\?\.raw \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
+  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofHandoffJsonStarterText \|\| tiktokMvpProofDropKit\.proofLinksStarterText \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
+  assert.match(page, /setTiktokMvpProofLinksText\(event\.target\.value\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
   assert.match(page, /tiktokMvpProofHandoffJsonStarterText/);
   assert.match(page, /tiktokMvpProofHandoff\?\.jsonStarter/);
   assert.match(page, /JSON\.stringify\(tiktokMvpProofHandoff\.jsonStarter, null, 2\)/);

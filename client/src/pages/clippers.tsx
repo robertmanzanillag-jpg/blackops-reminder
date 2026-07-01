@@ -40,6 +40,7 @@ import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -10755,6 +10756,7 @@ export default function ClippersPage() {
   const [tiktokMvpProofLinksPasteText, setTiktokMvpProofLinksPasteText] = useState("");
   const [tiktokMvpFastPathSportProofUrl, setTiktokMvpFastPathSportProofUrl] = useState("");
   const [tiktokMvpFastPathMemesProofUrl, setTiktokMvpFastPathMemesProofUrl] = useState("");
+  const [tiktokMvpFastPathOwnershipConfirmed, setTiktokMvpFastPathOwnershipConfirmed] = useState(false);
   const [tiktokMvpProofLinksLoaded, setTiktokMvpProofLinksLoaded] = useState(false);
   const [tiktokMvpProofLinksPreview, setTiktokMvpProofLinksPreview] = useState<ClipperTikTokMvpProofLinksPreviewSummary | null>(null);
   const [tiktokMvpProofLinksPastePreview, setTiktokMvpProofLinksPastePreview] = useState<ClipperTikTokMvpProofLinksPastePreviewSummary | null>(null);
@@ -17105,10 +17107,19 @@ export default function ClippersPage() {
     setTiktokMvpProofLinksText("");
     setTiktokMvpProofLinksPreview(null);
     setTiktokMvpProofLinksSaveReceipt(null);
+    setTiktokMvpFastPathOwnershipConfirmed(false);
   };
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
+    if (!tiktokMvpFastPathOwnershipConfirmed) {
+      toast({
+        title: "Fast path requiere confirmacion",
+        description: "Confirma que cada proof muestra el TikTok conectado bajo control de Robert y no contiene secretos antes de reutilizarlo como ownership.",
+        variant: "destructive",
+      });
+      return;
+    }
     const packetText = [
       `sports-daily:tiktok.accountOwnershipProofUrl=${sportUrl}`,
       `sports-daily:tiktok.metricoolConnectionProofUrl=${sportUrl}`,
@@ -18808,6 +18819,7 @@ export default function ClippersPage() {
                           value={tiktokMvpFastPathSportProofUrl}
                           onChange={(event) => {
                             setTiktokMvpFastPathSportProofUrl(event.target.value);
+                            setTiktokMvpFastPathOwnershipConfirmed(false);
                             clearTikTokMvpProofLinksGeneratedState();
                           }}
                           className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
@@ -18821,6 +18833,7 @@ export default function ClippersPage() {
                           value={tiktokMvpFastPathMemesProofUrl}
                           onChange={(event) => {
                             setTiktokMvpFastPathMemesProofUrl(event.target.value);
+                            setTiktokMvpFastPathOwnershipConfirmed(false);
                             clearTikTokMvpProofLinksGeneratedState();
                           }}
                           className="mt-1 h-8 border-emerald-300/20 bg-black/40 text-xs text-emerald-50"
@@ -18833,7 +18846,7 @@ export default function ClippersPage() {
                         size="sm"
                         variant="outline"
                         onClick={buildTikTokMvpMetricoolFastPathPaste}
-                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathSportProofUrl.trim() || !tiktokMvpFastPathMemesProofUrl.trim()}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathSportProofUrl.trim() || !tiktokMvpFastPathMemesProofUrl.trim() || !tiktokMvpFastPathOwnershipConfirmed}
                         className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
                         data-testid="build-clippers-tiktok-mvp-metricool-fast-path-button"
                       >
@@ -18841,6 +18854,17 @@ export default function ClippersPage() {
                         Build & preview 2 URLs
                       </Button>
                     </div>
+                    <label className="mt-2 flex items-start gap-2 rounded border border-emerald-300/10 bg-black/20 p-2 text-[10px] leading-4 text-emerald-100/80">
+                      <Checkbox
+                        checked={tiktokMvpFastPathOwnershipConfirmed}
+                        onCheckedChange={(checked) => setTiktokMvpFastPathOwnershipConfirmed(checked === true)}
+                        className="mt-0.5 border-emerald-300/40 data-[state=checked]:bg-emerald-300 data-[state=checked]:text-zinc-950"
+                        data-testid="clippers-tiktok-mvp-fast-path-ownership-confirmation"
+                      />
+                      <span>
+                        I confirm each proof shows the TikTok profile connected under Robert control and contains no passwords, cookies, tokens, recovery codes, signed URLs, or private screenshots.
+                      </span>
+                    </label>
                     <p className="mt-2 text-[10px] leading-4 text-emerald-100/70">
                       These two URLs build explicit account + Metricool proof fields, then go straight to Preview links. They do not save evidence, apply closeout, schedule, or publish.
                     </p>
@@ -18905,6 +18929,7 @@ export default function ClippersPage() {
                           setTiktokMvpProofLinksPastePreview(null);
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
+                          setTiktokMvpFastPathOwnershipConfirmed(false);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinks?.raw}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
@@ -18922,6 +18947,7 @@ export default function ClippersPage() {
                           setTiktokMvpProofLinksPastePreview(null);
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
+                          setTiktokMvpFastPathOwnershipConfirmed(false);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText)}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
@@ -18962,6 +18988,7 @@ export default function ClippersPage() {
                       setTiktokMvpProofLinksPastePreview(null);
                       setTiktokMvpProofLinksPreview(null);
                       setTiktokMvpProofLinksSaveReceipt(null);
+                      setTiktokMvpFastPathOwnershipConfirmed(false);
                     }}
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
