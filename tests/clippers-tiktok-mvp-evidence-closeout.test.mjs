@@ -33,6 +33,7 @@ const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof
 const quickFillInputPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json");
 const proofLinksPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links.json");
 const proofLinksStarterPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links-starter.json");
+const proofLinksFilledDropPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links-paste-packet-filled.txt");
 const tiktokMvpOperatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
 const proofLinksPreviewGatePath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json");
 const targetAccountCsvPath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
@@ -1154,7 +1155,7 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar; change status to verified only after proof is real and reviewed>/);
   assert.doesNotMatch(accountTemplate, /"verified".*<paste real public ownership proof URL/);
   assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
-  assert.match(bridgeTemplate, /<paste real public Metricool proof URL or Drive\/Docs evidence URL for memes @memeradar>/);
+  assert.match(bridgeTemplate, /<paste real public Metricool proof URL or concrete Drive file\/folder\/Docs evidence URL for memes @memeradar>/);
   assert.match(markdown, /Evidence quality:/);
   assert.match(markdown, /Current blocker: .*accountProofUrl/);
   assert.match(markdown, /Drive\/Docs Evidence Checklist/);
@@ -1202,7 +1203,7 @@ test("TikTok MVP proof intake import blocks placeholder combined rows without wr
     assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "account_ownership_proof_url"));
     assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "metricool_connection_proof_url"));
     assert.match(report.paths.fixQueueCsv, /proof-intake-import-fix-queue\.csv$/);
-    assert.match(report.nextStep, /do not apply/i);
+    assert.match(report.nextStep, /do not (use|apply)/i);
     const fixQueueCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import-fix-queue.csv"), "utf8");
     assert.match(fixQueueCsv, /account_ownership_proof_url/);
     assert.match(fixQueueCsv, /metricool_connection_proof_url/);
@@ -1303,7 +1304,7 @@ test("TikTok MVP proof intake import previews and applies clean combined proof C
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
     assert.equal(report.status, "applied");
     assert.equal(report.fixQueue.length, 0);
-    assert.match(report.nextStep, /evidence closeout apply/i);
+    assert.match(report.nextStep, /closeout apply review gate/i);
   } finally {
     if (previousAccount === null) await unlink(targetAccountCsvPath).catch(() => undefined);
     else await writeFile(targetAccountCsvPath, previousAccount);
@@ -1384,14 +1385,14 @@ test("TikTok MVP proof doctor diagnoses target CSV blockers without applying evi
   assert.ok(doctor.recommendedProofFlow.steps.some((step) => step.includes("Preview bridge rows")));
   assert.ok(doctor.requiredProofLinks.some((item) => item.key === "sports-daily:tiktok.metricoolConnectionProofUrl"));
   assert.ok(doctor.requiredProofLinks.some((item) => item.key === "meme-radar:tiktok.accountOwnershipProofUrl"));
-  assert.match(doctor.nextStep, /proof links drop with two real Metricool\/Drive proof URLs/);
+  assert.match(doctor.nextStep, /proof links drop with two real Metricool URLs or concrete Drive file\/folder\/Docs proof URLs/);
   assert.ok(doctor.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.source === "bridge" && row.requiredValue.includes("metricool.com")));
   assert.ok(doctor.lanes.every((lane) => lane.nextAction && lane.status === "blocked"));
   assert.doesNotMatch(JSON.stringify(doctor), /access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+|password=/i);
 
   const fixQueueCsv = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fix-queue.csv"), "utf8");
   assert.match(fixQueueCsv, /sports-daily:tiktok/);
-  assert.match(fixQueueCsv, /real HTTPS metricool.com proof URL or Google Drive\/Docs evidence URL/);
+  assert.match(fixQueueCsv, /real HTTPS metricool.com proof URL or concrete Google Drive file\/folder or Docs evidence URL/);
   assert.doesNotMatch(fixQueueCsv, /ready_to_send|video\.publish|access_token=|refresh_token=|client_secret=/i);
 });
 
@@ -2534,6 +2535,65 @@ test("Goal completion audit blocks automation when preview is clean but operatin
     else await writeFile(tiktokMvpOperatingRefreshPath, previousOperatingRefresh);
     if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
     else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
+  }
+});
+
+test("Goal completion audit watches local proof drop without saving or trusting it as proof", async () => {
+  const previousDrop = await readFile(proofLinksFilledDropPath, "utf8").catch(() => null);
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(proofLinksFilledDropPath), { recursive: true });
+    await writeFile(proofLinksFilledDropPath, [
+      "# local operator proof drop",
+      "sports-daily:tiktok.metricoolConnectionProofUrl=https://drive.google.com/file/d/sports-daily-metricool-proof/view",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-proof/edit",
+      "sports-daily:tiktok.accountNotes=Robert confirms this Drive proof shows Sports Daily TikTok under his control without secrets.",
+      "meme-radar:tiktok.accountNotes=Robert confirms this Docs proof shows Meme Radar TikTok under his control without secrets.",
+    ].join("\n"));
+
+    const audit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(audit.status, 0, audit.stderr || audit.stdout);
+    const output = JSON.parse(audit.stdout);
+    assert.equal(output.proofLinksDropStatus, "ready_for_preview");
+    assert.equal(output.proofLinksDropExtractedUrls, 2);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(report.proofLinksDropAudit.status, "ready_for_preview");
+    assert.equal(report.proofLinksDropAudit.found, true);
+    assert.equal(report.proofLinksDropAudit.extractedUrls, 2);
+    assert.equal(report.proofLinksDropAudit.nextButton, "import_drop_file");
+    assert.match(report.proofLinksDropAudit.nextStep, /Import drop file to create a clean preview gate/);
+    assert.equal(report.externalActionGate.canAutomateWithoutRobert, false);
+    assert.doesNotMatch(JSON.stringify(report.proofLinksDropAudit), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+    assert.equal(await readFile(proofLinksPath, "utf8").catch(() => null), previousProofLinks);
+
+    const markdown = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.md"), "utf8");
+    assert.match(markdown, /Proof Links Drop Audit/);
+    assert.match(markdown, /Status: ready_for_preview/);
+
+    await writeFile(proofLinksFilledDropPath, [
+      "sports-daily:tiktok.metricoolConnectionProofUrl=https://drive.google.com/file/d/sports-daily-metricool-proof/view",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-proof/edit",
+      "operator-reference=http://user:secret@example.com/proof",
+    ].join("\n"));
+    const blockedAudit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(blockedAudit.status, 0, blockedAudit.stderr || blockedAudit.stdout);
+    const blockedOutput = JSON.parse(blockedAudit.stdout);
+    assert.equal(blockedOutput.proofLinksDropStatus, "blocked_secret_like");
+    const blockedReport = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(blockedReport.proofLinksDropAudit.unsafeBlocked, true);
+    assert.equal(blockedReport.proofLinksDropAudit.nextButton, "edit_drop_file");
+    assert.match(blockedReport.proofLinksDropAudit.nextStep, /Remove tokens/);
+    assert.equal(await readFile(proofLinksPath, "utf8").catch(() => null), previousProofLinks);
+  } finally {
+    if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
+    else await writeFile(proofLinksFilledDropPath, previousDrop);
   }
 });
 

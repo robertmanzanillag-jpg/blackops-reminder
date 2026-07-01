@@ -24,6 +24,11 @@ const paths = {
   outCsv: path.join(reportsDir, "clippers-goal-completion-audit.csv"),
   outNextActionsCsv: path.join(reportsDir, "clippers-goal-completion-next-actions.csv"),
 };
+const proofLinksDropPastePaths = [
+  path.join(rootDir, "proof-drop", "tiktok-mvp", "proof-links-paste-packet-filled.txt"),
+  path.join(rootDir, "proof-drop", "tiktok-mvp", "proof-links-drop.txt"),
+  path.join(rootDir, "proof-drop", "tiktok-mvp", "proof-links-paste-packet.txt"),
+];
 
 async function readJson(filePath, fallback = {}) {
   const raw = await readFile(filePath, "utf8").catch(() => null);
@@ -73,6 +78,73 @@ function csvCell(value) {
 function isPlaceholder(value) {
   const text = String(value || "").trim();
   return !text || /^<.*>$/.test(text) || /\bpaste\b|\bplaceholder\b|\bafter live\b|\bafter 24h\b/i.test(text);
+}
+
+function candidateProofUrlCount(raw) {
+  return Array.from(String(raw || "").matchAll(/https:\/\/[^\s"'<>]+/gi))
+    .map((match) => match[0].replace(/[),.;]+$/g, ""))
+    .filter((url) => !isPlaceholder(url) && !containsUnsafeProofText(url))
+    .length;
+}
+
+function containsUnsafeProofText(value) {
+  return /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || ""))
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
+    || /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i.test(String(value || ""));
+}
+
+async function buildProofLinksDropAudit() {
+  for (const sourcePath of proofLinksDropPastePaths) {
+    const raw = await readFile(sourcePath, "utf8").catch((error) => {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    });
+    if (raw === null) continue;
+    const trimmed = raw.trim();
+    const bytes = Buffer.byteLength(raw, "utf8");
+    const extractedUrls = candidateProofUrlCount(raw);
+    const unsafeBlocked = containsUnsafeProofText(raw);
+    const blankProofLines = (raw.match(/(?:accountOwnershipProofUrl|metricoolConnectionProofUrl)\s*=\s*(?:\r?\n|$)/g) || []).length;
+    const starterLike = /TikTok MVP Metricool fast-path proof packet|proof-links paste packet/i.test(raw)
+      && (blankProofLines > 0 || extractedUrls < 2);
+    const status = !trimmed
+      ? "empty"
+      : unsafeBlocked
+        ? "blocked_secret_like"
+        : starterLike
+          ? "starter_waiting_for_urls"
+          : extractedUrls >= 2
+            ? "ready_for_preview"
+            : "needs_urls";
+    return {
+      status,
+      found: true,
+      sourcePath,
+      bytes,
+      extractedUrls,
+      blankProofLines,
+      starterLike,
+      unsafeBlocked,
+      nextButton: status === "ready_for_preview" ? "import_drop_file" : "edit_drop_file",
+      nextStep: status === "ready_for_preview"
+        ? "Import drop file to create a clean preview gate; do not save until preview stays clean/current."
+        : status === "blocked_secret_like"
+          ? "Remove tokens, cookies, passwords, signed URLs, or private key material before importing this drop file."
+          : "Fill the drop file with real SPORT and memes Metricool or concrete Drive/Docs proof URLs before importing.",
+    };
+  }
+  return {
+    status: "missing",
+    found: false,
+    sourcePath: proofLinksDropPastePaths[0],
+    bytes: 0,
+    extractedUrls: 0,
+    blankProofLines: 0,
+    starterLike: false,
+    unsafeBlocked: false,
+    nextButton: "create_starter",
+    nextStep: `Create ${proofLinksDropPastePaths[0]} or use the app starter, then paste real non-secret SPORT and memes proof URLs.`,
+  };
 }
 
 function numberValue(value) {
@@ -258,6 +330,8 @@ function renderMarkdown(summary) {
     `- External action gate: ${summary.externalActionGate.status}`,
     `- Can automate without Robert: ${summary.externalActionGate.canAutomateWithoutRobert}`,
     `- Missing proof URLs: ${summary.externalActionGate.missingProofUrls}`,
+    `- Proof links drop: ${summary.proofLinksDropAudit.status}`,
+    `- Proof links drop candidate URLs: ${summary.proofLinksDropAudit.extractedUrls}`,
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
@@ -310,6 +384,19 @@ function renderMarkdown(summary) {
     ...(summary.externalActionGate.exactFields.length
       ? ["- Exact fields:", ...summary.externalActionGate.exactFields.map((field) => `  - \`${field}\``)]
       : ["- Exact fields: none"]),
+    "",
+    "## Proof Links Drop Audit",
+    "",
+    `- Status: ${summary.proofLinksDropAudit.status}`,
+    `- Found: ${summary.proofLinksDropAudit.found}`,
+    `- Source path: ${summary.proofLinksDropAudit.sourcePath}`,
+    `- Bytes: ${summary.proofLinksDropAudit.bytes}`,
+    `- Candidate proof URLs found: ${summary.proofLinksDropAudit.extractedUrls}`,
+    `- Blank proof lines: ${summary.proofLinksDropAudit.blankProofLines}`,
+    `- Starter-like: ${summary.proofLinksDropAudit.starterLike}`,
+    `- Unsafe blocked: ${summary.proofLinksDropAudit.unsafeBlocked}`,
+    `- Next button: ${summary.proofLinksDropAudit.nextButton}`,
+    `- Next: ${summary.proofLinksDropAudit.nextStep}`,
     "",
     "## TikTok MVP Proof Refresh",
     "",
@@ -658,7 +745,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, proofHandoff, proofLinksPreviewGateRaw, evidenceRaw] = await Promise.all([
+  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, proofHandoff, proofLinksPreviewGateRaw, proofLinksDropAudit, evidenceRaw] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.metricoolMvpLaunchPack),
     readJson(paths.metricool100ApprovalRun),
@@ -670,6 +757,7 @@ async function main() {
     readJson(paths.tiktokMvpProofQuickFill, {}),
     readJson(paths.tiktokMvpProofHandoff, {}),
     readJson(paths.tiktokMvpProofLinksPreviewGate, {}),
+    buildProofLinksDropAudit(),
     readFile(paths.masterEvidenceCsv, "utf8").catch(() => ""),
   ]);
   const evidence = evidenceTotals(parseCsv(evidenceRaw));
@@ -966,6 +1054,7 @@ async function main() {
         : "Quick fill is stale or missing; rerun Quick fill with real non-secret proof before trusting this result.",
     },
     tiktokMvpProofLinksPreviewGate: proofLinksPreviewGate,
+    proofLinksDropAudit,
     tiktokMvpStartGate,
     externalActionGate,
     operatorNextActions,
@@ -1005,6 +1094,8 @@ async function main() {
     externalActionGateStatus: summary.externalActionGate.status,
     canAutomateWithoutRobert: summary.externalActionGate.canAutomateWithoutRobert,
     missingProofUrls: summary.externalActionGate.missingProofUrls,
+    proofLinksDropStatus: summary.proofLinksDropAudit.status,
+    proofLinksDropExtractedUrls: summary.proofLinksDropAudit.extractedUrls,
     nextStep: summary.nextStep,
     operatorNextActions: summary.operatorNextActions.length,
     nextActionsCsvPath: paths.outNextActionsCsv,

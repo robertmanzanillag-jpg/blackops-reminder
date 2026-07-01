@@ -770,6 +770,18 @@ interface ClipperGoalCompletionAuditSummary {
     reason: string;
     nextStep: string;
   };
+  proofLinksDropAudit?: {
+    status: "missing" | "empty" | "blocked_secret_like" | "starter_waiting_for_urls" | "ready_for_preview" | "needs_urls";
+    found: boolean;
+    sourcePath: string;
+    bytes: number;
+    extractedUrls: number;
+    blankProofLines: number;
+    starterLike: boolean;
+    unsafeBlocked: boolean;
+    nextButton: string;
+    nextStep: string;
+  };
   requirements: Array<{
     id: string;
     label: string;
@@ -22684,6 +22696,42 @@ export default function ClippersPage() {
                       </div>
                     )}
                     <p className="mt-2 text-xs leading-5 text-zinc-400">{goalCompletionAudit.externalActionGate.nextStep}</p>
+                  </div>
+                )}
+                {goalCompletionAudit.proofLinksDropAudit && (
+                  <div className={cn(
+                    "mt-3 rounded-md border p-3",
+                    goalCompletionAudit.proofLinksDropAudit.status === "ready_for_preview"
+                      ? "border-cyan-300/15 bg-cyan-950/10"
+                      : goalCompletionAudit.proofLinksDropAudit.status === "blocked_secret_like"
+                        ? "border-rose-300/20 bg-rose-950/10"
+                        : "border-zinc-700 bg-black/20"
+                  )} data-testid="clippers-goal-proof-links-drop-audit">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-cyan-100">Proof drop watcher</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{goalCompletionAudit.proofLinksDropAudit.nextStep}</p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        goalCompletionAudit.proofLinksDropAudit.status === "ready_for_preview"
+                          ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                          : goalCompletionAudit.proofLinksDropAudit.status === "blocked_secret_like"
+                            ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                            : "border-zinc-600 bg-zinc-900 text-zinc-300"
+                      )}>
+                        {goalCompletionAudit.proofLinksDropAudit.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-3">
+                      <p>Found: {goalCompletionAudit.proofLinksDropAudit.found ? "yes" : "no"}</p>
+                      <p>Candidate URLs: {formatNumber(goalCompletionAudit.proofLinksDropAudit.extractedUrls)}</p>
+                      <p>Blank lines: {formatNumber(goalCompletionAudit.proofLinksDropAudit.blankProofLines)}</p>
+                      <p>Starter: {goalCompletionAudit.proofLinksDropAudit.starterLike ? "yes" : "no"}</p>
+                      <p>Unsafe blocked: {goalCompletionAudit.proofLinksDropAudit.unsafeBlocked ? "yes" : "no"}</p>
+                      <p>Next: {goalCompletionAudit.proofLinksDropAudit.nextButton}</p>
+                    </div>
+                    <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionAudit.proofLinksDropAudit.sourcePath}</p>
                   </div>
                 )}
                 {goalCompletionAudit.tiktokMvpProofLinksPreviewGate && (
