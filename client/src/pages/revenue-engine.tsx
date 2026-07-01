@@ -207,7 +207,7 @@ type RevenueSnapshot = {
       verificationCommands: string[];
       blockedActions: string[];
       deploymentApprovalPacket: {
-        status: "waiting_for_external_evidence";
+        status: "waiting_for_external_evidence" | "approved";
         requiredSummaryFields: string[];
         rollbackPlan: string;
         deployApprovalAsk: string;

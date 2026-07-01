@@ -5716,6 +5716,88 @@ function applyRevenueProductionPersistenceGate(input: {
   };
 }
 
+function buildRevenueProductionReleaseEvidence(workspaces: RevenueDeliveryWorkspace[]) {
+  const releaseReadyWorkspace = workspaces.find((workspace) =>
+    workspace.input.prUrl
+    && workspace.input.secondReviewStatus === "pass"
+    && workspace.input.secondReviewEvidenceUrl
+    && workspace.input.appQaStatus === "pass"
+    && workspace.input.appQaEvidenceUrl
+    && workspace.input.deploymentApprovalStatus === "approved"
+    && workspace.input.deploymentApprovalUrl
+    && revenueWebsiteWorkspaceSaleGate(workspace).blockers.length === 0
+  );
+  const partialPrReviewWorkspace = workspaces.find((workspace) =>
+    workspace.input.prUrl
+    && workspace.input.secondReviewStatus === "pass"
+    && workspace.input.secondReviewEvidenceUrl
+  );
+  const partialAppQaWorkspace = workspaces.find((workspace) =>
+    workspace.input.prUrl
+    && workspace.input.appQaStatus === "pass"
+    && workspace.input.appQaEvidenceUrl
+  );
+  const partialDeploymentApprovalWorkspace = workspaces.find((workspace) =>
+    workspace.input.prUrl
+    && workspace.input.deploymentApprovalStatus === "approved"
+    && workspace.input.deploymentApprovalUrl
+  );
+
+  return {
+    prReview: releaseReadyWorkspace
+      ? {
+          status: "ready" as const,
+          workspaceId: releaseReadyWorkspace.id,
+          evidenceUrl: releaseReadyWorkspace.input.secondReviewEvidenceUrl,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has approved second-agent review evidence on ${releaseReadyWorkspace.input.prUrl}.`,
+          nextStep: "Mantener evidencia del review en el PR antes de merge/deploy.",
+        }
+      : {
+          status: "blocked" as const,
+          workspaceId: "",
+          evidenceUrl: "",
+          evidence: partialPrReviewWorkspace
+            ? `${partialPrReviewWorkspace.input.clientName} has PR review evidence, but not a complete same-workspace release packet.`
+            : "No delivery workspace has persisted PR review evidence.",
+          nextStep: "Registrar PR review, App QA y aprobacion de deploy en el mismo release gate del workspace.",
+        },
+    appQa: releaseReadyWorkspace
+      ? {
+          status: "ready" as const,
+          workspaceId: releaseReadyWorkspace.id,
+          evidenceUrl: releaseReadyWorkspace.input.appQaEvidenceUrl,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has App QA evidence on ${releaseReadyWorkspace.input.prUrl}.`,
+          nextStep: "Mantener App QA sin warnings/failures antes de deploy.",
+        }
+      : {
+          status: "blocked" as const,
+          workspaceId: "",
+          evidenceUrl: "",
+          evidence: partialAppQaWorkspace
+            ? `${partialAppQaWorkspace.input.clientName} has App QA evidence, but not a complete same-workspace release packet.`
+            : "No delivery workspace has persisted App QA release-gate evidence.",
+          nextStep: "Registrar PR review, App QA y aprobacion de deploy en el mismo release gate del workspace.",
+        },
+    deploymentApproval: releaseReadyWorkspace
+      ? {
+          status: "ready" as const,
+          workspaceId: releaseReadyWorkspace.id,
+          evidenceUrl: releaseReadyWorkspace.input.deploymentApprovalUrl,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has explicit Robert deploy approval evidence.`,
+          nextStep: "Usar la aprobacion registrada solo para el deploy descrito por ese PR/workspace.",
+        }
+      : {
+          status: "blocked" as const,
+          workspaceId: "",
+          evidenceUrl: "",
+          evidence: partialDeploymentApprovalWorkspace
+            ? `${partialDeploymentApprovalWorkspace.input.clientName} has Robert deploy approval evidence, but not a complete same-workspace release packet.`
+            : "No delivery workspace has explicit Robert deploy approval evidence.",
+          nextStep: "Registrar PR review, App QA y aprobacion de deploy en el mismo release gate del workspace.",
+        },
+  };
+}
+
 function buildRevenueMoneyActivationPlan(input: {
   launchReadiness: ReturnType<typeof applyRevenueProductionPersistenceGate>["launchReadiness"];
   dailyMoneyCommand: RevenueDailyMoneyCommand;
@@ -5723,6 +5805,7 @@ function buildRevenueMoneyActivationPlan(input: {
   publicLeadImportQueue: RevenuePublicLeadImportQueue;
   systemReadiness: ReturnType<typeof buildRevenueSystemReadiness>;
   agentOperatingContract: ReturnType<typeof buildRevenueAgentOperatingContract>;
+  releaseEvidence: ReturnType<typeof buildRevenueProductionReleaseEvidence>;
 }) {
   const productionPersistence = input.systemReadiness.items.find((item) => item.id === "production_persistence");
   const hardMissing = [
@@ -5775,9 +5858,7 @@ function buildRevenueMoneyActivationPlan(input: {
       ...input.publicLeadImportQueue.safety.blockedActions,
     ])),
   };
-  const productionLaunchChecklist = {
-    status: "blocked" as const,
-    requiredEvidence: [
+  const requiredLaunchEvidence = [
       {
         id: "production_database",
         label: "DATABASE_URL real",
@@ -5788,25 +5869,29 @@ function buildRevenueMoneyActivationPlan(input: {
       {
         id: "pr_review",
         label: "PR review independiente",
-        status: "blocked" as const,
-        evidence: "PR #55 debe tener review/checker aprobado antes de merge.",
-        nextStep: "Mantener PR-first; adjuntar second-agent review y checks antes de decir ready.",
+        status: input.releaseEvidence.prReview.status,
+        evidence: input.releaseEvidence.prReview.evidence,
+        nextStep: input.releaseEvidence.prReview.nextStep,
       },
       {
         id: "app_qa_release_gate",
         label: "App QA release gate",
-        status: "blocked" as const,
-        evidence: "App QA debe pasar rutas, links/clicks, API, errores e improvements antes de deploy.",
-        nextStep: "Correr App QA contra entorno objetivo y pegar evidencia URL/comentario en el release gate.",
+        status: input.releaseEvidence.appQa.status,
+        evidence: input.releaseEvidence.appQa.evidence,
+        nextStep: input.releaseEvidence.appQa.nextStep,
       },
       {
         id: "robert_deploy_approval",
         label: "Aprobacion explicita de deploy",
-        status: "blocked" as const,
-        evidence: "Replit deploy requiere aprobacion humana aunque todo pase.",
-        nextStep: "Pedir aprobacion explicita de Robert despues del resumen PR/QA/rollback.",
+        status: input.releaseEvidence.deploymentApproval.status,
+        evidence: input.releaseEvidence.deploymentApproval.evidence,
+        nextStep: input.releaseEvidence.deploymentApproval.nextStep,
       },
-    ],
+    ];
+  const blockedLaunchEvidence = requiredLaunchEvidence.filter((item) => item.status !== "ready");
+  const productionLaunchChecklist = {
+    status: blockedLaunchEvidence.length === 0 ? "ready" as const : "blocked" as const,
+    requiredEvidence: requiredLaunchEvidence,
     verificationCommands: [
       "npm run test:revenue-engine",
       "npm run test:developer-autopilot",
@@ -5820,7 +5905,7 @@ function buildRevenueMoneyActivationPlan(input: {
       "Replit deploy before Robert approval",
     ],
     deploymentApprovalPacket: {
-      status: "waiting_for_external_evidence" as const,
+      status: blockedLaunchEvidence.length === 0 ? "approved" as const : "waiting_for_external_evidence" as const,
       requiredSummaryFields: [
         "PR URL",
         "files changed",
@@ -5833,12 +5918,9 @@ function buildRevenueMoneyActivationPlan(input: {
       ],
       rollbackPlan: "Revertir el PR o volver al deployment anterior; no hacer Replit deploy si App QA tiene warning/failure.",
       deployApprovalAsk: "Robert, apruebas explicitamente el deploy de Replit despues de revisar PR, tests, App QA, riesgos y rollback?",
-      blockedUntil: [
-        "PR merged/reviewed with second-agent evidence",
-        "App QA release gate passes without warnings",
-        "DATABASE_URL production persistence is real",
-        "Robert explicitly approves Replit deploy",
-      ],
+      blockedUntil: blockedLaunchEvidence.length > 0
+        ? blockedLaunchEvidence.map((item) => `${item.label}: ${item.nextStep}`)
+        : ["none"],
     },
   };
   const copyableProductionLaunchChecklist = [
@@ -6262,6 +6344,7 @@ export function getRevenueEngineSnapshot() {
     publicLeadImportQueue,
     systemReadiness,
     agentOperatingContract,
+    releaseEvidence: buildRevenueProductionReleaseEvidence(revenueDeliveryWorkspaces),
   });
 
   return {

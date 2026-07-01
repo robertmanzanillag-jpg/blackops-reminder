@@ -4699,6 +4699,9 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
 });
 
 test("trusted release gate persists PR App QA review and deploy approval for website delivery", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const created = createSoldWebsiteWorkspaceForTest({
     businessName: "Trusted Release Cafe",
     contactEmail: "owner@trustedrelease.example",
@@ -4734,6 +4737,90 @@ test("trusted release gate persists PR App QA review and deploy approval for web
   assert.equal(releaseGate.workspace?.codexBuildHandoff.missing.length, 0);
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, true);
   assert.equal(releaseGate.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+  assert.equal(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.status, "ready");
+  assert.equal(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.status, "approved");
+  assert.deepEqual(
+    releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.map((item) => [item.id, item.status]),
+    [
+      ["production_database", "ready"],
+      ["pr_review", "ready"],
+      ["app_qa_release_gate", "ready"],
+      ["robert_deploy_approval", "ready"],
+    ],
+  );
+  assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Trusted Release Cafe/);
+  assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Status: ready/);
+  assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Blocked until:\n  - none/);
+});
+
+test("production launch checklist requires one coherent release-gated sold workspace", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  const reviewed = createSoldWebsiteWorkspaceForTest({
+    businessName: "Reviewed Only Cafe",
+    contactEmail: "owner@reviewedonly.example",
+    sourceUrl: "https://example.com/reviewed-only-cafe",
+    mockupSlug: "reviewed-only-cafe",
+    projectType: "website",
+  });
+  const appQa = createSoldWebsiteWorkspaceForTest({
+    businessName: "App QA Only Cafe",
+    contactEmail: "owner@appqaonly.example",
+    sourceUrl: "https://example.com/app-qa-only-cafe",
+    mockupSlug: "app-qa-only-cafe",
+    projectType: "website",
+  });
+  const approved = createSoldWebsiteWorkspaceForTest({
+    businessName: "Approved Only Cafe",
+    contactEmail: "owner@approvedonly.example",
+    sourceUrl: "https://example.com/approved-only-cafe",
+    mockupSlug: "approved-only-cafe",
+    projectType: "website",
+  });
+
+  updateRevenueDeliveryWorkspaceQa({
+    workspaceId: reviewed.workspace.id,
+    repoFullName: "robert/reviewed-only-cafe",
+    branchName: "codex/client-reviewed-only-cafe-website",
+    githubIssueUrl: "https://github.com/robert/reviewed-only-cafe/issues/1",
+    prUrl: "https://github.com/robert/reviewed-only-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/reviewed-only-cafe/pull/2#pullrequestreview-1",
+  }, { allowGithubIssueEvidence: true, allowReleaseGateEvidence: true });
+  updateRevenueDeliveryWorkspaceQa({
+    workspaceId: appQa.workspace.id,
+    repoFullName: "robert/app-qa-only-cafe",
+    branchName: "codex/client-app-qa-only-cafe-website",
+    githubIssueUrl: "https://github.com/robert/app-qa-only-cafe/issues/1",
+    prUrl: "https://github.com/robert/app-qa-only-cafe/pull/2",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/app-qa-only-cafe/pull/2#issuecomment-app-qa",
+  }, { allowGithubIssueEvidence: true, allowReleaseGateEvidence: true });
+  updateRevenueDeliveryWorkspaceQa({
+    workspaceId: approved.workspace.id,
+    repoFullName: "robert/approved-only-cafe",
+    branchName: "codex/client-approved-only-cafe-website",
+    githubIssueUrl: "https://github.com/robert/approved-only-cafe/issues/1",
+    prUrl: "https://github.com/robert/approved-only-cafe/pull/2",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/approved-only-cafe/pull/2#issuecomment-approval",
+  }, { allowGithubIssueEvidence: true, allowReleaseGateEvidence: true });
+
+  const checklist = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist;
+
+  assert.equal(checklist.status, "blocked");
+  assert.equal(checklist.deploymentApprovalPacket.status, "waiting_for_external_evidence");
+  assert.deepEqual(
+    checklist.requiredEvidence.map((item) => [item.id, item.status]),
+    [
+      ["production_database", "ready"],
+      ["pr_review", "blocked"],
+      ["app_qa_release_gate", "blocked"],
+      ["robert_deploy_approval", "blocked"],
+    ],
+  );
+  assert.match(checklist.copyableChecklist, /same-workspace release packet/);
 });
 
 test("trusted release gate blocks anchored evidence without fresh PR status check", () => {
@@ -4767,6 +4854,9 @@ test("trusted release gate blocks anchored evidence without fresh PR status chec
 });
 
 test("trusted release gate blocks direct website workspace without sold opportunity chain", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const created = recordRevenueDeliveryWorkspace({
     workspaceName: "Direct release website",
     clientName: "Direct Release Cafe",
@@ -4806,6 +4896,49 @@ test("trusted release gate blocks direct website workspace without sold opportun
   assert.match(releaseGate.reason, /sourceOpportunityId vendido requerido/);
   assert.equal(releaseGate.workspace?.input.prUrl || "", "");
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
+});
+
+test("production launch checklist ignores direct workspace release fields without sold opportunity chain", () => {
+  process.env.NODE_ENV = "production";
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  recordRevenueDeliveryWorkspace({
+    workspaceName: "Injected release website",
+    clientName: "Injected Release Cafe",
+    projectType: "website",
+    packageName: "Website 3D Premium",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Attempt to seed release evidence directly.",
+    repoFullName: "robert/injected-release-cafe",
+    branchName: "codex/client-injected-release-cafe-website",
+    githubIssueUrl: "https://github.com/robert/injected-release-cafe/issues/1",
+    prUrl: "https://github.com/robert/injected-release-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/injected-release-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/injected-release-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/injected-release-cafe/pull/2#issuecomment-approval",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+
+  const checklist = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist;
+
+  assert.equal(checklist.status, "blocked");
+  assert.equal(checklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "ready"), true);
+  assert.equal(checklist.requiredEvidence.some((item) => item.id === "pr_review" && item.status === "blocked"), true);
+  assert.equal(checklist.requiredEvidence.some((item) => item.id === "app_qa_release_gate" && item.status === "blocked"), true);
+  assert.equal(checklist.requiredEvidence.some((item) => item.id === "robert_deploy_approval" && item.status === "blocked"), true);
 });
 
 test("trusted release gate blocks forged or incomplete release evidence", () => {
