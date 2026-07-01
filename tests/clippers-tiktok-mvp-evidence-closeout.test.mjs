@@ -965,6 +965,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /import-clippers-tiktok-mvp-proof-links-drop-button/);
   assert.match(page, /create-clippers-tiktok-mvp-proof-links-drop-starter-button/);
   assert.match(page, /ingest-clippers-tiktok-mvp-proof-links-drop-button/);
+  assert.match(page, /goal-create-clippers-tiktok-mvp-proof-links-drop-starter-button/);
+  assert.match(page, /goal-import-clippers-tiktok-mvp-proof-links-drop-button/);
+  assert.match(page, /goal-ingest-clippers-tiktok-mvp-proof-links-drop-button/);
+  assert.match(page, /refreshTikTokProofDropAuditCaches/);
+  assert.match(page, /queryClient\.invalidateQueries\(\{ queryKey: \["\/api\/clippers\/goal-completion-audit"\] \}\)/);
   assert.match(page, /tiktokMvpProofLinksDropIngestMutation/);
   assert.match(page, /tiktokMvpProofLinksDropStarterMutation/);
   assert.match(page, /starterKind/);

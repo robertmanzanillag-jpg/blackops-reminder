@@ -11279,6 +11279,10 @@ export default function ClippersPage() {
     void refetchMetricoolSourceUploadPack();
     void refetchMetricoolOperatorCloseoutPack();
   };
+  const refreshTikTokProofDropAuditCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/goal-completion-audit"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/clippers/tiktok-mvp-proof-links-drop-status"] });
+  };
   const { data: accountPermissionReadiness } = useQuery<ClipperAccountPermissionReadinessSummary | null>({
     queryKey: ["/api/clippers/account-permission-readiness"],
     queryFn: async () => {
@@ -12185,6 +12189,7 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksDropImport.proofLinksPreview);
       setTiktokMvpProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
+      refreshTikTokProofDropAuditCaches();
       const dropChecklist = data.tiktokMvpProofLinksDropImport.proofLinksPreview.lanes.flatMap((lane) => [
         { laneKey: lane.key, accountName: lane.accountName, field: "accountOwnershipProofUrl", label: "TikTok ownership proof", status: lane.accountProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real safe HTTPS proof URL, non-Metricool, no tokens/cookies/signed params" },
         { laneKey: lane.key, accountName: lane.accountName, field: "metricoolConnectionProofUrl", label: "Metricool connection proof", status: lane.metricoolProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params" },
@@ -12237,6 +12242,7 @@ export default function ClippersPage() {
       if (data.tiktokMvpProofHandoff) {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-handoff"], data.tiktokMvpProofHandoff);
       }
+      refreshTikTokProofDropAuditCaches();
       toast({
         title: data.tiktokMvpProofLinksDropStarter.status === "created" ? "Starter creado" : "Starter existente preservado",
         description: `${data.tiktokMvpProofLinksDropStarter.starterKind || "proof_packet"}: ${data.tiktokMvpProofLinksDropStarter.nextStep}`,
@@ -12293,6 +12299,7 @@ export default function ClippersPage() {
       if (data.tiktokMvpReadinessVerifier) queryClient.setQueryData(["/api/clippers/tiktok-mvp-readiness-verifier"], data.tiktokMvpReadinessVerifier);
       if (data.tiktokNextAction) queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       if (data.metricoolBridgeEvidenceCsvStatus) queryClient.setQueryData(["/api/clippers/metricool-bridge-evidence-csv-status"], data.metricoolBridgeEvidenceCsvStatus);
+      refreshTikTokProofDropAuditCaches();
       toast({
         title: data.postProofRefreshError ? "Drop guardado con blockers" : "Drop ingerido y refrescado",
         description: data.postProofRefreshError || data.tiktokMvpProofLinksDropIngest.nextStep,
@@ -22732,6 +22739,44 @@ export default function ClippersPage() {
                       <p>Next: {goalCompletionAudit.proofLinksDropAudit.nextButton}</p>
                     </div>
                     <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionAudit.proofLinksDropAudit.sourcePath}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => tiktokMvpProofLinksDropStarterMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading}
+                        className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                        data-testid="goal-create-clippers-tiktok-mvp-proof-links-drop-starter-button"
+                      >
+                        {tiktokMvpProofLinksDropStarterMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-2 h-3.5 w-3.5" />}
+                        Create starter
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => tiktokMvpProofLinksDropImportMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading || goalCompletionAudit.proofLinksDropAudit.status === "missing" || goalCompletionAudit.proofLinksDropAudit.status === "empty" || goalCompletionAudit.proofLinksDropAudit.status === "blocked_secret_like"}
+                        className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10 disabled:border-zinc-700 disabled:text-zinc-500"
+                        data-testid="goal-import-clippers-tiktok-mvp-proof-links-drop-button"
+                      >
+                        {tiktokMvpProofLinksDropImportMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-2 h-3.5 w-3.5" />}
+                        Import preview
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => tiktokMvpProofLinksDropIngestMutation.mutate()}
+                        disabled={tiktokProofFlowBusy || isLoading || tiktokMvpProofLinksDropStatus?.status !== "ready_for_import"}
+                        className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10 disabled:border-zinc-700 disabled:text-zinc-500"
+                        data-testid="goal-ingest-clippers-tiktok-mvp-proof-links-drop-button"
+                      >
+                        {tiktokMvpProofLinksDropIngestMutation.isPending ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-2 h-3.5 w-3.5" />}
+                        Safe ingest
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {goalCompletionAudit.tiktokMvpProofLinksPreviewGate && (
