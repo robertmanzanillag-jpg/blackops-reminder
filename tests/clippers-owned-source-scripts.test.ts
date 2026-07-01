@@ -8018,6 +8018,12 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /prepare-clippers-goal-completion-audit-button/);
   assert.match(page, /clippers-goal-completion-audit-panel/);
   assert.match(page, /clippers-goal-operating-mode/);
+  assert.match(page, /tiktokMvpProofLinksPreviewGate\?:/);
+  assert.match(page, /clippers-goal-proof-links-preview-gate/);
+  assert.match(page, /Proof links preview gate/);
+  assert.match(page, /goalCompletionAudit\.tiktokMvpProofLinksPreviewGate\.readyForSave/);
+  assert.match(page, /Raw stored: \{String\(goalCompletionAudit\.tiktokMvpProofLinksPreviewGate\.rawStored\)\}/);
+  assert.match(page, /Proof fields:/);
   assert.match(page, /TikTok \+ Metricool only/);
   assert.match(page, /Direct APIs:/);
   assert.match(page, /Goal completion audit/);

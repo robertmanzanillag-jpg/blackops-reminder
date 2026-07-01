@@ -712,12 +712,30 @@ interface ClipperGoalCompletionAuditSummary {
   };
   fullGoal?: {
     metricoolMvpReady: boolean;
+    tiktokMvpProofGateReady?: boolean;
+    tiktokMvpOperatingProofGateReady?: boolean;
+    tiktokMvpProofRefreshReady?: boolean;
     externalProofFilesNeedRealEvidence: number;
     tiktokExternalCloseoutTasks: number;
+    tiktokExternalDeferredTasks?: number;
     fullReadinessMissing: number;
     allAccountsVerified: boolean;
     allDirectApiPermissionsReady: boolean;
     allPublishedEvidenceReady: boolean;
+  };
+  tiktokMvpProofLinksPreviewGate?: {
+    status: "missing" | "ready_for_save" | "blocked_preview_not_clean" | "blocked_missing_or_stale_preview";
+    generatedAt: string;
+    fresh: boolean;
+    readyForSave: boolean;
+    rawStored: boolean | "unknown";
+    rawStoredExplicitFalse?: boolean;
+    rawHashPresent: boolean;
+    readyProofFields: number;
+    totalProofFields: number;
+    issues: number;
+    path: string;
+    nextStep: string;
   };
   requirements: Array<{
     id: string;
@@ -22412,6 +22430,33 @@ export default function ClippersPage() {
                       <p>Direct APIs: {goalCompletionAudit.operatingMode.directSocialApisRequired ? "required" : "deferred"}</p>
                       <p>Deferred: {goalCompletionAudit.operatingMode.deferredPlatforms.join(", ") || "none"}</p>
                     </div>
+                  </div>
+                )}
+                {goalCompletionAudit.tiktokMvpProofLinksPreviewGate && (
+                  <div className="mt-3 rounded-md border border-cyan-300/10 bg-cyan-950/10 p-3" data-testid="clippers-goal-proof-links-preview-gate">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-cyan-100">Proof links preview gate</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{goalCompletionAudit.tiktokMvpProofLinksPreviewGate.nextStep}</p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        goalCompletionAudit.tiktokMvpProofLinksPreviewGate.readyForSave
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>
+                        {goalCompletionAudit.tiktokMvpProofLinksPreviewGate.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-3">
+                      <p>Fresh: {goalCompletionAudit.tiktokMvpProofLinksPreviewGate.fresh ? "yes" : "no"}</p>
+                      <p>Ready for save: {goalCompletionAudit.tiktokMvpProofLinksPreviewGate.readyForSave ? "yes" : "no"}</p>
+                      <p>Raw stored: {String(goalCompletionAudit.tiktokMvpProofLinksPreviewGate.rawStored)}</p>
+                      <p>Raw hash: {goalCompletionAudit.tiktokMvpProofLinksPreviewGate.rawHashPresent ? "present" : "missing"}</p>
+                      <p>Proof fields: {formatNumber(goalCompletionAudit.tiktokMvpProofLinksPreviewGate.readyProofFields)}/{formatNumber(goalCompletionAudit.tiktokMvpProofLinksPreviewGate.totalProofFields)}</p>
+                      <p>Issues: {formatNumber(goalCompletionAudit.tiktokMvpProofLinksPreviewGate.issues)}</p>
+                    </div>
+                    <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionAudit.tiktokMvpProofLinksPreviewGate.path}</p>
                   </div>
                 )}
                 <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">
