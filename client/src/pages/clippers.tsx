@@ -16942,6 +16942,21 @@ export default function ClippersPage() {
     });
   };
 
+  const loadTiktokMvpProofHandoffPacket = (packetText?: string) => {
+    const cleanPacket = (packetText || "").trim();
+    if (!cleanPacket) return;
+    setTiktokMvpProofLinksPasteText(cleanPacket);
+    setTiktokMvpProofLinksPastePreview(null);
+    setTiktokMvpProofLinksPreview(null);
+    setTiktokMvpProofLinksSaveReceipt(null);
+    setTiktokMvpProofLinksPreviewGate(null);
+    markGoalCompletionProofLinksPreviewGateStale();
+    toast({
+      title: "Proof packet loaded",
+      description: "Add real non-secret URLs and your own confirmation notes, then run Preview links before saving.",
+    });
+  };
+
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
     const uniqueEnvVars = Array.from(new Set(envVars.map((envVar) => envVar.trim()).filter(Boolean)));
     if (!uniqueEnvVars.length) return;
@@ -19127,10 +19142,7 @@ export default function ClippersPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                        setTiktokMvpProofLinksPasteText(tiktokMvpProofHandoff?.pastePacketText || "");
-                        setTiktokMvpProofLinksPastePreview(null);
-                      }}
+                      onClick={() => loadTiktokMvpProofHandoffPacket(tiktokMvpProofHandoff?.pastePacketText)}
                       disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofHandoff?.pastePacketText}
                       className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
                       data-testid="load-clippers-tiktok-mvp-proof-links-paste-packet-button"
@@ -19142,10 +19154,7 @@ export default function ClippersPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                        setTiktokMvpProofLinksPasteText(tiktokMvpProofHandoff?.fastPathPastePacketText || "");
-                        setTiktokMvpProofLinksPastePreview(null);
-                      }}
+                      onClick={() => loadTiktokMvpProofHandoffPacket(tiktokMvpProofHandoff?.fastPathPastePacketText)}
                       disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofHandoff?.fastPathPastePacketText}
                       className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
                       data-testid="load-clippers-tiktok-mvp-proof-links-fast-path-packet-button"
