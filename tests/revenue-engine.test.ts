@@ -1462,6 +1462,56 @@ test("verified scout connector intake records review-only candidates without imp
   assert.equal(result.snapshot.recentLedger.length, 0);
 });
 
+test("verified scout connector normalized rows cannot bypass review through Money Sprint", () => {
+  const connectorResult = recordRevenueVerifiedScoutConnectorResults({
+    area: "Miami",
+    niche: "coffee shop",
+    connectorName: "Local browser scout",
+    connectorRunId: "connector-review-gate-run",
+    sourceTaskId: "connector-review-gate",
+    results: [
+      {
+        businessName: "Review Gate Cafe",
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@reviewgatecafe",
+        recipientEmail: "owner@reviewgate.example",
+        sourceUrl: "https://instagram.com/reviewgatecafe",
+        evidence: "Public Instagram profile has no dedicated website and current catering posts with visible owner email.",
+        painPoint: "Needs online menu, catering quote capture and follow-up.",
+        estimatedOfferUsd: 4200,
+      },
+    ],
+  });
+
+  assert.equal(connectorResult.status, "needs_review");
+  assert.match(connectorResult.normalizedBatchText, /public_candidate_review_gate=needs_review/);
+
+  const sprint = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: connectorResult.normalizedBatchText,
+  });
+
+  assert.equal(sprint.status, "needs_lead_evidence");
+  assert.equal(sprint.recordedLeads.length, 0);
+  assert.equal(sprint.previews.length, 0);
+  assert.equal(sprint.outreachDrafts.length, 0);
+  assert.equal(sprint.blockedSeeds.some((seed) => seed.reason.includes("public candidate review required")), true);
+  assert.equal(sprint.snapshot.recentLeads.length, 0);
+  assert.equal(sprint.snapshot.recentOutreach.length, 0);
+  assert.equal(sprint.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(sprint.snapshot.publicLeadImportQueue.blockedCount, 1);
+});
+
 test("verified scout connector rejects invalid rows before persisting partial candidates", () => {
   assert.throws(
     () => recordRevenueVerifiedScoutConnectorResults({

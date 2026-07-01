@@ -357,9 +357,12 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(routeSource, /recordRevenueVerifiedScoutConnectorResults\(input\)/);
   assert.match(routeSource, /revenuePublicScoutAgentCommandSchema\.parse/);
   assert.match(uiSource, /publicScoutEvidenceMutation/);
+  assert.match(uiSource, /publicScoutConnectorIntakeMutation/);
   assert.match(uiSource, /publicScoutAgentCommandMutation/);
   assert.match(uiSource, /textarea-public-scout-evidence/);
+  assert.match(uiSource, /textarea-public-scout-connector-results/);
   assert.match(uiSource, /button-normalize-public-scout-evidence/);
+  assert.match(uiSource, /button-record-public-scout-connector-intake/);
   assert.match(uiSource, /Submitir slot del sprint/);
   assert.match(uiSource, /checkbox-public-scout-evidence-verified/);
   assert.match(uiSource, /checkbox-public-scout-approval-import/);
@@ -370,6 +373,11 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(uiSource, /button-run-public-scout-agent-command/);
   assert.match(uiSource, /const \[publicScoutEvidenceText, setPublicScoutEvidenceText\] = useState\(""\)/);
   assert.doesNotMatch(uiSource, /useState\(\[\s*"Business: No Site Cafe"/);
+  const connectorMutationSource = uiSource.split("const publicScoutAgentCommandMutation")[0].split("const publicScoutConnectorIntakeMutation")[1] || "";
+  assert.doesNotMatch(connectorMutationSource, /approvalToImport:\s*true/);
+  assert.doesNotMatch(connectorMutationSource, /publicEvidenceVerified:\s*true/);
+  assert.doesNotMatch(connectorMutationSource, /setSeedLeadBatchText/);
+  assert.match(engineSource, /public_candidate_review_gate=needs_review/);
 });
 
 test("Revenue Engine exposes manual outreach outcome recording", () => {

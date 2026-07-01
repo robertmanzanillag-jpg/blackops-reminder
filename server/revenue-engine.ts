@@ -6800,6 +6800,9 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
         ? "needs_review" as const
         : "empty" as const,
     normalizedBatchText: [
+      parsed.publicEvidenceVerified && parsed.approvalToImport
+        ? "# public_candidate_review_gate=approved"
+        : "# public_candidate_review_gate=needs_review",
       "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
       ...candidates.map((candidate) => revenueCandidateBatchRow(candidate)),
     ].join("\n"),
@@ -10406,6 +10409,16 @@ export function parseRevenueMoneySprintSeedLeadBatch(
   batchText: string,
   defaults: Pick<RevenueMoneySprintInput, "area" | "niche">,
 ): { seedLeads: RevenueMoneySprintSeedLeadInput[]; blockedSeeds: Array<{ businessName: string; reason: string }> } {
+  if (/#\s*public_candidate_review_gate\s*=\s*needs_review\b/i.test(batchText)) {
+    return {
+      seedLeads: [],
+      blockedSeeds: [{
+        businessName: "public candidate batch",
+        reason: "public candidate review required before Money Sprint",
+      }],
+    };
+  }
+
   const lines = batchText
     .split(/\r?\n/)
     .map((line) => line.trim())

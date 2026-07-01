@@ -1506,6 +1506,34 @@ type RevenuePublicScoutAgentCommandResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenueVerifiedScoutConnectorIntakeResult = {
+  status: "needs_review" | "ready_for_preview" | "empty";
+  reason: string;
+  connector: {
+    name: string;
+    runId: string;
+    resultCount: number;
+    executionMode: "verified_connector_review_only";
+    approvalLocked: boolean;
+  };
+  evidenceResult: RevenuePublicScoutEvidenceResult;
+  normalizedBatchText: string;
+  recordedCount: number;
+  importableCount: number;
+  blockedCount: number;
+  safety: {
+    persistsCandidates: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    spendsMoney: boolean;
+    writesPreviewFiles: boolean;
+    requiresRobertReview: boolean;
+    blockedActions: string[];
+  };
+  nextAction: string;
+  snapshot: RevenueSnapshot;
+};
+
 type RevenueMockupTemplatePack = {
   status: "ready" | "needs_spend_approval";
   pack: {
@@ -2077,6 +2105,27 @@ export default function RevenueEnginePage() {
   const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
   const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
   const [publicScoutEvidenceText, setPublicScoutEvidenceText] = useState("");
+  const [publicScoutConnectorName, setPublicScoutConnectorName] = useState("browser-public-scout");
+  const [publicScoutConnectorRunId, setPublicScoutConnectorRunId] = useState("daily-run-001");
+  const [publicScoutConnectorResultsJson, setPublicScoutConnectorResultsJson] = useState(
+    JSON.stringify(
+      [
+        {
+          businessName: "No Site Cafe",
+          area: "Miami",
+          niche: "coffee shop",
+          websiteStatus: "no_website",
+          contactName: "Owner",
+          recipientEmail: "owner@example.com",
+          sourceUrl: "https://instagram.com/nositecafe",
+          evidence: "Instagram activo, no website en bio, menu solo en posts publicos.",
+          painPoint: "Necesita menu online, captura de catering y follow-up.",
+        },
+      ],
+      null,
+      2,
+    ),
+  );
   const [selectedDailyScoutTaskId, setSelectedDailyScoutTaskId] = useState("");
   const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
   const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
@@ -3416,6 +3465,41 @@ export default function RevenueEnginePage() {
     onSuccess: (data) => {
       const evidenceResult = "evidenceResult" in data ? data.evidenceResult : data;
       setSeedLeadBatchText(evidenceResult?.normalizedBatchText || "");
+      refetchSnapshot();
+    },
+  });
+
+  const publicScoutConnectorIntakeMutation = useMutation<RevenueVerifiedScoutConnectorIntakeResult>({
+    mutationFn: async () => {
+      let results: unknown;
+      try {
+        results = JSON.parse(publicScoutConnectorResultsJson);
+      } catch {
+        throw new Error("JSON del connector invalido");
+      }
+      if (!Array.isArray(results)) {
+        throw new Error("El connector debe enviar un array de resultados");
+      }
+
+      const response = await fetch("/api/revenue-engine/public-scout-connector-intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: activeScoutArea,
+          niche: activeScoutNiche,
+          missionId: snapshot?.latestDailyScoutSprint?.id || "",
+          sourceTaskId: activeScoutSourceTaskId,
+          connectorName: publicScoutConnectorName,
+          connectorRunId: publicScoutConnectorRunId,
+          results,
+          notes: "Recorded from Revenue Engine verified connector intake UI.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.reason || "No se pudo guardar connector intake");
+      return data;
+    },
+    onSuccess: (data) => {
       refetchSnapshot();
     },
   });
@@ -4970,6 +5054,59 @@ export default function RevenueEnginePage() {
                           Scout a Money Sprint
                         </Button>
                       </div>
+                      <div className="space-y-3 rounded-md border border-zinc-800 bg-black p-3">
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-name">
+                              Connector
+                            </label>
+                            <Input
+                              id="public-scout-connector-name"
+                              value={publicScoutConnectorName}
+                              onChange={(event) => setPublicScoutConnectorName(event.target.value)}
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-public-scout-connector-name"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-run">
+                              Run id
+                            </label>
+                            <Input
+                              id="public-scout-connector-run"
+                              value={publicScoutConnectorRunId}
+                              onChange={(event) => setPublicScoutConnectorRunId(event.target.value)}
+                              className="border-zinc-800 bg-black"
+                              data-testid="input-public-scout-connector-run"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="public-scout-connector-results">
+                            Connector results JSON
+                          </label>
+                          <Textarea
+                            id="public-scout-connector-results"
+                            value={publicScoutConnectorResultsJson}
+                            onChange={(event) => setPublicScoutConnectorResultsJson(event.target.value)}
+                            className="min-h-[150px] border-zinc-800 bg-black font-mono text-xs"
+                            data-testid="textarea-public-scout-connector-results"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          disabled={publicScoutConnectorIntakeMutation.isPending || publicScoutConnectorResultsJson.trim().length < 5}
+                          onClick={() => publicScoutConnectorIntakeMutation.mutate()}
+                          className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                          data-testid="button-record-public-scout-connector-intake"
+                        >
+                          {publicScoutConnectorIntakeMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                          Guardar connector review-only
+                        </Button>
+                        <p className="text-xs leading-5 text-zinc-500">
+                          Connector intake guarda candidatos para revision; no importa leads, no manda outreach, no gasta y no publica websites.
+                        </p>
+                      </div>
                       <Button
                         type="submit"
                         disabled={scoutingMissionMutation.isPending}
@@ -5966,6 +6103,30 @@ export default function RevenueEnginePage() {
                         </div>
                         <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
                           Deploy {publicScoutAgentCommandMutation.data.safety.deploys ? "activo" : "bloqueado"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {publicScoutConnectorIntakeMutation.data && (
+                    <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <p className="text-sm font-medium text-cyan-100">{publicScoutConnectorIntakeMutation.data.reason}</p>
+                        <Badge variant="outline" className={cn(statusTone(publicScoutConnectorIntakeMutation.data.status), "shrink-0")}>
+                          {publicScoutConnectorIntakeMutation.data.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-300">
+                        {publicScoutConnectorIntakeMutation.data.connector.name} · {publicScoutConnectorIntakeMutation.data.connector.resultCount} enviados · {publicScoutConnectorIntakeMutation.data.recordedCount} guardados · {publicScoutConnectorIntakeMutation.data.importableCount} importables · {publicScoutConnectorIntakeMutation.data.blockedCount} bloqueados
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Review {publicScoutConnectorIntakeMutation.data.safety.requiresRobertReview ? "requerido" : "libre"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Import {publicScoutConnectorIntakeMutation.data.connector.approvalLocked ? "bloqueado" : "activo"}
+                        </div>
+                        <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300">
+                          Outreach {publicScoutConnectorIntakeMutation.data.safety.sendsOutreach ? "activo" : "bloqueado"}
                         </div>
                       </div>
                     </div>
