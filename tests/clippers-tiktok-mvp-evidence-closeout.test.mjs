@@ -889,6 +889,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-unblocker-fixes/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblock-board/);
+  assert.match(page, /clippers-tiktok-mvp-proof-fast-path-rows/);
   assert.match(page, /clippers-tiktok-mvp-proof-unblock-board-rows/);
   assert.match(page, /unblockBoard\.impact\.metricool100SourceReadyBatches/);
   assert.match(page, /paths\.unblockBoardCsv/);
@@ -1897,6 +1898,11 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(report.unblockBoard.impact.metricool100SourceReadyBatches, 10);
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
   assert.equal(report.unblockBoard.impact.metricool100BlockedBatches, 10);
+  assert.equal(report.unblockBoard.fastPathRows.length, 2);
+  assert.match(report.unblockBoard.fastPathRows[0].exactPasteLine, /metricoolConnectionProofUrl=/);
+  assert.match(report.unblockBoard.fastPathRows[0].reuseAsOwnershipLine, /accountOwnershipProofUrl=/);
+  assert.equal(report.unblockBoard.fastPathRows[0].metricoolBrandName, "SPORT");
+  assert.equal(report.unblockBoard.fastPathRows[1].metricoolBrandName, "memes");
   assert.equal(typeof report.proofState.quickFillCurrent, "boolean");
   assert.equal(typeof report.proofState.proofRefreshFresh, "boolean");
   assert.match(report.gates.find((gate) => gate.id === "quick_fill").detail, /currentWithProofRefresh|malformed/);
@@ -1953,6 +1959,13 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
 
   const oneScreen = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-fill-one-screen.txt"), "utf8");
   assert.match(oneScreen, /TikTok MVP proof fill - one screen/);
+  assert.match(oneScreen, /Fast path first: paste these 2 real non-secret Metricool\/Drive proof URLs/);
+  assert.match(oneScreen, /Expanded fields the app prepares from the fast path/);
+  assert.doesNotMatch(oneScreen, /undefined/);
+  assert.doesNotMatch(oneScreen, /preview confirms/i);
+  assert.match(oneScreen, /Robert\/operator must manually confirm/);
+  assert.match(oneScreen, /SPORT connected to @sportsdaily/);
+  assert.match(oneScreen, /memes connected to @memeradar/);
   assert.match(oneScreen, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(oneScreen, /Minimum real proof URLs needed: 2/);

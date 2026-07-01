@@ -2810,6 +2810,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
     accountName: string;
     platform: "tiktok";
     handle: string;
+    metricoolBrandName: string;
     field: "accountOwnershipProofUrl" | "metricoolConnectionProofUrl";
     status: "ready" | "needed";
     proofUrlRule: string;
@@ -2826,6 +2827,19 @@ interface ClipperTikTokMvpProofHandoffSummary {
     readyProofs: number;
     totalProofs: number;
     blockedGates: string[];
+    fastPathRows?: Array<{
+      id: string;
+      priority: number;
+      lane: string;
+      accountName: string;
+      handle: string;
+      metricoolBrandName: string;
+      exactPasteLine: string;
+      reuseAsOwnershipLine: string;
+      status: "ready" | "needed";
+      proofUrlRule: string;
+      operatorAction: string;
+    }>;
     rows: Array<{
       id: string;
       priority: number;
@@ -19195,6 +19209,21 @@ export default function ClippersPage() {
                   </div>
                   <p className="mt-1 text-orange-100/80">{tiktokMvpProofHandoff.unblockBoard.nextAction}</p>
                   <p className="mt-1 text-zinc-500">{tiktokMvpProofHandoff.unblockBoard.impact.note}</p>
+                  {(tiktokMvpProofHandoff.unblockBoard.fastPathRows ?? []).length > 0 && (
+                    <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-fast-path-rows">
+                      {(tiktokMvpProofHandoff.unblockBoard.fastPathRows ?? []).map((row) => (
+                        <div key={row.id} className="rounded border border-emerald-300/10 bg-emerald-950/10 p-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-emerald-100">Fast path #{row.priority} {row.metricoolBrandName}</p>
+                            <Badge className="border border-emerald-300/30 bg-emerald-300/10 text-[10px] text-emerald-100">{row.handle}</Badge>
+                          </div>
+                          <p className="mt-1 font-mono text-[10px] text-zinc-300">{row.exactPasteLine}</p>
+                          <p className="mt-1 text-emerald-100/70">{row.operatorAction}</p>
+                          <p className="mt-1 font-mono text-[10px] text-zinc-500">reuse check: {row.reuseAsOwnershipLine}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {tiktokMvpProofHandoff.unblockBoard.rows.length > 0 && (
                     <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-unblock-board-rows">
                       {tiktokMvpProofHandoff.unblockBoard.rows.map((row) => (

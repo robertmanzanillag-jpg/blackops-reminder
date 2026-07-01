@@ -156,6 +156,7 @@ function buildCollectionPackets(proofDrop) {
         accountName: lane.accountName,
         platform: lane.platform,
         handle: lane.handle,
+        metricoolBrandName: lane.metricoolBrandName,
         field: "accountOwnershipProofUrl",
         status: state.accountProofReady && state.accountNotesReady ? "ready" : "needed",
         proofUrlRule: "Real safe HTTPS URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
@@ -178,6 +179,7 @@ function buildCollectionPackets(proofDrop) {
         accountName: lane.accountName,
         platform: lane.platform,
         handle: lane.handle,
+        metricoolBrandName: lane.metricoolBrandName,
         field: "metricoolConnectionProofUrl",
         status: state.metricoolProofReady && state.metricoolNotesReady ? "ready" : "needed",
         proofUrlRule: "Must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL; no passwords, tokens, cookies, recovery codes, signed/temporary URLs, x-amz/signature/expires query params, or private keys.",
@@ -270,6 +272,21 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
       operatorAction: packet.copyPrompt,
     };
   });
+  const fastPathRows = fastPathAvailable
+    ? missingMetricoolPackets.map((packet, index) => ({
+      id: `${packet.id}-fast-path`,
+      priority: index + 1,
+      lane: packet.lane,
+      accountName: packet.accountName,
+      handle: packet.handle,
+      metricoolBrandName: packet.metricoolBrandName,
+      exactPasteLine: `${packet.lane}.metricoolConnectionProofUrl=`,
+      reuseAsOwnershipLine: `${packet.lane}.accountOwnershipProofUrl=`,
+      status: packet.status,
+      proofUrlRule: packet.proofUrlRule,
+      operatorAction: `Paste one real Metricool/Drive proof URL for ${packet.metricoolBrandName} -> ${packet.handle}. Robert/operator must confirm the proof content clearly shows the TikTok profile connected under Robert control before the app reuses that same URL for ownership proof.`,
+    }))
+    : [];
   const readyRows = collectionPackets.filter((packet) => packet.status === "ready").length;
   return {
     status: rows.length ? "blocked_needs_operator_proof" : "ready_for_proof_drop",
@@ -280,6 +297,7 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
     readyProofs: readyRows,
     totalProofs: collectionPackets.length,
     blockedGates,
+    fastPathRows,
     rows,
     impact: {
       metricool100Rows: rowsCount,
@@ -365,14 +383,33 @@ function buildProofLinksJsonStarter() {
 
 function renderOneScreenProofFill(summary) {
   const rows = summary.unblockBoard.rows.length ? summary.unblockBoard.rows : buildUnblockBoard(summary.collectionPackets, summary.gates).rows;
+  const fastPathRows = summary.unblockBoard.fastPathRows || [];
   return [
     "TikTok MVP proof fill - one screen",
     "",
-    "Fill these exact lines with real non-secret HTTPS proof URLs:",
+    `Fast path first: paste these ${summary.unblockBoard.minimumProofUrlsNeeded} real non-secret Metricool/Drive proof URLs.`,
     `Minimum real proof URLs needed: ${summary.unblockBoard.minimumProofUrlsNeeded}`,
     `Fast path available: ${summary.unblockBoard.fastPathAvailable}`,
     "",
-    ...rows.map((row) => `${row.priority}. ${row.exactPasteLine}    # ${row.accountName} / ${row.field}`),
+    ...(fastPathRows.length
+      ? [
+        ...fastPathRows.map((row) => `${row.priority}. ${row.exactPasteLine}    # ${row.accountName} / ${row.metricoolBrandName} connected to ${row.handle}`),
+        "",
+        "The app validates proof URL safety and fields; Robert/operator must manually confirm each fast-path proof clearly shows Robert-controlled TikTok connection in Metricool before reusing it as ownership proof.",
+        "",
+        "Expanded fields the app prepares from the fast path:",
+        ...fastPathRows.flatMap((row) => [
+          `- ${row.exactPasteLine}<same real proof URL>`,
+          `- ${row.reuseAsOwnershipLine}<same real proof URL only if it proves ownership/control>`,
+        ]),
+      ]
+      : [
+        "Fill these exact lines with real non-secret HTTPS proof URLs:",
+        ...rows.map((row) => `${row.priority}. ${row.exactPasteLine}    # ${row.accountName} / ${row.field}`),
+      ]),
+    "",
+    "Fallback if the Metricool proof does not show ownership/control:",
+    ...rows.map((row) => `- ${row.exactPasteLine}    # ${row.accountName} / ${row.field}`),
     "",
     "Required:",
     "- Account ownership proof can be a safe HTTPS Drive/doc/proof URL showing account ownership/security review.",
