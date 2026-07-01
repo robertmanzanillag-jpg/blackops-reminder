@@ -231,7 +231,9 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
 export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
   const raw = String(rawPaste || "");
   const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const allUrls = Array.from(raw.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
+  const contentLines = lines.filter((line) => !line.startsWith("#"));
+  const nonCommentText = contentLines.join("\n");
+  const allUrls = Array.from(nonCommentText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
   const issues: string[] = [];
   if (!raw.trim()) issues.push("Paste text with SPORT and memes TikTok ownership proof plus Metricool proof URLs.");
   if (containsClipperSecretLikeText(raw)) issues.push("Paste text cannot contain passwords, tokens, cookies, keys, or recovery codes.");
@@ -247,7 +249,7 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
   }
   const lanes = Object.fromEntries(clipperTikTokMvpProofLaneSpecs.map((spec) => {
     const explicitLane = explicitFields.get(spec.key) || {};
-    const laneLines = lines.filter((line) => spec.aliases.some((alias) => line.toLowerCase().includes(alias)));
+    const laneLines = contentLines.filter((line) => spec.aliases.some((alias) => line.toLowerCase().includes(alias)));
     const laneText = laneLines.join("\n");
     const scopedUrls = Array.from(laneText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
     const candidateUrls = scopedUrls.length ? scopedUrls : allUrls;

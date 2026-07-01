@@ -81,7 +81,12 @@ function isPlaceholder(value) {
 }
 
 function candidateProofUrlCount(raw) {
-  return Array.from(String(raw || "").matchAll(/https:\/\/[^\s"'<>]+/gi))
+  const proofText = String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => !line.startsWith("#"))
+    .join("\n");
+  return Array.from(proofText.matchAll(/https:\/\/[^\s"'<>]+/gi))
     .map((match) => match[0].replace(/[),.;]+$/g, ""))
     .filter((url) => !isPlaceholder(url) && !containsUnsafeProofText(url))
     .length;

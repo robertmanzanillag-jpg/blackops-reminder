@@ -60,6 +60,25 @@ test("TikTok MVP proof links parser accepts explicit packet fields", () => {
   assert.doesNotMatch(parsed.proofLinksText, /ready_to_send|realPublishEnabled\s*:\s*true|publish/i);
 });
 
+test("TikTok MVP proof links parser ignores instruction URLs in comments", () => {
+  const parsed = extractClipperTikTokMvpProofLinksPaste([
+    "# SPORT accepted: real https://*.metricool.com/... URL or concrete Google Drive file/folder or Docs evidence URL.",
+    "sports-daily:tiktok.metricoolConnectionProofUrl=",
+    "sports-daily:tiktok.accountOwnershipProofUrl=",
+    "sports-daily:tiktok.accountNotes=Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=",
+    "meme-radar:tiktok.accountOwnershipProofUrl=",
+    "meme-radar:tiktok.accountNotes=Robert confirms this Drive proof shows Meme Radar TikTok connected under Robert control without secrets.",
+  ].join("\n"));
+
+  assert.equal(parsed.status, "needs_review");
+  assert.equal(parsed.extractedUrls, 0);
+  assert.equal(parsed.proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl, "");
+  assert.equal(parsed.proofLinks.lanes["meme-radar:tiktok"].metricoolConnectionProofUrl, "");
+  assert.match(parsed.issues.join("\n"), /could not find a safe HTTPS metricool\.com/);
+  assert.equal(parsed.realPublishEnabled, false);
+});
+
 test("TikTok MVP proof links parser can reuse clean Metricool proof as account control proof", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "SPORT Metricool connected proof https://app.metricool.com/planner/sports-daily-tiktok-proof",

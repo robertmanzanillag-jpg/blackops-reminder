@@ -2648,6 +2648,36 @@ test("Goal completion audit watches local proof drop without saving or trusting 
     assert.equal(blockedReport.proofLinksDropAudit.nextButton, "edit_drop_file");
     assert.match(blockedReport.proofLinksDropAudit.nextStep, /Remove tokens/);
     assert.equal(await readFile(proofLinksPath, "utf8").catch(() => null), previousProofLinks);
+
+    await writeFile(proofLinksFilledDropPath, [
+      "# TikTok MVP Metricool fast-path proof packet",
+      "# Accepted: real https://*.metricool.com/... URL or concrete Google Drive file/folder or Docs evidence URL.",
+      "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "sports-daily:tiktok.accountOwnershipProofUrl=",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.accountOwnershipProofUrl=",
+    ].join("\n"));
+    const starterAudit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(starterAudit.status, 0, starterAudit.stderr || starterAudit.stdout);
+    const starterOutput = JSON.parse(starterAudit.stdout);
+    assert.equal(starterOutput.proofLinksDropStatus, "starter_waiting_for_urls");
+    assert.equal(starterOutput.proofLinksDropExtractedUrls, 0);
+
+    await writeFile(proofLinksFilledDropPath, [
+      "# local operator proof drop with fallback lines",
+      "SPORT Metricool connected proof https://app.metricool.com/planner/sports-daily-tiktok-proof",
+      "memes Metricool connected proof https://docs.google.com/document/d/meme-radar-metricool-proof/edit",
+    ].join("\n"));
+    const fallbackAudit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(fallbackAudit.status, 0, fallbackAudit.stderr || fallbackAudit.stdout);
+    const fallbackOutput = JSON.parse(fallbackAudit.stdout);
+    assert.equal(fallbackOutput.proofLinksDropExtractedUrls, 2);
   } finally {
     if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
     else await writeFile(proofLinksFilledDropPath, previousDrop);
