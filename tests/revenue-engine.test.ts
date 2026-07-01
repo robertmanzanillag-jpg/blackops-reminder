@@ -2765,6 +2765,10 @@ test("snapshot builds a capped manual outreach queue from approved drafts", () =
   assert.equal(queue.items.every((item) => item.nextAction.includes("registrar contacted/reply/call/deposito")), true);
   assert.equal(queue.items.every((item) => item.copyableContactPacket.includes("Manual outreach packet")), true);
   assert.equal(queue.items.every((item) => item.copyableContactPacket.includes("Do not auto-send")), true);
+  assert.equal(queue.items.every((item) => item.paymentEvidenceRequired.length >= 4), true);
+  assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Manual close evidence packet")), true);
+  assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Scope approval must be explicit")), true);
+  assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Do not create delivery workspace")), true);
   assert.equal(queue.blocked.some((item) => item.businessName === "Needs Approval Cafe" && item.reason.includes("Robert")), true);
   assert.equal(queue.blocked.filter((item) => item.reason.includes("Daily contact limit reached")).length, 2);
 });
@@ -2834,9 +2838,12 @@ test("manual outreach queue uses public source URLs for non-email channels and c
   assert.match(instagramItem.copyableContactPacket, /Open: https:\/\/instagram\.com\/instaqueuestudio/);
   assert.match(instagramItem.copyableContactPacket, /Fallback: none/);
   assert.match(instagramItem.copyableContactPacket, /Subject:/);
+  assert.match(instagramItem.copyableCloseEvidencePacket, /Contact URL: https:\/\/instagram\.com\/instaqueuestudio/);
+  assert.match(instagramItem.copyableCloseEvidencePacket, /Keep sensitive payment artifacts out of public issues/);
   assert.equal(contactFormItem.contactUrl, "https://example.com/form-queue/contact");
   assert.equal(contactFormItem.fallbackUrl, "");
   assert.match(contactFormItem.copyableContactPacket, /Open: https:\/\/example\.com\/form-queue\/contact/);
+  assert.match(contactFormItem.copyableCloseEvidencePacket, /Contact URL: https:\/\/example\.com\/form-queue\/contact/);
   assert.equal(queue.items.some((item) => item.businessName === "Mockup Only Form"), false);
   assert.equal(queue.blockedCount, 13);
   assert.equal(queue.blocked.length, 10);

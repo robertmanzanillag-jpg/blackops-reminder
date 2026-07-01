@@ -144,7 +144,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /panel-website-build-handoff-queue/);
   assert.match(uiSource, /button-copy-website-build-brief-/);
   assert.match(uiSource, /button-copy-manual-outreach-packet-/);
+  assert.match(uiSource, /button-copy-manual-close-evidence-/);
   assert.match(uiSource, /copyableContactPacket/);
+  assert.match(uiSource, /copyableCloseEvidencePacket/);
+  assert.match(engineSource, /paymentEvidenceRequired/);
+  assert.match(engineSource, /Manual close evidence packet/);
   assert.match(uiSource, /button-create-website-opportunity-/);
   assert.match(uiSource, /panel-website-close-plan-/);
   assert.match(uiSource, /button-copy-website-close-plan-/);

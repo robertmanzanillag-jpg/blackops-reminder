@@ -682,7 +682,9 @@ type RevenueManualOutreachQueue = {
     estimatedSetupUsd: number;
     depositUsd: number;
     monthlyRetainerUsd: number;
+    paymentEvidenceRequired: string[];
     copyableContactPacket: string;
+    copyableCloseEvidencePacket: string;
     nextAction: string;
   }>;
   blocked: Array<{
@@ -3882,6 +3884,50 @@ function contactUrlForRevenueDraft(draft: RevenueOutreachDraft) {
   return draft.links.gmailCompose;
 }
 
+function buildRevenueManualCloseEvidencePacket(draft: RevenueOutreachDraft, contactUrl: string) {
+  const setupUsd = draft.pricing.totalSetupUsd.toLocaleString("en-US");
+  const depositUsd = draft.pricing.depositUsd.toLocaleString("en-US");
+  const retainerUsd = draft.pricing.monthlyRetainerUsd.toLocaleString("en-US");
+  const mockupUrl = draft.mockupUrl || "pending; attach approved preview before delivery handoff";
+  const sourceUrl = draft.sourceUrl || "pending; attach public source before delivery handoff";
+  const paymentEvidenceRequired = [
+    "Payment reference: Stripe invoice/payment id, bank/Zelle/CashApp reference, receipt URL, or provider confirmation code.",
+    `Cash collected must be at least the required deposit: $${depositUsd}.`,
+    "Scope approval must be explicit before any delivery workspace is started.",
+    "Record who approved, what package was accepted, and any promised launch deadline.",
+  ];
+
+  return {
+    paymentEvidenceRequired,
+    copyableCloseEvidencePacket: [
+      `Manual close evidence packet: ${draft.businessName}`,
+      `Draft: ${draft.id}`,
+      draft.leadId ? `Lead: ${draft.leadId}` : "Lead: not linked; connect lead before delivery.",
+      `Channel: ${draft.channel}`,
+      `Contact URL: ${contactUrl}`,
+      `Public source: ${sourceUrl}`,
+      `Mockup/preview: ${mockupUrl}`,
+      "",
+      "Accepted offer to confirm:",
+      `- Setup: $${setupUsd}`,
+      `- Deposit due before build: $${depositUsd}`,
+      `- Monthly retainer: $${retainerUsd}/mo`,
+      "",
+      "Required close evidence:",
+      ...paymentEvidenceRequired.map((item) => `- ${item}`),
+      "",
+      "Record outcome:",
+      "- Use Deposit only after Robert has verified the payment evidence.",
+      "- Notes should include the scope approval, payment reference, and next delivery promise.",
+      "- Do not create delivery workspace until deposit and scope evidence are recorded.",
+      "",
+      "Guardrails:",
+      "- Do not auto-charge, auto-send, submit forms automatically, or publish previews from this packet.",
+      "- Keep sensitive payment artifacts out of public issues and PR text.",
+    ].join("\n"),
+  };
+}
+
 function manualOutreachBlockedReason(draft: RevenueOutreachDraft) {
   const failedGate = draft.qaGates.find((gate) => !gate.passed);
   if (failedGate) return failedGate.fix;
@@ -3941,6 +3987,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
     items: readyToday.map((draft) => {
       const contactUrl = contactUrlForRevenueDraft(draft);
       const manualAction = manualActionForRevenueDraft(draft);
+      const closeEvidence = buildRevenueManualCloseEvidencePacket(draft, contactUrl);
       return {
         draftId: draft.id,
         businessName: draft.businessName,
@@ -3953,6 +4000,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
         estimatedSetupUsd: draft.pricing.totalSetupUsd,
         depositUsd: draft.pricing.depositUsd,
         monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+        paymentEvidenceRequired: closeEvidence.paymentEvidenceRequired,
         copyableContactPacket: [
           `Manual outreach packet: ${draft.businessName}`,
           `Channel: ${draft.channel}`,
@@ -3970,6 +4018,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
           "- Do not auto-send, bulk DM, submit forms automatically, or publish previews from this packet.",
           `Next action: ${manualAction}`,
         ].join("\n"),
+        copyableCloseEvidencePacket: closeEvidence.copyableCloseEvidencePacket,
         nextAction: "Revisar evidencia, abrir enlace manual y registrar contacted/reply/call/deposito desde esta cola.",
       };
     }),

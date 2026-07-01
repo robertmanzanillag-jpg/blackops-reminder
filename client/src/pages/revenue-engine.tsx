@@ -428,7 +428,9 @@ type RevenueSnapshot = {
       estimatedSetupUsd: number;
       depositUsd: number;
       monthlyRetainerUsd: number;
+      paymentEvidenceRequired: string[];
       copyableContactPacket: string;
+      copyableCloseEvidencePacket: string;
       nextAction: string;
     }>;
     blocked: Array<{
@@ -4221,6 +4223,17 @@ export default function RevenueEnginePage() {
                         >
                           <Copy className="mr-2 h-3.5 w-3.5" />
                           Copy message
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableCloseEvidencePacket)}
+                          data-testid={`button-copy-manual-close-evidence-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy close
                         </Button>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
