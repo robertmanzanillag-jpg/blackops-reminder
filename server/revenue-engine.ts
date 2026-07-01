@@ -1020,6 +1020,14 @@ type RevenueDailyMoneyCommand = {
     nextAction: string;
     status: "ready" | "waiting" | "blocked";
   }>;
+  runPacket: {
+    status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+    apiAction: string;
+    input: string;
+    output: string;
+    gate: string;
+    copyableRunPacket: string;
+  };
   copyableOperatorBrief: string;
   safety: {
     sendsOutreach: false;
@@ -5465,6 +5473,78 @@ function buildRevenueDailyMoneyCommand(input: {
   const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
     ? baseSteps.map((step) => ({ ...step, status: "blocked" as const }))
     : baseSteps;
+  const runPacketByStatus: Record<RevenueDailyMoneyCommand["status"], Omit<RevenueDailyMoneyCommand["runPacket"], "status" | "copyableRunPacket">> = {
+    search: {
+      apiAction: "/api/revenue-engine/scout-dispatch",
+      input: "area, niche, offerFocus, targetLeadCount, maxTasks, resultSlotsPerTask, maxPaidDataSpendUsd=0",
+      output: "Subagent briefs plus connector intake JSON for real public businesses.",
+      gate: "Only public sources; connector rows stay needs_review until Robert verifies evidence.",
+    },
+    sprint: {
+      apiAction: "/api/revenue-engine/money-sprint/public-candidates",
+      input: "candidateIds from verified publicLeadImportQueue, writePreviewFiles=true, requireRobertApprovalToContact=true",
+      output: "Mockups, website sales packets and draft-only outreach for approved candidates.",
+      gate: "No outreach send, paid data spend or placeholder candidates.",
+    },
+    sell: {
+      apiAction: "/api/revenue-engine/outreach-drafts/approve",
+      input: "draftId, approvedByRobert=true, notes with manual approval context",
+      output: "Approved manual contact queue entry and close packet.",
+      gate: "Robert approval required before any business contact.",
+    },
+    contact: {
+      apiAction: "/api/revenue-engine/outreach-outcome",
+      input: "draftId, manual outcome, notes, optional cash/payment reference only when verified",
+      output: "Reply/call/deposit outcome captured without auto-send.",
+      gate: "Manual-only channels stay manual; deposit requires verifiable payment evidence.",
+    },
+    collect: {
+      apiAction: "/api/revenue-engine/website-delivery-workspace",
+      input: "leadId, outreachDraftId, websiteOpportunityId, repoFullName, branchName=codex/..., depositPaid=true, scopeApproved=true, publicDataVerified=true",
+      output: "QA-gated delivery workspace plus GitHub PR-first build handoff.",
+      gate: "No workspace/build until deposit, scope and payment evidence pass.",
+    },
+    build: {
+      apiAction: "/api/revenue-engine/delivery-workspaces/github-handoff",
+      input: "workspaceId, repoFullName, branchName and public build pack",
+      output: "GitHub handoff issue/PR-first brief for second-agent review and App QA.",
+      gate: "No merge/deploy/client preview until PR, review, App QA and Robert deploy approval.",
+    },
+    blocked: {
+      apiAction: "/api/revenue-engine/expense-preflight",
+      input: "concept, amountUsd=0, estimatedInternalCostUsd=0, notes describing the blocked guardrail",
+      output: "Blocked reason and safe next action.",
+      gate: "Resolve Profit Guard or production persistence before operating with real money.",
+    },
+  };
+  const runPacketCore = status === "collect" && input.websiteDeliveryHandoffQueue.readyCount === 0 && input.websiteClosureQueue.readyCount > 0
+    ? {
+        apiAction: "/api/revenue-engine/website-opportunities/close",
+        input: "opportunityId, depositPaid, scopeApproved, cashCollectedUsd, paymentConfirmation, notes",
+        output: "Sold website opportunity once deposit and scope evidence are complete.",
+        gate: "No delivery workspace, ledger sale or build until deposit evidence and scope approval are both recorded.",
+      }
+    : runPacketByStatus[status];
+  const copyableRunPacket = [
+    "Revenue Engine next run packet",
+    "",
+    `Status: ${status}`,
+    `Primary action: ${primaryActionByStatus[status]}`,
+    `API: ${runPacketCore.apiAction}`,
+    `Input: ${runPacketCore.input}`,
+    `Output: ${runPacketCore.output}`,
+    `Gate: ${runPacketCore.gate}`,
+    "",
+    "Safety:",
+    "- Do not auto-send outreach.",
+    "- Do not spend money without Robert approval.",
+    "- Do not deploy, publish previews or merge without PR review, App QA and explicit Robert approval.",
+  ].join("\n");
+  const runPacket: RevenueDailyMoneyCommand["runPacket"] = {
+    status,
+    ...runPacketCore,
+    copyableRunPacket,
+  };
   const copyableOperatorBrief = [
     "Revenue Engine daily money command",
     "",
@@ -5481,6 +5561,9 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Delivery handoffs ready: ${funnel.deliveryHandoffsReady}`,
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
     "- Payment totals: tracked internally; do not paste amounts into public PR/client handoff text.",
+    "",
+    "Next run packet:",
+    copyableRunPacket,
     input.websiteBuildHandoffQueue.items[0] ? "" : null,
     input.websiteBuildHandoffQueue.items[0] ? "Top build handoff:" : null,
     input.websiteBuildHandoffQueue.items[0] ? `- Workspace: ${input.websiteBuildHandoffQueue.items[0].workspaceId}` : null,
@@ -5504,6 +5587,7 @@ function buildRevenueDailyMoneyCommand(input: {
     target,
     funnel,
     steps,
+    runPacket,
     copyableOperatorBrief,
     safety: {
       sendsOutreach: false,
@@ -5542,6 +5626,29 @@ function applyRevenueProductionPersistenceGate(input: {
   const ready = launchItems.filter((item) => item.status === "ready").length;
   const pendingAllowed = launchItems.filter((item) => item.status === "pending_allowed").length;
   const blocked = launchItems.filter((item) => item.status === "blocked").length;
+  const persistenceBlockedRunPacket: RevenueDailyMoneyCommand["runPacket"] = {
+    status: "blocked",
+    apiAction: "/api/revenue-engine/expense-preflight",
+    input: "concept, amountUsd=0, estimatedInternalCostUsd=0, notes=production DATABASE_URL missing",
+    output: "Blocked reason and safe next action.",
+    gate: "Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+    copyableRunPacket: [
+      "Revenue Engine next run packet",
+      "",
+      "Status: blocked",
+      "Primary action: Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+      "API: /api/revenue-engine/expense-preflight",
+      "Input: concept, amountUsd=0, estimatedInternalCostUsd=0, notes=production DATABASE_URL missing",
+      "Output: Blocked reason and safe next action.",
+      "Gate: Configure real DATABASE_URL before operating with real leads, payments or delivery.",
+      "",
+      "Safety:",
+      "- Do not run public lead workflows with real money state until production persistence is configured.",
+      "- Do not auto-send outreach.",
+      "- Do not spend money without Robert approval.",
+      "- Do not deploy, publish previews or merge without PR review, App QA and explicit Robert approval.",
+    ].join("\n"),
+  };
   const dailyMoneyCommand: RevenueDailyMoneyCommand = persistenceItem.status === "blocked"
     ? {
         ...input.dailyMoneyCommand,
@@ -5556,12 +5663,16 @@ function applyRevenueProductionPersistenceGate(input: {
             ? "Configurar DATABASE_URL real; solo hacer dry-run local sin contacto ni cobros."
             : step.nextAction,
         })),
+        runPacket: persistenceBlockedRunPacket,
         copyableOperatorBrief: [
           "Revenue Engine daily money command",
           "",
           "Status: blocked",
           "Primary action: Configure real DATABASE_URL before operating with real leads, payments or delivery.",
           `Persistence evidence: ${persistenceItem.evidence}`,
+          "",
+          "Next run packet:",
+          persistenceBlockedRunPacket.copyableRunPacket,
           "",
           input.dailyMoneyCommand.copyableOperatorBrief,
         ].join("\n"),

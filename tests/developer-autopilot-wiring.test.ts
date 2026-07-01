@@ -314,6 +314,15 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /button-load-daily-scout-task-slots-/);
   assert.match(uiSource, /dailyMoneyCommand\.primaryAction/);
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
+  assert.match(serverSource, /Revenue Engine next run packet/);
+  assert.match(serverSource, /\/api\/revenue-engine\/scout-dispatch/);
+  assert.match(serverSource, /\/api\/revenue-engine\/website-opportunities\/close/);
+  assert.match(serverSource, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.match(serverSource, /leadId, outreachDraftId, websiteOpportunityId/);
+  assert.match(serverSource, /concept, amountUsd=0, estimatedInternalCostUsd=0/);
+  assert.match(uiSource, /panel-daily-run-packet/);
+  assert.match(uiSource, /button-copy-daily-run-packet/);
+  assert.match(uiSource, /dailyMoneyCommand\.runPacket\.copyableRunPacket/);
   assert.match(uiSource, /const readyCandidateCount = snapshot\?\.publicLeadImportQueue\.readyCount \|\| 0/);
   assert.match(uiSource, /candidateIds: visibleCandidateIdsCoverReadyQueue \? candidateIds : \[\]/);
   assert.match(uiSource, /statusTone\(snapshot\?\.launchReadiness\.todayExecutionPack\?\.status \|\| "review"\)/);

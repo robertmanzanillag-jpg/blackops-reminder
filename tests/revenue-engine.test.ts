@@ -386,6 +386,12 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(initial.dailyMoneyCommand.status, "search");
   assert.match(initial.dailyMoneyCommand.primaryAction, /Buscar negocios publicos/);
   assert.equal(initial.dailyMoneyCommand.funnel.researchTarget, initial.businessScoutQueue.dailyResearchTarget);
+  assert.equal(initial.dailyMoneyCommand.runPacket.status, "search");
+  assert.equal(initial.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/scout-dispatch");
+  assert.match(initial.dailyMoneyCommand.runPacket.output, /connector intake JSON/);
+  assert.match(initial.dailyMoneyCommand.runPacket.gate, /needs_review/);
+  assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /Revenue Engine next run packet/);
+  assert.match(initial.dailyMoneyCommand.runPacket.copyableRunPacket, /Do not auto-send outreach/);
   assert.equal(initial.dailyMoneyCommand.safety.sendsOutreach, false);
   assert.equal(initial.dailyMoneyCommand.safety.spendsMoney, false);
   assert.equal(initial.dailyMoneyCommand.safety.deploys, false);
@@ -409,6 +415,7 @@ test("snapshot exposes a public business scout queue before money sprint runs", 
   assert.equal(updated.businessScoutQueue.workPack.searchPlaybook.prioritizedSources.some((source) => source.query.includes("roofers Orlando")), true);
   assert.match(updated.businessScoutQueue.workPack.searchPlaybook.copyableBrief, /Market: Orlando/);
   assert.match(updated.dailyMoneyCommand.copyableOperatorBrief, /Revenue Engine daily money command/);
+  assert.match(updated.dailyMoneyCommand.copyableOperatorBrief, /Next run packet/);
 });
 
 test("business scout queue handles minimum-size scouting missions without snapshot crash", () => {
@@ -2469,6 +2476,13 @@ test("system readiness blocks production money mode without real database url", 
   assert.equal(snapshot.systemReadiness.blocked > 0, true);
   assert.equal(snapshot.launchReadiness.status, "blocked");
   assert.equal(snapshot.dailyMoneyCommand.status, "blocked");
+  assert.equal(snapshot.dailyMoneyCommand.runPacket.status, "blocked");
+  assert.equal(snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/expense-preflight");
+  assert.match(snapshot.dailyMoneyCommand.runPacket.input, /concept, amountUsd=0/);
+  assert.match(snapshot.dailyMoneyCommand.runPacket.gate, /DATABASE_URL/);
+  assert.doesNotMatch(snapshot.dailyMoneyCommand.runPacket.apiAction, /scout-dispatch/);
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /Next run packet/);
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /production DATABASE_URL missing/);
 });
 
 test("system readiness accepts a real database url for production persistence", () => {
@@ -3432,6 +3446,10 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.sendsOutreach, false);
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.collectsPaymentAutomatically, false);
   assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.status, "collect");
+  assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.status, "collect");
+  assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/website-opportunities/close");
+  assert.match(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.input, /opportunityId, depositPaid, scopeApproved/);
+  assert.match(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.gate, /No delivery workspace/);
 
   const preservedOpportunity = recordRevenueWebsiteOpportunity({
     leadId: readyLead.lead.id,
@@ -3857,6 +3875,12 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /Operator notes/);
   assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /Client said yes/);
   assert.equal(handoff.snapshot.dailyMoneyCommand.status, "build");
+  assert.equal(handoff.snapshot.dailyMoneyCommand.runPacket.status, "build");
+  assert.equal(handoff.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/delivery-workspaces/github-handoff");
+  assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.input, /workspaceId/);
+  assert.match(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief, /workspaceId, repoFullName, branchName/);
+  assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.gate, /No merge\/deploy\/client preview/);
+  assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.copyableRunPacket, /explicit Robert approval/);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].workspaceId, handoff.workspace?.id);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].codexBrief.includes("PR-First Rules"), true);

@@ -155,6 +155,14 @@ type RevenueSnapshot = {
       nextAction: string;
       status: "ready" | "waiting" | "blocked";
     }>;
+    runPacket: {
+      status: "search" | "sprint" | "sell" | "contact" | "collect" | "build" | "blocked";
+      apiAction: string;
+      input: string;
+      output: string;
+      gate: string;
+      copyableRunPacket: string;
+    };
     copyableOperatorBrief: string;
     safety: {
       sendsOutreach: false;
@@ -5426,6 +5434,31 @@ export default function RevenueEnginePage() {
                     >
                       <Copy className="mr-2 h-3.5 w-3.5" />
                       Copy daily command
+                    </Button>
+                    <div className="mt-3 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2" data-testid="panel-daily-run-packet">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-sky-100">Next run packet</p>
+                        <Badge variant="outline" className={cn(statusTone(snapshot?.dailyMoneyCommand.runPacket.status || "review"), "shrink-0")}>
+                          {snapshot?.dailyMoneyCommand.runPacket.status || "loading"}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-zinc-400">
+                        {snapshot?.dailyMoneyCommand.runPacket.apiAction || "/api/revenue-engine/scout-dispatch"}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">
+                        {snapshot?.dailyMoneyCommand.runPacket.gate || "Esperando guardrails."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                      onClick={() => navigator.clipboard.writeText(snapshot?.dailyMoneyCommand.runPacket.copyableRunPacket || "")}
+                      data-testid="button-copy-daily-run-packet"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy next run
                     </Button>
                   </div>
                 </CardContent>
