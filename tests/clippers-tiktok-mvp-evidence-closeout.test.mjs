@@ -594,6 +594,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
     "const saveClipperTikTokMvpProofLinksAndRefresh =",
     "const readClipperExternalCloseoutPack =",
   );
+  const proofLinksPreviewGateHelper = requiredSlice(
+    routes,
+    "async function validateClipperTikTokMvpProofLinksPreviewGate",
+    "async function readClipperTikTokMvpEvidenceCloseoutCsvPair",
+  );
   const importPreviewRoute = requiredSlice(
     routes,
     'app.post("/api/clippers/preview-tiktok-mvp-proof-intake-import"',
@@ -795,6 +800,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.doesNotMatch(proofLinksDropIngestRoute, /--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|schedule/i);
   assert.match(proofLinksSaveRoute, /validateClipperTikTokMvpProofLinks/);
   assert.match(proofLinksSaveRoute, /validateClipperTikTokMvpProofLinksPreviewGate/);
+  assert.match(proofLinksPreviewGateHelper, /gate\?\.scope === "tiktok_only_metricool_mvp"/);
+  assert.match(proofLinksPreviewGateHelper, /gate\?\.launchMode === "metricool_approval_required"/);
+  assert.match(proofLinksPreviewGateHelper, /gate\?\.directSocialApisRequired === false/);
+  assert.match(proofLinksPreviewGateHelper, /gate\?\.realPublishEnabled === false/);
+  assert.match(proofLinksPreviewGateHelper, /gate\?\.rawStored === false/);
+  assert.match(proofLinksPreviewGateHelper, /Latest proof links preview gate is missing its hash/);
   assert.match(proofLinksSaveRoute, /previewHash/);
   assert.match(proofLinksSaveRoute, /blocked_missing_or_stale_preview/);
   assert.match(proofLinksSaveRoute, /auditClipperTikTokMvpProofLinks/);

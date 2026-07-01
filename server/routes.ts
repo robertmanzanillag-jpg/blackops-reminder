@@ -312,6 +312,12 @@ async function validateClipperTikTokMvpProofLinksPreviewGate(raw: string, previe
   const issues = [
     gate ? null : "Run Preview links before saving proof links.",
     gate?.status === "ready_for_save" ? null : "Latest proof links preview is not clean.",
+    gate?.scope === "tiktok_only_metricool_mvp" ? null : "Latest proof links preview gate has the wrong scope.",
+    gate?.launchMode === "metricool_approval_required" ? null : "Latest proof links preview gate is not Metricool approval_required.",
+    gate?.directSocialApisRequired === false ? null : "Latest proof links preview gate cannot require direct social APIs.",
+    gate?.realPublishEnabled === false ? null : "Latest proof links preview gate cannot enable real publishing.",
+    gate?.rawStored === false ? null : "Latest proof links preview gate cannot store raw proof link text.",
+    gate?.rawHash ? null : "Latest proof links preview gate is missing its hash.",
     requestedHash && requestedHash === currentHash ? null : "Preview hash does not match the current proof links text.",
     gate?.rawHash === currentHash ? null : "Latest proof links preview gate does not match the current proof links text.",
     ageMs <= 30 * 60 * 1000 ? null : "Latest proof links preview gate expired; preview again.",
