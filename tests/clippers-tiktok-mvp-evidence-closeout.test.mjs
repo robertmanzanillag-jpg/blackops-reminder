@@ -815,6 +815,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksDropIngestRoute, /readClipperTikTokMvpProofLinksDropPaste/);
   assert.match(proofLinksDropIngestRoute, /extractClipperTikTokMvpProofLinksPaste/);
   assert.match(proofLinksDropIngestRoute, /validateClipperTikTokMvpProofLinks/);
+  assert.match(proofLinksDropIngestRoute, /writeClipperTikTokMvpProofLinksPreviewGate/);
+  assert.match(proofLinksDropIngestRoute, /validateClipperTikTokMvpProofLinksPreviewGate/);
+  assert.match(proofLinksDropIngestRoute, /tiktokMvpProofLinksPreviewGate/);
+  assert.ok(
+    proofLinksDropIngestRoute.indexOf("writeClipperTikTokMvpProofLinksPreviewGate")
+      < proofLinksDropIngestRoute.indexOf("if (validationError || parsedPreview.issues.length || !parsedPreview.proofLinksPreview.readyForProofDrop)"),
+    "safe ingest should write a hash-only preview gate before invalid-drop responses",
+  );
   assert.match(proofLinksDropIngestRoute, /blocked_invalid_drop/);
   assert.match(proofLinksDropIngestRoute, /saveClipperTikTokMvpProofLinksAndRefresh/);
   assert.match(proofLinksDropIngestRoute, /saved_and_refreshed/);
@@ -1094,11 +1102,17 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpProofLinksDropIngestMutation/);
   assert.match(page, /tiktokMvpProofLinksDropIngest: data\.tiktokMvpProofLinksDropIngest/);
   assert.match(page, /tiktokMvpProofLinksPastePreview: data\.tiktokMvpProofLinksPastePreview/);
+  assert.match(page, /tiktokMvpProofLinksPreviewGate: data\.tiktokMvpProofLinksPreviewGate/);
   assert.match(page, /tiktokMvpProofLinksDropIngest\?: ClipperTikTokMvpProofLinksDropIngestSummary/);
   assert.match(page, /tiktokMvpProofLinksPastePreview\?: ClipperTikTokMvpProofLinksPastePreviewSummary/);
+  assert.match(page, /tiktokMvpProofLinksPreviewGate\?: ClipperTikTokMvpProofLinksPreviewGateSummary/);
   assert.match(page, /setTiktokMvpProofLinksPastePreview\(error\.tiktokMvpProofLinksPastePreview\)/);
   assert.match(page, /setTiktokMvpProofLinksText\(error\.tiktokMvpProofLinksPastePreview\.proofLinksText\)/);
   assert.match(page, /setTiktokMvpProofLinksPreview\(error\.tiktokMvpProofLinksPastePreview\.proofLinksPreview\)/);
+  assert.match(page, /setTiktokMvpProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /syncGoalCompletionProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /setTiktokMvpProofLinksPreviewGate\(error\.tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /setTiktokMvpProofLinksPreviewGate\(null\);[\s\S]*?markGoalCompletionProofLinksPreviewGateStale\(\)/);
   assert.match(page, /tiktokMvpProofLinksDropStarterMutation/);
   assert.match(page, /starterKind/);
   assert.match(page, /tiktokMvpProofLinksDropImportMutation/);

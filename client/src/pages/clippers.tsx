@@ -12278,12 +12278,14 @@ export default function ClippersPage() {
         throw buildClipperMutationError(data.error || "No pude ingerir el proof drop", {
           tiktokMvpProofLinksDropIngest: data.tiktokMvpProofLinksDropIngest,
           tiktokMvpProofLinksPastePreview: data.tiktokMvpProofLinksPastePreview,
+          tiktokMvpProofLinksPreviewGate: data.tiktokMvpProofLinksPreviewGate,
         });
       }
       return data as {
         tiktokMvpProofLinksDropIngest: ClipperTikTokMvpProofLinksDropIngestSummary;
         tiktokMvpProofLinksDropStatus: ClipperTikTokMvpProofLinksDropStatusSummary;
         tiktokMvpProofLinksPastePreview: ClipperTikTokMvpProofLinksPastePreviewSummary;
+        tiktokMvpProofLinksPreviewGate: ClipperTikTokMvpProofLinksPreviewGateSummary;
         tiktokMvpProofLinks: ClipperTikTokMvpProofLinksSummary;
         tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary;
@@ -12305,6 +12307,8 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPastePreview(data.tiktokMvpProofLinksPastePreview);
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinks.raw);
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksPastePreview.proofLinksPreview);
+      setTiktokMvpProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
+      syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], data.tiktokMvpProofLinksDropStatus);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links"], data.tiktokMvpProofLinks);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-drop-kit"], data.tiktokMvpProofDropKit);
@@ -12330,12 +12334,24 @@ export default function ClippersPage() {
     onError: (error: Error & {
       tiktokMvpProofLinksDropIngest?: ClipperTikTokMvpProofLinksDropIngestSummary;
       tiktokMvpProofLinksPastePreview?: ClipperTikTokMvpProofLinksPastePreviewSummary;
+      tiktokMvpProofLinksPreviewGate?: ClipperTikTokMvpProofLinksPreviewGateSummary;
     }) => {
       if (error.tiktokMvpProofLinksPastePreview) {
         setTiktokMvpProofLinksPastePreview(error.tiktokMvpProofLinksPastePreview);
         setTiktokMvpProofLinksText(error.tiktokMvpProofLinksPastePreview.proofLinksText);
         setTiktokMvpProofLinksPreview(error.tiktokMvpProofLinksPastePreview.proofLinksPreview);
-        markGoalCompletionProofLinksPreviewGateStale();
+        if (error.tiktokMvpProofLinksPreviewGate) {
+          setTiktokMvpProofLinksPreviewGate(error.tiktokMvpProofLinksPreviewGate);
+          syncGoalCompletionProofLinksPreviewGate(error.tiktokMvpProofLinksPreviewGate, {
+            status: "blocked_missing_or_stale_preview",
+            fresh: false,
+            readyForSave: false,
+            nextStep: error.tiktokMvpProofLinksPreviewGate.nextStep || error.message,
+          });
+        } else {
+          setTiktokMvpProofLinksPreviewGate(null);
+          markGoalCompletionProofLinksPreviewGateStale();
+        }
       }
       if (error.tiktokMvpProofLinksDropIngest) {
         refreshTikTokProofDropAuditCaches();

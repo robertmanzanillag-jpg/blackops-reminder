@@ -3714,6 +3714,10 @@ export async function registerRoutes(
     try {
       const drop = await readClipperTikTokMvpProofLinksDropPaste();
       const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
+      const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(
+        parsedPreview.proofLinksText,
+        parsedPreview.proofLinksPreview,
+      );
       const validationError = validateClipperTikTokMvpProofLinks(parsedPreview.proofLinks);
       if (validationError || parsedPreview.issues.length || !parsedPreview.proofLinksPreview.readyForProofDrop) {
         res.status(400).json({
@@ -3735,6 +3739,35 @@ export async function registerRoutes(
             nextStep: "Fix the proof links drop file, then run Safe ingest drop again.",
           },
           tiktokMvpProofLinksPastePreview: parsedPreview,
+          tiktokMvpProofLinksPreviewGate,
+        });
+        return;
+      }
+      const previewGate = await validateClipperTikTokMvpProofLinksPreviewGate(
+        parsedPreview.proofLinksText,
+        tiktokMvpProofLinksPreviewGate.rawHash,
+      );
+      if (!previewGate.ok) {
+        res.status(400).json({
+          error: previewGate.issues[0] || "Proof links preview gate is not ready.",
+          tiktokMvpProofLinksDropIngest: {
+            status: "blocked_invalid_drop",
+            generatedAt: parsedPreview.generatedAt,
+            scope: parsedPreview.scope,
+            launchMode: parsedPreview.launchMode,
+            directSocialApisRequired: parsedPreview.directSocialApisRequired,
+            realPublishEnabled: false,
+            sourcePath: drop.sourcePath,
+            extractedUrls: parsedPreview.extractedUrls,
+            issues: previewGate.issues,
+            guardrails: [
+              "Blocked before saving because the local proof links preview gate did not pass validation.",
+              "Does not apply evidence, queue Metricool, create calendar rows, or send posts.",
+            ],
+            nextStep: "Run Import drop file again, then Safe ingest only if the proof links preview gate is clean/current.",
+          },
+          tiktokMvpProofLinksPastePreview: parsedPreview,
+          tiktokMvpProofLinksPreviewGate,
         });
         return;
       }
@@ -3760,6 +3793,7 @@ export async function registerRoutes(
         },
         tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
         tiktokMvpProofLinksPastePreview: parsedPreview,
+        tiktokMvpProofLinksPreviewGate,
       });
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 400;
