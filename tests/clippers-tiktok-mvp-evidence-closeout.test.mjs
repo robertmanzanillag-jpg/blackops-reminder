@@ -745,6 +745,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveHelper, /readClipperMetricoolMcpPreflight/);
   assert.match(proofLinksSaveHelper, /readClipperMetricoolCurrentBatchUploadPack/);
   assert.match(proofLinksSaveHelper, /readClipperMetricoolCurrentBatchSessionPacket/);
+  assert.match(proofLinksSaveHelper, /readClipperGoalCompletionAudit/);
   assert.match(proofLinksSaveHelper, /tiktokNextAction/);
   assert.match(proofLinksSaveHelper, /metricoolCurrentBatchUploadPack/);
   assert.match(proofLinksSaveHelper, /metricoolCurrentBatchSessionPacket/);
@@ -974,6 +975,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /const tiktokMvpProofLinksPreviewMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
   assert.match(page, /const tiktokMvpProofLinksPasteMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(pasteTextOverride\?: string\) =>/);
   assert.match(page, /setTiktokMvpProofLinksPreview\(data\.tiktokMvpProofLinksPreview\);[\s\S]*?setTiktokMvpProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
+  assert.match(page, /\["\/api\/clippers\/goal-completion-audit"\], data\.goalCompletionAudit/);
   assert.match(page, /setTiktokMvpProofLinksPastePreview\(data\.tiktokMvpProofLinksPastePreview\);[\s\S]*?setTiktokMvpProofLinksText\(data\.tiktokMvpProofLinksPastePreview\.proofLinksText\);[\s\S]*?setTiktokMvpProofLinksPreview\(data\.tiktokMvpProofLinksPastePreview\.proofLinksPreview\);[\s\S]*?setTiktokMvpProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-preview/);
   assert.match(page, /save-clippers-tiktok-mvp-proof-links-from-paste-preview-button/);

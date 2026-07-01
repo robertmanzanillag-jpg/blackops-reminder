@@ -11997,6 +11997,7 @@ export default function ClippersPage() {
         metricoolCurrentBatchUploadPack: ClipperMetricoolCurrentBatchUploadPackSummary | null;
         metricoolCurrentBatchSessionPacket: ClipperMetricoolCurrentBatchSessionPacketSummary | null;
         metricoolBridgeEvidenceCsvStatus: ClipperMetricoolBridgeEvidenceCsvStatus | null;
+        goalCompletionAudit: ClipperGoalCompletionAuditSummary | null;
         tiktokMvpProofLinksSaveReceipt: ClipperTikTokMvpProofLinksSaveReceiptSummary;
         postProofRefreshRuns: Record<string, unknown>;
         postProofRefreshError: string;
@@ -12047,6 +12048,9 @@ export default function ClippersPage() {
       }
       if (data.metricoolBridgeEvidenceCsvStatus) {
         queryClient.setQueryData(["/api/clippers/metricool-bridge-evidence-csv-status"], data.metricoolBridgeEvidenceCsvStatus);
+      }
+      if (data.goalCompletionAudit) {
+        queryClient.setQueryData(["/api/clippers/goal-completion-audit"], data.goalCompletionAudit);
       }
       toast({
         title: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError ? "Proof links guardados" : "Proof links guardados con blockers",

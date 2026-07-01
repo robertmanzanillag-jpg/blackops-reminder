@@ -1097,6 +1097,7 @@ export async function registerRoutes(
       metricoolCurrentBatchUploadPack,
       metricoolCurrentBatchSessionPacket,
       metricoolBridgeEvidenceCsvStatus,
+      goalCompletionAudit,
     ] = await Promise.all([
       readClipperTikTokMvpProofLinks(),
       readClipperTikTokMvpProofDropKit(),
@@ -1115,6 +1116,7 @@ export async function registerRoutes(
       readClipperMetricoolCurrentBatchUploadPack().catch(() => null),
       readClipperMetricoolCurrentBatchSessionPacket().catch(() => null),
       buildClipperMetricoolBridgeEvidenceCsvStatus().catch(() => null),
+      readClipperGoalCompletionAudit().catch(() => null),
     ]);
     const tiktokMvpProofLinksSaveReceipt = {
       status: postProofRefreshError ? "saved_refresh_blocked" : "saved_refreshed",
@@ -1215,6 +1217,7 @@ export async function registerRoutes(
       metricoolCurrentBatchUploadPack,
       metricoolCurrentBatchSessionPacket,
       metricoolBridgeEvidenceCsvStatus,
+      goalCompletionAudit,
       tiktokMvpProofLinksSaveReceipt,
       proofDropRun,
       quickFillRun,
