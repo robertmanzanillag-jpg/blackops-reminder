@@ -3382,6 +3382,26 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(missingRepoHandoff.snapshot.recentLedger.length, postSaleSnapshot.recentLedger.length);
   assert.equal(missingRepoHandoff.snapshot.recentLeads.find((item) => item.id === lead.id)?.status, leadStatusBeforeRepoBlock);
 
+  const mainBranchHandoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunity.id,
+    mockupUrl: preview.previewUrl,
+    projectType: "bundle",
+    repoFullName: "robert/handoff-cafe",
+    branchName: "main",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: 2100,
+    publicDataVerified: true,
+  });
+
+  assert.equal(mainBranchHandoff.status, "blocked");
+  assert.match(mainBranchHandoff.reason, /Branch codex/);
+  assert.equal(mainBranchHandoff.workspace, null);
+  assert.equal(mainBranchHandoff.snapshot.recentDeliveryWorkspaces.length, 0);
+  assert.equal(mainBranchHandoff.snapshot.recentLedger.length, postSaleSnapshot.recentLedger.length);
+
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,
     outreachDraftId: draft.id,
@@ -4115,6 +4135,11 @@ test("delivery workspace records GitHub handoff issue without bypassing PR-first
     branchName: "codex/client-handoff-cafe-website",
   });
   assert.equal(parsed.repoFullName, "robert/handoff-cafe");
+  assert.throws(() => revenueDeliveryWorkspaceGithubHandoffSchema.parse({
+    workspaceId,
+    repoFullName: "robert/handoff-cafe",
+    branchName: "main",
+  }), /branchName must start with codex/);
 
   const lookup = getRevenueDeliveryWorkspaceById(workspaceId);
   assert.equal(lookup.status, "found");
@@ -6190,6 +6215,63 @@ test("blocks automation opportunity close without verifiable payment evidence", 
   assert.equal(weakNarrativeEvidence.opportunity?.depositPaid, false);
   assert.equal(weakNarrativeEvidence.snapshot.metrics.automationsSold, 0);
   assert.equal(weakNarrativeEvidence.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("blocks automation opportunity close without explicit scope approval", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Scope Approval Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_scope_2500",
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.reason.includes("scope"), true);
+  assert.equal(result.entry, null);
+  assert.equal(result.opportunity?.status, "quoted");
+  assert.equal(result.opportunity?.depositPaid, false);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("closes automation opportunity with existing scope approval and omitted approval flag", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Existing Scope Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: true,
+    depositPaid: false,
+  });
+
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_existing_scope_2500",
+  });
+
+  assert.equal(result.status, "recorded");
+  assert.equal(result.opportunity?.status, "sold");
+  assert.equal(result.opportunity?.clientApprovedScope, true);
+  assert.equal(result.entry?.kind, "automation_sale");
+  assert.equal(result.snapshot.metrics.automationsSold, 1);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
 });
 
 test("blocks automation opportunity close when deposit is incomplete", () => {

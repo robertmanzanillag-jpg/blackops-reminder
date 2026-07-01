@@ -8519,6 +8519,7 @@ export default function RevenueEnginePage() {
                             const repoFullName = repoInput.repoFullName || "";
                             const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
                             const repoReady = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName.trim());
+                            const branchReady = /^codex\/[A-Za-z0-9._/-]+$/.test(branchName.trim());
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -8542,6 +8543,9 @@ export default function RevenueEnginePage() {
                                   </Badge>
                                   <Badge variant="outline" className={cn(repoReady ? statusTone("ready") : statusTone("blocked"))}>
                                     {repoReady ? "repo listo" : "repo requerido"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(branchReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {branchReady ? "branch codex listo" : "branch codex requerido"}
                                   </Badge>
                                 </div>
                                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -8605,13 +8609,13 @@ export default function RevenueEnginePage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady}
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady}
                                     onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
                                     className="bg-sky-600 text-white hover:bg-sky-500"
                                     data-testid={`button-create-website-workspace-${item.leadId}`}
                                   >
                                     {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                    {depositCoversHandoff ? repoReady ? "Crear workspace" : "Repo requerido" : "Deposito incompleto"}
+                                    {depositCoversHandoff ? repoReady ? branchReady ? "Crear workspace" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
                                   </Button>
                                 </div>
                               </div>
@@ -8658,6 +8662,7 @@ export default function RevenueEnginePage() {
                         ) : (
                           snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => {
                             const releaseGateInput = buildReleaseGateInput(workspace);
+                            const buildHandoffBranchReady = !workspace.codexBuildHandoff.missing.includes("branch codex/... para PR-first");
                             return (
                             <div key={workspace.id} className="rounded-lg border border-zinc-800 bg-black p-3">
                               <div className="flex items-start justify-between gap-3">
@@ -8752,6 +8757,7 @@ export default function RevenueEnginePage() {
                                       || Boolean(workspace.input.githubIssueUrl)
                                       || !workspace.input.repoFullName
                                       || !workspace.input.publicDataVerified
+                                      || !buildHandoffBranchReady
                                       || workspace.projectPlan.decision.status !== "ready_to_build"
                                     }
                                     className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"

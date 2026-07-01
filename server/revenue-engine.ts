@@ -364,7 +364,7 @@ type RevenueDeliveryReleaseGateOptions = {
 export const revenueDeliveryWorkspaceGithubHandoffSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
   repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
-  branchName: z.string().trim().max(200).optional(),
+  branchName: z.string().trim().regex(/^codex\/[A-Za-z0-9._/-]+$/, "branchName must start with codex/").max(200).optional(),
 });
 
 export type RevenueDeliveryWorkspaceGithubHandoffInput = z.infer<typeof revenueDeliveryWorkspaceGithubHandoffSchema>;
@@ -623,7 +623,7 @@ export const revenueAutomationOpportunityCloseSchema = z.object({
   opportunityId: z.string().trim().min(1).max(200),
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
   paymentConfirmation: z.string().trim().max(500).optional().default(""),
-  markScopeApproved: z.boolean().default(true),
+  markScopeApproved: z.boolean().default(false),
   notes: z.string().trim().max(800).optional().default(""),
 });
 
@@ -1690,6 +1690,10 @@ function slugifyRevenueValue(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "preview";
+}
+
+export function isRevenueCodexBranchName(value: string) {
+  return /^codex\/[A-Za-z0-9._/-]+$/.test(value.trim());
 }
 
 const GENERIC_REVENUE_PAYMENT_EVIDENCE = new Set([
@@ -3715,6 +3719,17 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
       snapshot: getRevenueEngineSnapshot(),
     };
   }
+  const deliveryBranchName = (parsed.branchName || `codex/client-${slugifyRevenueValue(lead.businessName)}-website`).trim();
+  if (!isRevenueCodexBranchName(deliveryBranchName)) {
+    return {
+      status: "blocked" as const,
+      reason: "Branch codex/... requerido antes de crear delivery workspace PR-first.",
+      lead,
+      outreachDraft: outreachDraft || null,
+      workspace: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
 
   if (depositPaid && websiteOpportunity.scopeApproved && lead.status !== "closed") {
     lead.status = strongerRevenueLeadStatus(lead.status, "closed");
@@ -3754,7 +3769,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     sourceUrl,
     mockupUrl: effectiveMockupUrl,
     repoFullName: parsed.repoFullName || "",
-    branchName: parsed.branchName || "",
+    branchName: deliveryBranchName,
     githubIssueUrl: "",
     prUrl: "",
     secondReviewStatus: "pending",
@@ -3840,6 +3855,7 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
   const blockingReasons = [
     opportunity.status === "blocked" && "la oportunidad esta bloqueada",
     opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de cerrar",
+    !(parsed.markScopeApproved || opportunity.clientApprovedScope) && "falta aprobacion escrita de scope",
     cashCollectedUsd <= 0 && "falta cash/deposito cobrado",
     cashCollectedUsd > 0 && cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${(requiredDepositUsd - cashCollectedUsd).toLocaleString("en-US")}`,
     !hasRevenuePaymentEvidence(parsed.paymentConfirmation || opportunity.paymentConfirmation) && "falta comprobante/referencia verificable de pago",
@@ -8925,6 +8941,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const missing = [
     isWebsiteBuild && !input.publicDataVerified && "data publica verificada",
     isWebsiteBuild && !repoFullName && "repo GitHub del website",
+    isWebsiteBuild && !isRevenueCodexBranchName(branchName) && "branch codex/... para PR-first",
     isWebsiteBuild && !githubIssueUrl && "GitHub handoff issue PR-first",
     isWebsiteBuild && !prUrl && "pull request de build",
     isWebsiteBuild && secondReviewStatus !== "pass" && "segundo review independiente",
