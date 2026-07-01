@@ -7997,6 +7997,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /setTiktokMvpProofLinksPasteText\(cleanPacket\)/);
   assert.match(page, /setTiktokMvpProofLinksPastePreview\(null\)/);
   assert.match(page, /setTiktokMvpProofLinksPreview\(null\)/);
+  assert.match(page, /Empty lines are not evidence/);
+  assert.match(page, /Preview links passes cleanly/);
   assert.match(page, /goalCompletionPrimaryFastPathLines/);
   assert.match(page, /fastPathPasteLines\?: string\[\]/);
   assert.match(page, /Next actions CSV:/);

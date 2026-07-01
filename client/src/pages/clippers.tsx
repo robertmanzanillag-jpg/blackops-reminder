@@ -22336,6 +22336,9 @@ export default function ClippersPage() {
                         </p>
                       ))}
                     </div>
+                    <p className="mt-2 text-[10px] leading-4 text-amber-100/80">
+                      Empty lines are not evidence. The gate stays blocked until real non-secret Metricool or Drive/Docs proof URLs are pasted and Preview links passes cleanly.
+                    </p>
                     <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.buttonOrFile}</p>
                     <p className="mt-1 text-[10px] leading-4 text-zinc-500">{goalCompletionPrimaryAction.guardrail}</p>
                   </div>
