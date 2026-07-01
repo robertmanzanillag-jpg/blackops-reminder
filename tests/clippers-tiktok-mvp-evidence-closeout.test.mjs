@@ -739,6 +739,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofLinksSaveHelper, /script\/clippers-metricool-current-batch-upload-pack\.mjs/);
   assert.match(proofLinksSaveHelper, /script\/clippers-metricool-current-batch-session-packet\.mjs/);
   assert.match(proofLinksSaveHelper, /script\/clippers-tiktok-next-action\.mjs/);
+  assert.match(proofLinksSaveHelper, /finalGoalAuditRun/);
+  assert.ok(
+    proofLinksSaveHelper.indexOf("tiktokNextActionRun") < proofLinksSaveHelper.indexOf("finalGoalAuditRun")
+      && proofLinksSaveHelper.indexOf("metricoolCurrentBatchSessionPacketRun") < proofLinksSaveHelper.indexOf("finalGoalAuditRun"),
+  );
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpGoLivePacket/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokMvpReadinessVerifier/);
   assert.match(proofLinksSaveHelper, /readClipperTikTokNextAction/);

@@ -1075,6 +1075,7 @@ export async function registerRoutes(
       }
       postProofRefreshRuns.tiktokNextActionRun = await runClipperJsonScript("script/clippers-tiktok-next-action.mjs", "TikTok next action");
       postProofRefreshRuns.metricoolCurrentBatchSessionPacketRun = await runClipperJsonScript("script/clippers-metricool-current-batch-session-packet.mjs", "Metricool current batch session packet");
+      postProofRefreshRuns.finalGoalAuditRun = await runClipperJsonScript("script/clippers-goal-completion-audit.mjs", "Goal completion audit final refresh");
     } catch (refreshError: any) {
       postProofRefreshError = refreshError.message || "Post-proof readiness refresh failed";
     }
