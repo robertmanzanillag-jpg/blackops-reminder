@@ -102,6 +102,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   if (!proofDrop?.readyForQuickFill) {
     return {
       status: "blocked_needs_proof_links",
+      businessBlocker: "blocked_needs_real_metricool_tiktok_proof",
       nextButton: "save_proof_links",
       nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes proof URLs into the proof drop or paste packet. Preview links first; save only if the preview gate is clean/current.",
     };
@@ -109,6 +110,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   if (!quickFill?.currentWithProofRefresh) {
     return {
       status: "blocked_needs_quick_fill",
+      businessBlocker: "blocked_needs_real_metricool_tiktok_proof",
       nextButton: "quick_fill",
       nextAction: quickFill?.nextStep || "Run Quick fill after proof links pass validation, then rerun Proof handoff so the report matches current Proof refresh.",
     };
@@ -116,6 +118,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   if (importPreview?.status !== "ready_to_apply" && importPreview?.status !== "applied") {
     return {
       status: "blocked_needs_import_preview",
+      businessBlocker: "blocked_proof_import_preview",
       nextButton: "import_preview",
       nextAction: importPreview?.nextStep || "Run Import preview and fix any generated proof intake blockers.",
     };
@@ -123,6 +126,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   if (closeout?.status !== "ready_to_apply" && closeout?.status !== "applied") {
     return {
       status: "blocked_needs_closeout_preview",
+      businessBlocker: "blocked_proof_closeout_preview",
       nextButton: "preview_closeout",
       nextAction: closeout?.nextStep || "Run closeout preview and fix any rejected TikTok/Metricool evidence rows.",
     };
@@ -130,12 +134,14 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
   if (wizard?.status === "ready_for_operator_apply_review") {
     return {
       status: "ready_for_operator_apply_review",
+      businessBlocker: "none",
       nextButton: "operator_confirmed_apply",
       nextAction: "Operator can apply the validated import/closeout only after manually confirming all proof URLs are real and non-secret. Metricool remains approval_required.",
     };
   }
   return {
     status: "review_required",
+    businessBlocker: "review_required",
     nextButton: "closeout_wizard",
     nextAction: wizard?.nextStep || "Run Closeout wizard to confirm the next safe operator step.",
   };
@@ -441,6 +447,7 @@ function renderMarkdown(summary) {
     "",
     `Generated: ${summary.generatedAt}`,
     `Status: ${summary.status}`,
+    `Business blocker: ${summary.businessBlocker}`,
     `Next button: ${summary.nextButton}`,
     `Next safe button: ${summary.nextSafeButton}`,
     `Locked until clean preview: ${summary.nextLockedButton}`,
@@ -619,7 +626,10 @@ async function main() {
   await writeFile(outUnblockBoardCsvPath, renderUnblockBoardCsv(summary.unblockBoard));
   console.log(JSON.stringify({
     status: summary.status,
+    businessBlocker: summary.businessBlocker,
     nextButton: summary.nextButton,
+    nextSafeButton: summary.nextSafeButton,
+    nextLockedButton: summary.nextLockedButton,
     proofIssues: summary.totals.proofIssues,
     quickFillIssues: summary.totals.quickFillIssues,
     quickFillCurrent: summary.totals.quickFillCurrent,
