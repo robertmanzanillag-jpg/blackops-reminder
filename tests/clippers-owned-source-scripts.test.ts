@@ -8325,9 +8325,13 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.doesNotMatch(audit.operatorNextActions[0].fastPathPacketText, /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=|cookie=|password=|confirmed by Robert|verified by Robert|Robert confirms/i);
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
+    "sports-daily:tiktok.accountOwnershipProofUrl=",
     "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
+    "sports-daily:tiktok.metricoolNotes=<write a real 20+ character note after reviewing SPORT Metricool connection proof>",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
+    "meme-radar:tiktok.accountOwnershipProofUrl=",
     "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
+    "meme-radar:tiktok.metricoolNotes=<write a real 20+ character note after reviewing memes Metricool connection proof>",
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);

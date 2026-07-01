@@ -2903,9 +2903,13 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
     ]);
     assert.deepEqual(report.operatorNextActions[0].fastPathPasteLines, [
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "sports-daily:tiktok.accountOwnershipProofUrl=",
       "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
+      "sports-daily:tiktok.metricoolNotes=<write a real 20+ character note after reviewing SPORT Metricool connection proof>",
       "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.accountOwnershipProofUrl=",
       "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
+      "meme-radar:tiktok.metricoolNotes=<write a real 20+ character note after reviewing memes Metricool connection proof>",
     ]);
     assert.doesNotMatch(JSON.stringify(report.operatorNextActions[0].fastPathPasteLines), /Robert confirms|connected under Robert control/i);
     assert.doesNotMatch(JSON.stringify(report.externalActionGate), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
