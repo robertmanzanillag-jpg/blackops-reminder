@@ -145,10 +145,10 @@ async function writeEvidence(category, categorySpecs) {
   const evidencePath = path.join(categoryDir, "owned-gap-production-notes.md");
   const label = category === "sports" ? "Sports Daily" : category === "memes" ? "Meme Radar" : "Streamer Pulse";
   const restriction = category === "sports"
-    ? "No league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, third-party footage, or platform-private material are included."
+    ? "No third-party footage, no raw footage, no league footage, no broadcast footage, no team footage, no athlete likenesses, no copyrighted music, no scraped highlights, and no platform-private material are included."
     : category === "streamers"
-      ? "No raw streamer clips, creator likenesses, copyrighted music, cookies, tokens, passwords, private screenshots, scraped footage, or platform-private material are included."
-      : "No third-party footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, cookies, tokens, passwords, private screenshots, or platform-private material are included.";
+      ? "No third-party footage, no raw footage, no raw streamer clips, no creator likenesses, no copyrighted music, no cookies, no tokens, no passwords, no private screenshots, no scraped footage, and no platform-private material are included."
+      : "No third-party footage, no raw footage, no creator clips, no sports broadcasts, no streamer clips, no licensed music, no watermarked reposts, no cookies, no tokens, no passwords, no private screenshots, and no platform-private material are included.";
   if (!forceRender && await fileExists(evidencePath)) return evidencePath;
   await writeFile(evidencePath, [
     `# Owned Gap Source Production Notes - ${label}`,

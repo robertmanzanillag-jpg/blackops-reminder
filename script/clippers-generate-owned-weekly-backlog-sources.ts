@@ -224,10 +224,10 @@ async function writeEvidence(category: SourceCategory, categorySpecs: OwnedBackl
   const evidencePath = path.join(categoryDropDir, "owned-weekly-backlog-production-notes.md");
   const label = category === "sports" ? "Sports Daily" : category === "memes" ? "Meme Radar" : "Streamer Pulse";
   const restriction = category === "sports"
-    ? "No league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, or scraped highlights are included."
+    ? "No third-party footage, no raw footage, no league footage, no broadcast footage, no team footage, no athlete likenesses, no copyrighted music, and no scraped highlights are included."
     : category === "streamers"
-      ? "No streamer raw clips, creator likenesses, copyrighted music, cookies, tokens, passwords, private screenshots, or scraped footage are included."
-      : "No third-party footage, creator clips, sports broadcasts, streamer clips, licensed music, cookies, tokens, passwords, or private screenshots are included.";
+      ? "No third-party footage, no raw footage, no streamer raw clips, no creator likenesses, no copyrighted music, no cookies, no tokens, no passwords, no private screenshots, and no scraped footage are included."
+      : "No third-party footage, no raw footage, no creator clips, no sports broadcasts, no streamer clips, no licensed music, no cookies, no tokens, no passwords, and no private screenshots are included.";
 
   await writeFile(evidencePath, [
     `# Owned Weekly Backlog Production Notes - ${label}`,
@@ -240,6 +240,9 @@ async function writeEvidence(category: SourceCategory, categorySpecs: OwnedBackl
     `These ${categorySpecs.length} source videos are original generated vertical graphic assets for ${label}.`,
     restriction,
     "They are approved only as owned source inputs for draft creation and Metricool approval queue review.",
+    "",
+    "Covered files:",
+    ...categorySpecs.map((spec) => `- ${spec.fileName}`),
     "",
     "Guardrails:",
     "- Keep Metricool in approval_required mode.",

@@ -2474,6 +2474,20 @@ test("owned source generator commands have timeout and process group cleanup", a
   assert.match(sportsStreamerGenerator, /covered_assets: streamers-owned-01\.mp4 through streamers-owned-09\.mp4/);
   assert.match(sportsStreamerGenerator, /no third-party footage, no raw footage, no league footage, no broadcast footage/);
   assert.match(sportsStreamerGenerator, /no third-party footage, no raw footage, no streamer raw clips/);
+
+  const weeklyGenerator = await readFile(path.join(process.cwd(), "script/clippers-generate-owned-weekly-backlog-sources.ts"), "utf8");
+  assert.match(weeklyGenerator, /Covered files:/);
+  assert.match(weeklyGenerator, /categorySpecs\.map\(\(spec\) => `- \$\{spec\.fileName\}`\)/);
+  assert.match(weeklyGenerator, /no third-party footage, no raw footage, no league footage, no broadcast footage/i);
+  assert.match(weeklyGenerator, /no third-party footage, no raw footage, no streamer raw clips/i);
+  assert.match(weeklyGenerator, /no third-party footage, no raw footage, no creator clips/i);
+
+  const gapGenerator = await readFile(path.join(process.cwd(), "script/clippers-generate-owned-gap-sources.mjs"), "utf8");
+  assert.match(gapGenerator, /Covered files:/);
+  assert.match(gapGenerator, /categorySpecs\.map\(\(spec\) => `- \$\{spec\.fileName\}`\)/);
+  assert.match(gapGenerator, /no third-party footage, no raw footage, no league footage, no broadcast footage/i);
+  assert.match(gapGenerator, /no third-party footage, no raw footage, no raw streamer clips/i);
+  assert.match(gapGenerator, /no third-party footage, no raw footage, no creator clips/i);
 });
 
 test("Metricool 100 operator handoff batches approval-only rows without publishing", async () => {
