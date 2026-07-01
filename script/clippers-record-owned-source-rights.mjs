@@ -21,7 +21,7 @@ const rules = [
     weeklyEvidenceFile: "owned-weekly-backlog-production-notes-v2.md",
     weeklyStartsAt: 12,
     accountLabel: "Sports Daily",
-    restrictions: "no league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, or platform-private material",
+    restrictions: "no third-party footage, raw footage, league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, or platform-private material",
   },
   {
     category: "memes",
@@ -30,7 +30,7 @@ const rules = [
     weeklyEvidenceFile: "owned-weekly-backlog-production-notes.md",
     weeklyStartsAt: 15,
     accountLabel: "Meme Radar",
-    restrictions: "no third-party footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, or platform-private material",
+    restrictions: "no third-party footage, raw footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, or platform-private material",
   },
   {
     category: "streamers",

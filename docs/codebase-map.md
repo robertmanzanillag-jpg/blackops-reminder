@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-06-30T22:35:48.441Z
+Generated: 2026-07-01T06:41:40.661Z
 Repo: `/private/tmp/asistente-clippers-pr`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 434 | 366 | 1385 | 101 | 9088 |
+| 435 | 367 | 1388 | 101 | 9283 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `client/src` | 108 | 107 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
 | `server` | 95 | 91 | server:95 |
-| `script` | 67 | 65 | script:67 |
+| `script` | 68 | 66 | script:68 |
 | `tests` | 62 | 59 | test:62 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
@@ -148,13 +148,14 @@ Package: `rest-express`
 - `script/ceo-restore.ts` (script; 9 symbols, 4 imports)
 - `script/ceo-smoke.ts` (script; 29 symbols, 15 imports)
 - `script/ceo-verify-local.mjs` (script; 2 symbols, 1 imports)
-- `script/clippers-account-permission-readiness.mjs` (script; 162 symbols, 2 imports)
+- `script/clippers-account-permission-readiness.mjs` (script; 172 symbols, 2 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 268 symbols, 3 imports)
+- `script/clippers-generate-owned-active-tiktok-mvp-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
-- `script/clippers-goal-completion-audit.mjs` (script; 81 symbols, 2 imports)
+- `script/clippers-goal-completion-audit.mjs` (script; 121 symbols, 2 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 120 symbols, 3 imports)
 - `script/clippers-metricool-current-batch-session-packet.mjs` (script; 50 symbols, 2 imports)
 - `script/clippers-metricool-current-batch-upload-pack.mjs` (script; 77 symbols, 2 imports)
@@ -169,24 +170,24 @@ Package: `rest-express`
 - `script/clippers-tiktok-batch-runbook.mjs` (script; 54 symbols, 2 imports)
 - `script/clippers-tiktok-batch-tracker.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-tiktok-evidence-checklist.mjs` (script; 38 symbols, 2 imports)
-- `script/clippers-tiktok-external-closeout-session.mjs` (script; 56 symbols, 2 imports)
+- `script/clippers-tiktok-external-closeout-session.mjs` (script; 57 symbols, 2 imports)
 - `script/clippers-tiktok-launch-control.mjs` (script; 63 symbols, 2 imports)
 - `script/clippers-tiktok-mvp-autopilot-boundary.mjs` (script; 44 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 45 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 68 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 46 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-local-verification.mjs` (script; 25 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-closeout-wizard.mjs` (script; 55 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-evidence-closeout.mjs` (script; 71 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-go-live-packet.mjs` (script; 55 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-local-verification.mjs` (script; 36 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-operating-refresh.ts` (script; 33 symbols, 5 imports)
 - `script/clippers-tiktok-mvp-proof-doctor.mjs` (script; 49 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 59 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-handoff.mjs` (script; 57 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-drop-kit.mjs` (script; 70 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-handoff.mjs` (script; 73 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-intake-import.mjs` (script; 69 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-intake-pack.mjs` (script; 36 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-quick-fill.mjs` (script; 53 symbols, 3 imports)
-- `script/clippers-tiktok-mvp-proof-refresh.mjs` (script; 20 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-quick-fill.mjs` (script; 65 symbols, 3 imports)
+- `script/clippers-tiktok-mvp-proof-refresh.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-proof-unblocker.mjs` (script; 41 symbols, 3 imports)
 - `script/clippers-tiktok-mvp-readiness-verifier.mjs` (script; 47 symbols, 2 imports)
-- `script/clippers-tiktok-next-action.mjs` (script; 63 symbols, 2 imports)
+- `script/clippers-tiktok-next-action.mjs` (script; 69 symbols, 2 imports)
 - `script/clippers-tiktok-operator-cockpit-preflight.mjs` (script; 75 symbols, 2 imports)
 - `script/clippers-tiktok-operator-cockpit.mjs` (script; 28 symbols, 2 imports)
 - `script/clippers-tiktok-post-schedule-verifier.mjs` (script; 38 symbols, 2 imports)
@@ -196,7 +197,6 @@ Package: `rest-express`
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
 - `script/create-local-user.ts` (script; 5 symbols, 3 imports)
 - `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
-- `script/import-developer-health-inventory.ts` (script; 14 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

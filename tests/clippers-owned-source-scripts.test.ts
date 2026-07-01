@@ -2450,6 +2450,7 @@ test("Clippers UI refreshes account permission readiness after evidence activati
 
 test("owned source generator commands have timeout and process group cleanup", async () => {
   const generatorScripts = [
+    "script/clippers-generate-owned-active-tiktok-mvp-sources.mjs",
     "script/clippers-generate-owned-gap-sources.mjs",
     "script/clippers-generate-owned-meme-sources.ts",
     "script/clippers-generate-owned-sports-streamer-sources.ts",
@@ -2488,6 +2489,21 @@ test("owned source generator commands have timeout and process group cleanup", a
   assert.match(gapGenerator, /no third-party footage, no raw footage, no league footage, no broadcast footage/i);
   assert.match(gapGenerator, /no third-party footage, no raw footage, no raw streamer clips/i);
   assert.match(gapGenerator, /no third-party footage, no raw footage, no creator clips/i);
+
+  const activeMvpGenerator = await readFile(path.join(process.cwd(), "script/clippers-generate-owned-active-tiktok-mvp-sources.mjs"), "utf8");
+  assert.match(activeMvpGenerator, /sports-owned-60\.mp4/);
+  assert.match(activeMvpGenerator, /memes-owned-40\.mp4/);
+  assert.match(activeMvpGenerator, /activeTikTokMvpTargets:[\s\S]*sports: 60,[\s\S]*memes: 40,[\s\S]*streamers: 0/);
+  assert.match(activeMvpGenerator, /Covered files:/);
+  assert.match(activeMvpGenerator, /categorySpecs\.map\(\(spec\) => `- \$\{spec\.fileName\}`\)/);
+  assert.match(activeMvpGenerator, /No third-party footage, no raw footage, no league footage, no broadcast footage/i);
+  assert.match(activeMvpGenerator, /No third-party footage, no raw footage, no creator clips/i);
+  assert.match(activeMvpGenerator, /They do not verify any external account connection, Metricool brand, social login, or publishing permission/);
+  assert.match(activeMvpGenerator, /Do not enable realPublishEnabled/);
+
+  const ownedRightsRegistrar = await readFile(path.join(process.cwd(), "script/clippers-record-owned-source-rights.mjs"), "utf8");
+  assert.match(ownedRightsRegistrar, /no third-party footage, raw footage, league footage, broadcast footage/i);
+  assert.match(ownedRightsRegistrar, /no third-party footage, raw footage, creator clips/i);
 });
 
 test("Metricool 100 operator handoff batches approval-only rows without publishing", async () => {
