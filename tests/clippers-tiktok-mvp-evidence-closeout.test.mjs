@@ -869,7 +869,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /parse-clippers-tiktok-mvp-proof-links-paste-button/);
   assert.match(page, /const tiktokMvpProofLinksSaveMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
   assert.match(page, /const tiktokMvpProofLinksPreviewMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
-  assert.match(page, /const tiktokMvpProofLinksPasteMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(pasteTextOverride\?: string\) =>/);
+  assert.match(page, /const tiktokMvpProofLinksPasteMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksText\(""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(pasteTextOverride\?: string\) =>/);
   assert.match(page, /setTiktokMvpProofLinksPreview\(data\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
   assert.match(page, /setTiktokMvpProofLinksPastePreview\(data\);[\s\S]*?setTiktokMvpProofLinksText\(data\.proofLinksText\);[\s\S]*?setTiktokMvpProofLinksPreview\(data\.proofLinksPreview\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-paste-preview/);

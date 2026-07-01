@@ -11913,6 +11913,9 @@ export default function ClippersPage() {
 
   const tiktokMvpProofLinksPasteMutation = useMutation({
     onMutate: () => {
+      setTiktokMvpProofLinksPastePreview(null);
+      setTiktokMvpProofLinksText("");
+      setTiktokMvpProofLinksPreview(null);
       setTiktokMvpProofLinksSaveReceipt(null);
     },
     mutationFn: async (pasteTextOverride?: string) => {
