@@ -1854,6 +1854,13 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /script\/clippers-tiktok-mvp-proof-drop-kit\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-proof-intake-import\.mjs/);
   assert.match(source, /script\/clippers-tiktok-mvp-closeout-wizard\.mjs/);
+  assert.match(source, /function isQuickFillCurrentWithProofRefresh/);
+  assert.match(source, /const quickFillIssues = Array\.isArray\(quickFill\.issues\) \? quickFill\.issues : null/);
+  assert.match(source, /isFreshGeneratedAt\(quickFill\.generatedAt\)/);
+  assert.match(source, /isFreshGeneratedAt\(proofRefresh\.generatedAt\)/);
+  assert.match(source, /currentWithProofRefresh/);
+  assert.match(source, /proofRefreshFresh/);
+  assert.doesNotMatch(source, /quickFillGeneratedAt >= proofRefreshGeneratedAt/);
   assert.match(source, /Proof handoff never applies evidence, publishes, schedules, or enables direct social APIs/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
@@ -1890,6 +1897,9 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(report.unblockBoard.impact.metricool100SourceReadyBatches, 10);
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
   assert.equal(report.unblockBoard.impact.metricool100BlockedBatches, 10);
+  assert.equal(typeof report.proofState.quickFillCurrent, "boolean");
+  assert.equal(typeof report.proofState.proofRefreshFresh, "boolean");
+  assert.match(report.gates.find((gate) => gate.id === "quick_fill").detail, /currentWithProofRefresh|malformed/);
   assert.match(report.unblockBoard.rows[0].exactPasteLine, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.doesNotMatch(JSON.stringify(report.unblockBoard), /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);

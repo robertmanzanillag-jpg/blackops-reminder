@@ -8255,10 +8255,69 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.equal(mismatchedQuickFillAudit.tiktokMvpProofQuickFill.currentWithProofRefresh, false);
     assert.match(mismatchedQuickFillAudit.operatorNextActions[0].nextAction, /Quick fill is stale against current Proof refresh/);
 
+    await writeFile(proofRefreshPath, JSON.stringify({
+      ...originalRefresh,
+      status: "ready_to_apply",
+      generatedAt: new Date().toISOString(),
+      importStatus: "ready_to_apply",
+      doctorStatus: "ready_to_apply",
+      readyLanes: 2,
+      targetLanes: 2,
+      importFixQueue: 0,
+      doctorFixQueue: 0,
+      readyChecks: {
+        importRunOk: true,
+        doctorRunOk: true,
+        importReady: true,
+        doctorReady: true,
+        lanesReady: true,
+        noImportFixes: true,
+        noDoctorFixes: true,
+      },
+      blockers: [],
+      paths: {
+        ...(originalRefresh.paths || {}),
+        markdown: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.md"),
+      },
+      nextStep: "Proof refresh is clean.",
+    }, null, 2));
+    await writeFile(proofQuickFillPath, JSON.stringify({
+      ...originalQuickFill,
+      status: "applied_to_combined_intake",
+      generatedAt: new Date().toISOString(),
+      appliedToIntake: true,
+      issues: "malformed",
+      proofRefreshStatus: "ready_to_apply",
+      paths: {
+        ...(originalQuickFill.paths || {}),
+        inputJson: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json"),
+      },
+      nextStep: "Quick fill must be rerun because the issue list is malformed.",
+    }, null, 2));
+    const cleanRefreshMalformedQuickFillResult = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(cleanRefreshMalformedQuickFillResult.status, 0, cleanRefreshMalformedQuickFillResult.stderr || cleanRefreshMalformedQuickFillResult.stdout);
+    const cleanRefreshMalformedQuickFillAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(cleanRefreshMalformedQuickFillAudit.fullGoal.tiktokMvpOperatingProofGateReady, true);
+    assert.equal(cleanRefreshMalformedQuickFillAudit.fullGoal.tiktokMvpProofRefreshReady, true);
+    assert.equal(cleanRefreshMalformedQuickFillAudit.fullGoal.tiktokMvpProofGateReady, false);
+    assert.equal(cleanRefreshMalformedQuickFillAudit.tiktokMvpProofQuickFill.currentWithProofRefresh, false);
+    assert.equal(cleanRefreshMalformedQuickFillAudit.tiktokMvpProofQuickFill.issues, 1);
+    assert.equal(cleanRefreshMalformedQuickFillAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.status, "needs_external_action");
+    assert.match(cleanRefreshMalformedQuickFillAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.evidence || "", /quickFillCurrent false/);
+    assert.match(cleanRefreshMalformedQuickFillAudit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate")?.nextAction || "", /Quick fill must be rerun/);
+    assert.match(cleanRefreshMalformedQuickFillAudit.nextStep, /Quick fill must be rerun/);
+
     const scriptSource = await readFile(path.join(process.cwd(), "script/clippers-goal-completion-audit.mjs"), "utf8");
     assert.match(scriptSource, /function proofGateControlFieldsPresent\(proofGate = \{\}\)/);
     assert.match(scriptSource, /function isProofGateReady\(proofGate\)/);
     assert.match(scriptSource, /function isProofRefreshReady\(proofRefresh = \{\}\)/);
+    assert.match(scriptSource, /const quickFillIssues = Array\.isArray\(quickFill\.issues\) \? quickFill\.issues : null/);
+    assert.match(scriptSource, /isFreshGeneratedAt\(quickFill\.generatedAt\)/);
+    assert.match(scriptSource, /isFreshGeneratedAt\(proofRefresh\.generatedAt\)/);
+    assert.doesNotMatch(scriptSource, /quickFillGeneratedAt >= proofRefreshGeneratedAt/);
     assert.match(scriptSource, /proofGateControlFieldsPresent\(proofGate\)/);
     assert.match(scriptSource, /requiredLanes\.includes\("sports-daily:tiktok"\)/);
     assert.match(scriptSource, /requiredLanes\.includes\("meme-radar:tiktok"\)/);
@@ -8266,7 +8325,7 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.match(scriptSource, /proofGate\.boundaryNotReady/);
     assert.match(scriptSource, /proofGate\.blockedBy/);
     assert.match(scriptSource, /!proofGate\.preflightNotReady/);
-    assert.match(scriptSource, /const tiktokMvpProofReady = proofGateReady && proofRefreshReady/);
+    assert.match(scriptSource, /const tiktokMvpProofReady = proofGateReady && proofRefreshReady && proofQuickFillCurrent/);
     assert.match(scriptSource, /const tiktokMvpOperatorReady = tiktokMvpProofReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession/);
     assert.match(scriptSource, /const currentBatchOperatorReady = tiktokMvpOperatorReady && currentBatchReady/);
   } finally {

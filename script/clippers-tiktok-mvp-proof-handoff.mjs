@@ -69,6 +69,35 @@ async function readJson(filePath, fallback = null) {
   }
 }
 
+function timestampMs(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isFreshGeneratedAt(value, maxAgeMs = 6 * 60 * 60 * 1000) {
+  const parsed = timestampMs(value);
+  if (!parsed) return false;
+  const ageMs = Date.now() - parsed;
+  return ageMs >= 0 && ageMs <= maxAgeMs;
+}
+
+function isQuickFillCurrentWithProofRefresh(quickFill = {}, proofRefresh = {}) {
+  const quickFillGeneratedAt = timestampMs(quickFill.generatedAt);
+  const proofRefreshGeneratedAt = timestampMs(proofRefresh.generatedAt);
+  const quickFillIssues = Array.isArray(quickFill.issues) ? quickFill.issues : null;
+  return Boolean(
+    quickFill.appliedToIntake === true
+    && quickFill.status === "applied_to_combined_intake"
+    && quickFillIssues
+    && quickFillIssues.length === 0
+    && isFreshGeneratedAt(quickFill.generatedAt)
+    && isFreshGeneratedAt(proofRefresh.generatedAt)
+    && quickFillGeneratedAt
+    && proofRefreshGeneratedAt
+    && quickFill.proofRefreshStatus === proofRefresh.status
+  );
+}
+
 function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, wizard }) {
   if (!proofDrop?.readyForQuickFill) {
     return {
@@ -77,11 +106,11 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
       nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes Metricool proof URLs, or separate ownership plus Metricool URLs, then save proof links.",
     };
   }
-  if (!quickFill?.appliedToIntake) {
+  if (!quickFill?.currentWithProofRefresh) {
     return {
       status: "blocked_needs_quick_fill",
       nextButton: "quick_fill",
-      nextAction: quickFill?.nextStep || "Run Quick fill after proof links pass validation.",
+      nextAction: quickFill?.nextStep || "Run Quick fill after proof links pass validation, then rerun Proof handoff so the report matches current Proof refresh.",
     };
   }
   if (importPreview?.status !== "ready_to_apply" && importPreview?.status !== "applied") {
@@ -395,6 +424,8 @@ function renderMarkdown(summary) {
     `- Missing proofs: ${summary.unblockBoard.missingProofs}/${summary.unblockBoard.totalProofs}`,
     `- Minimum real proof URLs needed: ${summary.unblockBoard.minimumProofUrlsNeeded}`,
     `- Fast path available: ${summary.unblockBoard.fastPathAvailable}`,
+    `- Quick fill current: ${summary.proofState.quickFillCurrent}`,
+    `- Proof refresh fresh: ${summary.proofState.proofRefreshFresh}`,
     `- Source-ready batches: ${summary.unblockBoard.impact.metricool100SourceReadyBatches}`,
     `- Operator-ready batches: ${summary.unblockBoard.impact.metricool100OperatorReadyBatches}`,
     `- Board CSV: ${summary.paths.unblockBoardCsv}`,
@@ -427,11 +458,23 @@ async function main() {
   const wizardRun = runJson(["script/clippers-tiktok-mvp-closeout-wizard.mjs"]);
   const proofDrop = await readJson(path.join(reportsDir, "proof-drop-kit.json"), {});
   const quickFill = await readJson(path.join(reportsDir, "proof-quick-fill.json"), {});
+  const proofRefresh = await readJson(path.join(reportsDir, "proof-refresh.json"), {});
   const importPreview = await readJson(path.join(reportsDir, "proof-intake-import.json"), {});
   const closeout = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"), {});
   const wizard = await readJson(path.join(reportsDir, "closeout-wizard.json"), {});
   const goLivePacket = await readJson(path.join(rootDir, "reports", "clippers-tiktok-mvp-go-live-packet.json"), {});
-  const decision = decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, wizard });
+  const quickFillCurrent = isQuickFillCurrentWithProofRefresh(quickFill, proofRefresh);
+  const quickFillIssuesValid = Array.isArray(quickFill?.issues);
+  const quickFillIssues = quickFillIssuesValid ? quickFill.issues.length : 1;
+  const proofRefreshFresh = isFreshGeneratedAt(proofRefresh?.generatedAt);
+  const quickFillForDecision = {
+    ...quickFill,
+    currentWithProofRefresh: quickFillCurrent,
+    nextStep: quickFillCurrent
+      ? quickFill?.nextStep
+      : "Quick fill is stale, malformed, or missing against current Proof refresh; rerun Quick fill with real non-secret proof before trusting this handoff.",
+  };
+  const decision = decisionFromArtifacts({ proofDrop, quickFill: quickFillForDecision, importPreview, closeout, wizard });
   const collectionPackets = buildCollectionPackets(proofDrop);
   const gates = [
     {
@@ -441,8 +484,10 @@ async function main() {
     },
     {
       id: "quick_fill",
-      status: quickFill?.appliedToIntake ? "pass" : "blocked",
-      detail: `${Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0} quick-fill issues.`,
+      status: quickFillCurrent ? "pass" : "blocked",
+      detail: quickFillIssuesValid
+        ? `${quickFillIssues} quick-fill issues; currentWithProofRefresh=${quickFillCurrent}; proofRefreshStatus=${quickFill?.proofRefreshStatus || "missing"}; currentProofRefresh=${proofRefresh?.status || "missing"}.`
+        : "Quick-fill issues report is malformed; rerun Quick fill with real non-secret proof before trusting this handoff.",
     },
     {
       id: "import_preview",
@@ -473,6 +518,14 @@ async function main() {
       importPreviewRun,
       wizardRun,
     },
+    proofState: {
+      quickFillCurrent,
+      quickFillIssues,
+      quickFillIssuesValid,
+      proofRefreshStatus: proofRefresh?.status || "missing",
+      proofRefreshFresh,
+      proofRefreshGeneratedAt: proofRefresh?.generatedAt || "missing",
+    },
     gates,
     collectionPackets,
     unblockBoard,
@@ -480,7 +533,9 @@ async function main() {
     jsonStarter: buildProofLinksJsonStarter(),
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
-      quickFillIssues: Array.isArray(quickFill?.issues) ? quickFill.issues.length : 0,
+      quickFillIssues,
+      quickFillCurrent,
+      proofRefreshFresh,
       importFixes: Array.isArray(importPreview?.fixQueue) ? importPreview.fixQueue.length : 0,
       closeoutRejected: Number(closeout?.totals?.rejected || 0),
       proofPacketsNeeded: collectionPackets.filter((packet) => packet.status !== "ready").length,
@@ -497,6 +552,7 @@ async function main() {
       unblockBoardCsv: outUnblockBoardCsvPath,
       proofDropJson: path.join(reportsDir, "proof-drop-kit.json"),
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
+      proofRefreshJson: path.join(reportsDir, "proof-refresh.json"),
       importJson: path.join(reportsDir, "proof-intake-import.json"),
       closeoutJson: path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json"),
       wizardJson: path.join(reportsDir, "closeout-wizard.json"),
@@ -521,6 +577,8 @@ async function main() {
     nextButton: summary.nextButton,
     proofIssues: summary.totals.proofIssues,
     quickFillIssues: summary.totals.quickFillIssues,
+    quickFillCurrent: summary.totals.quickFillCurrent,
+    proofRefreshFresh: summary.totals.proofRefreshFresh,
     importFixes: summary.totals.importFixes,
     closeoutRejected: summary.totals.closeoutRejected,
     proofPacketsNeeded: summary.totals.proofPacketsNeeded,
