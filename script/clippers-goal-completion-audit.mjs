@@ -13,6 +13,7 @@ const paths = {
   tiktokLaunchControl: path.join(reportsDir, "clippers-tiktok-launch-control.json"),
   tiktokExternalCloseoutSession: path.join(reportsDir, "clippers-tiktok-external-closeout-session.json"),
   tiktokMvpOperatingRefresh: path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json"),
+  tiktokMvpProofRefresh: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-refresh.json"),
   masterEvidenceCsv: path.join(rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv"),
   batchEvidenceDir: path.join(scheduledDir, "metricool-100-batch-evidence-imports"),
   outJson: path.join(reportsDir, "clippers-goal-completion-audit.json"),
@@ -74,6 +75,18 @@ function isPlaceholder(value) {
 function numberValue(value) {
   const parsed = Number(String(value || "").replace(/,/g, "").trim());
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function timestampMs(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isFreshGeneratedAt(value, maxAgeMs = 6 * 60 * 60 * 1000) {
+  const parsed = timestampMs(value);
+  if (!parsed) return false;
+  const ageMs = Date.now() - parsed;
+  return ageMs >= 0 && ageMs <= maxAgeMs;
 }
 
 function isTikTokPostUrl(value) {
@@ -139,6 +152,8 @@ function renderMarkdown(summary) {
     `- External proof files needing evidence: ${summary.fullGoal.externalProofFilesNeedRealEvidence}`,
     `- TikTok proof gate status: ${summary.tiktokMvpProofGate.status}`,
     `- TikTok proof gate minimum URLs: ${summary.tiktokMvpProofGate.minimumProofUrlsNeeded}`,
+    `- TikTok proof refresh status: ${summary.tiktokMvpProofRefresh.status}`,
+    `- TikTok proof refresh blockers: ${summary.tiktokMvpProofRefresh.blockers.length}`,
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
@@ -156,6 +171,19 @@ function renderMarkdown(summary) {
     `- Proof JSON: ${summary.tiktokMvpProofGate.paths.proofLinksJson || "missing"}`,
     "",
     ...(summary.tiktokMvpProofGate.blockedBy.length ? summary.tiktokMvpProofGate.blockedBy.map((item) => `- ${item}`) : ["- none"]),
+    "",
+    "## TikTok MVP Proof Refresh",
+    "",
+    `- Status: ${summary.tiktokMvpProofRefresh.status}`,
+    `- Generated: ${summary.tiktokMvpProofRefresh.generatedAt}`,
+    `- Fresh: ${summary.tiktokMvpProofRefresh.fresh}`,
+    `- Import status: ${summary.tiktokMvpProofRefresh.importStatus}`,
+    `- Doctor status: ${summary.tiktokMvpProofRefresh.doctorStatus}`,
+    `- Ready lanes: ${summary.tiktokMvpProofRefresh.readyLanes}/${summary.tiktokMvpProofRefresh.targetLanes}`,
+    `- Import fixes: ${summary.tiktokMvpProofRefresh.importFixQueue}`,
+    `- Doctor fixes: ${summary.tiktokMvpProofRefresh.doctorFixQueue}`,
+    `- Next: ${summary.tiktokMvpProofRefresh.nextStep}`,
+    ...(summary.tiktokMvpProofRefresh.blockers.length ? summary.tiktokMvpProofRefresh.blockers.map((item) => `- Blocker: ${item}`) : ["- Blocker: none"]),
     "",
     "## Operator Next Actions",
     "",
@@ -254,7 +282,39 @@ function isProofGateReady(proofGate) {
     && !proofGate.preflightNotReady;
 }
 
-function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate }) {
+function isProofRefreshReady(proofRefresh = {}) {
+  const blockers = proofRefreshBlockersForAudit(proofRefresh);
+  const readyChecks = proofRefresh.readyChecks || {};
+  return proofRefresh.status === "ready_to_apply"
+    && isFreshGeneratedAt(proofRefresh.generatedAt)
+    && (proofRefresh.importStatus === "ready_to_apply" || proofRefresh.importStatus === "applied")
+    && proofRefresh.doctorStatus === "ready_to_apply"
+    && Number(proofRefresh.readyLanes || 0) >= Number(proofRefresh.targetLanes || 2)
+    && Number(proofRefresh.importFixQueue || 0) === 0
+    && Number(proofRefresh.doctorFixQueue || 0) === 0
+    && blockers.length === 0
+    && readyChecks.importRunOk === true
+    && readyChecks.doctorRunOk === true
+    && readyChecks.importReady === true
+    && readyChecks.doctorReady === true
+    && readyChecks.lanesReady === true
+    && readyChecks.noImportFixes === true
+    && readyChecks.noDoctorFixes === true;
+}
+
+function proofRefreshBlockersForAudit(proofRefresh = {}) {
+  const blockers = Array.isArray(proofRefresh.blockers) ? [...proofRefresh.blockers] : [];
+  if (!isFreshGeneratedAt(proofRefresh.generatedAt)) {
+    blockers.unshift("proof_refresh_stale_or_missing");
+  }
+  return Array.from(new Set(blockers));
+}
+
+function shouldPrioritizeProofGateFix(proofGate = {}, proofGateReady = false) {
+  return !proofGateReady && proofGate.status === "ready_for_operator_review";
+}
+
+function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh }) {
   const proofHandoffDir = path.join(reportsDir, "tiktok-mvp-proof-intake");
   const oneScreenProofPath = path.join(proofHandoffDir, "proof-fill-one-screen.txt");
   const rows = [];
@@ -269,15 +329,24 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
     ];
   let priority = 1;
   if (!proofGateReady) {
+    const proofRefreshBlockers = proofRefreshBlockersForAudit(proofRefresh);
+    const proofRefreshPath = proofRefresh?.paths?.markdown || path.join(proofHandoffDir, "proof-refresh.md");
+    const proofRefreshNextAction = proofRefreshBlockers.length
+      ? `${proofRefresh.nextStep || "Fix proof refresh blockers before save/apply."} Current proof refresh blockers: ${proofRefreshBlockers.slice(0, 3).join(", ")}.`
+      : proofRefresh?.nextStep || "Run Proof refresh to rebuild proof intake and doctor blockers before operating Metricool.";
     rows.push({
       priority: priority++,
       title: "Fast path Metricool TikTok proof gate",
       status: "blocked_needs_valid_metricool_tiktok_proof_gate",
       owner: "Robert",
-      buttonOrFile: proofGate.paths?.oneScreenGuide || oneScreenProofPath,
+      buttonOrFile: proofGateFixFirst
+        ? proofGate.paths?.oneScreenGuide || oneScreenProofPath
+        : proofRefreshPath,
       proofLine: (proofGate.requiredLanes || []).join(" + "),
       guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs.",
-      nextAction: proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs and preview before saving.`,
+      nextAction: proofGateFixFirst
+        ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs and preview before saving.`
+        : proofRefreshNextAction,
     });
   }
   const activeMvpProofReady = activeMvpReady && proofGateReady;
@@ -347,7 +416,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, evidenceRaw] = await Promise.all([
+  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, evidenceRaw] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.metricoolMvpLaunchPack),
     readJson(paths.metricool100ApprovalRun),
@@ -355,6 +424,7 @@ async function main() {
     readJson(paths.tiktokLaunchControl),
     readJson(paths.tiktokExternalCloseoutSession, {}),
     readJson(paths.tiktokMvpOperatingRefresh, {}),
+    readJson(paths.tiktokMvpProofRefresh, {}),
     readFile(paths.masterEvidenceCsv, "utf8").catch(() => ""),
   ]);
   const evidence = evidenceTotals(parseCsv(evidenceRaw));
@@ -413,34 +483,41 @@ async function main() {
   const proofGate = operatingRefresh.proofGate || {};
   const proofGateControlsPresent = proofGateControlFieldsPresent(proofGate);
   const proofGateReady = isProofGateReady(proofGate);
-  const tiktokMvpOperatorReady = proofGateReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession;
+  const proofRefreshReady = isProofRefreshReady(proofRefresh);
+  const proofRefreshFresh = isFreshGeneratedAt(proofRefresh.generatedAt);
+  const proofRefreshBlockers = proofRefreshBlockersForAudit(proofRefresh);
+  const proofGateFixFirst = shouldPrioritizeProofGateFix(proofGate, proofGateReady);
+  const tiktokMvpProofReady = proofGateReady && proofRefreshReady;
+  const tiktokMvpOperatorReady = tiktokMvpProofReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession;
   const currentBatchOperatorReady = tiktokMvpOperatorReady && currentBatchReady;
 
   const requirements = [
     requirement(
       "tiktok_metricool_proof_gate",
       "TikTok Metricool proof gate",
-      proofGateReady ? "ready" : "needs_external_action",
-      `proofGate ${proofGate.status || "missing"}; controlFieldsPresent ${proofGateControlsPresent}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
-      proofGate.nextStep || "Run Operating Refresh and paste real non-secret SPORT/memes Metricool proof URLs.",
+      tiktokMvpProofReady ? "ready" : "needs_external_action",
+      `proofGate ${proofGate.status || "missing"}; proofGateReady ${proofGateReady}; controlFieldsPresent ${proofGateControlsPresent}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; proofRefresh ${proofRefresh.status || "missing"}; proofRefreshReady ${proofRefreshReady}; proofRefreshFresh ${proofRefreshFresh}; proofRefreshGeneratedAt ${proofRefresh.generatedAt || "missing"}; proofRefreshBlockers ${proofRefreshBlockers.join("+") || "none"}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
+      proofGateFixFirst
+        ? (proofGate.nextStep || "Run Operating Refresh and paste real non-secret SPORT/memes Metricool proof URLs.")
+        : (proofRefreshReady ? proofGate.nextStep : proofRefresh.nextStep) || "Run Proof refresh to rebuild proof intake and doctor blockers.",
     ),
     requirement(
       "tiktok_metricool_mvp_ready",
       "TikTok Metricool MVP ready",
       tiktokMvpOperatorReady ? "ready" : "needs_external_action",
       `activeMvp ${activeMvp.readyLanes || 0}/${activeMvp.targetLanes || 0}; queued ${approvalRun.totals?.metricoolQueuedForApproval || 0}; readyToSend ${approvalRun.totals?.readyToSend || 0}; platforms tiktok=${approvalSession.totals?.tiktok || 0}, instagram=${approvalSession.totals?.instagram || 0}, youtube=${approvalSession.totals?.youtube || 0}`,
-      proofGateReady
+      tiktokMvpProofReady
         ? "Use Metricool approval workflow only."
-        : (proofGate.nextStep || "Complete the TikTok Metricool proof gate before operating the MVP."),
+        : (proofGateFixFirst ? proofGate.nextStep : proofRefresh.nextStep) || "Complete the TikTok Metricool proof gate before operating the MVP.",
     ),
     requirement(
       "tiktok_batch_01_ready_for_metricool",
       "Batch 01 ready for Metricool operator",
-      currentBatchOperatorReady ? "ready" : (proofGateReady ? "waiting_metricool_work" : "needs_external_action"),
+      currentBatchOperatorReady ? "ready" : (tiktokMvpProofReady ? "waiting_metricool_work" : "needs_external_action"),
       `launchControl ${launchControl.status || "missing"}; currentBatch ${currentBatch.id || "missing"} rows ${currentBatch.rows || 0}; accounts ${(currentBatch.accounts || []).join("+") || "none"}`,
       currentBatchOperatorReady
         ? "Open the current batch workbook and process it inside Metricool."
-        : (proofGateReady ? "Prepare the current batch after launch control is ready." : (proofGate.nextStep || "Complete the TikTok Metricool proof gate before opening the current batch.")),
+        : (tiktokMvpProofReady ? "Prepare the current batch after launch control is ready." : ((proofGateFixFirst ? proofGate.nextStep : proofRefresh.nextStep) || "Complete the TikTok Metricool proof gate before opening the current batch.")),
     ),
     requirement(
       "published_urls_and_metrics",
@@ -512,11 +589,13 @@ async function main() {
     accountReadiness,
     activeMvp,
     activeMvpReady,
-    proofGateReady,
+    proofGateReady: tiktokMvpProofReady,
+    proofGateFixFirst,
     currentBatchId,
     currentBatchReady,
     allPublishedEvidenceReady,
     proofGate,
+    proofRefresh,
   });
 
   const totals = requirements.reduce((sum, row) => {
@@ -558,7 +637,9 @@ async function main() {
     },
     fullGoal: {
       metricoolMvpReady: tiktokMvpOperatorReady,
-      tiktokMvpProofGateReady: proofGateReady,
+      tiktokMvpProofGateReady: tiktokMvpProofReady,
+      tiktokMvpOperatingProofGateReady: proofGateReady,
+      tiktokMvpProofRefreshReady: proofRefreshReady,
       externalProofFilesNeedRealEvidence: externalProofRows,
       tiktokExternalCloseoutTasks,
       tiktokExternalDeferredTasks,
@@ -582,14 +663,29 @@ async function main() {
       paths: proofGate.paths || {},
       nextStep: proofGate.nextStep || "Run Operating Refresh to rebuild the TikTok MVP proof gate.",
     },
+    tiktokMvpProofRefresh: {
+      status: proofRefresh.status || "missing",
+      generatedAt: proofRefresh.generatedAt || "missing",
+      fresh: proofRefreshFresh,
+      importStatus: proofRefresh.importStatus || "missing",
+      doctorStatus: proofRefresh.doctorStatus || "missing",
+      readyLanes: Number(proofRefresh.readyLanes || 0),
+      targetLanes: Number(proofRefresh.targetLanes || 2),
+      importFixQueue: Number(proofRefresh.importFixQueue || 0),
+      doctorFixQueue: Number(proofRefresh.doctorFixQueue || 0),
+      readyChecks: proofRefresh.readyChecks || {},
+      blockers: proofRefreshBlockers,
+      paths: proofRefresh.paths || {},
+      nextStep: proofRefresh.nextStep || "Run Proof refresh to rebuild proof intake and doctor blockers.",
+    },
     operatorNextActions,
     requirements,
     totals,
     nextStep: status === "tiktok_mvp_ready_external_work_remaining"
       ? `Process ${currentBatch.id || "metricool-batch-01"} in Metricool; do not import evidence until real TikTok URLs and 24h metrics exist.`
-      : (proofGateReady
+      : (tiktokMvpProofReady
         ? "Fix the blocked TikTok MVP evidence before operating Metricool."
-        : (proofGate.nextStep || "Complete the TikTok Metricool proof gate before operating Metricool.")),
+        : ((proofGateFixFirst ? proofGate.nextStep : proofRefresh.nextStep) || "Complete the TikTok Metricool proof gate before operating Metricool.")),
     guardrails: [
       "Only TikTok SPORT and memes are active in this MVP.",
       "Metricool remains approval_required with realPublishEnabled=false.",
