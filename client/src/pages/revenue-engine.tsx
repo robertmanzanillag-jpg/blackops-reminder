@@ -1637,6 +1637,16 @@ type DeliveryWorkspaceGithubHandoffResult = {
   snapshot: RevenueSnapshot;
 };
 
+type DeliveryWorkspaceReleaseGateInput = {
+  prUrl?: string;
+  secondReviewEvidenceUrl?: string;
+  appQaEvidenceUrl?: string;
+  deploymentApprovalUrl?: string;
+  secondReviewPassed?: boolean;
+  appQaPassed?: boolean;
+  robertApprovedDeploy?: boolean;
+};
+
 type DeliveryWorkspacePrStatusResult = {
   status: "ready" | "blocked" | "needs_pr" | "not_found" | "repo_mismatch" | "github_unavailable" | "invalid_request";
   reason?: string;
@@ -2063,13 +2073,7 @@ export default function RevenueEnginePage() {
     return value.length >= 4 ? value : null;
   };
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
-  const [releasePrUrl, setReleasePrUrl] = useState("");
-  const [releaseSecondReviewEvidenceUrl, setReleaseSecondReviewEvidenceUrl] = useState("");
-  const [releaseAppQaEvidenceUrl, setReleaseAppQaEvidenceUrl] = useState("");
-  const [releaseDeploymentApprovalUrl, setReleaseDeploymentApprovalUrl] = useState("");
-  const [releaseSecondReviewPassed, setReleaseSecondReviewPassed] = useState(false);
-  const [releaseAppQaPassed, setReleaseAppQaPassed] = useState(false);
-  const [releaseRobertApprovedDeploy, setReleaseRobertApprovedDeploy] = useState(false);
+  const [releaseGateInputsByWorkspace, setReleaseGateInputsByWorkspace] = useState<Record<string, DeliveryWorkspaceReleaseGateInput>>({});
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
   const [proposalRecipientEmail, setProposalRecipientEmail] = useState("robert.manzanillag@gmail.com");
   const [proposalContactName, setProposalContactName] = useState("Robert");
@@ -2168,6 +2172,29 @@ export default function RevenueEnginePage() {
   const [agentApprovalToContact, setAgentApprovalToContact] = useState(false);
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
+
+  const buildReleaseGateInput = (workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number]): Required<DeliveryWorkspaceReleaseGateInput> => {
+    const stored = releaseGateInputsByWorkspace[workspace.id] || {};
+    return {
+      prUrl: stored.prUrl ?? (workspace.input.prUrl || workspace.codexBuildHandoff.prUrl || ""),
+      secondReviewEvidenceUrl: stored.secondReviewEvidenceUrl ?? (workspace.input.secondReviewEvidenceUrl || workspace.codexBuildHandoff.secondReviewEvidenceUrl || ""),
+      appQaEvidenceUrl: stored.appQaEvidenceUrl ?? (workspace.input.appQaEvidenceUrl || workspace.codexBuildHandoff.appQaEvidenceUrl || ""),
+      deploymentApprovalUrl: stored.deploymentApprovalUrl ?? (workspace.input.deploymentApprovalUrl || workspace.codexBuildHandoff.deploymentApprovalUrl || ""),
+      secondReviewPassed: stored.secondReviewPassed ?? (workspace.input.secondReviewStatus === "pass" || workspace.codexBuildHandoff.secondReviewStatus === "pass"),
+      appQaPassed: stored.appQaPassed ?? (workspace.input.appQaStatus === "pass" || workspace.codexBuildHandoff.appQaStatus === "pass"),
+      robertApprovedDeploy: stored.robertApprovedDeploy ?? (workspace.input.deploymentApprovalStatus === "approved" || workspace.codexBuildHandoff.deploymentApprovalStatus === "approved"),
+    };
+  };
+
+  const updateReleaseGateInput = (workspaceId: string, patch: DeliveryWorkspaceReleaseGateInput) => {
+    setReleaseGateInputsByWorkspace((current) => ({
+      ...current,
+      [workspaceId]: {
+        ...current[workspaceId],
+        ...patch,
+      },
+    }));
+  };
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -2839,6 +2866,7 @@ export default function RevenueEnginePage() {
 
   const deliveryWorkspaceReleaseGateMutation = useMutation<DeliveryWorkspaceQaUpdateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
     mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
       const response = await fetch("/api/revenue-engine/delivery-workspaces/release-gate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2847,14 +2875,14 @@ export default function RevenueEnginePage() {
           repoFullName: reviewRepoFullName || workspace.input.repoFullName,
           branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
           githubIssueUrl: workspace.input.githubIssueUrl,
-          prUrl: releasePrUrl || workspace.input.prUrl,
-          secondReviewStatus: releaseSecondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
-          secondReviewEvidenceUrl: releaseSecondReviewEvidenceUrl,
-          appQaStatus: releaseAppQaPassed ? "pass" : workspace.input.appQaStatus,
-          appQaEvidenceUrl: releaseAppQaEvidenceUrl,
-          deploymentApprovalStatus: releaseRobertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
-          deploymentApprovalUrl: releaseDeploymentApprovalUrl || workspace.input.deploymentApprovalUrl,
-          notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${workspace.input.branchName || workspace.codexBuildHandoff.branchName}, client ${workspace.input.clientName}. second review=${releaseSecondReviewPassed ? "pass" : "pending"} app qa=${releaseAppQaPassed ? "pass" : "pending"} Robert approval=${releaseRobertApprovedDeploy ? "approved" : "pending"}.`,
+          prUrl: releaseGateInput.prUrl,
+          secondReviewStatus: releaseGateInput.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+          secondReviewEvidenceUrl: releaseGateInput.secondReviewEvidenceUrl,
+          appQaStatus: releaseGateInput.appQaPassed ? "pass" : workspace.input.appQaStatus,
+          appQaEvidenceUrl: releaseGateInput.appQaEvidenceUrl,
+          deploymentApprovalStatus: releaseGateInput.robertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
+          deploymentApprovalUrl: releaseGateInput.deploymentApprovalUrl,
+          notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${workspace.input.branchName || workspace.codexBuildHandoff.branchName}, client ${workspace.input.clientName}. second review=${releaseGateInput.secondReviewPassed ? "pass" : "pending"} app qa=${releaseGateInput.appQaPassed ? "pass" : "pending"} Robert approval=${releaseGateInput.robertApprovedDeploy ? "approved" : "pending"}.`,
         }),
       });
       const data = await response.json();
@@ -2868,12 +2896,13 @@ export default function RevenueEnginePage() {
 
   const deliveryWorkspacePrStatusMutation = useMutation<DeliveryWorkspacePrStatusResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
     mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
       const response = await fetch("/api/revenue-engine/delivery-workspaces/pr-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId: workspace.id,
-          prUrl: releasePrUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl,
+          prUrl: releaseGateInput.prUrl,
         }),
       });
       const data = await response.json();
@@ -2881,15 +2910,19 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: (data) => {
-      if (data.prStatus?.pr.htmlUrl) setReleasePrUrl(data.prStatus.pr.htmlUrl);
+      const workspaceId = data.workspace?.id;
+      if (!workspaceId) return;
+      const patch: DeliveryWorkspaceReleaseGateInput = {};
+      if (data.prStatus?.pr.htmlUrl) patch.prUrl = data.prStatus.pr.htmlUrl;
       if (data.prStatus?.secondReviewEvidenceUrl) {
-        setReleaseSecondReviewEvidenceUrl((current) => current || data.prStatus?.secondReviewEvidenceUrl || "");
-        setReleaseSecondReviewPassed(true);
+        patch.secondReviewEvidenceUrl = data.prStatus.secondReviewEvidenceUrl;
+        patch.secondReviewPassed = true;
       }
       if (data.prStatus?.appQaEvidenceUrl) {
-        setReleaseAppQaEvidenceUrl((current) => current || data.prStatus?.appQaEvidenceUrl || "");
-        setReleaseAppQaPassed(true);
+        patch.appQaEvidenceUrl = data.prStatus.appQaEvidenceUrl;
+        patch.appQaPassed = true;
       }
+      updateReleaseGateInput(workspaceId, patch);
     },
   });
 
@@ -8221,95 +8254,18 @@ export default function RevenueEnginePage() {
                         ))}
                       </div>
 
-                      <div className="grid gap-3">
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-repo">
-                            Repo
-                          </label>
-                          <Input
-                            id="review-repo"
-                            value={reviewRepoFullName}
-                            onChange={(event) => setReviewRepoFullName(event.target.value)}
-                            placeholder="owner/repo"
-                            className="border-zinc-800 bg-black"
-                            data-testid="input-review-repo"
-                          />
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-pr-url">
-                              PR URL
-                            </label>
-                            <Input
-                              id="release-pr-url"
-                              value={releasePrUrl}
-                              onChange={(event) => setReleasePrUrl(event.target.value)}
-                              placeholder="https://github.com/owner/repo/pull/1"
-                              className="border-zinc-800 bg-black"
-                              data-testid="input-release-pr-url"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-approval-url">
-                              Approval URL
-                            </label>
-                            <Input
-                              id="release-approval-url"
-                              value={releaseDeploymentApprovalUrl}
-                              onChange={(event) => setReleaseDeploymentApprovalUrl(event.target.value)}
-                              placeholder="PR comment with Robert approval"
-                              className="border-zinc-800 bg-black"
-                              data-testid="input-release-approval-url"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-second-review-url">
-                              Second review URL
-                            </label>
-                            <Input
-                              id="release-second-review-url"
-                              value={releaseSecondReviewEvidenceUrl}
-                              onChange={(event) => setReleaseSecondReviewEvidenceUrl(event.target.value)}
-                              placeholder="PR review/comment URL"
-                              className="border-zinc-800 bg-black"
-                              data-testid="input-release-second-review-url"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="release-app-qa-url">
-                              App QA URL
-                            </label>
-                            <Input
-                              id="release-app-qa-url"
-                              value={releaseAppQaEvidenceUrl}
-                              onChange={(event) => setReleaseAppQaEvidenceUrl(event.target.value)}
-                              placeholder="PR comment with App QA pass"
-                              className="border-zinc-800 bg-black"
-                              data-testid="input-release-app-qa-url"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-3">
-                          {[
-                            ["second-review", "Second review pass", releaseSecondReviewPassed, setReleaseSecondReviewPassed],
-                            ["app-qa", "App QA pass", releaseAppQaPassed, setReleaseAppQaPassed],
-                            ["robert-approval", "Robert approved", releaseRobertApprovedDeploy, setReleaseRobertApprovedDeploy],
-                          ].map(([key, label, checked, setter]) => (
-                            <label
-                              key={String(key)}
-                              className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={Boolean(checked)}
-                                onChange={() => (setter as (value: boolean) => void)(!checked)}
-                                className="h-4 w-4 rounded border-zinc-700 bg-black"
-                                data-testid={`checkbox-release-${key}`}
-                              />
-                              {String(label)}
-                            </label>
-                          ))}
-                        </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="review-repo">
+                          Repo
+                        </label>
+                        <Input
+                          id="review-repo"
+                          value={reviewRepoFullName}
+                          onChange={(event) => setReviewRepoFullName(event.target.value)}
+                          placeholder="owner/repo"
+                          className="border-zinc-800 bg-black"
+                          data-testid="input-review-repo"
+                        />
                       </div>
 
                       <div className="space-y-2">
@@ -8604,7 +8560,9 @@ export default function RevenueEnginePage() {
                             Sin workspaces guardados todavia.
                           </div>
                         ) : (
-                          snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => (
+                          snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => {
+                            const releaseGateInput = buildReleaseGateInput(workspace);
+                            return (
                             <div key={workspace.id} className="rounded-lg border border-zinc-800 bg-black p-3">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
@@ -8730,6 +8688,60 @@ export default function RevenueEnginePage() {
                                 {deliveryWorkspaceQaMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                                 Revalidar con checks marcados
                               </Button>
+                              <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3" data-testid={`panel-release-gate-inputs-${workspace.id}`}>
+                                <p className="text-xs uppercase tracking-wide text-zinc-500">Release gate de este workspace</p>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <Input
+                                    value={releaseGateInput.prUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { prUrl: event.target.value })}
+                                    placeholder="https://github.com/owner/repo/pull/1"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-pr-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.deploymentApprovalUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { deploymentApprovalUrl: event.target.value })}
+                                    placeholder="Robert approval comment URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-approval-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.secondReviewEvidenceUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { secondReviewEvidenceUrl: event.target.value })}
+                                    placeholder="Second review URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-second-review-url-${workspace.id}`}
+                                  />
+                                  <Input
+                                    value={releaseGateInput.appQaEvidenceUrl}
+                                    onChange={(event) => updateReleaseGateInput(workspace.id, { appQaEvidenceUrl: event.target.value })}
+                                    placeholder="App QA pass URL"
+                                    className="border-zinc-800 bg-black"
+                                    data-testid={`input-release-app-qa-url-${workspace.id}`}
+                                  />
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                                  {[
+                                    ["second-review", "Second review pass", releaseGateInput.secondReviewPassed, () => updateReleaseGateInput(workspace.id, { secondReviewPassed: !releaseGateInput.secondReviewPassed })],
+                                    ["app-qa", "App QA pass", releaseGateInput.appQaPassed, () => updateReleaseGateInput(workspace.id, { appQaPassed: !releaseGateInput.appQaPassed })],
+                                    ["robert-approval", "Robert approved", releaseGateInput.robertApprovedDeploy, () => updateReleaseGateInput(workspace.id, { robertApprovedDeploy: !releaseGateInput.robertApprovedDeploy })],
+                                  ].map(([key, label, checked, toggle]) => (
+                                    <label
+                                      key={String(key)}
+                                      className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(checked)}
+                                        onChange={() => (toggle as () => void)()}
+                                        className="h-4 w-4 rounded border-zinc-700 bg-black"
+                                        data-testid={`checkbox-release-${key}-${workspace.id}`}
+                                      />
+                                      {String(label)}
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
@@ -8737,7 +8749,7 @@ export default function RevenueEnginePage() {
                                 disabled={
                                   deliveryWorkspacePrStatusMutation.isPending
                                   || workspace.codexBuildHandoff.status === "not_required"
-                                  || !(releasePrUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl)
+                                  || !releaseGateInput.prUrl
                                 }
                                 onClick={() => deliveryWorkspacePrStatusMutation.mutate(workspace)}
                                 className="mt-2 w-full border-indigo-500/30 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
@@ -8753,13 +8765,13 @@ export default function RevenueEnginePage() {
                                 disabled={
                                   deliveryWorkspaceReleaseGateMutation.isPending
                                   || workspace.codexBuildHandoff.status === "not_required"
-                                  || !releasePrUrl
-                                  || !releaseSecondReviewEvidenceUrl
-                                  || !releaseAppQaEvidenceUrl
-                                  || !releaseDeploymentApprovalUrl
-                                  || !releaseSecondReviewPassed
-                                  || !releaseAppQaPassed
-                                  || !releaseRobertApprovedDeploy
+                                  || !releaseGateInput.prUrl
+                                  || !releaseGateInput.secondReviewEvidenceUrl
+                                  || !releaseGateInput.appQaEvidenceUrl
+                                  || !releaseGateInput.deploymentApprovalUrl
+                                  || !releaseGateInput.secondReviewPassed
+                                  || !releaseGateInput.appQaPassed
+                                  || !releaseGateInput.robertApprovedDeploy
                                 }
                                 onClick={() => deliveryWorkspaceReleaseGateMutation.mutate(workspace)}
                                 className="mt-2 w-full border-sky-500/30 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
@@ -8806,7 +8818,8 @@ export default function RevenueEnginePage() {
                                 Guardar review de mejora
                               </Button>
                             </div>
-                          ))
+                          );
+                          })
                         )}
                         {deliveryWorkspaceQaMutation.data && deliveryWorkspaceQaMutation.data.status !== "ready" && (
                           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100">

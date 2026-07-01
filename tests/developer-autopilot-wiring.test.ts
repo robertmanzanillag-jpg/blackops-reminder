@@ -122,10 +122,13 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /button-check-pr-status-/);
   assert.match(uiSource, /panel-pr-status/);
   assert.match(uiSource, /button-record-release-gate-/);
-  assert.match(uiSource, /input-release-pr-url/);
-  assert.match(uiSource, /input-release-second-review-url/);
-  assert.match(uiSource, /input-release-app-qa-url/);
-  assert.match(uiSource, /releaseRobertApprovedDeploy/);
+  assert.match(uiSource, /releaseGateInputsByWorkspace/);
+  assert.match(uiSource, /panel-release-gate-inputs-/);
+  assert.match(uiSource, /input-release-pr-url-\$\{workspace\.id\}/);
+  assert.match(uiSource, /input-release-second-review-url-\$\{workspace\.id\}/);
+  assert.match(uiSource, /input-release-app-qa-url-\$\{workspace\.id\}/);
+  assert.match(uiSource, /releaseGateInput\.robertApprovedDeploy/);
+  assert.doesNotMatch(uiSource, /const \[releasePrUrl, setReleasePrUrl\]/);
   assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(uiSource, /workspace\.status !== "ready_to_deliver"/);
   assert.match(uiSource, /workspace\.approvalSummary\.requiredBeforeClient\.length > 0/);
