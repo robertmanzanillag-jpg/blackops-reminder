@@ -867,8 +867,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-session-packet"\], data\.metricoolCurrentBatchSessionPacket/);
   assert.match(page, /postProofRefreshError/);
   assert.match(page, /parse-clippers-tiktok-mvp-proof-links-paste-button/);
-  assert.match(page, /const tiktokMvpProofLinksSaveMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
-  assert.match(page, /const tiktokMvpProofLinksPreviewMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
+  assert.match(page, /const tiktokMvpProofLinksSaveMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
+  assert.match(page, /const tiktokMvpProofLinksPreviewMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(\) =>/);
   assert.match(page, /const tiktokMvpProofLinksPasteMutation = useMutation\(\{[\s\S]*?onMutate: \(\) => \{[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?mutationFn: async \(pasteTextOverride\?: string\) =>/);
   assert.match(page, /setTiktokMvpProofLinksPreview\(data\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
   assert.match(page, /setTiktokMvpProofLinksPastePreview\(data\);[\s\S]*?setTiktokMvpProofLinksText\(data\.proofLinksText\);[\s\S]*?setTiktokMvpProofLinksPreview\(data\.proofLinksPreview\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
@@ -891,9 +891,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /signed\/temporary URLs/);
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-starter-button/);
-  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofLinks\?\.raw \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
-  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofHandoffJsonStarterText \|\| tiktokMvpProofDropKit\.proofLinksStarterText \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
-  assert.match(page, /setTiktokMvpProofLinksText\(event\.target\.value\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
+  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofLinks\?\.raw \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
+  assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofHandoffJsonStarterText \|\| tiktokMvpProofDropKit\.proofLinksStarterText \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
+  assert.match(page, /setTiktokMvpProofLinksText\(event\.target\.value\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);/);
   assert.match(page, /tiktokMvpProofHandoffJsonStarterText/);
   assert.match(page, /tiktokMvpProofHandoff\?\.jsonStarter/);
   assert.match(page, /JSON\.stringify\(tiktokMvpProofHandoff\.jsonStarter, null, 2\)/);

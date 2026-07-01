@@ -11791,6 +11791,7 @@ export default function ClippersPage() {
 
   const tiktokMvpProofLinksSaveMutation = useMutation({
     onMutate: () => {
+      setTiktokMvpProofLinksPastePreview(null);
       setTiktokMvpProofLinksSaveReceipt(null);
     },
     mutationFn: async () => {
@@ -11883,6 +11884,7 @@ export default function ClippersPage() {
 
   const tiktokMvpProofLinksPreviewMutation = useMutation({
     onMutate: () => {
+      setTiktokMvpProofLinksPastePreview(null);
       setTiktokMvpProofLinksSaveReceipt(null);
     },
     mutationFn: async () => {
@@ -18877,6 +18879,7 @@ export default function ClippersPage() {
                         variant="outline"
                         onClick={() => {
                           setTiktokMvpProofLinksText(tiktokMvpProofLinks?.raw || "");
+                          setTiktokMvpProofLinksPastePreview(null);
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
                         }}
@@ -18893,6 +18896,7 @@ export default function ClippersPage() {
                         variant="outline"
                         onClick={() => {
                           setTiktokMvpProofLinksText(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText || "");
+                          setTiktokMvpProofLinksPastePreview(null);
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
                         }}
@@ -18932,6 +18936,7 @@ export default function ClippersPage() {
                     value={tiktokMvpProofLinksText}
                     onChange={(event) => {
                       setTiktokMvpProofLinksText(event.target.value);
+                      setTiktokMvpProofLinksPastePreview(null);
                       setTiktokMvpProofLinksPreview(null);
                       setTiktokMvpProofLinksSaveReceipt(null);
                     }}
