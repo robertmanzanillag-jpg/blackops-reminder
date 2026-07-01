@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
+import { buildCopyableTrustedDeliverRequest, isTrustedDeliveryRequestReady } from "@/lib/revenue-engine-delivery-requests";
 import { buildPublicScoutConnectorIntakeRequest } from "@/lib/revenue-engine-public-scout-connector";
 
 type RevenueDailyScoutSprintSnapshot = {
@@ -3236,16 +3237,12 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const deliveryWorkspaceDeliverMutation = useMutation<DeliveryWorkspaceDeliverResult, Error, string>({
-    mutationFn: async (workspaceId) => {
+  const deliveryWorkspaceDeliverMutation = useMutation<DeliveryWorkspaceDeliverResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
       const response = await fetch("/api/revenue-engine/delivery-workspaces/trusted-deliver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          approvedByRobert: true,
-          notes: "Entrega aprobada desde Revenue Engine despues de QA.",
-        }),
+        body: buildCopyableTrustedDeliverRequest(workspace),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo marcar entrega");
@@ -9266,6 +9263,7 @@ export default function RevenueEnginePage() {
                           snapshot?.recentDeliveryWorkspaces.slice(0, 4).map((workspace) => {
                             const releaseGateInput = buildReleaseGateInput(workspace);
                             const buildHandoffBranchReady = !workspace.codexBuildHandoff.missing.includes("branch codex/... para PR-first");
+                            const trustedDeliveryReady = isTrustedDeliveryRequestReady(workspace);
                             return (
                             <div key={workspace.id} className="rounded-lg border border-zinc-800 bg-black p-3">
                               <div className="flex items-start justify-between gap-3">
@@ -9586,25 +9584,35 @@ export default function RevenueEnginePage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
+                                onClick={() => navigator.clipboard.writeText(buildCopyableTrustedDeliverRequest(workspace))}
+                                className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                                data-testid={`button-copy-trusted-deliver-request-${workspace.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy delivery JSON
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
                                 disabled={
                                   deliveryWorkspaceDeliverMutation.isPending
-                                  || workspace.status !== "ready_to_deliver"
-                                  || !workspace.approvalSummary.canLaunch
-                                  || workspace.codexBuildHandoff.missing.length > 0
-                                  || workspace.approvalSummary.requiredBeforeClient.length > 0
+                                  || !trustedDeliveryReady
                                 }
-                                onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace.id)}
+                                onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace)}
                                 className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                                 data-testid={`button-deliver-workspace-${workspace.id}`}
                               >
                                 {deliveryWorkspaceDeliverMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                 Entregar aprobado
                               </Button>
-                              {(workspace.status !== "ready_to_deliver" || !workspace.approvalSummary.canLaunch || workspace.codexBuildHandoff.missing.length > 0 || workspace.approvalSummary.requiredBeforeClient.length > 0) && (
+                              {!trustedDeliveryReady && (
                                 <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100" data-testid={`panel-delivery-blocked-reason-${workspace.id}`}>
                                   {workspace.codexBuildHandoff.missing[0]
                                     || workspace.approvalSummary.requiredBeforeClient[0]
-                                    || (workspace.approvalSummary.canLaunch ? `workspace no esta listo: ${workspace.status}` : "launch/handoff bloqueado")}
+                                    || (workspace.status !== "ready_to_deliver"
+                                      ? `workspace no esta listo: ${workspace.status}`
+                                      : "release gate, App QA, rollback y aprobacion Robert requeridos antes de entregar")}
                                 </div>
                               )}
                               <Button

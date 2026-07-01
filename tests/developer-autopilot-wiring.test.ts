@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { buildCopyableTrustedDeliverRequest } from "../client/src/lib/revenue-engine-delivery-requests";
 
 test("Telegram routes developer bug requests before generic work routing", () => {
   const source = readFileSync("server/telegram-chat.ts", "utf8");
@@ -38,9 +39,13 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   const routeSource = readFileSync("server/routes.ts", "utf8");
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
   const engineSource = readFileSync("server/revenue-engine.ts", "utf8");
+  const deliveryRequestSource = readFileSync("client/src/lib/revenue-engine-delivery-requests.ts", "utf8");
   const mutationStart = uiSource.indexOf("const deliveryWorkspaceGithubHandoffMutation");
   const mutationEnd = uiSource.indexOf("const deliveryWorkspaceDeliverMutation");
   const handoffMutation = uiSource.slice(mutationStart, mutationEnd);
+  const deliverMutationStart = uiSource.indexOf("const deliveryWorkspaceDeliverMutation");
+  const deliverMutationEnd = uiSource.indexOf("const deliveryWorkspaceImprovementMutation");
+  const deliverMutation = uiSource.slice(deliverMutationStart, deliverMutationEnd);
   const websiteOpportunityCloseStart = uiSource.indexOf("const websiteOpportunityCloseMutation");
   const websiteOpportunityCloseEnd = uiSource.indexOf("const automationOpportunityCloseMutation");
   const websiteOpportunityCloseMutation = uiSource.slice(websiteOpportunityCloseStart, websiteOpportunityCloseEnd);
@@ -164,8 +169,19 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /releaseGateInput\.robertApprovedDeploy/);
   assert.doesNotMatch(uiSource, /const \[releasePrUrl, setReleasePrUrl\]/);
   assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
+  assert.match(uiSource, /buildCopyableTrustedDeliverRequest/);
+  assert.match(uiSource, /isTrustedDeliveryRequestReady/);
+  assert.match(uiSource, /button-copy-trusted-deliver-request-/);
+  assert.match(uiSource, /const trustedDeliveryReady = isTrustedDeliveryRequestReady\(workspace\)/);
+  assert.match(uiSource, /deliveryWorkspaceDeliverMutation\.mutate\(workspace\)/);
+  assert.match(deliverMutation, /body: buildCopyableTrustedDeliverRequest\(workspace\)/);
+  assert.doesNotMatch(deliverMutation, /approvedByRobert: true/);
+  assert.match(deliveryRequestSource, /approvedByRobert: readyForTrustedDelivery/);
+  assert.match(deliveryRequestSource, /isTrustedDeliveryRequestReady/);
+  assert.match(deliveryRequestSource, /workspace\.input\.projectType === "website" \|\| workspace\.input\.projectType === "bundle"/);
+  assert.match(deliveryRequestSource, /workspace\.input\.releaseGateHeadSha/);
+  assert.match(deliveryRequestSource, /workspace\.approvalSummary\.requiredBeforeClient\.length === 0/);
   assert.match(uiSource, /workspace\.status !== "ready_to_deliver"/);
-  assert.match(uiSource, /workspace\.approvalSummary\.requiredBeforeClient\.length > 0/);
   assert.match(uiSource, /panel-delivery-blocked-reason-/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
   assert.match(uiSource, /button-copy-website-build-pack-/);
@@ -272,6 +288,62 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady\}/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
+});
+
+test("Revenue Engine trusted delivery copy request stays website release-gated", () => {
+  const baseWorkspace = {
+    id: "delivery-workspace-test",
+    status: "ready_to_deliver",
+    input: {
+      projectType: "website",
+      prUrl: "https://github.com/robert/site/pull/1",
+      secondReviewStatus: "pass",
+      secondReviewEvidenceUrl: "https://github.com/robert/site/pull/1#pullrequestreview-1",
+      appQaStatus: "pass",
+      appQaEvidenceUrl: "https://github.com/robert/site/pull/1#issuecomment-app-qa",
+      deploymentApprovalStatus: "approved",
+      deploymentApprovalUrl: "https://github.com/robert/site/pull/1#issuecomment-approval",
+      releaseGateHeadSha: "abc1234",
+    },
+    approvalSummary: {
+      canLaunch: true,
+      requiredBeforeClient: [],
+    },
+    codexBuildHandoff: {
+      missing: [],
+    },
+  };
+
+  const websiteRequest = JSON.parse(buildCopyableTrustedDeliverRequest(baseWorkspace));
+  assert.equal(websiteRequest.approvedByRobert, true);
+
+  const automationRequest = JSON.parse(buildCopyableTrustedDeliverRequest({
+    ...baseWorkspace,
+    id: "delivery-workspace-automation",
+    input: {
+      ...baseWorkspace.input,
+      projectType: "automation",
+      prUrl: "",
+      secondReviewStatus: "pending",
+      secondReviewEvidenceUrl: "",
+      appQaStatus: "pending",
+      appQaEvidenceUrl: "",
+      deploymentApprovalStatus: "not_requested",
+      deploymentApprovalUrl: "",
+      releaseGateHeadSha: "",
+    },
+  }));
+  assert.equal(automationRequest.approvedByRobert, false);
+
+  const websiteMissingReleaseRequest = JSON.parse(buildCopyableTrustedDeliverRequest({
+    ...baseWorkspace,
+    id: "delivery-workspace-missing-release",
+    input: {
+      ...baseWorkspace.input,
+      releaseGateHeadSha: "",
+    },
+  }));
+  assert.equal(websiteMissingReleaseRequest.approvedByRobert, false);
 });
 
 test("Revenue Engine exposes the daily money command panel", () => {
