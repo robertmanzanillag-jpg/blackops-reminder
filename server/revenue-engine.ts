@@ -6259,6 +6259,27 @@ function revenueHostMatches(hostname: string, rootHost: string) {
   return hostname === rootHost || hostname.endsWith(`.${rootHost}`);
 }
 
+function isRevenueGenericPublicPlatformUrl(hostname: string, pathname: string) {
+  const normalizedPath = pathname.toLowerCase();
+  if (revenueHostMatches(hostname, "instagram.com")) {
+    return /^\/(explore|reels?|p|stories|tags|directory|accounts)\b/.test(normalizedPath)
+      || normalizedPath.includes("/explore/");
+  }
+  if (revenueHostMatches(hostname, "yelp.com")) {
+    return /^\/(search|c|biz_photos|collections|events|topic)\b/.test(normalizedPath);
+  }
+  if (revenueHostMatches(hostname, "linkedin.com")) {
+    return /^\/(search|feed|pulse|jobs|learning|groups)\b/.test(normalizedPath);
+  }
+  if (revenueHostMatches(hostname, "facebook.com")) {
+    return /^\/(search|marketplace|groups|events|watch|hashtag)\b/.test(normalizedPath);
+  }
+  if (revenueHostMatches(hostname, "tripadvisor.com")) {
+    return /^\/(Search|Attractions|Restaurants|Hotels)\b/i.test(pathname);
+  }
+  return false;
+}
+
 function revenueSourceUrlMatchesCandidate(input: Pick<RevenuePublicLeadCandidateInput, "businessName" | "contactValue" | "recipientEmail" | "sourceUrl">) {
   if (!isRevenuePublicSourceUrl(input.sourceUrl)) return false;
   const parsed = new URL(input.sourceUrl);
@@ -6278,8 +6299,9 @@ function revenueSourceUrlMatchesCandidate(input: Pick<RevenuePublicLeadCandidate
     "resy.com",
     "mindbodyonline.com",
   ];
-  if (publicPlatformHosts.some((host) => revenueHostMatches(hostname, host))) return true;
-  if (publicPlatformHosts.some((host) => hostname.includes(host.replace(".com", "")))) return false;
+  const isPublicPlatformHost = publicPlatformHosts.some((host) => revenueHostMatches(hostname, host));
+  if (!isPublicPlatformHost && publicPlatformHosts.some((host) => hostname.includes(host.replace(".com", "")))) return false;
+  if (isPublicPlatformHost && isRevenueGenericPublicPlatformUrl(hostname, parsed.pathname)) return false;
 
   const sourceText = `${hostname} ${parsed.pathname} ${parsed.search}`.toLowerCase();
   const businessTokens = revenueEvidenceTokens(input.businessName);

@@ -1126,7 +1126,119 @@ test("public lead source matching rejects spoofed platforms and generic category
   assert.equal(genericGoogleSearch.snapshot.publicLeadImportQueue.readyCount, 0);
 });
 
-test("public lead source matching accepts exact public platform hosts", () => {
+test("public lead source matching rejects generic public platform URLs", () => {
+  const genericInstagram = recordRevenuePublicLeadCandidate({
+    businessName: "Generic Instagram Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@genericinstagramcafe",
+    sourceUrl: "https://instagram.com/explore/tags/coffee",
+    recipientEmail: "",
+    evidence: "Instagram hashtag page mentions coffee but does not prove this specific business profile.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Generic Instagram Cafe should not import from a hashtag page.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const genericYelp = recordRevenuePublicLeadCandidate({
+    businessName: "Generic Yelp Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "contact_form",
+    contactValue: "https://genericyelpcafe.example/contact",
+    sourceUrl: "https://www.yelp.com/search?find_desc=coffee&find_loc=Miami",
+    recipientEmail: "owner@genericyelp.example",
+    evidence: "Yelp search page is public but not tied to this specific business.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Generic Yelp Cafe should not import from a category search.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const tokenMatchingYelpSearch = recordRevenuePublicLeadCandidate({
+    businessName: "Token Match Yelp Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "contact_form",
+    contactValue: "https://tokenmatchyelpcafe.example/contact",
+    sourceUrl: "https://www.yelp.com/search?find_desc=Token+Match+Yelp+Cafe&find_loc=Miami",
+    recipientEmail: "owner@tokenmatchyelp.example",
+    evidence: "Yelp search query includes the business name but is still not a direct business listing.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Token Match Yelp Cafe should not import from a token-matching search URL.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const tokenMatchingInstagramExplore = recordRevenuePublicLeadCandidate({
+    businessName: "Token Match Instagram Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@tokenmatchinstagramcafe",
+    sourceUrl: "https://instagram.com/explore/tags/tokenmatchinstagramcafe",
+    recipientEmail: "",
+    evidence: "Instagram tag URL includes the business handle but is still a generic tag page.",
+    painPoint: "Needs online menu and inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Token Match Instagram Cafe should not import from a token-matching tag URL.",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const sprint = runRevenueMoneySprintFromPublicCandidates({
+    candidateIds: [
+      genericInstagram.candidate.id,
+      genericYelp.candidate.id,
+      tokenMatchingYelpSearch.candidate.id,
+      tokenMatchingInstagramExplore.candidate.id,
+    ],
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+  });
+
+  assert.equal(genericInstagram.candidate.importReady, false);
+  assert.equal(genericYelp.candidate.importReady, false);
+  assert.equal(tokenMatchingYelpSearch.candidate.importReady, false);
+  assert.equal(tokenMatchingInstagramExplore.candidate.importReady, false);
+  assert.equal(genericInstagram.candidate.blockedReasons.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(genericYelp.candidate.blockedReasons.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(tokenMatchingYelpSearch.candidate.blockedReasons.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(tokenMatchingInstagramExplore.candidate.blockedReasons.includes("sourceUrl must match business/contact evidence"), true);
+  assert.equal(sprint.status, "blocked");
+  assert.equal(sprint.blockedCandidates.length, 4);
+  assert.equal(sprint.importedCandidateIds.length, 0);
+  assert.equal(sprint.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(sprint.snapshot.recentLeads.length, 0);
+  assert.equal(sprint.snapshot.recentOutreach.length, 0);
+});
+
+test("public lead source matching accepts specific public platform business URLs", () => {
   const result = recordRevenuePublicLeadCandidate({
     businessName: "Maps Ready Cafe",
     area: "Miami",
