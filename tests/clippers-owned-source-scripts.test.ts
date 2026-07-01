@@ -2273,6 +2273,10 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("Metricool MVP evidence only"));
   assert.ok(page.includes("TikTok MVP account closeout"));
   assert.ok(page.includes("Este bloque no pide developer apps ni permisos directos"));
+  assert.ok(page.includes("SPORT TikTok conectado en Metricool approval_required"));
+  assert.ok(page.includes("memes TikTok conectado en Metricool approval_required"));
+  assert.ok(page.includes("developer apps y permisos directos quedan backlog"));
+  assert.doesNotMatch(page, /placeholder=\\{`\\$\\{launchEvidenceBatchHeader\\}[\\s\\S]*permission,,tiktok,requested,video\\.publish/);
   assert.ok(page.includes("no social API keys"));
   assert.ok(page.includes("nextRepairCsvRowTemplate"));
   assert.ok(page.includes("csvRowTemplate"));

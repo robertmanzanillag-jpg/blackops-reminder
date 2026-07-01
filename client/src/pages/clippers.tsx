@@ -33414,12 +33414,12 @@ export default function ClippersPage() {
                       setLaunchEvidenceBatchText(event.target.value);
                       setLaunchEvidenceBatchPreview(null);
                     }}
-                    placeholder={`${launchEvidenceBatchHeader}\naccount,sports-daily,tiktok,verified,,,,Cuenta creada y verificada con profile URL y screenshot en Drive\ndeveloper_app,,youtube,submitted,,youtube-app-id,https://tu-dominio.com,App enviada a review con screenshot/ticket del portal\npermission,,tiktok,requested,video.publish,,,Scope solicitado con ticket o screenshot del portal\nsource_rights,clip.mp4,memes,owned_or_permissioned,clip.mp4,,,Creator permission signed; proof URL https://drive.google.com/file/proof`}
+                    placeholder={`${launchEvidenceBatchHeader}\naccount,sports-daily,tiktok,verified,,,,SPORT TikTok conectado en Metricool approval_required; proof URL en Drive/Docs sin secretos\naccount,meme-radar,tiktok,verified,,,,memes TikTok conectado en Metricool approval_required; proof URL en Drive/Docs sin secretos\nsource_rights,clip.mp4,memes,owned_or_permissioned,clip.mp4,,,Creator permission signed; proof URL https://drive.google.com/file/proof`}
                     className="mt-3 min-h-32 border-zinc-800 bg-black font-mono text-xs"
                     autoComplete="off"
                     data-testid="clipper-launch-evidence-batch-input"
                   />
-                  <p className="mt-2 text-xs text-zinc-600">Columnas clave: kind, account_id, platform, status, scope, app_identifier, public_base_url, notes. Para source_rights: account_id puede ser asset_id/file_name, platform es category y scope puede repetir file_name.</p>
+                  <p className="mt-2 text-xs text-zinc-600">Columnas clave: kind, account_id, platform, status, scope, app_identifier, public_base_url, notes. Para este MVP, usa account rows de SPORT/memes TikTok + Metricool proof; developer apps y permisos directos quedan backlog. Para source_rights: account_id puede ser asset_id/file_name, platform es category y scope puede repetir file_name.</p>
                   <p className="mt-1 break-all text-xs text-zinc-600">Drop inbox: {status.accountEvidence.launchEvidenceDropDir || `${status.rootDir}/evidence-drop`}</p>
                   <p className="mt-1 break-all text-xs text-zinc-600">Template CSV: {status.accountEvidence.launchEvidenceTemplatePath} · {status.accountEvidence.launchEvidenceTemplateRows} rows</p>
                   {launchEvidenceBatchPreview && (
