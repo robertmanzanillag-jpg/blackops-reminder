@@ -791,6 +791,14 @@ type RevenueWebsiteSalesPacketQueue = {
     monthlyRetainerUsd: number;
     primaryOffer: string;
     copyableSalesPacket: string;
+    closePlan: {
+      requiredDepositUsd: number;
+      paymentEvidenceRequired: string[];
+      scopeApprovalRequired: true;
+      nextCloseAction: string;
+      copyableClosePacket: string;
+      blockedActions: string[];
+    };
     readiness: string[];
     nextAction: string;
   }>;
@@ -4421,6 +4429,52 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       sourceUrl ? "fuente publica enlazada" : "fuente publica pendiente",
       draft.delivery.sendStatus === "sent" ? "contacto ya enviado" : "contacto no enviado",
     ];
+    const closePlan = {
+      requiredDepositUsd: draft.pricing.depositUsd,
+      paymentEvidenceRequired: [
+        "Stripe payment id, invoice id, Zelle/CashApp/bank reference, or receipt URL",
+        "cashCollectedUsd must be at least the required deposit",
+        "scopeApproved must be true before delivery workspace",
+      ],
+      scopeApprovalRequired: true as const,
+      nextCloseAction: draft.status === "approved"
+        ? `Contactar manualmente, pedir aprobacion de scope y cobrar deposito de $${draft.pricing.depositUsd.toLocaleString("en-US")} antes de delivery.`
+        : "Aprobar draft con Robert antes de contacto; luego pedir scope y deposito.",
+      blockedActions: [
+        "auto-send outreach",
+        "mark sold without deposit payment evidence",
+        "create delivery workspace before scope and deposit",
+        "start build before verified payment",
+        "deploy website before PR/App QA/Robert approval",
+      ],
+      copyableClosePacket: [
+        `Website close packet: ${lead.businessName}`,
+        `Status: ${draft.status === "approved" ? "approved_for_manual_contact" : "internal_only_pending_robert_approval"}`,
+        draft.status === "approved"
+          ? "Manual contact may proceed only through the approved queue."
+          : "Internal only: do not send this close ask, request deposit, or contact the business until Robert approves the draft.",
+        "",
+        `Offer: ${primaryOffer}`,
+        `Setup: $${draft.pricing.totalSetupUsd.toLocaleString("en-US")}`,
+        `Required deposit: $${draft.pricing.depositUsd.toLocaleString("en-US")}`,
+        `Monthly retainer: $${draft.pricing.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
+        `Mockup: ${mockupUrl}`,
+        `Public source: ${sourceUrl}`,
+        "",
+        "Close ask:",
+        `To start ${lead.businessName}, approve this scope and send the $${draft.pricing.depositUsd.toLocaleString("en-US")} deposit. I will not start delivery until payment is confirmed and the QA-gated delivery workspace is created.`,
+        "",
+        "Payment evidence required:",
+        "- Stripe payment id, invoice id, Zelle/CashApp/bank reference, or receipt URL",
+        "- cashCollectedUsd must be at least the required deposit",
+        "- scopeApproved must be true before delivery workspace",
+        "",
+        "Guardrails:",
+        "- Do not mark sold without deposit payment evidence.",
+        "- Do not create delivery workspace before scope and deposit.",
+        "- Do not build, deploy, or publish before PR/App QA/Robert approval.",
+      ].join("\n"),
+    };
     const copyableSalesPacket = [
       `Negocio: ${lead.businessName}`,
       `Area/nicho: ${lead.area} / ${lead.niche}`,
@@ -4431,6 +4485,7 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       `Mockup: ${mockupUrl}`,
       `Oferta: ${primaryOffer}`,
       `Setup: $${draft.pricing.totalSetupUsd.toLocaleString("en-US")} | Deposito: $${draft.pricing.depositUsd.toLocaleString("en-US")} | Retainer: $${draft.pricing.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
+      `Close next action: ${closePlan.nextCloseAction}`,
       `Subject: ${draft.subject}`,
       "",
       draft.body,
@@ -4458,6 +4513,7 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
       primaryOffer,
       copyableSalesPacket,
+      closePlan,
       readiness,
       nextAction:
         draft.status === "approved"

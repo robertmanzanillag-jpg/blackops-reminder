@@ -2806,6 +2806,8 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
   assert.equal(result.snapshot.websiteSalesPacketQueue.readyCount, 1);
   assert.equal(result.snapshot.websiteSalesPacketQueue.items[0].draftStatus, "draft");
+  assert.match(result.snapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /internal_only_pending_robert_approval/);
+  assert.match(result.snapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /do not send this close ask/);
   assert.equal(result.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
   assert.equal(result.snapshot.recentWebsiteOpportunities.length, 0);
 
@@ -2816,6 +2818,7 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   });
   assert.equal(approval.status, "approved");
   assert.equal(approval.snapshot.websiteSalesPacketQueue.items[0].draftStatus, "approved");
+  assert.match(approval.snapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /approved_for_manual_contact/);
   assert.equal(approval.snapshot.manualOutreachQueue.readyCount, 1);
   assert.equal(approval.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
 });
@@ -3202,6 +3205,13 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].mockupUrl, preview.previewUrl);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Handoff Cafe/);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Deposito:/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Close next action:/);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.requiredDepositUsd, draft.pricing.depositUsd);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.scopeApprovalRequired, true);
+  assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.paymentEvidenceRequired.some((item) => item.includes("Stripe payment id")), true);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /Website close packet: Handoff Cafe/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /approved_for_manual_contact/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /Do not mark sold without deposit payment evidence/);
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.safety.sendsOutreach, false);
 
   const opportunity = sellWebsiteOpportunityForTest({

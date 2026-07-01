@@ -356,6 +356,14 @@ type RevenueSnapshot = {
       monthlyRetainerUsd: number;
       primaryOffer: string;
       copyableSalesPacket: string;
+      closePlan: {
+        requiredDepositUsd: number;
+        paymentEvidenceRequired: string[];
+        scopeApprovalRequired: true;
+        nextCloseAction: string;
+        copyableClosePacket: string;
+        blockedActions: string[];
+      };
       readiness: string[];
       nextAction: string;
     }>;
@@ -5919,6 +5927,18 @@ export default function RevenueEnginePage() {
                             </div>
                           </div>
                           <p className="mt-3 text-sm leading-6 text-zinc-400">{item.nextAction}</p>
+                          <div className="mt-3 rounded-md border border-emerald-500/15 bg-emerald-500/5 px-3 py-2" data-testid={`panel-website-close-plan-${item.leadId}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-emerald-100">Plan de cierre</p>
+                              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-100">
+                                {money.format(item.closePlan.requiredDepositUsd)} deposito
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-emerald-100/80">{item.closePlan.nextCloseAction}</p>
+                            <p className="mt-2 text-xs leading-5 text-zinc-500">
+                              Evidencia: {(item.closePlan.paymentEvidenceRequired || []).slice(0, 2).join(" · ")}
+                            </p>
+                          </div>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <Button
                               type="button"
@@ -5930,6 +5950,18 @@ export default function RevenueEnginePage() {
                             >
                               <Copy className="mr-2 h-4 w-4" />
                               Copy packet
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-700 text-emerald-100"
+                              disabled={item.draftStatus !== "approved"}
+                              onClick={() => navigator.clipboard.writeText(item.closePlan.copyableClosePacket)}
+                              data-testid={`button-copy-website-close-plan-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy close
                             </Button>
                             <Button
                               type="button"
