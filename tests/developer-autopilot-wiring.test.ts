@@ -237,6 +237,8 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(uiSource, /moneyActivationPlan\.canBuildWebsites/);
   assert.match(uiSource, /moneyActivationPlan\.missingBeforeRealMoney/);
   assert.match(uiSource, /moneyActivationPlan\.blockedUntilApproved/);
+  assert.match(uiSource, /moneyActivationPlan\.copyableBrief/);
+  assert.match(uiSource, /button-copy-money-activation-brief/);
 });
 
 test("Revenue Engine exposes public scout evidence intake", () => {

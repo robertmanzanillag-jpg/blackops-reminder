@@ -3556,6 +3556,17 @@ export default function RevenueEnginePage() {
               <p className="mt-2 rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2 text-sm leading-6 text-cyan-100">
                 {snapshot?.moneyActivationPlan.nextRobertAction || "Preparar research publico sin contacto externo."}
               </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-3 border-cyan-500/30 bg-black text-cyan-100 hover:bg-cyan-500/10"
+                onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.copyableBrief || "")}
+                data-testid="button-copy-money-activation-brief"
+              >
+                <Copy className="mr-2 h-3.5 w-3.5" />
+                Copiar brief
+              </Button>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                 <div className={cn("rounded-md border px-3 py-2", snapshot?.moneyActivationPlan.canStartToday ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-red-500/20 bg-red-500/5 text-red-100")}>
                   Start {snapshot?.moneyActivationPlan.canStartToday ? "yes" : "no"}
