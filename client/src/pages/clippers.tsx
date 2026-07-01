@@ -16694,7 +16694,7 @@ export default function ClippersPage() {
       await navigator.clipboard.writeText(`${cleanPacket}\n`);
       toast({
         title: "Metricool proof lines copied",
-        description: "Paste real non-secret proof URLs after each equals sign; preview links first, then save only if clean.",
+        description: "Paste real non-secret proof URLs after each equals sign. Preview links first; save only if the preview gate is clean/current.",
       });
     } catch {
       toast({

@@ -241,7 +241,7 @@ export function buildProofGate({ proofHandoff, preflight, verifier, boundary, bo
     ],
     nextStep: status === "ready_for_operator_review"
       ? "Run operator review with Metricool approval_required; do not enable real publishing."
-      : "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence, preview links, then save only if the preview is clean.",
+      : "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
   };
 }
 

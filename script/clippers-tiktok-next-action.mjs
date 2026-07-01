@@ -73,7 +73,7 @@ function nextStepFor(summary) {
   if (summary.status === "blocked_account_or_metricool_connection") {
     if (summary.proofGate?.status && !isProofGateReady(summary.proofGate)) {
       return [
-        summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence, preview links, then save only if the preview is clean.",
+        summary.proofGate.nextStep || "Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file/folder/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
         summary.proofGate.paths?.oneScreenGuide ? `One-screen guide: ${summary.proofGate.paths.oneScreenGuide}.` : "",
         summary.proofGate.paths?.proofLinksJson ? `Proof JSON: ${summary.proofGate.paths.proofLinksJson}.` : "",
         summary.proofGate.fastPathAvailable ? "Fast path: paste one real Metricool URL or concrete Drive file/folder/Docs proof URL for SPORT and one for memes; the app builds explicit proof fields before preview." : "",
@@ -466,7 +466,7 @@ function operatorPacketFor(summary) {
     summary.proofGate?.status ? `Operating proof gate: ${summary.proofGate.status}` : "",
     summary.proofGate?.minimumProofUrlsNeeded ? `Proof URLs needed: ${summary.proofGate.minimumProofUrlsNeeded}` : "",
     summary.proofGate?.paths?.oneScreenGuide ? `One-screen proof guide: ${summary.proofGate.paths.oneScreenGuide}` : "",
-    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool URLs or concrete Drive file/folder/Docs proof URLs in the two input boxes; preview links first, then save only if the preview is clean." : "",
+    summary.proofGate?.fastPathAvailable ? "Fast path: paste SPORT + memes Metricool URLs or concrete Drive file/folder/Docs proof URLs in the two input boxes. Preview links first; save only if the preview gate is clean/current." : "",
     summary.proofBridgeGate?.paths?.proofLinksPastePacket ? `Proof links packet: ${summary.proofBridgeGate.paths.proofLinksPastePacket}` : "",
     summary.proofBridgeGate?.paths?.bridgeEvidenceCsv ? `Bridge CSV: ${summary.proofBridgeGate.paths.bridgeEvidenceCsv}` : "",
     summary.operatingRefresh?.status ? `Operating refresh: ${summary.operatingRefresh.status}` : "",

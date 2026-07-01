@@ -231,7 +231,7 @@ test("TikTok MVP proof links JSON starter stays blocked until real proof URLs ar
   assert.equal(audit.goalBoardImpact.nextLockedButton, "save_proof_links");
   assert.deepEqual(audit.goalBoardImpact.unlocksOperatorActions, []);
   assert.match(audit.issues.join("\n"), /accountOwnershipProofUrl must be a real safe HTTPS proof URL/);
-  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or Google Drive\/Docs evidence URL/);
+  assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
   assert.doesNotMatch(JSON.stringify(audit), /"readyToSend"\s*:\s*true|realPublishEnabled\s*[:=]\s*true|video\.publish|autopublish/i);
 });
 

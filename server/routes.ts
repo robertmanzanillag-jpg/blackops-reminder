@@ -696,7 +696,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       ],
       nextStep: issues.length
         ? "Open the proof links drop file, fix the listed issues, then run Import drop file again."
-        : "Run Import drop file, preview links, then Save proof links if the preview stays clean.",
+        : "Run Import drop file, then preview links first. Save proof links only if the preview gate stays clean/current.",
     };
   } catch (error: any) {
     return {
@@ -3754,7 +3754,7 @@ export async function registerRoutes(
               "Blocked before saving because the current proof links text does not match a clean preview gate.",
               "Does not save proof links, apply evidence, queue Metricool, create calendar rows, or send posts.",
             ],
-            nextStep: "Preview links again, then save only if the preview is clean and current.",
+            nextStep: "Preview links again first; save only if the preview gate is clean/current.",
           },
         });
         return;

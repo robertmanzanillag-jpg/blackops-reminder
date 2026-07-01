@@ -458,7 +458,7 @@ async function main() {
       pastePacketPath: outProofLinksPastePacketPath,
       filledDropPath: proofLinksFilledDropPath,
       proofLinksJsonPath: proofLinksJsonDropPath,
-      nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse/Preview; save only if the preview is clean, then Safe ingest drop.",
+      nextStep: "Paste real non-secret proof URLs into this packet, then use Proof Links Assistant -> Parse/Preview. Preview links first; save only if the preview gate is clean/current, then Safe ingest drop.",
       checklist: proofLinksOperatorChecklist(),
       guardrails: [
         "This packet is a template and does not save evidence by itself.",

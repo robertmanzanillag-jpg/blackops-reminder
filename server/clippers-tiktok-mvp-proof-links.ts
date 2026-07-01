@@ -299,6 +299,6 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
     ],
     nextStep: issues.length || preview.issues.length
       ? "Review the draft and fix missing or unsafe proof links before saving."
-      : "Preview links, then save proof links if the preview stays clean.",
+      : "Preview links first; save proof links only if the preview gate stays clean/current.",
   };
 }

@@ -138,7 +138,7 @@ function buildTikTokMvpStartGate({ activeMvpReady, tiktokMvpProofReady, proofLin
       label: "SPORT and memes proof gate",
       status: tiktokMvpProofReady ? "pass" : "blocked",
       evidence: tiktokMvpProofReady ? "proof gate, proof refresh, and quick fill are current" : "real non-secret SPORT + memes proof is still missing or stale",
-      nextAction: tiktokMvpProofReady ? "Use the applied evidence for operator review." : "Paste real Metricool or concrete Drive/Docs proof, preview first, then save only if clean.",
+      nextAction: tiktokMvpProofReady ? "Use the applied evidence for operator review." : "Paste real Metricool or concrete Drive/Docs proof. Preview links first; save only if the preview gate is clean/current.",
     },
     {
       id: "proof_preview_save_gate",
@@ -528,7 +528,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
         : [],
       guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool URLs or concrete Drive file/folder/Docs proof URLs and keep the confirmation notes true.",
       nextAction: proofGateFixFirst
-        ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs, preview links first, then save only if the preview is clean.`
+        ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs. Preview links first; save only if the preview gate is clean/current.`
         : proofRefreshNextAction,
     });
   }
@@ -545,7 +545,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       guardrail: "Use only a safe HTTPS proof URL; no passwords, cookies, tokens, recovery codes, signed URLs, or private screenshots.",
       nextAction: activeMvpProofReady
         ? "Already covered by applied TikTok MVP evidence."
-        : `Paste real ownership/security proof for ${row.handle || accountId}, preview links first, then save only if the preview is clean.`,
+        : `Paste real ownership/security proof for ${row.handle || accountId}. Preview links first; save only if the preview gate is clean/current.`,
     });
     rows.push({
       priority: priority++,
@@ -557,7 +557,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       guardrail: "Metricool proof must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL; keep Metricool approval_required.",
       nextAction: activeMvpProofReady
         ? "Already covered by applied TikTok MVP evidence."
-        : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}, preview links first, then save only if the preview is clean.`,
+        : `Paste real Metricool connection proof for ${activeMvp.metricoolBrands?.includes("SPORT") && accountId === "sports-daily" ? "SPORT" : accountId === "meme-radar" ? "memes" : accountId}. Preview links first; save only if the preview gate is clean/current.`,
     });
   }
   rows.push({

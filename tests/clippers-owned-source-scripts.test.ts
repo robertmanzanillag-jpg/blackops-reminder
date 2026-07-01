@@ -1195,7 +1195,7 @@ test("TikTok external closeout session surfaces active Metricool MVP proof block
   ]);
   assert.ok(session.proofLinksFlow.checklist.every((item) => item.expectedGate && item.nextButton));
   assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "save_and_ingest")?.nextButton || "", /Preview clean, then Save proof links/);
-  assert.match(session.proofLinksFlow.nextStep, /Parse\/Preview; save only if the preview is clean/);
+  assert.match(session.proofLinksFlow.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
   assert.doesNotMatch(JSON.stringify(session.proofLinksFlow), /Proof Links Assistant -> Parse -> Save proof links|Save proof links, then Safe ingest drop/i);
   assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "preview_bridge_rows")?.expectedGate || "", /ready_for_import/);
   assert.match(session.proofLinksFlow.checklist.find((item) => item.id === "rerun_readiness")?.expectedGate || "", /without enabling real publishing/);
@@ -7647,7 +7647,7 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.match(output.nextStep, /Fill SPORT and memes proof links/i);
     assert.match(output.nextStep, /proof-fill-one-screen\.txt/);
     assert.match(output.nextStep, /proof-links\.json/);
-    assert.match(output.nextStep, /Fast path: paste one real Metricool\/Drive proof URL for SPORT and one for memes/);
+    assert.match(output.nextStep, /Fast path: paste one real Metricool URL or concrete Drive file\/folder\/Docs proof URL for SPORT and one for memes/);
 
     const nextAction = JSON.parse(await readFile(nextActionPath, "utf8"));
     assert.equal(nextAction.status, "blocked_account_or_metricool_connection");
@@ -7696,7 +7696,7 @@ test("TikTok next action surfaces Metricool proof bridge blocker when account la
     assert.match(nextAction.operator.copyPacket, /Proof bridge gate: blocked_needs_real_proofs/);
     assert.match(nextAction.operator.copyPacket, /Operating proof gate: blocked_needs_real_metricool_tiktok_proof/);
     assert.match(nextAction.operator.copyPacket, /One-screen proof guide: .*proof-fill-one-screen\.txt/);
-    assert.match(nextAction.operator.copyPacket, /Fast path: paste SPORT \+ memes Metricool\/Drive proof URLs/);
+    assert.match(nextAction.operator.copyPacket, /Fast path: paste SPORT \+ memes Metricool URLs or concrete Drive file\/folder\/Docs proof URLs/);
     assert.match(nextAction.operator.copyPacket, /Operating refresh: blocked_external_account_proof/);
     assert.match(nextAction.operator.copyPacket, /Proof URLs needed: 2/);
     assert.match(nextAction.operator.copyPacket, /First external blocker: account-proof:sports-daily:tiktok/);
@@ -8165,10 +8165,10 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);
-  assert.match(audit.operatorNextActions[1].nextAction, /preview links first, then save only if the preview is clean/);
-  assert.match(audit.operatorNextActions[2].nextAction, /preview links first, then save only if the preview is clean/);
-  assert.match(audit.operatorNextActions[3].nextAction, /preview links first, then save only if the preview is clean/);
-  assert.match(audit.operatorNextActions[4].nextAction, /preview links first, then save only if the preview is clean/);
+  assert.match(audit.operatorNextActions[1].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
+  assert.match(audit.operatorNextActions[2].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
+  assert.match(audit.operatorNextActions[3].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
+  assert.match(audit.operatorNextActions[4].nextAction, /Preview links first; save only if the preview gate is clean\/current/);
   assert.ok(audit.operatorNextActions.every((row) => !/preview\/save proof links|then save proof links/i.test(row.nextAction)));
   assert.equal(audit.operatorNextActions[1].proofLine, "sports-daily:tiktok.accountOwnershipProofUrl=");
   assert.equal(audit.operatorNextActions[2].proofLine, "sports-daily:tiktok.metricoolConnectionProofUrl=");
@@ -8209,7 +8209,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /proof-links-preview-gate\.json/);
   assert.match(markdown, /Blocker: import_status_blocked_invalid_intake/);
   assert.match(markdown, /Next safe button: preview_proof_links/);
-  assert.match(markdown, /preview links first, then save only if the preview is clean/);
+  assert.match(markdown, /Preview links first; save only if the preview gate is clean\/current/);
   assert.doesNotMatch(markdown, /preview\/save proof links|then save proof links/i);
   assert.match(markdown, /TikTok external active closeout tasks: \d+/);
   assert.match(markdown, /TikTok external deferred backlog tasks: 4/);
@@ -8237,7 +8237,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.doesNotMatch(nextActionsCsv, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
   assert.match(nextActionsCsv, /Sports Daily Clips TikTok ownership proof/);
   assert.match(nextActionsCsv, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
-  assert.match(nextActionsCsv, /preview links first, then save only if the preview is clean/);
+  assert.match(nextActionsCsv, /Preview links first; save only if the preview gate is clean\/current/);
   assert.doesNotMatch(nextActionsCsv, /preview\/save proof links|then save proof links/i);
   assert.match(nextActionsCsv, /prepare-metricool-current-batch-upload-pack \+ prepare-metricool-current-batch-session-packet/);
   assert.doesNotMatch(nextActionsCsv, /password=|access_token=|refresh_token=|client_secret=|cookie=|ready_to_send|realPublishEnabled=true|autopublish/i);

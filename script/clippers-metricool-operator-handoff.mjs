@@ -1167,7 +1167,7 @@ async function main() {
       approvalRun,
       rows,
       blocker: approvalRunBlocker,
-      nextStep: "Import real SPORT/memes TikTok Metricool proof, preview links, save only if clean, regenerate the Metricool 100 approval run, then regenerate this handoff.",
+      nextStep: "Import real SPORT/memes TikTok Metricool proof. Preview links first; save only if the preview gate is clean/current, regenerate the Metricool 100 approval run, then regenerate this handoff.",
     });
     return;
   }
