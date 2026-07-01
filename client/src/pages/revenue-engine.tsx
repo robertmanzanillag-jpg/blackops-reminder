@@ -238,6 +238,7 @@ type RevenueSnapshot = {
       offerFocus: "websites" | "automations" | "both";
       targetRows: number;
       nextApiAction: string;
+      copyableDispatchRequest: string;
       revenuePath: Array<{
         id: string;
         label: string;
@@ -3972,7 +3973,7 @@ export default function RevenueEnginePage() {
                   {snapshot?.moneyActivationPlan.firstSprintPlan.title || "First revenue sprint"}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
-                  {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/daily-scout-sprint"}
+                  {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/scout-dispatch"}
                 </p>
                 <div className="mt-3 rounded-md border border-cyan-500/15 bg-cyan-500/5 px-3 py-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3998,6 +3999,17 @@ export default function RevenueEnginePage() {
                 >
                   <Copy className="mr-2 h-3.5 w-3.5" />
                   Copiar sprint
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 ml-2 border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                  onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.firstSprintPlan.copyableDispatchRequest || "")}
+                  data-testid="button-copy-first-sprint-dispatch-request"
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copiar dispatch
                 </Button>
                 <div className="mt-3 space-y-2">
                   {(snapshot?.moneyActivationPlan.firstSprintPlan.steps || []).map((step) => (

@@ -6162,7 +6162,18 @@ function buildRevenueMoneyActivationPlan(input: {
     niche: input.businessScoutQueue.niche,
     offerFocus: input.businessScoutQueue.offerFocus,
     targetRows: Math.min(input.businessScoutQueue.dailyResearchTarget, 10),
-    nextApiAction: "/api/revenue-engine/daily-scout-sprint",
+    nextApiAction: "/api/revenue-engine/scout-dispatch",
+    copyableDispatchRequest: JSON.stringify({
+      area: input.businessScoutQueue.area,
+      niche: input.businessScoutQueue.niche,
+      offerFocus: input.businessScoutQueue.offerFocus,
+      targetLeadCount: Math.min(input.businessScoutQueue.dailyResearchTarget, 10),
+      maxTasks: Math.min(Math.max(input.businessScoutQueue.tasks.length, 1), 5),
+      resultSlotsPerTask: 2,
+      maxPaidDataSpendUsd: 0,
+      requireRobertApprovalToContact: true,
+      notes: "First revenue sprint scout dispatch: public research only; return connector work orders and review-only candidates.",
+    }, null, 2),
     revenuePath: [
       {
         id: "find_public_businesses",
@@ -6207,16 +6218,9 @@ function buildRevenueMoneyActivationPlan(input: {
     ],
     steps: [
       {
-        id: "start_scout_sprint",
-        label: "Start daily scout sprint",
-        action: "Crear slots por subagente desde la cola publica actual.",
-        apiAction: "/api/revenue-engine/daily-scout-sprint",
-        approvalRequired: false,
-      },
-      {
         id: "dispatch_public_research",
         label: "Dispatch scouts",
-        action: "Asignar briefs a subagentes; solo abrir fuentes publicas y llenar evidencia real.",
+        action: "Crear slots y work orders por subagente; solo abrir fuentes publicas y llenar evidencia real.",
         apiAction: "/api/revenue-engine/scout-dispatch",
         approvalRequired: false,
       },
@@ -6251,6 +6255,9 @@ function buildRevenueMoneyActivationPlan(input: {
     `Offer focus: ${firstSprintPlan.offerFocus}`,
     `Target rows: ${firstSprintPlan.targetRows}`,
     `Next API action: ${firstSprintPlan.nextApiAction}`,
+    "",
+    "Copyable dispatch request:",
+    firstSprintPlan.copyableDispatchRequest,
     "",
     "Steps:",
     ...firstSprintPlan.steps.map((step, index) => [

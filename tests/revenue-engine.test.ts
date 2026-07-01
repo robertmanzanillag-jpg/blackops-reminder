@@ -2384,8 +2384,14 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.allowedToday.includes("buscar negocios publicos"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("production DATABASE_URL"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("client charge/deposit confirmation"), true);
-  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.nextApiAction, "/api/revenue-engine/daily-scout-sprint");
-  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/daily-scout-sprint");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.nextApiAction, "/api/revenue-engine/scout-dispatch");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].id, "dispatch_public_research");
+  assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/scout-dispatch");
+  const firstSprintDispatchRequest = JSON.parse(snapshot.moneyActivationPlan.firstSprintPlan.copyableDispatchRequest);
+  assert.equal(firstSprintDispatchRequest.area, snapshot.businessScoutQueue.area);
+  assert.equal(firstSprintDispatchRequest.niche, snapshot.businessScoutQueue.niche);
+  assert.equal(firstSprintDispatchRequest.maxPaidDataSpendUsd, 0);
+  assert.equal(firstSprintDispatchRequest.requireRobertApprovalToContact, true);
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps.some((step) => step.id === "approve_contact_or_collect" && step.approvalRequired), true);
   assert.deepEqual(
     snapshot.moneyActivationPlan.firstSprintPlan.revenuePath.map((stage) => stage.id),
@@ -2426,6 +2432,7 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket, /npm run ceo:db-check -- --json/);
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.copyableSetupPacket, /No pegar DATABASE_URL/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Copyable dispatch request/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue path to paid website build/);

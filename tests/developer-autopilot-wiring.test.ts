@@ -382,7 +382,9 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.revenuePath/);
   assert.match(uiSource, /panel-revenue-path-to-paid-build/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.copyableBrief/);
+  assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.copyableDispatchRequest/);
   assert.match(uiSource, /button-copy-first-sprint-brief/);
+  assert.match(uiSource, /button-copy-first-sprint-dispatch-request/);
   assert.match(uiSource, /moneyActivationPlan\.copyableBrief/);
   assert.match(uiSource, /button-copy-money-activation-brief/);
 });
