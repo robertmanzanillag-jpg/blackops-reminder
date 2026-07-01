@@ -102,6 +102,25 @@ function cleanCombinedCsv() {
   ].join("\n") + "\n";
 }
 
+function cleanProofLinksPayload() {
+  return {
+    lanes: {
+      "sports-daily:tiktok": {
+        accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+        metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+        accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok under his control without secrets.",
+        metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+      },
+      "meme-radar:tiktok": {
+        accountOwnershipProofUrl: "https://docs.google.com/document/d/meme-radar-account-proof/edit",
+        metricoolConnectionProofUrl: "https://app.metricool.com/planner/meme-radar-tiktok-proof",
+        accountNotes: "Robert confirms this Metricool proof shows Meme Radar TikTok under his control without secrets.",
+        metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+      },
+    },
+  };
+}
+
 async function writeApprovalRequiredMetricoolQueueForTest() {
   const raw = await readFile(metricoolQueuePath, "utf8");
   const queue = JSON.parse(raw);
@@ -2826,22 +2845,7 @@ test("Goal completion audit blocks automation when preview is clean but operatin
 test("TikTok MVP proof links save route rejects malformed ready-looking preview gates", async () => {
   const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
   const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
-  const proofLinks = {
-    lanes: {
-      "sports-daily:tiktok": {
-        accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
-        metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
-        accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok under his control without secrets.",
-        metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
-      },
-      "meme-radar:tiktok": {
-        accountOwnershipProofUrl: "https://docs.google.com/document/d/meme-radar-account-proof/edit",
-        metricoolConnectionProofUrl: "https://app.metricool.com/planner/meme-radar-tiktok-proof",
-        accountNotes: "Robert confirms this Metricool proof shows Meme Radar TikTok under his control without secrets.",
-        metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
-      },
-    },
-  };
+  const proofLinks = cleanProofLinksPayload();
   const raw = JSON.stringify(proofLinks);
   const rawHash = createHash("sha256").update(raw).digest("hex");
   const validGate = {
@@ -2901,6 +2905,67 @@ test("TikTok MVP proof links save route rejects malformed ready-looking preview 
       const currentProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
       assert.equal(currentProofLinks, previousProofLinks, label);
     }
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
+    if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
+    else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
+  }
+});
+
+test("TikTok MVP proof links preview route writes a hash-only clean save gate", async () => {
+  const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  const proofLinks = cleanProofLinksPayload();
+  const raw = JSON.stringify(proofLinks);
+  const expectedHash = createHash("sha256").update(raw).digest("hex");
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await mkdir(path.dirname(proofLinksPreviewGatePath), { recursive: true });
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/clippers/preview-tiktok-mvp-proof-links`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proofLinksText: raw }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(body.tiktokMvpProofLinksPreview.readyForProofDrop, true);
+    assert.deepEqual(body.tiktokMvpProofLinksPreview.issues, []);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.status, "ready_for_save");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.scope, "tiktok_only_metricool_mvp");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.launchMode, "metricool_approval_required");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.directSocialApisRequired, false);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.realPublishEnabled, false);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.rawStored, false);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.rawHash, expectedHash);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.totals.readyProofFields, 8);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.totals.totalProofFields, 8);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.totals.issues, 0);
+    assert.doesNotMatch(JSON.stringify(body.tiktokMvpProofLinksPreviewGate), /sports-daily-tiktok-proof|meme-radar-tiktok-proof|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+
+    const persistedGate = JSON.parse(await readFile(proofLinksPreviewGatePath, "utf8"));
+    assert.equal(persistedGate.rawHash, expectedHash);
+    assert.equal(persistedGate.rawStored, false);
+    assert.doesNotMatch(JSON.stringify(persistedGate), /sports-daily-tiktok-proof|meme-radar-tiktok-proof|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+    const currentProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+    assert.equal(currentProofLinks, previousProofLinks);
   } finally {
     if (listening) {
       await new Promise((resolve, reject) => {
