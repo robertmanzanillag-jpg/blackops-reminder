@@ -11000,6 +11000,67 @@ export default function ClippersPage() {
       return data.goalCompletionAudit as ClipperGoalCompletionAuditSummary;
     },
   });
+  function buildGoalCompletionProofLinksPreviewGate(
+    gate: ClipperTikTokMvpProofLinksPreviewGateSummary | null,
+    override?: Partial<NonNullable<ClipperGoalCompletionAuditSummary["tiktokMvpProofLinksPreviewGate"]>>,
+  ): NonNullable<ClipperGoalCompletionAuditSummary["tiktokMvpProofLinksPreviewGate"]> {
+    const generatedAt = gate?.generatedAt || new Date().toISOString();
+    const generatedMs = Date.parse(generatedAt);
+    const fresh = Boolean(Number.isFinite(generatedMs) && generatedMs > 0 && Date.now() - generatedMs >= 0 && Date.now() - generatedMs <= 30 * 60 * 1000);
+    const readyProofFields = Number(gate?.totals?.readyProofFields || 0);
+    const totalProofFields = Number(gate?.totals?.totalProofFields || 0);
+    const issues = Number(gate?.totals?.issues || 0);
+    const rawStored = gate?.rawStored === false ? false : gate?.rawStored === true ? true : "unknown";
+    const readyForSave = Boolean(
+      gate?.status === "ready_for_save"
+      && fresh
+      && gate.rawStored === false
+      && gate.rawHash
+      && issues === 0
+      && totalProofFields > 0
+      && readyProofFields === totalProofFields,
+    );
+    return {
+      status: gate?.status || "missing",
+      generatedAt,
+      fresh,
+      readyForSave,
+      rawStored,
+      rawStoredExplicitFalse: gate?.rawStored === false,
+      rawHashPresent: Boolean(gate?.rawHash),
+      readyProofFields,
+      totalProofFields,
+      issues,
+      path: "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json",
+      nextStep: readyForSave
+        ? "A clean current proof-links preview gate exists; saving still requires the matching previewHash and real non-secret proof links."
+        : "Run Preview links after pasting real SPORT and memes proof URLs; save only if the preview gate is clean and current.",
+      ...override,
+    };
+  }
+  function syncGoalCompletionProofLinksPreviewGate(
+    gate: ClipperTikTokMvpProofLinksPreviewGateSummary | null,
+    override?: Partial<NonNullable<ClipperGoalCompletionAuditSummary["tiktokMvpProofLinksPreviewGate"]>>,
+  ) {
+    const previewGate = buildGoalCompletionProofLinksPreviewGate(gate, override);
+    queryClient.setQueryData<ClipperGoalCompletionAuditSummary | null>(["/api/clippers/goal-completion-audit"], (current) => (
+      current ? { ...current, tiktokMvpProofLinksPreviewGate: previewGate } : current
+    ));
+  }
+  function markGoalCompletionProofLinksPreviewGateStale() {
+    syncGoalCompletionProofLinksPreviewGate(null, {
+      status: "blocked_missing_or_stale_preview",
+      fresh: false,
+      readyForSave: false,
+      rawStored: "unknown",
+      rawStoredExplicitFalse: false,
+      rawHashPresent: false,
+      readyProofFields: 0,
+      totalProofFields: 0,
+      issues: 0,
+      nextStep: "Proof links text changed locally; run Preview links again before saving.",
+    });
+  }
   const { data: tiktokBatchTracker } = useQuery<ClipperTikTokBatchTrackerSummary | null>({
     queryKey: ["/api/clippers/tiktok-batch-tracker"],
     queryFn: async () => {
@@ -11970,6 +12031,7 @@ export default function ClippersPage() {
     onSuccess: (data) => {
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksPreview);
       setTiktokMvpProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
+      syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       setTiktokMvpProofLinksSaveReceipt(null);
       toast({
         title: data.tiktokMvpProofLinksPreview.readyForProofDrop ? "Proof links validos" : "Proof links con blockers",
@@ -11989,6 +12051,7 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPreview(null);
       setTiktokMvpProofLinksSaveReceipt(null);
       setTiktokMvpProofLinksPreviewGate(null);
+      markGoalCompletionProofLinksPreviewGateStale();
     },
     mutationFn: async (pasteTextOverride?: string) => {
       const response = await fetch("/api/clippers/parse-tiktok-mvp-proof-links-paste", {
@@ -12008,6 +12071,7 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinksPastePreview.proofLinksText);
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksPastePreview.proofLinksPreview);
       setTiktokMvpProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
+      syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       setTiktokMvpProofLinksSaveReceipt(null);
       toast({
         title: data.tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview" ? "Proof packet convertido" : "Proof packet necesita revision",
@@ -12036,6 +12100,7 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksText(data.tiktokMvpProofLinksDropImport.proofLinksText);
       setTiktokMvpProofLinksPreview(data.tiktokMvpProofLinksDropImport.proofLinksPreview);
       setTiktokMvpProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
+      syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       const dropChecklist = data.tiktokMvpProofLinksDropImport.proofLinksPreview.lanes.flatMap((lane) => [
         { laneKey: lane.key, accountName: lane.accountName, field: "accountOwnershipProofUrl", label: "TikTok ownership proof", status: lane.accountProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real safe HTTPS proof URL, non-Metricool, no tokens/cookies/signed params" },
         { laneKey: lane.key, accountName: lane.accountName, field: "metricoolConnectionProofUrl", label: "Metricool connection proof", status: lane.metricoolProofReady ? "ready" as const : "missing_or_invalid" as const, required: "real HTTPS metricool.com proof URL, no tokens/cookies/signed params" },
@@ -17176,10 +17241,10 @@ export default function ClippersPage() {
     : !tiktokMvpProofQuickFillIssuesValid
       ? "Quick fill report is malformed; rerun Quick fill with real non-secret proof before trusting this result."
       : tiktokMvpProofQuickFillIssues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool URLs or concrete Drive file/folder/Docs proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
+  const tiktokMvpProofLinksCurrentPreviewGate = buildGoalCompletionProofLinksPreviewGate(tiktokMvpProofLinksPreviewGate);
   const tiktokMvpProofLinksSaveGateReady = Boolean(
     tiktokMvpProofLinksPreview?.readyForProofDrop
-    && tiktokMvpProofLinksPreviewGate?.status === "ready_for_save"
-    && tiktokMvpProofLinksPreviewGate?.rawHash
+    && tiktokMvpProofLinksCurrentPreviewGate.readyForSave
   );
   const clearTikTokMvpProofLinksGeneratedState = () => {
     setTiktokMvpProofLinksPastePreview(null);
@@ -17187,6 +17252,7 @@ export default function ClippersPage() {
     setTiktokMvpProofLinksPreview(null);
     setTiktokMvpProofLinksSaveReceipt(null);
     setTiktokMvpProofLinksPreviewGate(null);
+    markGoalCompletionProofLinksPreviewGateStale();
     setTiktokMvpFastPathOwnershipConfirmed(false);
   };
   const buildTikTokMvpMetricoolFastPathPaste = () => {
@@ -17216,6 +17282,7 @@ export default function ClippersPage() {
     setTiktokMvpProofLinksPreview(null);
     setTiktokMvpProofLinksSaveReceipt(null);
     setTiktokMvpProofLinksPreviewGate(null);
+    markGoalCompletionProofLinksPreviewGateStale();
     tiktokMvpProofLinksPasteMutation.mutate(packetText);
   };
   const getTikTokMvpOperatorButtonLabel = (button?: string) => {
@@ -18958,6 +19025,7 @@ export default function ClippersPage() {
                       setTiktokMvpProofLinksPreview(null);
                       setTiktokMvpProofLinksSaveReceipt(null);
                       setTiktokMvpProofLinksPreviewGate(null);
+                      markGoalCompletionProofLinksPreviewGateStale();
                     }}
                     placeholder={"SPORT Metricool: https://app.metricool.com/...\nmemes Metricool: https://app.metricool.com/...\nOptional ownership URLs can be separate Drive/Docs proof links."}
                     className="mt-2 min-h-28 border-cyan-300/20 bg-black/40 font-mono text-xs text-cyan-50"
@@ -19012,6 +19080,7 @@ export default function ClippersPage() {
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
                           setTiktokMvpProofLinksPreviewGate(null);
+                          markGoalCompletionProofLinksPreviewGateStale();
                           setTiktokMvpFastPathOwnershipConfirmed(false);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinks?.raw}
@@ -19031,6 +19100,7 @@ export default function ClippersPage() {
                           setTiktokMvpProofLinksPreview(null);
                           setTiktokMvpProofLinksSaveReceipt(null);
                           setTiktokMvpProofLinksPreviewGate(null);
+                          markGoalCompletionProofLinksPreviewGateStale();
                           setTiktokMvpFastPathOwnershipConfirmed(false);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText)}
@@ -19073,6 +19143,7 @@ export default function ClippersPage() {
                       setTiktokMvpProofLinksPreview(null);
                       setTiktokMvpProofLinksSaveReceipt(null);
                       setTiktokMvpProofLinksPreviewGate(null);
+                      markGoalCompletionProofLinksPreviewGateStale();
                       setTiktokMvpFastPathOwnershipConfirmed(false);
                     }}
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"

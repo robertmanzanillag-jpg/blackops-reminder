@@ -8019,6 +8019,14 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /clippers-goal-completion-audit-panel/);
   assert.match(page, /clippers-goal-operating-mode/);
   assert.match(page, /tiktokMvpProofLinksPreviewGate\?:/);
+  assert.match(page, /function buildGoalCompletionProofLinksPreviewGate/);
+  assert.match(page, /function syncGoalCompletionProofLinksPreviewGate/);
+  assert.match(page, /function markGoalCompletionProofLinksPreviewGateStale/);
+  assert.match(page, /const tiktokMvpProofLinksCurrentPreviewGate = buildGoalCompletionProofLinksPreviewGate\(tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /&& tiktokMvpProofLinksCurrentPreviewGate\.readyForSave/);
+  assert.match(page, /queryClient\.setQueryData<ClipperGoalCompletionAuditSummary \| null>\(\["\/api\/clippers\/goal-completion-audit"\]/);
+  assert.match(page, /syncGoalCompletionProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /Proof links text changed locally; run Preview links again before saving\./);
   assert.match(page, /clippers-goal-proof-links-preview-gate/);
   assert.match(page, /Proof links preview gate/);
   assert.match(page, /goalCompletionAudit\.tiktokMvpProofLinksPreviewGate\.readyForSave/);
