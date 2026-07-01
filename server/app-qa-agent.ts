@@ -228,6 +228,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
     label: "Revenue Engine",
     expectedClicks: [
       "Guardar candidato publico",
+      "Guardar connector review-only",
       "Preview batch",
       "Money sprint",
       "Copy packet",
@@ -241,11 +242,12 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
       "Guardar workspace",
       "Create issue",
       "Revalidar con checks marcados",
+      "Run App QA",
       "Registrar release gate",
       "Entregar aprobado",
       "Correr QA",
     ],
-    expectedControls: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControls: ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"],
     expectedControlGroups: [
       {
         name: "website_sales_packet",
@@ -264,8 +266,8 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
       },
       {
         name: "website_release_gate",
-        controls: ["Create issue", "Revalidar con checks marcados", "Registrar release gate", "Entregar aprobado"],
-        activationControls: ["Create issue", "Revalidar con checks marcados", "Registrar release gate", "Entregar aprobado"],
+        controls: ["Create issue", "Revalidar con checks marcados", "Run App QA", "Registrar release gate", "Entregar aprobado"],
+        activationControls: ["Create issue", "Revalidar con checks marcados", "Run App QA", "Registrar release gate", "Entregar aprobado"],
       },
     ],
     visualTextTabs: ["Pipeline", "Leads", "QA entrega", "Outbox"],

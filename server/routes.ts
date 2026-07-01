@@ -5507,6 +5507,116 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/delivery-workspaces/app-qa-gate", async (req, res) => {
+    const userId = getCurrentUserId(req);
+    if (userId !== getSystemUserId()) {
+      return res.status(403).json({
+        error: "Revenue Engine App QA gates require the configured owner account.",
+      });
+    }
+
+    const appQaGateSchema = z.object({
+      workspaceId: z.string().trim().min(1).max(200),
+      prUrl: z.string().trim().url().max(500),
+      notify: z.boolean().optional().default(false),
+    });
+
+    try {
+      const input = appQaGateSchema.parse(req.body);
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const parsedPr = parseGitHubPullRequestUrl(input.prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const expectedBranch = workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch,
+      });
+      const branchMismatch = prStatus.blockers.find((blocker) => /Branch del PR/i.test(blocker));
+      if (branchMismatch) {
+        return res.status(409).json({
+          status: "branch_mismatch",
+          reason: branchMismatch,
+          prStatus,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const scan = await runAppQaScan(userId, input.notify, true, false);
+      const gate = evaluateDeveloperReleaseGate(scan, { prUrl: prStatus.pr.htmlUrl });
+      const appQaPrCommentBody = gate.status === "pass"
+        ? [
+          `App QA passed for ${prStatus.pr.headSha}. no blockers.`,
+          "",
+          `Revenue workspace: ${workspace.id}`,
+          `PR: ${prStatus.pr.htmlUrl}`,
+          `Branch: ${prStatus.pr.headRef}`,
+          `Summary: ${scan.summary}`,
+          "",
+          "Subagents:",
+          ...scan.subAgents.map((agent) => `- ${agent.name}: ${agent.status}`),
+          "",
+          "No deployment approval is granted by this comment. Robert approval and the Revenue Engine release gate are still required.",
+        ].join("\n")
+        : "";
+
+      return res.json({
+        status: gate.status === "pass" ? "pass" : "blocked",
+        reason: gate.status === "pass"
+          ? "App QA paso. Pega el comentario sugerido en el PR y vuelve a correr Check PR status para anclar evidencia al head."
+          : gate.reasons[0] || "App QA bloqueo el release.",
+        scan,
+        gate,
+        prStatus,
+        appQaEvidenceUrl: gate.status === "pass" ? prStatus.appQaEvidenceUrl || "" : "",
+        appQaPrCommentBody,
+        safety: {
+          persistsReleaseGate: false,
+          approvesDeployment: false,
+          requiresPrCommentEvidence: true,
+          requiresRobertApproval: true,
+        },
+        workspace,
+        snapshot: lookup.snapshot,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      if (error?.status === 404 || error?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String(error?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: error.message });
+      }
+      res.status(500).json({ error: "Failed to run revenue delivery App QA gate" });
+    }
+  });
+
   app.post("/api/revenue-engine/delivery-workspaces/release-gate", async (req, res) => {
     const userId = getCurrentUserId(req);
     if (userId !== getSystemUserId()) {

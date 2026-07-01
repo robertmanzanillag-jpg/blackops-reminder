@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-01T04:19:03.632Z",
+  "generatedAt": "2026-07-01T04:41:14.137Z",
   "repoRoot": "/private/tmp/asistente-pr55-fresh",
   "packageName": "rest-express",
   "scripts": {
@@ -83,10 +83,10 @@
   },
   "totals": {
     "filesVisible": 400,
-    "filesIndexed": 333,
+    "filesIndexed": 332,
     "imports": 1321,
-    "routes": 455,
-    "symbols": 7259
+    "routes": 456,
+    "symbols": 7265
   },
   "directories": {
     ".agents/skills": {
@@ -141,7 +141,7 @@
     },
     "docs": {
       "files": 11,
-      "indexed": 11,
+      "indexed": 10,
       "kinds": {
         "docs": 11
       }
@@ -3602,14 +3602,6 @@
     },
     {
       "path": "docs/clippers-tiktok-go-live.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10108,6 +10100,8 @@
         "appCards",
         "appIdentifier",
         "appProject",
+        "appQaGateSchema",
+        "appQaPrCommentBody",
         "applyButton",
         "applyReadyButton",
         "approved",
@@ -10121,6 +10115,7 @@
         "badge",
         "blockers",
         "body",
+        "branchMismatch",
         "branchName",
         "buildClipperExternalCloseoutBatchCopyPacket",
         "buildClipperExternalCloseoutEvidenceCsvTemplate",
@@ -10186,6 +10181,7 @@
         "existingIds",
         "existingRepos",
         "existingTitles",
+        "expectedBranch",
         "externalCloseoutEvidenceImport",
         "externalConnectAutopilot",
         "externalConnectSprint",
@@ -10713,6 +10709,7 @@
         "/api/revenue-engine/daily-scout-sprint/submit",
         "/api/revenue-engine/delivery-review",
         "/api/revenue-engine/delivery-workspaces",
+        "/api/revenue-engine/delivery-workspaces/app-qa-gate",
         "/api/revenue-engine/delivery-workspaces/deliver",
         "/api/revenue-engine/delivery-workspaces/github-handoff",
         "/api/revenue-engine/delivery-workspaces/improvement-review",
@@ -12741,6 +12738,7 @@
       "exports": [],
       "symbols": [
         "autopilotIndex",
+        "connectorMutationSource",
         "engineSource",
         "genericIndex",
         "githubHandoffRoute",
@@ -13265,6 +13263,7 @@
         "closeWithoutExplicitPaymentConfirmation",
         "collectOpportunity",
         "commandInput",
+        "connectorResult",
         "contactFormItem",
         "converted",
         "createApprovedWebsiteDraftForTest",

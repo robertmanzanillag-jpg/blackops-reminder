@@ -1720,6 +1720,32 @@ type DeliveryWorkspacePrStatusResult = {
   snapshot: RevenueSnapshot;
 };
 
+type DeliveryWorkspaceAppQaGateResult = {
+  status: "pass" | "blocked" | "not_found" | "repo_mismatch" | "branch_mismatch" | "github_unavailable" | "invalid_request";
+  reason?: string;
+  scan?: {
+    summary: string;
+    failCount: number;
+    warnCount: number;
+    subAgents: Array<{ name: string; status: string; summary: string }>;
+  };
+  gate?: {
+    status: "pass" | "blocked";
+    reasons: string[];
+  };
+  prStatus?: DeliveryWorkspacePrStatusResult["prStatus"];
+  appQaEvidenceUrl?: string;
+  appQaPrCommentBody?: string;
+  safety?: {
+    persistsReleaseGate: boolean;
+    approvesDeployment: boolean;
+    requiresPrCommentEvidence: boolean;
+    requiresRobertApproval: boolean;
+  };
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number] | null;
+  snapshot: RevenueSnapshot;
+};
+
 type DeliveryWorkspaceDeliverResult = {
   status: "delivered" | "blocked" | "not_found";
   reason: string;
@@ -3031,6 +3057,35 @@ export default function RevenueEnginePage() {
       }
       if (data.prStatus?.appQaEvidenceUrl) {
         patch.appQaEvidenceUrl = data.prStatus.appQaEvidenceUrl;
+        patch.appQaPassed = true;
+      }
+      updateReleaseGateInput(workspaceId, patch);
+    },
+  });
+
+  const deliveryWorkspaceAppQaGateMutation = useMutation<DeliveryWorkspaceAppQaGateResult, Error, RevenueSnapshot["recentDeliveryWorkspaces"][number]>({
+    mutationFn: async (workspace) => {
+      const releaseGateInput = buildReleaseGateInput(workspace);
+      const response = await fetch("/api/revenue-engine/delivery-workspaces/app-qa-gate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          prUrl: releaseGateInput.prUrl,
+          notify: false,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.reason || data.error || "No se pudo correr App QA");
+      return data;
+    },
+    onSuccess: (data) => {
+      const workspaceId = data.workspace?.id;
+      if (!workspaceId) return;
+      const patch: DeliveryWorkspaceReleaseGateInput = {};
+      if (data.prStatus?.pr.htmlUrl) patch.prUrl = data.prStatus.pr.htmlUrl;
+      if (data.status === "pass" && data.appQaEvidenceUrl) {
+        patch.appQaEvidenceUrl = data.appQaEvidenceUrl;
         patch.appQaPassed = true;
       }
       updateReleaseGateInput(workspaceId, patch);
@@ -9032,6 +9087,50 @@ export default function RevenueEnginePage() {
                                 {deliveryWorkspacePrStatusMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GitPullRequest className="mr-2 h-4 w-4" />}
                                 Check PR status
                               </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={
+                                  deliveryWorkspaceAppQaGateMutation.isPending
+                                  || workspace.codexBuildHandoff.status === "not_required"
+                                  || !releaseGateInput.prUrl
+                                }
+                                onClick={() => deliveryWorkspaceAppQaGateMutation.mutate(workspace)}
+                                className="mt-2 w-full border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
+                                data-testid={`button-run-workspace-app-qa-${workspace.id}`}
+                              >
+                                {deliveryWorkspaceAppQaGateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                Run App QA
+                              </Button>
+                              {deliveryWorkspaceAppQaGateMutation.data?.workspace?.id === workspace.id && (
+                                <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-workspace-app-qa-gate">
+                                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                    <p className="text-sm font-medium text-emerald-100">{deliveryWorkspaceAppQaGateMutation.data.reason}</p>
+                                    <Badge variant="outline" className={cn(statusTone(deliveryWorkspaceAppQaGateMutation.data.status), "shrink-0")}>
+                                      {deliveryWorkspaceAppQaGateMutation.data.status}
+                                    </Badge>
+                                  </div>
+                                  {deliveryWorkspaceAppQaGateMutation.data.scan && (
+                                    <p className="mt-2 text-xs leading-5 text-zinc-300">
+                                      {deliveryWorkspaceAppQaGateMutation.data.scan.summary} · fails {deliveryWorkspaceAppQaGateMutation.data.scan.failCount} · warnings {deliveryWorkspaceAppQaGateMutation.data.scan.warnCount}
+                                    </p>
+                                  )}
+                                  {deliveryWorkspaceAppQaGateMutation.data.appQaPrCommentBody && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="mt-3 border-emerald-500/30 text-emerald-100"
+                                      onClick={() => navigator.clipboard.writeText(deliveryWorkspaceAppQaGateMutation.data?.appQaPrCommentBody || "")}
+                                      data-testid={`button-copy-app-qa-pr-comment-${workspace.id}`}
+                                    >
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy App QA PR comment
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
                               <Button
                                 type="button"
                                 size="sm"

@@ -53,6 +53,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine");
   const expectedCriticalClicks = [
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Copy packet",
@@ -66,6 +67,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     "Guardar workspace",
     "Create issue",
     "Revalidar con checks marcados",
+    "Run App QA",
     "Registrar release gate",
     "Entregar aprobado",
     "Correr QA",
@@ -76,7 +78,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     expectedCriticalClicks.every((click) => revenueRoute.expectedClicks.includes(click)),
     true,
   );
-  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]);
+  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]);
   assert.deepEqual(
     expectedCriticalClicks.every((click) =>
       [
@@ -86,6 +88,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     ),
     true,
   );
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Run App QA")), true);
   assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Registrar release gate")), true);
   assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Entregar aprobado")), true);
   assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.activationControls?.includes("Reply")), false);
@@ -99,13 +102,14 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
   const body = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
   ].join("\n");
 
   assert.deepEqual(
-    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]),
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]),
     [],
   );
   assert.deepEqual(
@@ -119,6 +123,7 @@ test("visual control coverage checks Revenue Engine money-flow groups independen
   const salesOnlyBody = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
@@ -136,6 +141,7 @@ test("visual control coverage checks Revenue Engine money-flow groups independen
   assert.deepEqual(salesNotes, []);
   assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
   assert.equal(releaseNotes.join("\n").includes("Entregar aprobado"), true);
+  assert.equal(releaseNotes.join("\n").includes("Run App QA"), true);
 });
 
 test("visual control coverage does not merge scenario controls across tabs", () => {
@@ -143,6 +149,7 @@ test("visual control coverage does not merge scenario controls across tabs", () 
   const baseBody = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
@@ -157,6 +164,7 @@ test("visual control coverage does not merge scenario controls across tabs", () 
 
   assert.equal(notes.some((note) => note.includes("website_release_gate")), true);
   assert.equal(notes.join("\n").includes("Entregar aprobado"), true);
+  assert.equal(notes.join("\n").includes("Run App QA"), true);
 });
 
 test("visual control coverage accepts a complete activated scenario snapshot", () => {
@@ -164,10 +172,12 @@ test("visual control coverage accepts a complete activated scenario snapshot", (
   const body = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
     "Registrar release gate",
+    "Run App QA",
     "Entregar aprobado",
     "Create issue",
     "Revalidar con checks marcados",
@@ -184,6 +194,7 @@ test("visual control coverage flags non-generic group controls without their req
   const partialSalesBody = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
@@ -192,6 +203,7 @@ test("visual control coverage flags non-generic group controls without their req
   const partialReleaseBody = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
@@ -205,6 +217,7 @@ test("visual control coverage flags non-generic group controls without their req
   assert.equal(salesNotes.join("\n").includes("Crear oportunidad"), true);
   assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
   assert.equal(releaseNotes.join("\n").includes("Registrar release gate"), true);
+  assert.equal(releaseNotes.join("\n").includes("Run App QA"), true);
 });
 
 test("visual control coverage does not match short controls inside longer words", () => {
@@ -212,6 +225,7 @@ test("visual control coverage does not match short controls inside longer words"
   const body = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
@@ -230,6 +244,7 @@ test("visual control coverage ignores generic scenario words until a strong mone
   const genericBody = [
     "Revenue Engine",
     "Guardar candidato publico",
+    "Guardar connector review-only",
     "Preview batch",
     "Money sprint",
     "Correr QA",
