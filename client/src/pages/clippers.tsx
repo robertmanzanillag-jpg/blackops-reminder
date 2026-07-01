@@ -1858,6 +1858,15 @@ interface ClipperAccountPermissionReadinessSummary {
     operatorActions: number;
     nextEvidenceRows?: number;
     evidenceImportCsvPath?: string | null;
+    activeMvpProofPriority?: {
+      active: boolean;
+      id: string;
+      accountId: string;
+      accountName?: string;
+      kind?: string;
+      proofPath: string;
+      nextStep: string;
+    };
     nextActionId: string | null;
     nextStep: string;
   };
@@ -1933,6 +1942,15 @@ interface ClipperAccountPermissionReadinessSummary {
       copyText: string;
     }>;
     source: string;
+    activeMvpProofPriority?: {
+      active: boolean;
+      id: string;
+      accountId: string;
+      accountName?: string;
+      kind?: string;
+      proofPath: string;
+      nextStep: string;
+    };
     nextStep: string;
   };
   metricoolMvpEvidence?: {
@@ -28920,6 +28938,24 @@ export default function ClippersPage() {
                             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-sky-100/75">{row.nextStep}</p>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+                  {accountPermissionReadiness.externalCloseout?.activeMvpProofPriority?.active && (
+                    <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-950/10 p-3" data-testid="clippers-active-mvp-proof-priority">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-amber-100">Active MVP proof priority</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500">{accountPermissionReadiness.externalCloseout.activeMvpProofPriority.nextStep}</p>
+                        </div>
+                        <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-[10px] text-amber-100">
+                          {accountPermissionReadiness.externalCloseout.activeMvpProofPriority.id}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 grid gap-2 text-[11px] leading-4 text-zinc-500 md:grid-cols-3">
+                        <p>Account: {accountPermissionReadiness.externalCloseout.activeMvpProofPriority.accountId}</p>
+                        <p>Kind: {accountPermissionReadiness.externalCloseout.activeMvpProofPriority.kind || "proof"}</p>
+                        <p className="break-all">Proof: {accountPermissionReadiness.externalCloseout.activeMvpProofPriority.proofPath}</p>
                       </div>
                     </div>
                   )}

@@ -469,9 +469,26 @@ test("account permission readiness writes active TikTok MVP account evidence row
   const memesEvidencePath = path.join(rootDir, "account-evidence/meme-radar-tiktok.json");
   const originalSportsEvidence = await readFile(sportsEvidencePath, "utf8").catch(() => null);
   const originalMemesEvidence = await readFile(memesEvidencePath, "utf8").catch(() => null);
+  const originalQueue = await readFile(queuePath, "utf8");
   try {
     await unlink(sportsEvidencePath).catch(() => undefined);
     await unlink(memesEvidencePath).catch(() => undefined);
+    const queue = JSON.parse(originalQueue);
+    queue.status = "approval_required";
+    queue.publishMode = "approval_required";
+    queue.realPublishEnabled = false;
+    queue.totals = { ...(queue.totals || {}), readyToSend: 0 };
+    queue.items = [];
+    queue.sourceReadiness = {
+      ...(queue.sourceReadiness || {}),
+      status: "ready",
+      categories: [
+        { accountId: "sports-daily", category: "sports", connectedNetworks: ["tiktok"], rightsReadyAssets: 50 },
+        { accountId: "meme-radar", category: "memes", connectedNetworks: ["tiktok"], rightsReadyAssets: 50 },
+      ],
+      totals: { ...((queue.sourceReadiness || {}).totals || {}), rightsReadyAssets: 100 },
+    };
+    await writeFile(queuePath, JSON.stringify(queue, null, 2));
 
     const result = spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
       cwd: process.cwd(),
@@ -486,6 +503,12 @@ test("account permission readiness writes active TikTok MVP account evidence row
     const readiness = JSON.parse(await readFile(path.join(rootDir, "account-permission-readiness.json"), "utf8"));
     assert.equal(readiness.metricoolMvpEvidence.accountRows, 2);
     assert.match(readiness.metricoolMvpEvidence.accountEvidenceCsvPath, /account-permission-mvp-account-evidence\.csv$/);
+    assert.equal(readiness.externalCloseout.activeMvpProofPriority.active, true);
+    assert.equal(readiness.externalCloseout.nextActionId, "account-proof:sports-daily:tiktok");
+    assert.match(readiness.externalCloseout.nextStep, /Sports Daily Clips|proof links/i);
+    assert.match(readiness.fullReadinessGap.nextStep, /Sports Daily Clips|proof links/i);
+    assert.equal(readiness.nextEvidenceDrop.activeMvpProofPriority.id, "account-proof:sports-daily:tiktok");
+    assert.match(readiness.nextEvidenceDrop.nextStep, /Sports Daily Clips|proof links/i);
     const sportsRow = readiness.accountRows.find((row) => row.accountId === "sports-daily" && row.platform === "tiktok");
     assert.equal(sportsRow.evidenceQuality.status, "missing");
     assert.ok(sportsRow.evidenceQuality.issues.some((issue) => issue.includes("exact profileUrl")));
@@ -500,11 +523,15 @@ test("account permission readiness writes active TikTok MVP account evidence row
     assert.doesNotMatch(mvpAccountEvidenceCsv, /"account","meme-radar","tiktok","verified","[^"]*","[^"]*","[^"]*","[^"]*","https:\/\/www\.tiktok\.com\/signup","[^"]*","[^"]*","<real/);
     assert.match(mvpAccountEvidenceCsv, /active TikTok MVP account proof/);
     assert.doesNotMatch(mvpAccountEvidenceCsv, /"instagram"|"youtube"|developer_app|permission|client_secret|refresh_token|access_token|password=/);
+    const readinessMarkdown = await readFile(path.join(rootDir, "account-permission-readiness.md"), "utf8");
+    assert.match(readinessMarkdown, /Active MVP proof priority: account-proof:sports-daily:tiktok/);
+    assert.match(readinessMarkdown, /Active MVP priority proof: .*sports-daily-tiktok\.json/);
   } finally {
     if (originalSportsEvidence === null) await unlink(sportsEvidencePath).catch(() => undefined);
     else await writeFile(sportsEvidencePath, originalSportsEvidence);
     if (originalMemesEvidence === null) await unlink(memesEvidencePath).catch(() => undefined);
     else await writeFile(memesEvidencePath, originalMemesEvidence);
+    await writeFile(queuePath, originalQueue);
     spawnSync(process.execPath, ["script/clippers-account-permission-readiness.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -1958,6 +1985,12 @@ test("account permission readiness rejects unsafe Metricool queue state", async 
     assert.match(readiness.activeMvp.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
     assert.match(readiness.nextStep, /Fix Metricool safety guard before importing bridge evidence/);
     assert.doesNotMatch(readiness.nextStep, /^Preview\/import real non-secret Metricool bridge evidence/);
+    assert.equal(readiness.externalCloseout.activeMvpProofPriority.id, "metricool-safety:tiktok-mvp");
+    assert.equal(readiness.externalCloseout.activeMvpProofPriority.kind, "metricool_safety");
+    assert.match(readiness.externalCloseout.nextStep, /Fix Metricool safety before proof import/);
+    assert.match(readiness.fullReadinessGap.nextStep, /Fix Metricool safety before proof import/);
+    assert.match(readiness.nextEvidenceDrop.nextStep, /Fix Metricool safety before proof import/);
+    assert.doesNotMatch(readiness.externalCloseout.nextStep, /^Add real non-secret Metricool bridge proof/);
     assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.status, "blocked_metricool_safety");
     assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.approvalRequired, false);
     assert.equal(readiness.metricoolMvpEvidence.bridgeProofPack.readyToSend, 1);
@@ -2253,6 +2286,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes('data-testid="clippers-next-evidence-cards"'));
   assert.ok(page.includes('data-testid="prepare-clippers-external-closeout-pack-button"'));
   assert.ok(page.includes("fullReadinessGap"));
+  assert.ok(page.includes("activeMvpProofPriority"));
+  assert.ok(page.includes('data-testid="clippers-active-mvp-proof-priority"'));
+  assert.ok(page.includes("Active MVP proof priority"));
   assert.ok(page.includes("previewCards"));
   assert.ok(page.includes("copyText"));
   assert.ok(page.includes("nextEvidenceDrop"));

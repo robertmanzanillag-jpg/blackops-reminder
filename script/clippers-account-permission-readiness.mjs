@@ -539,6 +539,51 @@ function tiktokMvpCloseoutRows(accountRows, queue = {}, metricoolMvpLaunchPack =
     });
 }
 
+function activeMvpProofPriority(activeMvpRows, bridgeEvidenceCsvPath, metricoolGuard = {}) {
+  if (metricoolGuard.safe === false) {
+    const firstBlocker = Array.isArray(metricoolGuard.blockers) && metricoolGuard.blockers.length
+      ? metricoolGuard.blockers[0]
+      : "Metricool queue safety guard is blocked";
+    return {
+      active: true,
+      id: "metricool-safety:tiktok-mvp",
+      accountId: "",
+      accountName: "TikTok Metricool MVP",
+      proofPath: bridgeEvidenceCsvPath,
+      kind: "metricool_safety",
+      nextStep: `Fix Metricool safety before proof import: ${firstBlocker}. Metricool must stay approval_required with realPublishEnabled=false and readyToSend=0.`,
+    };
+  }
+  const blockedRow = activeMvpRows.find((row) => !row.readyForMetricoolApproval);
+  if (!blockedRow) {
+    return {
+      active: false,
+      id: "",
+      accountId: "",
+      nextStep: "SPORT and memes TikTok proof gates are clear for the Metricool MVP.",
+      proofPath: "",
+    };
+  }
+  const needsAccountProof = blockedRow.accountStatus !== "verified";
+  const needsBridgeProof = !blockedRow.metricoolConnected || blockedRow.metricoolRightsReadyAssets <= 0 || blockedRow.metricoolBlockers.length > 0;
+  const id = needsAccountProof
+    ? `account-proof:${blockedRow.accountId}:tiktok`
+    : `metricool-bridge-proof:${blockedRow.accountId}:tiktok`;
+  return {
+    active: true,
+    id,
+    accountId: blockedRow.accountId,
+    accountName: blockedRow.accountName,
+    proofPath: needsAccountProof ? blockedRow.evidencePath : bridgeEvidenceCsvPath,
+    kind: needsAccountProof ? "account" : "metricool_bridge",
+    nextStep: needsAccountProof
+      ? `Add real non-secret TikTok ownership/security proof for ${blockedRow.accountName}, then preview proof links before saving.`
+      : needsBridgeProof
+        ? `Add real non-secret Metricool bridge proof for ${blockedRow.accountName} in ${bridgeEvidenceCsvPath}, preview first, then import only if clean.`
+        : `Refresh readiness for ${blockedRow.accountName}; the active MVP row is not ready yet.`,
+  };
+}
+
 function renderTikTokMvpCloseoutMarkdown(closeout) {
   return [
     "# TikTok MVP Account Closeout",
@@ -909,6 +954,7 @@ function renderMarkdown(summary) {
     `- External evidence repair rows: ${summary.externalCloseout.evidenceRepairRows}`,
     `- Local owned source assets: ${summary.sourceReadiness.localOwnedSourceAssets}`,
     `- Connected Metricool rights-ready assets: ${summary.sourceReadiness.connectedMetricoolRightsReadyAssets}`,
+    `- Active MVP proof priority: ${summary.externalCloseout.activeMvpProofPriority?.id || "none"}`,
     "",
     "## Active MVP Now",
     "",
@@ -944,6 +990,8 @@ function renderMarkdown(summary) {
     `- Operator actions: ${summary.externalCloseout.operatorActions}`,
     `- Next action: ${summary.externalCloseout.nextActionId || "none"}`,
     `- Next step: ${summary.externalCloseout.nextStep}`,
+    `- Active MVP priority: ${summary.externalCloseout.activeMvpProofPriority?.id || "none"}`,
+    `- Active MVP priority proof: ${summary.externalCloseout.activeMvpProofPriority?.proofPath || "none"}`,
     "",
     "## Official Research",
     "",
@@ -955,6 +1003,7 @@ function renderMarkdown(summary) {
     `Rows: ${summary.nextEvidenceDrop.rows}`,
     `Source: ${summary.nextEvidenceDrop.source}`,
     `Next step: ${summary.nextEvidenceDrop.nextStep}`,
+    `Active MVP priority: ${summary.nextEvidenceDrop.activeMvpProofPriority?.id || "none"}`,
     `Schema: ${externalEvidenceHeader}`,
     "",
     "Preview rows:",
@@ -1148,6 +1197,7 @@ async function main() {
   const activeMvpRows = accountRows.filter((row) => activeMetricoolMvpAccountIds.has(row.accountId) && activeMetricoolMvpPlatforms.has(row.platform));
   const activeMvpReadyLanes = activeMvpRows.filter((row) => row.readyForMetricoolApproval).length;
   const activeMvpTargetLanes = activeMetricoolMvpAccountIds.size * activeMetricoolMvpPlatforms.size;
+  const activeMvpProof = activeMvpProofPriority(activeMvpRows, metricoolTiktokBridgeEvidencePath, metricoolGuard);
   const localOwnedSourceAssets = queue?.sourceReadiness?.localOwnedSourceTotals?.total || 0;
   const connectedMetricoolRightsReadyAssets = queue?.sourceReadiness?.totals?.rightsReadyAssets || 0;
   const externalProofsNeedEvidence = externalCloseout?.totals?.proofFilesNeedRealEvidence || 0;
@@ -1155,11 +1205,11 @@ async function main() {
   const externalEvidenceRepairRows = externalProofsNeedEvidence;
   const metricoolMvpReady = activeMvpReadyLanes >= activeMvpTargetLanes && connectedMetricoolRightsReadyAssets > 0;
   const fullReadinessGapRows = [
-    progressRow("accounts", "Account profiles", totals.verifiedAccounts, totals.accountProfiles, accountRows.find((row) => row.accountStatus !== "verified")?.nextStep || "All account profiles verified."),
+    progressRow("accounts", "Account profiles", totals.verifiedAccounts, totals.accountProfiles, activeMvpProof.active ? activeMvpProof.nextStep : accountRows.find((row) => row.accountStatus !== "verified")?.nextStep || "All account profiles verified."),
     progressRow("metricool_tiktok_mvp", "Metricool TikTok MVP lanes", activeMvpReadyLanes, activeMvpTargetLanes, "Keep SPORT and memes TikTok connected in Metricool approval_required mode."),
     progressRow("developer_apps", "Developer apps", totals.developerAppsApproved, totals.developerApps, developerRows.find((row) => row.status !== "approved")?.nextStep || "All developer apps approved."),
     progressRow("permissions", "Platform permission groups", totals.permissionGroupsApproved, totals.permissionGroups, permissionRows.find((row) => row.status !== "approved")?.nextStep || "All platform permissions approved."),
-    progressRow("external_proofs", "External proof files", Math.max(0, externalOperatorActions - externalProofsNeedEvidence), externalOperatorActions, externalCloseout?.operatorQueue?.[0]?.operatorAction || "All external proof files are complete."),
+    progressRow("external_proofs", "External proof files", Math.max(0, externalOperatorActions - externalProofsNeedEvidence), externalOperatorActions, activeMvpProof.active ? activeMvpProof.nextStep : externalCloseout?.operatorQueue?.[0]?.operatorAction || "All external proof files are complete."),
     progressRow("direct_api", "Direct API lanes", totals.directApiReadyLanes, totals.accountProfiles, "Keep Direct API blocked until accounts, developer apps, permissions and proof imports are all verified."),
   ];
   const fullReadinessMissing = fullReadinessGapRows.reduce((sum, row) => sum + row.missing, 0);
@@ -1262,7 +1312,9 @@ async function main() {
       missing: fullReadinessMissing,
       percent: fullReadinessTotal > 0 ? Math.round(((fullReadinessTotal - fullReadinessMissing) / fullReadinessTotal) * 100) : 100,
       rows: fullReadinessGapRows,
-      nextStep: fullReadinessGapRows.find((row) => row.missing > 0)?.nextStep || "All account, permission and external proof gates are ready.",
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : fullReadinessGapRows.find((row) => row.missing > 0)?.nextStep || "All account, permission and external proof gates are ready.",
     },
     externalCloseout: {
       status: externalCloseout?.status || "not_prepared",
@@ -1271,8 +1323,11 @@ async function main() {
       operatorActions: externalOperatorActions,
       nextEvidenceRows: closeoutRowsForEvidenceDrop(externalCloseout).length,
       evidenceImportCsvPath: externalCloseout?.paths?.evidenceCsv || null,
-      nextActionId: externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
-      nextStep: externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
+      activeMvpProofPriority: activeMvpProof,
+      nextActionId: activeMvpProof.active ? activeMvpProof.id : externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
     },
     officialResearch: platforms.map((platform) => ({
       platform: platform.platform,
@@ -1311,7 +1366,10 @@ async function main() {
       cards: nextEvidenceCards,
       previewCards: nextEvidenceCards.slice(0, 5),
       source: nextEvidenceDataRows.length > 0 && externalOperatorActions > 0 ? "external_closeout" : "account_permission_readiness",
-      nextStep: nextEvidenceDataRows.length > 0
+      activeMvpProofPriority: activeMvpProof,
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : nextEvidenceDataRows.length > 0
         ? "Fill only rows backed by real non-secret proof, then run the external closeout evidence import preview."
         : "No next evidence rows remain.",
     },
