@@ -603,6 +603,7 @@ type RevenueSnapshot = {
       prUrl: string;
       codexBrief: string;
       publicBuildBrief: string;
+      copyableGithubHandoffRequest: string;
       buildPack: {
         sections: string[];
         assets: string[];
@@ -2070,6 +2071,24 @@ function slugifyClientBranchValue(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "client";
+}
+
+function isGithubRepoFullName(value: string) {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value.trim());
+}
+
+function isCodexBranchName(value: string) {
+  return /^codex\/[A-Za-z0-9._/-]+$/.test(value.trim());
+}
+
+function buildCopyableGithubHandoffRequest(workspaceId: string, repoFullName: string, branchName: string) {
+  const trimmedRepoFullName = repoFullName.trim();
+  const trimmedBranchName = branchName.trim();
+  return JSON.stringify({
+    workspaceId,
+    ...(isGithubRepoFullName(trimmedRepoFullName) ? { repoFullName: trimmedRepoFullName } : {}),
+    ...(isCodexBranchName(trimmedBranchName) ? { branchName: trimmedBranchName } : {}),
+  }, null, 2);
 }
 
 const genericPaymentEvidence = new Set([
@@ -5617,6 +5636,17 @@ export default function RevenueEnginePage() {
                             <Copy className="mr-2 h-4 w-4" />
                             Copy build pack
                           </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-zinc-700"
+                            onClick={() => navigator.clipboard.writeText(item.copyableGithubHandoffRequest)}
+                            data-testid={`button-copy-website-github-handoff-request-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy handoff JSON
+                          </Button>
                           {item.githubIssueUrl && (
                             <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
                               <Button type="button" size="sm" variant="outline" className="border-zinc-700">
@@ -8956,8 +8986,8 @@ export default function RevenueEnginePage() {
                             const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
                             const repoFullName = repoInput.repoFullName || "";
                             const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
-                            const repoReady = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName.trim());
-                            const branchReady = /^codex\/[A-Za-z0-9._/-]+$/.test(branchName.trim());
+                            const repoReady = isGithubRepoFullName(repoFullName);
+                            const branchReady = isCodexBranchName(branchName);
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -9222,6 +9252,21 @@ export default function RevenueEnginePage() {
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy build pack
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-zinc-700"
+                                    onClick={() => navigator.clipboard.writeText(buildCopyableGithubHandoffRequest(
+                                      workspace.id,
+                                      workspace.input.repoFullName,
+                                      workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+                                    ))}
+                                    data-testid={`button-copy-github-handoff-request-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy handoff JSON
                                   </Button>
                                   <Button
                                     type="button"

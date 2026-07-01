@@ -4311,6 +4311,10 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].workspaceId, handoff.workspace?.id);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].codexBrief.includes("PR-First Rules"), true);
+  const githubHandoffRequest = JSON.parse(handoff.snapshot.websiteBuildHandoffQueue.items[0].copyableGithubHandoffRequest);
+  assert.equal(githubHandoffRequest.workspaceId, handoff.workspace?.id);
+  assert.equal(githubHandoffRequest.repoFullName, "robert/handoff-cafe");
+  assert.equal(githubHandoffRequest.branchName, "codex/client-handoff-cafe-website");
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].buildPack.copyableBuildPack.includes("Implementation rules"), true);
   assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].publicBuildBrief, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|Operator notes|Client said yes/);
   assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].buildPack.copyableBuildPack, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|Operator notes|Client said yes/);
@@ -8255,6 +8259,57 @@ test("legacy website delivery workspaces reload into PR-first blocked state", ()
 
   assert.equal(delivered.status, "blocked");
   assert.match(delivered.reason, /pull request de build/);
+});
+
+test("website build handoff request omits invalid optional repo and branch fields", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Missing Repo Cafe",
+    contactEmail: "owner@missing-repo.test",
+    sourceUrl: "https://example.com/missing-repo-cafe",
+    mockupSlug: "missing-repo-cafe",
+  });
+  const opportunity = sellWebsiteOpportunityForTest({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "bundle",
+    cashCollectedUsd: 2100,
+  });
+  const workspaceResult = recordRevenueDeliveryWorkspace({
+    workspaceName: "Missing Repo Cafe website delivery",
+    sourceOpportunityId: opportunity.id,
+    sourceLeadId: lead.id,
+    sourceOutreachDraftId: draft.id,
+    mockupUrl: "/api/revenue-engine/mockup-previews/missing-repo-cafe",
+    sourceUrl: "https://example.com/missing-repo-cafe",
+    repoFullName: "",
+    branchName: "main",
+    clientName: "Missing Repo Cafe",
+    projectType: "bundle",
+    packageName: "Website 3D Premium + Automation Sprint",
+    setupUsd: 4200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: true,
+    launchTargetDays: 7,
+    clientRequest: "Sold website workspace waiting for PR-first GitHub handoff details.",
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+  const queued = snapshot.websiteBuildHandoffQueue.items.find((item) => item.workspaceId === workspaceResult.workspace.id);
+
+  assert.ok(queued);
+  const handoffRequest = JSON.parse(queued.copyableGithubHandoffRequest);
+  assert.deepEqual(revenueDeliveryWorkspaceGithubHandoffSchema.parse(handoffRequest), {
+    workspaceId: workspaceResult.workspace.id,
+  });
+  assert.equal("repoFullName" in handoffRequest, false);
+  assert.equal("branchName" in handoffRequest, false);
 });
 
 test("persists ledger entries across module state reloads", () => {

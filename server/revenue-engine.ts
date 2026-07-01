@@ -988,6 +988,7 @@ type RevenueWebsiteBuildHandoffQueue = {
     prUrl: string;
     codexBrief: string;
     publicBuildBrief: string;
+    copyableGithubHandoffRequest: string;
     buildPack: {
       sections: string[];
       assets: string[];
@@ -1757,6 +1758,20 @@ function slugifyRevenueValue(value: string) {
 
 export function isRevenueCodexBranchName(value: string) {
   return /^codex\/[A-Za-z0-9._/-]+$/.test(value.trim());
+}
+
+function isRevenueGithubRepoFullName(value: string) {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value.trim());
+}
+
+function buildRevenueGithubHandoffRequest(workspace: RevenueDeliveryWorkspace) {
+  const repoFullName = workspace.codexBuildHandoff.repoFullName.trim();
+  const branchName = workspace.codexBuildHandoff.branchName.trim();
+  return JSON.stringify({
+    workspaceId: workspace.id,
+    ...(isRevenueGithubRepoFullName(repoFullName) ? { repoFullName } : {}),
+    ...(isRevenueCodexBranchName(branchName) ? { branchName } : {}),
+  }, null, 2);
 }
 
 const GENERIC_REVENUE_PAYMENT_EVIDENCE = new Set([
@@ -4935,23 +4950,27 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
     )
     .slice()
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const items: RevenueWebsiteBuildHandoffQueue["items"] = openWorkspaces.slice(0, visibleLimit).map((workspace) => ({
-    workspaceId: workspace.id,
-    clientName: workspace.input.clientName,
-    projectType: workspace.input.projectType === "bundle" ? "bundle" : "website",
-    packageName: workspace.input.packageName,
-    setupUsd: workspace.input.setupUsd,
-    repoFullName: workspace.codexBuildHandoff.repoFullName,
-    branchName: workspace.codexBuildHandoff.branchName,
-    githubIssueUrl: workspace.codexBuildHandoff.githubIssueUrl,
-    prUrl: workspace.codexBuildHandoff.prUrl,
-    codexBrief: workspace.codexBuildHandoff.codexBrief,
-    publicBuildBrief: workspace.codexBuildHandoff.publicBuildBrief,
-    buildPack: workspace.codexBuildHandoff.buildPack,
-    missing: workspace.codexBuildHandoff.missing,
-    blockedActions: workspace.codexBuildHandoff.blockedActions,
-    nextAction: workspace.codexBuildHandoff.nextAction,
-  }));
+  const items: RevenueWebsiteBuildHandoffQueue["items"] = openWorkspaces.slice(0, visibleLimit).map((workspace) => {
+    const copyableGithubHandoffRequest = buildRevenueGithubHandoffRequest(workspace);
+    return {
+      workspaceId: workspace.id,
+      clientName: workspace.input.clientName,
+      projectType: workspace.input.projectType === "bundle" ? "bundle" : "website",
+      packageName: workspace.input.packageName,
+      setupUsd: workspace.input.setupUsd,
+      repoFullName: workspace.codexBuildHandoff.repoFullName,
+      branchName: workspace.codexBuildHandoff.branchName,
+      githubIssueUrl: workspace.codexBuildHandoff.githubIssueUrl,
+      prUrl: workspace.codexBuildHandoff.prUrl,
+      codexBrief: workspace.codexBuildHandoff.codexBrief,
+      publicBuildBrief: workspace.codexBuildHandoff.publicBuildBrief,
+      copyableGithubHandoffRequest,
+      buildPack: workspace.codexBuildHandoff.buildPack,
+      missing: workspace.codexBuildHandoff.missing,
+      blockedActions: workspace.codexBuildHandoff.blockedActions,
+      nextAction: workspace.codexBuildHandoff.nextAction,
+    };
+  });
 
   return {
     status: openWorkspaces.length > 0 ? "ready" : "empty",

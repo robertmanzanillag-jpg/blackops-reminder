@@ -180,8 +180,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /websiteOpportunityCloseMutation/);
   assert.match(uiSource, /panel-website-build-handoff-queue/);
   assert.match(uiSource, /button-copy-website-build-brief-/);
+  assert.match(uiSource, /button-copy-website-github-handoff-request-/);
+  assert.match(uiSource, /button-copy-github-handoff-request-/);
   assert.match(uiSource, /button-copy-website-workspace-setup-/);
   assert.match(uiSource, /button-copy-website-workspace-request-/);
+  assert.match(uiSource, /copyableGithubHandoffRequest/);
   assert.match(uiSource, /copyableWorkspaceSetupPacket/);
   assert.match(uiSource, /copyableWorkspaceRequest/);
   assert.match(uiSource, /item\.suggestedBranchName/);
@@ -242,7 +245,10 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /const \[websiteDeliveryRepoInputs, setWebsiteDeliveryRepoInputs\] = useState<Record<string, \{/);
   assert.match(uiSource, /input-website-handoff-repo-/);
   assert.match(uiSource, /input-website-handoff-branch-/);
-  assert.match(uiSource, /const branchReady = \/\^codex\\\/\[A-Za-z0-9\._\/-\]\+\$\/\.test\(branchName\.trim\(\)\)/);
+  assert.match(uiSource, /function isGithubRepoFullName/);
+  assert.match(uiSource, /function isCodexBranchName/);
+  assert.match(uiSource, /function buildCopyableGithubHandoffRequest/);
+  assert.match(uiSource, /const branchReady = isCodexBranchName\(branchName\)/);
   assert.match(uiSource, /!repoReady \|\| !branchReady/);
   assert.match(uiSource, /Branch codex requerido/);
   assert.match(engineSource, /function isRevenueCodexBranchName/);
