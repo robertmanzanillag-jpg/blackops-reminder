@@ -10637,6 +10637,7 @@ function validateRevenueReleaseGateEvidence(
     !pr || !isGithubEvidenceForPr(deploymentApprovalUrl, pr.normalizedPrefix, "comment") && "deploymentApprovalUrl debe apuntar al PR o comentario de aprobacion del PR",
     !notes.includes("second review") && "notes debe mencionar evidencia de second review",
     !notes.includes("app qa") && "notes debe mencionar evidencia de App QA",
+    !notes.includes("app qa target") && "notes debe mencionar el App QA target del workspace",
     !notes.includes("robert") && "notes debe mencionar aprobacion de Robert",
     !notes.includes(workspace.id.toLowerCase()) && "notes debe incluir el workspace id auditado",
     branchName && !notes.includes(branchName.toLowerCase()) && "notes debe incluir el branch auditado",

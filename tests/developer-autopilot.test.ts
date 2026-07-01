@@ -71,6 +71,151 @@ test("release gate requires all App QA subagents to pass and still blocks Replit
   assert.equal(gate.prUrl, "https://github.com/robert/asistente/pull/12");
 });
 
+test("release gate blocks when a required App QA target context is missing", () => {
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "abc123",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+      },
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /missing targetContext/);
+});
+
+test("release gate blocks when App QA target context does not match the PR head", () => {
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "old-sha",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      },
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "new-sha",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      },
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /prHeadSha/);
+});
+
+test("release gate passes required App QA target only with matching visual scan", () => {
+  const requiredTargetContext = {
+    kind: "revenue_delivery_workspace" as const,
+    workspaceId: "workspace-123",
+    clientName: "Client Site",
+    repoFullName: "robert/client-site",
+    prUrl: "https://github.com/robert/client-site/pull/2",
+    prHeadSha: "abc123",
+    branchName: "codex/client-site",
+    routePath: "/revenue-engine",
+    expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+  };
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: requiredTargetContext,
+      visualScans: [{
+        path: "/revenue-engine",
+        url: "http://127.0.0.1:5000/revenue-engine",
+        status: "pass",
+        title: "Revenue Engine",
+        consoleErrors: [],
+        clicked: ["Dashboard"],
+        notes: ["Visual OK"],
+      }],
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+        { id: "visual-click-scout", name: "Visual Click Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext,
+    },
+  );
+
+  assert.equal(gate.status, "pass");
+});
+
+test("release gate blocks required App QA target when visual scan was skipped", () => {
+  const requiredTargetContext = {
+    kind: "revenue_delivery_workspace" as const,
+    workspaceId: "workspace-123",
+    clientName: "Client Site",
+    repoFullName: "robert/client-site",
+    prUrl: "https://github.com/robert/client-site/pull/2",
+    prHeadSha: "abc123",
+    branchName: "codex/client-site",
+    routePath: "/revenue-engine",
+    expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+  };
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: requiredTargetContext,
+      visualScans: [],
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+        { id: "visual-click-scout", name: "Visual Click Scout", status: "pass", summary: "skipped", checked: 0, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext,
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /missing visualScans/);
+});
+
 test("release gate blocks send approval until a PR URL exists", () => {
   const gate = evaluateDeveloperReleaseGate({
     failCount: 0,

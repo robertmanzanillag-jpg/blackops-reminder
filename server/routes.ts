@@ -5449,6 +5449,13 @@ export async function registerRoutes(
         repoFullName: parsedPr.repoFullName,
         pullNumber: parsedPr.pullNumber,
         expectedBranch: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          routePath: "/revenue-engine",
+        },
       });
 
       return res.json({
@@ -5521,6 +5528,13 @@ export async function registerRoutes(
         repoFullName: parsedPr.repoFullName,
         pullNumber: parsedPr.pullNumber,
         expectedBranch,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: expectedBranch,
+          routePath: "/revenue-engine",
+        },
       });
       const branchMismatch = prStatus.blockers.find((blocker) => /Branch del PR/i.test(blocker));
       if (branchMismatch) {
@@ -5533,15 +5547,35 @@ export async function registerRoutes(
         });
       }
 
-      const scan = await runAppQaScan(userId, input.notify, true, false);
-      const gate = evaluateDeveloperReleaseGate(scan, { prUrl: prStatus.pr.htmlUrl });
+      const appQaTargetContext = {
+        kind: "revenue_delivery_workspace" as const,
+        workspaceId: workspace.id,
+        clientName: workspace.input.clientName,
+        projectType: workspace.input.projectType,
+        repoFullName: parsedPr.repoFullName,
+        prUrl: prStatus.pr.htmlUrl,
+        prHeadSha: prStatus.pr.headSha,
+        branchName: prStatus.pr.headRef,
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      };
+      const scan = await runAppQaScan(userId, input.notify, true, false, appQaTargetContext);
+      const gate = evaluateDeveloperReleaseGate(scan, {
+        prUrl: prStatus.pr.htmlUrl,
+        requiredTargetContext: appQaTargetContext,
+      });
       const appQaPrCommentBody = gate.status === "pass"
         ? [
           `App QA passed for ${prStatus.pr.headSha}. no blockers.`,
           "",
+          "App QA target: revenue_delivery_workspace",
           `Revenue workspace: ${workspace.id}`,
+          `Client target: ${workspace.input.clientName}`,
+          `Repo target: ${parsedPr.repoFullName}`,
           `PR: ${prStatus.pr.htmlUrl}`,
-          `Branch: ${prStatus.pr.headRef}`,
+          `Branch target: ${prStatus.pr.headRef}`,
+          `PR head target: ${prStatus.pr.headSha}`,
+          "Route target: /revenue-engine",
           `Summary: ${scan.summary}`,
           "",
           "Subagents:",
@@ -5565,6 +5599,7 @@ export async function registerRoutes(
           persistsReleaseGate: false,
           approvesDeployment: false,
           requiresPrCommentEvidence: true,
+          requiresWorkspaceTargetEvidence: true,
           requiresRobertApproval: true,
         },
         workspace,
@@ -5634,6 +5669,13 @@ export async function registerRoutes(
         repoFullName: parsedPr.repoFullName,
         pullNumber: parsedPr.pullNumber,
         expectedBranch: input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+        appQaTargetEvidence: {
+          workspaceId: workspace.id,
+          clientName: workspace.input.clientName,
+          repoFullName: parsedPr.repoFullName,
+          branchName: input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+          routePath: "/revenue-engine",
+        },
       });
       if (!prStatus.readyForReleaseEvidence) {
         return res.status(409).json({

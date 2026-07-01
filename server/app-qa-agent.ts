@@ -59,8 +59,22 @@ export type AppQaRouteProbe = {
   notes: string[];
 };
 
+export type AppQaTargetContext = {
+  kind: "developer_autopilot_pr" | "revenue_delivery_workspace";
+  workspaceId?: string;
+  clientName?: string;
+  projectType?: string;
+  repoFullName?: string;
+  prUrl?: string;
+  prHeadSha?: string;
+  branchName?: string;
+  routePath?: string;
+  expectedControls?: string[];
+};
+
 export type AppQaScanResult = {
   scannedAt: string;
+  targetContext?: AppQaTargetContext;
   totalApps: number;
   totalGithubRepos: number;
   totalGithubAppRepos: number;
@@ -536,10 +550,12 @@ function shouldRunVisualScout(input: {
   userId: string;
   notify: boolean;
   allowDailyDigest: boolean;
+  targetContext?: AppQaTargetContext;
   now?: Date;
 }): boolean {
   const mode = getVisualMode();
   if (mode === "off") return false;
+  if (input.targetContext?.kind === "revenue_delivery_workspace") return true;
   if (mode === "every_scan") return true;
   if (mode === "manual") return input.notify;
   return input.notify || (input.allowDailyDigest && shouldRunDailyVisual(input.userId, input.now));
@@ -657,7 +673,7 @@ function describeAppQaStorageError(error: unknown): string {
   return text || "Storage unavailable";
 }
 
-function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date()): AppQaScanResult {
+function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date(), targetContext?: AppQaTargetContext): AppQaScanResult {
   const detail = describeAppQaStorageError(error);
   const visualReport = buildSkippedVisualScoutReport();
   const githubReport = buildDependencyUnavailableReport("github-scout", "GitHub Scout", detail) as AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] };
@@ -684,6 +700,7 @@ function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date
 
   return {
     scannedAt: startedAt.toISOString(),
+    targetContext,
     totalApps: 0,
     totalGithubRepos: 0,
     totalGithubAppRepos: 0,
@@ -1771,13 +1788,19 @@ async function analyzeApis(apps: AppProject[]): Promise<AppQaSubAgentReport> {
   };
 }
 
-export async function runAppQaScan(userId: string, notify = false, recordHistory = false, allowDailyDigest = false): Promise<AppQaScanResult> {
+export async function runAppQaScan(
+  userId: string,
+  notify = false,
+  recordHistory = false,
+  allowDailyDigest = false,
+  targetContext?: AppQaTargetContext,
+): Promise<AppQaScanResult> {
   const startedAt = new Date();
   let apps: AppProject[];
   try {
     apps = await storage.getAppProjects(userId);
   } catch (error) {
-    const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt);
+    const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt, targetContext);
     if (recordHistory) {
       await recordAppQaHistory(userId, unavailableResult, startedAt);
     }
@@ -1809,7 +1832,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, now: startedAt })
+  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1841,6 +1864,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
 
   const result: AppQaScanResult = {
     scannedAt: new Date().toISOString(),
+    targetContext,
     totalApps: apps.length,
     totalGithubRepos,
     totalGithubAppRepos: githubReport.githubApps.length,
@@ -1909,6 +1933,7 @@ async function recordAppQaHistory(userId: string, result: AppQaScanResult, start
         githubConnected: result.githubConnected,
         telegramSent: result.telegramSent,
         dailyDigestSent: result.dailyDigestSent,
+        targetContext: result.targetContext,
         bugPatrol: {
           enabled: result.bugPatrol.enabled,
           candidates: result.bugPatrol.candidates,

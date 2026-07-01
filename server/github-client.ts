@@ -135,6 +135,14 @@ export type GitHubPullRequestReleaseStatus = {
   readyForReleaseEvidence: boolean;
 };
 
+export type GitHubAppQaTargetEvidence = {
+  workspaceId?: string;
+  clientName?: string;
+  repoFullName?: string;
+  branchName?: string;
+  routePath?: string;
+};
+
 export function parseGitHubPullRequestUrl(value: string): GitHubPullRequestUrlParts | null {
   let parsed: URL;
   try {
@@ -197,13 +205,31 @@ function isTrustedPrEvidenceComment(comment: Record<string, any>): boolean {
   return ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(association);
 }
 
-function isPassingAppQaCommentForHead(comment: Record<string, any>, headSha: string): boolean {
+function commentIncludesAppQaTargetEvidence(body: string, target?: GitHubAppQaTargetEvidence): boolean {
+  if (!target) return true;
+  const normalized = body.toLowerCase();
+  if (!normalized.includes('app qa target')) return false;
+  const requiredValues = [
+    target.workspaceId,
+    target.clientName,
+    target.repoFullName,
+    target.branchName,
+    target.routePath,
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return requiredValues.every((value) => normalized.includes(value));
+}
+
+function isPassingAppQaCommentForHead(comment: Record<string, any>, headSha: string, target?: GitHubAppQaTargetEvidence): boolean {
   const body = String(comment.body || '');
   const normalized = body.toLowerCase();
   return /\bapp\s*qa\b/.test(normalized)
     && /\b(pass|passed|approve|approved|green|ok|no blockers|sin blockers|aprobado|aprobada)\b/.test(normalized)
     && headSha.length >= 7
     && normalized.includes(headSha.toLowerCase())
+    && commentIncludesAppQaTargetEvidence(body, target)
     && isTrustedPrEvidenceComment(comment);
 }
 
@@ -323,6 +349,7 @@ export function summarizeGitHubPullRequestReleaseStatus(input: {
   checksUnavailable?: boolean;
   statusesUnavailable?: boolean;
   expectedBranch?: string;
+  appQaTargetEvidence?: GitHubAppQaTargetEvidence;
 }): GitHubPullRequestReleaseStatus {
   const pr = input.pr;
   const latestReviews = latestReviewByReviewer(input.reviews);
@@ -355,7 +382,7 @@ export function summarizeGitHubPullRequestReleaseStatus(input: {
 
   const appQaComment = [...input.comments]
     .reverse()
-    .find((comment) => isPassingAppQaCommentForHead(comment, String(pr.head.sha || '')));
+    .find((comment) => isPassingAppQaCommentForHead(comment, String(pr.head.sha || ''), input.appQaTargetEvidence));
 
   const expectedBranch = input.expectedBranch?.trim();
   const blockers: string[] = [];
@@ -375,7 +402,9 @@ export function summarizeGitHubPullRequestReleaseStatus(input: {
   if (failedStatuses.length > 0) blockers.push('Hay GitHub statuses fallando.');
   if (pendingChecks.length > 0) blockers.push('Hay GitHub checks pendientes.');
   if (pendingStatuses.length > 0) blockers.push('Hay GitHub statuses pendientes.');
-  if (!appQaComment) blockers.push('Falta comentario/evidencia App QA pass para el PR head actual.');
+  if (!appQaComment) blockers.push(input.appQaTargetEvidence
+    ? 'Falta comentario/evidencia App QA pass para el PR head actual con target del workspace.'
+    : 'Falta comentario/evidencia App QA pass para el PR head actual.');
 
   if (!input.checksUnavailable && !input.statusesUnavailable && checkRuns.length === 0 && statusList.length === 0) {
     warnings.push('GitHub no reporto checks/statuses; registra checks manuales y App QA antes del release gate.');
@@ -422,6 +451,7 @@ export async function getGitHubPullRequestReleaseStatus(input: {
   repoFullName: string;
   pullNumber: number;
   expectedBranch?: string;
+  appQaTargetEvidence?: GitHubAppQaTargetEvidence;
 }): Promise<GitHubPullRequestReleaseStatus> {
   const [owner = '', repo = ''] = input.repoFullName.split('/');
   const ownerError = validateGitHubRepoNamePart(owner, 'Owner');
@@ -474,6 +504,7 @@ export async function getGitHubPullRequestReleaseStatus(input: {
     checksUnavailable: !checksResult.ok,
     statusesUnavailable: !statusesResult.ok,
     expectedBranch: input.expectedBranch,
+    appQaTargetEvidence: input.appQaTargetEvidence,
   });
 }
 

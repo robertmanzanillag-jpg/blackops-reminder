@@ -213,6 +213,49 @@ test("GitHub PR release status requires trusted App QA evidence tied to the curr
   assert.equal(fakeAppQaLogin.appQaEvidenceUrl, "");
 });
 
+test("GitHub PR release status requires App QA target fields when provided", () => {
+  const genericComment = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    appQaTargetEvidence: {
+      workspaceId: "workspace-123",
+      clientName: "Target Cafe",
+      repoFullName: "owner/repo",
+      branchName: "codex/client-build",
+      routePath: "/revenue-engine",
+    },
+  }));
+  assert.equal(genericComment.readyForReleaseEvidence, false);
+  assert.match(genericComment.blockers.join("\n"), /target del workspace/);
+  assert.equal(genericComment.appQaEvidenceUrl, "");
+
+  const targetedComment = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
+    comments: [{
+      body: [
+        "App QA passed for abc123def456. no blockers.",
+        "",
+        "App QA target: revenue_delivery_workspace",
+        "Revenue workspace: workspace-123",
+        "Client target: Target Cafe",
+        "Repo target: owner/repo",
+        "Branch target: codex/client-build",
+        "PR head target: abc123def456",
+        "Route target: /revenue-engine",
+      ].join("\n"),
+      html_url: "https://github.com/owner/repo/pull/12#issuecomment-targeted",
+      author_association: "OWNER",
+      user: { login: "robert" },
+    }],
+    appQaTargetEvidence: {
+      workspaceId: "workspace-123",
+      clientName: "Target Cafe",
+      repoFullName: "owner/repo",
+      branchName: "codex/client-build",
+      routePath: "/revenue-engine",
+    },
+  }));
+  assert.equal(targetedComment.readyForReleaseEvidence, true);
+  assert.equal(targetedComment.appQaEvidenceUrl, "https://github.com/owner/repo/pull/12#issuecomment-targeted");
+});
+
 test("GitHub PR release status blocks pending checks and unverifiable check APIs", () => {
   const pendingChecks = summarizeGitHubPullRequestReleaseStatus(buildReleaseStatusInput({
     checksData: {

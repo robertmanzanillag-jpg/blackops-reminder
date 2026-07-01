@@ -742,12 +742,24 @@ test("visual click scout stays in low-cost daily mode during lightweight scans",
       allowDailyDigest: true,
       now: new Date("2026-06-19T00:00:00.000Z"),
     });
+    const runRevenueTarget = __appQaAgentInternals.shouldRunVisualScout({
+      userId: "user-visual-low-cost-target",
+      notify: false,
+      allowDailyDigest: false,
+      targetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-target",
+        routePath: "/revenue-engine",
+      },
+      now: new Date("2026-06-18T12:00:00.000Z"),
+    });
 
     assert.equal(runNow, false);
     assert.equal(runManual, true);
     assert.equal(runMorningDeep, true);
     assert.equal(skipMorningRepeat, false);
     assert.equal(runEveningDeep, true);
+    assert.equal(runRevenueTarget, true);
   } finally {
     if (previousMode) {
       process.env.APP_QA_VISUAL_MODE = previousMode;
@@ -774,6 +786,23 @@ test("storage unavailable result blocks release without throwing", () => {
   assert.ok(result.failCount >= 1);
   assert.equal(result.subAgents.some((agent) => agent.id === "api-scout" && agent.status === "fail"), true);
   assert.match(result.summary, /bloqueo release/);
+});
+
+test("storage unavailable result preserves App QA target context", () => {
+  const result = __appQaAgentInternals.buildAppQaStorageUnavailableResult(
+    new Error("connect ECONNREFUSED 127.0.0.1:5432"),
+    new Date("2026-06-19T07:30:00.000Z"),
+    {
+      kind: "revenue_delivery_workspace",
+      workspaceId: "workspace-target",
+      clientName: "Target Cafe",
+      routePath: "/revenue-engine",
+    },
+  );
+
+  assert.equal(result.targetContext?.kind, "revenue_delivery_workspace");
+  assert.equal(result.targetContext?.workspaceId, "workspace-target");
+  assert.equal(result.targetContext?.routePath, "/revenue-engine");
 });
 
 test("storage unavailable result keeps useful AggregateError details", () => {

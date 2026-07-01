@@ -1,4 +1,4 @@
-import type { AppQaScanResult, AppQaStatus } from "./app-qa-agent";
+import type { AppQaScanResult, AppQaStatus, AppQaTargetContext } from "./app-qa-agent";
 import { createIssue, createIssueComment, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
@@ -601,12 +601,19 @@ export async function createDeveloperAutopilotHandoff(
 }
 
 export function evaluateDeveloperReleaseGate(
-  scan: Pick<AppQaScanResult, "failCount" | "warnCount" | "summary" | "subAgents">,
-  input: { prUrl?: string | null } = {},
+  scan: Pick<AppQaScanResult, "failCount" | "warnCount" | "summary" | "subAgents"> & Partial<Pick<AppQaScanResult, "targetContext" | "visualScans">>,
+  input: { prUrl?: string | null; requiredTargetContext?: AppQaTargetContext } = {},
 ): DeveloperReleaseGate {
   const failingAgents = scan.subAgents.filter((agent) => agent.status !== "pass");
   const prUrl = input.prUrl?.trim() || null;
   const reasons: string[] = [];
+  const requiredTargetContext = input.requiredTargetContext;
+  const targetContextMismatches = requiredTargetContext
+    ? getAppQaTargetContextMismatches(scan.targetContext, requiredTargetContext)
+    : [];
+  const targetVisualMismatches = requiredTargetContext
+    ? getAppQaTargetVisualMismatches(scan.visualScans, requiredTargetContext)
+    : [];
 
   if (!prUrl) {
     reasons.push("A pull request URL is required before sending the fix to Robert for approval.");
@@ -619,6 +626,12 @@ export function evaluateDeveloperReleaseGate(
   }
   if (failingAgents.length > 0) {
     reasons.push(`Subagents not passing: ${failingAgents.map((agent) => `${agent.name}=${agent.status}`).join(", ")}.`);
+  }
+  if (targetContextMismatches.length > 0) {
+    reasons.push(`App QA target context mismatch: ${targetContextMismatches.join(", ")}.`);
+  }
+  if (targetVisualMismatches.length > 0) {
+    reasons.push(`App QA visual target mismatch: ${targetVisualMismatches.join(", ")}.`);
   }
 
   const passed = reasons.length === 0;
@@ -633,6 +646,53 @@ export function evaluateDeveloperReleaseGate(
     reasons: passed ? [`PR can be sent to Robert for approval: ${prUrl}. Replit deployment is still blocked until explicit approval.`] : reasons,
     qaSummary: scan.summary,
   };
+}
+
+function getAppQaTargetContextMismatches(actual: AppQaTargetContext | undefined, required: AppQaTargetContext): string[] {
+  if (!actual) return ["missing targetContext"];
+  const mismatches: string[] = [];
+  const keys: Array<keyof AppQaTargetContext> = [
+    "kind",
+    "workspaceId",
+    "clientName",
+    "projectType",
+    "repoFullName",
+    "prUrl",
+    "prHeadSha",
+    "branchName",
+    "routePath",
+  ];
+
+  for (const key of keys) {
+    const requiredValue = required[key];
+    if (typeof requiredValue !== "string" || !requiredValue.trim()) continue;
+    const actualValue = actual[key];
+    if (typeof actualValue !== "string" || actualValue.trim() !== requiredValue.trim()) {
+      mismatches.push(String(key));
+    }
+  }
+
+  if (required.expectedControls?.length) {
+    const actualControls = new Set((actual.expectedControls || []).map((control) => control.trim().toLowerCase()).filter(Boolean));
+    const missingControls = required.expectedControls.filter((control) => !actualControls.has(control.trim().toLowerCase()));
+    if (missingControls.length) mismatches.push(`expectedControls:${missingControls.join("|")}`);
+  }
+
+  return mismatches;
+}
+
+function getAppQaTargetVisualMismatches(
+  visualScans: AppQaScanResult["visualScans"] | undefined,
+  required: AppQaTargetContext,
+): string[] {
+  if (required.kind !== "revenue_delivery_workspace") return [];
+  const routePath = required.routePath?.trim();
+  if (!routePath) return ["missing routePath"];
+  if (!visualScans?.length) return ["missing visualScans"];
+  const routeScan = visualScans.find((scan) => scan.path === routePath);
+  if (!routeScan) return [`missing visual scan for ${routePath}`];
+  if (routeScan.status !== "pass") return [`${routePath}=${routeScan.status}`];
+  return [];
 }
 
 export function buildReadyForApprovalMessage(input: {
