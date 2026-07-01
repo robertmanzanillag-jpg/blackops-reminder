@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { hasRealValue } from "./ceo-doctor-cli";
+import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
+
+const revenueExplicitBooleanSchema = z.preprocess((value) => {
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return value;
+}, z.boolean());
 
 export const revenueEnginePlanSchema = z.object({
   area: z.string().trim().min(2).max(120),
@@ -104,13 +109,6 @@ export const revenueOutreachDraftSchema = proposalEmailSchema.extend({
 
 export type RevenueOutreachDraftInput = z.infer<typeof revenueOutreachDraftSchema>;
 
-export const revenueOutreachSendSchema = z.object({
-  draftId: z.string().trim().min(1).max(160),
-  approvalToSend: z.coerce.boolean().default(false),
-});
-
-export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
-
 export const improvementReviewSchema = z.object({
   campaignName: z.string().trim().min(2).max(160),
   periodLabel: z.string().trim().min(2).max(80).default("esta semana"),
@@ -208,15 +206,28 @@ export const revenueProjectPlanSchema = z.object({
   setupUsd: z.coerce.number().min(0).max(100000).default(3500),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
-  depositPaid: z.coerce.boolean().default(false),
-  scopeApproved: z.coerce.boolean().default(false),
-  publicDataVerified: z.coerce.boolean().default(false),
+  depositPaid: revenueExplicitBooleanSchema.default(false),
+  scopeApproved: revenueExplicitBooleanSchema.default(false),
+  publicDataVerified: revenueExplicitBooleanSchema.default(false),
   includesAutomation: z.coerce.boolean().default(true),
   launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
   clientRequest: z.string().trim().max(1200).optional().default(""),
 });
 
 export type RevenueProjectPlanInput = z.infer<typeof revenueProjectPlanSchema>;
+
+export const revenueWebsiteScaffoldSchema = revenueProjectPlanSchema.extend({
+  area: z.string().trim().min(2).max(120).default("Miami"),
+  niche: z.string().trim().min(2).max(120).default("local service"),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  sourceUrl: z.union([z.string().trim().url().max(300), z.literal("")]).optional().default(""),
+  publicEvidence: z.string().trim().min(10).max(2000),
+  painPoint: z.string().trim().min(5).max(800),
+  primaryCta: z.string().trim().min(2).max(120).default("Book a consultation"),
+  contactEmail: z.union([z.string().trim().email().max(240), z.literal("")]).optional().default(""),
+});
+
+export type RevenueWebsiteScaffoldInput = z.infer<typeof revenueWebsiteScaffoldSchema>;
 
 export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   workspaceName: z.string().trim().min(2).max(180).optional().default("Delivery workspace"),
@@ -330,23 +341,157 @@ export const revenueMoneySprintSchema = z.object({
   dailyContactLimit: z.coerce.number().int().min(0).max(50).default(10),
   maxPaidDataSpendUsd: z.coerce.number().min(0).max(5000).default(0),
   requireRobertApprovalToContact: z.coerce.boolean().default(true),
-  writePreviewFiles: z.coerce.boolean().default(true),
+  writePreviewFiles: revenueExplicitBooleanSchema.default(true),
   seedLeads: z.array(revenueMoneySprintSeedLeadSchema).max(25).optional().default([]),
   seedLeadBatchText: z.string().trim().max(20000).optional().default(""),
 });
 
 export type RevenueMoneySprintInput = z.infer<typeof revenueMoneySprintSchema>;
 
+export const revenueScoutDispatchSchema = revenueMoneySprintSchema;
+
+export type RevenueScoutDispatchInput = z.infer<typeof revenueScoutDispatchSchema>;
+
+export const revenueMoneyReadinessSchema = z.object({
+  mode: z.enum(["first-sprint", "production-launch"]).default("first-sprint"),
+});
+
+export type RevenueMoneyReadinessInput = z.infer<typeof revenueMoneyReadinessSchema>;
+
+export const revenueOutreachSendSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  approvalToSend: revenueExplicitBooleanSchema.default(false),
+});
+
+export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
+
+export const revenueOutreachApprovalPacketSchema = z.object({
+  maxDrafts: z.coerce.number().int().min(1).max(50).default(10),
+  includeSent: revenueExplicitBooleanSchema.default(false),
+});
+
+export type RevenueOutreachApprovalPacketInput = z.infer<typeof revenueOutreachApprovalPacketSchema>;
+
+export const revenueManualContactApprovalPacketSchema = z.object({
+  maxCandidates: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export type RevenueManualContactApprovalPacketInput = z.infer<typeof revenueManualContactApprovalPacketSchema>;
+
+export const revenueWebsiteCreationPacketSchema = z.object({
+  outreachDraftId: z.string().trim().min(1).max(180),
+  robertApprovedBuild: revenueExplicitBooleanSchema.default(false),
+  clientApprovedScope: revenueExplicitBooleanSchema.default(false),
+  depositPaid: revenueExplicitBooleanSchema.default(false),
+  publicDataVerified: revenueExplicitBooleanSchema.default(false),
+  writeFiles: revenueExplicitBooleanSchema.default(false),
+  deployWebsite: revenueExplicitBooleanSchema.default(false),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+});
+
+export type RevenueWebsiteCreationPacketInput = z.infer<typeof revenueWebsiteCreationPacketSchema>;
+
 export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
   verificationStatus: z.enum(["needs_review", "verified_public", "blocked"]).default("needs_review"),
-  publicEvidenceVerified: z.coerce.boolean().default(false),
-  approvalToImport: z.coerce.boolean().default(false),
+  publicEvidenceVerified: revenueExplicitBooleanSchema.default(false),
+  approvalToImport: revenueExplicitBooleanSchema.default(false),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
 export type RevenuePublicLeadCandidateInput = z.infer<typeof revenuePublicLeadCandidateSchema>;
+
+const publicCandidateVerificationEmailSchema = z.string().trim().email().max(240);
+
+export const revenuePublicLeadCandidateVerificationUpdateSchema = z.object({
+  candidateId: z.string().trim().min(1).max(180),
+  contactChannel: z.enum(["email", "phone", "instagram", "contact_form"]),
+  contactValue: z.string().trim().min(2).max(300),
+  recipientEmail: z.union([publicCandidateVerificationEmailSchema, z.literal("")]).optional().default(""),
+  sourceUrl: z.string().trim().url().max(300),
+  evidence: z.string().trim().min(12).max(2000),
+  painPoint: z.string().trim().min(8).max(1000).optional().default("Needs a conversion-focused website and follow-up path."),
+  notes: z.string().trim().max(1000).optional().default(""),
+  verifiedBy: z.string().trim().min(2).max(120).default("Robert"),
+  confirmPublicEvidence: revenueExplicitBooleanSchema.default(false),
+}).strict().superRefine((value, context) => {
+  if (value.contactChannel === "email" && !publicCandidateVerificationEmailSchema.safeParse(value.contactValue).success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["contactValue"],
+      message: "contactValue must be a valid email when contactChannel is email.",
+    });
+  }
+  if (value.contactChannel === "email" && value.recipientEmail && value.recipientEmail !== value.contactValue) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recipientEmail"],
+      message: "recipientEmail must match contactValue when contactChannel is email.",
+    });
+  }
+});
+
+export type RevenuePublicLeadCandidateVerificationUpdateInput = z.infer<typeof revenuePublicLeadCandidateVerificationUpdateSchema>;
+
+export const revenuePublicLeadCandidateBlockSchema = z.object({
+  candidateId: z.string().trim().min(1).max(180),
+  blockReason: z.string().trim().min(8).max(500),
+  sourceUrl: z.string().trim().url().max(300),
+  evidence: z.string().trim().min(12).max(2000),
+  notes: z.string().trim().max(1000).optional().default(""),
+  verifiedBy: z.string().trim().min(2).max(120).default("Robert"),
+  confirmPublicMismatch: revenueExplicitBooleanSchema.default(false),
+}).strict();
+
+export type RevenuePublicLeadCandidateBlockInput = z.infer<typeof revenuePublicLeadCandidateBlockSchema>;
+
+export const revenuePublicScoutRunSchema = revenueMoneySprintSchema.omit({ seedLeads: true, seedLeadBatchText: true }).extend({
+  source: z.enum(["browser_subagent", "manual_browser", "csv_import", "public_directory"]).default("browser_subagent"),
+  scoutRunId: z.string().trim().max(160).optional().default(""),
+  candidates: z.array(revenuePublicLeadCandidateSchema).max(25).default([]),
+  autoApproveVerified: revenueExplicitBooleanSchema.default(false),
+});
+
+export type RevenuePublicScoutRunInput = z.infer<typeof revenuePublicScoutRunSchema>;
+
+function isIsoCalendarDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+export const revenuePublicScoutScheduleSchema = revenueMoneySprintSchema.omit({
+  dailyContactLimit: true,
+  maxPaidDataSpendUsd: true,
+  requireRobertApprovalToContact: true,
+  seedLeadBatchText: true,
+  seedLeads: true,
+  writePreviewFiles: true,
+}).extend({
+  scheduleName: z.string().trim().min(2).max(160).default("Daily public scout"),
+  timezone: z.string().trim().min(2).max(80).default("America/New_York"),
+  startDate: z.string().trim().refine(isIsoCalendarDate, "startDate must be a valid YYYY-MM-DD calendar date").default("2026-07-01"),
+  runDays: z.coerce.number().int().min(1).max(14).default(5),
+  runsPerDay: z.coerce.number().int().min(1).max(4).default(1),
+  runHourLocal: z.coerce.number().int().min(0).max(23).default(9),
+  browserExecutor: z.enum(["manual_browser", "subagent_browser"]).default("subagent_browser"),
+  maxCandidatesPerRun: z.coerce.number().int().min(1).max(25).default(8),
+}).strict();
+
+export type RevenuePublicScoutScheduleInput = z.infer<typeof revenuePublicScoutScheduleSchema>;
+
+export const revenuePublicLeadCandidateReviewSchema = revenueMoneySprintSchema.omit({ seedLeads: true, seedLeadBatchText: true }).extend({
+  candidateIds: z.array(z.string().trim().min(1).max(180)).min(1).max(25),
+  approvedByRobert: revenueExplicitBooleanSchema.default(false),
+  reviewerNote: z.string().trim().max(1000).optional().default(""),
+});
+
+export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublicLeadCandidateReviewSchema>;
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
@@ -1041,6 +1186,46 @@ function getRevenueEmailProviderStatus(): RevenueEmailProviderStatus {
     monthlyCostUsd: 0,
     sendPolicy: "Solo envia drafts approved con approvalToSend=true; si falta provider queda en Gmail/mailto manual.",
   };
+}
+
+function hasLiveRevenueStripeKey(value: string | undefined) {
+  return hasStrongSecret(value) && (value ?? "").trim().startsWith("sk_live_");
+}
+
+function hasRevenuePaymentLink(value: string | undefined) {
+  if (!hasRealValue(value)) return false;
+  try {
+    const url = new URL(value);
+    const allowedHosts = new Set([
+      "buy.stripe.com",
+      "checkout.stripe.com",
+      "invoice.stripe.com",
+      ...String(process.env.REVENUE_ENGINE_PAYMENT_LINK_ALLOWED_HOSTS || "")
+        .split(",")
+        .map((host) => host.trim().toLowerCase())
+        .filter(Boolean),
+    ]);
+    return url.protocol === "https:" && allowedHosts.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function hasProductionRevenueDatabaseUrl(value: string | undefined) {
+  if (!hasRealValue(value)) return false;
+  try {
+    const url = new URL(value);
+    const protocolOk = url.protocol === "postgres:" || url.protocol === "postgresql:";
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const localHost = ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(hostname) || hostname.endsWith(".local");
+    return protocolOk && !localHost;
+  } catch {
+    return false;
+  }
+}
+
+function isExplicitRevenueApproval(value: string | undefined) {
+  return value === "true";
 }
 
 function textToHtml(text: string) {
@@ -3031,12 +3216,12 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
   const blockedReasons = [
     parsed.verificationStatus === "blocked" && "candidate blocked by scout",
     !parsed.publicEvidenceVerified && "public evidence not verified",
-    !parsed.approvalToImport && "approvalToImport false",
+    "requires Robert review approval",
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
     parsed.recipientEmail.trim().length === 0 && "recipientEmail",
     ...qualification.missing,
   ].filter((item): item is string => Boolean(item));
-  const importReady = parsed.verificationStatus === "verified_public" && blockedReasons.length === 0;
+  const importReady = false;
   const now = new Date().toISOString();
   const existingIndex = revenuePublicLeadCandidates.findIndex((candidate) =>
     candidate.businessName.toLowerCase() === parsed.businessName.toLowerCase()
@@ -3079,6 +3264,545 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     nextAction: candidate.importReady
       ? "Paste this candidate row into Batch leads and run Preview batch before Money sprint."
       : `Fix before import: ${blockedReasons.join("; ") || "review candidate"}.`,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function recordRevenuePublicScoutRun(input: RevenuePublicScoutRunInput) {
+  const parsed = revenuePublicScoutRunSchema.parse(input);
+  const mission = buildRevenueScoutingMission({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    targetLeadCount: parsed.dailyQualifiedLeadLimit,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+  const scoutQueue = buildRevenueScoutQueue({ ...parsed, maxPaidDataSpendUsd: 0, seedLeads: [], seedLeadBatchText: "" });
+  const recordedCandidates = parsed.candidates.map((candidate, index) => recordRevenuePublicLeadCandidate({
+    ...candidate,
+    area: candidate.area || parsed.area,
+    niche: candidate.niche || parsed.niche,
+    missionId: candidate.missionId || parsed.scoutRunId || mission.mission.name,
+    sourceTaskId: candidate.sourceTaskId || scoutQueue[index % Math.max(1, scoutQueue.length)]?.id || "",
+    approvalToImport: false,
+  }));
+  const importableCandidates = recordedCandidates.filter((result) => result.candidate.importReady);
+  const blockedCandidates = recordedCandidates
+    .filter((result) => !result.candidate.importReady)
+    .map((result) => ({
+      businessName: result.candidate.businessName,
+      reasons: result.candidate.blockedReasons,
+      nextAction: result.nextAction,
+    }));
+  const importBatchText = [
+    "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+    ...importableCandidates.map((result) => result.candidate.batchRow),
+  ].join("\n");
+  const preview = previewRevenueMoneySprintSeeds({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: importBatchText,
+  });
+
+  return {
+    status: importableCandidates.length > 0 ? "ready_for_money_sprint_preview" as const : recordedCandidates.length > 0 ? "needs_candidate_review" as const : "empty" as const,
+    mode: "public_scout_capture_only" as const,
+    scoutRunId: parsed.scoutRunId || mission.mission.name,
+    source: parsed.source,
+    mission: mission.mission,
+    scoutQueue,
+    recordedCandidates: recordedCandidates.map((result) => ({
+      candidate: result.candidate,
+      status: result.status,
+      importableCount: result.importableCount,
+    })),
+    importableCount: importableCandidates.length,
+    blockedCandidates,
+    importBatchText,
+    preview,
+    nextApiAction: importableCandidates.length > 0 ? "/api/revenue-engine/money-sprint-preview" : "/api/revenue-engine/scout-dispatch",
+    nextAction: importableCandidates.length > 0
+      ? "Review preview.acceptedSeeds, then run Money sprint with this importBatchText only after Robert approves the batch."
+      : recordedCandidates.length > 0
+        ? "Robert reviews captured public candidates; approve/import through the explicit review path before any Money sprint preview."
+        : "Run a browser scout session, capture public candidates, then submit them for Robert review.",
+    safety: {
+      allowedAction: "capture_verified_public_scout_results",
+      blockedActions: ["automated scraping", "contact business", "buy data", "send outreach", "write preview files", "publish preview", "collect payment"],
+      persistsPublicCandidates: recordedCandidates.length > 0,
+      persistsLeads: false,
+      writesPreviewFiles: false,
+      sendsOutreach: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApprovalBeforeMoneySprint: true,
+      ignoresCaptureImportApproval: true,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function listRevenuePublicLeadCandidates() {
+  loadRevenuePublicLeadCandidates();
+  return [...revenuePublicLeadCandidates];
+}
+
+function isRevenueDemoPublicCandidate(candidate: { businessName: string; sourceUrl: string; recipientEmail: string }) {
+  const text = `${candidate.businessName} ${candidate.sourceUrl} ${candidate.recipientEmail}`.toLowerCase();
+  return ["example.com", "smoke", "demo", "sample", "fixture", "placeholder", "replace with", "test"].some((marker) => text.includes(marker));
+}
+
+export function buildRevenueManualContactApprovalPacket(input: RevenueManualContactApprovalPacketInput = { maxCandidates: 10 }) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenueManualContactApprovalPacketSchema.parse(input);
+  const publicCandidates = revenuePublicLeadCandidates.filter((candidate) => !isRevenueDemoPublicCandidate(candidate));
+  const allManualCandidates = publicCandidates.filter((candidate) =>
+    candidate.verificationStatus === "verified_public"
+    && candidate.publicEvidenceVerified
+    && candidate.recipientEmail.trim().length === 0
+    && ["phone", "instagram", "contact_form"].includes(candidate.contactChannel)
+    && candidate.contactValue.trim().length >= 3
+    && candidate.sourceUrl.trim().length > 0
+    && candidate.evidence.trim().length >= 12
+  );
+  const manualCandidates = allManualCandidates.slice(0, parsed.maxCandidates);
+
+  return {
+    status: allManualCandidates.length > 0 ? "ready_for_robert_manual_contact_review" as const : "empty" as const,
+    reviewed: publicCandidates.length,
+    manualContactCount: allManualCandidates.length,
+    items: manualCandidates.map((candidate) => ({
+      candidateId: candidate.id,
+      businessName: candidate.businessName,
+      area: candidate.area,
+      niche: candidate.niche,
+      contactChannel: candidate.contactChannel,
+      contactValue: candidate.contactValue,
+      sourceUrl: candidate.sourceUrl,
+      evidence: candidate.evidence,
+      painPoint: candidate.painPoint,
+      estimatedOfferUsd: candidate.estimatedOfferUsd,
+      readyForRobertApproval: true,
+      requiredBeforeContact: [
+        "Robert must explicitly approve manual contact.",
+        "Operator must review the public source immediately before contact.",
+        "Do not use an email provider; this is phone/social/contact-form only.",
+        "Record any reply/deposit before creating website delivery work.",
+      ],
+      suggestedManualOpening: [
+        `Hi, I saw ${candidate.businessName} while checking local ${candidate.niche} options in ${candidate.area}.`,
+        "I noticed your public listing has room for a stronger booking/lead capture website.",
+        "I can prepare a quick no-obligation website mockup based only on public info if you want to see it.",
+      ].join(" "),
+    })),
+    nextAction: manualCandidates.length > 0
+      ? "Robert reviews these manual-only candidates and explicitly decides whether an operator may contact them outside the email provider."
+      : "No verified manual-only candidates are ready; keep verifying public contact evidence.",
+    safety: {
+      allowedAction: "review_manual_contact_candidates_only",
+      blockedActions: ["send outreach", "call business", "dm business", "submit contact form", "import final lead", "write preview files", "collect payment"],
+      persistsData: false,
+      importsLeads: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApprovalBeforeContact: true,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function updateRevenuePublicLeadCandidateVerification(input: RevenuePublicLeadCandidateVerificationUpdateInput) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenuePublicLeadCandidateVerificationUpdateSchema.parse(input);
+  const existingIndex = revenuePublicLeadCandidates.findIndex((candidate) => candidate.id === parsed.candidateId);
+  if (existingIndex < 0) {
+    return {
+      status: "missing_candidate" as const,
+      candidateId: parsed.candidateId,
+      updated: false,
+      candidate: null,
+      remainingBeforeRobertReview: [`missing candidate id: ${parsed.candidateId}`],
+      nextAction: "Capture the public candidate first, then rerun verification update with its candidateId.",
+      safety: {
+        allowedAction: "none",
+        persistsPublicCandidate: false,
+        persistsLead: false,
+        sendsOutreach: false,
+        writesPreviewFiles: false,
+        paidDataSpendUsd: 0,
+        approvalToImportForcedFalse: true,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existing = revenuePublicLeadCandidates[existingIndex];
+  const recipientEmail = parsed.contactChannel === "email" && parsed.recipientEmail.trim().length === 0
+    ? parsed.contactValue
+    : parsed.recipientEmail;
+  const updatedInput: RevenuePublicLeadCandidateInput = {
+    ...existing,
+    contactChannel: parsed.contactChannel,
+    contactValue: parsed.contactValue,
+    recipientEmail,
+    sourceUrl: parsed.sourceUrl,
+    evidence: parsed.evidence,
+    painPoint: parsed.painPoint,
+    notes: [
+      existing.notes,
+      parsed.notes,
+      `Public verification updated by ${parsed.verifiedBy}; Robert import approval still required.`,
+    ].filter(Boolean).join("\n").slice(0, 1000),
+    verificationStatus: parsed.confirmPublicEvidence ? "verified_public" : "needs_review",
+    publicEvidenceVerified: parsed.confirmPublicEvidence,
+    approvalToImport: false,
+  };
+  const qualification = qualifyRevenueLead(updatedInput);
+  const blockedReasons = [
+    updatedInput.verificationStatus !== "verified_public" && "verificationStatus must be verified_public",
+    !updatedInput.publicEvidenceVerified && "public evidence not verified",
+    "requires Robert review approval",
+    updatedInput.sourceUrl.trim().length === 0 && "sourceUrl publico",
+    updatedInput.recipientEmail.trim().length === 0 && "recipientEmail",
+    ...qualification.missing,
+  ].filter((item): item is string => Boolean(item));
+  const updatedCandidate: RevenuePublicLeadCandidate = {
+    ...updatedInput,
+    id: existing.id,
+    createdAt: existing.createdAt,
+    updatedAt: new Date().toISOString(),
+    qualification,
+    importReady: false,
+    blockedReasons,
+    batchRow: revenueCandidateBatchRow(updatedInput),
+    safety: {
+      allowedAction: "update_public_candidate_verification_only",
+      blockedActions: ["approve import", "contact business", "buy data", "send outreach", "publish preview"],
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+    },
+  };
+
+  revenuePublicLeadCandidates.splice(existingIndex, 1, updatedCandidate);
+  persistRevenuePublicLeadCandidates();
+
+  const remainingBeforeRobertReview = blockedReasons.filter((reason) => reason !== "requires Robert review approval");
+  return {
+    status: remainingBeforeRobertReview.length === 0 ? "ready_for_robert_review" as const : "needs_more_public_verification" as const,
+    candidateId: updatedCandidate.id,
+    updated: true,
+    candidate: updatedCandidate,
+    remainingBeforeRobertReview,
+    nextReviewCommand: {
+      command: "npm",
+      args: [
+        "run",
+        "revenue:public-candidate-review",
+        "--",
+        `--candidate-ids=${updatedCandidate.id}`,
+        `--area=${updatedCandidate.area}`,
+        `--niche=${updatedCandidate.niche}`,
+        "--offer-focus=websites",
+      ],
+    },
+    nextAction: remainingBeforeRobertReview.length === 0
+      ? "Ask Robert to approve this candidate for import before running the review command with --approved-by-robert."
+      : `Resolve before Robert review: ${remainingBeforeRobertReview.join("; ")}.`,
+    safety: {
+      allowedAction: "persist_public_candidate_verification_only",
+      persistsPublicCandidate: true,
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      approvalToImportForcedFalse: updatedCandidate.approvalToImport === false,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function blockRevenuePublicLeadCandidate(input: RevenuePublicLeadCandidateBlockInput) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenuePublicLeadCandidateBlockSchema.parse(input);
+  const existingIndex = revenuePublicLeadCandidates.findIndex((candidate) => candidate.id === parsed.candidateId);
+  if (existingIndex < 0) {
+    return {
+      status: "missing_candidate" as const,
+      candidateId: parsed.candidateId,
+      updated: false,
+      candidate: null,
+      nextAction: "Capture the public candidate first, then rerun the block command with its candidateId.",
+      safety: {
+        allowedAction: "none",
+        persistsPublicCandidate: false,
+        persistsLead: false,
+        sendsOutreach: false,
+        writesPreviewFiles: false,
+        paidDataSpendUsd: 0,
+        approvalToImportForcedFalse: true,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  if (!parsed.confirmPublicMismatch) {
+    return {
+      status: "confirmation_required" as const,
+      candidateId: parsed.candidateId,
+      updated: false,
+      candidate: revenuePublicLeadCandidates[existingIndex],
+      nextAction: "Pass --confirm-public-mismatch only after checking public sources and confirming the candidate should be blocked.",
+      safety: {
+        allowedAction: "review_public_candidate_block_only",
+        persistsPublicCandidate: false,
+        persistsLead: false,
+        sendsOutreach: false,
+        writesPreviewFiles: false,
+        paidDataSpendUsd: 0,
+        approvalToImportForcedFalse: true,
+      },
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existing = revenuePublicLeadCandidates[existingIndex];
+  const updatedInput: RevenuePublicLeadCandidateInput = {
+    ...existing,
+    sourceUrl: parsed.sourceUrl,
+    evidence: parsed.evidence,
+    painPoint: parsed.blockReason,
+    notes: [
+      existing.notes,
+      parsed.notes,
+      `Public candidate blocked by ${parsed.verifiedBy}: ${parsed.blockReason}`,
+    ].filter(Boolean).join("\n").slice(0, 1000),
+    verificationStatus: "blocked",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  };
+  const qualification = qualifyRevenueLead(updatedInput);
+  const blockedReasons = [
+    "candidate blocked by scout",
+    "public evidence not verified",
+    parsed.blockReason,
+    updatedInput.recipientEmail.trim().length === 0 && "recipientEmail",
+  ].filter((item): item is string => Boolean(item));
+  const updatedCandidate: RevenuePublicLeadCandidate = {
+    ...updatedInput,
+    id: existing.id,
+    createdAt: existing.createdAt,
+    updatedAt: new Date().toISOString(),
+    qualification,
+    importReady: false,
+    blockedReasons,
+    batchRow: revenueCandidateBatchRow(updatedInput),
+    safety: {
+      allowedAction: "block_public_candidate_only",
+      blockedActions: ["approve import", "contact business", "buy data", "send outreach", "publish preview"],
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+    },
+  };
+
+  revenuePublicLeadCandidates.splice(existingIndex, 1, updatedCandidate);
+  persistRevenuePublicLeadCandidates();
+
+  return {
+    status: "blocked" as const,
+    candidateId: updatedCandidate.id,
+    updated: true,
+    candidate: updatedCandidate,
+    nextAction: "Candidate is blocked and excluded from first-money review queues. Capture a different verified public candidate.",
+    safety: {
+      allowedAction: "persist_public_candidate_block_only",
+      persistsPublicCandidate: true,
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      approvalToImportForcedFalse: updatedCandidate.approvalToImport === false,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function buildRevenueMoneySprintRunPacket(
+  input: RevenueMoneySprintInput,
+  importBatchText: string,
+  preview: ReturnType<typeof previewRevenueMoneySprintSeeds>,
+) {
+  const readyToRun = preview.status === "ready_to_import" && preview.totals.accepted > 0;
+  const canCreateDrafts = preview.totals.draftReady > 0;
+  const canCreateMockups = preview.totals.mockupReady > 0;
+  const requestBody: RevenueMoneySprintInput = {
+    ...input,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: importBatchText,
+  };
+
+  return {
+    status: readyToRun ? "ready_for_money_sprint_run" as const : "blocked" as const,
+    endpoint: "/api/revenue-engine/money-sprint",
+    method: "POST" as const,
+    requestBody,
+    expectedOutput: {
+      acceptedLeads: preview.totals.accepted,
+      mockupsToPrepare: preview.totals.mockupReady,
+      outreachDraftsToCreate: preview.totals.draftReady,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+    },
+    operatorChecklist: [
+      "Confirm Robert approved the candidate review result.",
+      "Confirm preview.acceptedSeeds match the real public evidence.",
+      "Run the money sprint request only after final human review.",
+      "Review generated mockups and outreach drafts before any contact.",
+      "Collect deposit and pass App QA/rollback gates before publishing a client website.",
+    ],
+    blockedUntil: [
+      !readyToRun && "Approved preview has no importable leads.",
+      !canCreateMockups && "No approved leads qualify for a mockup.",
+      !canCreateDrafts && "No approved leads have sourceUrl + recipientEmail for draft outreach.",
+    ].filter((item): item is string => Boolean(item)),
+    safety: {
+      allowedAction: "prepare_money_sprint_run_packet",
+      blockedActions: ["send outreach", "contact business", "buy data", "collect payment", "publish preview", "publish website"],
+      persistsLeadsOnlyWhenEndpointIsRun: true,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApprovalBeforeRun: true,
+      requiresRobertApprovalBeforeContact: true,
+    },
+  };
+}
+
+export function reviewRevenuePublicLeadCandidates(input: RevenuePublicLeadCandidateReviewInput) {
+  loadRevenuePublicLeadCandidates();
+  const parsed = revenuePublicLeadCandidateReviewSchema.parse(input);
+  const seenCandidateIds = new Set<string>();
+  const duplicateIds = parsed.candidateIds.filter((id) => {
+    if (seenCandidateIds.has(id)) return true;
+    seenCandidateIds.add(id);
+    return false;
+  });
+  const uniqueCandidateIds = Array.from(seenCandidateIds);
+  const selectedCandidates = uniqueCandidateIds
+    .map((id) => revenuePublicLeadCandidates.find((candidate) => candidate.id === id))
+    .filter((candidate): candidate is RevenuePublicLeadCandidate => Boolean(candidate));
+  const missingIds = uniqueCandidateIds.filter((id) => !selectedCandidates.some((candidate) => candidate.id === id));
+  const reviewRequestComplete = missingIds.length === 0 && duplicateIds.length === 0;
+  const reviewedCandidates = selectedCandidates.map((candidate) => {
+    const freshQualification = qualifyRevenueLead(candidate);
+    const freshBatchRow = revenueCandidateBatchRow(candidate);
+    const blockedReasons = [
+      !parsed.approvedByRobert && "approvedByRobert false",
+      duplicateIds.length > 0 && `duplicate candidate ids: ${duplicateIds.join(", ")}`,
+      missingIds.length > 0 && `missing candidate ids: ${missingIds.join(", ")}`,
+      candidate.verificationStatus !== "verified_public" && "verificationStatus must be verified_public",
+      !candidate.publicEvidenceVerified && "public evidence not verified",
+      candidate.evidence.trim().length < 12 && "evidencia publica revisable",
+      candidate.sourceUrl.trim().length === 0 && "sourceUrl publico",
+      candidate.recipientEmail.trim().length === 0 && "recipientEmail",
+      candidate.recipientEmail.trim().length > 0 && !publicCandidateVerificationEmailSchema.safeParse(candidate.recipientEmail).success && "recipientEmail valid email",
+      ...freshQualification.missing,
+    ].filter((item): item is string => Boolean(item));
+    return {
+      candidate,
+      freshQualification,
+      freshBatchRow,
+      approvedForPreview: blockedReasons.length === 0,
+      blockedReasons,
+    };
+  });
+  const approvedCandidates = reviewedCandidates.filter((item) => item.approvedForPreview);
+  const importBatchText = [
+    "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+    ...approvedCandidates.map((item) => item.freshBatchRow),
+  ].join("\n");
+  const preview = previewRevenueMoneySprintSeeds({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: importBatchText,
+  });
+  const moneySprintRunPacket = buildRevenueMoneySprintRunPacket({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: parsed.dailyContactLimit,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: parsed.requireRobertApprovalToContact,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: importBatchText,
+  }, importBatchText, preview);
+
+  return {
+    status: reviewRequestComplete && approvedCandidates.length > 0 ? "ready_for_money_sprint_preview" as const : "blocked" as const,
+    approvedByRobert: parsed.approvedByRobert,
+    reviewerNote: parsed.reviewerNote,
+    requestedCount: parsed.candidateIds.length,
+    foundCount: selectedCandidates.length,
+    approvedCount: approvedCandidates.length,
+    missingIds,
+    duplicateIds,
+    reviewedCandidates: reviewedCandidates.map((item) => ({
+      candidateId: item.candidate.id,
+      businessName: item.candidate.businessName,
+      approvedForPreview: item.approvedForPreview,
+      blockedReasons: item.blockedReasons,
+      grade: item.freshQualification.grade,
+      score: item.freshQualification.score,
+    })),
+    importBatchText,
+    preview,
+    moneySprintRunPacket,
+    nextApiAction: reviewRequestComplete && approvedCandidates.length > 0 ? "human_review_money_sprint_packet" : "/api/revenue-engine/public-scout-run",
+    nextAction: reviewRequestComplete && approvedCandidates.length > 0
+      ? "Robert-approved candidates are ready for a controlled Money sprint run; execute moneySprintRunPacket only after final review of preview.acceptedSeeds."
+      : duplicateIds.length > 0
+        ? "Remove duplicate candidate IDs before generating a Money sprint packet."
+        : missingIds.length > 0
+          ? "Resolve missing candidate IDs before generating a Money sprint packet."
+      : "Approve only verified public candidates with sourceUrl, recipientEmail and complete evidence before preview.",
+    safety: {
+      allowedAction: "review_public_candidates_for_preview_batch",
+      blockedActions: ["automated scraping", "contact business", "buy data", "send outreach", "write preview files", "publish preview", "collect payment"],
+      persistsLeads: false,
+      persistsPublicCandidates: false,
+      writesPreviewFiles: false,
+      sendsOutreach: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApproval: true,
+    },
     snapshot: getRevenueEngineSnapshot(),
   };
 }
@@ -3744,6 +4468,245 @@ export function buildRevenueProjectPlan(input: RevenueProjectPlanInput) {
   };
 }
 
+function scaffoldFileName(value: string) {
+  return slugifyRevenueValue(value).replace(/[^a-z0-9-]/g, "") || "client-website";
+}
+
+export function buildRevenueWebsiteScaffold(input: RevenueWebsiteScaffoldInput) {
+  const parsed = revenueWebsiteScaffoldSchema.parse(input);
+  const projectPlan = buildRevenueProjectPlan({
+    clientName: parsed.clientName,
+    projectType: parsed.projectType === "automation" ? "website" : parsed.projectType,
+    packageName: parsed.packageName,
+    setupUsd: parsed.setupUsd,
+    monthlyRetainerUsd: parsed.monthlyRetainerUsd,
+    estimatedInternalCostUsd: parsed.estimatedInternalCostUsd,
+    depositPaid: parsed.depositPaid,
+    scopeApproved: parsed.scopeApproved,
+    publicDataVerified: parsed.publicDataVerified,
+    includesAutomation: parsed.includesAutomation,
+    launchTargetDays: parsed.launchTargetDays,
+    clientRequest: parsed.clientRequest,
+  });
+  const canGeneratePreview = projectPlan.decision.status === "ready_to_build";
+  const slug = scaffoldFileName(`${parsed.clientName}-${parsed.area}`);
+  const headline = `${parsed.clientName} turns local interest into booked demand`;
+  const subheadline = `${parsed.niche} in ${parsed.area} with a conversion-focused website, verified public proof and clear next steps.`;
+  const contactHref = parsed.contactEmail ? `mailto:${parsed.contactEmail}` : "#contact";
+  const files = canGeneratePreview ? [
+    {
+      path: `${slug}/index.html`,
+      purpose: "Client website static preview entry point.",
+      content: [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '  <meta charset="utf-8" />',
+        '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
+        `  <title>${escapeHtml(parsed.clientName)} | ${escapeHtml(parsed.packageName)}</title>`,
+        '  <link rel="stylesheet" href="./styles.css" />',
+        "</head>",
+        "<body>",
+        '  <main class="page-shell">',
+        '    <section class="hero">',
+        `      <p class="eyebrow">${escapeHtml(parsed.area)} ${escapeHtml(parsed.niche)}</p>`,
+        `      <h1>${escapeHtml(headline)}</h1>`,
+        `      <p>${escapeHtml(subheadline)}</p>`,
+        `      <a class="primary-cta" href="${escapeHtml(contactHref)}">${escapeHtml(parsed.primaryCta)}</a>`,
+        "    </section>",
+        '    <section class="proof-grid" aria-label="Public proof and offer">',
+        `      <article><h2>Public signal</h2><p>${escapeHtml(parsed.publicEvidence)}</p></article>`,
+        `      <article><h2>Problem to solve</h2><p>${escapeHtml(parsed.painPoint)}</p></article>`,
+        `      <article><h2>Website status</h2><p>${escapeHtml(parsed.websiteStatus.replace("_", " "))}</p></article>`,
+        "    </section>",
+        '    <section class="offer" id="contact">',
+        `      <h2>${escapeHtml(parsed.packageName)}</h2>`,
+        `      <p>Setup: $${parsed.setupUsd.toLocaleString("en-US")} | Monthly support: $${parsed.monthlyRetainerUsd.toLocaleString("en-US")}</p>`,
+        "      <p>Lead capture, mobile-first sections, local proof, conversion CTA and optional approved follow-up automation.</p>",
+        "    </section>",
+        "  </main>",
+        "</body>",
+        "</html>",
+      ].join("\n"),
+    },
+    {
+      path: `${slug}/styles.css`,
+      purpose: "Responsive styling for the generated website preview.",
+      content: [
+        ":root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }",
+        "* { box-sizing: border-box; }",
+        "body { margin: 0; background: #f7f4ef; color: #172026; }",
+        ".page-shell { min-height: 100vh; }",
+        ".hero { min-height: 62vh; display: grid; align-content: center; gap: 20px; padding: clamp(32px, 7vw, 96px); background: #102a2c; color: white; }",
+        ".eyebrow { margin: 0; text-transform: uppercase; letter-spacing: 0; font-size: 0.82rem; color: #a7e0d1; }",
+        "h1 { max-width: 900px; margin: 0; font-size: clamp(2.4rem, 7vw, 5.8rem); line-height: 0.95; letter-spacing: 0; }",
+        ".hero p { max-width: 720px; font-size: 1.1rem; line-height: 1.6; }",
+        ".primary-cta { width: fit-content; display: inline-flex; padding: 14px 18px; border-radius: 8px; background: #f3c15f; color: #172026; text-decoration: none; font-weight: 700; }",
+        ".proof-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #d8d1c6; }",
+        "article, .offer { background: #fffaf2; padding: clamp(24px, 4vw, 48px); }",
+        "article h2, .offer h2 { margin-top: 0; font-size: 1.4rem; letter-spacing: 0; }",
+        "article p, .offer p { line-height: 1.6; color: #384248; }",
+        "@media (max-width: 760px) { .proof-grid { grid-template-columns: 1fr; } h1 { font-size: 2.7rem; } }",
+      ].join("\n"),
+    },
+    {
+      path: `${slug}/README.md`,
+      purpose: "Operator handoff for the website scaffold.",
+      content: [
+        `# ${parsed.clientName} Website Scaffold`,
+        "",
+        `Package: ${parsed.packageName}`,
+        `Source: ${parsed.sourceUrl || "public source URL not provided"}`,
+        "",
+        "This scaffold is an internal preview package. Do not deploy, publish, contact the client, or charge the client from this artifact alone.",
+        "",
+        "Required before client use:",
+        ...projectPlan.doneDefinition.map((item) => `- ${item}`),
+      ].join("\n"),
+    },
+    {
+      path: `${slug}/qa-checklist.md`,
+      purpose: "QA checklist before any preview link or client handoff.",
+      content: [
+        "# QA Checklist",
+        "",
+        ...projectPlan.deliveryGates.map((gate) => `- [${gate.passed ? "x" : " "}] ${gate.gate}: ${gate.fix}`),
+        "- [ ] Responsive visual QA passed on mobile and desktop.",
+        "- [ ] Links, contact CTA and forms tested with sample data.",
+        "- [ ] App QA target evidence attached before deploy.",
+        "- [ ] Robert approved any preview link, deploy or client handoff.",
+      ].join("\n"),
+    },
+  ] : [];
+
+  return {
+    status: canGeneratePreview ? "ready_for_internal_preview" as const : "blocked" as const,
+    slug,
+    projectPlan,
+    files,
+    fileCount: files.length,
+    canWriteFiles: false,
+    canDeploy: false,
+    deployBlockedUntil: [
+      "App QA target evidence",
+      "Robert deploy approval",
+      "production host/project selected",
+      "rollback plan verified",
+    ],
+    safety: {
+      allowedAction: "generate_internal_website_scaffold",
+      blockedActions: ["deploy website", "publish preview", "contact client", "collect payment", "use unverified public claims"],
+      writesFiles: false,
+      deploys: false,
+      sendsOutreach: false,
+    },
+  };
+}
+
+export function buildRevenueWebsiteCreationPacket(input: RevenueWebsiteCreationPacketInput) {
+  const parsed = revenueWebsiteCreationPacketSchema.parse(input);
+  loadRevenueOutreach();
+  loadRevenueLeads();
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.outreachDraftId);
+  const lead = draft?.leadId
+    ? revenueLeads.find((item) => item.id === draft.leadId)
+    : draft
+      ? revenueLeads.find((item) => item.businessName.toLowerCase() === draft.businessName.toLowerCase())
+      : undefined;
+  const sourceUrl = draft?.sourceUrl || draft?.mockupUrl || "";
+  const setupUsd = draft ? draft.pricing.totalSetupUsd : 3500;
+  const automationPriceUsd = draft ? draft.automationPriceUsd : 0;
+  const monthlyRetainerUsd = draft ? draft.pricing.monthlyRetainerUsd : 750;
+  const estimatedInternalCostUsd = draft ? draft.pricing.estimatedInternalMonthlyCostUsd : 54;
+  const publicEvidence = [
+    draft?.businessSummary,
+    lead?.evidence,
+  ].filter((item): item is string => Boolean(item && item.trim().length > 0)).join(" ");
+  const painPoint = lead?.painPoint || "Needs a conversion-focused website, lead capture and follow-up path.";
+  const hasDraft = Boolean(draft);
+  const draftReady = Boolean(draft && (draft.status === "approved" || draft.delivery.sendStatus === "sent"));
+  const hasCommercialProof = parsed.clientApprovedScope && parsed.depositPaid && parsed.publicDataVerified && parsed.robertApprovedBuild;
+  const unsafeActionRequested = parsed.writeFiles || parsed.deployWebsite;
+  const gates = [
+    { gate: "outreach_draft", passed: hasDraft, fix: "Seleccionar un draft de outreach existente." },
+    { gate: "draft_ready", passed: draftReady, fix: "Usar un draft aprobado o enviado, no un draft bloqueado/sin aprobar." },
+    { gate: "robert_build_approval", passed: parsed.robertApprovedBuild, fix: "Robert debe aprobar crear el website antes de preparar build." },
+    { gate: "scope", passed: parsed.clientApprovedScope, fix: "Conseguir aprobacion escrita del scope del cliente." },
+    { gate: "deposit", passed: parsed.depositPaid, fix: "Cobrar deposito antes de construir/lanzar." },
+    { gate: "public_data", passed: parsed.publicDataVerified, fix: "Verificar datos publicos y quitar claims dudosos." },
+    { gate: "safe_mode", passed: !unsafeActionRequested, fix: "Este paquete no escribe archivos ni despliega; usar handoff/PR/QA separado." },
+  ];
+  const failedGates = gates.filter((gate) => !gate.passed);
+  const scaffoldInput: RevenueWebsiteScaffoldInput | null = draft ? {
+    clientName: draft.businessName,
+    projectType: automationPriceUsd > 0 ? "bundle" : "website",
+    packageName: automationPriceUsd > 0 ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium",
+    setupUsd,
+    monthlyRetainerUsd,
+    estimatedInternalCostUsd,
+    depositPaid: parsed.depositPaid,
+    scopeApproved: parsed.clientApprovedScope,
+    publicDataVerified: parsed.publicDataVerified,
+    includesAutomation: automationPriceUsd > 0,
+    launchTargetDays: parsed.launchTargetDays,
+    clientRequest: `Create paid client website handoff from outreach draft ${draft.id}.`,
+    area: lead?.area || "Miami",
+    niche: lead?.niche || "local service",
+    websiteStatus: lead?.websiteStatus || "unknown",
+    sourceUrl,
+    publicEvidence: publicEvidence.trim().slice(0, 2000) || "Public evidence must be verified before build.",
+    painPoint,
+    primaryCta: "Book a consultation",
+    contactEmail: draft.recipientEmail,
+  } : null;
+  const scaffold = failedGates.length === 0 && scaffoldInput ? buildRevenueWebsiteScaffold(scaffoldInput) : null;
+  const readyForWebsiteCreation = Boolean(scaffold && scaffold.status === "ready_for_internal_preview");
+
+  return {
+    status: readyForWebsiteCreation ? "ready_for_website_creation_handoff" as const : "blocked" as const,
+    outreachDraftId: parsed.outreachDraftId,
+    draft: draft ? {
+      id: draft.id,
+      businessName: draft.businessName,
+      status: draft.status,
+      sendStatus: draft.delivery.sendStatus,
+      channel: draft.channel,
+      recipientEmail: draft.recipientEmail,
+      sourceUrl,
+    } : null,
+    lead: lead ? {
+      id: lead.id,
+      businessName: lead.businessName,
+      area: lead.area,
+      niche: lead.niche,
+      websiteStatus: lead.websiteStatus,
+      status: lead.status,
+    } : null,
+    gates,
+    blockedReasons: failedGates.map((gate) => gate.fix),
+    scaffoldInput,
+    scaffold,
+    nextApiAction: readyForWebsiteCreation ? "/api/revenue-engine/website-scaffold" : "/api/revenue-engine/outreach-approval-packet",
+    nextAction: readyForWebsiteCreation
+      ? "Use scaffold files as an internal handoff only; open PR/App QA before any publish or deploy."
+      : "Resolve gates before creating website scaffold handoff.",
+    safety: {
+      allowedAction: "prepare_paid_website_creation_handoff",
+      blockedActions: ["write files", "deploy website", "publish preview", "charge client", "contact business"],
+      writesFiles: false,
+      deploys: false,
+      publishesPreview: false,
+      sendsOutreach: false,
+      requiresRobertApprovalBeforeBuild: true,
+      requiresDepositBeforeBuild: true,
+      requiresAppQaBeforeDeploy: true,
+      requestedWriteFiles: parsed.writeFiles,
+      requestedDeployWebsite: parsed.deployWebsite,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 function buildAgentWorkOrder(input: RevenueAgentRunInput) {
   const request = input.request.toLowerCase();
   const clarificationGate = buildRevenueClarificationGate({
@@ -4041,6 +5004,96 @@ export function recordRevenueOutreachDraft(input: RevenueOutreachDraftInput) {
   };
 }
 
+export function buildRevenueOutreachApprovalPacket(input: RevenueOutreachApprovalPacketInput = { maxDrafts: 10, includeSent: false }) {
+  loadRevenueOutreach();
+  const parsed = revenueOutreachApprovalPacketSchema.parse(input);
+  const provider = getRevenueEmailProviderStatus();
+  const drafts = revenueOutreachDrafts
+    .filter((draft) => parsed.includeSent || draft.delivery.sendStatus !== "sent")
+    .slice()
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, parsed.maxDrafts);
+  const items = drafts.map((draft) => {
+    const failedGates = draft.qaGates.filter((gate) => !gate.passed);
+    const providerEmailChannel = ["email", "gmail", "mailto"].includes(draft.channel);
+    const readyForManualApproval = draft.status === "draft" && failedGates.length === 1 && failedGates[0]?.gate === "approval";
+    const readyForProviderSend = draft.status === "approved"
+      && draft.delivery.sendStatus !== "sent"
+      && draft.qaGates.every((gate) => gate.passed)
+      && providerEmailChannel
+      && provider.configured;
+    const blockedReasons = [
+      draft.delivery.sendStatus === "sent" && "already sent",
+      draft.status === "blocked" && "draft blocked by QA",
+      draft.status !== "approved" && !readyForManualApproval && "not approved",
+      ...failedGates.map((gate) => gate.fix),
+      draft.status === "approved" && !providerEmailChannel && `manual-only channel: ${draft.channel}`,
+      draft.status === "approved" && !provider.configured && `email provider missing: ${provider.missing.join(", ") || "provider"}`,
+    ].filter((item): item is string => Boolean(item));
+
+    return {
+      draftId: draft.id,
+      businessName: draft.businessName,
+      channel: draft.channel,
+      status: draft.status,
+      sendStatus: draft.delivery.sendStatus,
+      recipientEmail: draft.recipientEmail,
+      subject: draft.subject,
+      estimatedSetupUsd: draft.pricing.totalSetupUsd,
+      requiredDepositUsd: Math.round(draft.pricing.totalSetupUsd * 0.5),
+      monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
+      readyForManualApproval,
+      readyForProviderSend,
+      failedGates: failedGates.map((gate) => ({
+        gate: gate.gate,
+        fix: gate.fix,
+      })),
+      blockedReasons,
+      nextAction: readyForProviderSend
+        ? "Run outreach send only after Robert confirms approvalToSend=true."
+        : readyForManualApproval
+          ? "Robert can approve this draft after final copy/source review."
+          : blockedReasons.length
+            ? `Fix before contact: ${blockedReasons.join("; ")}.`
+            : "Review draft before contact.",
+    };
+  });
+  const readyForApprovalCount = items.filter((item) => item.readyForManualApproval).length;
+  const readyForSendCount = items.filter((item) => item.readyForProviderSend).length;
+
+  return {
+    status: readyForSendCount > 0 ? "ready_for_approved_send_review" as const : readyForApprovalCount > 0 ? "ready_for_robert_approval" as const : items.length > 0 ? "needs_fixes" as const : "empty" as const,
+    provider,
+    totals: {
+      reviewed: items.length,
+      readyForManualApproval: readyForApprovalCount,
+      readyForProviderSend: readyForSendCount,
+      blocked: items.filter((item) => !item.readyForManualApproval && !item.readyForProviderSend).length,
+      projectedSetupUsd: items.reduce((sum, item) => sum + item.estimatedSetupUsd, 0),
+      projectedRequiredDepositUsd: items.reduce((sum, item) => sum + item.requiredDepositUsd, 0),
+    },
+    items,
+    nextApiAction: readyForSendCount > 0 ? "/api/revenue-engine/outreach-send" : "/api/revenue-engine/outreach-drafts",
+    nextAction: readyForSendCount > 0
+      ? "Robert reviews approved drafts, then sends one at a time with approvalToSend=true; record replies/deposits after contact."
+      : readyForApprovalCount > 0
+        ? "Robert reviews ready drafts and explicitly approves selected drafts before any send."
+        : items.length > 0
+          ? "Fix blocked outreach drafts before contact."
+          : "Run Money Sprint to create draft-only outreach first.",
+    safety: {
+      allowedAction: "review_outreach_drafts_for_human_approval",
+      blockedActions: ["send outreach", "contact business", "collect payment", "publish preview", "publish website"],
+      sendsOutreach: false,
+      persistsData: false,
+      chargesClients: false,
+      requiresRobertApprovalBeforeSend: true,
+      requiresDepositBeforeDelivery: true,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
   const parsed = revenueSalesAutopilotSchema.parse(input);
   const clarificationGate = buildRevenueClarificationGate({
@@ -4162,14 +5215,17 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
 }
 
 export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) {
+  const parsed = revenueOutreachSendSchema.parse(input);
   loadRevenueOutreach();
-  const draft = revenueOutreachDrafts.find((item) => item.id === input.draftId);
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId);
   const provider = getRevenueEmailProviderStatus();
+  const providerEmailChannel = draft ? ["email", "gmail", "mailto"].includes(draft.channel) : true;
   const now = new Date().toISOString();
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
-    { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "human_approval", passed: parsed.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "email_channel", passed: providerEmailChannel, fix: `Canal manual-only: ${draft?.channel || "unknown"}. Usar revision manual fuera del proveedor de email.` },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },
     { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.every((gate) => gate.passed)), fix: "Resolver gates de QA antes de contactar." },
@@ -5410,6 +6466,214 @@ function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: R
   };
 }
 
+export function buildRevenueScoutDispatch(input: RevenueScoutDispatchInput) {
+  const parsed = revenueScoutDispatchSchema.parse(input);
+  const mission = buildRevenueScoutingMission({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    targetLeadCount: parsed.dailyQualifiedLeadLimit,
+    maxPaidDataSpendUsd: 0,
+    requireNoWebsiteSignal: true,
+    includeWeakWebsiteLeads: true,
+  });
+  const scoutQueue = buildRevenueScoutQueue({ ...parsed, maxPaidDataSpendUsd: 0 });
+  const scoutWorkPack = buildRevenueScoutWorkPack({ ...parsed, maxPaidDataSpendUsd: 0 }, scoutQueue);
+  const candidatePayloadTemplate = {
+    businessName: "REPLACE_BUSINESS_NAME",
+    area: parsed.area,
+    niche: parsed.niche.split(",").map((item) => item.trim()).filter(Boolean)[0] || parsed.niche,
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "REPLACE_PUBLIC_CONTACT",
+    evidence: "REPLACE_PUBLIC_EVIDENCE_WITH_SOURCE_CONTEXT",
+    painPoint: "REPLACE_PUBLIC_PAIN_POINT",
+    estimatedOfferUsd: 3500,
+    status: "research",
+    sourceUrl: "https://REPLACE_PUBLIC_SOURCE_URL",
+    recipientEmail: "owner@example.com",
+    contactName: "Owner",
+    businessSummary: "REPLACE_SHORT_PUBLIC_SUMMARY",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+    missionId: mission.mission.name,
+    sourceTaskId: "REPLACE_SCOUT_TASK_ID",
+    notes: "Captured from public source. No outreach sent.",
+  };
+
+  const workOrders = scoutQueue.map((task, index) => ({
+    id: `public-scout-work-${String(index + 1).padStart(2, "0")}`,
+    sourceTaskId: task.id,
+    ownerAgent: task.ownerAgent,
+    source: task.source,
+    query: task.query,
+    url: task.url,
+    targetRows: Math.max(1, Math.ceil(scoutWorkPack.targetRows / Math.max(1, scoutQueue.length))),
+    browserInstructions: [
+      `Open ${task.url}.`,
+      "Find real businesses that match the area/niche and have no website or a weak website signal.",
+      "Capture only public evidence: business name, source URL, website status, public contact path, recent activity and pain point.",
+      "Do not contact the business, submit forms, buy data, scrape at scale or publish previews.",
+      "Submit each verified candidate to /api/revenue-engine/public-lead-candidates with approvalToImport=false for Robert review.",
+    ],
+    candidatePayloadTemplate: {
+      ...candidatePayloadTemplate,
+      sourceTaskId: task.id,
+    },
+  }));
+
+  return {
+    status: "ready_for_public_scout_handoff" as const,
+    mission: mission.mission,
+    budgetGate: mission.budgetGate,
+    scoutQueue,
+    workOrders,
+    publicScoutRunEndpoint: "/api/revenue-engine/public-scout-run",
+    publicCandidateEndpoint: "/api/revenue-engine/public-lead-candidates",
+    previewEndpoint: "/api/revenue-engine/money-sprint-preview",
+    copyableApiRequest: {
+      method: "POST",
+      endpoint: "/api/revenue-engine/public-lead-candidates",
+      body: candidatePayloadTemplate,
+    },
+    importInstructions: [
+      ...scoutWorkPack.importInstructions,
+      "Submit candidates with approvalToImport=false first.",
+      "Use /api/revenue-engine/public-scout-run for batch capture after a browser/subagent finishes public research.",
+      "Robert reviews/approves import before Money sprint creates leads, previews or draft outreach.",
+    ],
+    safety: {
+      allowedAction: "dispatch_public_research_work_orders",
+      blockedActions: ["automated scraping", "contact business", "buy data", "send outreach", "publish preview", "collect payment"],
+      persistsLead: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApprovalToImport: true,
+    },
+  };
+}
+
+function addDaysToIsoDate(startDate: string, daysToAdd: number) {
+  const [year, month, day] = startDate.split("-").map((value) => Number(value));
+  const date = new Date(Date.UTC(year, month - 1, day + daysToAdd));
+  return date.toISOString().slice(0, 10);
+}
+
+function npmRunCommand(script: string, args: string[]) {
+  return {
+    command: "npm",
+    args: ["run", script, "--", ...args],
+  };
+}
+
+export function buildRevenuePublicScoutSchedule(input: RevenuePublicScoutScheduleInput) {
+  const parsed = revenuePublicScoutScheduleSchema.parse(input);
+  const dispatch = buildRevenueScoutDispatch({
+    area: parsed.area,
+    niche: parsed.niche,
+    offerFocus: parsed.offerFocus,
+    dailyResearchTarget: parsed.dailyResearchTarget,
+    dailyQualifiedLeadLimit: parsed.dailyQualifiedLeadLimit,
+    dailyMockupLimit: parsed.dailyMockupLimit,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeads: [],
+    seedLeadBatchText: "",
+  });
+  const guardedDispatch = {
+    ...dispatch,
+    importInstructions: [
+      "Open only the scheduled public research URLs.",
+      "Capture public notes with source URL, public contact path and specific evidence.",
+      "Run revenue:public-scout-extract, then revenue:public-scout-run to persist candidates for Robert review only.",
+      "Do not import leads or open a money sprint preview until Robert approves candidates through /api/revenue-engine/public-lead-candidates/review.",
+    ],
+  };
+  const scheduleSlug = parsed.scheduleName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "public-scout";
+  const hourSpacing = Math.max(1, Math.floor(8 / parsed.runsPerDay));
+  const runCount = parsed.runDays * parsed.runsPerDay;
+  const runs = Array.from({ length: runCount }, (_, index) => {
+    const dayIndex = Math.floor(index / parsed.runsPerDay);
+    const runIndexForDay = index % parsed.runsPerDay;
+    const localHour = (parsed.runHourLocal + runIndexForDay * hourSpacing) % 24;
+    const runDate = addDaysToIsoDate(parsed.startDate, dayIndex);
+    const runId = `${scheduleSlug}-${runDate}-${String(runIndexForDay + 1).padStart(2, "0")}`;
+    const workOrder = guardedDispatch.workOrders[index % Math.max(1, guardedDispatch.workOrders.length)];
+    const runSource = parsed.browserExecutor === "subagent_browser" ? "browser_subagent" : "manual_browser";
+    return {
+      id: runId,
+      date: runDate,
+      localTime: `${String(localHour).padStart(2, "0")}:00`,
+      timezone: parsed.timezone,
+      executor: parsed.browserExecutor,
+      sourceTaskId: workOrder?.sourceTaskId || "",
+      source: workOrder?.source || "public_directory",
+      query: workOrder?.query || "",
+      url: workOrder?.url || "",
+      targetCandidates: parsed.maxCandidatesPerRun,
+      captureNotesPath: `revenue_workspace/public-scout/${runId}.notes.txt`,
+      extractedJsonPath: `revenue_workspace/public-scout/${runId}.candidates.json`,
+      commands: {
+        prepareBrowserSession: npmRunCommand("revenue:browser-scout-session", [
+          `--area=${parsed.area}`,
+          `--niche=${parsed.niche}`,
+          `--offer-focus=${parsed.offerFocus}`,
+          `--daily-research-target=${parsed.dailyResearchTarget}`,
+          `--daily-qualified-lead-limit=${parsed.maxCandidatesPerRun}`,
+          `--daily-mockup-limit=${parsed.dailyMockupLimit}`,
+        ]),
+        extractCandidates: npmRunCommand("revenue:public-scout-extract", [
+          `--input=revenue_workspace/public-scout/${runId}.notes.txt`,
+          `--output=revenue_workspace/public-scout/${runId}.candidates.json`,
+          `--area=${parsed.area}`,
+          `--niche=${parsed.niche}`,
+          `--offer-focus=${parsed.offerFocus}`,
+          `--source=${runSource}`,
+          `--scout-run-id=${runId}`,
+        ]),
+        captureForReview: npmRunCommand("revenue:public-scout-run", [
+          `--input=revenue_workspace/public-scout/${runId}.candidates.json`,
+          `--area=${parsed.area}`,
+          `--niche=${parsed.niche}`,
+          `--offer-focus=${parsed.offerFocus}`,
+          `--source=${runSource}`,
+          `--scout-run-id=${runId}`,
+        ]),
+      },
+      reviewGate: "Captured candidates remain needs_review until Robert approves them through /api/revenue-engine/public-lead-candidates/review.",
+    };
+  });
+
+  return {
+    status: "ready_for_guarded_schedule" as const,
+    scheduleName: parsed.scheduleName,
+    timezone: parsed.timezone,
+    runCount: runs.length,
+    runs,
+    dispatch: guardedDispatch,
+    endpoints: {
+      scoutDispatch: "/api/revenue-engine/scout-dispatch",
+      publicScoutRun: "/api/revenue-engine/public-scout-run",
+      publicCandidateReview: "/api/revenue-engine/public-lead-candidates/review",
+    },
+    safety: {
+      allowedAction: "prepare_guarded_public_scout_schedule",
+      blockedActions: ["automated scraping without review", "contact business", "buy data", "send outreach", "write preview files", "publish preview", "collect payment"],
+      runsBrowserAutomatically: false,
+      persistsLeads: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      paidDataSpendUsd: 0,
+      requiresRobertReview: true,
+    },
+    nextAction: "Connect these run slots to a trusted browser executor that captures public notes, then run extract and public-scout-run for Robert review.",
+  };
+}
+
 function summarizeSeedLead(seed: RevenueMoneySprintSeedLeadInput) {
   if (seed.businessSummary.trim().length >= 40) return seed.businessSummary;
   return [
@@ -5791,6 +7055,151 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         ? ["Open scoutQueue tasks, capture public evidence, then rerun with seedLeads.", "Start with 10 leads, create 3-5 previews, contact only approved drafts."]
         : ["Review generated previews.", "Approve only the best outreach drafts.", "Record replies/calls/deposits in ledger and improvement review."],
     snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInput = { mode: "first-sprint" }) {
+  const parsed = revenueMoneyReadinessSchema.parse(input);
+  const emailProvider = getRevenueEmailProviderStatus();
+  const databaseReady = hasProductionRevenueDatabaseUrl(process.env.DATABASE_URL);
+  const sessionSecretReady = hasStrongSecret(process.env.SESSION_SECRET);
+  const moneyModeReady = process.env.REVENUE_ENGINE_MONEY_MODE === "live";
+  const robertContactApproval = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED);
+  const manualContactApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED);
+  const stripeCheckoutReady = hasLiveRevenueStripeKey(process.env.STRIPE_SECRET_KEY) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED);
+  const paymentLinkReady = hasRevenuePaymentLink(process.env.REVENUE_ENGINE_PAYMENT_LINK) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT);
+  const paymentVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED) || isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT);
+  const paymentReady = (stripeCheckoutReady || paymentLinkReady) && paymentVerified;
+  const websiteDeployEnabled = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED);
+  const websiteAppQaTargetPassed = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED);
+  const websitePreviewDeployVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED);
+  const websiteRollbackVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_ROLLBACK_VERIFIED);
+  const websitePublishApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT);
+  const deployApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT);
+  const productionLaunchReady = databaseReady && sessionSecretReady && moneyModeReady && deployApproved;
+  const canContactBusinesses = moneyModeReady && robertContactApproval && (emailProvider.configured || manualContactApproved);
+  const canCollectMoney = moneyModeReady && paymentReady;
+  const websiteDeliveryEvidenceReady = websiteDeployEnabled
+    && websiteAppQaTargetPassed
+    && websitePreviewDeployVerified
+    && websiteRollbackVerified
+    && websitePublishApproved;
+  const canBuildWebsites = productionLaunchReady && websiteDeliveryEvidenceReady;
+  const checks = [
+    {
+      id: "safe_public_research",
+      label: "Public business research",
+      status: "ok" as const,
+      detail: "Scout dispatch can prepare public Google/Maps/Instagram work orders without spend or outreach.",
+      nextStep: "Run scout dispatch and save only candidates with sourceUrl, contact path and specific evidence.",
+    },
+    {
+      id: "evidence_gate",
+      label: "Lead evidence gate",
+      status: "ok" as const,
+      detail: "Money sprint batch preview marks weak rows as not draft-ready and keeps outreach draft-only.",
+      nextStep: "Keep importing only no_website/weak_website leads with public evidence.",
+    },
+    {
+      id: "autonomous_business_search",
+      label: "Autonomous business search",
+      status: "fail" as const,
+      detail: "The current agent creates safe browser/subagent work orders, guarded scout schedules, local browser scout sessions, structured review candidates from captured public notes, and batch review capture, but it does not yet run a trusted browser executor by itself.",
+      nextStep: "Connect the guarded scout schedule to trusted browser execution with source evidence capture and Robert-review handoff for /api/revenue-engine/public-scout-run.",
+    },
+    {
+      id: "production_persistence",
+      label: "Production persistence",
+      status: databaseReady ? "ok" as const : "fail" as const,
+      detail: databaseReady ? "Production Postgres DATABASE_URL is configured." : "Production Postgres DATABASE_URL is missing, local or still a placeholder.",
+      nextStep: databaseReady ? "Run db:push and production smoke checks before launch." : "Configure a real production Postgres DATABASE_URL outside tracked files.",
+    },
+    {
+      id: "session_secret",
+      label: "Session security",
+      status: sessionSecretReady ? "ok" as const : "fail" as const,
+      detail: sessionSecretReady ? "SESSION_SECRET has production length." : "SESSION_SECRET is missing, weak or a placeholder.",
+      nextStep: sessionSecretReady ? "Keep the secret in the deployment secret manager." : "Set a random SESSION_SECRET with at least 32 characters.",
+    },
+    {
+      id: "money_mode",
+      label: "Real money mode",
+      status: moneyModeReady ? "ok" as const : "fail" as const,
+      detail: moneyModeReady ? "REVENUE_ENGINE_MONEY_MODE=live." : "Revenue Engine is still in dry-run/research mode.",
+      nextStep: "Switch to live only after PR review, App QA, persistence and Robert approval.",
+    },
+    {
+      id: "contact_businesses",
+      label: "Contact businesses",
+      status: canContactBusinesses ? "ok" as const : "fail" as const,
+      detail: canContactBusinesses ? "Contact is approved and a send/manual channel is configured." : "External outreach is blocked until Robert approval and a real send/manual contact path are configured.",
+      nextStep: "Keep generating drafts; contact only after explicit Robert approval.",
+    },
+    {
+      id: "collect_money",
+      label: "Collect deposits",
+      status: canCollectMoney ? "ok" as const : "fail" as const,
+      detail: canCollectMoney ? "A live payment path is configured and smoke/deposit evidence is verified." : "No verified live Stripe/payment-link deposit path is configured.",
+      nextStep: "Configure Stripe/payment link and record payment smoke or first deposit confirmation before charging clients.",
+    },
+    {
+      id: "website_build_pipeline",
+      label: "Build and publish client websites",
+      status: canBuildWebsites ? "ok" as const : "fail" as const,
+      detail: canBuildWebsites ? "Website deploy flag, App QA evidence, preview deploy, rollback proof and Robert publish approval are present." : "The app can create internal mockups/workspaces/scaffolds, but not publish client websites end-to-end yet.",
+      nextStep: "Add website deploy enablement, preview deploy verification, App QA target evidence, rollback verification and Robert publish approval.",
+    },
+    {
+      id: "production_launch",
+      label: "Production launch gate",
+      status: productionLaunchReady ? "ok" as const : "fail" as const,
+      detail: productionLaunchReady ? "Production env and Robert deploy approval are present." : "Production launch remains blocked until env, PR/App QA and Robert approval are complete.",
+      nextStep: "Keep PR-first; do not deploy Replit without Robert approval.",
+    },
+  ];
+  const blockingCheckIds = parsed.mode === "production-launch"
+    ? new Set(["production_persistence", "session_secret", "money_mode", "contact_businesses", "collect_money", "website_build_pipeline", "production_launch"])
+    : new Set(["production_persistence", "session_secret", "money_mode", "contact_businesses", "collect_money"]);
+  const failedChecks = checks.filter((check) => check.status === "fail");
+  const blockingFailedChecks = failedChecks.filter((check) => blockingCheckIds.has(check.id));
+  const ready = blockingFailedChecks.length === 0;
+  const status = ready
+    ? parsed.mode === "production-launch" ? "production_money_ready" as const : "first_sprint_money_ready" as const
+    : moneyModeReady ? "live_mode_blocked" as const : "dry_run_research_only" as const;
+  const headline = ready
+    ? parsed.mode === "production-launch"
+      ? "Revenue Engine is ready for production money launch."
+      : "Revenue Engine is ready for a guarded first money sprint."
+    : moneyModeReady
+      ? "Money mode is live, but required gates still block real selling."
+      : "Puede buscar negocios en modo research/dry-run; falta activar money mode real.";
+
+  return {
+    ready,
+    mode: parsed.mode,
+    status,
+    headline,
+    canStartToday: true,
+    canSearchBusinesses: true,
+    canAutonomousSearchBusinesses: false,
+    canDraftOutreach: true,
+    canCreateInternalMockups: true,
+    canContactBusinesses,
+    canCollectMoney,
+    canBuildWebsites,
+    nextApiAction: "/api/revenue-engine/scout-dispatch",
+    nextAction: blockingFailedChecks[0]?.nextStep || "Run a guarded public research sprint.",
+    allowedToday: [
+      "Public research from Google/Maps/Instagram/directories.",
+      "Save candidates with public evidence and contact path.",
+      "Generate internal mockups/previews and draft-only outreach.",
+      "Prepare proposals and ask Robert for approval before any contact or spend.",
+    ],
+    blockedUntil: blockingFailedChecks.map((check) => check.nextStep),
+    remainingGaps: failedChecks
+      .filter((check) => !blockingCheckIds.has(check.id))
+      .map((check) => check.nextStep),
+    checks,
   };
 }
 

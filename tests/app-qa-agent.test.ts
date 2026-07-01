@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
-import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runBugPatrolHandoffs } from "../server/app-qa-agent";
+import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runAppQaScan, runBugPatrolHandoffs } from "../server/app-qa-agent";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -549,6 +549,27 @@ test("storage unavailable result blocks release without throwing", () => {
   assert.ok(result.failCount >= 1);
   assert.equal(result.subAgents.some((agent) => agent.id === "api-scout" && agent.status === "fail"), true);
   assert.match(result.summary, /bloqueo release/);
+});
+
+test("runAppQaScan blocks release quickly when DATABASE_URL is missing", async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+
+  try {
+    const result = await runAppQaScan("user-1", false, false, false);
+
+    assert.equal(result.council.status, "fail");
+    assert.equal(result.githubError, "App QA storage unavailable");
+    assert.ok(result.failCount >= 1);
+    assert.match(result.summary, /bloqueo release/);
+    assert.equal(result.routeMap.some((route) => route.path === "/revenue-engine"), true);
+  } finally {
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+  }
 });
 
 test("storage unavailable result keeps useful AggregateError details", () => {

@@ -2,12 +2,8 @@ import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@sh
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { recordScheduledAutomationRun } from "./automation-registry";
 import { hasRealValue } from "./ceo-doctor-cli";
-import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
-import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
-import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
 
 export type AppQaSeverity = "critical" | "high" | "medium" | "low" | "info";
@@ -196,8 +192,12 @@ const LIKELY_APP_REPO_KEYWORDS = [
   "portal",
 ];
 
-type GithubRepo = Awaited<ReturnType<typeof listRepositories>>[number];
+type GithubRepo = Awaited<ReturnType<typeof import("./github-client")["listRepositories"]>>[number];
 type AppQaVisualMode = "off" | "manual" | "daily" | "every_scan";
+type Storage = typeof import("./storage")["storage"];
+type CreateDeveloperAutopilotHandoff = typeof import("./developer-autopilot")["createDeveloperAutopilotHandoff"];
+type GithubClient = Pick<typeof import("./github-client"), "isGitHubConnected" | "listRepositories">;
+type RecordScheduledAutomationRun = typeof import("./automation-registry")["recordScheduledAutomationRun"];
 
 type AppQaContext = {
   app: AppProject;
@@ -232,6 +232,29 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/promo-video", label: "Promo Video", expectedClicks: ["Importar videos", "Editar"], status: "pass", notes: [] },
   { path: "/clippers", label: "Clippers", expectedClicks: ["Preflight", "Publishing queue"], status: "pass", notes: [] },
 ];
+
+async function getStorage(): Promise<Storage> {
+  if (!hasRealValue(process.env.DATABASE_URL)) {
+    throw new Error("DATABASE_URL is not configured with a real Postgres URL.");
+  }
+  return (await import("./storage")).storage;
+}
+
+async function getCreateDeveloperAutopilotHandoff(): Promise<CreateDeveloperAutopilotHandoff> {
+  return (await import("./developer-autopilot")).createDeveloperAutopilotHandoff;
+}
+
+async function getGithubClient(): Promise<GithubClient> {
+  const githubClient = await import("./github-client");
+  return {
+    isGitHubConnected: githubClient.isGitHubConnected,
+    listRepositories: githubClient.listRepositories,
+  };
+}
+
+async function getRecordScheduledAutomationRun(): Promise<RecordScheduledAutomationRun> {
+  return (await import("./automation-registry")).recordScheduledAutomationRun;
+}
 
 function getTelegramBotToken(): string | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -407,6 +430,7 @@ export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], f
       continue;
     }
 
+    const createDeveloperAutopilotHandoff = await getCreateDeveloperAutopilotHandoff();
     const handoff = await createDeveloperAutopilotHandoff(
       userId,
       buildBugPatrolAutopilotMessage(finding, repoFullName),
@@ -1618,7 +1642,9 @@ async function analyzeApis(apps: AppProject[]): Promise<AppQaSubAgentReport> {
 export async function runAppQaScan(userId: string, notify = false, recordHistory = false, allowDailyDigest = false): Promise<AppQaScanResult> {
   const startedAt = new Date();
   let apps: AppProject[];
+  let storage: Storage;
   try {
+    storage = await getStorage();
     apps = await storage.getAppProjects(userId);
   } catch (error) {
     const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt);
@@ -1633,6 +1659,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
   let githubReport: AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] };
 
   try {
+    const { isGitHubConnected, listRepositories } = await getGithubClient();
     githubConnected = await isGitHubConnected();
     if (githubConnected) {
       const repos = await listRepositories();
@@ -1739,6 +1766,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
 
 async function recordAppQaHistory(userId: string, result: AppQaScanResult, startedAt: Date): Promise<void> {
   try {
+    const recordScheduledAutomationRun = await getRecordScheduledAutomationRun();
     await recordScheduledAutomationRun(userId, "app-qa-council", startedAt, {
       status: "success",
       resultSummary: result.summary,
@@ -1788,6 +1816,7 @@ export function startAppQaScheduler(): void {
 
   setInterval(async () => {
     try {
+      const storage = await getStorage();
       const configs = await storage.getEnabledTelegramConfigs();
       await Promise.all(configs.map((config) => runAppQaScan(config.userId, false, true, true)));
     } catch (error) {

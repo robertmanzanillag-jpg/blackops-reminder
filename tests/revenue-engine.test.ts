@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -13,8 +13,13 @@ import {
   buildRevenueMockup,
   buildRevenueMockupPreview,
   buildRevenueMockupTemplatePack,
+  buildRevenueOutreachApprovalPacket,
   buildRevenueProjectPlan,
+  buildRevenuePublicScoutSchedule,
+  buildRevenueScoutDispatch,
   buildRevenueScoutingMission,
+  buildRevenueWebsiteCreationPacket,
+  buildRevenueWebsiteScaffold,
   closeRevenueAutomationOpportunity,
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
@@ -34,8 +39,10 @@ import {
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
   recordRevenuePublicLeadCandidate,
+  recordRevenuePublicScoutRun,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  reviewRevenuePublicLeadCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
   resetRevenueAgentRunsForTests,
@@ -49,6 +56,7 @@ import {
   resetRevenueOutreachForTests,
   resetRevenuePublicLeadCandidatesForTests,
   resetRevenueScoutingMissionsForTests,
+  revenuePublicScoutScheduleSchema,
   setRevenueAgentRunsPathForTests,
   setRevenueApprovalDecisionsPathForTests,
   setRevenueAutomationIntakesPathForTests,
@@ -239,7 +247,7 @@ test("builds an always-on lead radar with contact and mockup limits", () => {
   assert.equal(radar.recommendation.includes("Buscar leads puede correr 24/7"), true);
 });
 
-test("records verified public lead candidates as previewable batch rows without outreach", () => {
+test("records verified public lead candidates for Robert review without preview import", () => {
   recordRevenuePublicLeadCandidate({
     businessName: "Older Orlando Roof",
     area: "Orlando",
@@ -279,12 +287,13 @@ test("records verified public lead candidates as previewable batch rows without 
   });
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(result.status, "ready_for_preview");
-  assert.equal(result.candidate.importReady, true);
-  assert.equal(result.importableCount, 1);
-  assert.match(result.importBatchText, /Public Scout Cafe/);
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.candidate.importReady, false);
+  assert.equal(result.importableCount, 0);
+  assert.doesNotMatch(result.importBatchText, /Public Scout Cafe/);
   assert.doesNotMatch(result.importBatchText, /Older Orlando Roof/);
-  assert.equal(result.importBatchText.split("\n").length, 2);
+  assert.equal(result.importBatchText.split("\n").length, 1);
+  assert.match(result.nextAction, /requires Robert review approval/);
   assert.equal(result.candidate.safety.persistsLead, false);
   assert.equal(result.candidate.safety.sendsOutreach, false);
   assert.equal(snapshot.recentPublicLeadCandidates[0].businessName, "Public Scout Cafe");
@@ -822,6 +831,213 @@ test("builds production plan only when commercial and cost gates pass", () => {
   assert.equal(plan.subagentCorrections.some((item) => item.agent === "cost-controller"), true);
 });
 
+test("builds website scaffold files only for internally approved paid work", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "Ready Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/ready-site-cafe",
+    publicEvidence: "Public listing has no website, recent menu photos and a visible business contact path.",
+    painPoint: "Needs online menu, local proof and catering lead capture.",
+    primaryCta: "Request catering",
+    contactEmail: "owner@readysite.example",
+  });
+
+  assert.equal(scaffold.status, "ready_for_internal_preview");
+  assert.equal(scaffold.canWriteFiles, false);
+  assert.equal(scaffold.canDeploy, false);
+  assert.equal(scaffold.safety.writesFiles, false);
+  assert.equal(scaffold.safety.deploys, false);
+  assert.equal(scaffold.files.some((file) => file.path.endsWith("index.html") && file.content.includes("Ready Site Cafe")), true);
+  assert.equal(scaffold.files.some((file) => file.path.endsWith("qa-checklist.md") && file.content.includes("Robert approved")), true);
+});
+
+test("blocks website scaffold when commercial gates are missing", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "Unpaid Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: false,
+    scopeApproved: false,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/unpaid-site-cafe",
+    publicEvidence: "Public listing has no website and a public contact path.",
+    painPoint: "Needs online ordering and catering lead capture.",
+  });
+
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.canWriteFiles, false);
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("deposito pagado"), true);
+  assert.equal(scaffold.safety.blockedActions.includes("deploy website"), true);
+});
+
+test("website scaffold treats string false approvals as blocked", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "String False Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: "false",
+    scopeApproved: "false",
+    publicDataVerified: "false",
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/string-false-site-cafe",
+    publicEvidence: "Public listing has no website and a public contact path.",
+    painPoint: "Needs online ordering and catering lead capture.",
+  } as any);
+
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.projectPlan.decision.status, "blocked");
+  assert.equal(scaffold.projectPlan.decision.missing.includes("deposito pagado"), true);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("scope aprobado"), true);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("data publica verificada"), true);
+});
+
+test("website creation packet turns approved paid outreach into scaffold handoff", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Paid Build Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@paidbuild.example",
+    evidence: "Public listing has no website, menu photos and a visible catering inquiry path.",
+    painPoint: "Needs catering lead capture and online menu conversion.",
+    estimatedOfferUsd: 4700,
+    status: "mockup_ready",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@paidbuild.example",
+    contactName: "Owner",
+    businessName: "Paid Build Cafe",
+    sourceUrl: "https://example.com/paid-build-cafe",
+    businessSummary: "Paid Build Cafe has public evidence of no dedicated website and needs online menu capture plus catering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: false,
+    deployWebsite: false,
+  });
+
+  assert.equal(packet.status, "ready_for_website_creation_handoff");
+  assert.equal(packet.safety.writesFiles, false);
+  assert.equal(packet.safety.deploys, false);
+  assert.equal(packet.scaffold?.status, "ready_for_internal_preview");
+  assert.equal(packet.scaffoldInput?.projectType, "bundle");
+  assert.equal(packet.scaffoldInput?.includesAutomation, true);
+  assert.equal(packet.scaffoldInput?.packageName, "Website 3D Premium + Automation Sprint");
+  assert.equal(packet.scaffold?.canWriteFiles, false);
+  assert.equal(packet.scaffold?.canDeploy, false);
+  assert.equal(packet.scaffold?.files.some((file) => file.path.endsWith("index.html") && file.content.includes("Paid Build Cafe")), true);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/website-scaffold");
+});
+
+test("website creation packet treats string false approvals as blocked", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@stringfalsebuild.example",
+    contactName: "Owner",
+    businessName: "String False Build Cafe",
+    sourceUrl: "https://example.com/string-false-build-cafe",
+    businessSummary: "String False Build Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: "false" as unknown as boolean,
+    clientApprovedScope: "false" as unknown as boolean,
+    depositPaid: "false" as unknown as boolean,
+    publicDataVerified: "false" as unknown as boolean,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /Robert debe aprobar/);
+  assert.match(packet.blockedReasons.join("; "), /deposito/);
+  assert.equal(packet.safety.writesFiles, false);
+});
+
+test("website creation packet blocks write and deploy requests", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@unsafewebsite.example",
+    contactName: "Owner",
+    businessName: "Unsafe Website Cafe",
+    sourceUrl: "https://example.com/unsafe-website-cafe",
+    businessSummary: "Unsafe Website Cafe has public evidence of no dedicated website and needs event lead capture.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: true,
+    deployWebsite: true,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /no escribe archivos ni despliega/);
+  assert.equal(packet.safety.requestedWriteFiles, true);
+  assert.equal(packet.safety.requestedDeployWebsite, true);
+});
+
 test("records outreach draft without sending and moves matching lead to outreach", () => {
   const leadResult = recordRevenueLead({
     businessName: "Black Room",
@@ -944,6 +1160,809 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
   assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
   assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
   assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
+});
+
+test("money sprint treats string false writePreviewFiles as no local preview write", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 1,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: "false",
+    seedLeads: [
+      {
+        businessName: "String False Preview Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@stringfalsepreview.example",
+        evidence: "Google listing has no website, Instagram bio has no link and a public menu photo trail.",
+        painPoint: "Needs online menu and catering inquiry capture.",
+        estimatedOfferUsd: 4200,
+        status: "research",
+        sourceUrl: "https://example.com/string-false-preview-cafe",
+        recipientEmail: "owner@stringfalsepreview.example",
+        contactName: "Owner",
+        businessSummary: "String False Preview Cafe has public evidence of no website and needs an online menu.",
+      },
+    ],
+  } as any);
+
+  assert.equal(result.previews.length, 1);
+  assert.equal("previewPath" in result.previews[0], false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), false);
+});
+
+test("scout dispatch creates safe public research work orders without importing leads", () => {
+  const result = buildRevenueScoutDispatch({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 9,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_public_scout_handoff");
+  assert.equal(result.publicScoutRunEndpoint, "/api/revenue-engine/public-scout-run");
+  assert.equal(result.publicCandidateEndpoint, "/api/revenue-engine/public-lead-candidates");
+  assert.equal(result.previewEndpoint, "/api/revenue-engine/money-sprint-preview");
+  assert.equal(result.workOrders.length, result.scoutQueue.length);
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.approvalToImport, false);
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.verificationStatus, "needs_review");
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.publicEvidenceVerified, false);
+  assert.equal(result.workOrders[0].browserInstructions.some((item) => item.includes("Do not contact")), true);
+  assert.equal(result.safety.blockedActions.includes("contact business"), true);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.persistsLead, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 0);
+});
+
+test("public scout schedule prepares guarded browser runs without executing outreach or writes", () => {
+  const result = buildRevenuePublicScoutSchedule({
+    scheduleName: "Miami cafe scout",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    startDate: "2026-07-01",
+    runDays: 2,
+    runsPerDay: 2,
+    runHourLocal: 9,
+    browserExecutor: "subagent_browser",
+    maxCandidatesPerRun: 4,
+  });
+
+  assert.equal(result.status, "ready_for_guarded_schedule");
+  assert.equal(result.runCount, 4);
+  assert.equal(result.runs[0].date, "2026-07-01");
+  assert.equal(result.runs[0].localTime, "09:00");
+  assert.equal(result.runs[1].localTime, "13:00");
+  assert.equal(result.runs[2].date, "2026-07-02");
+  assert.equal(result.runs[0].targetCandidates, 4);
+  assert.equal(result.runs[0].commands.prepareBrowserSession.command, "npm");
+  assert.deepEqual(result.runs[0].commands.prepareBrowserSession.args.slice(0, 4), ["run", "revenue:browser-scout-session", "--", "--area=Miami"]);
+  assert.equal(result.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=4"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--area=Miami"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--niche=coffee shop"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--offer-focus=websites"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes(`--scout-run-id=${result.runs[0].id}`), true);
+  assert.equal(result.runs[0].commands.captureForReview.args.includes("--area=Miami"), true);
+  assert.equal(result.runs[0].commands.captureForReview.args.includes("--source=browser_subagent"), true);
+  assert.equal(result.dispatch.safety.paidDataSpendUsd, 0);
+  assert.equal(result.dispatch.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.runsBrowserAutomatically, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.paidDataSpendUsd, 0);
+  assert.equal(result.safety.requiresRobertReview, true);
+});
+
+test("public scout schedule schema rejects contact spend and write knobs", () => {
+  const parsed = revenuePublicScoutScheduleSchema.safeParse({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 50,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+  });
+
+  assert.equal(parsed.success, false);
+});
+
+test("public scout schedule emits structured args instead of shell strings", () => {
+  const maliciousArea = "Miami$(touch /tmp/revenue-pwn)";
+  const maliciousNiche = "coffee shop`touch /tmp/revenue-pwn2`";
+  const result = buildRevenuePublicScoutSchedule({
+    scheduleName: "Unsafe input scout",
+    area: maliciousArea,
+    niche: maliciousNiche,
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    startDate: "2026-07-01",
+    runDays: 1,
+    runsPerDay: 1,
+    runHourLocal: 9,
+    browserExecutor: "manual_browser",
+    maxCandidatesPerRun: 5,
+  });
+  const commandValues = Object.values(result.runs[0].commands);
+
+  for (const command of commandValues) {
+    assert.equal(command.command, "npm");
+    assert.equal(Array.isArray(command.args), true);
+    assert.equal(command.args.includes(`--area=${maliciousArea}`), true);
+    assert.equal(command.args.some((arg) => arg.includes("$(touch /tmp/revenue-pwn)") || arg.includes("`touch /tmp/revenue-pwn2`")), true);
+    assert.equal(Object.values(command).some((value) => typeof value === "string" && value.includes("npm run")), false);
+  }
+});
+
+test("public scout run captures verified candidates for Robert review without importing leads", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 4,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    source: "browser_subagent",
+    scoutRunId: "scout-run-miami-coffee-001",
+    candidates: [
+      {
+        businessName: "Batch Scout Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@batchscout.example",
+        sourceUrl: "https://example.com/batch-scout-cafe",
+        recipientEmail: "owner@batchscout.example",
+        evidence: "Google listing has no website, recent menu photos and a public owner email.",
+        painPoint: "Needs online menu, catering lead capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        contactName: "Owner",
+        businessSummary: "Batch Scout Cafe is a no-website coffee shop with visible demand signals and public contact.",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+      {
+        businessName: "Unclear Batch Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "unknown",
+        contactChannel: "unknown",
+        contactValue: "",
+        sourceUrl: "https://example.com/unclear-batch-cafe",
+        recipientEmail: "",
+        evidence: "Needs review.",
+        painPoint: "Needs review.",
+        estimatedOfferUsd: 900,
+        status: "research",
+        verificationStatus: "needs_review",
+        publicEvidenceVerified: false,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.doesNotMatch(result.importBatchText, /Batch Scout Cafe/);
+  assert.doesNotMatch(result.importBatchText, /Unclear Batch Cafe/);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.preview.totals.mockupReady, 0);
+  assert.equal(result.blockedCandidates.length, 2);
+  assert.equal(result.safety.persistsPublicCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.ignoresCaptureImportApproval, true);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 2);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("public scout run does not auto-approve unverified candidates", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: true,
+    candidates: [
+      {
+        businessName: "Almost Verified Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@almostsalon.example",
+        sourceUrl: "https://example.com/almost-salon",
+        recipientEmail: "owner@almostsalon.example",
+        evidence: "Public directory lists services and contact, but QA has not verified the evidence yet.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "needs_review",
+        publicEvidenceVerified: false,
+        approvalToImport: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /public evidence not verified/);
+});
+
+test("public scout run ignores autoApproveVerified for verified candidates", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: true,
+    candidates: [
+      {
+        businessName: "Auto Approve Trap Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@autotrap.example",
+        sourceUrl: "https://example.com/auto-trap-cafe",
+        recipientEmail: "owner@autotrap.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /requires Robert review approval/);
+});
+
+test("public scout run treats string false approval flags as false", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: "false" as unknown as boolean,
+    candidates: [
+      {
+        businessName: "String False Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@stringfalse.example",
+        sourceUrl: "https://example.com/string-false-cafe",
+        recipientEmail: "owner@stringfalse.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: "false" as unknown as boolean,
+        approvalToImport: "false" as unknown as boolean,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.publicEvidenceVerified, false);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /public evidence not verified/);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /requires Robert review approval/);
+});
+
+test("Robert review promotes captured public candidates to preview batch without importing leads", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Robert Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@robertreview.example",
+        sourceUrl: "https://example.com/robert-review-cafe",
+        recipientEmail: "owner@robertreview.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and catering inquiry follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+    reviewerNote: "Robert approved this candidate for preview only.",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.approvedCount, 1);
+  assert.match(result.importBatchText, /Robert Review Cafe/);
+  assert.equal(result.preview.totals.accepted, 1);
+  assert.equal(result.preview.totals.mockupReady, 1);
+  assert.equal(result.moneySprintRunPacket.status, "ready_for_money_sprint_run");
+  assert.equal(result.moneySprintRunPacket.endpoint, "/api/revenue-engine/money-sprint");
+  assert.equal(result.moneySprintRunPacket.requestBody.maxPaidDataSpendUsd, 0);
+  assert.equal(result.moneySprintRunPacket.requestBody.requireRobertApprovalToContact, true);
+  assert.equal(result.moneySprintRunPacket.requestBody.writePreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.requestBody.seedLeads.length, 0);
+  assert.match(result.moneySprintRunPacket.requestBody.seedLeadBatchText, /Robert Review Cafe/);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.acceptedLeads, 1);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.mockupsToPrepare, 1);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.outreachDraftsToCreate, 1);
+  assert.equal(result.moneySprintRunPacket.safety.sendsOutreach, false);
+  assert.equal(result.moneySprintRunPacket.safety.writesPreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.safety.requiresRobertApprovalBeforeRun, true);
+  assert.equal(result.nextApiAction, "human_review_money_sprint_packet");
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("Robert review packet strips unsafe money sprint knobs before run handoff", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Adversarial Packet Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@adversarialpacket.example",
+        sourceUrl: "https://example.com/adversarial-packet-cafe",
+        recipientEmail: "owner@adversarialpacket.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: false,
+    writePreviewFiles: true,
+    candidateIds: [capture.recordedCandidates[0].candidate.id],
+    approvedByRobert: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.preview.safety.persistsData, false);
+  assert.equal(result.moneySprintRunPacket.status, "ready_for_money_sprint_run");
+  assert.equal(result.moneySprintRunPacket.requestBody.maxPaidDataSpendUsd, 0);
+  assert.equal(result.moneySprintRunPacket.requestBody.requireRobertApprovalToContact, true);
+  assert.equal(result.moneySprintRunPacket.requestBody.writePreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.safety.requiresRobertApprovalBeforeRun, true);
+  assert.equal(result.moneySprintRunPacket.safety.paidDataSpendUsd, 0);
+  assert.equal(result.nextApiAction, "human_review_money_sprint_packet");
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("Robert review blocks money sprint packet when requested candidate ids are missing", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Missing Id Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@missingid.example",
+        sourceUrl: "https://example.com/missing-id-cafe",
+        recipientEmail: "owner@missingid.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [capture.recordedCandidates[0].candidate.id, "missing-id"],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.missingIds, ["missing-id"]);
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.nextApiAction, "/api/revenue-engine/public-scout-run");
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /missing candidate ids: missing-id/);
+});
+
+test("Robert review blocks duplicate candidate ids before money sprint packet", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Duplicate Id Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@duplicateid.example",
+        sourceUrl: "https://example.com/duplicate-id-salon",
+        recipientEmail: "owner@duplicateid.example",
+        evidence: "Public listing has no website, recent service photos and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId, candidateId],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.duplicateIds, [candidateId]);
+  assert.equal(result.foundCount, 1);
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.nextApiAction, "/api/revenue-engine/public-scout-run");
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /duplicate candidate ids:/);
+});
+
+test("Robert review blocks captured candidates without explicit approval", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Needs Robert Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@needsrobert.example",
+        sourceUrl: "https://example.com/needs-robert-salon",
+        recipientEmail: "owner@needsrobert.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [capture.recordedCandidates[0].candidate.id],
+    approvedByRobert: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.moneySprintRunPacket.requestBody.seedLeadBatchText.trim().split(/\r?\n/).length, 1);
+  assert.match(result.moneySprintRunPacket.blockedUntil.join("; "), /no importable leads/i);
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /approvedByRobert false/);
+});
+
+test("Robert review rechecks candidate evidence instead of trusting stored qualification", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Stale Evidence Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@staleevidence.example",
+        sourceUrl: "https://example.com/stale-evidence-cafe",
+        recipientEmail: "owner@staleevidence.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const persisted = JSON.parse(readFileSync(testPublicLeadCandidatesPath, "utf8"));
+  persisted[0].evidence = "short";
+  writeFileSync(testPublicLeadCandidatesPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+  setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
+
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.approvedCount, 0);
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /evidencia publica revisable/);
+  assert.equal(result.preview.totals.accepted, 0);
+});
+
+test("routes wire scout dispatch endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueScoutDispatch/);
+  assert.match(routesSource, /revenueScoutDispatchSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/scout-dispatch"/);
+  assert.match(
+    routesSource,
+    /const input = revenueScoutDispatchSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueScoutDispatch\(input\)\)/,
+  );
+});
+
+test("routes wire public scout run endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /recordRevenuePublicScoutRun/);
+  assert.match(routesSource, /revenuePublicScoutRunSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-scout-run"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicScoutRunSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(recordRevenuePublicScoutRun\(input\)\)/,
+  );
+});
+
+test("routes wire public scout schedule endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenuePublicScoutSchedule/);
+  assert.match(routesSource, /revenuePublicScoutScheduleSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-scout-schedule"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicScoutScheduleSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenuePublicScoutSchedule\(input\)\)/,
+  );
+});
+
+test("routes wire public candidate review endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /reviewRevenuePublicLeadCandidates/);
+  assert.match(routesSource, /revenuePublicLeadCandidateReviewSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/review"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicLeadCandidateReviewSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(reviewRevenuePublicLeadCandidates\(input\)\)/,
+  );
+});
+
+test("routes wire outreach approval packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueOutreachApprovalPacket/);
+  assert.match(routesSource, /revenueOutreachApprovalPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/outreach-approval-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueOutreachApprovalPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueOutreachApprovalPacket\(input\)\)/,
+  );
+});
+
+test("routes wire website creation packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsiteCreationPacket/);
+  assert.match(routesSource, /revenueWebsiteCreationPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-creation-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsiteCreationPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsiteCreationPacket\(input\)\)/,
+  );
+});
+
+test("routes wire website scaffold endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsiteScaffold/);
+  assert.match(routesSource, /revenueWebsiteScaffoldSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-scaffold"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsiteScaffoldSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsiteScaffold\(input\)\)/,
+  );
 });
 
 test("money sprint parses pasted lead batches with partial failures", () => {
@@ -1244,6 +2263,170 @@ test("persists outreach drafts across module state reloads", () => {
   assert.equal(snapshot.recentOutreach[0].status, "approved");
 });
 
+test("outreach approval packet surfaces draft-only approvals without sending", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@approvalpacket.example",
+    contactName: "Owner",
+    businessName: "Approval Packet Cafe",
+    sourceUrl: "https://example.com/approval-packet-cafe",
+    businessSummary: "Approval Packet Cafe has public evidence of no dedicated website and needs online menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "ready_for_robert_approval");
+  assert.equal(packet.totals.readyForManualApproval, 1);
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.equal(packet.items[0].readyForManualApproval, true);
+  assert.equal(packet.items[0].readyForProviderSend, false);
+  assert.equal(packet.items[0].failedGates[0].gate, "approval");
+  assert.equal(packet.safety.sendsOutreach, false);
+  assert.equal(packet.safety.persistsData, false);
+  assert.equal(packet.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
+});
+
+test("outreach approval packet blocks approved drafts until provider is configured", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@providerpacket.example",
+    contactName: "Owner",
+    businessName: "Provider Packet Cafe",
+    sourceUrl: "https://example.com/provider-packet-cafe",
+    businessSummary: "Provider Packet Cafe has public evidence of weak conversion and needs online order capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "needs_fixes");
+  assert.equal(packet.provider.configured, false);
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.match(packet.items[0].blockedReasons.join("; "), /email provider missing/);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/outreach-drafts");
+});
+
+test("outreach approval packet marks approved drafts ready for reviewed send when provider is configured", () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@sendpacket.example",
+    contactName: "Owner",
+    businessName: "Send Packet Cafe",
+    sourceUrl: "https://example.com/send-packet-cafe",
+    businessSummary: "Send Packet Cafe has public evidence of no dedicated website and needs menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "ready_for_approved_send_review");
+  assert.equal(packet.provider.configured, true);
+  assert.equal(packet.totals.readyForProviderSend, 1);
+  assert.equal(packet.items[0].readyForProviderSend, true);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/outreach-send");
+  assert.match(packet.nextAction, /approvalToSend=true/);
+  assert.equal(packet.safety.requiresRobertApprovalBeforeSend, true);
+});
+
+test("outreach approval packet treats string false includeSent as false", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  setRevenueOutreachSenderForTests(async () => ({ id: "email_include_sent_false" }));
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@includesentfalse.example",
+    contactName: "Owner",
+    businessName: "Include Sent False Cafe",
+    sourceUrl: "https://example.com/include-sent-false-cafe",
+    businessSummary: "Include Sent False Cafe has public evidence of no dedicated website and needs menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  await sendRevenueOutreachDraft({ draftId: result.draft.id, approvalToSend: true });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: "false" as unknown as boolean });
+
+  assert.equal(packet.totals.reviewed, 0);
+  assert.equal(packet.items.some((item) => item.draftId === result.draft.id), false);
+});
+
+test("outreach approval packet keeps non-email channels manual-only", () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  recordRevenueOutreachDraft({
+    channel: "instagram",
+    approvalStatus: "approved",
+    recipientEmail: "owner@manualonly.example",
+    contactName: "Owner",
+    businessName: "Manual Only Studio",
+    sourceUrl: "https://example.com/manual-only-studio",
+    businessSummary: "Manual Only Studio has public evidence of no dedicated website and needs booking capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "needs_fixes");
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.equal(packet.items[0].readyForProviderSend, false);
+  assert.match(packet.items[0].blockedReasons.join("; "), /manual-only channel: instagram/);
+});
+
+test("blocks provider send for manual-only outreach channels", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "instagram",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Manual Channel Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Manual Channel Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.reason, "Canal manual-only: instagram. Usar revision manual fuera del proveedor de email.");
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
+});
+
 test("blocks outreach send when email provider is missing", async () => {
   const result = recordRevenueOutreachDraft({
     channel: "gmail",
@@ -1299,6 +2482,34 @@ test("blocks outreach send when email provider values are placeholders", async (
   assert.equal(sendResult.provider.missing.includes("RESEND_API_KEY"), true);
   assert.equal(sendResult.provider.missing.includes("REVENUE_ENGINE_FROM_EMAIL"), true);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
+});
+
+test("blocks outreach send when approvalToSend is string false", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "String False Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "String False Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: "false" as unknown as boolean,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.reason, "Marcar approvalToSend=true para contacto externo.");
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
 });
 
 test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
