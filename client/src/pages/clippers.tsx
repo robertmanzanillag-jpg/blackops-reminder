@@ -10625,19 +10625,30 @@ function isTikTokProfileUrl(value: string) {
   }
 }
 
+function isConcreteGoogleEvidenceUrl(url: URL) {
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname;
+  if (hostname === "drive.google.com") {
+    return /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+      || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+      || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()));
+  }
+  if (hostname === "docs.google.com") {
+    return /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+  }
+  return false;
+}
+
 function isMetricoolProofUrl(value: string) {
   try {
     const url = new URL(value.trim());
     const hostname = url.hostname.toLowerCase();
+    const isMetricoolHost = hostname === "metricool.com" || hostname.endsWith(".metricool.com");
+    const isGoogleEvidenceHost = hostname === "drive.google.com" || hostname === "docs.google.com";
     return url.protocol === "https:"
       && !url.username
       && !url.password
-      && (
-        hostname === "metricool.com"
-        || hostname.endsWith(".metricool.com")
-        || hostname === "drive.google.com"
-        || hostname === "docs.google.com"
-      )
+      && (isMetricoolHost || (isGoogleEvidenceHost && isConcreteGoogleEvidenceUrl(url)))
       && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
   } catch {
     return false;

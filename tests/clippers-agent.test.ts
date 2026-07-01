@@ -6260,6 +6260,41 @@ test("Metricool bridge evidence batch accepts only active TikTok MVP lanes", asy
   }
 });
 
+test("Metricool bridge evidence batch rejects non-concrete Google proof pages", async () => {
+  const beforeStatus = await getClipperStatus();
+  const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");
+  const memesPath = path.join(beforeStatus.accountEvidence.evidenceDir, "meme-radar-tiktok.json");
+  const previousSports = await readFile(sportsPath, "utf8").catch(() => null);
+  const previousMemes = await readFile(memesPath, "utf8").catch(() => null);
+
+  try {
+    await unlink(sportsPath).catch(() => undefined);
+    await unlink(memesPath).catch(() => undefined);
+    const raw = [
+      "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://drive.google.com/drive/search?q=metricool,Sport TikTok bridge must reject Drive search pages as proof.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://drive.google.com/drive/my-drive,Sport TikTok bridge must reject Drive listing pages as proof.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://docs.google.com/,Memes TikTok bridge must reject bare Google Docs home as proof.",
+      "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/open?id=metricool-proof-id,Memes TikTok bridge can accept a concrete Drive open id proof.",
+    ].join("\n");
+
+    const { metricoolBridgeEvidenceBatch } = await previewClipperMetricoolBridgeEvidenceBatch({ raw });
+    assert.equal(metricoolBridgeEvidenceBatch.wouldWrite, false);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 4);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 3);
+    assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
+    assert.equal(metricoolBridgeEvidenceBatch.skipped.filter((item) => item.reason.includes("Metricool proof URL or Google Drive/Docs")).length, 3);
+    assert.equal(await readFile(sportsPath, "utf8").catch(() => null), null);
+    assert.equal(await readFile(memesPath, "utf8").catch(() => null), null);
+  } finally {
+    if (previousSports === null) await unlink(sportsPath).catch(() => undefined);
+    else await writeFile(sportsPath, previousSports);
+    if (previousMemes === null) await unlink(memesPath).catch(() => undefined);
+    else await writeFile(memesPath, previousMemes);
+  }
+});
+
 test("Metricool bridge evidence batch rejects credential URLs and mismatched active lane identity", async () => {
   const beforeStatus = await getClipperStatus();
   const sportsPath = path.join(beforeStatus.accountEvidence.evidenceDir, "sports-daily-tiktok.json");

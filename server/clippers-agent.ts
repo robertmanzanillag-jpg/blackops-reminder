@@ -33137,12 +33137,27 @@ function isMetricoolProofUrl(value: string): boolean {
   }
 }
 
+function isConcreteGoogleEvidenceUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname;
+  if (hostname === "drive.google.com") {
+    return /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+      || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+      || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()));
+  }
+  if (hostname === "docs.google.com") {
+    return /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+  }
+  return false;
+}
+
 function isGoogleMetricoolEvidenceProofUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
     return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "drive.google.com" || hostname === "docs.google.com")
+      && isConcreteGoogleEvidenceUrl(url)
       && !url.searchParams.has("access_token")
       && !url.searchParams.has("auth")
       && !url.searchParams.has("key");
