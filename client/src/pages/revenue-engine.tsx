@@ -2404,6 +2404,8 @@ export default function RevenueEnginePage() {
   const publicCandidateSprintMutation = useMutation<RevenuePublicCandidateSprintResult>({
     mutationFn: async () => {
       const candidateIds = (snapshot?.publicLeadImportQueue.items || []).map((item) => item.candidateId);
+      const readyCandidateCount = snapshot?.publicLeadImportQueue.readyCount || 0;
+      const visibleCandidateIdsCoverReadyQueue = candidateIds.length >= readyCandidateCount;
       const response = await fetch("/api/revenue-engine/money-sprint/public-candidates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2418,8 +2420,8 @@ export default function RevenueEnginePage() {
           maxPaidDataSpendUsd: scoutingPaidSpendUsd,
           requireRobertApprovalToContact: true,
           writePreviewFiles: true,
-          candidateIds,
-          maxCandidates: Math.min(candidateIds.length || 1, 25),
+          candidateIds: visibleCandidateIdsCoverReadyQueue ? candidateIds : [],
+          maxCandidates: Math.min(Math.max(readyCandidateCount, candidateIds.length, 1), 25),
         }),
       });
       const data = await response.json();

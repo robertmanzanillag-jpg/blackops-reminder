@@ -240,6 +240,8 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /button-load-daily-scout-task-slots-/);
   assert.match(uiSource, /dailyMoneyCommand\.primaryAction/);
   assert.match(uiSource, /dailyMoneyCommand\.funnel\.salesPacketsReady/);
+  assert.match(uiSource, /const readyCandidateCount = snapshot\?\.publicLeadImportQueue\.readyCount \|\| 0/);
+  assert.match(uiSource, /candidateIds: visibleCandidateIdsCoverReadyQueue \? candidateIds : \[\]/);
   assert.match(uiSource, /statusTone\(snapshot\?\.launchReadiness\.todayExecutionPack\?\.status \|\| "review"\)/);
   assert.doesNotMatch(uiSource, /statusTone\("pass"\), "shrink-0"\}>\s*\{snapshot\?\.launchReadiness\.todayExecutionPack\?\.ownerAgent/);
 });

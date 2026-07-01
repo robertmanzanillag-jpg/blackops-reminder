@@ -1513,6 +1513,61 @@ test("runs money sprint from verified public candidates without copy paste or ou
   assert.equal(result.snapshot.manualOutreachQueue.readyCount, 0);
 });
 
+test("public candidate money sprint can use ready candidates beyond the visible queue slice", () => {
+  const candidateIds: string[] = [];
+
+  for (let index = 0; index < 12; index += 1) {
+    const result = recordRevenuePublicLeadCandidate({
+      businessName: `Batch Ready Cafe ${String(index + 1).padStart(2, "0")}`,
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: `owner${index + 1}@batchready.example`,
+      sourceUrl: `https://example.com/batch-ready-cafe-${index + 1}`,
+      recipientEmail: `owner${index + 1}@batchready.example`,
+      evidence: "Google listing has no website, current menu photos, public contact path and a clear catering inquiry gap.",
+      painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+      estimatedOfferUsd: 4200,
+      status: "research",
+      contactName: "Owner",
+      businessSummary: "Batch Ready Cafe has public no-website evidence and a clear menu capture opportunity.",
+      verificationStatus: "verified_public",
+      publicEvidenceVerified: true,
+      approvalToImport: true,
+    });
+    candidateIds.push(result.candidate.id);
+  }
+
+  const beforeSprint = getRevenueEngineSnapshot();
+
+  assert.equal(beforeSprint.publicLeadImportQueue.readyCount, 12);
+  assert.equal(beforeSprint.publicLeadImportQueue.items.length, 10);
+
+  const result = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 12,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [],
+    maxCandidates: 12,
+  });
+
+  assert.equal(result.status, "started");
+  assert.equal(result.importedCandidateIds.length, 12);
+  assert.equal(new Set(result.importedCandidateIds).size, 12);
+  assert.equal(candidateIds.every((candidateId) => result.importedCandidateIds.includes(candidateId)), true);
+  assert.equal(result.sprint?.recordedLeads.length, 12);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
+});
+
 test("runs money sprint from Instagram public candidate into manual draft without email", () => {
   const candidate = recordRevenuePublicLeadCandidate({
     businessName: "Verified Insta Sprint Cafe",
