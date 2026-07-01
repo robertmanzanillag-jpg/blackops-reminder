@@ -2818,6 +2818,7 @@ test("TikTok MVP go-live packet rewrites stale packet when current workbook is e
     assert.equal(output.realPublishEnabled, false);
     assert.equal(output.directSocialApisRequired, false);
     assert.match(output.blocker, /clippers-tiktok-batch-tracker\.mjs/);
+    assert.equal(output.businessBlocker, "blocked_metricool_approval_run");
     assert.match(output.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
 
     const packet = JSON.parse(await readFile(packetPath, "utf8"));
@@ -2827,6 +2828,9 @@ test("TikTok MVP go-live packet rewrites stale packet when current workbook is e
     assert.equal(packet.totals.accountRows, 0);
     assert.equal(packet.totals.readyToImport, 0);
     assert.equal(packet.operatorSteps[0].id, "prerequisite-refresh");
+    assert.equal(packet.businessBlocker, "blocked_metricool_approval_run");
+    assert.equal(packet.operatorSteps[0].blocker, "blocked_metricool_approval_run");
+    assert.equal(packet.sourceStatuses.metricool100Handoff, "blocked_approval_run");
     assert.ok(packet.prerequisiteFailures.some((failure) => /clippers-tiktok-batch-tracker\.mjs/.test(failure.script)));
     assert.match(packet.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
     assert.doesNotMatch(JSON.stringify(packet), /ready_for_metricool_operator|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|autopublish/i);
@@ -2854,6 +2858,7 @@ test("TikTok MVP go-live packet rewrites stale packet when current workbook is e
 
     const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
     assert.match(page, /blocked_prerequisite_refresh/);
+    assert.match(page, /businessBlocker/);
     assert.match(page, /clippers-tiktok-mvp-go-live-prerequisite-block/);
     assert.match(page, /TikTok go-live packet bloqueado/);
   } finally {

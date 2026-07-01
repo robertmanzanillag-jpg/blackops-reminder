@@ -128,6 +128,21 @@ function renderBlockedPrerequisiteMarkdown(summary) {
 }
 
 async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
+  const [goalAudit, operatingRefresh, metricool100Handoff] = await Promise.all([
+    readJsonOrNull(goalAuditPath),
+    readJsonOrNull(operatingRefreshPath),
+    readJsonOrNull(metricool100HandoffPath),
+  ]);
+  const proofGate = proofGateFor(operatingRefresh || {});
+  const metricoolHandoffBlocked = metricool100Handoff?.status && metricool100Handoff.status !== "ready_for_operator";
+  const businessBlocker = metricoolHandoffBlocked
+    ? "blocked_metricool_approval_run"
+    : proofGate.status && proofGate.status !== "ready_for_operator_review"
+      ? proofGate.status
+      : "prerequisite_refresh_failed";
+  const businessNextStep = metricoolHandoffBlocked
+    ? metricool100Handoff.nextStep
+    : proofGate.nextStep || goalAudit?.nextStep || "";
   const summary = {
     status: "blocked_prerequisite_refresh",
     generatedAt: new Date().toISOString(),
@@ -135,6 +150,7 @@ async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
     directSocialApisRequired: false,
     realPublishEnabled: false,
     blocker: prerequisiteFailures[0]?.script || "prerequisite_refresh_failed",
+    businessBlocker,
     prerequisiteFailures,
     paths: {
       json: outJsonPath,
@@ -143,6 +159,9 @@ async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
     },
     sourceStatuses: {
       prerequisiteRefresh: "blocked",
+      goalAudit: goalAudit?.status || "missing",
+      operatingRefresh: operatingRefresh?.status || "missing",
+      metricool100Handoff: metricool100Handoff?.status || "missing",
     },
     totals: {
       accountRows: 0,
@@ -173,9 +192,9 @@ async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
         id: "prerequisite-refresh",
         status: "blocked",
         owner: "app",
-        action: "Fix the failed prerequisite report before operating from this go-live packet.",
+        action: businessNextStep || "Fix the failed prerequisite report before operating from this go-live packet.",
         proof: outJsonPath,
-        blocker: prerequisiteFailures[0]?.script || "prerequisite_refresh_failed",
+        blocker: businessBlocker,
       },
     ],
     guardrails: [
@@ -184,7 +203,7 @@ async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
       "This blocked packet does not schedule, publish, import metrics, or enable direct social APIs.",
       "Do not operate from stale go-live packets; fix the prerequisite report and regenerate.",
     ],
-    nextStep: "Fix the failed prerequisite report, then regenerate this go-live packet. If the blocker is SPORT/memes proof, add real non-secret Metricool or concrete Drive/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
+    nextStep: businessNextStep || "Fix the failed prerequisite report, then regenerate this go-live packet. If the blocker is SPORT/memes proof, add real non-secret Metricool or concrete Drive/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
   };
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderBlockedPrerequisiteMarkdown(summary));
@@ -192,6 +211,7 @@ async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
   console.log(JSON.stringify({
     status: summary.status,
     blocker: summary.blocker,
+    businessBlocker: summary.businessBlocker,
     prerequisiteFailures: summary.prerequisiteFailures.length,
     directSocialApisRequired: summary.directSocialApisRequired,
     realPublishEnabled: summary.realPublishEnabled,

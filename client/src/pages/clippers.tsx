@@ -1468,6 +1468,7 @@ interface ClipperTikTokMvpGoLivePacketSummary {
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
   blocker?: string;
+  businessBlocker?: string;
   prerequisiteFailures?: Array<{
     script: string;
     status?: number;
@@ -22086,7 +22087,7 @@ export default function ClippersPage() {
                     ))}
                   </div>
                   <Badge className="w-fit border border-red-300/30 bg-red-300/10 text-[10px] text-red-100">
-                    {tiktokMvpGoLivePacket.blocker || "prerequisite_refresh_failed"}
+                    {tiktokMvpGoLivePacket.businessBlocker || tiktokMvpGoLivePacket.blocker || "prerequisite_refresh_failed"}
                   </Badge>
                 </div>
               </div>
