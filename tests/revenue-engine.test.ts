@@ -529,7 +529,7 @@ test("dispatches scout agents without creating candidates leads outreach or spen
   assert.match(result.dispatch.connectorIntake.copyableBrief, /\/api\/revenue-engine\/public-scout-connector-intake/);
   assert.match(result.dispatch.connectorIntake.copyableBrief, /needs_review/);
   assert.match(result.dispatch.connectorIntake.copyableBrief, /Do not contact/);
-  assert.match(result.dispatch.connectorIntake.copyableBrief, /Do not set publicEvidenceVerified or approvalToImport/);
+  assert.match(result.dispatch.connectorIntake.copyableBrief, /Do not set publicEvidenceVerified, approvalToImport or approvedByRobert/);
   assert.equal(result.safety.persistsScoutRun, true);
   assert.equal(result.safety.persistsCandidates, false);
   assert.equal(result.safety.persistsLeads, false);
@@ -587,6 +587,7 @@ test("public scout intake blocks unfilled daily scout placeholders", () => {
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 3500,
   });
 
@@ -618,6 +619,7 @@ test("public scout intake accepts valid Spanish evidence containing todo", () =>
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 3500,
   });
 
@@ -625,6 +627,35 @@ test("public scout intake accepts valid Spanish evidence containing todo", () =>
   assert.equal(result.importableCount, 1);
   assert.equal(result.blockedCount, 0);
   assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 1);
+});
+
+test("public scout intake cannot import without explicit Robert approval", () => {
+  const result = recordRevenuePublicScoutEvidence({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Approval Gate Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: @approvalgatecafe",
+      "Email: owner@approvalgate.example",
+      "Source: https://instagram.com/approvalgatecafe",
+      "Evidence: Public Instagram profile has recent menu posts, no dedicated website link and a visible contact path.",
+      "Pain: Needs online menu, catering inquiries and follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    defaultOfferUsd: 3500,
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.recorded[0].candidate.importReady, false);
+  assert.equal(result.recorded[0].candidate.blockedReasons.includes("approvedByRobert false"), true);
+  assert.match(result.normalizedBatchText, /public_candidate_review_gate=needs_review/);
+  assert.equal(result.snapshot.publicLeadImportQueue.readyCount, 0);
 });
 
 test("daily scout sprint submit records candidates and updates slot progress", () => {
@@ -659,6 +690,7 @@ test("daily scout sprint submit records candidates and updates slot progress", (
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 3500,
     maxCandidates: 1,
   });
@@ -697,6 +729,7 @@ test("daily scout sprint submit records candidates and updates slot progress", (
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 3500,
     maxCandidates: 1,
   });
@@ -724,6 +757,7 @@ test("daily scout sprint submit records candidates and updates slot progress", (
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 3500,
     maxCandidates: 1,
   });
@@ -770,6 +804,7 @@ test("daily money command prioritizes verified public candidates before more sea
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     batchText: [
       "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
       "Daily Command Cafe|Miami|restaurants|no_website|email|owner@dailycommand.example|https://example.com/daily-command-cafe|owner@dailycommand.example|Public listing has no website and recent owner-managed menu updates.|Needs mobile menu and catering lead capture.|4200|Owner|Owner-operated and visible demand.",
@@ -839,6 +874,7 @@ test("records verified public lead candidates as previewable batch rows without 
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const result = recordRevenuePublicLeadCandidate({
     businessName: "Public Scout Cafe",
@@ -859,6 +895,7 @@ test("records verified public lead candidates as previewable batch rows without 
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const snapshot = getRevenueEngineSnapshot();
 
@@ -896,6 +933,7 @@ test("records verified Instagram public lead candidate without requiring email",
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const snapshot = getRevenueEngineSnapshot();
 
@@ -1155,6 +1193,7 @@ test("public lead candidates require source urls tied to business or contact evi
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   assert.equal(unrelated.candidate.importReady, false);
@@ -1179,6 +1218,7 @@ test("public lead candidates require source urls tied to business or contact evi
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   assert.equal(related.candidate.importReady, true);
@@ -1204,6 +1244,7 @@ test("public lead source matching rejects spoofed platforms and generic category
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const genericCategory = recordRevenuePublicLeadCandidate({
     businessName: "Single Token Cafe",
@@ -1223,6 +1264,7 @@ test("public lead source matching rejects spoofed platforms and generic category
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const genericGoogleSearch = recordRevenuePublicLeadCandidate({
     businessName: "Generic Google Cafe",
@@ -1242,6 +1284,7 @@ test("public lead source matching rejects spoofed platforms and generic category
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   assert.equal(spoofedPlatform.candidate.importReady, false);
@@ -1269,6 +1312,7 @@ test("public lead source matching rejects generic public platform URLs", () => {
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const genericYelp = recordRevenuePublicLeadCandidate({
     businessName: "Generic Yelp Cafe",
@@ -1288,6 +1332,7 @@ test("public lead source matching rejects generic public platform URLs", () => {
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const tokenMatchingYelpSearch = recordRevenuePublicLeadCandidate({
     businessName: "Token Match Yelp Cafe",
@@ -1307,6 +1352,7 @@ test("public lead source matching rejects generic public platform URLs", () => {
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const tokenMatchingInstagramExplore = recordRevenuePublicLeadCandidate({
     businessName: "Token Match Instagram Cafe",
@@ -1326,6 +1372,7 @@ test("public lead source matching rejects generic public platform URLs", () => {
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   const sprint = runRevenueMoneySprintFromPublicCandidates({
     candidateIds: [
@@ -1381,6 +1428,7 @@ test("public lead source matching accepts specific public platform business URLs
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   assert.equal(result.candidate.importReady, true);
@@ -1400,6 +1448,7 @@ test("records verified public lead candidate batch without creating leads or out
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     notes: "Batch verified from public sources.",
   });
 
@@ -1488,6 +1537,7 @@ test("normalizes public scout evidence into candidates without creating leads", 
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     defaultOfferUsd: 4200,
     maxCandidates: 10,
   });
@@ -1752,6 +1802,7 @@ test("blocks public scout evidence from private or local source urls", () => {
       verificationStatus: "verified_public",
       publicEvidenceVerified: true,
       approvalToImport: true,
+      approvedByRobert: true,
       defaultOfferUsd: 4200,
     });
 
@@ -1780,6 +1831,7 @@ test("public scout agent command normalizes import-ready candidates without runn
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   assert.equal(result.status, "candidates_ready");
@@ -1814,6 +1866,7 @@ test("public scout agent command runs sprint only with import-ready candidates a
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     dailyResearchTarget: 30,
     dailyQualifiedLeadLimit: 10,
     dailyMockupLimit: 3,
@@ -1881,6 +1934,7 @@ test("public scout agent command rejects string false safety flags", () => {
       verificationStatus: "verified_public",
       publicEvidenceVerified: true,
       approvalToImport: true,
+      approvedByRobert: true,
       runMoneySprintIfReady: "false",
       writePreviewFiles: "false",
     } as Parameters<typeof runRevenuePublicScoutAgentCommand>[0]),
@@ -1906,6 +1960,7 @@ test("public scout agent command cannot loosen contact approval or paid spend", 
     verificationStatus: "verified_public" as const,
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     runMoneySprintIfReady: true,
   };
 
@@ -1976,6 +2031,7 @@ test("runs money sprint from verified public candidates without copy paste or ou
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   const result = runRevenueMoneySprintFromPublicCandidates({
@@ -2027,6 +2083,7 @@ test("public candidate money sprint can use ready candidates beyond the visible 
       verificationStatus: "verified_public",
       publicEvidenceVerified: true,
       approvalToImport: true,
+      approvedByRobert: true,
     });
     candidateIds.push(result.candidate.id);
   }
@@ -2079,6 +2136,7 @@ test("runs money sprint from Instagram public candidate into manual draft withou
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   const result = runRevenueMoneySprintFromPublicCandidates({
@@ -2171,6 +2229,7 @@ test("blocks public candidate money sprint when paid data spend is requested", (
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
 
   const result = runRevenueMoneySprintFromPublicCandidates({
@@ -2438,6 +2497,7 @@ test("money activation evidence gate mirrors public lead import readiness", () =
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
   });
   recordRevenuePublicLeadCandidate({
     businessName: "Gate Blocked Spa",

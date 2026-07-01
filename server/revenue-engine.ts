@@ -488,6 +488,7 @@ export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema
   verificationStatus: z.enum(["needs_review", "verified_public", "blocked"]).default("needs_review"),
   publicEvidenceVerified: z.boolean().default(false),
   approvalToImport: z.boolean().default(false),
+  approvedByRobert: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -502,6 +503,7 @@ export const revenuePublicLeadCandidateBatchSchema = z.object({
   verificationStatus: z.enum(["needs_review", "verified_public"]).default("needs_review"),
   publicEvidenceVerified: z.boolean().default(false),
   approvalToImport: z.boolean().default(false),
+  approvedByRobert: z.boolean().default(false),
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -526,6 +528,7 @@ export const revenuePublicScoutEvidenceSchema = z.object({
   verificationStatus: z.enum(["needs_review", "verified_public"]).default("needs_review"),
   publicEvidenceVerified: z.boolean().default(false),
   approvalToImport: z.boolean().default(false),
+  approvedByRobert: z.boolean().default(false),
   defaultOfferUsd: z.coerce.number().min(1500).max(100000).default(3500),
   maxCandidates: z.coerce.number().int().min(1).max(50).default(25),
   notes: z.string().trim().max(1000).optional().default(""),
@@ -5024,7 +5027,7 @@ export function runRevenueDailyScoutSprint(input: z.input<typeof revenueDailySco
   const qualityGate = [
     ...workPack.qualityGate,
     "Cada slot debe corresponder a un negocio real; no usar placeholders como evidencia final.",
-    "No se registra candidato hasta que publicEvidenceVerified y approvalToImport sean true.",
+    "No se registra candidato importable hasta que publicEvidenceVerified, approvalToImport y approvedByRobert sean true.",
   ];
   const tasks = scoutQueue.map((task) => {
     const resultSlots = Array.from({ length: parsed.resultSlotsPerTask }, (_, slotIndex) => {
@@ -5199,7 +5202,7 @@ function buildRevenueScoutDispatchSummary(sprint: RevenueDailyScoutSprint) {
     "",
     "Safety:",
     "- Results are recorded as needs_review only.",
-    "- Do not set publicEvidenceVerified or approvalToImport.",
+    "- Do not set publicEvidenceVerified, approvalToImport or approvedByRobert.",
     "- Do not contact businesses, buy data, create leads, publish previews or deploy websites.",
     "",
     "JSON payload template:",
@@ -6034,7 +6037,7 @@ function buildRevenueMoneyActivationPlan(input: {
         label: "Find real public businesses",
         input: "Public search/listing/profile URLs assigned to scout subagents.",
         output: "Verified public evidence blocks with sourceUrl, contact path, pain point and offer estimate.",
-        gate: "No placeholders; publicEvidenceVerified and approvalToImport must be true.",
+        gate: "No placeholders; publicEvidenceVerified, approvalToImport and approvedByRobert must be true.",
         apiAction: "/api/revenue-engine/daily-scout-sprint/submit",
       },
       {
@@ -6913,6 +6916,7 @@ function parseRevenuePublicScoutEvidence(input: RevenuePublicScoutEvidenceInput)
       verificationStatus: parsed.verificationStatus,
       publicEvidenceVerified: parsed.publicEvidenceVerified,
       approvalToImport: parsed.approvalToImport,
+      approvedByRobert: parsed.approvedByRobert,
       notes: parsed.notes || "Normalized from public scouting evidence intake.",
     };
     const placeholderFields = revenuePlaceholderFieldNames(candidate);
@@ -6939,6 +6943,7 @@ export function recordRevenuePublicLeadCandidate(input: RevenuePublicLeadCandida
     parsed.verificationStatus === "blocked" && "candidate blocked by scout",
     !parsed.publicEvidenceVerified && "public evidence not verified",
     !parsed.approvalToImport && "approvalToImport false",
+    parsed.approvalToImport && !parsed.approvedByRobert && "approvedByRobert false",
     parsed.sourceUrl.trim().length === 0 && "sourceUrl publico",
     parsed.sourceUrl.trim().length > 0 && !isRevenuePublicSourceUrl(parsed.sourceUrl) && "sourceUrl must be public",
     parsed.sourceUrl.trim().length > 0 && isRevenuePublicSourceUrl(parsed.sourceUrl) && !revenueSourceUrlMatchesCandidate(parsed) && "sourceUrl must match business/contact evidence",
@@ -7009,6 +7014,7 @@ export function recordRevenuePublicLeadCandidateBatch(input: RevenuePublicLeadCa
       verificationStatus: parsed.verificationStatus,
       publicEvidenceVerified: parsed.publicEvidenceVerified,
       approvalToImport: parsed.approvalToImport,
+      approvedByRobert: parsed.approvedByRobert,
       notes: parsed.notes || "Recorded from public candidate batch.",
     }));
   }
@@ -7094,6 +7100,7 @@ export function approveRevenuePublicLeadCandidate(input: RevenuePublicLeadCandid
     verificationStatus: "verified_public",
     publicEvidenceVerified: parsed.publicEvidenceVerified,
     approvalToImport: parsed.approvalToImport,
+    approvedByRobert: parsed.approvedByRobert,
     notes: parsed.notes,
   });
 
@@ -7129,7 +7136,7 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
     area: parsed.area,
     niche: parsed.niche,
     filledCount: importReadyCount,
-    rejectedCount: parsed.publicEvidenceVerified && parsed.approvalToImport ? blockedCount : 0,
+    rejectedCount: parsed.publicEvidenceVerified && parsed.approvalToImport && parsed.approvedByRobert ? blockedCount : 0,
   });
 
   return {
@@ -7139,7 +7146,7 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
         ? "needs_review" as const
         : "empty" as const,
     normalizedBatchText: [
-      parsed.publicEvidenceVerified && parsed.approvalToImport
+      parsed.publicEvidenceVerified && parsed.approvalToImport && parsed.approvedByRobert
         ? "# public_candidate_review_gate=approved"
         : "# public_candidate_review_gate=needs_review",
       "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
@@ -7171,14 +7178,15 @@ export function recordRevenuePublicScoutEvidence(input: RevenuePublicScoutEviden
       spendsMoney: false,
       writesPreviewFiles: false,
       requiresPublicEvidence: true,
+      requiresRobertApprovalToImport: true,
       source: "operator_or_subagent_public_evidence",
       blockedActions: ["automated scraping", "send outreach", "buy data", "publish preview", "deploy website"],
     },
     nextAction: uniqueRecorded.some((item) => item.candidate.importReady)
       ? "Run Money Sprint with verified public candidates; do not contact until outreach approval."
-      : parsed.publicEvidenceVerified && parsed.approvalToImport
+      : parsed.publicEvidenceVerified && parsed.approvalToImport && parsed.approvedByRobert
         ? "Fix blocked evidence fields before Money Sprint."
-        : "Review normalized candidates, verify public evidence, then approve import.",
+        : "Review normalized candidates, verify public evidence, then Robert must explicitly approve import.",
     snapshot: getRevenueEngineSnapshot(),
   };
 }
@@ -7223,6 +7231,7 @@ export function recordRevenueVerifiedScoutConnectorResults(input: RevenueVerifie
     verificationStatus: "needs_review",
     publicEvidenceVerified: false,
     approvalToImport: false,
+    approvedByRobert: false,
     defaultOfferUsd: 3500,
     maxCandidates: parsed.results.length,
     notes,
@@ -7461,6 +7470,7 @@ function buildRevenuePublicCandidateRepairPacket(candidate: RevenuePublicLeadCan
     verificationStatus: "verified_public",
     publicEvidenceVerified: true,
     approvalToImport: true,
+    approvedByRobert: true,
     notes: "Repair blocked candidate after Robert verifies public evidence.",
   };
   const repairBatchRow = revenueCandidateBatchRow(safeCandidate);
@@ -10709,7 +10719,7 @@ function buildRevenueScoutWorkPack(input: RevenueMoneySprintInput, scoutQueue: R
     "- Use public research only.",
     "- Do not contact businesses before Robert approval.",
     "- Do not buy data, scrape at scale, publish previews or deploy.",
-    "- Do not import placeholders; every row needs public evidence and approvalToImport.",
+    "- Do not import placeholders; every row needs public evidence, approvalToImport and explicit Robert approval.",
   ].join("\n");
 
   return {

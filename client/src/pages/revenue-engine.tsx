@@ -3482,6 +3482,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
         }),
       });
       const data = await response.json();
@@ -3530,6 +3531,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
           notes: "Recorded from Revenue Engine batch candidates UI.",
         }),
       });
@@ -3558,6 +3560,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
           maxCandidates: Math.min(activeScoutTarget, 50),
           notes: "Normalized from Revenue Engine public scout evidence UI.",
@@ -3610,6 +3613,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
+          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
           maxCandidates: Math.min(activeScoutTarget, 50),
           dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
