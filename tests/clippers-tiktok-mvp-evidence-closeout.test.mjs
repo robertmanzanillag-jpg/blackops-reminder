@@ -1094,6 +1094,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /blocked_secret_like/);
   assert.match(page, /tiktokMvpProofLinksDropStatus\.status === "blocked_secret_like"/);
   assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| tiktokMvpProofLinksDropStatus\?\.status === "blocked_secret_like"\}/);
+  assert.match(page, /requiredFastPathPasteLines/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-drop-required-lines/);
   assert.match(page, /tiktokMvpProofLinksDropImport: data\.tiktokMvpProofLinksDropImport/);
   assert.match(page, /tiktokMvpProofLinksDropStatus: data\.tiktokMvpProofLinksDropStatus/);
   assert.match(page, /tiktokMvpProofLinksDropImport\?: ClipperTikTokMvpProofLinksDropImportSummary/);
@@ -3068,6 +3070,10 @@ test("TikTok MVP proof drop starter route blocks secret-like existing drops with
     assert.equal(body.tiktokMvpProofLinksDropStatus.rawStored, false);
     assert.equal(body.tiktokMvpProofLinksDropStatus.unsafeBlocked, true);
     assert.equal(body.tiktokMvpProofLinksDropStatus.nextButton, "edit_drop_file");
+    assert.deepEqual(body.tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines, [
+      "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=",
+    ]);
     assert.match(body.tiktokMvpProofLinksDropStatus.nextStep, /Remove passwords, tokens, cookies, keys/);
     assert.doesNotMatch(
       JSON.stringify(body),
@@ -3134,6 +3140,10 @@ test("TikTok MVP proof drop import and ingest block secret-like drops before par
       assert.equal(body.tiktokMvpProofLinksDropStatus.status, "blocked_secret_like", endpoint);
       assert.equal(body.tiktokMvpProofLinksDropStatus.rawStored, false, endpoint);
       assert.equal(body.tiktokMvpProofLinksDropStatus.unsafeBlocked, true, endpoint);
+      assert.deepEqual(body.tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines, [
+        "sports-daily:tiktok.metricoolConnectionProofUrl=",
+        "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      ], endpoint);
       assert.equal("proofLinksText" in body[key], false, endpoint);
       assert.equal("proofLinksPreview" in body[key], false, endpoint);
       assert.equal("tiktokMvpProofLinksPastePreview" in body, false, endpoint);

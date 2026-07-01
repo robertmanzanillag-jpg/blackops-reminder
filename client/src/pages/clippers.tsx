@@ -2798,6 +2798,7 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
   bytes: number;
   extractedUrls: number;
   unsafeBlocked?: boolean;
+  requiredFastPathPasteLines?: string[];
   checklist: Array<{
     laneKey: string;
     accountName: string;
@@ -19152,6 +19153,15 @@ export default function ClippersPage() {
                       </div>
                       <p className="mt-1 break-all">{tiktokMvpProofLinksDropStatus.sourcePath}</p>
                       <p className="mt-1">{tiktokMvpProofLinksDropStatus.issues[0] || tiktokMvpProofLinksDropStatus.nextStep}</p>
+                      {(tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines ?? []).length > 0 && (
+                        <div className="mt-2 grid gap-1" data-testid="clippers-tiktok-mvp-proof-links-drop-required-lines">
+                          {tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines!.map((line) => (
+                            <code key={line} className="rounded border border-cyan-300/10 bg-black/30 px-2 py-1 text-[10px] text-cyan-100">
+                              {line}
+                            </code>
+                          ))}
+                        </div>
+                      )}
                       <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="clippers-tiktok-mvp-proof-links-drop-checklist">
                         {tiktokMvpProofLinksDropStatus.checklist.map((item) => (
                           <div key={`${item.laneKey}-${item.field}`} className="rounded border border-white/10 bg-black/20 p-2">

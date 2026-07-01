@@ -623,6 +623,10 @@ const clipperTikTokMvpProofLinksDropPastePaths = [
   "clippers_workspace/proof-drop/tiktok-mvp/proof-links-paste-packet.txt",
 ] as const;
 const clipperTikTokMvpProofLinksFilledDropPath = clipperTikTokMvpProofLinksDropPastePaths[0];
+const clipperTikTokMvpProofLinksFastPathPasteLines = [
+  "sports-daily:tiktok.metricoolConnectionProofUrl=",
+  "meme-radar:tiktok.metricoolConnectionProofUrl=",
+];
 
 async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: string; pasteText: string; bytes: number }> {
   for (const sourcePath of clipperTikTokMvpProofLinksDropPastePaths) {
@@ -676,6 +680,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
         bytes: drop.bytes,
         extractedUrls: 0,
         unsafeBlocked: true,
+        requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
         checklist: emptyChecklist,
         checklistTotals: { ready: 0, total: emptyChecklist.length, missing: emptyChecklist.length },
         nextButton: "edit_drop_file",
@@ -739,6 +744,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       bytes: drop.bytes,
       extractedUrls: parsedPreview.extractedUrls,
       unsafeBlocked: false,
+      requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
       checklist,
       checklistTotals: {
         ready: readyChecklistItems,
@@ -769,6 +775,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       bytes: 0,
       extractedUrls: 0,
       unsafeBlocked: false,
+      requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
       checklist: [
         "sports-daily:tiktok.accountOwnershipProofUrl",
         "sports-daily:tiktok.metricoolConnectionProofUrl",
