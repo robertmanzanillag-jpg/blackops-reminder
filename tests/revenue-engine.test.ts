@@ -3942,6 +3942,125 @@ test("website sales packet queue keeps older ready packages visible", () => {
   assert.equal(snapshot.dailyMoneyCommand.funnel.salesPacketsReady, 12);
 });
 
+test("public scout evidence reaches PR-first website delivery handoff", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  const publicEvidence = recordRevenuePublicScoutEvidence({
+    area: "Miami",
+    niche: "coffee shop",
+    evidenceText: [
+      "Business: Public Path Cafe",
+      "Area: Miami",
+      "Niche: coffee shop",
+      "Website: no website",
+      "Contact: owner@publicpath.example",
+      "Email: owner@publicpath.example",
+      "Source: https://example.com/public-path-cafe",
+      "Evidence: Public listing has no dedicated website, recent menu photos and a verified owner email contact path.",
+      "Pain: Needs online menu, catering inquiry capture and automated follow-up.",
+    ].join("\n"),
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    approvedByRobert: true,
+    defaultOfferUsd: 4200,
+    maxCandidates: 1,
+  });
+  const candidate = publicEvidence.recorded[0]?.candidate;
+  assert.equal(publicEvidence.status, "ready_for_preview");
+  assert.ok(candidate);
+
+  const publicSprint = runRevenueMoneySprintFromPublicCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    candidateIds: [candidate.id],
+    maxCandidates: 1,
+  });
+  assert.equal(publicSprint.status, "started");
+  assert.deepEqual(publicSprint.importedCandidateIds, [candidate.id]);
+  assert.equal(publicSprint.safety.sendsOutreach, false);
+
+  const publicLead = publicSprint.sprint?.recordedLeads[0]?.lead;
+  const publicDraft = publicSprint.sprint?.outreachDrafts[0];
+  const publicPreview = publicSprint.sprint?.previews[0];
+  assert.ok(publicLead);
+  assert.ok(publicDraft);
+  assert.ok(publicPreview);
+  assert.equal(publicDraft.delivery.sendStatus, "not_sent");
+
+  const publicApproval = approveRevenueOutreachDraft({
+    draftId: publicDraft.id,
+    approvedByRobert: true,
+    notes: "Robert approved manual follow-up after public scout review.",
+  });
+  assert.equal(publicApproval.status, "approved");
+
+  const publicOpportunity = sellWebsiteOpportunityForTest({
+    leadId: publicLead.id,
+    outreachDraftId: publicDraft.id,
+    projectType: "website",
+    cashCollectedUsd: publicDraft.pricing.depositUsd,
+  });
+  assert.equal(publicOpportunity.status, "sold");
+
+  const publicHandoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: publicLead.id,
+    outreachDraftId: publicDraft.id,
+    websiteOpportunityId: publicOpportunity.id,
+    mockupUrl: publicPreview.previewUrl,
+    projectType: "website",
+    repoFullName: "robert/public-path-cafe",
+    branchName: "codex/client-public-path-cafe-website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: publicDraft.pricing.depositUsd,
+    publicDataVerified: true,
+    visualQaPassed: false,
+    technicalQaPassed: false,
+    automationQaPassed: true,
+    clientHandoffReady: false,
+    notes: "Public scout path created a sold website workspace for PR-first build.",
+  });
+
+  assert.equal(publicHandoff.status, "created");
+  assert.equal(publicHandoff.workspace?.input.sourceLeadId, publicLead.id);
+  assert.equal(publicHandoff.workspace?.input.sourceOpportunityId, publicOpportunity.id);
+  assert.equal(publicHandoff.workspace?.input.repoFullName, "robert/public-path-cafe");
+  assert.equal(publicHandoff.workspace?.input.branchName, "codex/client-public-path-cafe-website");
+  assert.equal(publicHandoff.workspace?.input.sourceUrl, "https://example.com/public-path-cafe");
+  assert.equal(publicHandoff.workspace?.input.mockupUrl, publicPreview.previewUrl);
+  assert.equal(publicHandoff.workspace?.codexBuildHandoff.status, "needs_pr");
+  assert.match(publicHandoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /PR-first client build handoff/);
+  assert.match(publicHandoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Target branch: codex\/client-public-path-cafe-website/);
+  assert.match(publicHandoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Public source: https:\/\/example\.com\/public-path-cafe/);
+  assert.equal(publicHandoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
+  const publicSurfaces = [
+    publicHandoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "",
+    publicHandoff.workspace?.codexBuildHandoff.publicBuildBrief || "",
+    publicHandoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "",
+    publicHandoff.snapshot.websiteBuildHandoffQueue.items[0]?.publicBuildBrief || "",
+    publicHandoff.snapshot.websiteBuildHandoffQueue.items[0]?.buildPack.copyableBuildPack || "",
+  ];
+  for (const surface of publicSurfaces) {
+    assert.match(surface, /Public Path Cafe/);
+    assert.match(surface, /codex\/client-public-path-cafe-website/);
+    assert.doesNotMatch(surface, /Deposit paid:|Setup: \$|Retainer:|Cash collected|Stripe|pi_test/i);
+  }
+  assert.equal(publicHandoff.snapshot.dailyMoneyCommand.status, "build");
+  assert.equal(publicHandoff.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/delivery-workspaces/github-handoff");
+  assert.equal(publicHandoff.snapshot.recentLedger.some((entry) => entry.kind === "website_sale" && entry.clientName === "Public Path Cafe"), true);
+  assert.equal(publicHandoff.snapshot.publicLeadImportQueue.readyCount, 0);
+  assert.equal(publicHandoff.snapshot.recentOutreach.some((draft) => draft.id === publicDraft.id && draft.delivery.outcome === "deposit_collected"), true);
+});
+
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
 
