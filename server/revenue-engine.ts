@@ -838,12 +838,14 @@ type RevenueWebsiteSalesPacketQueue = {
     monthlyRetainerUsd: number;
     primaryOffer: string;
     copyableSalesPacket: string;
+    copyableOpportunityRequest: string;
     closePlan: {
       requiredDepositUsd: number;
       paymentEvidenceRequired: string[];
       scopeApprovalRequired: true;
       nextCloseAction: string;
       copyableClosePacket: string;
+      copyableCloseRequest: string;
       blockedActions: string[];
     };
     readiness: string[];
@@ -4577,6 +4579,12 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
     }
 
     const primaryOffer = draft.automationPriceUsd > 0 ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium";
+    const opportunityRequest = {
+      leadId: lead.id,
+      outreachDraftId: draft.id,
+      projectType: primaryOffer.includes("Automation") ? "bundle" as const : "website" as const,
+      notes: `Quoted from Revenue Engine website sales packet for ${lead.businessName}; do not close or build until deposit and scope evidence are recorded.`,
+    };
     const readiness = [
       `Grade ${qualification.grade}/${qualification.score}`,
       "mockup preview listo",
@@ -4595,6 +4603,14 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       nextCloseAction: draft.status === "approved"
         ? `Contactar manualmente, pedir aprobacion de scope y cobrar deposito de $${draft.pricing.depositUsd.toLocaleString("en-US")} antes de delivery.`
         : "Aprobar draft con Robert antes de contacto; luego pedir scope y deposito.",
+      copyableCloseRequest: JSON.stringify({
+        opportunityId: "REPLACE_WITH_CREATED_WEBSITE_OPPORTUNITY_ID",
+        depositPaid: true,
+        scopeApproved: true,
+        cashCollectedUsd: "REPLACE_WITH_VERIFIED_CASH_AMOUNT_AT_LEAST_DEPOSIT",
+        paymentConfirmation: "REPLACE_WITH_STRIPE_INVOICE_BANK_OR_RECEIPT_REFERENCE",
+        notes: `Close ${lead.businessName} only after manual deposit and scope approval are verified.`,
+      }, null, 2),
       blockedActions: [
         "auto-send outreach",
         "mark sold without deposit payment evidence",
@@ -4624,6 +4640,16 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
         "- cashCollectedUsd must be at least the required deposit",
         "- scopeApproved must be true before delivery workspace",
         "",
+        "Copyable close request:",
+        JSON.stringify({
+          opportunityId: "REPLACE_WITH_CREATED_WEBSITE_OPPORTUNITY_ID",
+          depositPaid: true,
+          scopeApproved: true,
+          cashCollectedUsd: "REPLACE_WITH_VERIFIED_CASH_AMOUNT_AT_LEAST_DEPOSIT",
+          paymentConfirmation: "REPLACE_WITH_STRIPE_INVOICE_BANK_OR_RECEIPT_REFERENCE",
+          notes: `Close ${lead.businessName} only after manual deposit and scope approval are verified.`,
+        }, null, 2),
+        "",
         "Guardrails:",
         "- Do not mark sold without deposit payment evidence.",
         "- Do not create delivery workspace before scope and deposit.",
@@ -4642,6 +4668,9 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       `Setup: $${draft.pricing.totalSetupUsd.toLocaleString("en-US")} | Deposito: $${draft.pricing.depositUsd.toLocaleString("en-US")} | Retainer: $${draft.pricing.monthlyRetainerUsd.toLocaleString("en-US")}/mo`,
       `Close next action: ${closePlan.nextCloseAction}`,
       `Subject: ${draft.subject}`,
+      "",
+      "Copyable opportunity request:",
+      JSON.stringify(opportunityRequest, null, 2),
       "",
       draft.body,
       "",
@@ -4668,6 +4697,7 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       monthlyRetainerUsd: draft.pricing.monthlyRetainerUsd,
       primaryOffer,
       copyableSalesPacket,
+      copyableOpportunityRequest: JSON.stringify(opportunityRequest, null, 2),
       closePlan,
       readiness,
       nextAction:

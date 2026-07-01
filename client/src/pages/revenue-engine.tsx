@@ -412,12 +412,14 @@ type RevenueSnapshot = {
       monthlyRetainerUsd: number;
       primaryOffer: string;
       copyableSalesPacket: string;
+      copyableOpportunityRequest: string;
       closePlan: {
         requiredDepositUsd: number;
         paymentEvidenceRequired: string[];
         scopeApprovalRequired: true;
         nextCloseAction: string;
         copyableClosePacket: string;
+        copyableCloseRequest: string;
         blockedActions: string[];
       };
       readiness: string[];
@@ -6583,6 +6585,28 @@ export default function RevenueEnginePage() {
                             >
                               <Copy className="mr-2 h-4 w-4" />
                               Copy close
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700"
+                              onClick={() => navigator.clipboard.writeText(item.copyableOpportunityRequest)}
+                              data-testid={`button-copy-website-opportunity-request-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy opp JSON
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-700 text-emerald-100"
+                              onClick={() => navigator.clipboard.writeText(item.closePlan.copyableCloseRequest)}
+                              data-testid={`button-copy-website-close-request-${item.leadId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy close JSON
                             </Button>
                             <Button
                               type="button"

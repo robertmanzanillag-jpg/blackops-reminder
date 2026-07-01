@@ -195,7 +195,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /button-create-website-opportunity-/);
   assert.match(uiSource, /panel-website-close-plan-/);
   assert.match(uiSource, /button-copy-website-close-plan-/);
+  assert.match(uiSource, /button-copy-website-opportunity-request-/);
+  assert.match(uiSource, /button-copy-website-close-request-/);
+  assert.match(uiSource, /copyableOpportunityRequest/);
   assert.match(uiSource, /closePlan\.copyableClosePacket/);
+  assert.match(uiSource, /closePlan\.copyableCloseRequest/);
   assert.match(uiSource, /closePlan\.paymentEvidenceRequired/);
   assert.match(uiSource, /disabled=\{item\.draftStatus !== "approved"\}/);
   assert.match(uiSource, /button-approve-website-sales-draft-/);

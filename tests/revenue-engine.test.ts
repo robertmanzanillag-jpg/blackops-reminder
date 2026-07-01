@@ -4140,12 +4140,32 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Handoff Cafe/);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Deposito:/);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Close next action:/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableSalesPacket, /Copyable opportunity request/);
+  const opportunityRequest = JSON.parse(preHandoffSnapshot.websiteSalesPacketQueue.items[0].copyableOpportunityRequest);
+  assert.equal(opportunityRequest.leadId, lead.id);
+  assert.equal(opportunityRequest.outreachDraftId, draft.id);
+  assert.equal(opportunityRequest.projectType, "bundle");
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.requiredDepositUsd, draft.pricing.depositUsd);
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.scopeApprovalRequired, true);
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.paymentEvidenceRequired.some((item) => item.includes("Stripe payment id")), true);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /Website close packet: Handoff Cafe/);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /approved_for_manual_contact/);
   assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /Do not mark sold without deposit payment evidence/);
+  assert.match(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableClosePacket, /Copyable close request/);
+  const closeRequest = JSON.parse(preHandoffSnapshot.websiteSalesPacketQueue.items[0].closePlan.copyableCloseRequest);
+  assert.equal(closeRequest.depositPaid, true);
+  assert.equal(closeRequest.scopeApproved, true);
+  assert.match(closeRequest.paymentConfirmation, /REPLACE_WITH/);
+  const placeholderOpportunity = recordRevenueWebsiteOpportunity(opportunityRequest);
+  assert.equal(placeholderOpportunity.status, "quoted");
+  const placeholderClose = closeRevenueWebsiteOpportunity({
+    ...closeRequest,
+    opportunityId: placeholderOpportunity.opportunity!.id,
+    cashCollectedUsd: draft.pricing.depositUsd,
+  });
+  assert.equal(placeholderClose.status, "blocked");
+  assert.equal(placeholderClose.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.match(placeholderClose.reason, /payment evidence|referencia de pago|deposit/i);
   assert.equal(preHandoffSnapshot.websiteSalesPacketQueue.safety.sendsOutreach, false);
 
   const opportunity = sellWebsiteOpportunityForTest({
