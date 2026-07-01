@@ -615,6 +615,7 @@ type RevenueSnapshot = {
       codexBrief: string;
       publicBuildBrief: string;
       copyableGithubHandoffRequest: string;
+      copyableReleaseGateRequest: string;
       buildPack: {
         sections: string[];
         assets: string[];
@@ -2101,6 +2102,28 @@ function buildCopyableGithubHandoffRequest(workspaceId: string, repoFullName: st
     workspaceId,
     ...(isGithubRepoFullName(trimmedRepoFullName) ? { repoFullName: trimmedRepoFullName } : {}),
     ...(isCodexBranchName(trimmedBranchName) ? { branchName: trimmedBranchName } : {}),
+  }, null, 2);
+}
+
+function buildCopyableReleaseGateRequest(
+  workspace: RevenueSnapshot["recentDeliveryWorkspaces"][number],
+  releaseGateInput: Required<DeliveryWorkspaceReleaseGateInput>,
+) {
+  const branchName = workspace.input.branchName || workspace.codexBuildHandoff.branchName;
+  return JSON.stringify({
+    workspaceId: workspace.id,
+    repoFullName: workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName,
+    branchName,
+    githubIssueUrl: workspace.input.githubIssueUrl || workspace.codexBuildHandoff.githubIssueUrl,
+    prUrl: releaseGateInput.prUrl,
+    secondReviewStatus: releaseGateInput.secondReviewPassed ? "pass" : workspace.input.secondReviewStatus,
+    secondReviewEvidenceUrl: releaseGateInput.secondReviewEvidenceUrl,
+    appQaStatus: releaseGateInput.appQaPassed ? "pass" : workspace.input.appQaStatus,
+    appQaEvidenceUrl: releaseGateInput.appQaEvidenceUrl,
+    deploymentApprovalStatus: releaseGateInput.robertApprovedDeploy ? "approved" : workspace.input.deploymentApprovalStatus,
+    deploymentApprovalUrl: releaseGateInput.deploymentApprovalUrl,
+    releaseGateHeadSha: workspace.input.releaseGateHeadSha || workspace.codexBuildHandoff.releaseGateHeadSha,
+    notes: `Robert release gate from Revenue Engine for workspace ${workspace.id}, branch ${branchName}, client ${workspace.input.clientName}. second review=${releaseGateInput.secondReviewPassed ? "pass" : "pending"} app qa=${releaseGateInput.appQaPassed ? "pass" : "pending"} Robert approval=${releaseGateInput.robertApprovedDeploy ? "approved" : "pending"}.`,
   }, null, 2);
 }
 
@@ -5681,6 +5704,17 @@ export default function RevenueEnginePage() {
                           >
                             <Copy className="mr-2 h-4 w-4" />
                             Copy handoff JSON
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-indigo-500/30 text-indigo-100"
+                            onClick={() => navigator.clipboard.writeText(item.copyableReleaseGateRequest)}
+                            data-testid={`button-copy-website-release-gate-request-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy release JSON
                           </Button>
                           {item.githubIssueUrl && (
                             <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
@@ -9357,6 +9391,17 @@ export default function RevenueEnginePage() {
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy handoff JSON
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-indigo-500/30 text-indigo-100"
+                                    onClick={() => navigator.clipboard.writeText(buildCopyableReleaseGateRequest(workspace, releaseGateInput))}
+                                    data-testid={`button-copy-release-gate-request-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy release JSON
                                   </Button>
                                   <Button
                                     type="button"

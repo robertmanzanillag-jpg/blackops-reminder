@@ -56,6 +56,7 @@ import {
   revenueWebsiteOpportunityCloseSchema,
   revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
+  revenueDeliveryWorkspaceUpdateSchema,
   approveRevenueOutreachDraft,
   deliverRevenueDeliveryWorkspaceFromTrustedApproval,
   runRevenueDailyScoutSprint,
@@ -4405,6 +4406,18 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(githubHandoffRequest.workspaceId, handoff.workspace?.id);
   assert.equal(githubHandoffRequest.repoFullName, "robert/handoff-cafe");
   assert.equal(githubHandoffRequest.branchName, "codex/client-handoff-cafe-website");
+  const releaseGateRequest = revenueDeliveryWorkspaceUpdateSchema.parse(
+    JSON.parse(handoff.snapshot.websiteBuildHandoffQueue.items[0].copyableReleaseGateRequest)
+  );
+  assert.equal(releaseGateRequest.workspaceId, handoff.workspace?.id);
+  assert.equal(releaseGateRequest.repoFullName, "robert/handoff-cafe");
+  assert.equal(releaseGateRequest.branchName, "codex/client-handoff-cafe-website");
+  assert.equal(releaseGateRequest.prUrl, "");
+  assert.equal(releaseGateRequest.secondReviewStatus, "pending");
+  assert.equal(releaseGateRequest.appQaStatus, "pending");
+  assert.equal(releaseGateRequest.deploymentApprovalStatus, "not_requested");
+  assert.equal(releaseGateRequest.releaseGateHeadSha, "");
+  assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].copyableReleaseGateRequest, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|paymentConfirmation|Operator notes|Client said yes/);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].buildPack.copyableBuildPack.includes("Implementation rules"), true);
   assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].publicBuildBrief, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|Operator notes|Client said yes/);
   assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].buildPack.copyableBuildPack, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|Operator notes|Client said yes/);

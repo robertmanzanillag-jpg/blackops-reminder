@@ -997,6 +997,7 @@ type RevenueWebsiteBuildHandoffQueue = {
     codexBrief: string;
     publicBuildBrief: string;
     copyableGithubHandoffRequest: string;
+    copyableReleaseGateRequest: string;
     buildPack: {
       sections: string[];
       assets: string[];
@@ -1782,6 +1783,32 @@ function buildRevenueGithubHandoffRequest(workspace: RevenueDeliveryWorkspace) {
     workspaceId: workspace.id,
     ...(isRevenueGithubRepoFullName(repoFullName) ? { repoFullName } : {}),
     ...(isRevenueCodexBranchName(branchName) ? { branchName } : {}),
+  }, null, 2);
+}
+
+function buildRevenueReleaseGateRequest(workspace: RevenueDeliveryWorkspace) {
+  const handoff = workspace.codexBuildHandoff;
+  return JSON.stringify({
+    workspaceId: workspace.id,
+    repoFullName: handoff.repoFullName,
+    branchName: handoff.branchName,
+    githubIssueUrl: handoff.githubIssueUrl,
+    prUrl: handoff.prUrl,
+    secondReviewStatus: handoff.secondReviewStatus,
+    secondReviewEvidenceUrl: handoff.secondReviewEvidenceUrl,
+    appQaStatus: handoff.appQaStatus,
+    appQaEvidenceUrl: handoff.appQaEvidenceUrl,
+    deploymentApprovalStatus: handoff.deploymentApprovalStatus,
+    deploymentApprovalUrl: handoff.deploymentApprovalUrl,
+    releaseGateHeadSha: handoff.releaseGateHeadSha,
+    notes: [
+      `Robert release gate from Revenue Engine for workspace ${workspace.id}.`,
+      `Client ${workspace.input.clientName}.`,
+      `Branch ${handoff.branchName}.`,
+      `second review=${handoff.secondReviewStatus}.`,
+      `app qa=${handoff.appQaStatus}.`,
+      `Robert approval=${handoff.deploymentApprovalStatus}.`,
+    ].join(" "),
   }, null, 2);
 }
 
@@ -5005,6 +5032,7 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const items: RevenueWebsiteBuildHandoffQueue["items"] = openWorkspaces.slice(0, visibleLimit).map((workspace) => {
     const copyableGithubHandoffRequest = buildRevenueGithubHandoffRequest(workspace);
+    const copyableReleaseGateRequest = buildRevenueReleaseGateRequest(workspace);
     return {
       workspaceId: workspace.id,
       clientName: workspace.input.clientName,
@@ -5018,6 +5046,7 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
       codexBrief: workspace.codexBuildHandoff.codexBrief,
       publicBuildBrief: workspace.codexBuildHandoff.publicBuildBrief,
       copyableGithubHandoffRequest,
+      copyableReleaseGateRequest,
       buildPack: workspace.codexBuildHandoff.buildPack,
       missing: workspace.codexBuildHandoff.missing,
       blockedActions: workspace.codexBuildHandoff.blockedActions,
