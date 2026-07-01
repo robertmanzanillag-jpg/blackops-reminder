@@ -21,7 +21,7 @@ const rules = [
     weeklyEvidenceFile: "owned-weekly-backlog-production-notes-v2.md",
     weeklyStartsAt: 12,
     accountLabel: "Sports Daily",
-    restrictions: "no league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, or platform-private material",
+    restrictions: "no third-party footage, raw footage, league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, scraped highlights, or platform-private material",
   },
   {
     category: "memes",
@@ -30,7 +30,7 @@ const rules = [
     weeklyEvidenceFile: "owned-weekly-backlog-production-notes.md",
     weeklyStartsAt: 15,
     accountLabel: "Meme Radar",
-    restrictions: "no third-party footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, or platform-private material",
+    restrictions: "no third-party footage, raw footage, creator clips, sports broadcasts, streamer clips, licensed music, watermarked reposts, or platform-private material",
   },
   {
     category: "streamers",
@@ -94,11 +94,31 @@ async function validateAllowlistFile(fileName, audit = null) {
   if (audit) {
     if (!content.includes(`asset_id: owned-source:${audit.category}:${audit.fileName}`)) return `${allowlistPath} does not match asset_id ${audit.fileName}`;
     if (!content.includes(`source_path: ${path.join(sourceDropDir, audit.category, audit.fileName)}`)) return `${allowlistPath} does not match source_path ${audit.fileName}`;
-    if (!content.includes(`owner note path ${audit.evidencePath}`)) return `${allowlistPath} points to a stale evidence path`;
+    if (!content.includes(`owner note path ${audit.evidencePath}`)) {
+      const coreProblem = validateAllowlistCoreContent(content, allowlistPath, audit);
+      if (coreProblem) return coreProblem;
+    }
   }
   if (!/Metricool approval_required/i.test(content)) return `${allowlistPath} does not preserve approval_required guardrail`;
   if (/realPublishEnabled:\s*true|ready_to_send|autopublish/i.test(content)) return `${allowlistPath} contains unsafe publish wording`;
   return null;
+}
+
+function validateAllowlistCoreContent(content, allowlistPath, audit) {
+  if (!/status:\s*owned_or_permissioned/i.test(content)) return `${allowlistPath} is not owned_or_permissioned`;
+  if (!content.includes(`asset_id: owned-source:${audit.category}:${audit.fileName}`)) return `${allowlistPath} does not match asset_id ${audit.fileName}`;
+  if (!content.includes(`source_path: ${path.join(sourceDropDir, audit.category, audit.fileName)}`)) return `${allowlistPath} does not match source_path ${audit.fileName}`;
+  if (!/Owned source generated locally|Permission, ownership, license, or creator approval was confirmed/i.test(content)) return `${allowlistPath} does not contain usable owned-source proof`;
+  if (!/Metricool approval_required/i.test(content)) return `${allowlistPath} does not preserve approval_required guardrail`;
+  if (/realPublishEnabled:\s*true|ready_to_send|autopublish/i.test(content)) return `${allowlistPath} contains unsafe publish wording`;
+  return null;
+}
+
+async function validateAllowlistCoreEvidence(fileName, audit) {
+  const allowlistPath = allowlistPathFor(fileName);
+  const evidence = await readTextFileWithTimeout(allowlistPath);
+  if (evidence.error) return `${allowlistPath} could not be read: ${evidence.error}`;
+  return validateAllowlistCoreContent(evidence.content, allowlistPath, audit);
 }
 
 async function readMetricoolPublishGuard() {
@@ -114,8 +134,8 @@ async function readMetricoolPublishGuard() {
     if (parsed?.publishMode !== "approval_required") {
       throw new Error("Metricool publishMode is not explicitly approval_required.");
     }
-    if (parsed?.status !== "approval_required") {
-      throw new Error("Metricool queue status is not explicitly approval_required.");
+    if (parsed?.status !== "approval_required" && parsed?.status !== "blocked") {
+      throw new Error("Metricool queue status must be approval_required or blocked behind safe source readiness.");
     }
     if ((parsed?.totals?.readyToSend || 0) !== 0) {
       throw new Error("Metricool queue has readyToSend items; approval_required guard is not safe.");
@@ -332,9 +352,13 @@ async function scanOwnedSourceDropFiles() {
         manifestEvidencePath,
         evidencePath,
       };
+      let evidenceProblem = await validateEvidenceFile(audit);
+      if (evidenceProblem && await allowlistExists(fileName) && !await validateAllowlistCoreEvidence(fileName, audit)) {
+        evidenceProblem = null;
+      }
       audits.push({
         ...audit,
-        evidenceProblem: await validateEvidenceFile(audit),
+        evidenceProblem,
         mediaProblem: await validateSourceMediaFile(audit),
       });
     }

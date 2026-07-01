@@ -212,6 +212,8 @@ function buildRepairQueue(
     };
     return {
       ...repairItem,
+      priority: repairPriority(repairItem),
+      priorityLabel: repairPriorityLabel(repairItem),
       csvRowTemplate: buildNextRepairCsvRowTemplate(repairItem),
     };
   });
@@ -250,6 +252,30 @@ function buildNextRepairCsvRowTemplate(firstRepair: Record<string, unknown> | nu
   ].map(csvCell).join(",");
 }
 
+function repairPriority(row: Record<string, unknown>): number {
+  const platform = String(row.platform || "").toLowerCase();
+  const lane = String(row.lane || "").toLowerCase();
+  const platformRank: Record<string, number> = {
+    tiktok: 0,
+    instagram: 1,
+    youtube: 2,
+    twitch: 3,
+  };
+  const laneRank: Record<string, number> = {
+    account: 0,
+    developer_app: 1,
+    permission: 2,
+  };
+  return (platformRank[platform] ?? 9) * 10 + (laneRank[lane] ?? 9);
+}
+
+function repairPriorityLabel(row: Record<string, unknown>): string {
+  const platform = String(row.platform || "").toLowerCase();
+  if (platform === "tiktok") return "TikTok first";
+  if (platform === "instagram" || platform === "youtube" || platform === "twitch") return "Deferred platform";
+  return "Later";
+}
+
 function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Record<string, unknown>[]): Record<string, unknown> {
   const byKind = new Map<string, number>();
   const byReason = new Map<string, number>();
@@ -273,10 +299,15 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
   const missingFieldRows = Array.from(missingFields.entries())
     .map(([field, count]) => ({ field, count }))
     .sort((left, right) => right.count - left.count || left.field.localeCompare(right.field));
-  const firstRepair = repairQueue[0] || null;
+  const prioritizedRepairQueue = [...repairQueue].sort((left, right) =>
+    repairPriority(left) - repairPriority(right) ||
+    Number(left.csvRow || 0) - Number(right.csvRow || 0) ||
+    String(left.closeoutId || "").localeCompare(String(right.closeoutId || "")));
+  const firstRepair = prioritizedRepairQueue[0] || null;
   const nextRepairCsvRowTemplate = buildNextRepairCsvRowTemplate(firstRepair);
   const nextRepairPacket = firstRepair ? [
     `Next evidence repair: ${firstRepair.closeoutId || firstRepair.lane || "external evidence"}`,
+    `Priority: ${repairPriorityLabel(firstRepair)}`,
     `CSV row: ${firstRepair.csvRow || "?"}`,
     `Lane: ${firstRepair.lane || "unknown"}`,
     `Platform: ${firstRepair.platform || "n/a"}`,
@@ -300,11 +331,18 @@ function buildRepairSummary(rejected: Record<string, unknown>[], repairQueue: Re
     byKind: Array.from(byKind.entries()).map(([kind, count]) => ({ kind, count })),
     topReasons,
     missingFields: missingFieldRows,
+    priorityPolicy: {
+      activeFirst: ["tiktok"],
+      deferred: ["instagram", "youtube", "twitch"],
+      order: "TikTok rows first, then deferred platforms by lane and CSV row.",
+    },
     nextRepair: firstRepair ? {
       csvRow: firstRepair.csvRow || null,
       closeoutId: firstRepair.closeoutId || null,
       lane: firstRepair.lane || "unknown",
       platform: firstRepair.platform || "",
+      priority: repairPriority(firstRepair),
+      priorityLabel: repairPriorityLabel(firstRepair),
       proofPath: firstRepair.proofPath || "",
       reason: firstRepair.reason || "",
       nextStep: firstRepair.nextStep || "",
@@ -328,6 +366,8 @@ function buildRepairWorkPacket(summary: Record<string, any>): Record<string, unk
       platform: row.platform || "",
       portalUrl,
       docsUrl: row.docsUrl || "",
+      priority: repairPriority(row),
+      priorityLabel: repairPriorityLabel(row),
       items: [],
     };
     existing.items.push({
@@ -342,6 +382,8 @@ function buildRepairWorkPacket(summary: Record<string, any>): Record<string, unk
       nextStep: row.nextStep || "",
       replacementCsvRow: row.csvRowTemplate || "",
     });
+    existing.priority = Math.min(existing.priority, repairPriority(row));
+    existing.priorityLabel = existing.priority === 0 ? "TikTok first" : existing.priorityLabel;
     groups.set(key, existing);
   }
   return {
@@ -355,12 +397,14 @@ function buildRepairWorkPacket(summary: Record<string, any>): Record<string, unk
       markdown: repairWorkPacketMarkdownPath,
     },
     guardrails: [
+      "Repair order prioritizes TikTok because the active MVP is TikTok through Metricool.",
       "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes or private screenshots.",
       "Only replace a row after the matching proof file contains real non-secret evidence.",
       "Run npm run clippers:import-external-closeout-evidence before applying anything.",
       "Metricool remains approval_required; this packet does not publish content.",
     ],
     groups: Array.from(groups.values()).sort((left, right) =>
+      Number(left.priority ?? 99) - Number(right.priority ?? 99) ||
       String(left.lane).localeCompare(String(right.lane)) ||
       String(left.platform).localeCompare(String(right.platform)) ||
       String(left.portalUrl).localeCompare(String(right.portalUrl))),
@@ -390,6 +434,7 @@ function renderRepairWorkPacketMarkdown(packet: Record<string, any>): string {
     ...(packet.groups?.length ? packet.groups.map((group: any) => [
       `### ${group.lane} / ${group.platform}`,
       "",
+      `- Priority: ${group.priorityLabel || "Later"} (${group.priority ?? "n/a"})`,
       `- Portal: ${group.portalUrl}`,
       group.docsUrl ? `- Docs: ${group.docsUrl}` : null,
       `- Items: ${group.items.length}`,
@@ -717,7 +762,10 @@ async function main(): Promise<void> {
       : "No habia filas aplicables.";
   }
   const allRejected = [...rejected, ...(batchResult?.launchEvidenceBatch.rejected || [])];
-  const repairQueue = buildRepairQueue(allRejected, rows, closeoutIndex);
+  const repairQueue = buildRepairQueue(allRejected, rows, closeoutIndex).sort((left, right) =>
+    repairPriority(left) - repairPriority(right) ||
+    Number(left.csvRow || 0) - Number(right.csvRow || 0) ||
+    String(left.closeoutId || "").localeCompare(String(right.closeoutId || "")));
   const repairSummary = buildRepairSummary(allRejected, repairQueue);
   const summary = {
     status,

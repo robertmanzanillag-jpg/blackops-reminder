@@ -7,11 +7,36 @@ const outJsonPath = path.join(rootDir, "account-permission-readiness.json");
 const outMarkdownPath = path.join(rootDir, "account-permission-readiness.md");
 const outCsvPath = path.join(rootDir, "account-permission-readiness.csv");
 const evidenceDropPath = path.join(rootDir, "account-permission-next-evidence.csv");
+const mvpAccountEvidenceDropPath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
+const tiktokMvpAccountCloseoutJsonPath = path.join(rootDir, "tiktok-mvp-account-closeout.json");
+const tiktokMvpAccountCloseoutMarkdownPath = path.join(rootDir, "tiktok-mvp-account-closeout.md");
+const tiktokMvpAccountCloseoutCsvPath = path.join(rootDir, "tiktok-mvp-account-closeout.csv");
+const metricoolTiktokBridgeEvidencePath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-evidence.csv");
+const metricoolTiktokBridgeProofPackJsonPath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-proof-pack.json");
+const metricoolTiktokBridgeProofPackMarkdownPath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-proof-pack.md");
+const metricoolTiktokBridgeProofPackCsvPath = path.join(rootDir, "scheduled", "metricool-tiktok-bridge-proof-pack.csv");
+const metricoolPendingProfileEvidencePath = path.join(rootDir, "scheduled", "metricool-pending-profile-evidence.csv");
+const metricoolMvpLaunchPackPath = path.join(rootDir, "scheduled", "metricool-mvp-launch-pack.json");
 const externalCloseoutProofTodoPath = path.join(rootDir, "reports", "clippers-external-closeout-proof-todo.json");
+const activeMetricoolMvpAccountIds = new Set(["sports-daily", "meme-radar"]);
+const activeMetricoolMvpPlatforms = new Set(["tiktok"]);
+const weakEvidenceNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);
+const unsafeEvidencePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
+const unsafeEvidenceParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function decodedEvidenceText(value) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 const accounts = [
-  { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdaily" },
-  { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", handle: "@memeradar" },
+  { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdailyclips" },
+  { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", handle: "@memeradarclips" },
   { accountId: "streamer-pulse", accountName: "Streamer Pulse", category: "streamers", handle: "@streamerpulse" },
 ];
 
@@ -76,6 +101,98 @@ function csvCell(value) {
 
 function evidencePathFor(accountId, platform) {
   return path.join(accountEvidenceDir, `${accountId}-${platform}.json`);
+}
+
+function isSafeEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !unsafeEvidencePattern.test(url.hostname)
+      && !unsafeEvidenceParamPattern.test(url.search)
+      && !unsafeEvidenceParamPattern.test(decodedEvidenceText(url.search));
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    return isSafeEvidenceUrl(value)
+      && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"));
+  } catch {
+    return false;
+  }
+}
+
+function isGoogleEvidenceUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname;
+    const concreteDriveEvidence = hostname === "drive.google.com" && (
+      /^\/file\/d\/[^/]+(?:\/|$)/.test(pathname)
+      || /^\/drive\/(?:u\/\d+\/)?folders\/[^/]+(?:\/|$)/.test(pathname)
+      || ((pathname === "/open" || pathname === "/folderview") && Boolean(url.searchParams.get("id")?.trim()))
+    );
+    const concreteDocsEvidence = hostname === "docs.google.com"
+      && /^\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/[^/]+(?:\/|$)/.test(pathname);
+    return isSafeEvidenceUrl(value)
+      && (concreteDriveEvidence || concreteDocsEvidence);
+  } catch {
+    return false;
+  }
+}
+
+function isMetricoolConnectionEvidenceUrl(value) {
+  return isMetricoolEvidenceUrl(value) || isGoogleEvidenceUrl(value);
+}
+
+function exactTikTokProfileUrlFor(handle) {
+  return `https://www.tiktok.com/${String(handle || "").startsWith("@") ? handle : `@${handle}`}`;
+}
+
+function isExactTikTokProfileUrl(value, handle) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const expected = new URL(exactTikTokProfileUrlFor(handle));
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && url.hostname.toLowerCase() === expected.hostname.toLowerCase()
+      && url.pathname.replace(/\/$/, "").toLowerCase() === expected.pathname.replace(/\/$/, "").toLowerCase()
+      && !unsafeEvidenceParamPattern.test(url.search);
+  } catch {
+    return false;
+  }
+}
+
+function evidenceNotesIssue(notes) {
+  const text = String(notes || "").trim();
+  const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (text.length < 20) return "evidence notes must be at least 20 characters";
+  if (weakEvidenceNotes.has(normalized)) return "evidence notes are too generic";
+  if (unsafeEvidencePattern.test(text) || unsafeEvidenceParamPattern.test(text)) return "evidence notes contain placeholder or secret-like text";
+  return "";
+}
+
+function activeTikTokMvpEvidenceIssues(account, platform, evidence) {
+  if (!activeMetricoolMvpAccountIds.has(account.accountId) || platform !== "tiktok") return [];
+  const notes = evidence?.notes || "";
+  const profileUrl = evidence?.profileUrl || evidence?.profileLink || "";
+  const accountProofUrl = evidence?.accountProofUrl || evidence?.ownershipProofUrl || "";
+  const metricoolProofUrl = evidence?.metricoolProofUrl || "";
+  const combined = JSON.stringify(evidence || {});
+  return [
+    !isExactTikTokProfileUrl(profileUrl, account.handle) ? `profileUrl must be the exact public TikTok profile ${exactTikTokProfileUrlFor(account.handle)}` : null,
+    !isSafeEvidenceUrl(accountProofUrl) ? "accountProofUrl must be a real safe HTTPS ownership/security proof URL" : null,
+    !isMetricoolConnectionEvidenceUrl(metricoolProofUrl) ? "metricoolProofUrl must be a real safe HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL" : null,
+    evidenceNotesIssue(notes),
+    unsafeEvidencePattern.test(combined) || unsafeEvidenceParamPattern.test(combined) ? "evidence contains placeholder or secret-like text" : null,
+  ].filter(Boolean);
 }
 
 function permissionStatusFor(permissionTracker, platform, scopes) {
@@ -180,6 +297,31 @@ function progressRow(id, label, ready, total, nextStep) {
 }
 
 const externalEvidenceHeader = "kind,account_id,platform,status,scope,app_identifier,public_base_url,redirect_uri,portal_url,docs_url,proof,notes";
+
+function metricoolSafetyBlockerFor(sourceReadiness) {
+  const blockers = Array.isArray(sourceReadiness?.blockers) ? sourceReadiness.blockers : [];
+  return blockers.find((blocker) =>
+    /realPublishEnabled|publishMode|status is not approval_required|readyToSend|can send now/i.test(blocker)
+  ) || "";
+}
+
+function activeMvpNextStep({ metricoolMvpReady, activeMvpReadyLanes, activeMvpTargetLanes, bridgeEvidenceCsvPath, sourceReadiness }) {
+  const safetyBlocker = metricoolSafetyBlockerFor(sourceReadiness);
+  if (safetyBlocker) {
+    return `Fix Metricool safety guard before importing bridge evidence: ${safetyBlocker}. Metricool must stay approval_required with realPublishEnabled=false and readyToSend=0.`;
+  }
+  if (metricoolMvpReady) {
+    return "Open Metricool and manually review/schedule TikTok queued clips for SPORT and memes. Add Instagram/YouTube later when Robert is ready.";
+  }
+  if (activeMvpTargetLanes > 0 && activeMvpReadyLanes < activeMvpTargetLanes) {
+    return [
+      "Preview/import real non-secret Metricool bridge evidence for SPORT and memes TikTok.",
+      bridgeEvidenceCsvPath ? `Use bridge CSV: ${bridgeEvidenceCsvPath}.` : "",
+      "Required fields: public TikTok profile URL, real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL, and 20+ character notes. Direct social API keys are not required for this TikTok MVP.",
+    ].filter(Boolean).join(" ");
+  }
+  return "Use Metricool in approval_required mode for connected TikTok lanes. Add Instagram/YouTube later when Robert is ready.";
+}
 
 function publicBaseUrlFromRedirect(redirectUri) {
   if (!redirectUri) return "";
@@ -318,6 +460,456 @@ function nextEvidenceRows(accountRows, permissionRows, developerRows, externalCl
   return `${rows.join("\n")}\n`;
 }
 
+function mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack = {}) {
+  const pendingProfileRows = Array.isArray(metricoolMvpLaunchPack?.pendingProfileEvidenceRows)
+    ? metricoolMvpLaunchPack.pendingProfileEvidenceRows
+    : [];
+  const pendingAccountPlatforms = new Set(pendingProfileRows
+    .filter((row) => activeMetricoolMvpAccountIds.has(row.accountId) && activeMetricoolMvpPlatforms.has(row.platform))
+    .map((row) => `${row.accountId}:${row.platform}`));
+  const rows = [externalEvidenceHeader];
+  for (const row of accountRows.filter((item) =>
+    activeMetricoolMvpAccountIds.has(item.accountId)
+    && activeMetricoolMvpPlatforms.has(item.platform)
+    && item.accountStatus !== "verified"
+  )) {
+    const sourceHint = pendingAccountPlatforms.has(`${row.accountId}:${row.platform}`)
+      ? "pending Metricool profile evidence"
+      : "active TikTok MVP account proof";
+    rows.push([
+      "account",
+      row.accountId,
+      row.platform,
+      "submitted",
+      "",
+      "",
+      "",
+      "",
+      platforms.find((platform) => platform.platform === row.platform)?.accountUrl || "",
+      "",
+      "",
+      `<real ${row.handle} profile URL + ownership/security proof + Metricool-ready account proof from ${sourceHint}; change status to verified only after proof is real and reviewed>`,
+    ].map(csvCell).join(","));
+  }
+  return `${rows.join("\n")}\n`;
+}
+
+function tiktokMvpCloseoutRows(accountRows, queue = {}, metricoolMvpLaunchPack = {}) {
+  const pendingProfileRows = Array.isArray(metricoolMvpLaunchPack?.pendingProfileEvidenceRows)
+    ? metricoolMvpLaunchPack.pendingProfileEvidenceRows
+    : [];
+  const pendingByAccount = new Map(pendingProfileRows
+    .filter((row) => activeMetricoolMvpAccountIds.has(row.accountId) && row.platform === "tiktok")
+    .map((row) => [row.accountId, row]));
+  return accountRows
+    .filter((row) => activeMetricoolMvpAccountIds.has(row.accountId) && row.platform === "tiktok")
+    .map((row) => {
+      const pending = pendingByAccount.get(row.accountId) || {};
+      const ready = row.readyForMetricoolApproval === true;
+      const status = ready ? "ready_for_metricool_tiktok" : row.metricoolConnected ? "needs_account_proof" : "needs_metricool_connection";
+      const requiredProof = [
+        "public TikTok profile URL",
+        "non-secret ownership/security proof note",
+        "Metricool brand/profile connection proof",
+      ];
+      return {
+        accountId: row.accountId,
+        accountName: row.accountName,
+        category: row.category,
+        platform: row.platform,
+        handle: row.handle,
+        status,
+        accountStatus: row.accountStatus,
+        evidenceQuality: row.evidenceQuality || {
+          status: row.accountStatus === "verified" ? "accepted" : "missing",
+          issues: row.accountStatus === "verified" ? [] : ["account evidence not verified"],
+          requiresAccountProofUrl: true,
+          requiresMetricoolProofUrl: true,
+        },
+        metricoolConnected: row.metricoolConnected,
+        metricoolBrandOrProfile: pending.metricoolBrandName || pending.metricoolProfile || row.metricoolConnectedNetworks.join("|") || "",
+        rightsReadyAssets: row.metricoolRightsReadyAssets,
+        evidencePath: row.evidencePath,
+        requiredProof,
+        blockers: row.metricoolBlockers || row.blockers || [],
+        operatorAction: ready
+          ? `Use Metricool brand/profile for ${row.accountName}; no direct social API permissions are required for the TikTok MVP.`
+          : `Add real non-secret account and Metricool connection evidence for ${row.accountName}.`,
+        copyText: [
+          `TikTok MVP account: ${row.accountName}`,
+          `Account ID: ${row.accountId}`,
+          `Handle: ${row.handle}`,
+          `Status: ${status}`,
+          `Metricool connected: ${row.metricoolConnected ? "yes" : "no"}`,
+          `Rights-ready assets: ${row.metricoolRightsReadyAssets}`,
+          `Evidence path: ${row.evidencePath}`,
+          `Required proof: ${requiredProof.join("; ")}`,
+          `Next action: ${ready ? "Process TikTok clips in Metricool approval_required mode." : "Paste only non-secret evidence in the account evidence drop."}`,
+        ].join("\n"),
+      };
+    });
+}
+
+function activeMvpProofPriority(activeMvpRows, bridgeEvidenceCsvPath, metricoolGuard = {}) {
+  if (metricoolGuard.safe === false) {
+    const firstBlocker = Array.isArray(metricoolGuard.blockers) && metricoolGuard.blockers.length
+      ? metricoolGuard.blockers[0]
+      : "Metricool queue safety guard is blocked";
+    return {
+      active: true,
+      id: "metricool-safety:tiktok-mvp",
+      accountId: "",
+      accountName: "TikTok Metricool MVP",
+      proofPath: bridgeEvidenceCsvPath,
+      kind: "metricool_safety",
+      nextStep: `Fix Metricool safety before proof import: ${firstBlocker}. Metricool must stay approval_required with realPublishEnabled=false and readyToSend=0.`,
+    };
+  }
+  const blockedRow = activeMvpRows.find((row) => !row.readyForMetricoolApproval);
+  if (!blockedRow) {
+    return {
+      active: false,
+      id: "",
+      accountId: "",
+      nextStep: "SPORT and memes TikTok proof gates are clear for the Metricool MVP.",
+      proofPath: "",
+    };
+  }
+  const needsAccountProof = blockedRow.accountStatus !== "verified";
+  const needsBridgeProof = !blockedRow.metricoolConnected || blockedRow.metricoolRightsReadyAssets <= 0 || blockedRow.metricoolBlockers.length > 0;
+  const id = needsAccountProof
+    ? `account-proof:${blockedRow.accountId}:tiktok`
+    : `metricool-bridge-proof:${blockedRow.accountId}:tiktok`;
+  return {
+    active: true,
+    id,
+    accountId: blockedRow.accountId,
+    accountName: blockedRow.accountName,
+    proofPath: needsAccountProof ? blockedRow.evidencePath : bridgeEvidenceCsvPath,
+    kind: needsAccountProof ? "account" : "metricool_bridge",
+    nextStep: needsAccountProof
+      ? `Add real non-secret TikTok ownership/security proof for ${blockedRow.accountName}, then preview proof links before saving.`
+      : needsBridgeProof
+        ? `Add real non-secret Metricool bridge proof for ${blockedRow.accountName} in ${bridgeEvidenceCsvPath}, preview first, then import only if clean.`
+        : `Refresh readiness for ${blockedRow.accountName}; the active MVP row is not ready yet.`,
+  };
+}
+
+function renderTikTokMvpCloseoutMarkdown(closeout) {
+  return [
+    "# TikTok MVP Account Closeout",
+    "",
+    `Generated: ${closeout.generatedAt}`,
+    `Status: ${closeout.status}`,
+    "",
+    "This pack is only for the active TikTok MVP lanes in Metricool: SPORT and memes. It does not request direct social API credentials, developer app secrets, browser sessions, or login material.",
+    "",
+    "## Totals",
+    "",
+    `- Rows: ${closeout.totals.rows}`,
+    `- Ready lanes: ${closeout.totals.ready}`,
+    `- Needs proof: ${closeout.totals.needsProof}`,
+    `- Needs Metricool connection: ${closeout.totals.needsMetricoolConnection}`,
+    `- Direct social APIs required: ${closeout.directSocialApisRequired ? "yes" : "no"}`,
+    "",
+    "## Rows",
+    "",
+    ...closeout.rows.map((row) => [
+      `### ${row.accountName}`,
+      "",
+      `- Status: ${row.status}`,
+      `- Handle: ${row.handle}`,
+      `- Evidence quality: ${row.evidenceQuality?.status || "unknown"}`,
+      ...((row.evidenceQuality?.issues || []).length ? [`- Evidence issues: ${row.evidenceQuality.issues.join("; ")}`] : ["- Evidence issues: none"]),
+      `- Metricool connected: ${row.metricoolConnected ? "yes" : "no"}`,
+      `- Rights-ready assets: ${row.rightsReadyAssets}`,
+      `- Evidence path: ${row.evidencePath}`,
+      `- Required proof: ${row.requiredProof.join("; ")}`,
+      `- Next action: ${row.operatorAction}`,
+      "",
+      "```text",
+      row.copyText,
+      "```",
+      "",
+    ].join("\n")),
+    "## Guardrails",
+    "",
+    ...closeout.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Next Step",
+    "",
+    closeout.nextStep,
+    "",
+  ].join("\n");
+}
+
+function renderTikTokMvpCloseoutCsv(closeout) {
+  const header = ["account_id", "account_name", "category", "platform", "handle", "status", "account_status", "evidence_quality_status", "evidence_quality_issues", "metricool_connected", "rights_ready_assets", "evidence_path", "operator_action"];
+  return [
+    header.map(csvCell).join(","),
+    ...closeout.rows.map((row) => [
+      row.accountId,
+      row.accountName,
+      row.category,
+      row.platform,
+      row.handle,
+      row.status,
+      row.accountStatus,
+      row.evidenceQuality?.status || "",
+      (row.evidenceQuality?.issues || []).join("; "),
+      row.metricoolConnected ? "yes" : "no",
+      row.rightsReadyAssets,
+      row.evidencePath,
+      row.operatorAction,
+    ].map(csvCell).join(",")),
+  ].join("\n") + "\n";
+}
+
+function tiktokMetricoolBridgeEvidenceRows(closeout) {
+  const header = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
+  const rows = closeout.rows.map((row) => {
+    const defaultBrandName = row.accountId === "sports-daily" ? "SPORT" : row.accountId === "meme-radar" ? "memes" : "";
+    const metricoolBrandName = row.metricoolBrandOrProfile && row.metricoolBrandOrProfile !== row.platform
+      ? row.metricoolBrandOrProfile
+      : defaultBrandName;
+    const profileUrl = `https://www.tiktok.com/${row.handle.startsWith("@") ? row.handle : `@${row.handle}`}`;
+    return [
+      row.accountId,
+      "tiktok",
+      metricoolBrandName,
+      "",
+      profileUrl,
+      "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
+      `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+    ].map(csvCell).join(",");
+  });
+  return `${[header, ...rows].join("\n")}\n`;
+}
+
+function tiktokMetricoolBridgeOperatorCards(closeout) {
+  return closeout.rows.map((row) => {
+    const defaultBrandName = row.accountId === "sports-daily" ? "SPORT" : row.accountId === "meme-radar" ? "memes" : "";
+    const metricoolBrandName = row.metricoolBrandOrProfile && row.metricoolBrandOrProfile !== row.platform
+      ? row.metricoolBrandOrProfile
+      : defaultBrandName;
+    const profileUrl = `https://www.tiktok.com/${row.handle.startsWith("@") ? row.handle : `@${row.handle}`}`;
+    const csvRowTemplate = [
+      row.accountId,
+      "tiktok",
+      metricoolBrandName,
+      "",
+      profileUrl,
+      "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
+      `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+    ].map(csvCell).join(",");
+    const copyPacket = [
+      `Account: ${row.accountName}`,
+      `Account ID: ${row.accountId}`,
+      "Platform: tiktok",
+      `Metricool brand: ${metricoolBrandName}`,
+      `Public TikTok profile URL: ${profileUrl}`,
+      "Required proof: real HTTPS Metricool planner/profile proof URL",
+      "Required notes: 20+ characters describing the real Metricool connection evidence",
+      "Do not paste passwords, tokens, cookies, recovery codes, or private screenshots.",
+      "CSV row template:",
+      csvRowTemplate,
+    ].join("\n");
+    return {
+      accountId: row.accountId,
+      accountName: row.accountName,
+      platform: "tiktok",
+      metricoolBrandName,
+      profileUrl,
+      proofPlaceholder: "<paste real public Metricool proof URL or concrete Drive file/folder/Docs evidence URL>",
+      notesPlaceholder: `Replace with a real 20+ character note after ${metricoolBrandName || row.accountName} TikTok is connected in Metricool.`,
+      csvRowTemplate,
+      copyPacket,
+      status: row.status,
+      nextStep: row.status === "ready_for_metricool_tiktok"
+        ? "Already ready; keep this proof current and do not import duplicate rows."
+        : "Replace placeholders with real non-secret Metricool proof, preview, then import bridge evidence.",
+    };
+  });
+}
+
+function buildTikTokMetricoolBridgeProofPack(closeout, bridgeOperatorCards, sourceReadiness = {}) {
+  const safetyBlockers = Array.isArray(sourceReadiness.safetyBlockers) ? sourceReadiness.safetyBlockers : [];
+  const safetyClear = sourceReadiness.approvalRequired === true
+    && sourceReadiness.realPublishEnabled !== true
+    && Number(sourceReadiness.readyToSend || 0) === 0
+    && safetyBlockers.length === 0;
+  const rows = bridgeOperatorCards.map((card) => ({
+    accountId: card.accountId,
+    accountName: card.accountName,
+    platform: "tiktok",
+    metricoolBrandName: card.metricoolBrandName,
+    publicProfileUrl: card.profileUrl,
+    status: card.status === "ready_for_metricool_tiktok" ? "ready" : "needs_real_proof",
+    requiredProof: [
+      "public TikTok profile URL",
+      "real account ownership/security proof URL",
+      "real HTTPS Metricool proof URL or concrete Google Drive file/folder or Docs evidence URL",
+      "20+ character operator notes",
+    ],
+    accountEvidenceFields: [
+      "kind",
+      "account_id",
+      "platform",
+      "status",
+      "proof",
+      "notes",
+    ],
+    bridgeEvidenceFields: [
+      "account_id",
+      "platform",
+      "metricool_brand_name",
+      "metricool_blog_id",
+      "profile_url",
+      "proof",
+      "notes",
+    ],
+    accountEvidenceCsv: mvpAccountEvidenceDropPath,
+    allowedEvidence: [
+      "public TikTok profile URL",
+      "public/non-secret Google Drive or Docs proof for account ownership/security",
+      "public/non-secret Metricool planner, brand or profile URL",
+      "non-secret operator note confirming the account is connected in Metricool",
+    ],
+    prohibitedEvidence: [
+      "passwords",
+      "tokens",
+      "cookies",
+      "recovery codes",
+      "private screenshots",
+      "browser session exports",
+    ],
+    csvRowTemplate: card.csvRowTemplate,
+    nextStep: card.status === "ready_for_metricool_tiktok"
+      ? "Already ready; keep proof current and do not import duplicate rows."
+      : "Replace placeholders with real non-secret proof, preview bridge rows, then import.",
+  }));
+  const blockedRows = rows.filter((row) => row.status !== "ready");
+  return {
+    status: !safetyClear ? "blocked_metricool_safety" : blockedRows.length ? "needs_real_metricool_bridge_proof" : "ready_for_metricool_operator",
+    generatedAt: new Date().toISOString(),
+    mode: "tiktok_metricool_bridge_proof_pack",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    approvalRequired: sourceReadiness.approvalRequired === true,
+    realPublishEnabled: sourceReadiness.realPublishEnabled === true,
+    readyToSend: Number(sourceReadiness.readyToSend || 0),
+    safetyBlockers,
+    paths: {
+      json: metricoolTiktokBridgeProofPackJsonPath,
+      markdown: metricoolTiktokBridgeProofPackMarkdownPath,
+      csv: metricoolTiktokBridgeProofPackCsvPath,
+      bridgeEvidenceCsv: metricoolTiktokBridgeEvidencePath,
+      accountEvidenceCsv: mvpAccountEvidenceDropPath,
+    },
+    totals: {
+      rows: rows.length,
+      ready: rows.length - blockedRows.length,
+      needsProof: blockedRows.length,
+      connectedMetricoolRightsReadyAssets: sourceReadiness.connectedMetricoolRightsReadyAssets || 0,
+    },
+    rows,
+    guardrails: [
+      "This pack does not create external accounts, submit credentials, connect browser sessions or publish posts.",
+      "Direct TikTok/Instagram/YouTube APIs are not required for this TikTok MVP.",
+      "Metricool must remain approval_required with realPublishEnabled=false and readyToSend=0.",
+      "Only paste public/non-secret proof URLs and operator notes.",
+    ],
+    nextStep: !safetyClear
+      ? `Fix Metricool safety before collecting bridge proof: ${safetyBlockers.join("; ") || "approval_required not confirmed"}.`
+      : blockedRows.length
+      ? `Collect real non-secret TikTok account proof plus Metricool proof for ${blockedRows.map((row) => row.accountId).join(", ")}. Use ${mvpAccountEvidenceDropPath} for account proof and ${metricoolTiktokBridgeEvidencePath} for Metricool bridge proof.`
+      : "Open Metricool operator flow for SPORT and memes TikTok in approval_required mode.",
+  };
+}
+
+function renderTikTokMetricoolBridgeProofPackMarkdown(pack) {
+  return [
+    "# TikTok Metricool Bridge Proof Pack",
+    "",
+    `Generated: ${pack.generatedAt}`,
+    `Status: ${pack.status}`,
+    `Launch mode: ${pack.launchMode}`,
+    "",
+    "Use this pack only for the active TikTok MVP: SPORT and memes through Metricool approval_required. It does not publish and it does not require direct social API keys.",
+    "",
+    "## Totals",
+    "",
+    `- Rows: ${pack.totals.rows}`,
+    `- Ready: ${pack.totals.ready}`,
+    `- Needs proof: ${pack.totals.needsProof}`,
+    `- Connected rights-ready assets: ${pack.totals.connectedMetricoolRightsReadyAssets}`,
+    `- Approval required observed: ${pack.approvalRequired ? "yes" : "no"}`,
+    `- Real publish enabled observed: ${pack.realPublishEnabled ? "yes" : "no"}`,
+    `- Ready to send observed: ${pack.readyToSend}`,
+    `- Bridge CSV: ${pack.paths.bridgeEvidenceCsv}`,
+    `- Account proof CSV: ${pack.paths.accountEvidenceCsv}`,
+    `- Safety blockers: ${pack.safetyBlockers.join("; ") || "none"}`,
+    "",
+    "## Rows",
+    "",
+    ...pack.rows.map((row) => [
+      `### ${row.accountName}`,
+      `- Account ID: ${row.accountId}`,
+      `- Platform: ${row.platform}`,
+      `- Metricool brand: ${row.metricoolBrandName}`,
+      `- Public profile URL: ${row.publicProfileUrl}`,
+      `- Status: ${row.status}`,
+      `- Required proof: ${row.requiredProof.join("; ")}`,
+      `- Account evidence fields: ${row.accountEvidenceFields.join(", ")}`,
+      `- Bridge evidence fields: ${row.bridgeEvidenceFields.join(", ")}`,
+      `- Account proof CSV: ${row.accountEvidenceCsv}`,
+      `- Next step: ${row.nextStep}`,
+      "",
+      "```csv",
+      row.csvRowTemplate,
+      "```",
+      "",
+    ].join("\n")),
+    "## Allowed Evidence",
+    "",
+    ...pack.rows[0].allowedEvidence.map((item) => `- ${item}`),
+    "",
+    "## Prohibited Evidence",
+    "",
+    ...pack.rows[0].prohibitedEvidence.map((item) => `- ${item}`),
+    "",
+    "## Guardrails",
+    "",
+    ...pack.guardrails.map((guardrail) => `- ${guardrail}`),
+    "",
+    "## Next Step",
+    "",
+    pack.nextStep,
+    "",
+  ].join("\n");
+}
+
+function renderTikTokMetricoolBridgeProofPackCsv(pack) {
+  const header = ["account_id", "account_name", "platform", "metricool_brand_name", "public_profile_url", "status", "required_proof", "account_evidence_fields", "bridge_evidence_fields", "account_evidence_csv", "next_step", "csv_row_template"];
+  return [
+    header.map(csvCell).join(","),
+    ...pack.rows.map((row) => [
+      row.accountId,
+      row.accountName,
+      row.platform,
+      row.metricoolBrandName,
+      row.publicProfileUrl,
+      row.status,
+      row.requiredProof.join("; "),
+      row.accountEvidenceFields.join("; "),
+      row.bridgeEvidenceFields.join("; "),
+      row.accountEvidenceCsv,
+      row.nextStep,
+      row.csvRowTemplate,
+    ].map(csvCell).join(",")),
+  ].join("\n") + "\n";
+}
+
 function renderMarkdown(summary) {
   const accountLines = summary.accountRows.map((row) => [
     `### ${row.accountName} / ${row.platform}`,
@@ -325,7 +917,7 @@ function renderMarkdown(summary) {
     `- Account status: ${row.accountStatus}`,
     `- Metricool connected: ${row.metricoolConnected ? "yes" : "no"}`,
     `- Connected rights-ready assets for category: ${row.metricoolRightsReadyAssets}`,
-    `- Ready for Metricool approval queue: ${row.readyForMetricoolApproval ? "yes" : "no"}`,
+    `- Ready for Metricool review queue: ${row.readyForMetricoolApproval ? "yes" : "no"}`,
     `- Direct API ready: ${row.directApiReady ? "yes" : "no"}`,
     `- Direct API backlog: ${row.directApiBacklog.length ? row.directApiBacklog.join("; ") : "none"}`,
     `- Evidence path: ${row.evidencePath}`,
@@ -373,6 +965,19 @@ function renderMarkdown(summary) {
     `- External evidence repair rows: ${summary.externalCloseout.evidenceRepairRows}`,
     `- Local owned source assets: ${summary.sourceReadiness.localOwnedSourceAssets}`,
     `- Connected Metricool rights-ready assets: ${summary.sourceReadiness.connectedMetricoolRightsReadyAssets}`,
+    `- Active MVP proof priority: ${summary.externalCloseout.activeMvpProofPriority?.id || "none"}`,
+    "",
+    "## Active MVP Now",
+    "",
+    `- Scope: ${summary.activeMvp.scope}`,
+    `- Platforms: ${summary.activeMvp.platforms.join(", ")}`,
+    `- Accounts: ${summary.activeMvp.accountIds.join(", ")}`,
+    `- Metricool brands: ${summary.activeMvp.metricoolBrands.join(", ")}`,
+    `- Ready lanes: ${summary.activeMvp.readyLanes}/${summary.activeMvp.targetLanes}`,
+    `- Deferred lanes: ${summary.activeMvp.deferredLanes.join(", ")}`,
+    `- Direct social APIs required: ${summary.activeMvp.directSocialApisRequired ? "yes" : "no"}`,
+    `- Bridge evidence CSV: ${summary.activeMvp.bridgeEvidenceCsvPath}`,
+    `- Next step: ${summary.activeMvp.nextStep}`,
     "",
     "## Full Readiness Gap",
     "",
@@ -396,6 +1001,8 @@ function renderMarkdown(summary) {
     `- Operator actions: ${summary.externalCloseout.operatorActions}`,
     `- Next action: ${summary.externalCloseout.nextActionId || "none"}`,
     `- Next step: ${summary.externalCloseout.nextStep}`,
+    `- Active MVP priority: ${summary.externalCloseout.activeMvpProofPriority?.id || "none"}`,
+    `- Active MVP priority proof: ${summary.externalCloseout.activeMvpProofPriority?.proofPath || "none"}`,
     "",
     "## Official Research",
     "",
@@ -407,6 +1014,7 @@ function renderMarkdown(summary) {
     `Rows: ${summary.nextEvidenceDrop.rows}`,
     `Source: ${summary.nextEvidenceDrop.source}`,
     `Next step: ${summary.nextEvidenceDrop.nextStep}`,
+    `Active MVP priority: ${summary.nextEvidenceDrop.activeMvpProofPriority?.id || "none"}`,
     `Schema: ${externalEvidenceHeader}`,
     "",
     "Preview rows:",
@@ -421,6 +1029,48 @@ function renderMarkdown(summary) {
       `  Next step: ${card.nextStep}`,
       `  Proof: ${card.proofPath || "missing"}`,
     ].join("\n")),
+    "",
+    "## Metricool MVP Evidence Only",
+    "",
+    `- Account evidence CSV: ${summary.metricoolMvpEvidence.accountEvidenceCsvPath}`,
+    `- Account rows: ${summary.metricoolMvpEvidence.accountRows}`,
+    `- Metricool bridge CSV: ${summary.metricoolMvpEvidence.bridgeEvidenceCsvPath}`,
+    `- Metricool bridge rows: ${summary.metricoolMvpEvidence.bridgeEvidenceRows}`,
+    `- Metricool bridge proof pack: ${summary.metricoolMvpEvidence.bridgeProofPack.markdownPath}`,
+    `- Metricool bridge proof status: ${summary.metricoolMvpEvidence.bridgeProofPack.status}`,
+    `- Metricool bridge proof needs proof: ${summary.metricoolMvpEvidence.bridgeProofPack.needsProof}`,
+    `- Metricool profile evidence CSV: ${summary.metricoolMvpEvidence.pendingProfileEvidenceCsvPath}`,
+    `- Metricool profile rows: ${summary.metricoolMvpEvidence.pendingProfileRows}`,
+    `- Direct API evidence required for MVP: ${summary.directSocialApisRequired ? "yes" : "no"}`,
+    `- Next step: ${summary.metricoolMvpEvidence.nextStep}`,
+    "",
+    "MVP account evidence preview:",
+    "```csv",
+    ...summary.metricoolMvpEvidence.previewRows,
+    "```",
+    "",
+    "Metricool bridge operator cards:",
+    "",
+    ...summary.metricoolMvpEvidence.bridgeOperatorCards.map((card) => [
+      `### ${card.accountName}`,
+      `- Account ID: ${card.accountId}`,
+      `- Brand: ${card.metricoolBrandName}`,
+      `- Profile URL: ${card.profileUrl}`,
+      `- Status: ${card.status}`,
+      `- Next step: ${card.nextStep}`,
+      "",
+      "```csv",
+      card.csvRowTemplate,
+      "```",
+      "",
+    ].join("\n")),
+    "## TikTok MVP Account Closeout",
+    "",
+    `- Status: ${summary.tiktokMvpAccountCloseout.status}`,
+    `- Ready lanes: ${summary.tiktokMvpAccountCloseout.totals.ready}/${summary.tiktokMvpAccountCloseout.totals.rows}`,
+    `- Markdown: ${summary.tiktokMvpAccountCloseout.paths.markdown}`,
+    `- Direct social APIs required: ${summary.tiktokMvpAccountCloseout.directSocialApisRequired ? "yes" : "no"}`,
+    `- Next step: ${summary.tiktokMvpAccountCloseout.nextStep}`,
     "",
     "## Next Step",
     "",
@@ -454,6 +1104,7 @@ async function main() {
   const permissionTracker = await readJson(path.join(rootDir, "permission-tracker.json"), {});
   const developerKit = await readJson(path.join(rootDir, "developer-app-evidence", "developer-app-connection-kit.json"), {});
   const externalCloseout = await readJson(externalCloseoutProofTodoPath, {});
+  const metricoolMvpLaunchPack = await readJson(metricoolMvpLaunchPackPath, {});
   const permissionRows = platforms.map((platform) => {
     const permission = permissionStatusFor(permissionTracker, platform.platform, platform.requiredScopes);
     return {
@@ -485,7 +1136,19 @@ async function main() {
       const metricool = metricoolConnectionFor(queue, account, platform.platform);
       const permissionRow = permissionRows.find((row) => row.platform === platform.platform);
       const developerRow = developerRows.find((row) => row.platform === platform.platform);
-      const accountStatus = evidence?.status === "verified" ? "verified" : evidence?.status || "missing";
+      const evidenceIssues = evidence?.status === "verified"
+        ? activeTikTokMvpEvidenceIssues(account, platform.platform, evidence)
+        : [];
+      const missingEvidenceIssues = activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok"
+        ? [
+          `missing verified account evidence file with exact profileUrl ${exactTikTokProfileUrlFor(account.handle)}`,
+          "missing safe HTTPS accountProofUrl ownership/security proof",
+          "missing safe HTTPS metricoolProofUrl connection proof",
+        ]
+        : ["account evidence not verified"];
+      const accountStatus = evidence?.status === "verified"
+        ? evidenceIssues.length === 0 ? "verified" : "rejected"
+        : evidence?.status || "missing";
       const readyForMetricoolApproval = accountStatus === "verified"
         && metricool.connected
         && metricool.rightsReadyAssets > 0
@@ -494,7 +1157,7 @@ async function main() {
         && developerRow?.status === "approved"
         && permissionRow?.status === "approved";
       const metricoolBlockers = [
-        accountStatus !== "verified" ? "account evidence not verified" : null,
+        evidenceIssues[0] || (accountStatus !== "verified" ? "account evidence not verified" : null),
         !metricool.connected ? "not connected in Metricool for this platform" : null,
         metricool.connected && metricool.rightsReadyAssets <= 0 ? "no rights-ready source assets for this category" : null,
         metricool.connected && !metricoolGuard.safe ? metricoolGuard.blockers[0] || "Metricool queue guard is blocked" : null,
@@ -511,6 +1174,12 @@ async function main() {
         label: platform.label,
         handle: account.handle,
         accountStatus,
+        evidenceQuality: {
+          status: evidence?.status === "verified" && evidenceIssues.length === 0 ? "accepted" : evidence?.status === "verified" ? "rejected" : "missing",
+          issues: evidence?.status === "verified" ? evidenceIssues : missingEvidenceIssues,
+          requiresAccountProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
+          requiresMetricoolProofUrl: activeMetricoolMvpAccountIds.has(account.accountId) && platform.platform === "tiktok",
+        },
         evidencePath,
         profileUrl: evidence?.profileUrl || evidence?.profileLink || null,
         metricoolConnected: metricool.connected,
@@ -536,18 +1205,22 @@ async function main() {
     permissionGroups: permissionRows.length,
     permissionGroupsApproved: permissionRows.filter((row) => row.status === "approved").length,
   };
+  const activeMvpRows = accountRows.filter((row) => activeMetricoolMvpAccountIds.has(row.accountId) && activeMetricoolMvpPlatforms.has(row.platform));
+  const activeMvpReadyLanes = activeMvpRows.filter((row) => row.readyForMetricoolApproval).length;
+  const activeMvpTargetLanes = activeMetricoolMvpAccountIds.size * activeMetricoolMvpPlatforms.size;
+  const activeMvpProof = activeMvpProofPriority(activeMvpRows, metricoolTiktokBridgeEvidencePath, metricoolGuard);
   const localOwnedSourceAssets = queue?.sourceReadiness?.localOwnedSourceTotals?.total || 0;
   const connectedMetricoolRightsReadyAssets = queue?.sourceReadiness?.totals?.rightsReadyAssets || 0;
   const externalProofsNeedEvidence = externalCloseout?.totals?.proofFilesNeedRealEvidence || 0;
   const externalOperatorActions = externalCloseout?.totals?.tasks || externalCloseout?.rows?.length || 0;
   const externalEvidenceRepairRows = externalProofsNeedEvidence;
-  const metricoolMvpReady = totals.metricoolReadyLanes >= 2 && connectedMetricoolRightsReadyAssets > 0;
+  const metricoolMvpReady = activeMvpReadyLanes >= activeMvpTargetLanes && connectedMetricoolRightsReadyAssets > 0;
   const fullReadinessGapRows = [
-    progressRow("accounts", "Account profiles", totals.verifiedAccounts, totals.accountProfiles, accountRows.find((row) => row.accountStatus !== "verified")?.nextStep || "All account profiles verified."),
-    progressRow("metricool", "Metricool approval lanes", totals.metricoolReadyLanes, Math.min(2, totals.accountProfiles), "Keep SPORT and memes connected in Metricool approval_required mode."),
+    progressRow("accounts", "Account profiles", totals.verifiedAccounts, totals.accountProfiles, activeMvpProof.active ? activeMvpProof.nextStep : accountRows.find((row) => row.accountStatus !== "verified")?.nextStep || "All account profiles verified."),
+    progressRow("metricool_tiktok_mvp", "Metricool TikTok MVP lanes", activeMvpReadyLanes, activeMvpTargetLanes, "Keep SPORT and memes TikTok connected in Metricool approval_required mode."),
     progressRow("developer_apps", "Developer apps", totals.developerAppsApproved, totals.developerApps, developerRows.find((row) => row.status !== "approved")?.nextStep || "All developer apps approved."),
     progressRow("permissions", "Platform permission groups", totals.permissionGroupsApproved, totals.permissionGroups, permissionRows.find((row) => row.status !== "approved")?.nextStep || "All platform permissions approved."),
-    progressRow("external_proofs", "External proof files", Math.max(0, externalOperatorActions - externalProofsNeedEvidence), externalOperatorActions, externalCloseout?.operatorQueue?.[0]?.operatorAction || "All external proof files are complete."),
+    progressRow("external_proofs", "External proof files", Math.max(0, externalOperatorActions - externalProofsNeedEvidence), externalOperatorActions, activeMvpProof.active ? activeMvpProof.nextStep : externalCloseout?.operatorQueue?.[0]?.operatorAction || "All external proof files are complete."),
     progressRow("direct_api", "Direct API lanes", totals.directApiReadyLanes, totals.accountProfiles, "Keep Direct API blocked until accounts, developer apps, permissions and proof imports are all verified."),
   ];
   const fullReadinessMissing = fullReadinessGapRows.reduce((sum, row) => sum + row.missing, 0);
@@ -556,11 +1229,67 @@ async function main() {
   const nextEvidenceCsvLines = nextEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
   const nextEvidenceDataRows = nextEvidenceCsvLines.slice(1);
   const nextEvidenceCards = closeoutCardsForEvidenceDrop(externalCloseout);
+  const mvpAccountEvidenceCsv = mvpAccountEvidenceRows(accountRows, metricoolMvpLaunchPack);
+  const mvpAccountEvidenceLines = mvpAccountEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
+  const mvpAccountEvidenceDataRows = mvpAccountEvidenceLines.slice(1);
+  const tiktokMvpCloseoutRowsForSummary = tiktokMvpCloseoutRows(accountRows, queue, metricoolMvpLaunchPack);
+  const tiktokMvpAccountCloseout = {
+    status: tiktokMvpCloseoutRowsForSummary.every((row) => row.status === "ready_for_metricool_tiktok")
+      ? "ready_for_metricool_tiktok"
+      : "needs_tiktok_account_evidence",
+    generatedAt: new Date().toISOString(),
+    paths: {
+      json: tiktokMvpAccountCloseoutJsonPath,
+      markdown: tiktokMvpAccountCloseoutMarkdownPath,
+      csv: tiktokMvpAccountCloseoutCsvPath,
+    },
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    rows: tiktokMvpCloseoutRowsForSummary,
+    totals: {
+      rows: tiktokMvpCloseoutRowsForSummary.length,
+      ready: tiktokMvpCloseoutRowsForSummary.filter((row) => row.status === "ready_for_metricool_tiktok").length,
+      needsProof: tiktokMvpCloseoutRowsForSummary.filter((row) => row.status === "needs_account_proof").length,
+      needsMetricoolConnection: tiktokMvpCloseoutRowsForSummary.filter((row) => row.status === "needs_metricool_connection").length,
+    },
+    guardrails: [
+      "Metricool remains approval_required; no automatic publishing.",
+      "Do not store login material, browser sessions, recovery codes, or private screenshots.",
+      "Direct TikTok API developer scopes are not required for this MVP.",
+      "Only public profile/connection proof and non-secret notes belong in evidence files.",
+    ],
+    nextStep: tiktokMvpCloseoutRowsForSummary.every((row) => row.status === "ready_for_metricool_tiktok")
+      ? "Use the TikTok Batch Runbook and process SPORT/memes clips in Metricool approval_required mode."
+      : "Add real non-secret TikTok account and Metricool connection evidence for the blocked MVP row.",
+  };
+  const metricoolTiktokBridgeEvidenceCsv = tiktokMetricoolBridgeEvidenceRows(tiktokMvpAccountCloseout);
+  const metricoolTiktokBridgeEvidenceLines = metricoolTiktokBridgeEvidenceCsv.trim().split(/\r?\n/).filter(Boolean);
+  const metricoolTiktokBridgeEvidenceDataRows = metricoolTiktokBridgeEvidenceLines.slice(1);
+  const metricoolTiktokBridgeOperatorCards = tiktokMetricoolBridgeOperatorCards(tiktokMvpAccountCloseout);
+  const metricoolTiktokBridgeProofPack = buildTikTokMetricoolBridgeProofPack(tiktokMvpAccountCloseout, metricoolTiktokBridgeOperatorCards, {
+    connectedMetricoolRightsReadyAssets,
+    approvalRequired: queue?.publishMode === "approval_required" && queue?.status === "approval_required",
+    realPublishEnabled: queue?.realPublishEnabled === true,
+    readyToSend: queue?.totals?.readyToSend || 0,
+    safetyBlockers: metricoolGuard.blockers,
+  });
+  const pendingMetricoolProfileRows = Array.isArray(metricoolMvpLaunchPack?.pendingProfileEvidenceRows)
+    ? metricoolMvpLaunchPack.pendingProfileEvidenceRows.length
+    : 0;
   const status = metricoolMvpReady
-    ? externalProofsNeedEvidence > 0 || totals.directApiReadyLanes < totals.accountProfiles
-      ? "metricool_mvp_ready_with_external_blockers"
-      : "metricool_mvp_ready"
+    ? "metricool_mvp_ready"
     : "blocked";
+  const activeMvpMetricoolBrands = ["SPORT", "memes"];
+  const activeMvpDeferredLanes = ["instagram", "youtube", "streamers"];
+  const activeMvpNextAction = activeMvpNextStep({
+    metricoolMvpReady,
+    activeMvpReadyLanes,
+    activeMvpTargetLanes,
+    bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+    sourceReadiness: {
+      blockers: metricoolGuard.blockers,
+    },
+  });
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -570,6 +1299,9 @@ async function main() {
       json: outJsonPath,
       markdown: outMarkdownPath,
       csv: outCsvPath,
+      tiktokMvpAccountCloseoutJson: tiktokMvpAccountCloseoutJsonPath,
+      tiktokMvpAccountCloseoutMarkdown: tiktokMvpAccountCloseoutMarkdownPath,
+      tiktokMvpAccountCloseoutCsv: tiktokMvpAccountCloseoutCsvPath,
     },
     accountRows,
     permissionRows,
@@ -591,7 +1323,9 @@ async function main() {
       missing: fullReadinessMissing,
       percent: fullReadinessTotal > 0 ? Math.round(((fullReadinessTotal - fullReadinessMissing) / fullReadinessTotal) * 100) : 100,
       rows: fullReadinessGapRows,
-      nextStep: fullReadinessGapRows.find((row) => row.missing > 0)?.nextStep || "All account, permission and external proof gates are ready.",
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : fullReadinessGapRows.find((row) => row.missing > 0)?.nextStep || "All account, permission and external proof gates are ready.",
     },
     externalCloseout: {
       status: externalCloseout?.status || "not_prepared",
@@ -600,8 +1334,11 @@ async function main() {
       operatorActions: externalOperatorActions,
       nextEvidenceRows: closeoutRowsForEvidenceDrop(externalCloseout).length,
       evidenceImportCsvPath: externalCloseout?.paths?.evidenceCsv || null,
-      nextActionId: externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
-      nextStep: externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
+      activeMvpProofPriority: activeMvpProof,
+      nextActionId: activeMvpProof.active ? activeMvpProof.id : externalCloseout?.operatorQueue?.[0]?.id || externalCloseout?.rows?.[0]?.id || null,
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : externalCloseout?.operatorQueue?.[0]?.operatorAction || externalCloseout?.rows?.[0]?.nextStep || "Prepare external closeout pack and import real non-secret evidence.",
     },
     officialResearch: platforms.map((platform) => ({
       platform: platform.platform,
@@ -610,6 +1347,28 @@ async function main() {
       notes: platform.officialResearch,
     })),
     totals,
+    activeMvp: {
+      scope: "tiktok_only_metricool_mvp",
+      platforms: Array.from(activeMetricoolMvpPlatforms),
+      accountIds: Array.from(activeMetricoolMvpAccountIds),
+      metricoolBrands: activeMvpMetricoolBrands,
+      deferredLanes: activeMvpDeferredLanes,
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      approvalRequired: queue?.publishMode === "approval_required" && queue?.status === "approval_required",
+      requiredApprovalMode: "approval_required",
+      realPublishEnabled: queue?.realPublishEnabled === true,
+      requiredRealPublishEnabled: false,
+      readyToSend: queue?.totals?.readyToSend || 0,
+      safetyBlockers: metricoolGuard.blockers,
+      bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+      accountEvidenceCsvPath: mvpAccountEvidenceDropPath,
+      pendingProfileEvidenceCsvPath: metricoolPendingProfileEvidencePath,
+      readyLanes: activeMvpReadyLanes,
+      targetLanes: activeMvpTargetLanes,
+      status: metricoolMvpReady ? "ready" : "blocked",
+      nextStep: activeMvpNextAction,
+    },
     nextEvidenceDrop: {
       path: evidenceDropPath,
       rows: nextEvidenceDataRows.length,
@@ -618,22 +1377,61 @@ async function main() {
       cards: nextEvidenceCards,
       previewCards: nextEvidenceCards.slice(0, 5),
       source: nextEvidenceDataRows.length > 0 && externalOperatorActions > 0 ? "external_closeout" : "account_permission_readiness",
-      nextStep: nextEvidenceDataRows.length > 0
+      activeMvpProofPriority: activeMvpProof,
+      nextStep: activeMvpProof.active
+        ? activeMvpProof.nextStep
+        : nextEvidenceDataRows.length > 0
         ? "Fill only rows backed by real non-secret proof, then run the external closeout evidence import preview."
         : "No next evidence rows remain.",
     },
+    metricoolMvpEvidence: {
+      accountEvidenceCsvPath: mvpAccountEvidenceDropPath,
+      accountRows: mvpAccountEvidenceDataRows.length,
+      bridgeEvidenceCsvPath: metricoolTiktokBridgeEvidencePath,
+      bridgeEvidenceRows: metricoolTiktokBridgeEvidenceDataRows.length,
+      bridgeEvidenceTemplate: metricoolTiktokBridgeEvidenceCsv,
+      bridgeEvidencePreviewRows: metricoolTiktokBridgeEvidenceDataRows.slice(0, 5),
+      bridgeOperatorCards: metricoolTiktokBridgeOperatorCards,
+      bridgeProofPack: {
+        status: metricoolTiktokBridgeProofPack.status,
+        jsonPath: metricoolTiktokBridgeProofPack.paths.json,
+        markdownPath: metricoolTiktokBridgeProofPack.paths.markdown,
+        csvPath: metricoolTiktokBridgeProofPack.paths.csv,
+        rows: metricoolTiktokBridgeProofPack.totals.rows,
+        ready: metricoolTiktokBridgeProofPack.totals.ready,
+        needsProof: metricoolTiktokBridgeProofPack.totals.needsProof,
+        approvalRequired: metricoolTiktokBridgeProofPack.approvalRequired,
+        realPublishEnabled: metricoolTiktokBridgeProofPack.realPublishEnabled,
+        readyToSend: metricoolTiktokBridgeProofPack.readyToSend,
+        safetyBlockers: metricoolTiktokBridgeProofPack.safetyBlockers,
+        nextStep: metricoolTiktokBridgeProofPack.nextStep,
+      },
+      pendingProfileEvidenceCsvPath: metricoolPendingProfileEvidencePath,
+      pendingProfileRows: pendingMetricoolProfileRows,
+      previewRows: mvpAccountEvidenceDataRows.slice(0, 5),
+      nextStep: mvpAccountEvidenceDataRows.length > 0
+        ? "Create/verify the active SPORT/memes TikTok accounts first, then refresh Metricool readiness."
+        : pendingMetricoolProfileRows > 0
+          ? "TikTok MVP is the active lane; Instagram/YouTube profile evidence stays deferred until Robert asks to expand."
+          : "Metricool TikTok MVP account/profile evidence queue is clear.",
+    },
+    tiktokMvpAccountCloseout,
     nextEvidenceDropPath: evidenceDropPath,
-    nextStep: status === "metricool_mvp_ready"
-      ? "Open Metricool and manually review approved queued clips; all external blockers are clear."
-      : status === "metricool_mvp_ready_with_external_blockers"
-        ? "Use Metricool in approval_required mode for connected lanes. Complete developer apps and permissions later only if you want direct API publishing."
-        : "Create/connect missing external accounts and import real account/developer/permission evidence before enabling more lanes.",
+    nextStep: activeMvpNextAction,
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCsvPath, renderCsv(summary));
   await writeFile(evidenceDropPath, nextEvidenceCsv);
+  await writeFile(mvpAccountEvidenceDropPath, mvpAccountEvidenceCsv);
+  await writeFile(metricoolTiktokBridgeEvidencePath, metricoolTiktokBridgeEvidenceCsv);
+  await writeFile(metricoolTiktokBridgeProofPackJsonPath, JSON.stringify(metricoolTiktokBridgeProofPack, null, 2));
+  await writeFile(metricoolTiktokBridgeProofPackMarkdownPath, renderTikTokMetricoolBridgeProofPackMarkdown(metricoolTiktokBridgeProofPack));
+  await writeFile(metricoolTiktokBridgeProofPackCsvPath, renderTikTokMetricoolBridgeProofPackCsv(metricoolTiktokBridgeProofPack));
+  await writeFile(tiktokMvpAccountCloseoutJsonPath, JSON.stringify(tiktokMvpAccountCloseout, null, 2));
+  await writeFile(tiktokMvpAccountCloseoutMarkdownPath, renderTikTokMvpCloseoutMarkdown(tiktokMvpAccountCloseout));
+  await writeFile(tiktokMvpAccountCloseoutCsvPath, renderTikTokMvpCloseoutCsv(tiktokMvpAccountCloseout));
   console.log(JSON.stringify({
     status: summary.status,
     launchMode: summary.launchMode,
@@ -641,12 +1439,21 @@ async function main() {
     verifiedAccounts: totals.verifiedAccounts,
     accountProfiles: totals.accountProfiles,
     metricoolReadyLanes: totals.metricoolReadyLanes,
+    activeMvpReadyLanes,
+    activeMvpTargetLanes,
     directApiReadyLanes: totals.directApiReadyLanes,
     externalProofsNeedEvidence,
     externalEvidenceRepairRows,
     fullReadinessPercent: summary.fullReadinessGap.percent,
     fullReadinessMissing: summary.fullReadinessGap.missing,
     nextEvidenceRows: summary.nextEvidenceDrop.rows,
+    metricoolMvpAccountEvidenceRows: summary.metricoolMvpEvidence.accountRows,
+    metricoolMvpBridgeProofPackStatus: summary.metricoolMvpEvidence.bridgeProofPack.status,
+    metricoolMvpBridgeProofPackPath: summary.metricoolMvpEvidence.bridgeProofPack.markdownPath,
+    metricoolMvpProfileEvidenceRows: summary.metricoolMvpEvidence.pendingProfileRows,
+    tiktokMvpCloseoutStatus: tiktokMvpAccountCloseout.status,
+    tiktokMvpCloseoutReady: tiktokMvpAccountCloseout.totals.ready,
+    tiktokMvpCloseoutRows: tiktokMvpAccountCloseout.totals.rows,
     connectedMetricoolRightsReadyAssets,
     localOwnedSourceAssets,
     nextEvidenceDropPath: evidenceDropPath,

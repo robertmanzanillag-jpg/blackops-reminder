@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 
@@ -15,6 +15,9 @@ const proofTodoCsvPath = path.join(reportsDir, "clippers-external-closeout-proof
 const operatorQueueJsonPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.json");
 const operatorQueueMarkdownPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.md");
 const operatorQueueCsvPath = path.join(reportsDir, "clippers-external-closeout-operator-queue.csv");
+const batchHandoffJsonPath = path.join(reportsDir, "clippers-external-closeout-batches.json");
+const batchHandoffMarkdownPath = path.join(reportsDir, "clippers-external-closeout-batches.md");
+const batchHandoffCsvPath = path.join(reportsDir, "clippers-external-closeout-batches.csv");
 const goLiveAuditJsonPath = path.join(reportsDir, "clippers-external-go-live-audit.json");
 const goLiveAuditMarkdownPath = path.join(reportsDir, "clippers-external-go-live-audit.md");
 const goLiveAuditCsvPath = path.join(reportsDir, "clippers-external-go-live-audit.csv");
@@ -57,6 +60,51 @@ async function readJsonOptional(filePath) {
   } catch {
     return null;
   }
+}
+
+async function evidenceImportFreshness(evidenceImport) {
+  const [csvStat, reportStat] = await Promise.all([
+    stat(evidenceCsvPath).catch(() => null),
+    stat(evidenceImportReportPath).catch(() => null),
+  ]);
+  if (!evidenceImport || !reportStat) {
+    return {
+      status: "missing_report",
+      reportIsFresh: false,
+      evidenceCsvMtimeMs: csvStat?.mtimeMs || 0,
+      reportMtimeMs: 0,
+      nextStep: "Run Validate before trusting external closeout evidence import counts.",
+    };
+  }
+  const reportIsFresh = !csvStat || reportStat.mtimeMs >= csvStat.mtimeMs;
+  return {
+    status: reportIsFresh ? "fresh" : "stale_report",
+    reportIsFresh,
+    evidenceCsvMtimeMs: csvStat?.mtimeMs || 0,
+    reportMtimeMs: reportStat.mtimeMs,
+    nextStep: reportIsFresh
+      ? "Evidence import report matches the current CSV timestamp."
+      : "Evidence CSV changed after the import report. Run Validate again before applying anything.",
+  };
+}
+
+function evidenceImportForFreshness(evidenceImport, freshness) {
+  if (freshness.reportIsFresh) return evidenceImport;
+  return {
+    ...(evidenceImport || {}),
+    status: "stale_evidence_import_report",
+    freshness,
+    totals: {
+      rowsScanned: 0,
+      accepted: 0,
+      rejected: 0,
+      applied: 0,
+    },
+    accepted: [],
+    rejected: [],
+    repairQueue: [],
+    nextStep: freshness.nextStep,
+  };
 }
 
 function runJsonScript(scriptPath, label, timeoutMs = jsonScriptTimeoutMs) {
@@ -773,6 +821,212 @@ function renderOperatorQueueCsv(summary) {
   return `${header.join(",")}\n${rows.join("\n")}\n`;
 }
 
+function batchChecklistFor(lane, platform) {
+  if (lane === "developer_app") {
+    return [
+      `Open the official ${platform} developer portal.`,
+      "Create or submit the app/project and copy only public identifiers.",
+      "Confirm public_base_url and redirect_uri match the production callback.",
+      "Fill proof files and evidence CSV rows only after the portal action is real.",
+    ];
+  }
+  if (lane === "permission") {
+    return [
+      `Open the official ${platform} permission/app-review portal.`,
+      "Request or confirm every scope in this batch.",
+      "Save the portal URL, ticket, case ID or redacted proof note.",
+      "Import only rows with requested or approved status and real proof.",
+    ];
+  }
+  return [
+    `Open each ${platform} account/profile portal.`,
+    "Create or verify the real profile/channel and ownership access.",
+    "Record public profile URL plus owner/manager proof without credentials.",
+    "Include Metricool connected-profile proof when this lane is part of the MVP bridge.",
+  ];
+}
+
+function buildBatchHandoff(summary) {
+  const laneOrder = { developer_app: 0, permission: 1, account: 2 };
+  const platformOrder = { instagram: 0, tiktok: 1, youtube: 2 };
+  const taskById = new Map(summary.tasks.map((task) => [task.id, task]));
+  const groups = new Map();
+  for (const row of summary.operatorQueue) {
+    const key = `${row.platform || "mixed"}:${row.lane || "unknown"}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const batches = Array.from(groups.entries())
+    .map(([key, rows], index) => {
+      const [platform, lane] = key.split(":");
+      const sortedRows = [...rows].sort((a, b) => a.rank - b.rank);
+      const sourceTasks = sortedRows.map((row) => taskById.get(row.id)).filter(Boolean);
+      const evidenceRows = sourceTasks.map(evidenceRow);
+      const proofPaths = sortedRows.map((row) => row.proofPath).filter(Boolean);
+      const missingCsvFields = Array.from(new Set(sortedRows.flatMap((row) => row.missingCsvFields || []))).sort();
+      const blockers = Array.from(new Set(sortedRows.flatMap((row) => row.blockers || []).map(safeArtifactText)));
+      const portalUrls = Array.from(new Set(sortedRows.map((row) => row.portalUrl).filter(Boolean)));
+      const docsUrls = Array.from(new Set(sortedRows.map((row) => row.docsUrl).filter(Boolean)));
+      const accountIds = Array.from(new Set(sortedRows.map((row) => row.accountId).filter(Boolean)));
+      const scopes = Array.from(new Set(sourceTasks.map((task) => task.scope).filter(Boolean)));
+      return {
+        id: `external-closeout-${platform}-${lane}`,
+        rank: index + 1,
+        label: `${platform} ${lane.replace(/_/g, " ")}`,
+        platform,
+        lane,
+        status: sortedRows.length ? "needs_operator" : "complete",
+        total: sortedRows.length,
+        critical: sortedRows.filter((row) => row.priority === "critical").length,
+        high: sortedRows.filter((row) => row.priority === "high").length,
+        startRank: sortedRows[0]?.rank || 0,
+        endRank: sortedRows[sortedRows.length - 1]?.rank || 0,
+        requiredStatuses: Array.from(new Set(sortedRows.map((row) => row.requiredCsvStatus).filter(Boolean))),
+        missingCsvFields,
+        blockers,
+        portalUrls,
+        docsUrls,
+        accountIds,
+        scopes,
+        proofPaths,
+        evidenceRows,
+        operatorActions: sortedRows.map((row) => row.operatorAction),
+        firstAction: sortedRows[0]?.operatorAction || "No operator actions remain for this batch.",
+        checklist: batchChecklistFor(lane, platform),
+        doneCriteria: [
+          "Every proof file in this batch contains real non-secret evidence.",
+          "Evidence CSV rows use only accepted statuses for this lane.",
+          "No passwords, cookies, tokens, recovery values, client private values or private screenshots are stored.",
+          "Validate accepts the rows before Apply ready is used.",
+        ],
+      };
+    })
+    .sort((a, b) => (
+      (platformOrder[a.platform] ?? 99) - (platformOrder[b.platform] ?? 99) ||
+      (laneOrder[a.lane] ?? 99) - (laneOrder[b.lane] ?? 99) ||
+      a.startRank - b.startRank
+    ))
+    .map((batch, index) => ({ ...batch, rank: index + 1 }));
+  return {
+    status: batches.length ? "needs_operator" : "complete",
+    generatedAt: summary.generatedAt,
+    paths: {
+      json: batchHandoffJsonPath,
+      markdown: batchHandoffMarkdownPath,
+      csv: batchHandoffCsvPath,
+      evidenceCsv: summary.paths.evidenceCsv,
+      proofDir: summary.paths.proofDir,
+      operatorQueue: summary.paths.operatorQueueMarkdown,
+    },
+    totals: {
+      batches: batches.length,
+      rows: batches.reduce((sum, batch) => sum + batch.total, 0),
+      critical: batches.reduce((sum, batch) => sum + batch.critical, 0),
+      high: batches.reduce((sum, batch) => sum + batch.high, 0),
+      proofFilesNeedRealEvidence: batches.reduce((sum, batch) => sum + batch.proofPaths.length, 0),
+      evidenceRows: batches.reduce((sum, batch) => sum + batch.evidenceRows.length, 0),
+      metricoolReadyToSend: summary.metricool.readyToSend,
+      realPublishEnabled: summary.metricool.realPublishEnabled,
+    },
+    batches,
+    nextBatch: batches[0] || null,
+    nextStep: batches[0]?.firstAction || "No external closeout batches remain.",
+    guardrails: [
+      "This handoff organizes external portal work; it does not prove accounts or permissions are done.",
+      "Metricool remains approval_required and ready_to_send must stay 0 until Robert explicitly approves a publish-mode change.",
+      "Do not store passwords, cookies, tokens, recovery values, client private values or private screenshots.",
+    ],
+  };
+}
+
+function renderBatchHandoffMarkdown(handoff) {
+  const batchLines = handoff.batches.map((batch) => [
+    `### ${batch.rank}. ${batch.label}`,
+    "",
+    `- Status: ${batch.status}`,
+    `- Rows: ${batch.startRank}-${batch.endRank}`,
+    `- Actions: ${batch.total}`,
+    `- Critical / high: ${batch.critical}/${batch.high}`,
+    `- Required statuses: ${batch.requiredStatuses.join(", ") || "n/a"}`,
+    `- Missing CSV fields: ${batch.missingCsvFields.join(", ") || "none"}`,
+    `- Portal URLs: ${batch.portalUrls.join(" | ") || "n/a"}`,
+    `- Docs URLs: ${batch.docsUrls.join(" | ") || "n/a"}`,
+    `- Accounts: ${batch.accountIds.join(", ") || "n/a"}`,
+    `- Scopes: ${batch.scopes.join(", ") || "n/a"}`,
+    `- First action: ${batch.firstAction}`,
+    "",
+    "Checklist:",
+    ...batch.checklist.map((item) => `- [ ] ${item}`),
+    "",
+    "Done criteria:",
+    ...batch.doneCriteria.map((item) => `- ${item}`),
+    "",
+    "Proof files:",
+    ...(batch.proofPaths.length ? batch.proofPaths.map((item) => `- ${item}`) : ["- n/a"]),
+    "",
+    "Evidence starter rows:",
+    "```csv",
+    ...batch.evidenceRows,
+    "```",
+    "",
+  ].join("\n"));
+  return [
+    "# Clippers External Closeout Batches",
+    "",
+    `Generated: ${handoff.generatedAt}`,
+    `Status: ${handoff.status}`,
+    "",
+    "Use this as the batch-by-batch handoff for external portal work. It is not a publishing approval and it does not mark permissions complete.",
+    "",
+    "## Totals",
+    "",
+    `- Batches: ${handoff.totals.batches}`,
+    `- Rows: ${handoff.totals.rows}`,
+    `- Critical: ${handoff.totals.critical}`,
+    `- High: ${handoff.totals.high}`,
+    `- Proof files needing real evidence: ${handoff.totals.proofFilesNeedRealEvidence}`,
+    `- Evidence rows: ${handoff.totals.evidenceRows}`,
+    `- Metricool ready to send: ${handoff.totals.metricoolReadyToSend}`,
+    `- Real publish enabled: ${handoff.totals.realPublishEnabled ? "yes" : "no"}`,
+    "",
+    "## Guardrails",
+    "",
+    ...handoff.guardrails.map((item) => `- ${item}`),
+    "",
+    "## Next Batch",
+    "",
+    handoff.nextBatch ? `- ${handoff.nextBatch.id}: ${handoff.nextBatch.firstAction}` : "- No batches remain.",
+    "",
+    "## Batches",
+    "",
+    ...(batchLines.length ? batchLines : ["- No external closeout batches remain."]),
+    "",
+  ].join("\n");
+}
+
+function renderBatchHandoffCsv(handoff) {
+  const header = ["rank", "id", "platform", "lane", "status", "total", "critical", "high", "start_rank", "end_rank", "required_statuses", "missing_csv_fields", "proof_files", "evidence_rows", "portal_urls", "first_action"];
+  const rows = handoff.batches.map((batch) => [
+    batch.rank,
+    batch.id,
+    batch.platform,
+    batch.lane,
+    batch.status,
+    batch.total,
+    batch.critical,
+    batch.high,
+    batch.startRank,
+    batch.endRank,
+    batch.requiredStatuses.join("|"),
+    batch.missingCsvFields.join("|"),
+    batch.proofPaths.join("|"),
+    batch.evidenceRows.length,
+    batch.portalUrls.join("|"),
+    batch.firstAction,
+  ].map(csvCell).join(","));
+  return `${header.join(",")}\n${rows.join("\n")}\n`;
+}
+
 function renderMarkdown(summary) {
   const taskLines = summary.tasks.map((task) => [
     `### ${task.id}`,
@@ -818,6 +1072,8 @@ function renderMarkdown(summary) {
     "",
     `CSV: ${summary.paths.evidenceCsv}`,
     `Proof dir: ${summary.paths.proofDir}`,
+    `Freshness: ${summary.evidenceImportFreshness.status}`,
+    `Freshness next step: ${summary.evidenceImportFreshness.nextStep}`,
     "",
     "## Tasks",
     "",
@@ -1039,10 +1295,10 @@ function buildGoLiveAudit(summary, artifactSafety, evidenceImport) {
     {
       id: "metricool_publish_mode",
       label: "Metricool stays approval_required with no automatic sending",
-      status: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0 ? "verified" : "blocked",
-      blocker: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0
+      status: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0 && summary.metricool.realPublishEnabled === false ? "verified" : "blocked",
+      blocker: summary.metricool.publishMode === "approval_required" && summary.metricool.readyToSend === 0 && summary.metricool.realPublishEnabled === false
         ? ""
-        : `Metricool publish mode is ${summary.metricool.publishMode}; readyToSend is ${summary.metricool.readyToSend}.`,
+        : `Metricool publish mode is ${summary.metricool.publishMode}; readyToSend is ${summary.metricool.readyToSend}; realPublishEnabled is ${summary.metricool.realPublishEnabled ? "true" : "false"}.`,
     },
     {
       id: "direct_api_gate",
@@ -1917,7 +2173,9 @@ async function main() {
   await runJsonScript("script/clippers-operational-readiness.mjs", "Operational readiness", nestedJsonScriptTimeoutMs);
   const accountReadiness = await readJson(accountReadinessPath);
   const operationalReadiness = await readJson(operationalReadinessPath);
-  const evidenceImport = await readJsonOptional(evidenceImportReportPath);
+  const evidenceImportRaw = await readJsonOptional(evidenceImportReportPath);
+  const evidenceImportFreshnessSummary = await evidenceImportFreshness(evidenceImportRaw);
+  const evidenceImport = evidenceImportForFreshness(evidenceImportRaw, evidenceImportFreshnessSummary);
   const officialPermissionSourceAudit = await readJsonOptional(officialPermissionSourceAuditPath);
   const publicBaseUrl = await readStoredPublicBaseUrl();
   const accountTasks = accountReadiness.accountRows.filter((row) => row.accountStatus !== "verified").map(accountTask);
@@ -1941,6 +2199,9 @@ async function main() {
       operatorQueueJson: operatorQueueJsonPath,
       operatorQueueMarkdown: operatorQueueMarkdownPath,
       operatorQueueCsv: operatorQueueCsvPath,
+      batchHandoffJson: batchHandoffJsonPath,
+      batchHandoffMarkdown: batchHandoffMarkdownPath,
+      batchHandoffCsv: batchHandoffCsvPath,
       goLiveAuditJson: goLiveAuditJsonPath,
       goLiveAuditMarkdown: goLiveAuditMarkdownPath,
       goLiveAuditCsv: goLiveAuditCsvPath,
@@ -1958,7 +2219,9 @@ async function main() {
       queuedForApproval: operationalReadiness.metricool?.queuedForApproval || 0,
       readyToSend: operationalReadiness.metricool?.readyToSend || 0,
       publishMode: operationalReadiness.metricool?.publishMode || "unknown",
+      realPublishEnabled: operationalReadiness.metricool?.realPublishEnabled === true,
     },
+    evidenceImportFreshness: evidenceImportFreshnessSummary,
     totals: {
       tasks: tasks.length,
       critical: tasks.filter((task) => task.priority === "critical").length,
@@ -2002,6 +2265,10 @@ async function main() {
   }, null, 2);
   const operatorQueueMarkdown = renderOperatorQueueMarkdown(summary);
   const operatorQueueCsv = renderOperatorQueueCsv(summary);
+  const batchHandoff = buildBatchHandoff(summary);
+  const batchHandoffJson = JSON.stringify(batchHandoff, null, 2);
+  const batchHandoffMarkdown = renderBatchHandoffMarkdown(batchHandoff);
+  const batchHandoffCsv = renderBatchHandoffCsv(batchHandoff);
   const evidenceCsv = renderEvidenceCsv(summary);
   const preliminaryAudit = buildGoLiveAudit(summary, { status: "clean", scanned: 0, findings: [] }, evidenceImport);
   const preliminaryAuditMarkdown = renderGoLiveAuditMarkdown(preliminaryAudit);
@@ -2028,6 +2295,9 @@ async function main() {
       { path: operatorQueueJsonPath, content: operatorQueueJson },
       { path: operatorQueueMarkdownPath, content: operatorQueueMarkdown },
       { path: operatorQueueCsvPath, content: operatorQueueCsv },
+      { path: batchHandoffJsonPath, content: batchHandoffJson },
+      { path: batchHandoffMarkdownPath, content: batchHandoffMarkdown },
+      { path: batchHandoffCsvPath, content: batchHandoffCsv },
       { path: goLiveAuditJsonPath, content: preliminaryAuditJson },
       { path: goLiveAuditMarkdownPath, content: preliminaryAuditMarkdown },
       { path: goLiveAuditCsvPath, content: preliminaryAuditCsv },
@@ -2046,13 +2316,13 @@ async function main() {
     ...artifactSafety.findings,
     ...artifactSafetyFindings([{ path: outJsonPath, content: preliminarySummaryJson }]),
   ];
-  artifactSafety.scanned = 19;
+  artifactSafety.scanned = 22;
   artifactSafety.status = artifactSafety.findings.length ? "blocked_sensitive_artifact" : "clean";
   const goLiveAudit = buildGoLiveAudit(summary, artifactSafety, evidenceImport);
   const actionSheet = buildOperatorActionSheet(summary, goLiveAudit, officialPermissionSourceAudit);
   const nextWorkRunBase = { ...actionSheet.workSession, generatedAt: summary.generatedAt, paths: { json: nextWorkRunJsonPath, markdown: nextWorkRunMarkdownPath, csv: nextWorkRunCsvPath } };
   const nextWorkRun = { ...nextWorkRunBase, portalSessions: buildWorkRunPortalSessions(nextWorkRunBase, summary.tasks) };
-  const finalSummary = { ...summary, artifactSafety, goLiveAudit, actionSheet, nextWorkRun };
+  const finalSummary = { ...summary, artifactSafety, batchHandoff, goLiveAudit, actionSheet, nextWorkRun };
   await writeFile(outJsonPath, JSON.stringify(finalSummary, null, 2));
   await writeFile(outMarkdownPath, closeoutMarkdown);
   await writeFile(outCsvPath, closeoutCsv);
@@ -2068,6 +2338,12 @@ async function main() {
   }, null, 2));
   await writeFile(operatorQueueMarkdownPath, operatorQueueMarkdown);
   await writeFile(operatorQueueCsvPath, operatorQueueCsv);
+  await writeFile(batchHandoffJsonPath, JSON.stringify({
+    ...batchHandoff,
+    artifactSafety,
+  }, null, 2));
+  await writeFile(batchHandoffMarkdownPath, batchHandoffMarkdown);
+  await writeFile(batchHandoffCsvPath, batchHandoffCsv);
   await writeFile(goLiveAuditJsonPath, JSON.stringify(goLiveAudit, null, 2));
   await writeFile(goLiveAuditMarkdownPath, renderGoLiveAuditMarkdown(goLiveAudit));
   await writeFile(goLiveAuditCsvPath, renderGoLiveAuditCsv(goLiveAudit));
@@ -2092,6 +2368,7 @@ async function main() {
     reportPath: outMarkdownPath,
     proofTodoPath: proofTodoMarkdownPath,
     operatorQueuePath: operatorQueueMarkdownPath,
+    batchHandoffPath: batchHandoffMarkdownPath,
     goLiveAuditPath: goLiveAuditMarkdownPath,
     actionSheetPath: actionSheetMarkdownPath,
     nextWorkRunPath: nextWorkRunMarkdownPath,

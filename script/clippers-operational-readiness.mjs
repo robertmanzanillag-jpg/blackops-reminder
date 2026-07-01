@@ -8,6 +8,7 @@ const scheduledDir = path.join(rootDir, "scheduled");
 const reportsDir = path.join(rootDir, "reports");
 const accountReadinessPath = path.join(rootDir, "account-permission-readiness.json");
 const metricoolQueuePath = path.join(scheduledDir, "metricool-execution-queue.json");
+const tiktokMvpReadinessVerifierPath = path.join(reportsDir, "clippers-tiktok-mvp-readiness-verifier.json");
 const outJsonPath = path.join(reportsDir, "clippers-operational-readiness.json");
 const outMarkdownPath = path.join(reportsDir, "clippers-operational-readiness.md");
 const outCsvPath = path.join(reportsDir, "clippers-operational-readiness.csv");
@@ -101,7 +102,7 @@ function unique(values) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-function buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue }) {
+function buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue, tiktokMvpReadinessVerifier }) {
   const blockers = [];
   if (!accountReadiness) blockers.push("account-permission-readiness.json missing; run npm run clippers:account-permission-readiness.");
   if (!metricoolQueue) blockers.push("metricool-execution-queue.json missing; run npm run clippers:sync-metricool-source-readiness.");
@@ -116,6 +117,9 @@ function buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue }) {
   if ((metricoolQueue?.sourceReadiness?.totals?.rightsReadyAssets || 0) <= 0) blockers.push("Metricool source readiness has no connected rights-ready assets.");
   if (!Array.isArray(metricoolQueue?.sourceReadiness?.categories) || metricoolQueue.sourceReadiness.categories.length < 2) blockers.push("Metricool source readiness has fewer than two connected lanes.");
   if ((accountReadiness?.totals?.metricoolReadyLanes || 0) < 2) blockers.push("Fewer than two Metricool approval lanes are ready; SPORT and memes must stay connected first.");
+  if (tiktokMvpReadinessVerifier?.status && tiktokMvpReadinessVerifier.status !== "pass") {
+    blockers.push(`TikTok MVP verifier is ${tiktokMvpReadinessVerifier.status}; ${tiktokMvpReadinessVerifier.nextStep || "rerun proof links/bridge evidence before Metricool operation."}`);
+  }
   return unique(blockers);
 }
 
@@ -149,6 +153,8 @@ function renderMarkdown(summary) {
     "## MVP",
     "",
     `- Metricool MVP ready: ${summary.mvp.metricoolReady ? "yes" : "no"}`,
+    `- TikTok MVP verifier: ${summary.mvp.tiktokVerifierStatus}`,
+    `- TikTok launch decision: ${summary.mvp.tiktokLaunchDecision}`,
     `- Launch mode: ${summary.mvp.launchMode}`,
     `- Approval queue ready: ${summary.mvp.approvalQueueReady ? "yes" : "no"}`,
     `- Real publish enabled: ${summary.metricool.realPublishEnabled ? "yes" : "no"}`,
@@ -196,6 +202,8 @@ function renderCsv(summary) {
   const rows = [
     ["status", summary.status],
     ["metricool_mvp_ready", summary.mvp.metricoolReady],
+    ["tiktok_mvp_verifier_status", summary.mvp.tiktokVerifierStatus],
+    ["tiktok_launch_decision", summary.mvp.tiktokLaunchDecision],
     ["launch_mode", summary.mvp.launchMode],
     ["approval_queue_ready", summary.mvp.approvalQueueReady],
     ["full_direct_api_ready", summary.fullDirectApiReady],
@@ -218,9 +226,11 @@ function renderCsv(summary) {
 async function main() {
   await mkdir(reportsDir, { recursive: true });
   await runJsonScript("script/clippers-account-permission-readiness.mjs", "Account permission readiness", nestedJsonScriptTimeoutMs);
-  const [accountReadiness, metricoolQueue, ...localAppPorts] = await Promise.all([
+  await runJsonScript("script/clippers-tiktok-mvp-readiness-verifier.mjs", "TikTok MVP readiness verifier", nestedJsonScriptTimeoutMs);
+  const [accountReadiness, metricoolQueue, tiktokMvpReadinessVerifier, ...localAppPorts] = await Promise.all([
     readJson(accountReadinessPath),
     readJson(metricoolQueuePath),
+    readJson(tiktokMvpReadinessVerifierPath),
     checkPort(5010),
     checkPort(5000),
   ]);
@@ -229,7 +239,7 @@ async function main() {
   const queueTotals = metricoolQueue?.totals || {};
   const sourceTotals = metricoolQueue?.sourceReadiness?.localOwnedSourceTotals || {};
   const lanes = Array.isArray(metricoolQueue?.sourceReadiness?.categories) ? metricoolQueue.sourceReadiness.categories : [];
-  const metricoolMvpBlockers = buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue });
+  const metricoolMvpBlockers = buildMetricoolMvpBlockers({ accountReadiness, metricoolQueue, tiktokMvpReadinessVerifier });
   const qaFollowups = buildQaFollowups({ accountReadiness, localAppPorts });
   const directApiBacklog = buildDirectApiBacklog({ accountReadiness });
   const sourceReadinessReady = metricoolQueue?.sourceReadiness?.status === "ready"
@@ -241,12 +251,15 @@ async function main() {
     && metricoolQueue?.realPublishEnabled === false
     && (queueTotals.queuedForApproval || 0) > 0
     && (queueTotals.readyToSend || 0) === 0;
+  const tiktokVerifierReady = tiktokMvpReadinessVerifier?.status === "pass"
+    && tiktokMvpReadinessVerifier?.launchDecision === "ready_for_metricool_operator";
   const metricoolMvpStatus = accountReadiness?.status === "metricool_mvp_ready"
     || accountReadiness?.status === "metricool_mvp_ready_with_external_blockers";
   const metricoolReady = metricoolMvpStatus
     && (accountTotals.metricoolReadyLanes || 0) >= 2
     && sourceReadinessReady
     && approvalQueueReady
+    && tiktokVerifierReady
     && metricoolMvpBlockers.length === 0;
   const fullDirectApiReady = (accountTotals.directApiReadyLanes || 0) >= (accountTotals.accountProfiles || 1)
     && (accountTotals.developerAppsApproved || 0) >= (accountTotals.developerApps || 1)
@@ -256,7 +269,9 @@ async function main() {
     ? "full_ready"
     : metricoolReady
       ? "metricool_mvp_ready"
-      : "blocked";
+      : tiktokVerifierReady && metricoolMvpBlockers.length === 0 && approvalQueueReady && sourceReadinessReady && metricoolMvpStatus
+        ? "metricool_mvp_ready_with_blockers"
+        : "blocked";
   const summary = {
     status,
     generatedAt: new Date().toISOString(),
@@ -270,6 +285,10 @@ async function main() {
       launchMode: "metricool_approval_required",
       approvalQueueReady,
       directSocialApisRequired: false,
+      tiktokVerifierReady,
+      tiktokVerifierStatus: tiktokMvpReadinessVerifier?.status || "missing",
+      tiktokLaunchDecision: tiktokMvpReadinessVerifier?.launchDecision || "missing",
+      tiktokVerifierNextStep: tiktokMvpReadinessVerifier?.nextStep || "",
     },
     fullDirectApiReady,
     accounts: {
