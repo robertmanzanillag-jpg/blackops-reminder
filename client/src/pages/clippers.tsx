@@ -2792,6 +2792,7 @@ interface ClipperTikTokMvpProofLinksDropStarterSummary {
   realPublishEnabled: boolean;
   sourcePath: string;
   bytes: number;
+  starterKind?: "metricool_fast_path" | "full_paste_packet" | string;
   overwritten: boolean;
   wroteStarter: boolean;
   guardrails: string[];
@@ -12203,7 +12204,7 @@ export default function ClippersPage() {
       }
       toast({
         title: data.tiktokMvpProofLinksDropStarter.status === "created" ? "Starter creado" : "Starter existente preservado",
-        description: data.tiktokMvpProofLinksDropStarter.nextStep,
+        description: `${data.tiktokMvpProofLinksDropStarter.starterKind || "proof_packet"}: ${data.tiktokMvpProofLinksDropStarter.nextStep}`,
         variant: data.tiktokMvpProofLinksDropStarter.status === "created" ? undefined : "destructive",
       });
     },

@@ -3597,11 +3597,11 @@ export async function registerRoutes(
       let handoffRun: Record<string, unknown> | null = null;
       if (!existing.trim()) {
         let handoff = await readClipperTikTokMvpProofHandoff().catch(() => null);
-        if (!handoff?.pastePacketText) {
+        if (!handoff?.fastPathPastePacketText && !handoff?.pastePacketText) {
           handoffRun = await runClipperTikTokMvpProofHandoff();
           handoff = await readClipperTikTokMvpProofHandoff();
         }
-        starterText = String(handoff?.pastePacketText || "").trimEnd();
+        starterText = String(handoff?.fastPathPastePacketText || handoff?.pastePacketText || "").trimEnd();
         if (!starterText.trim()) {
           res.status(400).json({ error: "TikTok MVP proof handoff did not produce a proof links paste packet." });
           return;
@@ -3619,6 +3619,7 @@ export async function registerRoutes(
           realPublishEnabled: false,
           sourcePath: clipperTikTokMvpProofLinksFilledDropPath,
           bytes: Buffer.byteLength(starterText || "", "utf8"),
+          starterKind: starterText.includes("Metricool fast-path proof packet") ? "metricool_fast_path" : "full_paste_packet",
           overwritten: false,
           wroteStarter,
           guardrails: [
@@ -3626,7 +3627,7 @@ export async function registerRoutes(
             "Does not overwrite an existing filled proof links drop file.",
             "Does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
           ],
-          nextStep: "Open the starter file, replace every placeholder with real public/non-secret proof URLs, then run Import drop file.",
+          nextStep: "Open the starter file, replace every blank proof URL with real public/non-secret proof evidence, then run Import drop file. Fast-path proof still requires Preview links before Save.",
         },
         tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
         tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),

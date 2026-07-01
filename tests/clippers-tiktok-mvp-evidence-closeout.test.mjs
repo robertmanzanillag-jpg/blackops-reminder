@@ -685,6 +685,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.doesNotMatch(proofLinksDropStatusRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksDropStarterRoute, /create-tiktok-mvp-proof-links-drop-starter/);
   assert.match(proofLinksDropStarterRoute, /!existing\.trim\(\)/);
+  assert.match(proofLinksDropStarterRoute, /fastPathPastePacketText/);
+  assert.match(proofLinksDropStarterRoute, /starterKind/);
+  assert.match(proofLinksDropStarterRoute, /metricool_fast_path/);
   assert.match(proofLinksDropStarterRoute, /writeNodeFile/);
   assert.match(proofLinksDropStarterRoute, /overwritten:\s*false/);
   assert.match(proofLinksDropStarterRoute, /realPublishEnabled:\s*false/);
@@ -950,6 +953,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /ingest-clippers-tiktok-mvp-proof-links-drop-button/);
   assert.match(page, /tiktokMvpProofLinksDropIngestMutation/);
   assert.match(page, /tiktokMvpProofLinksDropStarterMutation/);
+  assert.match(page, /starterKind/);
   assert.match(page, /tiktokMvpProofLinksDropImportMutation/);
   assert.match(page, /tiktokMvpProofHandoff\?\.pastePacketText/);
   assert.match(page, /setTiktokMvpProofLinksText\(data\.tiktokMvpProofLinksDropImport\.proofLinksText\)/);
