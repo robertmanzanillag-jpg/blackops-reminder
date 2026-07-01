@@ -1943,6 +1943,49 @@ function slugifyClientBranchValue(value: string) {
     .slice(0, 80) || "client";
 }
 
+const genericPaymentEvidence = new Set([
+  "paid",
+  "cash",
+  "deposit",
+  "payment",
+  "received",
+  "collected",
+  "paid cash",
+  "cash paid",
+  "deposit paid",
+  "payment received",
+  "robert confirmed deposit",
+]);
+
+function normalizePaymentEvidence(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[$,]/g, "")
+    .replace(/[^\p{L}\p{N}_\- ]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasVerifiablePaymentEvidence(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) return false;
+
+  const normalized = normalizePaymentEvidence(trimmed);
+  if (genericPaymentEvidence.has(normalized)) return false;
+  if (/^(paid|cash|deposit|payment|received|collected)\s+\$?\d+(\.\d{1,2})?$/.test(normalized)) return false;
+  if (/\b(?:pi|ch)_[a-z0-9]{6,}\b/i.test(trimmed)) return true;
+
+  const lower = trimmed.toLowerCase();
+  const hasPaymentProvider = /\b(zelle|venmo|cashapp|cash app|paypal|stripe|square|clover|ach|wire|bank transfer)\b/.test(lower);
+  const hasReferenceLabel = /\b(ref|reference|receipt|invoice|txn|transaction|confirmation|confirmacion|comprobante|payment id|charge id)\b/.test(lower);
+  const normalizedTokens = normalized.split(" ");
+  const hasSpecificToken = /\b\d{3,}\b/.test(normalized)
+    || normalizedTokens.some((token) => token.length >= 6 && /[a-z]/.test(token) && /\d/.test(token))
+    || /\b[a-z]{2,}[-_][a-z0-9][a-z0-9_-]{2,}\b/i.test(trimmed);
+
+  return hasSpecificToken && (hasPaymentProvider || hasReferenceLabel);
+}
+
 function statusTone(status: string) {
   if (status === "pass") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -2076,9 +2119,9 @@ export default function RevenueEnginePage() {
   }>>({});
   const requestDepositPaymentConfirmation = (businessName: string, amountUsd: number) => {
     const value = window.prompt(
-      `Referencia de pago para ${businessName} (${money.format(amountUsd)}): Stripe, Zelle, invoice o recibo.`,
+      `Referencia verificable de pago para ${businessName} (${money.format(amountUsd)}): Stripe payment id, Zelle/bank ref, invoice/receipt id.`,
     )?.trim() || "";
-    return value.length >= 4 ? value : null;
+    return hasVerifiablePaymentEvidence(value) ? value : null;
   };
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releaseGateInputsByWorkspace, setReleaseGateInputsByWorkspace] = useState<Record<string, DeliveryWorkspaceReleaseGateInput>>({});
@@ -6215,7 +6258,7 @@ export default function RevenueEnginePage() {
                         const closeCashCollectedUsd = Number(closeCashValue) || 0;
                         const closePaymentConfirmation = closeInput.paymentConfirmation ?? opportunity.paymentConfirmation;
                         const closeNotes = closeInput.notes ?? "";
-                        const closeHasPaymentConfirmation = closePaymentConfirmation.trim().length >= 4;
+                        const closeHasPaymentConfirmation = hasVerifiablePaymentEvidence(closePaymentConfirmation);
                         const closeHasCash = closeCashCollectedUsd > 0;
                         const closeDepositCoversRequired = closeCashCollectedUsd >= opportunity.requiredDepositUsd;
                         const shouldRecordDepositOutcome = closeDepositCoversRequired && (
@@ -6302,7 +6345,7 @@ export default function RevenueEnginePage() {
                                       }));
                                     }}
                                     className="h-9 border-zinc-800 bg-zinc-950 text-sm"
-                                    placeholder="Stripe/CashApp/Zelle confirmado"
+                                    placeholder="Stripe pi_..., Zelle ref 123456, invoice INV-123"
                                     data-testid={`input-website-opportunity-payment-${opportunity.id}`}
                                   />
                                 </div>
@@ -6334,7 +6377,7 @@ export default function RevenueEnginePage() {
                                 {!scopeApprovedForClose && <p>Falta aprobar scope.</p>}
                                 {!closeHasCash && <p>Falta monto de deposito.</p>}
                                 {closeHasCash && !closeDepositCoversRequired && <p>El monto capturado no cubre el deposito requerido.</p>}
-                                {!closeHasPaymentConfirmation && <p>Falta confirmacion de pago.</p>}
+                                {!closeHasPaymentConfirmation && <p>Falta referencia verificable: Stripe/Zelle/bank ref, invoice, receipt o confirmation id.</p>}
                                 {shouldRecordDepositOutcome && <p>El cierre registrara primero el deposito manual en el outreach.</p>}
                               </div>
                             )}

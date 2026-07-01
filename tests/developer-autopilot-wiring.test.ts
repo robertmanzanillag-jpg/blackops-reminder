@@ -172,11 +172,17 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /input-website-opportunity-cash-/);
   assert.match(uiSource, /input-website-opportunity-payment-/);
   assert.match(uiSource, /input-website-opportunity-close-notes-/);
+  assert.match(uiSource, /function hasVerifiablePaymentEvidence/);
+  assert.match(uiSource, /genericPaymentEvidence/);
+  assert.match(uiSource, /return hasVerifiablePaymentEvidence\(value\) \? value : null/);
+  assert.match(uiSource, /const closeHasPaymentConfirmation = hasVerifiablePaymentEvidence\(closePaymentConfirmation\)/);
+  assert.match(uiSource, /Falta referencia verificable/);
   assert.match(websiteOpportunityCloseMutation, /\/api\/revenue-engine\/outreach-outcome/);
   assert.match(websiteOpportunityCloseMutation, /outcome: "deposit_collected"/);
   assert.match(websiteOpportunityCloseMutation, /outcomeRecordedByRobert: true/);
   assert.match(websiteOpportunityCloseMutation, /outcomeData\.status === "blocked"/);
   assert.match(uiSource, /button-close-website-opportunity-/);
+  assert.doesNotMatch(uiSource, /const closeHasPaymentConfirmation = closePaymentConfirmation\.trim\(\)\.length >= 4/);
   assert.doesNotMatch(websiteOpportunityCloseMutation, /reviewChecks\.clientApprovedScope/);
   assert.match(uiSource, /const shouldRecordDepositOutcome = closeDepositCoversRequired &&/);
   assert.match(uiSource, /\|\| !closeDepositCoversRequired/);
