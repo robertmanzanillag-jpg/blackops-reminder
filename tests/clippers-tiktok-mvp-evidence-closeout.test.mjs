@@ -2066,7 +2066,8 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /nextLockedButton/);
   assert.match(source, /preview_proof_links/);
   assert.match(source, /Locked until clean preview/);
-  assert.match(source, /preview links first, then save only if the preview is clean/);
+  assert.match(source, /Preview links first; save only if the preview gate is clean\/current/);
+  assert.match(source, /proof drop or paste packet/);
   assert.doesNotMatch(source, /then save proof links/);
   assert.doesNotMatch(source, /quickFillGeneratedAt >= proofRefreshGeneratedAt/);
   assert.match(source, /Proof handoff never applies evidence, publishes, schedules, or enables direct social APIs/);
@@ -2112,6 +2113,9 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(report.unblockBoard.fastPathRows[0].reuseAsOwnershipLine, /accountOwnershipProofUrl=/);
   assert.equal(report.unblockBoard.fastPathRows[0].metricoolBrandName, "SPORT");
   assert.equal(report.unblockBoard.fastPathRows[1].metricoolBrandName, "memes");
+  assert.match(report.nextAction, /Preview links first; save only if the preview gate is clean\/current/);
+  assert.match(report.nextAction, /proof drop or paste packet/);
+  assert.doesNotMatch(report.nextAction, /proof-links\.json, then rerun Proof drop kit|then save proof links/i);
   assert.equal(typeof report.proofState.quickFillCurrent, "boolean");
   assert.equal(typeof report.proofState.proofRefreshFresh, "boolean");
   assert.match(report.gates.find((gate) => gate.id === "quick_fill").detail, /currentWithProofRefresh|malformed/);
@@ -2179,9 +2183,11 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(oneScreen, /Minimum real proof URLs needed: 2/);
   assert.match(oneScreen, /Fast path: if the Metricool or concrete Drive file\/folder\/Docs proof clearly shows the TikTok profile connected under Robert control/);
+  assert.match(oneScreen, /Preview links first; save only if the preview gate is clean\/current/);
   assert.match(oneScreen, /Next safe button: preview_proof_links/);
   assert.match(oneScreen, /Locked until clean preview: save_proof_links/);
   assert.doesNotMatch(oneScreen, /Next safe button: save_proof_links/);
+  assert.doesNotMatch(oneScreen, /proof-links\.json, then rerun Proof drop kit|then save proof links/i);
   assert.match(oneScreen, /This file does not apply evidence, schedule posts, publish, or enable direct social APIs/);
   assert.doesNotMatch(oneScreen, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 });

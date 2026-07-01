@@ -103,7 +103,7 @@ function decisionFromArtifacts({ proofDrop, quickFill, importPreview, closeout, 
     return {
       status: "blocked_needs_proof_links",
       nextButton: "save_proof_links",
-      nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes Metricool proof URLs, or separate ownership plus Metricool URLs, preview links first, then save only if the preview is clean.",
+      nextAction: proofDrop?.nextStep || "Paste the two real SPORT/memes proof URLs into the proof drop or paste packet. Preview links first; save only if the preview gate is clean/current.",
     };
   }
   if (!quickFill?.currentWithProofRefresh) {
@@ -309,7 +309,7 @@ function buildUnblockBoard(collectionPackets, gates, goLivePacket = {}) {
         : "All proof links are present; run the proof drop/import preview before any operator apply step.",
     },
     nextAction: rows.length
-      ? "Fast path: paste one real Metricool URL or concrete Drive file/folder/Docs proof URL per active TikTok lane; the app can reuse it as ownership/control proof when it clearly shows the connected profile. Preview, then save only if validation stays clean."
+      ? "Fast path: paste one real Metricool URL or concrete Drive file/folder/Docs proof URL per active TikTok lane into the proof drop or paste packet; the app can reuse it as ownership/control proof when it clearly shows the connected profile. Preview links first; save only if the preview gate is clean/current."
       : "Run Proof drop and Import preview; Metricool still stays approval_required.",
     guardrails: [
       "Do not paste passwords, tokens, cookies, recovery codes, client secrets, API keys, signed URLs, or private screenshots.",
@@ -418,6 +418,7 @@ function renderOneScreenProofFill(summary) {
     "- Metricool connection proof must be a real HTTPS metricool.com URL or concrete Google Drive file/folder or Docs evidence URL showing the TikTok profile connected in Metricool.",
     "- Fast path: if the Metricool or concrete Drive file/folder/Docs proof clearly shows the TikTok profile connected under Robert control, fill the metricoolConnectionProofUrl line and the app can reuse it as ownership/control proof.",
     "- Notes already exist in the paste packet; keep them concrete and 20+ characters.",
+    "- Preview links first; save only if the preview gate is clean/current.",
     "",
     "Never paste:",
     "- passwords, cookies, access tokens, refresh tokens, recovery codes, client secrets, API keys, signed URLs, temporary URLs, or private screenshots.",

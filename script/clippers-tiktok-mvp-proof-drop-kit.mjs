@@ -231,7 +231,7 @@ async function ensureDropKitFiles() {
     ]),
     "",
     "Use proof-links-starter.json as the safe copy-paste starter if proof-links.json gets messy.",
-    "Then edit proof-links.json with the real HTTPS proof URLs. Metricool connection proof can be a metricool.com HTTPS URL or a concrete Google Drive file/folder or Docs evidence URL showing the connection. URLs with x-amz/signature/expires/session/token query params are blocked.",
+    "Paste real HTTPS proof URLs into the proof drop or paste packet, preview links first, and save only when the preview gate is clean/current. Metricool connection proof can be a metricool.com HTTPS URL or a concrete Google Drive file/folder or Docs evidence URL showing the connection. URLs with x-amz/signature/expires/session/token query params are blocked.",
     "This kit never applies final evidence, publishes, schedules, or enables real publishing.",
     "",
   ].join("\n"));
@@ -438,7 +438,7 @@ async function main() {
     ],
     nextStep: validation.readyForQuickFill
       ? "Review quick-fill/unblocker output, then run Import preview. Do not apply until closeout preview says ready_to_apply."
-      : "Add real public/non-secret HTTPS proof URLs to proof-links.json, then rerun Proof drop kit.",
+      : "Paste real public/non-secret HTTPS proof URLs into the proof drop or paste packet. Preview links first; save only if the preview gate is clean/current, then rerun Proof drop kit.",
   };
 
   await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
