@@ -7,6 +7,7 @@ export const clipperTikTokMvpProofLaneSpecs = [
 
 export function containsClipperSecretLikeText(value: unknown): boolean {
   return /access_token=|refresh_token=|client_secret=|cookie=|password=|passcode|recovery|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|api[_-]?key|private[_ -]?key/i.test(String(value || ""))
+    || /https:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
     || clipperUnsafeProofQueryParamPattern.test(String(value || ""));
 }
 

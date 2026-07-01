@@ -281,6 +281,49 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   assert.match(await readFile(evidenceCloseoutPath, "utf8"), /x-amz-signature/);
 });
 
+test("TikTok MVP proof links preview rejects embedded credential proof URLs", async () => {
+  const {
+    auditClipperTikTokMvpProofLinks,
+    extractClipperTikTokMvpProofLinksPaste,
+    safeClipperHttpsProofUrl,
+    safeClipperMetricoolConnectionProofUrl,
+  } = await import(`${proofLinksModulePath}?proof-links-credential-test=${Date.now()}`);
+
+  assert.equal(safeClipperHttpsProofUrl("https://viewer:secret@drive.google.com/file/d/sports-daily-tiktok-proof/view"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://viewer:secret@docs.google.com/document/d/meme-radar-proof/edit"), false);
+  assert.equal(safeClipperMetricoolConnectionProofUrl("https://docs.google.com/document/d/meme-radar-proof/edit"), true);
+
+  const proofLinks = {
+    lanes: {
+      "sports-daily:tiktok": {
+        accountOwnershipProofUrl: "https://viewer:secret@drive.google.com/file/d/sports-daily-tiktok-proof/view",
+        metricoolConnectionProofUrl: "https://drive.google.com/file/d/sports-daily-metricool-proof/view",
+        accountNotes: "Sports Daily TikTok ownership and 2FA proof verified by Robert without secrets.",
+        metricoolNotes: "SPORT TikTok profile connected in Metricool with public proof reviewed by Robert.",
+      },
+      "meme-radar:tiktok": {
+        accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+        metricoolConnectionProofUrl: "https://viewer:secret@docs.google.com/document/d/meme-radar-metricool-proof/edit",
+        accountNotes: "Meme Radar TikTok ownership and 2FA proof verified by Robert without secrets.",
+        metricoolNotes: "memes TikTok profile connected in Metricool with public proof reviewed by Robert.",
+      },
+    },
+  };
+
+  const preview = auditClipperTikTokMvpProofLinks(proofLinks);
+  assert.equal(preview.readyForProofDrop, false);
+  assert.equal(preview.status, "blocked");
+  assert.ok(preview.issues.some((issue) => issue.includes("accountOwnershipProofUrl must be a real safe HTTPS proof URL")));
+  assert.ok(preview.issues.some((issue) => issue.includes("metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL")));
+
+  const pastePreview = extractClipperTikTokMvpProofLinksPaste([
+    "SPORT https://viewer:secret@drive.google.com/file/d/sports-daily-proof/view",
+    "memes https://viewer:secret@docs.google.com/document/d/meme-radar-proof/edit",
+  ].join("\n"));
+  assert.equal(pastePreview.status, "needs_review");
+  assert.ok(pastePreview.issues.some((issue) => /passwords|tokens|cookies|keys|recovery/i.test(issue)));
+});
+
 test("TikTok MVP evidence closeout does not claim applied when readiness stays blocked", async () => {
   const previousSports = await readFile(sportsEvidencePath, "utf8").catch(() => null);
   const previousMemes = await readFile(memesEvidencePath, "utf8").catch(() => null);
