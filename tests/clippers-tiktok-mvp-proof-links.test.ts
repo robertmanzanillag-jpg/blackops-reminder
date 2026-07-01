@@ -130,14 +130,18 @@ test("TikTok MVP proof links parser blocks Metricool ownership reuse without exp
 test("TikTok MVP proof links recommended packet stays blocked until Robert writes confirmation notes", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "sports-daily:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/sports-daily-tiktok-proof",
-    "sports-daily:tiktok.accountNotes=",
+    "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
     "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
-    "meme-radar:tiktok.accountNotes=",
+    "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
   ].join("\n"));
 
   assert.equal(parsed.status, "needs_review");
   assert.equal(parsed.realPublishEnabled, false);
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
+  assert.equal(
+    parsed.proofLinks.lanes["sports-daily:tiktok"].accountNotes,
+    "<write a real 20+ character note after reviewing SPORT ownership/control proof>",
+  );
   assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool or concrete Drive file\/folder\/Docs proof shows this TikTok profile under Robert control/i);
   assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/i);
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "preview_proof_links");

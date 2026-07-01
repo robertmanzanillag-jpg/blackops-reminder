@@ -629,9 +629,9 @@ const clipperTikTokMvpProofLinksFastPathPasteLines = [
 ];
 const clipperTikTokMvpProofLinksRecommendedFastPathPasteLines = [
   "sports-daily:tiktok.metricoolConnectionProofUrl=",
-  "sports-daily:tiktok.accountNotes=",
+  "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
   "meme-radar:tiktok.metricoolConnectionProofUrl=",
-  "meme-radar:tiktok.accountNotes=",
+  "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
 ];
 
 async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: string; pasteText: string; bytes: number }> {

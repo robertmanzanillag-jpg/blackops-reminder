@@ -370,8 +370,8 @@ function renderProofLinksPastePacket() {
     ...lanes.flatMap((lane) => [
       `${lane.key}.accountOwnershipProofUrl=`,
       `${lane.key}.metricoolConnectionProofUrl=`,
-      `${lane.key}.accountNotes=`,
-      `${lane.key}.metricoolNotes=`,
+      `${lane.key}.accountNotes=<write a real 20+ character note after reviewing ${lane.metricoolBrandName} ownership/control proof>`,
+      `${lane.key}.metricoolNotes=<write a real 20+ character note after reviewing ${lane.metricoolBrandName} Metricool connection proof>`,
       "",
     ]),
   ].join("\n");
@@ -388,8 +388,8 @@ function renderFastPathProofLinksPastePacket() {
     ...lanes.flatMap((lane) => [
       `${lane.key}.metricoolConnectionProofUrl=`,
       `${lane.key}.accountOwnershipProofUrl=`,
-      `${lane.key}.accountNotes=`,
-      `${lane.key}.metricoolNotes=`,
+      `${lane.key}.accountNotes=<write a real 20+ character note after reviewing ${lane.metricoolBrandName} ownership/control proof>`,
+      `${lane.key}.metricoolNotes=<write a real 20+ character note after reviewing ${lane.metricoolBrandName} Metricool connection proof>`,
       "",
     ]),
   ].join("\n");

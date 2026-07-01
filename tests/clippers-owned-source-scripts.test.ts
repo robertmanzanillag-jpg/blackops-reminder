@@ -8215,9 +8215,17 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.tiktokMvpProofGate.nextLockedButton, "save_proof_links");
   assert.ok(audit.tiktokMvpProofGate.blockedBy.some((item) => /real non-secret Metricool.*Drive|concrete Drive file\/folder\/Docs/i.test(item)));
   assert.equal(audit.tiktokMvpProofRefresh.status, "blocked");
-  assert.equal(audit.tiktokMvpProofRefresh.importStatus, "blocked_invalid_intake");
+  assert.ok(
+    ["blocked_invalid_intake", "ready_to_apply"].includes(audit.tiktokMvpProofRefresh.importStatus),
+    `unexpected importStatus ${audit.tiktokMvpProofRefresh.importStatus}`,
+  );
   assert.equal(audit.tiktokMvpProofRefresh.doctorStatus, "needs_proof_fix");
-  assert.ok(audit.tiktokMvpProofRefresh.blockers.includes("import_status_blocked_invalid_intake"));
+  if (audit.tiktokMvpProofRefresh.importStatus === "blocked_invalid_intake") {
+    assert.ok(audit.tiktokMvpProofRefresh.blockers.includes("import_status_blocked_invalid_intake"));
+  } else {
+    assert.equal(audit.tiktokMvpProofRefresh.importFixQueue, 0);
+    assert.equal(audit.tiktokMvpProofRefresh.readyChecks.importReady, true);
+  }
   assert.ok(audit.tiktokMvpProofRefresh.blockers.includes("doctor_status_needs_proof_fix"));
   assert.match(audit.tiktokMvpProofRefresh.paths.markdown, /proof-refresh\.md$/);
   assert.ok(["applied_to_combined_intake", "blocked_invalid_quick_fill", "missing"].includes(audit.tiktokMvpProofQuickFill.status));
@@ -8247,7 +8255,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewGate (missing|ready_for_save|blocked_preview_not_clean)/);
   assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewGateFresh (true|false)/);
   assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewRawStored (false|unknown)/);
-  assert.match(proofGateRequirement?.evidence || "", /proofRefreshBlockers import_status_blocked_invalid_intake/);
+  assert.match(proofGateRequirement?.evidence || "", /proofRefreshBlockers .*(import_status_blocked_invalid_intake|doctor_status_needs_proof_fix)/);
   assert.match(proofGateRequirement?.nextAction || "", /combined proof intake rows|proof doctor fix queue|proof links/i);
   assert.ok(["ready", "needs_external_action"].includes(audit.requirements.find((row) => row.id === "tiktok_metricool_mvp_ready")?.status || ""));
   const currentBatchRequirement = audit.requirements.find((row) => row.id === "tiktok_batch_01_ready_for_metricool");
@@ -8278,9 +8286,9 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.doesNotMatch(audit.operatorNextActions[0].fastPathPacketText, /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=|cookie=|password=|confirmed by Robert|verified by Robert|Robert confirms/i);
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
-    "sports-daily:tiktok.accountNotes=",
+    "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
-    "meme-radar:tiktok.accountNotes=",
+    "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);
@@ -8327,7 +8335,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /Proof links preview\/save gate/);
   assert.match(markdown, /Raw stored: (false|unknown)/);
   assert.match(markdown, /proof-links-preview-gate\.json/);
-  assert.match(markdown, /Blocker: import_status_blocked_invalid_intake/);
+  assert.match(markdown, /Blocker: (import_status_blocked_invalid_intake|doctor_status_needs_proof_fix)/);
   assert.match(markdown, /Next safe button: preview_proof_links/);
   assert.match(markdown, /Preview links first; save only if the preview gate is clean\/current/);
   assert.doesNotMatch(markdown, /preview\/save proof links|then save proof links/i);

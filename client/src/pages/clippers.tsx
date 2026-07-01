@@ -17558,12 +17558,12 @@ export default function ClippersPage() {
     const packetText = [
       `sports-daily:tiktok.accountOwnershipProofUrl=${sportUrl}`,
       `sports-daily:tiktok.metricoolConnectionProofUrl=${sportUrl}`,
-      "sports-daily:tiktok.accountNotes=",
-      "sports-daily:tiktok.metricoolNotes=",
+      "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
+      "sports-daily:tiktok.metricoolNotes=<write a real 20+ character note after reviewing SPORT Metricool connection proof>",
       `meme-radar:tiktok.accountOwnershipProofUrl=${memesUrl}`,
       `meme-radar:tiktok.metricoolConnectionProofUrl=${memesUrl}`,
-      "meme-radar:tiktok.accountNotes=",
-      "meme-radar:tiktok.metricoolNotes=",
+      "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
+      "meme-radar:tiktok.metricoolNotes=<write a real 20+ character note after reviewing memes Metricool connection proof>",
     ].join("\n");
     setTiktokMvpProofLinksPasteText(packetText);
     setTiktokMvpProofLinksPastePreview(null);

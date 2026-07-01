@@ -2879,9 +2879,9 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
     ]);
     assert.deepEqual(report.operatorNextActions[0].fastPathPasteLines, [
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
-      "sports-daily:tiktok.accountNotes=",
+      "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
       "meme-radar:tiktok.metricoolConnectionProofUrl=",
-      "meme-radar:tiktok.accountNotes=",
+      "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
     ]);
     assert.doesNotMatch(JSON.stringify(report.operatorNextActions[0].fastPathPasteLines), /Robert confirms|connected under Robert control/i);
     assert.doesNotMatch(JSON.stringify(report.externalActionGate), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
@@ -3148,9 +3148,9 @@ test("TikTok MVP proof drop starter route blocks secret-like existing drops with
     ]);
     assert.deepEqual(body.tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines, [
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
-      "sports-daily:tiktok.accountNotes=",
+      "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
       "meme-radar:tiktok.metricoolConnectionProofUrl=",
-      "meme-radar:tiktok.accountNotes=",
+      "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
     ]);
     assert.match(body.tiktokMvpProofLinksDropStatus.nextStep, /Remove passwords, tokens, cookies, keys/);
     assert.doesNotMatch(
@@ -3224,9 +3224,9 @@ test("TikTok MVP proof drop import and ingest block secret-like drops before par
       ], endpoint);
       assert.deepEqual(body.tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines, [
         "sports-daily:tiktok.metricoolConnectionProofUrl=",
-        "sports-daily:tiktok.accountNotes=",
+        "sports-daily:tiktok.accountNotes=<write a real 20+ character note after reviewing SPORT ownership/control proof>",
         "meme-radar:tiktok.metricoolConnectionProofUrl=",
-        "meme-radar:tiktok.accountNotes=",
+        "meme-radar:tiktok.accountNotes=<write a real 20+ character note after reviewing memes ownership/control proof>",
       ], endpoint);
       assert.equal("proofLinksText" in body[key], false, endpoint);
       assert.equal("proofLinksPreview" in body[key], false, endpoint);
