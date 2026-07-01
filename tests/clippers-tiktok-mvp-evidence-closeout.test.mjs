@@ -1767,6 +1767,35 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     assert.equal(credentialAfter, before);
     const credentialBridgeAfter = await readFile(targetBridgeCsvPath, "utf8");
     assert.equal(credentialBridgeAfter, bridgeBefore);
+
+    await writeFile(quickFillInputPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+          accountNotes: "Sports Daily TikTok ownership proof reviewed by Robert with api_key=neverpaste.",
+          metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-proof/edit",
+          accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+      },
+    }, null, 2));
+    const assignedSecretResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-quick-fill.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(assignedSecretResult.status, 0, assignedSecretResult.stderr || assignedSecretResult.stdout);
+    const assignedSecretOutput = JSON.parse(assignedSecretResult.stdout);
+    assert.equal(assignedSecretOutput.status, "blocked_invalid_quick_fill");
+    assert.equal(assignedSecretOutput.appliedToIntake, false);
+    assert.equal(await readFile(defaultCombinedProofCsvPath, "utf8"), before);
+    assert.equal(await readFile(targetBridgeCsvPath, "utf8"), bridgeBefore);
+    const assignedSecretReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
+    assert.match(assignedSecretReport.issues.join("\n"), /accountNotes/);
   } finally {
     if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);
