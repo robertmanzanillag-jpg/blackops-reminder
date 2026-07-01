@@ -1759,6 +1759,24 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.nextApiAction, "/api/revenue-engine/daily-scout-sprint");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/daily-scout-sprint");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps.some((step) => step.id === "approve_contact_or_collect" && step.approvalRequired), true);
+  assert.deepEqual(
+    snapshot.moneyActivationPlan.firstSprintPlan.revenuePath.map((stage) => stage.id),
+    [
+      "find_public_businesses",
+      "package_website_offer",
+      "close_deposit_scope",
+      "create_qa_delivery_workspace",
+      "open_pr_first_build",
+    ],
+  );
+  assert.equal(
+    snapshot.moneyActivationPlan.firstSprintPlan.revenuePath.find((stage) => stage.id === "close_deposit_scope")?.apiAction,
+    "/api/revenue-engine/website-opportunities/close",
+  );
+  assert.match(
+    snapshot.moneyActivationPlan.firstSprintPlan.revenuePath.find((stage) => stage.id === "open_pr_first_build")?.gate || "",
+    /No direct main commit/,
+  );
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.blockedActions.includes("charge client"), true);
   assert.equal(snapshot.moneyActivationPlan.evidenceGate.status, "empty");
   assert.equal(snapshot.moneyActivationPlan.evidenceGate.readyCandidates, 0);
@@ -1772,6 +1790,9 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue path to paid website build/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/website-delivery-workspace/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Blocked until Robert approval/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /First sprint steps/);

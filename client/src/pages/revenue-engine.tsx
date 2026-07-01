@@ -204,6 +204,14 @@ type RevenueSnapshot = {
       offerFocus: "websites" | "automations" | "both";
       targetRows: number;
       nextApiAction: string;
+      revenuePath: Array<{
+        id: string;
+        label: string;
+        input: string;
+        output: string;
+        gate: string;
+        apiAction: string;
+      }>;
       steps: Array<{
         id: string;
         label: string;
@@ -3704,6 +3712,23 @@ export default function RevenueEnginePage() {
                       <p className="mt-1 text-xs leading-5 text-zinc-500">{step.action}</p>
                     </div>
                   ))}
+                </div>
+                <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3" data-testid="panel-revenue-path-to-paid-build">
+                  <p className="text-xs font-medium uppercase tracking-wide text-emerald-100">Ruta a website cobrado</p>
+                  <div className="mt-2 space-y-2">
+                    {(snapshot?.moneyActivationPlan.firstSprintPlan.revenuePath || []).map((stage) => (
+                      <div key={stage.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-white">{stage.label}</p>
+                          <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-100">
+                            {stage.apiAction}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{stage.output}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{stage.gate}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
