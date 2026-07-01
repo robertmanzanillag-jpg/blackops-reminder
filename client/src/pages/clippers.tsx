@@ -12274,7 +12274,12 @@ export default function ClippersPage() {
     mutationFn: async () => {
       const response = await fetch("/api/clippers/ingest-tiktok-mvp-proof-links-drop", { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude ingerir el proof drop");
+      if (!response.ok) {
+        throw buildClipperMutationError(data.error || "No pude ingerir el proof drop", {
+          tiktokMvpProofLinksDropIngest: data.tiktokMvpProofLinksDropIngest,
+          tiktokMvpProofLinksPastePreview: data.tiktokMvpProofLinksPastePreview,
+        });
+      }
       return data as {
         tiktokMvpProofLinksDropIngest: ClipperTikTokMvpProofLinksDropIngestSummary;
         tiktokMvpProofLinksDropStatus: ClipperTikTokMvpProofLinksDropStatusSummary;
@@ -12322,7 +12327,19 @@ export default function ClippersPage() {
         variant: data.postProofRefreshError ? "destructive" : undefined,
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error & {
+      tiktokMvpProofLinksDropIngest?: ClipperTikTokMvpProofLinksDropIngestSummary;
+      tiktokMvpProofLinksPastePreview?: ClipperTikTokMvpProofLinksPastePreviewSummary;
+    }) => {
+      if (error.tiktokMvpProofLinksPastePreview) {
+        setTiktokMvpProofLinksPastePreview(error.tiktokMvpProofLinksPastePreview);
+        setTiktokMvpProofLinksText(error.tiktokMvpProofLinksPastePreview.proofLinksText);
+        setTiktokMvpProofLinksPreview(error.tiktokMvpProofLinksPastePreview.proofLinksPreview);
+        markGoalCompletionProofLinksPreviewGateStale();
+      }
+      if (error.tiktokMvpProofLinksDropIngest) {
+        refreshTikTokProofDropAuditCaches();
+      }
       toast({ title: "No pude ingerir proof drop", description: error.message, variant: "destructive" });
     },
   });
