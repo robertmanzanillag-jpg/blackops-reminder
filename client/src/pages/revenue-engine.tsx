@@ -883,6 +883,7 @@ type RevenueSnapshot = {
       appQaEvidenceUrl: string;
       deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
       deploymentApprovalUrl: string;
+      releaseGateHeadSha: string;
       visualQaPassed: boolean;
       technicalQaPassed: boolean;
       automationQaPassed: boolean;
@@ -906,6 +907,7 @@ type RevenueSnapshot = {
       appQaEvidenceUrl: string;
       deploymentApprovalStatus: "not_requested" | "requested" | "approved" | "blocked";
       deploymentApprovalUrl: string;
+      releaseGateHeadSha: string;
       title: string;
       codexBrief: string;
       publicBuildBrief: string;
@@ -9099,6 +9101,11 @@ export default function RevenueEnginePage() {
                                         Approval
                                       </Button>
                                     </a>
+                                  )}
+                                  {workspace.codexBuildHandoff.releaseGateHeadSha && (
+                                    <Badge variant="outline" className="border-sky-500/30 bg-black font-mono text-[10px] text-sky-100">
+                                      head {workspace.codexBuildHandoff.releaseGateHeadSha.slice(0, 12)}
+                                    </Badge>
                                   )}
                                   <Button
                                     type="button"

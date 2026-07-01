@@ -93,7 +93,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.doesNotMatch(appQaGateRoute, /requiredDepositUsd/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/release-gate/);
   assert.match(routeSource, /Release gate requiere PR URL y PR status check/);
-  assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input, \{ verifiedPrStatusReady: true \}\)/);
+  assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input, \{/);
+  assert.match(routeSource, /verifiedPrStatusReady: true/);
+  assert.match(routeSource, /verifiedPrHeadSha: prStatus\.pr\.headSha/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(routeSource, /deliverRevenueDeliveryWorkspaceFromTrustedApproval\(input\)/);
   assert.match(routeSource, /input\.projectType !== "automation"/);

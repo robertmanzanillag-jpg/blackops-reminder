@@ -4037,6 +4037,7 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     appQaStatus: "pass",
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/handoff-cafe/pull/2#issuecomment-approval",
+    releaseGateHeadSha: "abc987def6543210",
     notes: "PR, second review, App QA and Robert deploy approval verified.",
   }, {
     allowGithubIssueEvidence: true,
@@ -4726,6 +4727,7 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
     appQaStatus: "pass",
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/untrusted-gate/pull/2#issuecomment-approval",
+    releaseGateHeadSha: "bad123bad456bad7",
     notes: "Browser tried to assert release gates.",
   });
 
@@ -4734,6 +4736,7 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
   assert.equal(untrusted.workspace?.input.secondReviewStatus || "pending", "pending");
   assert.equal(untrusted.workspace?.input.appQaStatus || "pending", "pending");
   assert.equal(untrusted.workspace?.input.deploymentApprovalStatus || "not_requested", "not_requested");
+  assert.equal(untrusted.workspace?.input.releaseGateHeadSha || "", "");
   assert.equal(untrusted.workspace?.approvalSummary.canLaunch, false);
   assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("GitHub handoff issue PR-first"), true);
   assert.equal(untrusted.workspace?.codexBuildHandoff.missing.includes("pull request de build"), true);
@@ -4766,6 +4769,7 @@ test("trusted release gate persists PR App QA review and deploy approval for web
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-release-cafe-website, client Trusted Release Cafe.`,
   }, {
     verifiedPrStatusReady: true,
+    verifiedPrHeadSha: "abc123def4567890",
   });
 
   assert.equal(releaseGate.status, "ready");
@@ -4775,6 +4779,8 @@ test("trusted release gate persists PR App QA review and deploy approval for web
   assert.equal(releaseGate.workspace?.input.appQaStatus, "pass");
   assert.equal(releaseGate.workspace?.input.appQaEvidenceUrl, "https://github.com/robert/trusted-release-cafe/pull/2#issuecomment-app-qa");
   assert.equal(releaseGate.workspace?.input.deploymentApprovalStatus, "approved");
+  assert.equal(releaseGate.workspace?.input.releaseGateHeadSha, "abc123def4567890");
+  assert.equal(releaseGate.workspace?.codexBuildHandoff.releaseGateHeadSha, "abc123def4567890");
   assert.equal(releaseGate.workspace?.codexBuildHandoff.missing.length, 0);
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, true);
   assert.equal(releaseGate.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
@@ -4792,6 +4798,38 @@ test("trusted release gate persists PR App QA review and deploy approval for web
   assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Trusted Release Cafe/);
   assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Status: ready/);
   assert.match(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Blocked until:\n  - none/);
+});
+
+test("trusted release gate requires verified PR head sha evidence", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Head Sha Required Cafe",
+    contactEmail: "owner@headsharequired.example",
+    sourceUrl: "https://example.com/head-sha-required-cafe",
+    mockupSlug: "head-sha-required-cafe",
+    projectType: "website",
+  });
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/head-sha-required-cafe",
+    branchName: "codex/client-head-sha-required-cafe-website",
+    githubIssueUrl: "https://github.com/robert/head-sha-required-cafe/issues/1",
+    prUrl: "https://github.com/robert/head-sha-required-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/head-sha-required-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/head-sha-required-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/head-sha-required-cafe/pull/2#issuecomment-approval",
+    notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-head-sha-required-cafe-website, client Head Sha Required Cafe.`,
+  }, {
+    verifiedPrStatusReady: true,
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /head SHA/);
+  assert.equal(releaseGate.workspace?.input.releaseGateHeadSha || "", "");
+  assert.equal(releaseGate.snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
 });
 
 test("production launch checklist requires one coherent release-gated sold workspace", () => {
@@ -5150,6 +5188,7 @@ test("trusted release gate rejects wrong evidence anchor types", () => {
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-wrong-anchor-cafe-website, client Wrong Anchor Cafe.`,
   }, {
     verifiedPrStatusReady: true,
+    verifiedPrHeadSha: "def456abc1237890",
   });
 
   assert.equal(releaseGate.status, "blocked");
@@ -5185,6 +5224,7 @@ test("trusted release gate rejects PR subpath evidence even with valid anchors",
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-subpath-evidence-cafe-website, client Subpath Evidence Cafe.`,
   }, {
     verifiedPrStatusReady: true,
+    verifiedPrHeadSha: "fed654cba3217890",
   });
 
   assert.equal(releaseGate.status, "blocked");
@@ -5218,6 +5258,7 @@ test("trusted delivery endpoint helper delivers only after trusted release gate 
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-delivered-cafe-website, client Trusted Delivered Cafe.`,
   }, {
     verifiedPrStatusReady: true,
+    verifiedPrHeadSha: "123abc456def7890",
   });
 
   const untrustedDelivery = deliverRevenueDeliveryWorkspace({
@@ -5294,6 +5335,7 @@ test("trusted delivery blocks direct ready website workspace without sold opport
     appQaEvidenceUrl: "https://github.com/robert/direct-delivered-cafe/pull/2#issuecomment-app-qa",
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/direct-delivered-cafe/pull/2#issuecomment-approval",
+    releaseGateHeadSha: "cafe123456789abc",
     visualQaPassed: true,
     technicalQaPassed: true,
     automationQaPassed: true,

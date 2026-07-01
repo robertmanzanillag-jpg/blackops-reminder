@@ -297,6 +297,7 @@ export const revenueDeliveryWorkspaceSchema = revenueProjectPlanSchema.extend({
   appQaEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
   deploymentApprovalStatus: z.enum(["not_requested", "requested", "approved", "blocked"]).default("not_requested"),
   deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")).default(""),
+  releaseGateHeadSha: z.string().trim().regex(/^[a-f0-9]{7,64}$/i, "releaseGateHeadSha must be a git sha").max(64).optional().or(z.literal("")).default(""),
   visualQaPassed: z.boolean().default(false),
   technicalQaPassed: z.boolean().default(false),
   automationQaPassed: z.boolean().default(false),
@@ -347,6 +348,7 @@ export const revenueDeliveryWorkspaceUpdateSchema = z.object({
   deploymentApprovalUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
   secondReviewEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
   appQaEvidenceUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  releaseGateHeadSha: z.string().trim().regex(/^[a-f0-9]{7,64}$/i, "releaseGateHeadSha must be a git sha").max(64).optional().or(z.literal("")),
   notes: z.string().trim().max(1200).optional(),
 });
 
@@ -359,6 +361,7 @@ type RevenueDeliveryWorkspaceUpdateOptions = {
 
 type RevenueDeliveryReleaseGateOptions = {
   verifiedPrStatusReady?: boolean;
+  verifiedPrHeadSha?: string;
 };
 
 export const revenueDeliveryWorkspaceGithubHandoffSchema = z.object({
@@ -3555,6 +3558,7 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     appQaEvidenceUrl: "",
     deploymentApprovalStatus: "not_requested",
     deploymentApprovalUrl: "",
+    releaseGateHeadSha: "",
     clientName: opportunity.businessName,
     projectType: "automation",
     packageName: opportunity.quote.scope.packageName,
@@ -3830,6 +3834,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     appQaEvidenceUrl: "",
     deploymentApprovalStatus: "not_requested",
     deploymentApprovalUrl: "",
+    releaseGateHeadSha: "",
     clientName: lead.businessName,
     projectType,
     packageName: projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
@@ -5725,6 +5730,7 @@ function buildRevenueProductionReleaseEvidence(workspaces: RevenueDeliveryWorksp
     && workspace.input.appQaEvidenceUrl
     && workspace.input.deploymentApprovalStatus === "approved"
     && workspace.input.deploymentApprovalUrl
+    && workspace.input.releaseGateHeadSha
     && revenueWebsiteWorkspaceSaleGate(workspace).blockers.length === 0
   );
   const partialPrReviewWorkspace = workspaces.find((workspace) =>
@@ -5749,7 +5755,7 @@ function buildRevenueProductionReleaseEvidence(workspaces: RevenueDeliveryWorksp
           status: "ready" as const,
           workspaceId: releaseReadyWorkspace.id,
           evidenceUrl: releaseReadyWorkspace.input.secondReviewEvidenceUrl,
-          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has approved second-agent review evidence on ${releaseReadyWorkspace.input.prUrl}.`,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has approved second-agent review evidence on ${releaseReadyWorkspace.input.prUrl} at head ${releaseReadyWorkspace.input.releaseGateHeadSha}.`,
           nextStep: "Mantener evidencia del review en el PR antes de merge/deploy.",
         }
       : {
@@ -5766,7 +5772,7 @@ function buildRevenueProductionReleaseEvidence(workspaces: RevenueDeliveryWorksp
           status: "ready" as const,
           workspaceId: releaseReadyWorkspace.id,
           evidenceUrl: releaseReadyWorkspace.input.appQaEvidenceUrl,
-          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has App QA evidence on ${releaseReadyWorkspace.input.prUrl}.`,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has App QA evidence on ${releaseReadyWorkspace.input.prUrl} at head ${releaseReadyWorkspace.input.releaseGateHeadSha}.`,
           nextStep: "Mantener App QA sin warnings/failures antes de deploy.",
         }
       : {
@@ -5783,7 +5789,7 @@ function buildRevenueProductionReleaseEvidence(workspaces: RevenueDeliveryWorksp
           status: "ready" as const,
           workspaceId: releaseReadyWorkspace.id,
           evidenceUrl: releaseReadyWorkspace.input.deploymentApprovalUrl,
-          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has explicit Robert deploy approval evidence.`,
+          evidence: `${releaseReadyWorkspace.input.clientName} workspace ${releaseReadyWorkspace.id} has explicit Robert deploy approval evidence at head ${releaseReadyWorkspace.input.releaseGateHeadSha}.`,
           nextStep: "Usar la aprobacion registrada solo para el deploy descrito por ese PR/workspace.",
         }
       : {
@@ -9438,6 +9444,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const appQaEvidenceUrl = (input.appQaEvidenceUrl || "").trim();
   const deploymentApprovalStatus = input.deploymentApprovalStatus || "not_requested";
   const deploymentApprovalUrl = (input.deploymentApprovalUrl || "").trim();
+  const releaseGateHeadSha = (input.releaseGateHeadSha || "").trim();
   const missing = [
     isWebsiteBuild && !input.publicDataVerified && "data publica verificada",
     isWebsiteBuild && !repoFullName && "repo GitHub del website",
@@ -9448,6 +9455,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     isWebsiteBuild && appQaStatus !== "pass" && "App QA gate aprobado",
     isWebsiteBuild && deploymentApprovalStatus !== "approved" && "aprobacion humana de deploy",
     isWebsiteBuild && deploymentApprovalStatus === "approved" && !deploymentApprovalUrl && "URL/evidencia de aprobacion de deploy",
+    isWebsiteBuild && deploymentApprovalStatus === "approved" && !releaseGateHeadSha && "PR head SHA verificado para release",
   ].filter(Boolean) as string[];
   const title = `[Revenue Website Build] ${input.clientName} - ${input.packageName}`;
   const buildPackSections = [
@@ -9569,6 +9577,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     appQaEvidenceUrl,
     deploymentApprovalStatus,
     deploymentApprovalUrl,
+    releaseGateHeadSha,
     title,
     codexBrief,
     publicBuildBrief,
@@ -10079,6 +10088,7 @@ export function updateRevenueDeliveryWorkspaceQa(
     appQaEvidenceUrl: allowReleaseGateEvidence ? parsed.appQaEvidenceUrl ?? existing.input.appQaEvidenceUrl : existing.input.appQaEvidenceUrl,
     deploymentApprovalStatus: allowReleaseGateEvidence ? parsed.deploymentApprovalStatus ?? existing.input.deploymentApprovalStatus : existing.input.deploymentApprovalStatus,
     deploymentApprovalUrl: allowReleaseGateEvidence ? parsed.deploymentApprovalUrl ?? existing.input.deploymentApprovalUrl : existing.input.deploymentApprovalUrl,
+    releaseGateHeadSha: allowReleaseGateEvidence ? parsed.releaseGateHeadSha ?? existing.input.releaseGateHeadSha : existing.input.releaseGateHeadSha,
     clientRequest: parsed.notes
       ? `${existing.input.clientRequest}\n\nQA update: ${parsed.notes}`.slice(0, 1200)
       : existing.input.clientRequest,
@@ -10150,6 +10160,7 @@ function validateRevenueReleaseGateEvidence(
   const appQaStatus = parsed.appQaStatus || workspace.input.appQaStatus;
   const deploymentApprovalStatus = parsed.deploymentApprovalStatus || workspace.input.deploymentApprovalStatus;
   const deploymentApprovalUrl = (parsed.deploymentApprovalUrl || workspace.input.deploymentApprovalUrl || "").trim();
+  const releaseGateHeadSha = (parsed.releaseGateHeadSha || workspace.input.releaseGateHeadSha || "").trim();
   const notes = (parsed.notes || "").toLowerCase();
   const pr = parseGithubRepoUrl(prUrl);
   const issue = parseGithubRepoUrl(githubIssueUrl);
@@ -10164,6 +10175,7 @@ function validateRevenueReleaseGateEvidence(
     secondReviewStatus !== "pass" && "secondReviewStatus debe ser pass",
     appQaStatus !== "pass" && "appQaStatus debe ser pass",
     deploymentApprovalStatus !== "approved" && "deploymentApprovalStatus debe ser approved",
+    deploymentApprovalStatus === "approved" && !releaseGateHeadSha && "releaseGateHeadSha debe venir del PR status check fresco",
     !pr || !isGithubEvidenceForPr(parsed.secondReviewEvidenceUrl, pr.normalizedPrefix, "review") && "secondReviewEvidenceUrl debe apuntar al PR review aprobado del PR",
     !pr || !isGithubEvidenceForPr(parsed.appQaEvidenceUrl, pr.normalizedPrefix, "comment") && "appQaEvidenceUrl debe apuntar al PR o comentario de App QA del PR",
     !pr || !isGithubEvidenceForPr(deploymentApprovalUrl, pr.normalizedPrefix, "comment") && "deploymentApprovalUrl debe apuntar al PR o comentario de aprobacion del PR",
@@ -10198,9 +10210,14 @@ export function recordRevenueDeliveryReleaseGate(
   }
 
   const saleGate = revenueWebsiteWorkspaceSaleGate(workspace);
+  const releaseGateHeadSha = (options.verifiedPrHeadSha || "").trim();
   const blockers = [
-    ...validateRevenueReleaseGateEvidence(workspace, parsed),
+    ...validateRevenueReleaseGateEvidence(workspace, {
+      ...parsed,
+      releaseGateHeadSha,
+    }),
     !options.verifiedPrStatusReady && "fresh GitHub PR status check must pass before release gate",
+    !releaseGateHeadSha && "fresh GitHub PR status check must provide current head SHA before release gate",
     ...saleGate.blockers,
   ].filter(Boolean) as string[];
   if (blockers.length > 0) {
@@ -10212,7 +10229,10 @@ export function recordRevenueDeliveryReleaseGate(
     };
   }
 
-  return updateRevenueDeliveryWorkspaceQa(input, {
+  return updateRevenueDeliveryWorkspaceQa({
+    ...input,
+    releaseGateHeadSha,
+  }, {
     allowGithubIssueEvidence: true,
     allowReleaseGateEvidence: true,
   });

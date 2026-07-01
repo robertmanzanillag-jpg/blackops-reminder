@@ -5678,7 +5678,10 @@ export async function registerRoutes(
         });
       }
 
-      res.json(recordRevenueDeliveryReleaseGate(input, { verifiedPrStatusReady: true }));
+      res.json(recordRevenueDeliveryReleaseGate(input, {
+        verifiedPrStatusReady: true,
+        verifiedPrHeadSha: prStatus.pr.headSha,
+      }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
