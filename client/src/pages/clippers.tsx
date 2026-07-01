@@ -760,6 +760,8 @@ interface ClipperGoalCompletionAuditSummary {
     missingProofUrls: number;
     proofPacketsNeeded: number;
     fastPathAvailable: boolean;
+    proofGateReady?: boolean;
+    proofGateStatus?: string;
     requiredOwner: string;
     nextSafeButton: string;
     lockedButton: string;
@@ -22668,6 +22670,7 @@ export default function ClippersPage() {
                       <p>Missing URLs: {formatNumber(goalCompletionAudit.externalActionGate.missingProofUrls)}</p>
                       <p>Proof packets: {formatNumber(goalCompletionAudit.externalActionGate.proofPacketsNeeded)}</p>
                       <p>Fast path: {goalCompletionAudit.externalActionGate.fastPathAvailable ? "yes" : "no"}</p>
+                      <p>Proof gate: {goalCompletionAudit.externalActionGate.proofGateReady ? "ready" : "blocked"}</p>
                       <p>Next safe: {goalCompletionAudit.externalActionGate.nextSafeButton}</p>
                     </div>
                     {goalCompletionAudit.externalActionGate.fastPathPacketPath && (

@@ -188,18 +188,20 @@ function buildTikTokMvpStartGate({ activeMvpReady, tiktokMvpProofReady, proofLin
   };
 }
 
-function buildExternalActionGate({ proofGate = {}, proofLinksPreviewGate = {}, proofHandoff = {}, operatorNextActions = [] }) {
-  const missingProofUrls = Number(proofGate.minimumProofUrlsNeeded || proofHandoff?.unblockBoard?.minimumProofUrlsNeeded || 0);
-  const proofPacketsNeeded = Number(proofGate.proofPacketsNeeded || proofHandoff?.unblockBoard?.missingProofs || 0);
+function buildExternalActionGate({ proofGate = {}, proofGateReady = false, proofLinksPreviewGate = {}, proofHandoff = {}, operatorNextActions = [] }) {
+  const missingProofUrls = Number(proofGate.minimumProofUrlsNeeded ?? proofHandoff?.unblockBoard?.minimumProofUrlsNeeded ?? 0);
+  const proofPacketsNeeded = Number(proofGate.proofPacketsNeeded ?? proofHandoff?.unblockBoard?.missingProofs ?? 0);
   const fastPathAvailable = Boolean(proofGate.fastPathAvailable || proofHandoff?.unblockBoard?.fastPathAvailable);
   const primaryAction = operatorNextActions[0] || {};
-  const waitingForRobertProof = missingProofUrls > 0 || proofLinksPreviewGate.readyForSave !== true;
+  const waitingForRobertProof = missingProofUrls > 0 || proofLinksPreviewGate.readyForSave !== true || !proofGateReady;
   return {
     status: waitingForRobertProof ? "waiting_for_robert_proof" : "proof_preview_ready",
     canAutomateWithoutRobert: !waitingForRobertProof,
     missingProofUrls,
     proofPacketsNeeded,
     fastPathAvailable,
+    proofGateReady,
+    proofGateStatus: proofGate.status || "missing",
     requiredOwner: waitingForRobertProof ? "Robert/operator" : "app",
     nextSafeButton: proofGate.nextSafeButton || "preview_proof_links",
     lockedButton: proofGate.nextLockedButton || "save_proof_links",
@@ -208,7 +210,7 @@ function buildExternalActionGate({ proofGate = {}, proofLinksPreviewGate = {}, p
       ? primaryAction.fastPathPasteLines.filter((line) => /\.metricoolConnectionProofUrl=/.test(line))
       : [],
     reason: waitingForRobertProof
-      ? "The app cannot truthfully create or approve external Metricool/TikTok proof. Robert must paste real non-secret proof URLs first."
+      ? "The app cannot truthfully create or approve external Metricool/TikTok proof, and the proof gate must be current before automation continues."
       : "Proof preview is clean/current; the app can continue the guarded refresh and approval queue flow.",
     nextStep: waitingForRobertProof
       ? "Paste real SPORT and memes Metricool or concrete Drive/Docs proof URLs, then run Preview links before saving."
@@ -297,6 +299,8 @@ function renderMarkdown(summary) {
     `- Missing proof URLs: ${summary.externalActionGate.missingProofUrls}`,
     `- Proof packets needed: ${summary.externalActionGate.proofPacketsNeeded}`,
     `- Fast path available: ${summary.externalActionGate.fastPathAvailable}`,
+    `- Proof gate ready: ${summary.externalActionGate.proofGateReady}`,
+    `- Proof gate status: ${summary.externalActionGate.proofGateStatus}`,
     `- Required owner: ${summary.externalActionGate.requiredOwner}`,
     `- Next safe button: ${summary.externalActionGate.nextSafeButton}`,
     `- Locked button: ${summary.externalActionGate.lockedButton}`,
@@ -862,6 +866,7 @@ async function main() {
   });
   const externalActionGate = buildExternalActionGate({
     proofGate,
+    proofGateReady,
     proofLinksPreviewGate,
     proofHandoff,
     operatorNextActions,

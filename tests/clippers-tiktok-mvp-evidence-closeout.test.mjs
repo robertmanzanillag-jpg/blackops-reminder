@@ -33,6 +33,8 @@ const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof
 const quickFillInputPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json");
 const proofLinksPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links.json");
 const proofLinksStarterPath = path.join(rootDir, "proof-drop/tiktok-mvp/proof-links-starter.json");
+const tiktokMvpOperatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
+const proofLinksPreviewGatePath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json");
 const targetAccountCsvPath = path.join(rootDir, "account-permission-mvp-account-evidence.csv");
 const targetBridgeCsvPath = path.join(rootDir, "scheduled/metricool-tiktok-bridge-evidence.csv");
 
@@ -2447,10 +2449,13 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
     assert.equal(report.externalActionGate.status, "waiting_for_robert_proof");
     assert.equal(report.externalActionGate.canAutomateWithoutRobert, false);
     assert.equal(report.externalActionGate.missingProofUrls, 2);
+    assert.equal(report.externalActionGate.proofGateReady, false);
+    assert.equal(report.externalActionGate.proofGateStatus, "blocked_needs_real_metricool_tiktok_proof");
     assert.equal(report.externalActionGate.requiredOwner, "Robert/operator");
     assert.equal(report.externalActionGate.nextSafeButton, "preview_proof_links");
     assert.equal(report.externalActionGate.lockedButton, "save_proof_links");
     assert.match(report.externalActionGate.reason, /cannot truthfully create or approve external Metricool\/TikTok proof/);
+    assert.match(report.externalActionGate.reason, /proof gate must be current/);
     assert.match(report.externalActionGate.nextStep, /Paste real SPORT and memes Metricool/);
     assert.deepEqual(report.externalActionGate.exactFields, [
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
@@ -2465,6 +2470,70 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
   } finally {
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);
+  }
+});
+
+test("Goal completion audit blocks automation when preview is clean but operating proof gate is not ready", async () => {
+  const previousOperatingRefresh = await readFile(tiktokMvpOperatingRefreshPath, "utf8").catch(() => null);
+  const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(tiktokMvpOperatingRefreshPath), { recursive: true });
+    await mkdir(path.dirname(proofLinksPreviewGatePath), { recursive: true });
+    await writeFile(tiktokMvpOperatingRefreshPath, JSON.stringify({
+      status: "blocked_external_account_proof",
+      proofGate: {
+        status: "blocked_preflight_failed",
+        requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+        minimumProofUrlsNeeded: 0,
+        proofPacketsNeeded: 0,
+        fastPathAvailable: false,
+        nextSafeButton: "preview_proof_links",
+        nextLockedButton: "save_proof_links",
+        failedPreflightChecks: ["metricool_mcp_preflight"],
+        failedVerifierChecks: [],
+        missingRequiredReports: [],
+        boundaryNotReady: [],
+        blockedBy: ["Metricool MCP preflight snapshot status is blocked"],
+        preflightNotReady: true,
+        paths: {},
+        nextStep: "Fix the blocked preflight before continuing.",
+      },
+    }, null, 2));
+    await writeFile(proofLinksPreviewGatePath, JSON.stringify({
+      status: "ready_for_save",
+      generatedAt: new Date().toISOString(),
+      rawStored: false,
+      rawHash: "test-clean-preview-hash",
+      totals: {
+        readyProofFields: 4,
+        totalProofFields: 4,
+        issues: 0,
+      },
+    }, null, 2));
+
+    const audit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(audit.status, 0, audit.stderr || audit.stdout);
+    const output = JSON.parse(audit.stdout);
+    assert.equal(output.externalActionGateStatus, "waiting_for_robert_proof");
+    assert.equal(output.canAutomateWithoutRobert, false);
+    assert.equal(output.missingProofUrls, 0);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(report.externalActionGate.missingProofUrls, 0);
+    assert.equal(report.externalActionGate.proofGateReady, false);
+    assert.equal(report.externalActionGate.proofGateStatus, "blocked_preflight_failed");
+    assert.equal(report.externalActionGate.canAutomateWithoutRobert, false);
+    assert.equal(report.tiktokMvpProofLinksPreviewGate.readyForSave, true);
+    assert.match(report.externalActionGate.reason, /proof gate must be current/);
+    assert.doesNotMatch(JSON.stringify(report.externalActionGate), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+  } finally {
+    if (previousOperatingRefresh === null) await unlink(tiktokMvpOperatingRefreshPath).catch(() => undefined);
+    else await writeFile(tiktokMvpOperatingRefreshPath, previousOperatingRefresh);
+    if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
+    else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
   }
 });
 
