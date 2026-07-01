@@ -7893,8 +7893,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.operatorNextActions.length, 8);
   assert.equal(audit.operatorNextActions[0].title, "Fast path Metricool TikTok proof gate");
   assert.equal(audit.operatorNextActions[0].proofLine, "sports-daily:tiktok + meme-radar:tiktok");
-  assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-refresh\.md$/);
-  assert.match(audit.operatorNextActions[0].nextAction, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
+  assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
+  assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool\/Drive evidence/);
   assert.equal(audit.operatorNextActions[1].proofLine, "sports-daily:tiktok.accountOwnershipProofUrl=");
   assert.equal(audit.operatorNextActions[2].proofLine, "sports-daily:tiktok.metricoolConnectionProofUrl=");
   assert.equal(audit.operatorNextActions[3].proofLine, "meme-radar:tiktok.accountOwnershipProofUrl=");
@@ -7943,8 +7943,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
 
   const nextActionsCsv = await readFile(path.join(rootDir, "reports/clippers-goal-completion-next-actions.csv"), "utf8");
   assert.match(nextActionsCsv, /Fast path Metricool TikTok proof gate/);
-  assert.match(nextActionsCsv, /proof-refresh\.md/);
-  assert.match(nextActionsCsv, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
+  assert.match(nextActionsCsv, /proof-fill-one-screen\.txt/);
+  assert.doesNotMatch(nextActionsCsv, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
   assert.match(nextActionsCsv, /Sports Daily Clips TikTok ownership proof/);
   assert.match(nextActionsCsv, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(nextActionsCsv, /prepare-metricool-current-batch-upload-pack \+ prepare-metricool-current-batch-session-packet/);
@@ -8182,6 +8182,85 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.match(staleRefreshAudit.operatorNextActions[0].buttonOrFile, /proof-refresh\.md$/);
     assert.match(staleRefreshAudit.operatorNextActions[0].nextAction, /proof_refresh_stale_or_missing/);
 
+    await writeFile(operatingRefreshPath, JSON.stringify({
+      ...original,
+      proofGate: {
+        status: "blocked_needs_real_metricool_tiktok_proof",
+        requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+        minimumProofUrlsNeeded: 0,
+        proofPacketsNeeded: 0,
+        fastPathAvailable: false,
+        nextSafeButton: "refresh_metricool_preflight",
+        nextLockedButton: "save_proof_links",
+        failedPreflightChecks: ["tiktok_mvp_verifier_passed"],
+        failedVerifierChecks: ["metricool_brands_ready"],
+        missingRequiredReports: [],
+        boundaryNotReady: [],
+        blockedBy: ["Metricool verifier/preflight is not clean even though proof URLs are present."],
+        preflightNotReady: "Metricool preflight verifier failed",
+        nextStep: "Fix Metricool verifier/preflight blockers before operating.",
+        paths: original.proofGate?.paths || {},
+      },
+    }, null, 2));
+    await writeFile(proofRefreshPath, JSON.stringify({
+      ...originalRefresh,
+      status: "blocked",
+      generatedAt: new Date().toISOString(),
+      importStatus: "ready_to_apply",
+      doctorStatus: "needs_proof_fix",
+      readyLanes: 1,
+      targetLanes: 2,
+      importFixQueue: 0,
+      doctorFixQueue: 1,
+      readyChecks: {
+        importRunOk: true,
+        doctorRunOk: true,
+        importReady: true,
+        doctorReady: false,
+        lanesReady: false,
+        noImportFixes: true,
+        noDoctorFixes: false,
+      },
+      blockers: ["doctor_status_needs_proof_fix", "doctor_fix_queue_1"],
+      paths: {
+        ...(originalRefresh.paths || {}),
+        markdown: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.md"),
+      },
+      nextStep: "Fix the proof refresh doctor queue before operating Metricool.",
+    }, null, 2));
+    const blockedNoMissingUrlsResult = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(blockedNoMissingUrlsResult.status, 0, blockedNoMissingUrlsResult.stderr || blockedNoMissingUrlsResult.stdout);
+    const blockedNoMissingUrlsAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(blockedNoMissingUrlsAudit.tiktokMvpProofGate.minimumProofUrlsNeeded, 0);
+    assert.equal(blockedNoMissingUrlsAudit.operatorNextActions[0].title, "Fast path Metricool TikTok proof gate");
+    assert.match(blockedNoMissingUrlsAudit.operatorNextActions[0].buttonOrFile, /proof-refresh\.md$/);
+    assert.doesNotMatch(blockedNoMissingUrlsAudit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
+    assert.match(blockedNoMissingUrlsAudit.operatorNextActions[0].nextAction, /doctor_status_needs_proof_fix|proof refresh doctor queue/i);
+
+    await writeFile(operatingRefreshPath, JSON.stringify({
+      ...original,
+      proofGate: {
+        status: "ready_for_operator_review",
+        requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+        minimumProofUrlsNeeded: 0,
+        proofPacketsNeeded: 0,
+        fastPathAvailable: true,
+        nextSafeButton: "preview_proof_links",
+        nextLockedButton: "save_proof_links",
+        failedPreflightChecks: [],
+        failedVerifierChecks: [],
+        missingRequiredReports: [],
+        boundaryNotReady: [],
+        blockedBy: [],
+        preflightNotReady: false,
+        nextStep: "Operating proof gate is clean.",
+        paths: original.proofGate?.paths || {},
+      },
+    }, null, 2));
+
     await writeFile(proofRefreshPath, JSON.stringify({
       ...originalRefresh,
       status: "blocked",
@@ -8314,6 +8393,7 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.match(scriptSource, /function proofGateControlFieldsPresent\(proofGate = \{\}\)/);
     assert.match(scriptSource, /function isProofGateReady\(proofGate\)/);
     assert.match(scriptSource, /function isProofRefreshReady\(proofRefresh = \{\}\)/);
+    assert.match(scriptSource, /Number\(proofGate\.minimumProofUrlsNeeded \|\| 0\) > 0/);
     assert.match(scriptSource, /const quickFillIssues = Array\.isArray\(quickFill\.issues\) \? quickFill\.issues : null/);
     assert.match(scriptSource, /isFreshGeneratedAt\(quickFill\.generatedAt\)/);
     assert.match(scriptSource, /isFreshGeneratedAt\(proofRefresh\.generatedAt\)/);

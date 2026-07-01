@@ -342,7 +342,11 @@ function isQuickFillCurrentWithProofRefresh(quickFill = {}, proofRefresh = {}) {
 }
 
 function shouldPrioritizeProofGateFix(proofGate = {}, proofGateReady = false) {
-  return !proofGateReady && proofGate.status === "ready_for_operator_review";
+  return !proofGateReady
+    && (
+      proofGate.status === "ready_for_operator_review"
+      || Number(proofGate.minimumProofUrlsNeeded || 0) > 0
+    );
 }
 
 function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh, proofQuickFill, proofQuickFillCurrent }) {
