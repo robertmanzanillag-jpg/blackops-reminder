@@ -95,7 +95,7 @@ function deferralFor(row, activeMetricoolAccountIds) {
   };
 }
 
-function copyPacketFor(row) {
+function copyPacketFor(row, nextAction = taskAction(row)) {
   return [
     `TikTok closeout task: ${row.closeoutId || row.lane}`,
     `CSV row: ${row.csvRow || "?"}`,
@@ -108,7 +108,7 @@ function copyPacketFor(row) {
     `Proof file: ${row.proofPath || "missing"}`,
     `Reason blocked: ${row.reason || "needs real evidence"}`,
     `CSV row template: ${row.csvRowTemplate || row.replacementCsvRow || ""}`,
-    `Next: ${taskAction(row)}`,
+    `Next: ${nextAction}`,
     "",
     "Do not paste passwords, cookies, client secrets, OAuth tokens, refresh tokens, recovery codes, or private screenshots.",
   ].filter(Boolean).join("\n");
@@ -381,6 +381,7 @@ async function main() {
     String(left.closeoutId || "").localeCompare(String(right.closeoutId || "")));
   const tasks = tiktokRows.map((row, index) => {
     const deferral = deferralFor(row, activeMetricoolAccountIds);
+    const nextAction = deferral.deferred ? deferral.note : taskAction(row);
     return {
       rank: index + 1,
       closeoutId: row.closeoutId || `${row.lane || "external"}:tiktok:${index + 1}`,
@@ -395,8 +396,8 @@ async function main() {
       reason: row.reason || "",
       missingCsvFields: Array.isArray(row.missingCsvFields) ? row.missingCsvFields : [],
       csvRowTemplate: row.csvRowTemplate || "",
-      nextAction: deferral.deferred ? deferral.note : taskAction(row),
-      copyPacket: copyPacketFor(row),
+      nextAction,
+      copyPacket: copyPacketFor(row, nextAction),
       proofType: row.lane === "metricool_bridge" ? "metricool_connection" : row.lane === "account" ? "account_ownership" : "",
       activeForMetricoolMvp: !deferral.deferred,
       deferredForMetricoolMvp: deferral.deferred,

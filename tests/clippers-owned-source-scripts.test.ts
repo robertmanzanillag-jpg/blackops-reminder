@@ -1146,6 +1146,12 @@ test("TikTok external closeout session surfaces active Metricool MVP proof block
   assert.match(session.tasks.find((task) => task.closeoutId === "metricool-bridge-proof:sports-daily:tiktok")?.nextAction || "", /Preview\/Import the bridge CSV/);
   assert.equal(session.tasks.find((task) => task.lane === "developer_app")?.deferredReason, "direct_api_not_required_for_metricool_mvp");
   assert.equal(session.tasks.find((task) => task.closeoutId === "account:streamer-pulse:tiktok")?.deferredReason, "account_not_in_current_metricool_tiktok_mvp");
+  const deferredDeveloperTask = session.tasks.find((task) => task.closeoutId === "developer_app:tiktok");
+  const deferredPermissionTask = session.tasks.find((task) => task.closeoutId === "permission:tiktok:video.publish");
+  assert.match(deferredDeveloperTask?.copyPacket || "", /Deferred because TikTok MVP uses Metricool approval_required mode/);
+  assert.doesNotMatch(deferredDeveloperTask?.copyPacket || "", /Open TikTok Developers, submit/);
+  assert.match(deferredPermissionTask?.copyPacket || "", /Deferred because TikTok MVP uses Metricool approval_required mode/);
+  assert.doesNotMatch(deferredPermissionTask?.copyPacket || "", /Request TikTok video\.publish/);
   assert.match(session.tasks[0].copyPacket, /Do not paste passwords/);
   assert.match(session.tasks[0].csvRowTemplate, /sports-daily/);
   assert.equal(/client_secret=|access_token=|refresh_token=|bearer\s+[a-z0-9._-]+/i.test(session.tasks.map((task) => task.csvRowTemplate).join("\n")), false);
