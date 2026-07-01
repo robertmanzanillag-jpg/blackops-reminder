@@ -36,8 +36,14 @@ function runPrerequisite(scriptSpec) {
     encoding: "utf8",
   });
   if (result.status !== 0) {
-    throw new Error(`Prerequisite ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+    return {
+      ok: false,
+      script: args.join(" "),
+      status: result.status,
+      error: result.stderr || result.stdout || "Prerequisite failed without output.",
+    };
   }
+  return { ok: true, script: args.join(" "), status: result.status };
 }
 
 function csvCell(value) {
@@ -75,6 +81,86 @@ function renderCsv(summary) {
       step.blocker,
     ].map(csvCell).join(",")),
   ].join("\n") + "\n";
+}
+
+function renderBlockedPrerequisiteCsv(summary) {
+  const header = ["section", "step", "status", "owner", "scope", "active_platforms", "active_metricool_brands", "deferred_lanes", "action", "proof", "blocker"];
+  return [
+    header.map(csvCell).join(","),
+    [
+      "operator_step",
+      "prerequisite-refresh",
+      summary.status,
+      "app",
+      "tiktok_only_metricool_mvp",
+      "tiktok",
+      "SPORT|memes",
+      "instagram|youtube|streamers",
+      summary.nextStep,
+      summary.paths.json,
+      summary.blocker,
+    ].map(csvCell).join(","),
+  ].join("\n") + "\n";
+}
+
+function renderBlockedPrerequisiteMarkdown(summary) {
+  return [
+    "# Clippers TikTok MVP Go-Live Packet",
+    "",
+    `Generated: ${summary.generatedAt}`,
+    `Status: ${summary.status}`,
+    `Launch mode: ${summary.launchMode}`,
+    `Blocker: ${summary.blocker}`,
+    "",
+    "## Failed Prerequisites",
+    "",
+    ...summary.prerequisiteFailures.map((failure) => `- ${failure.script}: ${failure.error.split("\n")[0]}`),
+    "",
+    "## Next Step",
+    "",
+    summary.nextStep,
+    "",
+    "## Guardrails",
+    "",
+    ...summary.guardrails.map((item) => `- ${item}`),
+    "",
+  ].join("\n");
+}
+
+async function writeBlockedPrerequisiteSummary(prerequisiteFailures) {
+  const summary = {
+    status: "blocked_prerequisite_refresh",
+    generatedAt: new Date().toISOString(),
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    blocker: prerequisiteFailures[0]?.script || "prerequisite_refresh_failed",
+    prerequisiteFailures,
+    paths: {
+      json: outJsonPath,
+      markdown: outMarkdownPath,
+      csv: outCsvPath,
+    },
+    guardrails: [
+      "Metricool remains approval_required.",
+      "realPublishEnabled remains false.",
+      "This blocked packet does not schedule, publish, import metrics, or enable direct social APIs.",
+      "Do not operate from stale go-live packets; fix the prerequisite report and regenerate.",
+    ],
+    nextStep: "Fix the failed prerequisite report, then regenerate this go-live packet. If the blocker is SPORT/memes proof, add real non-secret Metricool or concrete Drive/Docs evidence. Preview links first; save only if the preview gate is clean/current.",
+  };
+  await writeFile(outJsonPath, JSON.stringify(summary, null, 2));
+  await writeFile(outMarkdownPath, renderBlockedPrerequisiteMarkdown(summary));
+  await writeFile(outCsvPath, renderBlockedPrerequisiteCsv(summary));
+  console.log(JSON.stringify({
+    status: summary.status,
+    blocker: summary.blocker,
+    prerequisiteFailures: summary.prerequisiteFailures.length,
+    directSocialApisRequired: summary.directSocialApisRequired,
+    realPublishEnabled: summary.realPublishEnabled,
+    markdownPath: outMarkdownPath,
+    nextStep: summary.nextStep,
+  }, null, 2));
 }
 
 function proofGateFor(report = {}) {
@@ -262,7 +348,12 @@ async function main() {
     prerequisites.splice(1, 0, ["script/clippers-tiktok-batch-evidence-sync.mjs", "--all-batches"]);
     prerequisites.push(["--import", "tsx", "script/clippers-tiktok-mvp-operating-refresh.ts"]);
     prerequisites.push("script/clippers-metricool-operator-handoff.mjs");
-    prerequisites.forEach(runPrerequisite);
+    const prerequisiteResults = prerequisites.map(runPrerequisite);
+    const prerequisiteFailures = prerequisiteResults.filter((result) => !result.ok);
+    if (prerequisiteFailures.length) {
+      await writeBlockedPrerequisiteSummary(prerequisiteFailures);
+      return;
+    }
   }
   const [accountCloseout, runbook, tracker, sync, evidenceChecklist, goalAudit, operatingRefresh, metricool100Handoff] = await Promise.all([
     readJson(accountCloseoutPath),

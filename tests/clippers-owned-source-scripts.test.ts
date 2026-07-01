@@ -2788,6 +2788,63 @@ test("Metricool 100 operator handoff overwrites stale ready handoff when approva
   }
 });
 
+test("TikTok MVP go-live packet rewrites stale packet when current workbook is empty", async () => {
+  const workbookPath = path.join(rootDir, "scheduled/metricool-100-current-batch-workbook.json");
+  const packetPath = path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.json");
+  const markdownPath = path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.md");
+  const csvPath = path.join(rootDir, "reports/clippers-tiktok-mvp-go-live-packet.csv");
+  const filesToRestore = [workbookPath, packetPath, markdownPath, csvPath];
+  const originals = await Promise.all(filesToRestore.map(async (filePath) => [filePath, await readFile(filePath, "utf8").catch(() => null)] as const));
+  try {
+    const workbook = JSON.parse(originals.find(([filePath]) => filePath === workbookPath)?.[1] || "{}");
+    await writeFile(workbookPath, JSON.stringify({
+      ...workbook,
+      status: "blocked_approval_run",
+      rows: [],
+      totals: {
+        ...(workbook.totals || {}),
+        rows: 0,
+        readyToSend: 0,
+      },
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-go-live-packet.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "blocked_prerequisite_refresh");
+    assert.equal(output.realPublishEnabled, false);
+    assert.equal(output.directSocialApisRequired, false);
+    assert.match(output.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
+
+    const packet = JSON.parse(await readFile(packetPath, "utf8"));
+    assert.equal(packet.status, "blocked_prerequisite_refresh");
+    assert.equal(packet.realPublishEnabled, false);
+    assert.equal(packet.directSocialApisRequired, false);
+    assert.ok(packet.prerequisiteFailures.some((failure) => /clippers-tiktok-batch-tracker\.mjs/.test(failure.script)));
+    assert.match(packet.nextStep, /Preview links first; save only if the preview gate is clean\/current/);
+    assert.doesNotMatch(JSON.stringify(packet), /ready_for_metricool_operator|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|autopublish/i);
+
+    const markdown = await readFile(markdownPath, "utf8");
+    assert.match(markdown, /blocked_prerequisite_refresh/);
+    assert.match(markdown, /clippers-tiktok-batch-tracker\.mjs/);
+    assert.match(markdown, /Preview links first; save only if the preview gate is clean\/current/);
+    assert.doesNotMatch(markdown, /ready_to_send|realPublishEnabled=true|video\.publish|autopublish/i);
+
+    const csv = await readFile(csvPath, "utf8");
+    assert.match(csv, /blocked_prerequisite_refresh/);
+    assert.match(csv, /Preview links first; save only if the preview gate is clean\/current/);
+    assert.doesNotMatch(csv, /ready_to_send|realPublishEnabled=true|video\.publish|autopublish/i);
+  } finally {
+    for (const [filePath, content] of originals) {
+      if (content === null) await unlink(filePath).catch(() => undefined);
+      else await writeFile(filePath, content);
+    }
+  }
+});
+
 test("Metricool 100 operator handoff blocked summary does not hide unsafe publish flags", async () => {
   const approvalRunPath = path.join(rootDir, "scheduled/metricool-100-approval-run.json");
   const handoffPath = path.join(rootDir, "scheduled/metricool-100-operator-handoff.json");
