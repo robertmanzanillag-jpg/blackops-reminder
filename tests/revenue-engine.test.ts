@@ -3353,6 +3353,15 @@ test("creates website delivery workspace from money sprint lead mockup and outre
     cashCollectedUsd: 2100,
   });
   const postSaleSnapshot = getRevenueEngineSnapshot();
+  const soldHandoffItem = postSaleSnapshot.websiteDeliveryHandoffQueue.items.find((item) => item.opportunityId === opportunity.id);
+  assert.ok(soldHandoffItem);
+  assert.equal(soldHandoffItem.repoRequired, true);
+  assert.equal(soldHandoffItem.repoFullNamePattern, "owner/repo");
+  assert.equal(soldHandoffItem.suggestedBranchName, "codex/client-handoff-cafe-website");
+  assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Website delivery workspace setup: Handoff Cafe/);
+  assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Repo required: owner\/repo/);
+  assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Do not merge to main directly/);
+  assert.match(soldHandoffItem.nextAction, /repo GitHub owner\/repo/);
   const leadStatusBeforeRepoBlock = postSaleSnapshot.recentLeads.find((item) => item.id === lead.id)?.status;
   const missingRepoHandoff = createWebsiteDeliveryWorkspaceFromLead({
     leadId: lead.id,

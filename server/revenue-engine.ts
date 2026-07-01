@@ -908,6 +908,10 @@ type RevenueWebsiteDeliveryHandoffQueue = {
     monthlyRetainerUsd: number;
     mockupUrl: string;
     sourceUrl: string;
+    repoRequired: true;
+    repoFullNamePattern: string;
+    suggestedBranchName: string;
+    copyableWorkspaceSetupPacket: string;
     nextAction: string;
   }>;
   blocked: Array<{
@@ -4648,6 +4652,30 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       });
       continue;
     }
+    const suggestedBranchName = `codex/client-${slugifyRevenueValue(opportunity.businessName)}-website`;
+    const repoFullNamePattern = "owner/repo";
+    const copyableWorkspaceSetupPacket = [
+      `Website delivery workspace setup: ${opportunity.businessName}`,
+      `Opportunity: ${opportunity.id}`,
+      `Lead: ${opportunity.sourceLeadId}`,
+      `Outreach draft: ${opportunity.sourceOutreachDraftId}`,
+      `Project type: ${opportunity.projectType}`,
+      `Repo required: ${repoFullNamePattern}`,
+      `Suggested branch: ${suggestedBranchName}`,
+      `Mockup: ${opportunity.mockupUrl}`,
+      `Public source: ${opportunity.sourceUrl}`,
+      "",
+      "Before creating workspace:",
+      "- Enter a real GitHub owner/repo from the app inventory or the exact client repo Robert approved.",
+      "- Keep the suggested branch or replace it with another codex/ branch.",
+      "- Confirm deposit evidence and scope are already recorded on the sold opportunity.",
+      "",
+      "PR-first delivery rules:",
+      "- Create a separate branch and pull request.",
+      "- Do not merge to main directly.",
+      "- Do not deploy or publish until second review, App QA, rollback note, and explicit Robert deploy approval are recorded.",
+      "- Keep payment evidence and commercial details out of public PR text.",
+    ].join("\n");
     items.push({
       opportunityId: opportunity.id,
       leadId: opportunity.sourceLeadId,
@@ -4661,7 +4689,11 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       monthlyRetainerUsd: opportunity.monthlyRetainerUsd,
       mockupUrl: opportunity.mockupUrl,
       sourceUrl: opportunity.sourceUrl,
-      nextAction: "Crear delivery workspace QA-gated; no desplegar sin PR, second review, App QA y aprobacion de Robert.",
+      repoRequired: true,
+      repoFullNamePattern,
+      suggestedBranchName,
+      copyableWorkspaceSetupPacket,
+      nextAction: "Ingresar repo GitHub owner/repo y crear delivery workspace QA-gated; no desplegar sin PR, second review, App QA y aprobacion de Robert.",
     });
   }
 

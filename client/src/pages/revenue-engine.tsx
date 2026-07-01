@@ -537,6 +537,10 @@ type RevenueSnapshot = {
       monthlyRetainerUsd: number;
       mockupUrl: string;
       sourceUrl: string;
+      repoRequired: true;
+      repoFullNamePattern: string;
+      suggestedBranchName: string;
+      copyableWorkspaceSetupPacket: string;
       nextAction: string;
     }>;
     blocked: Array<{
@@ -2707,7 +2711,7 @@ export default function RevenueEnginePage() {
     mutationFn: async (item) => {
       const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
       const repoFullName = (repoInput.repoFullName || "").trim();
-      const branchName = (repoInput.branchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
+      const branchName = (repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
       const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -8460,7 +8464,7 @@ export default function RevenueEnginePage() {
                             const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
                             const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
                             const repoFullName = repoInput.repoFullName || "";
-                            const branchName = repoInput.branchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
+                            const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
                             const repoReady = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoFullName.trim());
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
@@ -8520,6 +8524,17 @@ export default function RevenueEnginePage() {
                                   />
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-emerald-500/30 text-emerald-100"
+                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceSetupPacket)}
+                                    data-testid={`button-copy-website-workspace-setup-${item.opportunityId}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy repo setup
+                                  </Button>
                                   <a href={item.mockupUrl} target="_blank" rel="noreferrer">
                                     <Button type="button" size="sm" variant="outline" className="border-zinc-700">
                                       <ExternalLink className="mr-2 h-4 w-4" />
