@@ -2287,6 +2287,9 @@ test("Clippers UI refreshes account permission readiness after evidence activati
   assert.ok(page.includes("/api/clippers/external-closeout-repair-work-packet"));
   assert.ok(page.includes("Operational Readiness"));
   assert.ok(page.includes("External Closeout Pack"));
+  assert.ok(page.includes("Full/direct API closeout is backlog for this run"));
+  assert.ok(page.includes("active MVP unlock is still SPORT + memes TikTok proof"));
+  assert.ok(page.includes("direct API backlog"));
   assert.ok(page.includes("Copy run"));
   assert.ok(page.includes("more external actions in"));
   assert.ok(page.includes("External closeout"));

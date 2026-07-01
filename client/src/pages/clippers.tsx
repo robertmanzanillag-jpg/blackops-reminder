@@ -27228,6 +27228,9 @@ export default function ClippersPage() {
                   <p className="mt-1 text-xs leading-5 text-zinc-500">
                     {externalCloseoutPack?.nextStep || "Genera la lista exacta de cuentas, developer apps y permisos externos que faltan antes de full go-live."}
                   </p>
+                  <p className="mt-1 text-xs leading-5 text-amber-100/75">
+                    Full/direct API closeout is backlog for this run. The active MVP unlock is still SPORT + memes TikTok proof in Metricool approval_required.
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {externalCloseoutPack && (
@@ -27240,6 +27243,9 @@ export default function ClippersPage() {
                       {externalCloseoutPack.status}
                     </Badge>
                   )}
+                  <Badge className="w-fit border border-amber-300/30 bg-amber-300/10 text-amber-100">
+                    direct API backlog
+                  </Badge>
                   <Button
                     type="button"
                     size="sm"
