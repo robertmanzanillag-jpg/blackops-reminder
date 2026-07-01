@@ -61,6 +61,28 @@ test("TikTok MVP proof links parser accepts explicit packet fields", () => {
   assert.doesNotMatch(parsed.proofLinksText, /ready_to_send|realPublishEnabled\s*:\s*true|publish/i);
 });
 
+test("TikTok MVP proof links parser expands two Metricool proof URLs into the full fast path draft", () => {
+  const parsed = extractClipperTikTokMvpProofLinksPaste([
+    "sports-daily:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/sports-daily-tiktok-proof",
+    "sports-daily:tiktok.accountNotes=Robert reviewed the Metricool proof and confirms Sports Daily TikTok is under his control without secrets.",
+    "sports-daily:tiktok.metricoolNotes=SPORT TikTok profile is connected in Metricool approval_required mode with proof reviewed.",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+    "meme-radar:tiktok.accountNotes=Robert reviewed the Docs proof and confirms Meme Radar TikTok is under his control without secrets.",
+    "meme-radar:tiktok.metricoolNotes=memes TikTok profile is connected in Metricool approval_required mode with proof reviewed.",
+  ].join("\n"));
+
+  assert.equal(parsed.status, "ready_for_proof_links_preview");
+  assert.equal(parsed.extractedUrls, 2);
+  assert.equal(parsed.realPublishEnabled, false);
+  assert.equal(parsed.proofLinksPreview.readyForProofDrop, true);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.readyProofFields, 8);
+  assert.equal(parsed.proofLinks.lanes["sports-daily:tiktok"].accountOwnershipProofUrl, "https://app.metricool.com/planner/sports-daily-tiktok-proof");
+  assert.equal(parsed.proofLinks.lanes["sports-daily:tiktok"].metricoolConnectionProofUrl, "https://app.metricool.com/planner/sports-daily-tiktok-proof");
+  assert.equal(parsed.proofLinks.lanes["meme-radar:tiktok"].accountOwnershipProofUrl, "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing");
+  assert.equal(parsed.proofLinks.lanes["meme-radar:tiktok"].metricoolConnectionProofUrl, "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing");
+  assert.doesNotMatch(JSON.stringify(parsed), /"status"\s*:\s*"ready_to_send"|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|refresh_token|client_secret|cookie=|password=/i);
+});
+
 test("TikTok MVP proof URL classifier previews proof shape without unlocking gates", () => {
   const metricool = classifyClipperTikTokMvpProofUrl("https://app.metricool.com/planner/sports-daily-tiktok-proof");
   assert.equal(metricool.status, "ready_metricool_proof_url");

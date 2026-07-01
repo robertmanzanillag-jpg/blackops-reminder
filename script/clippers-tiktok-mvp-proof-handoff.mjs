@@ -381,6 +381,7 @@ function renderFastPathProofLinksPastePacket() {
   return [
     "# TikTok MVP Metricool fast-path proof packet",
     "# Fill only these URLs when each proof clearly shows the TikTok profile connected under Robert control.",
+    "# Minimum path: use one real proof URL per lane, then paste that same URL into metricoolConnectionProofUrl and accountOwnershipProofUrl only if the proof truly shows both Metricool connection and Robert control.",
     "# Accepted: real https://*.metricool.com/... URL or concrete Google Drive file/folder or Docs evidence URL.",
     "# Never paste passwords, cookies, access tokens, refresh tokens, recovery codes, signed/temporary URLs, API keys, or private screenshots.",
     "# After filling: Preview links first. Save remains locked until the preview gate is clean/current.",

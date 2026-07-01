@@ -2455,6 +2455,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.match(report.fastPathPastePacketText, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(report.fastPathPastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(report.fastPathPastePacketText, /Preview links first/);
+  assert.match(report.fastPathPastePacketText, /Minimum path: use one real proof URL per lane/);
   assert.match(report.fastPathPastePacketText, /sports-daily:tiktok\.accountNotes=/);
   assert.match(report.fastPathPastePacketText, /meme-radar:tiktok\.metricoolNotes=/);
   assert.doesNotMatch(report.fastPathPastePacketText, /ready_to_send|realPublishEnabled=true|video\.publish|confirmed by Robert|verified by Robert|Robert confirms/i);
