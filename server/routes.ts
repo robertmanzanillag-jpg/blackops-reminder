@@ -148,6 +148,7 @@ const clipperMetricoolBridgeEvidenceCsvPath = "clippers_workspace/scheduled/metr
 const clipperMetricoolBridgePreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/metricool-bridge-preview-gate.json";
 const clipperTikTokMvpAccountEvidenceCsvPath = "clippers_workspace/account-permission-mvp-account-evidence.csv";
 const clipperTikTokMvpEvidenceCloseoutPreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/evidence-closeout-preview-gate.json";
+const clipperTikTokMvpProofLinksPreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json";
 const clipperMetricoolBridgeRequiredRows = [
   { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdaily", accountName: "Sports Daily Clips" },
   { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradar", accountName: "Meme Radar" },
@@ -251,8 +252,68 @@ function hashClipperMetricoolBridgeRaw(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
+function hashClipperTikTokMvpProofLinksRaw(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+function normalizeClipperTikTokMvpProofLinksRaw(input: { proofLinksText?: unknown; proofLinks?: unknown }): string {
+  if (typeof input.proofLinksText === "string") return input.proofLinksText;
+  return JSON.stringify(input.proofLinks || {});
+}
+
 function hashClipperTikTokMvpEvidenceCloseoutRaw(accountRaw: string, bridgeRaw: string): string {
   return createHash("sha256").update(["account", accountRaw, "bridge", bridgeRaw].join("\n---clippers-closeout-boundary---\n")).digest("hex");
+}
+
+async function writeClipperTikTokMvpProofLinksPreviewGate(raw: string, preview: any) {
+  const rawHash = hashClipperTikTokMvpProofLinksRaw(raw);
+  const readyProofFields = Number(preview?.goalBoardImpact?.readyProofFields || 0);
+  const totalProofFields = Number(preview?.goalBoardImpact?.totalProofFields || 0);
+  const issues = Array.isArray(preview?.issues) ? preview.issues : [];
+  const ready = preview?.readyForProofDrop === true && issues.length === 0 && readyProofFields === totalProofFields && totalProofFields > 0;
+  const gate = {
+    status: ready ? "ready_for_save" : "blocked_preview_not_clean",
+    generatedAt: new Date().toISOString(),
+    scope: "tiktok_only_metricool_mvp",
+    launchMode: "metricool_approval_required",
+    directSocialApisRequired: false,
+    realPublishEnabled: false,
+    rawHash,
+    rawStored: false,
+    totals: {
+      issues: issues.length,
+      readyProofFields,
+      totalProofFields,
+    },
+    guardrails: [
+      "Stores only a SHA-256 hash and preview totals; it does not store raw proof link text.",
+      "Does not save proof links, apply evidence, queue Metricool, create calendar rows, schedule, or send posts.",
+      "Saving proof links requires this preview gate to match the exact current proof links text.",
+    ],
+    nextStep: ready
+      ? "Save is allowed only for the proof links text matching this preview hash."
+      : "Fix proof link issues and preview again before saving.",
+  };
+  await mkdirNode("clippers_workspace/reports/tiktok-mvp-proof-intake", { recursive: true });
+  await writeNodeFile(clipperTikTokMvpProofLinksPreviewGatePath, `${JSON.stringify(gate, null, 2)}\n`);
+  return gate;
+}
+
+async function validateClipperTikTokMvpProofLinksPreviewGate(raw: string, previewHash: unknown) {
+  const currentHash = hashClipperTikTokMvpProofLinksRaw(raw);
+  const requestedHash = String(previewHash || "").trim();
+  const gate = await readNodeFile(clipperTikTokMvpProofLinksPreviewGatePath, "utf8").then((gateRaw) => JSON.parse(gateRaw)).catch(() => null);
+  const ageMs = gate?.generatedAt ? Date.now() - new Date(gate.generatedAt).getTime() : Number.POSITIVE_INFINITY;
+  const issues = [
+    gate ? null : "Run Preview links before saving proof links.",
+    gate?.status === "ready_for_save" ? null : "Latest proof links preview is not clean.",
+    requestedHash && requestedHash === currentHash ? null : "Preview hash does not match the current proof links text.",
+    gate?.rawHash === currentHash ? null : "Latest proof links preview gate does not match the current proof links text.",
+    ageMs <= 30 * 60 * 1000 ? null : "Latest proof links preview gate expired; preview again.",
+    Number(gate?.totals?.readyProofFields || 0) === Number(gate?.totals?.totalProofFields || 0) && Number(gate?.totals?.totalProofFields || 0) > 0 ? null : "Latest proof links preview did not accept every proof field.",
+    Number(gate?.totals?.issues || 0) === 0 ? null : "Latest proof links preview had issues.",
+  ].filter(Boolean) as string[];
+  return { ok: issues.length === 0, currentHash, gate, issues };
 }
 
 async function readClipperTikTokMvpEvidenceCloseoutCsvPair() {
@@ -3496,8 +3557,11 @@ export async function registerRoutes(
 
   app.post("/api/clippers/preview-tiktok-mvp-proof-links", async (req, res) => {
     try {
+      const raw = normalizeClipperTikTokMvpProofLinksRaw(req.body || {});
       const parsed = typeof req.body?.proofLinksText === "string" ? JSON.parse(req.body.proofLinksText) : req.body?.proofLinks;
-      res.json({ tiktokMvpProofLinksPreview: auditClipperTikTokMvpProofLinks(parsed) });
+      const tiktokMvpProofLinksPreview = auditClipperTikTokMvpProofLinks(parsed);
+      const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(raw, tiktokMvpProofLinksPreview);
+      res.json({ tiktokMvpProofLinksPreview, tiktokMvpProofLinksPreviewGate });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to preview TikTok MVP proof links" });
     }
@@ -3505,7 +3569,12 @@ export async function registerRoutes(
 
   app.post("/api/clippers/parse-tiktok-mvp-proof-links-paste", async (req, res) => {
     try {
-      res.json({ tiktokMvpProofLinksPastePreview: extractClipperTikTokMvpProofLinksPaste(req.body?.pasteText) });
+      const tiktokMvpProofLinksPastePreview = extractClipperTikTokMvpProofLinksPaste(req.body?.pasteText);
+      const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(
+        tiktokMvpProofLinksPastePreview.proofLinksText,
+        tiktokMvpProofLinksPastePreview.proofLinksPreview,
+      );
+      res.json({ tiktokMvpProofLinksPastePreview, tiktokMvpProofLinksPreviewGate });
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Failed to parse TikTok MVP proof links paste" });
     }
@@ -3572,6 +3641,10 @@ export async function registerRoutes(
     try {
       const drop = await readClipperTikTokMvpProofLinksDropPaste();
       const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
+      const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(
+        parsedPreview.proofLinksText,
+        parsedPreview.proofLinksPreview,
+      );
       res.json({
         tiktokMvpProofLinksDropImport: {
           status: parsedPreview.status,
@@ -3594,6 +3667,7 @@ export async function registerRoutes(
           nextStep: parsedPreview.nextStep,
         },
         tiktokMvpProofLinksPastePreview: parsedPreview,
+        tiktokMvpProofLinksPreviewGate,
       });
     } catch (error: any) {
       const status = error?.code === "ENOENT" ? 404 : 400;
@@ -3660,7 +3734,31 @@ export async function registerRoutes(
 
   app.post("/api/clippers/save-tiktok-mvp-proof-links", async (req, res) => {
     try {
+      const raw = normalizeClipperTikTokMvpProofLinksRaw(req.body || {});
       const parsed = typeof req.body?.proofLinksText === "string" ? JSON.parse(req.body.proofLinksText) : req.body?.proofLinks;
+      const previewGate = await validateClipperTikTokMvpProofLinksPreviewGate(raw, req.body?.previewHash);
+      if (!previewGate.ok) {
+        res.status(400).json({
+          error: previewGate.issues[0] || "Proof links preview gate is not ready.",
+          tiktokMvpProofLinksPreviewGate: {
+            status: "blocked_missing_or_stale_preview",
+            generatedAt: new Date().toISOString(),
+            scope: "tiktok_only_metricool_mvp",
+            launchMode: "metricool_approval_required",
+            directSocialApisRequired: false,
+            realPublishEnabled: false,
+            currentHash: previewGate.currentHash,
+            rawStored: false,
+            issues: previewGate.issues,
+            guardrails: [
+              "Blocked before saving because the current proof links text does not match a clean preview gate.",
+              "Does not save proof links, apply evidence, queue Metricool, create calendar rows, or send posts.",
+            ],
+            nextStep: "Preview links again, then save only if the preview is clean and current.",
+          },
+        });
+        return;
+      }
       const validationError = validateClipperTikTokMvpProofLinks(parsed);
       if (validationError) {
         res.status(400).json({ error: validationError });

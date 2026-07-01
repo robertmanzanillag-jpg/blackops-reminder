@@ -101,8 +101,8 @@ test("TikTok MVP proof links parser blocks Metricool ownership reuse without exp
   assert.equal(parsed.status, "needs_review");
   assert.equal(parsed.realPublishEnabled, false);
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
-  assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool\/Drive proof shows this TikTok profile under Robert control/i);
-  assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/i);
+  assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool or concrete Drive file\/folder\/Docs proof shows this TikTok profile under Robert control/i);
+  assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/i);
   assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
 });
 
@@ -120,8 +120,8 @@ test("TikTok MVP proof links parser blocks explicit same-URL reuse with generic 
 
   assert.equal(parsed.status, "needs_review");
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
-  assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool\/Drive proof shows this TikTok profile under Robert control/i);
-  assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/i);
+  assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool or concrete Drive file\/folder\/Docs proof shows this TikTok profile under Robert control/i);
+  assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/i);
   assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
 });
 
@@ -132,7 +132,7 @@ test("TikTok MVP proof links parser names Drive or Docs as valid Metricool evide
   ].join("\n"));
 
   assert.equal(parsed.status, "needs_review");
-  assert.match(parsed.issues.join("\n"), /Google Drive\/Docs connection proof URL/);
+  assert.match(parsed.issues.join("\n"), /concrete Google Drive file\/folder or Docs connection proof URL/);
   assert.equal(parsed.realPublishEnabled, false);
 });
 
