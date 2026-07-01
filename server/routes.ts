@@ -3878,6 +3878,7 @@ export async function registerRoutes(
         tiktokMvpLocalVerification: await readClipperTikTokMvpLocalVerification(),
         tiktokMvpCloseoutWizard: await readClipperTikTokMvpCloseoutWizard().catch(() => null),
         tiktokMvpProofQuickFill: await readClipperTikTokMvpProofQuickFill(),
+        tiktokMvpProofRefresh: await readClipperTikTokMvpProofRefresh(),
         tiktokMvpProofUnblocker: await readClipperTikTokMvpProofUnblocker(),
         tiktokNextAction: await readClipperTikTokNextAction().catch(() => null),
         run,

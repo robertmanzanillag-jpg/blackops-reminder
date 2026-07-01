@@ -2751,7 +2751,10 @@ interface ClipperTikTokMvpLocalVerificationSummary {
   }>;
   proofState: {
     quickFillStatus: string;
+    quickFillCurrent: boolean;
     quickFillIssues: number;
+    proofRefreshStatus: string;
+    proofRefreshFresh: boolean;
     unblockerStatus: string;
     openFixes: number;
     readyLanes: number;
@@ -2763,6 +2766,7 @@ interface ClipperTikTokMvpLocalVerificationSummary {
     json: string;
     markdown: string;
     quickFillJson: string;
+    proofRefreshJson: string;
     unblockerJson: string;
   };
 }
@@ -12304,6 +12308,7 @@ export default function ClippersPage() {
         tiktokMvpLocalVerification: ClipperTikTokMvpLocalVerificationSummary;
         tiktokMvpCloseoutWizard: ClipperTikTokMvpCloseoutWizardSummary | null;
         tiktokMvpProofQuickFill: ClipperTikTokMvpProofQuickFillSummary;
+        tiktokMvpProofRefresh: ClipperTikTokMvpProofRefreshSummary;
         tiktokMvpProofUnblocker: ClipperTikTokMvpProofUnblockerSummary;
         tiktokNextAction: ClipperTikTokNextActionSummary | null;
       };
@@ -12314,6 +12319,7 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
       }
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-quick-fill"], data.tiktokMvpProofQuickFill);
+      queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-refresh"], data.tiktokMvpProofRefresh);
       queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-unblocker"], data.tiktokMvpProofUnblocker);
       if (data.tiktokNextAction) {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
@@ -17003,6 +17009,8 @@ export default function ClippersPage() {
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
   const tiktokMvpProofQuickFillGeneratedMs = tiktokMvpProofQuickFill ? Date.parse(tiktokMvpProofQuickFill.generatedAt) : 0;
   const tiktokMvpProofRefreshGeneratedMs = tiktokMvpProofRefresh ? Date.parse(tiktokMvpProofRefresh.generatedAt) : 0;
+  const tiktokMvpProofQuickFillIssues = Array.isArray(tiktokMvpProofQuickFill?.issues) ? tiktokMvpProofQuickFill.issues : [];
+  const tiktokMvpProofQuickFillIssuesValid = !tiktokMvpProofQuickFill || Array.isArray(tiktokMvpProofQuickFill.issues);
   const tiktokMvpProofRefreshFresh = Boolean(
     Number.isFinite(tiktokMvpProofRefreshGeneratedMs)
     && tiktokMvpProofRefreshGeneratedMs > 0
@@ -17012,11 +17020,11 @@ export default function ClippersPage() {
   const tiktokMvpProofQuickFillCurrent = Boolean(
     tiktokMvpProofQuickFill?.appliedToIntake
     && tiktokMvpProofQuickFill.status === "applied_to_combined_intake"
-    && (tiktokMvpProofQuickFill.issues || []).length === 0
+    && tiktokMvpProofQuickFillIssuesValid
+    && tiktokMvpProofQuickFillIssues.length === 0
     && tiktokMvpProofRefreshFresh
     && Number.isFinite(tiktokMvpProofQuickFillGeneratedMs)
     && Number.isFinite(tiktokMvpProofRefreshGeneratedMs)
-    && tiktokMvpProofQuickFillGeneratedMs >= tiktokMvpProofRefreshGeneratedMs
     && tiktokMvpProofQuickFill.proofRefreshStatus === tiktokMvpProofRefresh?.status
   );
   const tiktokMvpProofQuickFillAppliedCurrent = Boolean(tiktokMvpProofQuickFill?.appliedToIntake && tiktokMvpProofQuickFillCurrent);
@@ -17025,7 +17033,9 @@ export default function ClippersPage() {
     : tiktokMvpProofQuickFill?.status || "not submitted";
   const tiktokMvpProofQuickFillDisplayNextStep = tiktokMvpProofQuickFill?.appliedToIntake && !tiktokMvpProofQuickFillCurrent
     ? "Quick fill result is older than or no longer matches the current Proof refresh; rerun Quick fill with real non-secret proof before trusting this result."
-    : tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
+    : !tiktokMvpProofQuickFillIssuesValid
+      ? "Quick fill report is malformed; rerun Quick fill with real non-secret proof before trusting this result."
+      : tiktokMvpProofQuickFillIssues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
@@ -19411,7 +19421,9 @@ export default function ClippersPage() {
                     local verify {tiktokMvpLocalVerification.status}
                   </Badge>
                   <span>{tiktokMvpLocalVerification.commands.filter((row) => row.status === "pass").length}/{tiktokMvpLocalVerification.commands.length} commands passed</span>
+                  <span>quick fill {tiktokMvpLocalVerification.proofState.quickFillCurrent ? "current" : "stale"}</span>
                   <span>{tiktokMvpLocalVerification.proofState.quickFillIssues} quick-fill issues</span>
+                  <span>refresh {tiktokMvpLocalVerification.proofState.proofRefreshFresh ? "fresh" : "stale"}</span>
                   <span>{tiktokMvpLocalVerification.proofState.openFixes} open fixes</span>
                 </div>
                 <p className="mt-1">{tiktokMvpLocalVerification.nextStep}</p>
@@ -19447,7 +19459,7 @@ export default function ClippersPage() {
                     )}>
                       quick fill {tiktokMvpProofQuickFillDisplayStatus}
                     </Badge>
-                    <span>{tiktokMvpProofQuickFill?.issues.length ?? 0} issues</span>
+                    <span>{tiktokMvpProofQuickFillIssuesValid ? tiktokMvpProofQuickFillIssues.length : "malformed"} issues</span>
                     <span>applied current: {tiktokMvpProofQuickFillAppliedCurrent ? "yes" : "no"}</span>
                   </div>
                   <p className="mt-1">{tiktokMvpProofQuickFillDisplayNextStep}</p>

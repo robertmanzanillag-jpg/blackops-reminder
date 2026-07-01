@@ -95,6 +95,35 @@ async function readJson(filePath, fallback = null) {
   }
 }
 
+function timestampMs(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isFreshGeneratedAt(value, maxAgeMs = 6 * 60 * 60 * 1000) {
+  const parsed = timestampMs(value);
+  if (!parsed) return false;
+  const ageMs = Date.now() - parsed;
+  return ageMs >= 0 && ageMs <= maxAgeMs;
+}
+
+function isQuickFillCurrentWithProofRefresh(quickFill = {}, proofRefresh = {}) {
+  const quickFillGeneratedAt = timestampMs(quickFill.generatedAt);
+  const proofRefreshGeneratedAt = timestampMs(proofRefresh.generatedAt);
+  const quickFillIssues = Array.isArray(quickFill.issues) ? quickFill.issues : null;
+  return Boolean(
+    quickFill.appliedToIntake === true
+    && quickFill.status === "applied_to_combined_intake"
+    && quickFillIssues
+    && quickFillIssues.length === 0
+    && isFreshGeneratedAt(quickFill.generatedAt)
+    && isFreshGeneratedAt(proofRefresh.generatedAt)
+    && quickFillGeneratedAt
+    && proofRefreshGeneratedAt
+    && quickFill.proofRefreshStatus === proofRefresh.status
+  );
+}
+
 function renderMarkdown(summary) {
   return [
     "# TikTok MVP Local Verification",
@@ -118,7 +147,10 @@ function renderMarkdown(summary) {
     "## Proof State",
     "",
     `- Quick fill: ${summary.proofState.quickFillStatus}`,
+    `- Quick fill current: ${summary.proofState.quickFillCurrent}`,
     `- Quick fill issues: ${summary.proofState.quickFillIssues}`,
+    `- Proof refresh: ${summary.proofState.proofRefreshStatus}`,
+    `- Proof refresh fresh: ${summary.proofState.proofRefreshFresh}`,
     `- Unblocker: ${summary.proofState.unblockerStatus}`,
     `- Open proof fixes: ${summary.proofState.openFixes}`,
     `- Ready lanes: ${summary.proofState.readyLanes}/${summary.proofState.targetLanes}`,
@@ -138,11 +170,19 @@ async function main() {
   await mkdir(reportsDir, { recursive: true });
   const commandResults = commands.map(runCommand);
   const proofQuickFill = await readJson(path.join(reportsDir, "proof-quick-fill.json"), {});
+  const proofRefresh = await readJson(path.join(reportsDir, "proof-refresh.json"), {});
   const proofUnblocker = await readJson(path.join(reportsDir, "proof-unblocker.json"), {});
   const requiredFailures = commandResults.filter((row) => row.required && row.status !== "pass");
   const openFixes = Number(proofUnblocker?.totals?.openFixes || 0);
-  const quickFillIssues = Array.isArray(proofQuickFill?.issues) ? proofQuickFill.issues.length : 0;
-  const proofReady = openFixes === 0 && quickFillIssues === 0 && proofUnblocker?.status === "unblocked_ready_for_apply_preview";
+  const quickFillIssuesValid = Array.isArray(proofQuickFill?.issues);
+  const quickFillIssues = quickFillIssuesValid ? proofQuickFill.issues.length : 1;
+  const proofRefreshFresh = isFreshGeneratedAt(proofRefresh?.generatedAt);
+  const quickFillCurrent = isQuickFillCurrentWithProofRefresh(proofQuickFill, proofRefresh);
+  const proofReady = openFixes === 0
+    && quickFillIssues === 0
+    && quickFillCurrent
+    && proofRefresh?.status === "ready_to_apply"
+    && proofUnblocker?.status === "unblocked_ready_for_apply_preview";
   const status = requiredFailures.length === 0 && proofReady ? "pass" : "blocked";
   const summary = {
     status,
@@ -155,7 +195,10 @@ async function main() {
     commands: commandResults,
     proofState: {
       quickFillStatus: proofQuickFill?.status || "not_run",
+      quickFillCurrent,
       quickFillIssues,
+      proofRefreshStatus: proofRefresh?.status || "not_run",
+      proofRefreshFresh,
       unblockerStatus: proofUnblocker?.status || "not_run",
       openFixes,
       readyLanes: Number(proofUnblocker?.readyLanes || 0),
@@ -171,11 +214,14 @@ async function main() {
       ? `Fix failing local command: ${requiredFailures[0].label}.`
       : proofReady
         ? "Run Import preview and Evidence closeout preview, then apply only if both say ready_to_apply."
-        : "Paste real SPORT/memes TikTok and Metricool proof into Quick fill, then rerun local verification.",
+        : quickFillCurrent
+          ? "Proof refresh or unblocker is still blocked; rerun Proof refresh and fix the listed proof queue before Metricool."
+          : "Paste real SPORT/memes TikTok and Metricool proof into Quick fill, then rerun local verification.",
     paths: {
       json: outJsonPath,
       markdown: outMarkdownPath,
       quickFillJson: path.join(reportsDir, "proof-quick-fill.json"),
+      proofRefreshJson: path.join(reportsDir, "proof-refresh.json"),
       unblockerJson: path.join(reportsDir, "proof-unblocker.json"),
     },
   };
@@ -188,6 +234,8 @@ async function main() {
     commandsPassed: commandResults.filter((row) => row.status === "pass").length,
     commands: commandResults.length,
     quickFillIssues,
+    quickFillCurrent,
+    proofRefreshFresh,
     openFixes,
     reportJsonPath: outJsonPath,
     nextStep: summary.nextStep,
