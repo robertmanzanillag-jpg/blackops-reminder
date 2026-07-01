@@ -80,11 +80,24 @@ test("TikTok MVP proof URL classifier previews proof shape without unlocking gat
   assert.equal(generic.acceptedAsMetricoolConnectionProof, false);
   assert.match(generic.issues.join("\n"), /too generic/);
 
-  const secret = classifyClipperTikTokMvpProofUrl("https://app.metricool.com/planner/sports-daily?token=neverpaste");
-  assert.equal(secret.status, "blocked_secret_like");
-  assert.equal(secret.rawStored, false);
-  assert.equal(secret.realPublishEnabled, false);
-  assert.doesNotMatch(JSON.stringify(secret), /neverpaste|token=neverpaste/i);
+  for (const unsafeUrl of [
+    "https://app.metricool.com/planner/sports-daily?token=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?access_token=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?refresh_token=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?client_secret=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?access%5Ftoken=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?refresh%5Ftoken=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?client%5Fsecret=neverpaste",
+    "https://app.metricool.com/planner/sports-daily?access%5Ftoken=neverpaste%",
+    "https://app.metricool.com/planner/sports-daily?refresh%5Ftoken=neverpaste%",
+    "https://app.metricool.com/planner/sports-daily?client%5Fsecret=neverpaste%",
+  ]) {
+    const secret = classifyClipperTikTokMvpProofUrl(unsafeUrl);
+    assert.equal(secret.status, "blocked_secret_like", unsafeUrl);
+    assert.equal(secret.rawStored, false);
+    assert.equal(secret.realPublishEnabled, false);
+    assert.doesNotMatch(JSON.stringify(secret), /neverpaste|token=neverpaste|client_secret=neverpaste/i);
+  }
 
   const placeholder = classifyClipperTikTokMvpProofUrl("<paste real Metricool proof>");
   assert.equal(placeholder.status, "blocked_placeholder");
@@ -217,8 +230,11 @@ test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
     "meme-radar:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/meme-radar-tiktok-proof",
   ].join("\n"));
 
-  assert.equal(parsed.status, "needs_review");
+  assert.equal(parsed.status, "blocked_secret_like");
   assert.match(parsed.issues.join("\n"), /passwords, tokens, cookies, keys, or recovery codes/i);
+  assert.equal(parsed.rawStored, false);
+  assert.doesNotMatch(parsed.proofLinksText, /token=abc123|sports-daily-tiktok-proof|meme-radar-tiktok-proof/i);
+  assert.doesNotMatch(JSON.stringify(parsed.proofLinks), /token=abc123|sports-daily-tiktok-proof|meme-radar-tiktok-proof/i);
   assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.status, "blocked_proof_actions");
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "preview_proof_links");
@@ -229,8 +245,10 @@ test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
     "memes Metricool connected proof https://app.metricool.com/planner/meme-radar-tiktok-proof",
     "operator_notes=api_key=neverpaste-this-value",
   ].join("\n"));
-  assert.equal(nestedSecret.status, "needs_review");
+  assert.equal(nestedSecret.status, "blocked_secret_like");
   assert.match(nestedSecret.issues.join("\n"), /passwords, tokens, cookies, keys, or recovery codes/i);
+  assert.equal(nestedSecret.rawStored, false);
+  assert.doesNotMatch(nestedSecret.proofLinksText, /api_key=neverpaste|sports-daily-tiktok-proof|meme-radar-tiktok-proof/i);
   assert.equal(nestedSecret.proofLinksPreview.readyForProofDrop, false);
 });
 
@@ -267,6 +285,9 @@ test("TikTok MVP proof links audit rejects generic Metricool pages as proof", ()
     "https://metricool.com/pricing",
     "https://metricool.com/integrations",
     "https://metricool.com/resources",
+    "https://app.metricool.com/planner/a",
+    "https://app.metricool.com/analytics/x",
+    "https://app.metricool.com/reports/1",
   ]) {
     const proofLinks = {
       lanes: {

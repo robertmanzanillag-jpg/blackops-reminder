@@ -33091,7 +33091,17 @@ export async function recordClipperMetricoolAccountEvidence(userId = getSystemUs
 
 const METRICOOL_BRIDGE_EVIDENCE_TEMPLATE = "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes";
 const metricoolBridgeUnsafePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
-const metricoolBridgeUnsafeParamPattern = /(?:^|[?&#;])(token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i;
+const metricoolBridgeUnsafeParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function decodedMetricoolBridgeUrlText(value: string): string {
+  return value.replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 function parseClipperPlatformOptional(value: unknown): ClipperPlatform | null {
   return value === "tiktok" || value === "instagram" || value === "youtube" ? value : null;
@@ -33106,11 +33116,13 @@ function metricoolBridgeString(record: Record<string, unknown>, keys: string[]):
 }
 
 function isSafeMetricoolBridgeUrlObject(url: URL): boolean {
+  const raw = url.toString();
+  const decoded = decodedMetricoolBridgeUrlText(raw);
   return url.protocol === "https:"
     && !url.username
     && !url.password
     && !metricoolBridgeUnsafePattern.test(url.hostname)
-    && !metricoolBridgeUnsafeParamPattern.test(url.search);
+    && ![raw, decoded, url.search, decodedMetricoolBridgeUrlText(url.search)].some((value) => metricoolBridgeUnsafeParamPattern.test(value));
 }
 
 function normalizeMetricoolBridgeCompareUrl(value: string): string {
@@ -33154,8 +33166,7 @@ function isMetricoolProofUrl(value: string): boolean {
     return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
       && /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
-      && Boolean(pathSegments[1])
-      && pathSegments.join("").length >= 8
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "")
       && !url.search;
   } catch {
     return false;

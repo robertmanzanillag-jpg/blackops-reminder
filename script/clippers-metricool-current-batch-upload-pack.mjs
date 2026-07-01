@@ -299,11 +299,35 @@ function renderHtml(summary) {
   <main>${rows}</main>
   <script>
     const csvCell = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
-    const isMetricoolUrl = (value) => {
+    const decodedProofText = (value) => {
+      return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+        try {
+          return decodeURIComponent(match);
+        } catch {
+          return match;
+        }
+      });
+    };
+    const hasUnsafeUrlProofPart = (value) => {
+      const text = String(value || "");
+      const decoded = decodedProofText(text);
+      return [text, decoded].some((candidate) =>
+        /[a-z][a-z0-9+.-]*:\\/\\/[^\\s/:@]+:[^@\\s/]+@/i.test(candidate)
+        || /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i.test(candidate)
+      );
+    };
+    const isConcreteMetricoolScheduledProofUrl = (value) => {
       try {
         const parsed = new URL(value);
         const host = parsed.hostname.replace(/^www\\./, "");
-        return parsed.protocol === "https:" && (host === "metricool.com" || host.endsWith(".metricool.com"));
+        const pathSegments = parsed.pathname.replace(/\\/+$/, "").toLowerCase().split("/").filter(Boolean);
+        return parsed.protocol === "https:"
+          && !parsed.username
+          && !parsed.password
+          && !hasUnsafeUrlProofPart(value)
+          && (host === "metricool.com" || host.endsWith(".metricool.com"))
+          && /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+          && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "");
       } catch {
         return false;
       }
@@ -329,9 +353,9 @@ function renderHtml(summary) {
         const status = clip.querySelector("[data-evidence-status]");
         const metricoolUrl = clip.querySelector("[data-metricool-url]").value.trim();
         const operatorNotes = clip.querySelector("[data-operator-notes]").value.trim();
-        if (!isMetricoolUrl(metricoolUrl) || !concreteNotes(operatorNotes)) {
+        if (!isConcreteMetricoolScheduledProofUrl(metricoolUrl) || !concreteNotes(operatorNotes)) {
           button.classList.add("blocked");
-          status.textContent = "Blocked: use an HTTPS Metricool URL and concrete 20+ character operator note.";
+          status.textContent = "Blocked: use a concrete HTTPS Metricool planner/brand/post/report URL with no credential-like query params, plus a concrete 20+ character operator note.";
           setTimeout(() => button.classList.remove("blocked"), 1400);
           return;
         }

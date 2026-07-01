@@ -22,7 +22,17 @@ const activeMetricoolMvpAccountIds = new Set(["sports-daily", "meme-radar"]);
 const activeMetricoolMvpPlatforms = new Set(["tiktok"]);
 const weakEvidenceNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);
 const unsafeEvidencePattern = /\b(access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|password|passcode|cookie|session|bearer|authorization|auth|signature|signed|jwt|recovery[_ -]?code|private[_ -]?key)\b|sk-[A-Za-z0-9_-]{12,}|<[^>]+>|placeholder|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
-const unsafeEvidenceParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+const unsafeEvidenceParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function decodedEvidenceText(value) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 const accounts = [
   { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdaily" },
@@ -100,7 +110,8 @@ function isSafeEvidenceUrl(value) {
       && !url.username
       && !url.password
       && !unsafeEvidencePattern.test(url.hostname)
-      && !unsafeEvidenceParamPattern.test(url.search);
+      && !unsafeEvidenceParamPattern.test(url.search)
+      && !unsafeEvidenceParamPattern.test(decodedEvidenceText(url.search));
   } catch {
     return false;
   }

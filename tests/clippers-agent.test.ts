@@ -6315,6 +6315,8 @@ test("Metricool bridge evidence batch rejects credential URLs and mismatched act
       "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
       "sports-daily,tiktok,SPORT,6431687,https://viewer:secret@www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject profile URLs with embedded credentials.",
       "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://viewer:secret@drive.google.com/file/d/metricool-proof/view,Sport TikTok bridge must reject proof URLs with embedded credentials.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/a,Sport TikTok bridge must reject shallow Metricool planner proof URLs.",
+      "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-proof?access%5Ftoken=neverpaste,Sport TikTok bridge must reject encoded credential query params.",
       "sports-daily,tiktok,WRONG,6431687,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject wrong Metricool brand names.",
       "sports-daily,tiktok,SPORT,6431687,https://www.tiktok.com/@someoneelse,https://app.metricool.com/brands/6431687,Sport TikTok bridge must reject profile URLs for a different handle.",
       "meme-radar,tiktok,memes,6431685,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/metricool-proof/view,Memes TikTok bridge connected in Metricool with redacted Drive proof reference.",
@@ -6322,11 +6324,12 @@ test("Metricool bridge evidence batch rejects credential URLs and mismatched act
 
     const { metricoolBridgeEvidenceBatch } = await previewClipperMetricoolBridgeEvidenceBatch({ raw });
     assert.equal(metricoolBridgeEvidenceBatch.wouldWrite, false);
-    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 5);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.rows, 7);
     assert.equal(metricoolBridgeEvidenceBatch.totals.recorded, 1);
-    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 4);
+    assert.equal(metricoolBridgeEvidenceBatch.totals.skipped, 6);
     assert.ok(metricoolBridgeEvidenceBatch.recorded.some((item) => item.accountId === "meme-radar" && item.platform === "tiktok"));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("real https URLs without token-like query params")));
+    assert.ok(metricoolBridgeEvidenceBatch.skipped.filter((item) => item.reason.includes("real Metricool proof URL or concrete Google Drive")).length >= 1);
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("metricool_brand_name must match active lane SPORT")));
     assert.ok(metricoolBridgeEvidenceBatch.skipped.some((item) => item.reason.includes("profile_url must match active lane https://www.tiktok.com/@sportsdaily")));
     assert.equal(await readFile(sportsPath, "utf8").catch(() => null), null);

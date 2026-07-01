@@ -19,7 +19,17 @@ const weakNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified",
 const unsafeHostOrPlaceholderPattern = /<[^>]+>|\bpaste\b|\bplaceholder\b|replace this|not-real|not-metricool|todo|tbd|example\.com|localhost|127\.0\.0\.1|0\.0\.0\.0/i;
 const secretTextPattern = /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i;
 const credentialUrlPattern = /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i;
-const unsafeParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+const unsafeParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function decodedProofText(value) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 function parseArgs(argv) {
   const args = { apply: false, accountCsvPath: defaultAccountCsvPath, bridgeCsvPath: defaultBridgeCsvPath };
@@ -76,10 +86,13 @@ function normalize(value) {
 
 function containsUnsafeText(value) {
   const text = String(value || "");
-  return unsafeHostOrPlaceholderPattern.test(text)
-    || secretTextPattern.test(text)
-    || credentialUrlPattern.test(text)
-    || unsafeParamPattern.test(text);
+  const decoded = decodedProofText(text);
+  return [text, decoded].some((candidate) =>
+    unsafeHostOrPlaceholderPattern.test(candidate)
+    || secretTextPattern.test(candidate)
+    || credentialUrlPattern.test(candidate)
+    || unsafeParamPattern.test(candidate)
+  );
 }
 
 function isSafeHttpsUrl(value) {
@@ -91,7 +104,8 @@ function isSafeHttpsUrl(value) {
       && url.hostname.includes(".")
       && !unsafeHostOrPlaceholderPattern.test(url.hostname)
       && !unsafeHostOrPlaceholderPattern.test(url.href)
-      && !unsafeParamPattern.test(url.search);
+      && !unsafeParamPattern.test(url.search)
+      && !unsafeParamPattern.test(decodedProofText(url.search));
   } catch {
     return false;
   }
@@ -133,9 +147,9 @@ function isMetricoolProofUrl(value) {
       && !url.password
       && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
       && /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
-      && Boolean(pathSegments[1])
-      && pathSegments.join("").length >= 8
-      && !unsafeParamPattern.test(url.search);
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "")
+      && !unsafeParamPattern.test(url.search)
+      && !unsafeParamPattern.test(decodedProofText(url.search));
   } catch {
     return false;
   }

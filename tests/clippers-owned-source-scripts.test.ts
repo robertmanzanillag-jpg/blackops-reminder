@@ -3949,9 +3949,11 @@ test("TikTok batch evidence sync merges only valid current batch rows", async ()
 
 test("TikTok batch evidence sync secret detector allows safe prose and blocks assigned secrets", async () => {
   const source = await readFile(path.join(process.cwd(), "script/clippers-tiktok-batch-evidence-sync.mjs"), "utf8");
+  const decodedMatch = source.match(/function decodedEvidenceText\(value\) \{([\s\S]*?)\n\}/);
   const match = source.match(/function hasSecretSignal\(record\) \{([\s\S]*?)\n\}/);
+  assert.ok(decodedMatch, "decodedEvidenceText helper should exist");
   assert.ok(match, "hasSecretSignal helper should exist");
-  const hasSecretSignal = new Function("record", `${match[1]}`) as (record: Record<string, string>) => boolean;
+  const hasSecretSignal = new Function("record", `const decodedEvidenceText = (value) => {${decodedMatch[1]}\n};\n${match[1]}`) as (record: Record<string, string>) => boolean;
 
   assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool; no API keys were shared by Robert." }), false);
   assert.equal(hasSecretSignal({ operator_notes: "Scheduled in Metricool; no bearer tokens were shared by Robert." }), false);
@@ -3961,6 +3963,7 @@ test("TikTok batch evidence sync secret detector allows safe prose and blocks as
   assert.equal(hasSecretSignal({ operator_notes: "Authorization: Bearer abcdef1234567890" }), true);
   assert.equal(hasSecretSignal({ metricool_approval_url: "https://viewer:secret@app.metricool.com/planner/real" }), true);
   assert.equal(hasSecretSignal({ published_post_url: "https://www.tiktok.com/@memeradar/video/123?token=neverpaste" }), true);
+  assert.equal(hasSecretSignal({ metricool_approval_url: "https://app.metricool.com/planner/proof?access%5Ftoken=neverpaste%" }), true);
   assert.doesNotMatch(source, /\\b\(token\|password\|passwd\|secret\|cookie\|bearer\|authorization\|recovery code\|api\[_ -\]\?key\)\\b/);
 });
 
@@ -5973,8 +5976,7 @@ test("Metricool bridge evidence batch returns refreshed TikTok next action paylo
   );
   assert.match(metricoolProofUrlHelper, /pathSegments/);
   assert.match(metricoolProofUrlHelper, /planner\|brands\?\|posts\?\|publications\?\|analytics\|reports\?/);
-  assert.match(metricoolProofUrlHelper, /Boolean\(pathSegments\[1\]\)/);
-  assert.match(metricoolProofUrlHelper, /pathSegments\.join\(""\)\.length >= 8/);
+  assert.match(metricoolProofUrlHelper, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
   assert.match(metricoolProofUrlHelper, /hostname === "metricool\.com" \|\| hostname\.endsWith\("\.metricool\.com"\)/);
 
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
@@ -8058,11 +8060,13 @@ test("Metricool current batch upload pack stages the 10 TikTok source files", as
   assert.match(html, /Copy caption/);
   assert.match(html, /Scheduled evidence helper/);
   assert.match(html, /data-copy-scheduled-evidence/);
-  assert.match(html, /isMetricoolUrl/);
+  assert.match(html, /isConcreteMetricoolScheduledProofUrl/);
+  assert.match(html, /hasUnsafeUrlProofPart/);
+  assert.match(html, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
   assert.match(html, /metricool_approval_url/);
   assert.match(html, /final_status/);
   assert.match(html, /"scheduled"/);
-  assert.match(html, /Blocked: use an HTTPS Metricool URL/);
+  assert.match(html, /Blocked: use a concrete HTTPS Metricool planner\/brand\/post\/report URL/);
   assert.match(html, /This page is a local upload aid only/);
   assert.equal((html.match(/<video controls/g) || []).length, 10);
   assert.equal((html.match(/<button type="button" data-copy-scheduled-evidence/g) || []).length, 10);
@@ -8088,6 +8092,41 @@ test("Metricool current batch upload pack stages the 10 TikTok source files", as
   assert.match(page, /\["\/api\/clippers\/metricool-current-batch-upload-pack"\]/);
   assert.match(page, /metricoolCurrentBatchUploadPack\?: ClipperMetricoolCurrentBatchUploadPackSummary/);
   });
+});
+
+test("Metricool current batch upload pack scheduled helper requires concrete non-secret Metricool proof URLs", async () => {
+  const source = await readFile(path.join(process.cwd(), "script/clippers-metricool-current-batch-upload-pack.mjs"), "utf8");
+  const helperBlock = sliceRequired(source, "const decodedProofText", "document.querySelectorAll(\"button[data-copy]\")");
+  const emittedHelperBlock = helperBlock.replace(/\\\\/g, "\\");
+  const isConcreteMetricoolScheduledProofUrl = new Function(
+    `${emittedHelperBlock}\nreturn isConcreteMetricoolScheduledProofUrl;`,
+  )() as (value: string) => boolean;
+  assert.match(helperBlock, /const isConcreteMetricoolScheduledProofUrl/);
+  assert.match(helperBlock, /const decodedProofText/);
+  assert.match(helperBlock, /parsed\.protocol === "https:"/);
+  assert.match(helperBlock, /!parsed\.username/);
+  assert.match(helperBlock, /!parsed\.password/);
+  assert.match(helperBlock, /hasUnsafeUrlProofPart\(value\)/);
+  assert.match(helperBlock, /token\|code\|auth\|signature\|sig\|signed\|secret\|key\|api_key\|apikey\|access\|access_token\|refresh\|refresh_token\|client_secret\|session\|cookie/);
+  assert.match(helperBlock, /\^\(planner\|brands\?\|posts\?\|publications\?\|analytics\|reports\?\)\$/);
+  assert.match(helperBlock, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
+  assert.match(source, /Blocked: use a concrete HTTPS Metricool planner\/brand\/post\/report URL/);
+  assert.doesNotMatch(helperBlock, /final_status",\s*"published"/);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof"), true);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/brands/6431687"), true);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/a"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/dashboard"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://example.com/planner/sports-daily-proof"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://viewer:secret@app.metricool.com/planner/sports-daily-proof"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?access_token=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?refresh_token=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?client_secret=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?access%5Ftoken=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?refresh%5Ftoken=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?client%5Fsecret=neverpaste"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?access%5Ftoken=neverpaste%"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?refresh%5Ftoken=neverpaste%"), false);
+  assert.equal(isConcreteMetricoolScheduledProofUrl("https://app.metricool.com/planner/sports-daily-proof?client%5Fsecret=neverpaste%"), false);
 });
 
 test("Metricool current batch upload pack blocks rerun after operator evidence exists", async () => {

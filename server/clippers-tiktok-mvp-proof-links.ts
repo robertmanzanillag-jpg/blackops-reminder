@@ -1,4 +1,14 @@
-const clipperUnsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+const clipperUnsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function clipperDecodedProofText(value: unknown): string {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 export const clipperTikTokMvpProofLaneSpecs = [
   { key: "sports-daily:tiktok", accountName: "Sports Daily Clips", handle: "@sportsdaily", metricoolBrandName: "SPORT", aliases: ["sport", "sports", "sportsdaily", "sports daily"] },
@@ -6,9 +16,13 @@ export const clipperTikTokMvpProofLaneSpecs = [
 ] as const;
 
 export function containsClipperSecretLikeText(value: unknown): boolean {
-  return /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;=])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i.test(String(value || ""))
-    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
-    || clipperUnsafeProofQueryParamPattern.test(String(value || ""));
+  const text = String(value || "");
+  const decoded = clipperDecodedProofText(text);
+  return [text, decoded].some((candidate) =>
+    /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;=])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i.test(candidate)
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(candidate)
+    || clipperUnsafeProofQueryParamPattern.test(candidate)
+  );
 }
 
 function hasClipperProofPlaceholder(value: unknown): boolean {
@@ -35,8 +49,7 @@ export function safeClipperMetricoolProofUrl(value: unknown): boolean {
     const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     return /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
-      && Boolean(pathSegments[1])
-      && pathSegments.join("").length >= 8;
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "");
   } catch {
     return false;
   }
@@ -328,7 +341,37 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
   const allUrls = Array.from(nonCommentText.matchAll(/https:\/\/[^\s"'<>]+/gi)).map((match) => match[0].replace(/[),.;]+$/g, ""));
   const issues: string[] = [];
   if (!raw.trim()) issues.push("Paste text with SPORT and memes TikTok ownership proof plus Metricool proof URLs.");
-  if (containsClipperSecretLikeText(raw)) issues.push("Paste text cannot contain passwords, tokens, cookies, keys, or recovery codes.");
+  if (containsClipperSecretLikeText(raw)) {
+    const proofLinks = {
+      lanes: Object.fromEntries(clipperTikTokMvpProofLaneSpecs.map((spec) => [spec.key, {
+        accountOwnershipProofUrl: "",
+        metricoolConnectionProofUrl: "",
+        accountNotes: "",
+        metricoolNotes: "",
+      }])),
+    };
+    const preview = auditClipperTikTokMvpProofLinks(proofLinks);
+    return {
+      status: "blocked_secret_like",
+      generatedAt: new Date().toISOString(),
+      scope: "tiktok_only_metricool_mvp",
+      launchMode: "metricool_approval_required",
+      directSocialApisRequired: false,
+      realPublishEnabled: false,
+      extractedUrls: 0,
+      rawStored: false,
+      issues: ["Paste text cannot contain passwords, tokens, cookies, keys, or recovery codes."],
+      proofLinks,
+      proofLinksText: `${JSON.stringify(proofLinks, null, 2)}\n`,
+      proofLinksPreview: preview,
+      guardrails: [
+        "Secret-like paste text was blocked before parsing and raw proof values were not returned.",
+        "Paste assistant only builds a proof-links.json draft.",
+        "It does not save proof-links.json, apply evidence, or change Metricool status.",
+      ],
+      nextStep: "Remove tokens, cookies, passwords, signed query params, and credential material before trying again.",
+    };
+  }
   const explicitFields = new Map<string, Record<string, string>>();
   for (const line of lines) {
     if (line.startsWith("#")) continue;

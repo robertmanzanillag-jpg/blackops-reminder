@@ -10797,17 +10797,40 @@ function isConcreteGoogleEvidenceUrl(url: URL) {
   return false;
 }
 
+function decodedClipperProofText(value: string) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
+
+function hasClipperUnsafeProofQuery(value: string) {
+  const text = String(value || "");
+  const decoded = decodedClipperProofText(text);
+  return [text, decoded].some((candidate) =>
+    /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token|password|passcode|recovery)=/i.test(candidate),
+  );
+}
+
 function isMetricoolProofUrl(value: string) {
   try {
     const url = new URL(value.trim());
     const hostname = url.hostname.toLowerCase();
     const isMetricoolHost = hostname === "metricool.com" || hostname.endsWith(".metricool.com");
     const isGoogleEvidenceHost = hostname === "drive.google.com" || hostname === "docs.google.com";
+    const normalizedPath = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
+    const concreteMetricoolPath = /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "");
     return url.protocol === "https:"
       && !url.username
       && !url.password
-      && (isMetricoolHost || (isGoogleEvidenceHost && isConcreteGoogleEvidenceUrl(url)))
-      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret|password|passcode|recovery)=/i.test(url.search);
+      && ((isMetricoolHost && concreteMetricoolPath) || (isGoogleEvidenceHost && isConcreteGoogleEvidenceUrl(url)))
+      && !hasClipperUnsafeProofQuery(url.search)
+      && !hasClipperUnsafeProofQuery(url.toString());
   } catch {
     return false;
   }

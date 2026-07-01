@@ -372,8 +372,8 @@ test("TikTok MVP evidence closeout rejects generic Metricool proof pages", async
   await writeFile(accountCsvPath, cleanAccountCsv());
   await writeFile(bridgeCsvPath, [
     bridgeHeader,
-    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/dashboard,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://metricool.com/resources,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/a,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-proof?client%5Fsecret=neverpaste%,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n");
 
   const result = runCloseout();
@@ -384,7 +384,10 @@ test("TikTok MVP evidence closeout rejects generic Metricool proof pages", async
   const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
   assert.equal(report.totals.ready, 0);
   assert.match(JSON.stringify(report), /proof must be a real Metricool HTTPS URL or concrete Google Drive file\/folder or Docs evidence URL/);
-  assert.match(await readFile(evidenceCloseoutPath, "utf8"), /pathSegments|planner\|brands/);
+  const source = await readFile(evidenceCloseoutPath, "utf8");
+  assert.match(source, /decodedProofText/);
+  assert.match(source, /client_secret/);
+  assert.match(source, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
 });
 
 test("TikTok MVP proof links preview rejects embedded credential proof URLs", async () => {
@@ -430,7 +433,9 @@ test("TikTok MVP proof links preview rejects embedded credential proof URLs", as
     "SPORT https://viewer:secret@drive.google.com/file/d/sports-daily-proof/view",
     "memes https://viewer:secret@docs.google.com/document/d/meme-radar-proof/edit",
   ].join("\n"));
-  assert.equal(pastePreview.status, "needs_review");
+  assert.equal(pastePreview.status, "blocked_secret_like");
+  assert.equal(pastePreview.rawStored, false);
+  assert.doesNotMatch(pastePreview.proofLinksText, /viewer:secret|sports-daily-proof|meme-radar-proof/i);
   assert.ok(pastePreview.issues.some((issue) => /passwords|tokens|cookies|keys|recovery/i.test(issue)));
 });
 
@@ -760,7 +765,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-url-check-results/);
   assert.match(page, /raw stored \{check\.rawStored \? "yes" : "no"\}/);
   assert.match(page, /publish \{check\.realPublishEnabled \? "enabled" : "disabled"\}/);
-  assert.match(page, /\(token\|access\|refresh\|auth\|signature\|signed\|session\|cookie\|key\|secret\|password\|passcode\|recovery\)=/);
+  assert.match(page, /decodedClipperProofText/);
+  assert.match(page, /hasClipperUnsafeProofQuery/);
+  assert.match(page, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
+  assert.match(page, /access_token/);
+  assert.match(page, /refresh_token/);
+  assert.match(page, /client_secret/);
   assert.match(page, /Fast path requiere confirmacion/);
   assert.match(page, /Proof URLs no validos/);
   assert.match(page, /SPORT proof URL/);
@@ -2031,13 +2041,13 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
       lanes: {
         "sports-daily:tiktok": {
           accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
-          metricoolConnectionProofUrl: "https://app.metricool.com/settings",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/a",
           accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
           metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
-          metricoolConnectionProofUrl: "https://metricool.com/integrations",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/meme-radar-proof?access%5Ftoken=neverpaste%",
           accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
           metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
         },
@@ -2606,6 +2616,9 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.match(source, /ready_quick_fill_ran/);
   assert.match(source, /metricool\.com/);
   assert.match(source, /unsafeProofQueryParamPattern/);
+  assert.match(source, /decodedProofText/);
+  assert.match(source, /client_secret/);
+  assert.match(source, /\^\[a-z0-9\]\[a-z0-9_-\]\{5,\}\$/);
   assert.match(source, /x-amz-signature/);
   assert.match(source, /URLs with x-amz\/signature\/expires\/session\/token query params are blocked/);
   assert.match(source, /validMetricoolReuseConfirmationNotes/);

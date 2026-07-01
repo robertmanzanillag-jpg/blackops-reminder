@@ -81,12 +81,26 @@ function normalize(value) {
   return String(value ?? "").trim();
 }
 
-const unsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+const unsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
+
+function decodedProofText(value) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
 
 function containsSecret(value) {
-  return /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i.test(String(value || ""))
-    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
-    || unsafeProofQueryParamPattern.test(String(value || ""));
+  const text = String(value || "");
+  const decoded = decodedProofText(text);
+  return [text, decoded].some((candidate) =>
+    /access_token=|refresh_token=|client_secret=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|(?:^|[\s"'[{,?&#;])(cookie|password|passcode|recovery|api[_-]?key|private[_ -]?key)["']?\s*[:=]/i.test(candidate)
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(candidate)
+    || unsafeProofQueryParamPattern.test(candidate)
+  );
 }
 
 function hasPlaceholder(value) {
@@ -114,8 +128,7 @@ function metricoolProofUrl(value) {
     const normalizedPath = url.pathname.replace(/\/+$/, "").toLowerCase();
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     return /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
-      && Boolean(pathSegments[1])
-      && pathSegments.join("").length >= 8;
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "");
   } catch {
     return false;
   }

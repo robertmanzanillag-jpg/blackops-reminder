@@ -62,14 +62,27 @@ function isPlaceholder(value) {
   return !text || /^<.*>$/.test(text) || /\bpaste\b|\bplaceholder\b|\bafter live\b|\bafter 24h\b/i.test(text);
 }
 
+function decodedEvidenceText(value) {
+  return String(value || "").replace(/%[0-9a-f]{2}/gi, (match) => {
+    try {
+      return decodeURIComponent(match);
+    } catch {
+      return match;
+    }
+  });
+}
+
 function hasSecretSignal(record) {
   const text = Object.values(record).join(" ");
-  return /(?:^|[\s"'[{,?&#;])(access[_-]?token|refresh[_-]?token|client[_-]?secret|cookie|password|passwd|passcode|recovery|api[_ -]?key|private[_ -]?key|authorization)["']?\s*[:=]/i.test(text)
-    || /(?:^|[\s"'[{,?&#;])bearer\s*(?:[:=]\s*[a-z0-9._-]+|[ \t]+[a-z0-9._-]{12,})/i.test(text)
-    || /authorization\s*[:=]\s*bearer\s+[a-z0-9._-]+/i.test(text)
-    || /sk-[a-z0-9_-]+/i.test(text)
-    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(text)
-    || /(?:^|[?&#;])(token|code|auth|authorization|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i.test(text);
+  const decoded = decodedEvidenceText(text);
+  return [text, decoded].some((candidate) =>
+    /(?:^|[\s"'[{,?&#;])(access[_-]?token|refresh[_-]?token|client[_-]?secret|cookie|password|passwd|passcode|recovery|api[_ -]?key|private[_ -]?key|authorization)["']?\s*[:=]/i.test(candidate)
+    || /(?:^|[\s"'[{,?&#;])bearer\s*(?:[:=]\s*[a-z0-9._-]+|[ \t]+[a-z0-9._-]{12,})/i.test(candidate)
+    || /authorization\s*[:=]\s*bearer\s+[a-z0-9._-]+/i.test(candidate)
+    || /sk-[a-z0-9_-]+/i.test(candidate)
+    || /[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s/]+@/i.test(candidate)
+    || /(?:^|[?&#;])(token|code|auth|authorization|signature|sig|signed|secret|key|api_key|apikey|access|access_token|refresh|refresh_token|client_secret|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i.test(candidate)
+  );
 }
 
 function normalized(value) {

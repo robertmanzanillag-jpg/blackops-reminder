@@ -217,8 +217,7 @@ function isClipperMetricoolProofUrl(value: unknown): boolean {
     const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
     const pathSegments = normalizedPath.split("/").filter(Boolean);
     return /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
-      && Boolean(pathSegments[1])
-      && pathSegments.join("").length >= 8;
+      && /^[a-z0-9][a-z0-9_-]{5,}$/i.test(pathSegments[1] || "");
   } catch {
     return false;
   }
