@@ -184,6 +184,19 @@ type RevenueSnapshot = {
       nextAction: string;
       blockedActions: string[];
     };
+    productionLaunchChecklist: {
+      status: "ready" | "blocked";
+      requiredEvidence: Array<{
+        id: string;
+        label: string;
+        status: "ready" | "blocked";
+        evidence: string;
+        nextStep: string;
+      }>;
+      verificationCommands: string[];
+      blockedActions: string[];
+      copyableChecklist: string;
+    };
     firstSprintPlan: {
       title: string;
       area: string;
@@ -3695,6 +3708,38 @@ export default function RevenueEnginePage() {
               </div>
             </div>
             <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Checklist produccion</p>
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3" data-testid="panel-production-launch-checklist">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant="outline" className={cn(statusTone(snapshot?.moneyActivationPlan.productionLaunchChecklist.status || "blocked"), "shrink-0")}>
+                    {snapshot?.moneyActivationPlan.productionLaunchChecklist.status || "blocked"}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-amber-500/30 bg-black text-xs text-amber-100 hover:bg-amber-500/10"
+                    onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.productionLaunchChecklist.copyableChecklist || "")}
+                    data-testid="button-copy-production-launch-checklist"
+                  >
+                    <Copy className="mr-1.5 h-3 w-3" />
+                    Copy
+                  </Button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {(snapshot?.moneyActivationPlan.productionLaunchChecklist.requiredEvidence || []).slice(0, 4).map((item) => (
+                    <div key={item.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-medium text-amber-100">{item.label}</p>
+                        <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0 text-[10px]")}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">{item.nextStep}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Falta para money mode real</p>
               <div className="space-y-2">
                 {(snapshot?.moneyActivationPlan.missingBeforeRealMoney || []).slice(0, 4).map((item) => (

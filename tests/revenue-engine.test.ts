@@ -1764,6 +1764,11 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.evidenceGate.readyCandidates, 0);
   assert.equal(snapshot.moneyActivationPlan.evidenceGate.requiredFields.includes("sourceUrl"), true);
   assert.equal(snapshot.moneyActivationPlan.evidenceGate.blockedActions.includes("run Money Sprint from placeholders"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "blocked"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "app_qa_release_gate"), true);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Revenue Engine production launch checklist/);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /npm run build/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
@@ -1793,6 +1798,9 @@ test("snapshot launch readiness starts only with production persistence ready", 
   assert.equal(snapshot.moneyActivationPlan.canCollectMoney, true);
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.area, "Miami");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.targetRows <= 10, true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "ready"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "robert_deploy_approval" && item.status === "blocked"), true);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
 });

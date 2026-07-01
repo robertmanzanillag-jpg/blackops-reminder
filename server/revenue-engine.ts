@@ -5423,6 +5423,69 @@ function buildRevenueMoneyActivationPlan(input: {
       ...input.publicLeadImportQueue.safety.blockedActions,
     ])),
   };
+  const productionLaunchChecklist = {
+    status: "blocked" as const,
+    requiredEvidence: [
+      {
+        id: "production_database",
+        label: "DATABASE_URL real",
+        status: hardMissing.some((item) => item.id === "production_database") ? "blocked" as const : "ready" as const,
+        evidence: productionPersistence?.evidence || "No production persistence item found.",
+        nextStep: productionPersistence?.nextStep || "Confirmar persistencia antes de money mode.",
+      },
+      {
+        id: "pr_review",
+        label: "PR review independiente",
+        status: "blocked" as const,
+        evidence: "PR #55 debe tener review/checker aprobado antes de merge.",
+        nextStep: "Mantener PR-first; adjuntar second-agent review y checks antes de decir ready.",
+      },
+      {
+        id: "app_qa_release_gate",
+        label: "App QA release gate",
+        status: "blocked" as const,
+        evidence: "App QA debe pasar rutas, links/clicks, API, errores e improvements antes de deploy.",
+        nextStep: "Correr App QA contra entorno objetivo y pegar evidencia URL/comentario en el release gate.",
+      },
+      {
+        id: "robert_deploy_approval",
+        label: "Aprobacion explicita de deploy",
+        status: "blocked" as const,
+        evidence: "Replit deploy requiere aprobacion humana aunque todo pase.",
+        nextStep: "Pedir aprobacion explicita de Robert despues del resumen PR/QA/rollback.",
+      },
+    ],
+    verificationCommands: [
+      "npm run test:revenue-engine",
+      "npm run test:developer-autopilot",
+      "npm run check",
+      "npm run build",
+    ],
+    blockedActions: [
+      "real-money operation before production DATABASE_URL",
+      "merge before PR review",
+      "deploy before App QA",
+      "Replit deploy before Robert approval",
+    ],
+  };
+  const copyableProductionLaunchChecklist = [
+    "Revenue Engine production launch checklist",
+    "",
+    `Status: ${productionLaunchChecklist.status}`,
+    "",
+    "Required evidence:",
+    ...productionLaunchChecklist.requiredEvidence.map((item) => [
+      `- ${item.label}: ${item.status}`,
+      `  Evidence: ${item.evidence}`,
+      `  Next: ${item.nextStep}`,
+    ].join("\n")),
+    "",
+    "Verification commands:",
+    ...productionLaunchChecklist.verificationCommands.map((command) => `- ${command}`),
+    "",
+    "Blocked actions:",
+    ...productionLaunchChecklist.blockedActions.map((action) => `- ${action}`),
+  ].join("\n");
   const firstSprintPlan = {
     title: `${input.businessScoutQueue.area} ${input.businessScoutQueue.niche} first revenue sprint`,
     area: input.businessScoutQueue.area,
@@ -5533,6 +5596,10 @@ function buildRevenueMoneyActivationPlan(input: {
     missingBeforeRealMoney: dedupedMissing,
     blockedUntilApproved: approvals,
     evidenceGate,
+    productionLaunchChecklist: {
+      ...productionLaunchChecklist,
+      copyableChecklist: copyableProductionLaunchChecklist,
+    },
     firstSprintPlan: {
       ...firstSprintPlan,
       copyableBrief: firstSprintCopyableBrief,
@@ -5567,6 +5634,10 @@ function buildRevenueMoneyActivationPlan(input: {
       `- Required fields: ${evidenceGate.requiredFields.join(", ")}`,
       `- Next action: ${evidenceGate.nextAction}`,
       ...evidenceGate.blockedActions.map((action) => `- Blocked: ${action}`),
+      "",
+      "Production launch checklist:",
+      `- Status: ${productionLaunchChecklist.status}`,
+      ...productionLaunchChecklist.requiredEvidence.map((item) => `- ${item.label}: ${item.status} -- ${item.nextStep}`),
       "",
       "Missing before real money mode:",
       ...(dedupedMissing.length > 0 ? dedupedMissing.map((item) => `- ${item.label}: ${item.nextStep}`) : ["- none"]),
