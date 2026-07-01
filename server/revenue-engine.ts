@@ -357,6 +357,10 @@ type RevenueDeliveryWorkspaceUpdateOptions = {
   allowReleaseGateEvidence?: boolean;
 };
 
+type RevenueDeliveryReleaseGateOptions = {
+  verifiedPrStatusReady?: boolean;
+};
+
 export const revenueDeliveryWorkspaceGithubHandoffSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
   repoFullName: z.string().trim().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "repoFullName must be owner/repo").max(200).optional(),
@@ -933,6 +937,7 @@ type RevenueWebsiteBuildHandoffQueue = {
     githubIssueUrl: string;
     prUrl: string;
     codexBrief: string;
+    publicBuildBrief: string;
     missing: string[];
     blockedActions: string[];
     nextAction: string;
@@ -4709,6 +4714,7 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
     githubIssueUrl: workspace.codexBuildHandoff.githubIssueUrl,
     prUrl: workspace.codexBuildHandoff.prUrl,
     codexBrief: workspace.codexBuildHandoff.codexBrief,
+    publicBuildBrief: workspace.codexBuildHandoff.publicBuildBrief,
     missing: workspace.codexBuildHandoff.missing,
     blockedActions: workspace.codexBuildHandoff.blockedActions,
     nextAction: workspace.codexBuildHandoff.nextAction,
@@ -5241,7 +5247,7 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Website scope/deposit closures pending: ${funnel.websiteClosuresPending}`,
     `- Delivery handoffs ready: ${funnel.deliveryHandoffsReady}`,
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
-    `- Cash collected: $${funnel.cashCollectedUsd.toLocaleString("en-US")}`,
+    "- Payment totals: tracked internally; do not paste amounts into public PR/client handoff text.",
     input.websiteBuildHandoffQueue.items[0] ? "" : null,
     input.websiteBuildHandoffQueue.items[0] ? "Top build handoff:" : null,
     input.websiteBuildHandoffQueue.items[0] ? `- Workspace: ${input.websiteBuildHandoffQueue.items[0].workspaceId}` : null,
@@ -5249,7 +5255,7 @@ function buildRevenueDailyMoneyCommand(input: {
     input.websiteBuildHandoffQueue.items[0] ? `- Branch: ${input.websiteBuildHandoffQueue.items[0].branchName}` : null,
     input.websiteBuildHandoffQueue.items[0] ? `- Missing: ${input.websiteBuildHandoffQueue.items[0].missing.join("; ") || "none"}` : null,
     input.websiteBuildHandoffQueue.items[0] ? "" : null,
-    input.websiteBuildHandoffQueue.items[0] ? input.websiteBuildHandoffQueue.items[0].codexBrief : null,
+    input.websiteBuildHandoffQueue.items[0] ? input.websiteBuildHandoffQueue.items[0].publicBuildBrief : null,
     "",
     "Rules:",
     "- Use public research only.",
@@ -5467,6 +5473,27 @@ function buildRevenueMoneyActivationPlan(input: {
       "deploy before App QA",
       "Replit deploy before Robert approval",
     ],
+    deploymentApprovalPacket: {
+      status: "waiting_for_external_evidence" as const,
+      requiredSummaryFields: [
+        "PR URL",
+        "files changed",
+        "tests/build checks run",
+        "second-agent review result",
+        "App QA route/link/API/error/improvement summary",
+        "known risks",
+        "rollback note",
+        "explicit Robert deploy approval",
+      ],
+      rollbackPlan: "Revertir el PR o volver al deployment anterior; no hacer Replit deploy si App QA tiene warning/failure.",
+      deployApprovalAsk: "Robert, apruebas explicitamente el deploy de Replit despues de revisar PR, tests, App QA, riesgos y rollback?",
+      blockedUntil: [
+        "PR merged/reviewed with second-agent evidence",
+        "App QA release gate passes without warnings",
+        "DATABASE_URL production persistence is real",
+        "Robert explicitly approves Replit deploy",
+      ],
+    },
   };
   const copyableProductionLaunchChecklist = [
     "Revenue Engine production launch checklist",
@@ -5485,6 +5512,15 @@ function buildRevenueMoneyActivationPlan(input: {
     "",
     "Blocked actions:",
     ...productionLaunchChecklist.blockedActions.map((action) => `- ${action}`),
+    "",
+    "Deployment approval packet:",
+    `- Status: ${productionLaunchChecklist.deploymentApprovalPacket.status}`,
+    "- Required summary fields:",
+    ...productionLaunchChecklist.deploymentApprovalPacket.requiredSummaryFields.map((field) => `  - ${field}`),
+    `- Rollback: ${productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan}`,
+    `- Deploy approval ask: ${productionLaunchChecklist.deploymentApprovalPacket.deployApprovalAsk}`,
+    "- Blocked until:",
+    ...productionLaunchChecklist.deploymentApprovalPacket.blockedUntil.map((item) => `  - ${item}`),
   ].join("\n");
   const firstSprintPlan = {
     title: `${input.businessScoutQueue.area} ${input.businessScoutQueue.niche} first revenue sprint`,
@@ -5689,6 +5725,8 @@ function buildRevenueMoneyActivationPlan(input: {
       "Production launch checklist:",
       `- Status: ${productionLaunchChecklist.status}`,
       ...productionLaunchChecklist.requiredEvidence.map((item) => `- ${item.label}: ${item.status} -- ${item.nextStep}`),
+      `- Rollback: ${productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan}`,
+      `- Deploy approval ask: ${productionLaunchChecklist.deploymentApprovalPacket.deployApprovalAsk}`,
       "",
       "Missing before real money mode:",
       ...(dedupedMissing.length > 0 ? dedupedMissing.map((item) => `- ${item.label}: ${item.nextStep}`) : ["- none"]),
@@ -8746,6 +8784,36 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "- Any automation in scope has test data, failure behavior, and manual fallback.",
     "- PR includes tests/checks run, QA summary, risks, and rollback.",
   ].filter(Boolean).join("\n");
+  const publicBuildBrief = [
+    title,
+    "",
+    "Goal",
+    `Build the approved ${input.projectType} delivery for ${input.clientName} using public business facts, the approved mockup, and the Revenue Engine workspace.`,
+    "",
+    "Public Build Context",
+    `- Repo: ${repoFullName || "pending"}`,
+    `- Branch: ${branchName}`,
+    `- Public data verified: ${input.publicDataVerified ? "yes" : "no"}`,
+    input.mockupUrl && `- Mockup: ${input.mockupUrl}`,
+    "",
+    "Client Request / Evidence",
+    "Use the public source URL, approved mockup, package name, and Revenue Engine workspace context. Keep payment status, amounts, operator notes, and private client details out of public GitHub text.",
+    "",
+    "PR-First Rules",
+    "- Create or work only on a separate Codex branch.",
+    "- Open a pull request before merge.",
+    "- Do not commit directly to main.",
+    "- Do not deploy to Replit or custom production without explicit Robert approval.",
+    "- Do not include prices, payment references, deposit status, private notes, credentials, or customer-sensitive data in public GitHub text.",
+    "- Run App QA after implementation and include rollback notes.",
+    "",
+    "Acceptance Criteria",
+    "- Website experience matches the approved offer and public business facts.",
+    "- Mobile and desktop layouts are checked.",
+    "- CTA/contact paths work or are clearly stubbed for Robert/client approval.",
+    "- Any automation in scope has test data, failure behavior, and manual fallback.",
+    "- PR includes tests/checks run, QA summary, risks, and rollback.",
+  ].filter(Boolean).join("\n");
 
   return {
     status: !isWebsiteBuild ? "not_required" as const : missing.length > 0 ? "needs_pr" as const : "ready_for_qa" as const,
@@ -8761,6 +8829,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     deploymentApprovalUrl,
     title,
     codexBrief,
+    publicBuildBrief,
     acceptanceCriteria: [
       "PR exists before merge.",
       "Second-agent review passes.",
@@ -9358,7 +9427,10 @@ function validateRevenueReleaseGateEvidence(
   return Array.from(new Set(blockers));
 }
 
-export function recordRevenueDeliveryReleaseGate(input: RevenueDeliveryWorkspaceUpdateInput) {
+export function recordRevenueDeliveryReleaseGate(
+  input: RevenueDeliveryWorkspaceUpdateInput,
+  options: RevenueDeliveryReleaseGateOptions = {},
+) {
   loadRevenueDeliveryWorkspaces();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
@@ -9377,8 +9449,9 @@ export function recordRevenueDeliveryReleaseGate(input: RevenueDeliveryWorkspace
   const saleGate = revenueWebsiteWorkspaceSaleGate(workspace);
   const blockers = [
     ...validateRevenueReleaseGateEvidence(workspace, parsed),
+    !options.verifiedPrStatusReady && "fresh GitHub PR status check must pass before release gate",
     ...saleGate.blockers,
-  ];
+  ].filter(Boolean) as string[];
   if (blockers.length > 0) {
     return {
       status: "blocked" as const,

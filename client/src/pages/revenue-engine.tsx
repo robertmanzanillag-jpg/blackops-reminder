@@ -195,6 +195,13 @@ type RevenueSnapshot = {
       }>;
       verificationCommands: string[];
       blockedActions: string[];
+      deploymentApprovalPacket: {
+        status: "waiting_for_external_evidence";
+        requiredSummaryFields: string[];
+        rollbackPlan: string;
+        deployApprovalAsk: string;
+        blockedUntil: string[];
+      };
       copyableChecklist: string;
     };
     firstSprintPlan: {
@@ -556,6 +563,7 @@ type RevenueSnapshot = {
       githubIssueUrl: string;
       prUrl: string;
       codexBrief: string;
+      publicBuildBrief: string;
       missing: string[];
       blockedActions: string[];
       nextAction: string;
@@ -860,6 +868,7 @@ type RevenueSnapshot = {
       deploymentApprovalUrl: string;
       title: string;
       codexBrief: string;
+      publicBuildBrief: string;
       acceptanceCriteria: string[];
       blockedActions: string[];
       missing: string[];
@@ -3764,6 +3773,20 @@ export default function RevenueEnginePage() {
                     </div>
                   ))}
                 </div>
+                <div className="mt-3 rounded-md border border-zinc-800 bg-black px-3 py-2" data-testid="panel-deployment-approval-packet">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-amber-100">Deploy approval packet</p>
+                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-100">
+                      {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.status || "waiting"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-400">
+                    {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.deployApprovalAsk || "Esperando evidencia PR/QA/rollback."}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    Rollback: {snapshot?.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan || "Pendiente"}
+                  </p>
+                </div>
               </div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Falta para money mode real</p>
               <div className="space-y-2">
@@ -5135,11 +5158,11 @@ export default function RevenueEnginePage() {
                             size="sm"
                             variant="outline"
                             className="border-zinc-700"
-                            onClick={() => navigator.clipboard.writeText(item.codexBrief)}
+                            onClick={() => navigator.clipboard.writeText(item.publicBuildBrief)}
                             data-testid={`button-copy-website-build-brief-${item.workspaceId}`}
                           >
                             <Copy className="mr-2 h-4 w-4" />
-                            Copy brief
+                            Copy public brief
                           </Button>
                           {item.githubIssueUrl && (
                             <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
@@ -8657,11 +8680,11 @@ export default function RevenueEnginePage() {
                                     size="sm"
                                     variant="outline"
                                     className="border-zinc-700"
-                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.codexBrief)}
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.publicBuildBrief)}
                                     data-testid={`button-copy-codex-build-handoff-${workspace.id}`}
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
-                                    Copy brief
+                                    Copy public brief
                                   </Button>
                                   <Button
                                     type="button"
@@ -8747,7 +8770,13 @@ export default function RevenueEnginePage() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                disabled={deliveryWorkspaceDeliverMutation.isPending}
+                                disabled={
+                                  deliveryWorkspaceDeliverMutation.isPending
+                                  || workspace.status !== "ready_to_deliver"
+                                  || !workspace.approvalSummary.canLaunch
+                                  || workspace.codexBuildHandoff.missing.length > 0
+                                  || workspace.approvalSummary.requiredBeforeClient.length > 0
+                                }
                                 onClick={() => deliveryWorkspaceDeliverMutation.mutate(workspace.id)}
                                 className="mt-2 w-full border-cyan-500/30 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                                 data-testid={`button-deliver-workspace-${workspace.id}`}
@@ -8755,6 +8784,13 @@ export default function RevenueEnginePage() {
                                 {deliveryWorkspaceDeliverMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                                 Entregar aprobado
                               </Button>
+                              {(workspace.status !== "ready_to_deliver" || !workspace.approvalSummary.canLaunch || workspace.codexBuildHandoff.missing.length > 0 || workspace.approvalSummary.requiredBeforeClient.length > 0) && (
+                                <div className="mt-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-100" data-testid={`panel-delivery-blocked-reason-${workspace.id}`}>
+                                  {workspace.codexBuildHandoff.missing[0]
+                                    || workspace.approvalSummary.requiredBeforeClient[0]
+                                    || (workspace.approvalSummary.canLaunch ? `workspace no esta listo: ${workspace.status}` : "launch/handoff bloqueado")}
+                                </div>
+                              )}
                               <Button
                                 type="button"
                                 size="sm"

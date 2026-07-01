@@ -1785,8 +1785,13 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "app_qa_release_gate"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.requiredSummaryFields.includes("rollback note"), true);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.rollbackPlan, /Revertir el PR/);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.deploymentApprovalPacket.deployApprovalAsk, /apruebas explicitamente el deploy/);
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Revenue Engine production launch checklist/);
   assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /npm run build/);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /Deployment approval packet/);
+  assert.match(snapshot.moneyActivationPlan.productionLaunchChecklist.copyableChecklist, /explicit Robert deploy approval/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Evidence gate/);
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Required fields: .*sourceUrl/);
@@ -1797,6 +1802,7 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /First sprint steps/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /Evidence gate before import\/contact/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Deploy approval ask/);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
@@ -3305,11 +3311,21 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.status, "needs_pr");
   assert.equal(handoff.workspace?.codexBuildHandoff.codexBrief.includes("PR-First Rules"), true);
+  assert.equal(handoff.workspace?.codexBuildHandoff.publicBuildBrief.includes("PR-First Rules"), true);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Commercial Context/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Setup: \$/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Retainer:/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Deposit paid:/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Cash collected for deposit/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Operator notes/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Client said yes/);
   assert.equal(handoff.snapshot.dailyMoneyCommand.status, "build");
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].workspaceId, handoff.workspace?.id);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].codexBrief.includes("PR-First Rules"), true);
+  assert.doesNotMatch(handoff.snapshot.websiteBuildHandoffQueue.items[0].publicBuildBrief, /Deposit paid:|Retainer:|Setup: \$|Cash collected for deposit|Operator notes|Client said yes/);
   assert.equal(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief.includes(handoff.workspace?.id || ""), true);
+  assert.doesNotMatch(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief, /Deposit paid:|Retainer:|Setup: \$|Cash collected|Operator notes|Client said yes/);
   assert.equal(handoff.snapshot.dailyMoneyCommand.steps.find((step) => step.id === "collect")?.nextAction.includes(handoff.workspace?.id || ""), true);
   assert.equal(handoff.workspace?.approvalSummary.requiredBeforeClient.includes("pull request de build"), true);
   assert.equal(handoff.outreachDraft?.delivery.sendStatus, "sent");
@@ -4080,6 +4096,8 @@ test("trusted release gate persists PR App QA review and deploy approval for web
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/trusted-release-cafe/pull/2#issuecomment-approval",
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-release-cafe-website, client Trusted Release Cafe.`,
+  }, {
+    verifiedPrStatusReady: true,
   });
 
   assert.equal(releaseGate.status, "ready");
@@ -4092,6 +4110,36 @@ test("trusted release gate persists PR App QA review and deploy approval for web
   assert.equal(releaseGate.workspace?.codexBuildHandoff.missing.length, 0);
   assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, true);
   assert.equal(releaseGate.snapshot.recentDeliveryWorkspaces[0].status, "ready_to_deliver");
+});
+
+test("trusted release gate blocks anchored evidence without fresh PR status check", () => {
+  const created = createSoldWebsiteWorkspaceForTest({
+    businessName: "Anchored Evidence Cafe",
+    contactEmail: "owner@anchoredevidence.example",
+    sourceUrl: "https://example.com/anchored-evidence-cafe",
+    mockupSlug: "anchored-evidence-cafe",
+    projectType: "website",
+  });
+
+  const releaseGate = recordRevenueDeliveryReleaseGate({
+    workspaceId: created.workspace.id,
+    repoFullName: "robert/anchored-evidence-cafe",
+    branchName: "codex/client-anchored-evidence-cafe-website",
+    githubIssueUrl: "https://github.com/robert/anchored-evidence-cafe/issues/1",
+    prUrl: "https://github.com/robert/anchored-evidence-cafe/pull/2",
+    secondReviewStatus: "pass",
+    secondReviewEvidenceUrl: "https://github.com/robert/anchored-evidence-cafe/pull/2#pullrequestreview-1",
+    appQaStatus: "pass",
+    appQaEvidenceUrl: "https://github.com/robert/anchored-evidence-cafe/pull/2#issuecomment-app-qa",
+    deploymentApprovalStatus: "approved",
+    deploymentApprovalUrl: "https://github.com/robert/anchored-evidence-cafe/pull/2#issuecomment-approval",
+    notes: "Anchored URLs alone should not release without a fresh PR status check.",
+  });
+
+  assert.equal(releaseGate.status, "blocked");
+  assert.match(releaseGate.reason, /fresh GitHub PR status check/);
+  assert.equal(releaseGate.workspace?.input.prUrl || "", "");
+  assert.equal(releaseGate.workspace?.approvalSummary.canLaunch, false);
 });
 
 test("trusted release gate blocks direct website workspace without sold opportunity chain", () => {
@@ -4300,6 +4348,8 @@ test("trusted delivery endpoint helper delivers only after trusted release gate 
     deploymentApprovalStatus: "approved",
     deploymentApprovalUrl: "https://github.com/robert/trusted-delivered-cafe/pull/2#issuecomment-approval",
     notes: `PR, second review, App QA pass and Robert deploy approval verified for workspace ${created.workspace.id}, branch codex/client-trusted-delivered-cafe-website, client Trusted Delivered Cafe.`,
+  }, {
+    verifiedPrStatusReady: true,
   });
 
   const untrustedDelivery = deliverRevenueDeliveryWorkspace({

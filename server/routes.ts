@@ -5312,7 +5312,7 @@ export async function registerRoutes(
         workspace.input.mockupUrl ? `- Mockup preview: ${workspace.input.mockupUrl}` : null,
         "",
         "Approved scope summary:",
-        workspace.input.clientRequest || "Use the Revenue Engine workspace context and public business facts.",
+        "Use the public source URL, mockup preview, package name, and Revenue Engine workspace context. Sensitive sale details and private operator notes are intentionally withheld.",
         "",
         "Build acceptance criteria:",
         ...workspace.codexBuildHandoff.acceptanceCriteria.map((item) => `- ${item}`),
@@ -5497,10 +5497,67 @@ export async function registerRoutes(
 
     try {
       const input = revenueDeliveryWorkspaceUpdateSchema.parse(req.body);
-      res.json(recordRevenueDeliveryReleaseGate(input));
+      const lookup = getRevenueDeliveryWorkspaceById(input.workspaceId);
+      if (!lookup.workspace) {
+        return res.status(404).json(lookup);
+      }
+
+      const workspace = lookup.workspace;
+      const prUrl = input.prUrl || workspace.input.prUrl || workspace.codexBuildHandoff.prUrl;
+      if (!prUrl) {
+        return res.status(422).json({
+          status: "needs_pr",
+          reason: "Release gate requiere PR URL y PR status check antes de persistir evidencia.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const parsedPr = parseGitHubPullRequestUrl(prUrl);
+      if (!parsedPr) {
+        return res.status(400).json({
+          status: "invalid_request",
+          reason: "PR URL debe ser https://github.com/owner/repo/pull/123.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const repoFullName = input.repoFullName || workspace.input.repoFullName || workspace.codexBuildHandoff.repoFullName;
+      if (repoFullName && parsedPr.repoFullName !== repoFullName) {
+        return res.status(409).json({
+          status: "repo_mismatch",
+          reason: "El PR URL no pertenece al repo guardado en este workspace.",
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      const prStatus = await getGitHubPullRequestReleaseStatus({
+        repoFullName: parsedPr.repoFullName,
+        pullNumber: parsedPr.pullNumber,
+        expectedBranch: input.branchName || workspace.input.branchName || workspace.codexBuildHandoff.branchName,
+      });
+      if (!prStatus.readyForReleaseEvidence) {
+        return res.status(409).json({
+          status: "blocked",
+          reason: prStatus.blockers[0] || "PR status check no esta listo para release.",
+          prStatus,
+          workspace,
+          snapshot: lookup.snapshot,
+        });
+      }
+
+      res.json(recordRevenueDeliveryReleaseGate(input, { verifiedPrStatusReady: true }));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
+      }
+      if ((error as any)?.status === 404 || (error as any)?.statusCode === 404) {
+        return res.status(404).json({ status: "not_found", reason: "PR no encontrado en GitHub." });
+      }
+      if (/GitHub no conectado|token no disponible/i.test(String((error as any)?.message || ""))) {
+        return res.status(503).json({ status: "github_unavailable", reason: (error as any).message });
       }
       res.status(500).json({ error: "Failed to record delivery workspace release gate" });
     }

@@ -70,7 +70,8 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(routeSource, /getGitHubPullRequestReleaseStatus\(\{/);
   assert.match(routeSource, /Robert deployment approval sigue siendo manual/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/release-gate/);
-  assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input\)/);
+  assert.match(routeSource, /Release gate requiere PR URL y PR status check/);
+  assert.match(routeSource, /recordRevenueDeliveryReleaseGate\(input, \{ verifiedPrStatusReady: true \}\)/);
   assert.match(routeSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
   assert.match(routeSource, /deliverRevenueDeliveryWorkspaceFromTrustedApproval\(input\)/);
   assert.match(routeSource, /input\.projectType !== "automation"/);
@@ -87,7 +88,7 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(githubHandoffRoute, /Sanitized build context/);
   assert.match(githubHandoffRoute, /workspace\.input\.sourceUrl/);
   assert.match(githubHandoffRoute, /workspace\.input\.mockupUrl/);
-  assert.match(githubHandoffRoute, /workspace\.input\.clientRequest/);
+  assert.doesNotMatch(githubHandoffRoute, /workspace\.input\.clientRequest/);
   assert.match(githubHandoffRoute, /workspace\.codexBuildHandoff\.acceptanceCriteria/);
   assert.match(githubHandoffRoute, /publicIssueDescription/);
   assert.match(githubHandoffRoute, /Sensitive sale details and private client data intentionally withheld/);
@@ -102,6 +103,11 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(githubHandoffRoute, /updateRevenueDeliveryWorkspaceQa\(\{/);
   assert.doesNotMatch(githubHandoffRoute, /workspace\.codexBuildHandoff\.codexBrief/);
   assert.match(uiSource, /button-create-github-handoff/);
+  assert.match(uiSource, /workspace\.codexBuildHandoff\.publicBuildBrief/);
+  assert.doesNotMatch(uiSource, /workspace\.codexBuildHandoff\.publicBuildBrief \|\| workspace\.codexBuildHandoff\.codexBrief/);
+  assert.match(uiSource, /item\.publicBuildBrief/);
+  assert.doesNotMatch(uiSource, /item\.publicBuildBrief \|\| item\.codexBrief/);
+  assert.match(uiSource, /Copy public brief/);
   assert.match(uiSource, /workspace\.input\.publicDataVerified/);
   assert.match(uiSource, /workspace\.projectPlan\.decision\.status !== "ready_to_build"/);
   assert.match(uiSource, /reviewProjectType !== "automation"/);
@@ -117,6 +123,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /input-release-app-qa-url/);
   assert.match(uiSource, /releaseRobertApprovedDeploy/);
   assert.match(uiSource, /\/api\/revenue-engine\/delivery-workspaces\/trusted-deliver/);
+  assert.match(uiSource, /workspace\.status !== "ready_to_deliver"/);
+  assert.match(uiSource, /workspace\.approvalSummary\.requiredBeforeClient\.length > 0/);
+  assert.match(uiSource, /panel-delivery-blocked-reason-/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
   assert.match(uiSource, /clientHandoffReady: reviewChecks\.clientHandoffReady/);
   assert.doesNotMatch(uiSource, /clientHandoffReady: reviewChecks\.rollbackPlanReady/);
@@ -263,6 +272,8 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(uiSource, /panel-production-launch-checklist/);
   assert.match(uiSource, /button-copy-production-launch-checklist/);
   assert.match(uiSource, /moneyActivationPlan\.productionLaunchChecklist\.requiredEvidence/);
+  assert.match(uiSource, /moneyActivationPlan\.productionLaunchChecklist\.deploymentApprovalPacket/);
+  assert.match(uiSource, /panel-deployment-approval-packet/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan/);
   assert.doesNotMatch(uiSource, /moneyActivationPlan\.firstSprintPlan\.steps \|\| \[\]\)\.slice\(0, 3\)/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.revenuePath/);
