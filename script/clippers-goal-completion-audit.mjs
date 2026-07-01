@@ -14,6 +14,7 @@ const paths = {
   tiktokExternalCloseoutSession: path.join(reportsDir, "clippers-tiktok-external-closeout-session.json"),
   tiktokMvpOperatingRefresh: path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json"),
   tiktokMvpProofRefresh: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-refresh.json"),
+  tiktokMvpProofQuickFill: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-quick-fill.json"),
   masterEvidenceCsv: path.join(rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv"),
   batchEvidenceDir: path.join(scheduledDir, "metricool-100-batch-evidence-imports"),
   outJson: path.join(reportsDir, "clippers-goal-completion-audit.json"),
@@ -154,6 +155,8 @@ function renderMarkdown(summary) {
     `- TikTok proof gate minimum URLs: ${summary.tiktokMvpProofGate.minimumProofUrlsNeeded}`,
     `- TikTok proof refresh status: ${summary.tiktokMvpProofRefresh.status}`,
     `- TikTok proof refresh blockers: ${summary.tiktokMvpProofRefresh.blockers.length}`,
+    `- TikTok quick fill status: ${summary.tiktokMvpProofQuickFill.status}`,
+    `- TikTok quick fill current: ${summary.tiktokMvpProofQuickFill.currentWithProofRefresh}`,
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
@@ -184,6 +187,17 @@ function renderMarkdown(summary) {
     `- Doctor fixes: ${summary.tiktokMvpProofRefresh.doctorFixQueue}`,
     `- Next: ${summary.tiktokMvpProofRefresh.nextStep}`,
     ...(summary.tiktokMvpProofRefresh.blockers.length ? summary.tiktokMvpProofRefresh.blockers.map((item) => `- Blocker: ${item}`) : ["- Blocker: none"]),
+    "",
+    "## TikTok MVP Proof Quick Fill",
+    "",
+    `- Status: ${summary.tiktokMvpProofQuickFill.status}`,
+    `- Generated: ${summary.tiktokMvpProofQuickFill.generatedAt}`,
+    `- Applied to intake: ${summary.tiktokMvpProofQuickFill.appliedToIntake}`,
+    `- Current with proof refresh: ${summary.tiktokMvpProofQuickFill.currentWithProofRefresh}`,
+    `- Proof refresh status at quick fill: ${summary.tiktokMvpProofQuickFill.proofRefreshStatus}`,
+    `- Issues: ${summary.tiktokMvpProofQuickFill.issues}`,
+    `- Input JSON: ${summary.tiktokMvpProofQuickFill.paths.inputJson || "missing"}`,
+    `- Next: ${summary.tiktokMvpProofQuickFill.nextStep}`,
     "",
     "## Operator Next Actions",
     "",
@@ -310,11 +324,26 @@ function proofRefreshBlockersForAudit(proofRefresh = {}) {
   return Array.from(new Set(blockers));
 }
 
+function isQuickFillCurrentWithProofRefresh(quickFill = {}, proofRefresh = {}) {
+  const quickFillGeneratedAt = timestampMs(quickFill.generatedAt);
+  const proofRefreshGeneratedAt = timestampMs(proofRefresh.generatedAt);
+  return Boolean(
+    quickFill.appliedToIntake === true
+    && quickFill.status === "applied_to_combined_intake"
+    && (!Array.isArray(quickFill.issues) || quickFill.issues.length === 0)
+    && isFreshGeneratedAt(proofRefresh.generatedAt)
+    && quickFillGeneratedAt
+    && proofRefreshGeneratedAt
+    && quickFillGeneratedAt >= proofRefreshGeneratedAt
+    && quickFill.proofRefreshStatus === proofRefresh.status
+  );
+}
+
 function shouldPrioritizeProofGateFix(proofGate = {}, proofGateReady = false) {
   return !proofGateReady && proofGate.status === "ready_for_operator_review";
 }
 
-function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh }) {
+function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady, proofGateReady, proofGateFixFirst = false, currentBatchId, currentBatchReady, allPublishedEvidenceReady, proofGate, proofRefresh, proofQuickFill, proofQuickFillCurrent }) {
   const proofHandoffDir = path.join(reportsDir, "tiktok-mvp-proof-intake");
   const oneScreenProofPath = path.join(proofHandoffDir, "proof-fill-one-screen.txt");
   const rows = [];
@@ -331,9 +360,13 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
   if (!proofGateReady) {
     const proofRefreshBlockers = proofRefreshBlockersForAudit(proofRefresh);
     const proofRefreshPath = proofRefresh?.paths?.markdown || path.join(proofHandoffDir, "proof-refresh.md");
+    const quickFillInputPath = proofQuickFill?.paths?.inputJson || path.join(proofHandoffDir, "proof-quick-fill-input.json");
+    const quickFillStaleCopy = proofQuickFill?.appliedToIntake && !proofQuickFillCurrent
+      ? ` Quick fill is stale against current Proof refresh; use ${quickFillInputPath} or the one-screen guide and rerun Quick fill with real proof.`
+      : "";
     const proofRefreshNextAction = proofRefreshBlockers.length
-      ? `${proofRefresh.nextStep || "Fix proof refresh blockers before save/apply."} Current proof refresh blockers: ${proofRefreshBlockers.slice(0, 3).join(", ")}.`
-      : proofRefresh?.nextStep || "Run Proof refresh to rebuild proof intake and doctor blockers before operating Metricool.";
+      ? `${proofRefresh.nextStep || "Fix proof refresh blockers before save/apply."} Current proof refresh blockers: ${proofRefreshBlockers.slice(0, 3).join(", ")}.${quickFillStaleCopy}`
+      : `${proofRefresh?.nextStep || "Run Proof refresh to rebuild proof intake and doctor blockers before operating Metricool."}${quickFillStaleCopy}`;
     rows.push({
       priority: priority++,
       title: "Fast path Metricool TikTok proof gate",
@@ -416,7 +449,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, evidenceRaw] = await Promise.all([
+  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, evidenceRaw] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.metricoolMvpLaunchPack),
     readJson(paths.metricool100ApprovalRun),
@@ -425,6 +458,7 @@ async function main() {
     readJson(paths.tiktokExternalCloseoutSession, {}),
     readJson(paths.tiktokMvpOperatingRefresh, {}),
     readJson(paths.tiktokMvpProofRefresh, {}),
+    readJson(paths.tiktokMvpProofQuickFill, {}),
     readFile(paths.masterEvidenceCsv, "utf8").catch(() => ""),
   ]);
   const evidence = evidenceTotals(parseCsv(evidenceRaw));
@@ -486,6 +520,7 @@ async function main() {
   const proofRefreshReady = isProofRefreshReady(proofRefresh);
   const proofRefreshFresh = isFreshGeneratedAt(proofRefresh.generatedAt);
   const proofRefreshBlockers = proofRefreshBlockersForAudit(proofRefresh);
+  const proofQuickFillCurrent = isQuickFillCurrentWithProofRefresh(proofQuickFill, proofRefresh);
   const proofGateFixFirst = shouldPrioritizeProofGateFix(proofGate, proofGateReady);
   const tiktokMvpProofReady = proofGateReady && proofRefreshReady;
   const tiktokMvpOperatorReady = tiktokMvpProofReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession;
@@ -596,6 +631,8 @@ async function main() {
     allPublishedEvidenceReady,
     proofGate,
     proofRefresh,
+    proofQuickFill,
+    proofQuickFillCurrent,
   });
 
   const totals = requirements.reduce((sum, row) => {
@@ -677,6 +714,19 @@ async function main() {
       blockers: proofRefreshBlockers,
       paths: proofRefresh.paths || {},
       nextStep: proofRefresh.nextStep || "Run Proof refresh to rebuild proof intake and doctor blockers.",
+    },
+    tiktokMvpProofQuickFill: {
+      status: proofQuickFill.status || "missing",
+      generatedAt: proofQuickFill.generatedAt || "missing",
+      appliedToIntake: Boolean(proofQuickFill.appliedToIntake),
+      currentWithProofRefresh: proofQuickFillCurrent,
+      proofRefreshStatus: proofQuickFill.proofRefreshStatus || "missing",
+      proofUnblockerStatus: proofQuickFill.proofUnblockerStatus || "missing",
+      issues: Array.isArray(proofQuickFill.issues) ? proofQuickFill.issues.length : 0,
+      paths: proofQuickFill.paths || {},
+      nextStep: proofQuickFillCurrent
+        ? (proofQuickFill.nextStep || "Continue from the current quick fill result.")
+        : "Quick fill is stale or missing; rerun Quick fill with real non-secret proof before trusting this result.",
     },
     operatorNextActions,
     requirements,

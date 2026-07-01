@@ -922,6 +922,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.doesNotMatch(operatorButtonHelper, /tiktokMvpEvidenceCloseoutApplyMutation\.mutate/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-quick-fill-textarea/);
+  assert.match(page, /stale_applied_result/);
+  assert.match(page, /tiktokMvpProofQuickFillCurrent/);
+  assert.match(page, /older than or no longer matches the current Proof refresh/);
+  assert.match(page, /applied current/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-import-panel/);
   assert.match(page, /clippers-tiktok-mvp-proof-intake-import-fix-queue/);
   assert.match(page, /clippers-tiktok-mvp-proof-fix-queue/);

@@ -17001,6 +17001,31 @@ export default function ClippersPage() {
     || tiktokMvpOperatingRefreshMutation.isPending
     || tiktokMvpEvidenceCloseoutPreviewMutation.isPending
     || tiktokMvpEvidenceCloseoutApplyMutation.isPending;
+  const tiktokMvpProofQuickFillGeneratedMs = tiktokMvpProofQuickFill ? Date.parse(tiktokMvpProofQuickFill.generatedAt) : 0;
+  const tiktokMvpProofRefreshGeneratedMs = tiktokMvpProofRefresh ? Date.parse(tiktokMvpProofRefresh.generatedAt) : 0;
+  const tiktokMvpProofRefreshFresh = Boolean(
+    Number.isFinite(tiktokMvpProofRefreshGeneratedMs)
+    && tiktokMvpProofRefreshGeneratedMs > 0
+    && Date.now() - tiktokMvpProofRefreshGeneratedMs >= 0
+    && Date.now() - tiktokMvpProofRefreshGeneratedMs <= 6 * 60 * 60 * 1000
+  );
+  const tiktokMvpProofQuickFillCurrent = Boolean(
+    tiktokMvpProofQuickFill?.appliedToIntake
+    && tiktokMvpProofQuickFill.status === "applied_to_combined_intake"
+    && (tiktokMvpProofQuickFill.issues || []).length === 0
+    && tiktokMvpProofRefreshFresh
+    && Number.isFinite(tiktokMvpProofQuickFillGeneratedMs)
+    && Number.isFinite(tiktokMvpProofRefreshGeneratedMs)
+    && tiktokMvpProofQuickFillGeneratedMs >= tiktokMvpProofRefreshGeneratedMs
+    && tiktokMvpProofQuickFill.proofRefreshStatus === tiktokMvpProofRefresh?.status
+  );
+  const tiktokMvpProofQuickFillAppliedCurrent = Boolean(tiktokMvpProofQuickFill?.appliedToIntake && tiktokMvpProofQuickFillCurrent);
+  const tiktokMvpProofQuickFillDisplayStatus = tiktokMvpProofQuickFill?.appliedToIntake && !tiktokMvpProofQuickFillCurrent
+    ? "stale_applied_result"
+    : tiktokMvpProofQuickFill?.status || "not submitted";
+  const tiktokMvpProofQuickFillDisplayNextStep = tiktokMvpProofQuickFill?.appliedToIntake && !tiktokMvpProofQuickFillCurrent
+    ? "Quick fill result is older than or no longer matches the current Proof refresh; rerun Quick fill with real non-secret proof before trusting this result."
+    : tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill.";
   const buildTikTokMvpMetricoolFastPathPaste = () => {
     const sportUrl = tiktokMvpFastPathSportProofUrl.trim();
     const memesUrl = tiktokMvpFastPathMemesProofUrl.trim();
@@ -19414,16 +19439,18 @@ export default function ClippersPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className={cn(
                       "border text-[10px]",
-                      tiktokMvpProofQuickFill?.appliedToIntake
+                      tiktokMvpProofQuickFillAppliedCurrent
                         ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
-                        : "border-violet-300/30 bg-violet-300/10 text-violet-100"
+                        : tiktokMvpProofQuickFill?.appliedToIntake
+                          ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                          : "border-violet-300/30 bg-violet-300/10 text-violet-100"
                     )}>
-                      quick fill {tiktokMvpProofQuickFill?.status || "not submitted"}
+                      quick fill {tiktokMvpProofQuickFillDisplayStatus}
                     </Badge>
                     <span>{tiktokMvpProofQuickFill?.issues.length ?? 0} issues</span>
-                    <span>applied: {tiktokMvpProofQuickFill?.appliedToIntake ? "yes" : "no"}</span>
+                    <span>applied current: {tiktokMvpProofQuickFillAppliedCurrent ? "yes" : "no"}</span>
                   </div>
-                  <p className="mt-1">{tiktokMvpProofQuickFill?.issues[0] || tiktokMvpProofQuickFill?.nextStep || "Paste two real Metricool/Drive proof URLs, or separate ownership plus Metricool URLs, then run Quick fill."}</p>
+                  <p className="mt-1">{tiktokMvpProofQuickFillDisplayNextStep}</p>
                 </div>
                 <Button
                   type="button"
@@ -19448,6 +19475,7 @@ export default function ClippersPage() {
                   <p className="break-all">Report: {tiktokMvpProofQuickFill.paths.markdown}</p>
                   <p className="break-all">Input: {tiktokMvpProofQuickFill.paths.inputJson}</p>
                   <p className="break-all">Combined intake: {tiktokMvpProofQuickFill.paths.combinedCsv}</p>
+                  <p>Current with refresh: {tiktokMvpProofQuickFillCurrent ? "yes" : "no"}</p>
                   <p>Mode: {tiktokMvpProofQuickFill.launchMode}; direct APIs: {tiktokMvpProofQuickFill.directSocialApisRequired ? "required" : "not required"}</p>
                 </div>
               )}

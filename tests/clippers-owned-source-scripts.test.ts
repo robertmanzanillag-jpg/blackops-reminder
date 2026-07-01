@@ -7864,6 +7864,9 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.ok(audit.tiktokMvpProofRefresh.blockers.includes("import_status_blocked_invalid_intake"));
   assert.ok(audit.tiktokMvpProofRefresh.blockers.includes("doctor_status_needs_proof_fix"));
   assert.match(audit.tiktokMvpProofRefresh.paths.markdown, /proof-refresh\.md$/);
+  assert.ok(["applied_to_combined_intake", "blocked_invalid_quick_fill", "missing"].includes(audit.tiktokMvpProofQuickFill.status));
+  assert.equal(typeof audit.tiktokMvpProofQuickFill.currentWithProofRefresh, "boolean");
+  assert.match(audit.tiktokMvpProofQuickFill.paths.inputJson || "", /proof-quick-fill-input\.json$/);
   assert.ok(audit.requirements.some((row) => row.id === "tiktok_metricool_proof_gate" && row.status === "needs_external_action"));
   const proofGateRequirement = audit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate");
   assert.match(proofGateRequirement?.evidence || "", /proofRefresh blocked/);
@@ -7913,8 +7916,11 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /TikTok proof gate minimum URLs: 2/);
   assert.match(markdown, /TikTok proof refresh status: blocked/);
   assert.match(markdown, /TikTok proof refresh blockers: \d+/);
+  assert.match(markdown, /TikTok quick fill status:/);
+  assert.match(markdown, /TikTok quick fill current: (true|false)/);
   assert.match(markdown, /TikTok MVP Proof Gate/);
   assert.match(markdown, /TikTok MVP Proof Refresh/);
+  assert.match(markdown, /TikTok MVP Proof Quick Fill/);
   assert.match(markdown, /Blocker: import_status_blocked_invalid_intake/);
   assert.match(markdown, /Next safe button: preview_proof_links/);
   assert.match(markdown, /TikTok external active closeout tasks: \d+/);
@@ -7968,10 +7974,13 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
 test("goal completion audit rejects stale ready proof gates with hidden blockers", async () => {
   const operatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
   const proofRefreshPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.json");
+  const proofQuickFillPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json");
   const originalOperatingRefresh = await readFile(operatingRefreshPath, "utf8");
   const originalProofRefresh = await readFile(proofRefreshPath, "utf8");
+  const originalProofQuickFill = await readFile(proofQuickFillPath, "utf8");
   const original = JSON.parse(originalOperatingRefresh);
   const originalRefresh = JSON.parse(originalProofRefresh);
+  const originalQuickFill = JSON.parse(originalProofQuickFill);
   try {
     await writeFile(operatingRefreshPath, JSON.stringify({
       ...original,
@@ -8173,6 +8182,79 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
     assert.match(staleRefreshAudit.operatorNextActions[0].buttonOrFile, /proof-refresh\.md$/);
     assert.match(staleRefreshAudit.operatorNextActions[0].nextAction, /proof_refresh_stale_or_missing/);
 
+    await writeFile(proofRefreshPath, JSON.stringify({
+      ...originalRefresh,
+      status: "blocked",
+      generatedAt: new Date().toISOString(),
+      importStatus: "blocked_invalid_intake",
+      doctorStatus: "needs_proof_fix",
+      readyLanes: 0,
+      targetLanes: 2,
+      importFixQueue: 1,
+      doctorFixQueue: 1,
+      readyChecks: {
+        importRunOk: true,
+        doctorRunOk: true,
+        importReady: false,
+        doctorReady: false,
+        lanesReady: false,
+        noImportFixes: false,
+        noDoctorFixes: false,
+      },
+      blockers: ["import_status_blocked_invalid_intake", "doctor_status_needs_proof_fix"],
+      paths: {
+        ...(originalRefresh.paths || {}),
+        markdown: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-refresh.md"),
+      },
+      nextStep: "Fix current proof refresh blockers.",
+    }, null, 2));
+    await writeFile(proofQuickFillPath, JSON.stringify({
+      ...originalQuickFill,
+      status: "blocked_invalid_quick_fill",
+      generatedAt: new Date(Date.now() + 1000).toISOString(),
+      appliedToIntake: false,
+      issues: ["sports-daily:tiktok: accountOwnershipProofUrl must be a real safe HTTPS proof URL."],
+      proofRefreshStatus: "blocked",
+      paths: {
+        ...(originalQuickFill.paths || {}),
+        inputJson: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json"),
+      },
+      nextStep: "Fix the listed quick-fill issues and submit again.",
+    }, null, 2));
+    const blockedQuickFillResult = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(blockedQuickFillResult.status, 0, blockedQuickFillResult.stderr || blockedQuickFillResult.stdout);
+    const blockedQuickFillAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(blockedQuickFillAudit.tiktokMvpProofQuickFill.status, "blocked_invalid_quick_fill");
+    assert.equal(blockedQuickFillAudit.tiktokMvpProofQuickFill.appliedToIntake, false);
+    assert.equal(blockedQuickFillAudit.tiktokMvpProofQuickFill.currentWithProofRefresh, false);
+    assert.match(blockedQuickFillAudit.tiktokMvpProofQuickFill.nextStep, /stale or missing|rerun Quick fill/i);
+
+    await writeFile(proofQuickFillPath, JSON.stringify({
+      ...originalQuickFill,
+      status: "applied_to_combined_intake",
+      generatedAt: new Date(Date.now() + 1000).toISOString(),
+      appliedToIntake: true,
+      issues: [],
+      proofRefreshStatus: "ready_to_apply",
+      paths: {
+        ...(originalQuickFill.paths || {}),
+        inputJson: path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill-input.json"),
+      },
+      nextStep: "Load the prepared Metricool bridge CSV, preview rows, then import only after review.",
+    }, null, 2));
+    const mismatchedQuickFillResult = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(mismatchedQuickFillResult.status, 0, mismatchedQuickFillResult.stderr || mismatchedQuickFillResult.stdout);
+    const mismatchedQuickFillAudit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(mismatchedQuickFillAudit.tiktokMvpProofQuickFill.appliedToIntake, true);
+    assert.equal(mismatchedQuickFillAudit.tiktokMvpProofQuickFill.currentWithProofRefresh, false);
+    assert.match(mismatchedQuickFillAudit.operatorNextActions[0].nextAction, /Quick fill is stale against current Proof refresh/);
+
     const scriptSource = await readFile(path.join(process.cwd(), "script/clippers-goal-completion-audit.mjs"), "utf8");
     assert.match(scriptSource, /function proofGateControlFieldsPresent\(proofGate = \{\}\)/);
     assert.match(scriptSource, /function isProofGateReady\(proofGate\)/);
@@ -8190,6 +8272,7 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
   } finally {
     await writeFile(operatingRefreshPath, originalOperatingRefresh);
     await writeFile(proofRefreshPath, originalProofRefresh);
+    await writeFile(proofQuickFillPath, originalProofQuickFill);
     spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",
