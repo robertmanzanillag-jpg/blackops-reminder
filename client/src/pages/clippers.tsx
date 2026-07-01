@@ -11790,6 +11790,9 @@ export default function ClippersPage() {
   });
 
   const tiktokMvpProofLinksSaveMutation = useMutation({
+    onMutate: () => {
+      setTiktokMvpProofLinksSaveReceipt(null);
+    },
     mutationFn: async () => {
       const response = await fetch("/api/clippers/save-tiktok-mvp-proof-links", {
         method: "POST",
@@ -11879,6 +11882,9 @@ export default function ClippersPage() {
   });
 
   const tiktokMvpProofLinksPreviewMutation = useMutation({
+    onMutate: () => {
+      setTiktokMvpProofLinksSaveReceipt(null);
+    },
     mutationFn: async () => {
       const response = await fetch("/api/clippers/preview-tiktok-mvp-proof-links", {
         method: "POST",
@@ -11891,6 +11897,7 @@ export default function ClippersPage() {
     },
     onSuccess: (data) => {
       setTiktokMvpProofLinksPreview(data);
+      setTiktokMvpProofLinksSaveReceipt(null);
       toast({
         title: data.readyForProofDrop ? "Proof links validos" : "Proof links con blockers",
         description: data.nextStep,
@@ -11903,6 +11910,9 @@ export default function ClippersPage() {
   });
 
   const tiktokMvpProofLinksPasteMutation = useMutation({
+    onMutate: () => {
+      setTiktokMvpProofLinksSaveReceipt(null);
+    },
     mutationFn: async (pasteTextOverride?: string) => {
       const response = await fetch("/api/clippers/parse-tiktok-mvp-proof-links-paste", {
         method: "POST",
@@ -11917,6 +11927,7 @@ export default function ClippersPage() {
       setTiktokMvpProofLinksPastePreview(data);
       setTiktokMvpProofLinksText(data.proofLinksText);
       setTiktokMvpProofLinksPreview(data.proofLinksPreview);
+      setTiktokMvpProofLinksSaveReceipt(null);
       toast({
         title: data.status === "ready_for_proof_links_preview" ? "Proof packet convertido" : "Proof packet necesita revision",
         description: data.nextStep,
@@ -18867,6 +18878,7 @@ export default function ClippersPage() {
                         onClick={() => {
                           setTiktokMvpProofLinksText(tiktokMvpProofLinks?.raw || "");
                           setTiktokMvpProofLinksPreview(null);
+                          setTiktokMvpProofLinksSaveReceipt(null);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofLinks?.raw}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
@@ -18882,6 +18894,7 @@ export default function ClippersPage() {
                         onClick={() => {
                           setTiktokMvpProofLinksText(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText || "");
                           setTiktokMvpProofLinksPreview(null);
+                          setTiktokMvpProofLinksSaveReceipt(null);
                         }}
                         disabled={tiktokProofFlowBusy || isLoading || !(tiktokMvpProofHandoffJsonStarterText || tiktokMvpProofDropKit.proofLinksStarterText)}
                         className="h-8 border-sky-300/20 bg-transparent text-sky-100 hover:bg-sky-300/10"
@@ -18920,6 +18933,7 @@ export default function ClippersPage() {
                     onChange={(event) => {
                       setTiktokMvpProofLinksText(event.target.value);
                       setTiktokMvpProofLinksPreview(null);
+                      setTiktokMvpProofLinksSaveReceipt(null);
                     }}
                     className="mt-2 min-h-52 border-sky-300/20 bg-black/40 font-mono text-xs text-sky-50"
                     data-testid="clippers-tiktok-mvp-proof-links-textarea"
