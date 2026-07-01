@@ -550,6 +550,13 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(uiSource, /publicScoutEvidenceMutation/);
   assert.match(uiSource, /publicScoutConnectorIntakeMutation/);
   assert.match(uiSource, /publicScoutAgentCommandMutation/);
+  assert.match(uiSource, /candidateRobertApprovedImport/);
+  assert.match(uiSource, /checkbox-public-scout-robert-approved-import/);
+  assert.match(uiSource, /checkbox-candidate-robert-approved-import/);
+  assert.match(uiSource, /approvedByRobert: candidateRobertApprovedImport/);
+  assert.match(uiSource, /setCandidateRobertApprovedImport\(false\)/);
+  assert.match(uiSource, /Robert approve import/);
+  assert.doesNotMatch(uiSource, /approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport/);
   assert.match(uiSource, /buildPublicScoutConnectorIntakeRequest/);
   assert.match(uiSource, /textarea-public-scout-evidence/);
   assert.match(uiSource, /textarea-public-scout-connector-results/);

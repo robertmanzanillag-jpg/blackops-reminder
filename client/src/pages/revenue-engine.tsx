@@ -2304,6 +2304,7 @@ export default function RevenueEnginePage() {
   const [selectedDailyScoutTaskId, setSelectedDailyScoutTaskId] = useState("");
   const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
   const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
+  const [candidateRobertApprovedImport, setCandidateRobertApprovedImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [selectedApprovalTargetId, setSelectedApprovalTargetId] = useState("");
@@ -3625,7 +3626,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
-          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
         }),
       });
       const data = await response.json();
@@ -3634,6 +3635,7 @@ export default function RevenueEnginePage() {
     },
     onSuccess: (data) => {
       setSeedLeadBatchText(data.importBatchText);
+      setCandidateRobertApprovedImport(false);
       refetchSnapshot();
     },
   });
@@ -3674,7 +3676,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
-          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
           notes: "Recorded from Revenue Engine batch candidates UI.",
         }),
       });
@@ -3683,6 +3685,7 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      setCandidateRobertApprovedImport(false);
       refetchSnapshot();
     },
   });
@@ -3703,7 +3706,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
-          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
           maxCandidates: Math.min(activeScoutTarget, 50),
           notes: "Normalized from Revenue Engine public scout evidence UI.",
@@ -3716,6 +3719,7 @@ export default function RevenueEnginePage() {
     onSuccess: (data) => {
       const evidenceResult = "evidenceResult" in data ? data.evidenceResult : data;
       setSeedLeadBatchText(evidenceResult?.normalizedBatchText || "");
+      setCandidateRobertApprovedImport(false);
       refetchSnapshot();
     },
   });
@@ -3756,7 +3760,7 @@ export default function RevenueEnginePage() {
           verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
           publicEvidenceVerified: candidatePublicEvidenceVerified,
           approvalToImport: candidateApprovalToImport,
-          approvedByRobert: candidatePublicEvidenceVerified && candidateApprovalToImport,
+          approvedByRobert: candidateRobertApprovedImport,
           defaultOfferUsd: leadEstimatedOfferUsd,
           maxCandidates: Math.min(activeScoutTarget, 50),
           dailyResearchTarget: Math.max(leadRadarDailyResearchTarget, activeScoutTarget),
@@ -3777,6 +3781,7 @@ export default function RevenueEnginePage() {
     },
     onSuccess: (data) => {
       setSeedLeadBatchText(data.evidenceResult.normalizedBatchText);
+      setCandidateRobertApprovedImport(false);
       refetchSnapshot();
     },
   });
@@ -5304,7 +5309,7 @@ export default function RevenueEnginePage() {
                           placeholder={"Business: No Site Cafe\nArea: Miami\nNiche: coffee shop\nWebsite: no website\nContact: @nositecafe\nEmail: owner@example.com\nSource: https://instagram.com/nositecafe\nEvidence: Instagram activo, no website en bio, menu solo en posts publicos.\nPain: Necesita menu online, captura de catering y follow-up."}
                           data-testid="textarea-public-scout-evidence"
                         />
-                        <div className="grid gap-2 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300 md:grid-cols-2">
+                        <div className="grid gap-2 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300 md:grid-cols-3">
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
@@ -5324,6 +5329,16 @@ export default function RevenueEnginePage() {
                               data-testid="checkbox-public-scout-approval-import"
                             />
                             Aprobar import a Money Sprint
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={candidateRobertApprovedImport}
+                              onChange={(event) => setCandidateRobertApprovedImport(event.target.checked)}
+                              className="h-4 w-4"
+                              data-testid="checkbox-public-scout-robert-approved-import"
+                            />
+                            Robert aprobó import
                           </label>
                         </div>
                         <Button
@@ -6695,7 +6710,7 @@ export default function RevenueEnginePage() {
                               data-testid={`button-approve-public-candidate-${item.candidateId}`}
                             >
                               {publicLeadCandidateApproveMutation.isPending ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
-                              Aprobar import
+                              Robert approve import
                             </Button>
                           </div>
                         </div>
@@ -7374,6 +7389,17 @@ export default function RevenueEnginePage() {
                             data-testid="checkbox-candidate-approval-import"
                           />
                           <span>Aprobar el lead o todas las filas del batch pegado para la cola de candidatos. No contacta, no scrapea, no gasta.</span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-robert-approved-import">
+                          <input
+                            id="candidate-robert-approved-import"
+                            type="checkbox"
+                            checked={candidateRobertApprovedImport}
+                            onChange={(event) => setCandidateRobertApprovedImport(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-robert-approved-import"
+                          />
+                          <span>Robert aprobó explícitamente importar estos candidatos al Money Sprint. Sin esto quedan en revisión.</span>
                         </label>
                       </div>
                       <Button
