@@ -10687,7 +10687,7 @@ function isMetricoolProofUrl(value: string) {
       && !url.username
       && !url.password
       && (isMetricoolHost || (isGoogleEvidenceHost && isConcreteGoogleEvidenceUrl(url)))
-      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
+      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret|password|passcode|recovery)=/i.test(url.search);
   } catch {
     return false;
   }
@@ -17191,6 +17191,11 @@ export default function ClippersPage() {
     { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "SPORT", operatorAction: "Record non-secret SPORT TikTok Metricool bridge proof." },
     { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", status: "needs_account_proof", metricoolBrandOrProfile: "memes", operatorAction: "Record non-secret memes TikTok Metricool bridge proof." },
   ];
+  const tiktokMvpFastPathSportProofReady = isMetricoolProofUrl(tiktokMvpFastPathSportProofUrl);
+  const tiktokMvpFastPathMemesProofReady = isMetricoolProofUrl(tiktokMvpFastPathMemesProofUrl);
+  const tiktokMvpFastPathCanBuild = tiktokMvpFastPathSportProofReady
+    && tiktokMvpFastPathMemesProofReady
+    && tiktokMvpFastPathOwnershipConfirmed;
   const tiktokProofFlowBusy = tiktokMvpProofIntakePackMutation.isPending
     || tiktokMvpProofDropKitMutation.isPending
     || tiktokMvpProofLinksPasteMutation.isPending
@@ -17262,6 +17267,14 @@ export default function ClippersPage() {
       toast({
         title: "Fast path requiere confirmacion",
         description: "Confirma que cada proof muestra el TikTok conectado bajo control de Robert y no contiene secretos antes de reutilizarlo como ownership.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!tiktokMvpFastPathSportProofReady || !tiktokMvpFastPathMemesProofReady) {
+      toast({
+        title: "Proof URLs no validos",
+        description: "Usa URLs HTTPS de Metricool o evidencia concreta de Drive file/folder/Docs, sin credenciales ni tokens.",
         variant: "destructive",
       });
       return;
@@ -18974,6 +18987,9 @@ export default function ClippersPage() {
                           placeholder="https://app.metricool.com/... or https://drive.google.com/..."
                           data-testid="clippers-tiktok-mvp-fast-path-sport-input"
                         />
+                        <p className={cn("mt-1 text-[10px]", tiktokMvpFastPathSportProofReady ? "text-emerald-100/70" : "text-amber-100/75")}>
+                          SPORT proof URL {tiktokMvpFastPathSportProofReady ? "passes local URL check" : "must be Metricool or concrete Drive file/folder/Docs evidence"}.
+                        </p>
                       </div>
                       <div className="min-w-0 flex-1">
                         <Label className="text-[10px] uppercase tracking-wide text-emerald-100/70">memes Metricool or concrete Drive file/folder/Docs proof</Label>
@@ -18988,13 +19004,16 @@ export default function ClippersPage() {
                           placeholder="https://app.metricool.com/... or https://docs.google.com/..."
                           data-testid="clippers-tiktok-mvp-fast-path-memes-input"
                         />
+                        <p className={cn("mt-1 text-[10px]", tiktokMvpFastPathMemesProofReady ? "text-emerald-100/70" : "text-amber-100/75")}>
+                          memes proof URL {tiktokMvpFastPathMemesProofReady ? "passes local URL check" : "must be Metricool or concrete Drive file/folder/Docs evidence"}.
+                        </p>
                       </div>
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         onClick={buildTikTokMvpMetricoolFastPathPaste}
-                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathSportProofUrl.trim() || !tiktokMvpFastPathMemesProofUrl.trim() || !tiktokMvpFastPathOwnershipConfirmed}
+                        disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpFastPathCanBuild}
                         className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
                         data-testid="build-clippers-tiktok-mvp-metricool-fast-path-button"
                       >

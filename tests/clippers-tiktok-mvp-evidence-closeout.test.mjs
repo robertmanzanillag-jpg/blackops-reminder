@@ -635,7 +635,15 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /meme-radar:tiktok\.accountOwnershipProofUrl=\$\{memesUrl\}/);
   assert.match(page, /meme-radar:tiktok\.metricoolConnectionProofUrl=\$\{memesUrl\}/);
   assert.match(page, /tiktokMvpFastPathOwnershipConfirmed/);
+  assert.match(page, /tiktokMvpFastPathSportProofReady = isMetricoolProofUrl\(tiktokMvpFastPathSportProofUrl\)/);
+  assert.match(page, /tiktokMvpFastPathMemesProofReady = isMetricoolProofUrl\(tiktokMvpFastPathMemesProofUrl\)/);
+  assert.match(page, /tiktokMvpFastPathCanBuild = tiktokMvpFastPathSportProofReady/);
+  assert.match(page, /\(token\|access\|refresh\|auth\|signature\|signed\|session\|cookie\|key\|secret\|password\|passcode\|recovery\)=/);
   assert.match(page, /Fast path requiere confirmacion/);
+  assert.match(page, /Proof URLs no validos/);
+  assert.match(page, /SPORT proof URL/);
+  assert.match(page, /memes proof URL/);
+  assert.match(page, /must be Metricool or concrete Drive file\/folder\/Docs evidence/);
   assert.match(page, /clippers-tiktok-mvp-fast-path-ownership-confirmation/);
   assert.match(page, /!tiktokMvpFastPathOwnershipConfirmed/);
   assert.match(page, /shows the TikTok profile connected under Robert control/);
@@ -983,7 +991,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /reset-clippers-tiktok-mvp-proof-links-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-starter-button/);
   assert.match(page, /build-clippers-tiktok-mvp-metricool-fast-path-button/);
-  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| !tiktokMvpFastPathSportProofUrl\.trim\(\) \|\| !tiktokMvpFastPathMemesProofUrl\.trim\(\) \|\| !tiktokMvpFastPathOwnershipConfirmed\}/);
+  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| !tiktokMvpFastPathCanBuild\}/);
   assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofLinks\?\.raw \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
   assert.match(page, /setTiktokMvpProofLinksText\(tiktokMvpProofHandoffJsonStarterText \|\| tiktokMvpProofDropKit\.proofLinksStarterText \|\| ""\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
   assert.match(page, /setTiktokMvpProofLinksText\(event\.target\.value\);[\s\S]*?setTiktokMvpProofLinksPastePreview\(null\);[\s\S]*?setTiktokMvpProofLinksPreview\(null\);[\s\S]*?setTiktokMvpProofLinksSaveReceipt\(null\);[\s\S]*?setTiktokMvpFastPathOwnershipConfirmed\(false\);/);
