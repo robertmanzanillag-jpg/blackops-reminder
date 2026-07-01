@@ -35,8 +35,8 @@ function decodedEvidenceText(value) {
 }
 
 const accounts = [
-  { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdaily" },
-  { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", handle: "@memeradar" },
+  { accountId: "sports-daily", accountName: "Sports Daily Clips", category: "sports", handle: "@sportsdailyclips" },
+  { accountId: "meme-radar", accountName: "Meme Radar", category: "memes", handle: "@memeradarclips" },
   { accountId: "streamer-pulse", accountName: "Streamer Pulse", category: "streamers", handle: "@streamerpulse" },
 ];
 

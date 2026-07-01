@@ -24967,7 +24967,7 @@ function buildMetricoolMvpFocusRun(source: ClipperExternalExecutionFocusRun): Cl
     .filter((item) =>
       item.type === "account"
       && item.platform === "tiktok"
-      && /sports-daily|meme-radar|@sportsdaily|@memeradar/i.test(`${item.id} ${item.sourceItemId} ${item.label} ${item.evidenceRow}`)
+      && /sports-daily|meme-radar|@sportsdailyclips|@memeradarclips/i.test(`${item.id} ${item.sourceItemId} ${item.label} ${item.evidenceRow}`)
     )
     .map<ClipperExternalExecutionFocusRunItem>((item, index) => ({
       ...item,
@@ -29011,11 +29011,11 @@ const CLIPPER_METRICOOL_TIKTOK_MVP_LANES = new Set(
 const CLIPPER_METRICOOL_TIKTOK_MVP_LANE_EXPECTATIONS: Record<string, { metricoolBrandName: string; profileUrl: string }> = {
   "sports-daily:tiktok": {
     metricoolBrandName: "SPORT",
-    profileUrl: "https://www.tiktok.com/@sportsdaily",
+    profileUrl: "https://www.tiktok.com/@sportsdailyclips",
   },
   "meme-radar:tiktok": {
     metricoolBrandName: "memes",
-    profileUrl: "https://www.tiktok.com/@memeradar",
+    profileUrl: "https://www.tiktok.com/@memeradarclips",
   },
 };
 

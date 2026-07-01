@@ -658,8 +658,8 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
   const proofRows = accountRows.length
     ? accountRows
     : [
-      { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", handle: "@sportsdaily", status: "needs_account_proof" },
-      { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", handle: "@memeradar", status: "needs_account_proof" },
+      { accountId: "sports-daily", accountName: "Sports Daily Clips", platform: "tiktok", handle: "@sportsdailyclips", status: "needs_account_proof" },
+      { accountId: "meme-radar", accountName: "Meme Radar", platform: "tiktok", handle: "@memeradarclips", status: "needs_account_proof" },
     ];
   let priority = 1;
   if (!proofGateReady) {

@@ -11,8 +11,8 @@ const reportJsonPath = path.join(reportsDir, "clippers-tiktok-mvp-evidence-close
 const reportMarkdownPath = path.join(reportsDir, "clippers-tiktok-mvp-evidence-closeout.md");
 
 const activeLanes = [
-  { accountId: "sports-daily", accountName: "Sports Daily Clips", brand: "SPORT", handle: "@sportsdaily" },
-  { accountId: "meme-radar", accountName: "Meme Radar", brand: "memes", handle: "@memeradar" },
+  { accountId: "sports-daily", accountName: "Sports Daily Clips", brand: "SPORT", handle: "@sportsdailyclips" },
+  { accountId: "meme-radar", accountName: "Meme Radar", brand: "memes", handle: "@memeradarclips" },
 ];
 const activeLaneIds = new Set(activeLanes.map((lane) => `${lane.accountId}:tiktok`));
 const weakNotes = new Set(["ok", "yes", "done", "ready", "approved", "verified", "scheduled", "listo", "aprobado", "verificado"]);

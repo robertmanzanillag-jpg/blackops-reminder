@@ -18,7 +18,7 @@ const lanes = [
     accountId: "sports-daily",
     accountName: "Sports Daily Clips",
     platform: "tiktok",
-    handle: "@sportsdaily",
+    handle: "@sportsdailyclips",
     metricoolBrandName: "SPORT",
     expectedFiles: {
       account: "sports-daily-account-ownership",
@@ -30,7 +30,7 @@ const lanes = [
     accountId: "meme-radar",
     accountName: "Meme Radar",
     platform: "tiktok",
-    handle: "@memeradar",
+    handle: "@memeradarclips",
     metricoolBrandName: "memes",
     expectedFiles: {
       account: "meme-radar-account-ownership",

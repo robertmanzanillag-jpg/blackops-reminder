@@ -150,8 +150,8 @@ const clipperTikTokMvpAccountEvidenceCsvPath = "clippers_workspace/account-permi
 const clipperTikTokMvpEvidenceCloseoutPreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/evidence-closeout-preview-gate.json";
 const clipperTikTokMvpProofLinksPreviewGatePath = "clippers_workspace/reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json";
 const clipperMetricoolBridgeRequiredRows = [
-  { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdaily", accountName: "Sports Daily Clips" },
-  { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradar", accountName: "Meme Radar" },
+  { accountId: "sports-daily", platform: "tiktok", metricoolBrandName: "SPORT", profileUrl: "https://www.tiktok.com/@sportsdailyclips", accountName: "Sports Daily Clips" },
+  { accountId: "meme-radar", platform: "tiktok", metricoolBrandName: "memes", profileUrl: "https://www.tiktok.com/@memeradarclips", accountName: "Meme Radar" },
 ] as const;
 
 function parseClipperSimpleCsvLine(line: string): string[] {

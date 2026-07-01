@@ -11,8 +11,8 @@ function clipperDecodedProofText(value: unknown): string {
 }
 
 export const clipperTikTokMvpProofLaneSpecs = [
-  { key: "sports-daily:tiktok", accountName: "Sports Daily Clips", handle: "@sportsdaily", metricoolBrandName: "SPORT", aliases: ["sport", "sports", "sportsdaily", "sports daily"] },
-  { key: "meme-radar:tiktok", accountName: "Meme Radar", handle: "@memeradar", metricoolBrandName: "memes", aliases: ["meme", "memes", "memeradar", "meme radar"] },
+  { key: "sports-daily:tiktok", accountName: "Sports Daily Clips", handle: "@sportsdailyclips", metricoolBrandName: "SPORT", aliases: ["sport", "sports", "sportsdaily", "sportsdailyclips", "sports daily"] },
+  { key: "meme-radar:tiktok", accountName: "Meme Radar", handle: "@memeradarclips", metricoolBrandName: "memes", aliases: ["meme", "memes", "memeradar", "memeradarclips", "meme radar"] },
 ] as const;
 
 export function containsClipperSecretLikeText(value: unknown): boolean {

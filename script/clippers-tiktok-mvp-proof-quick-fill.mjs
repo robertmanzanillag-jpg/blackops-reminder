@@ -17,8 +17,8 @@ const lanes = [
     accountId: "sports-daily",
     accountName: "Sports Daily Clips",
     platform: "tiktok",
-    handle: "@sportsdaily",
-    profileUrl: "https://www.tiktok.com/@sportsdaily",
+    handle: "@sportsdailyclips",
+    profileUrl: "https://www.tiktok.com/@sportsdailyclips",
     metricoolBrandName: "SPORT",
   },
   {
@@ -26,8 +26,8 @@ const lanes = [
     accountId: "meme-radar",
     accountName: "Meme Radar",
     platform: "tiktok",
-    handle: "@memeradar",
-    profileUrl: "https://www.tiktok.com/@memeradar",
+    handle: "@memeradarclips",
+    profileUrl: "https://www.tiktok.com/@memeradarclips",
     metricoolBrandName: "memes",
   },
 ];

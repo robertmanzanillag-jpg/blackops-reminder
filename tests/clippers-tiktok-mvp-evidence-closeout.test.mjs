@@ -81,24 +81,24 @@ function cleanAccountCsv() {
 function cleanBridgeCsv() {
   return [
     bridgeHeader,
-    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n";
 }
 
 function cleanBridgeCsvWithGoogleEvidence() {
   return [
     bridgeHeader,
-    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://drive.google.com/file/d/sports-daily-metricool-connected-proof/view?usp=sharing,SPORT TikTok is connected in Metricool with public non-secret Drive screenshot proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing,memes TikTok is connected in Metricool with public non-secret Docs proof reviewed by Robert",
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,https://drive.google.com/file/d/sports-daily-metricool-connected-proof/view?usp=sharing,SPORT TikTok is connected in Metricool with public non-secret Drive screenshot proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing,memes TikTok is connected in Metricool with public non-secret Docs proof reviewed by Robert",
   ].join("\n") + "\n";
 }
 
 function cleanCombinedCsv() {
   return [
     combinedHeader,
-    "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,https://app.metricool.com/planner/sports-daily-tiktok-proof,Sports Daily TikTok account ownership and 2FA security proof verified by Robert without secrets,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
-    "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+    "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,https://app.metricool.com/planner/sports-daily-tiktok-proof,Sports Daily TikTok account ownership and 2FA security proof verified by Robert without secrets,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+    "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
   ].join("\n") + "\n";
 }
 
@@ -149,8 +149,8 @@ test("TikTok MVP evidence closeout rejects placeholders and does not apply", asy
     ].join("\n") + "\n");
     await writeFile(bridgeCsvPath, [
       bridgeHeader,
-      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real public Metricool proof URL>,Replace this placeholder later",
-      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://example.com/not-real,Metricool proof should not use example domains",
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,<paste real public Metricool proof URL>,Replace this placeholder later",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://example.com/not-real,Metricool proof should not use example domains",
     ].join("\n") + "\n");
 
     const result = runCloseout();
@@ -206,7 +206,7 @@ test("TikTok MVP evidence closeout applies clean non-secret proof rows", async (
     assert.equal(sportsEvidence.status, "verified");
     assert.equal(memesEvidence.status, "verified");
     assert.match(sportsEvidence.metricoolProofUrl, /metricool\.com/);
-    assert.match(memesEvidence.profileUrl, /tiktok\.com\/@memeradar/);
+    assert.match(memesEvidence.profileUrl, /tiktok\.com\/@memeradarclips/);
     assert.equal(/password=|access_token=|refresh_token=|client_secret=|cookie=|bearer\s+[a-z0-9._-]+/i.test(JSON.stringify(sportsEvidence)), false);
   } finally {
     if (previousSports === null) await unlink(sportsEvidencePath).catch(() => undefined);
@@ -278,8 +278,8 @@ test("TikTok MVP evidence closeout blocks assigned credential notes without bloc
     ].join("\n") + "\n");
     await writeFile(bridgeCsvPath, [
       bridgeHeader,
-      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok connection proof reviewed by Robert without API keys or secrets",
-      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok connection proof reviewed by Robert without API keys or secrets",
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok connection proof reviewed by Robert without API keys or secrets",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok connection proof reviewed by Robert without API keys or secrets",
     ].join("\n") + "\n");
 
     const safePreview = runCloseout();
@@ -330,7 +330,7 @@ test("TikTok MVP evidence closeout rejects mismatched TikTok handles", async () 
   await writeFile(bridgeCsvPath, [
     bridgeHeader,
     "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@someoneelse,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://app.metricool.com/planner/meme-radar-tiktok-proof,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n");
 
   const result = runCloseout();
@@ -340,7 +340,7 @@ test("TikTok MVP evidence closeout rejects mismatched TikTok handles", async () 
 
   const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
   assert.equal(report.totals.ready, 1);
-  assert.ok(JSON.stringify(report).includes("profile_url must match @sportsdaily"));
+  assert.ok(JSON.stringify(report).includes("profile_url must match @sportsdailyclips"));
 });
 
 test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async () => {
@@ -352,8 +352,8 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   ].join("\n") + "\n");
   await writeFile(bridgeCsvPath, [
     bridgeHeader,
-    "sports-daily,tiktok,SPORT,,https://viewer:secret@www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-tiktok-proof?X-Amz-Signature=abc123,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "sports-daily,tiktok,SPORT,,https://viewer:secret@www.tiktok.com/@sportsdailyclips,https://app.metricool.com/planner/sports-daily-tiktok-proof,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://app.metricool.com/planner/meme-radar-tiktok-proof?X-Amz-Signature=abc123,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n");
 
   const result = runCloseout();
@@ -372,8 +372,8 @@ test("TikTok MVP evidence closeout rejects generic Metricool proof pages", async
   await writeFile(accountCsvPath, cleanAccountCsv());
   await writeFile(bridgeCsvPath, [
     bridgeHeader,
-    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/planner/a,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
-    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://app.metricool.com/planner/meme-radar-proof?client%5Fsecret=neverpaste%,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,https://app.metricool.com/planner/a,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://app.metricool.com/planner/meme-radar-proof?client%5Fsecret=neverpaste%,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
   ].join("\n") + "\n");
 
   const result = runCloseout();
@@ -1397,17 +1397,17 @@ test("TikTok MVP proof intake pack generates safe templates without enabling pub
   const html = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-pack.html"), "utf8");
   assert.match(accountTemplate, /sports-daily","tiktok","submitted"/);
   assert.match(accountTemplate, /meme-radar","tiktok","submitted"/);
-  assert.match(accountTemplate, /<paste real public ownership proof URL for @sportsdaily; change status to verified only after proof is real and reviewed>/);
-  assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradar; change status to verified only after proof is real and reviewed>/);
+  assert.match(accountTemplate, /<paste real public ownership proof URL for @sportsdailyclips; change status to verified only after proof is real and reviewed>/);
+  assert.match(accountTemplate, /<paste real public ownership proof URL for @memeradarclips; change status to verified only after proof is real and reviewed>/);
   assert.doesNotMatch(accountTemplate, /"verified".*<paste real public ownership proof URL/);
-  assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdaily/);
-  assert.match(bridgeTemplate, /<paste real public Metricool proof URL or concrete Drive file\/folder\/Docs evidence URL for memes @memeradar>/);
-  assert.match(bridgeTemplate, /<write a real 20\+ character Metricool connection note after reviewing SPORT @sportsdaily proof>/);
+  assert.match(bridgeTemplate, /https:\/\/www\.tiktok\.com\/@sportsdailyclips/);
+  assert.match(bridgeTemplate, /<paste real public Metricool proof URL or concrete Drive file\/folder\/Docs evidence URL for memes @memeradarclips>/);
+  assert.match(bridgeTemplate, /<write a real 20\+ character Metricool connection note after reviewing SPORT @sportsdailyclips proof>/);
   assert.doesNotMatch(`${accountTemplate}\n${bridgeTemplate}`, /reviewed by Robert|verified by Robert|confirmed by Robert|Robert confirms/i);
   assert.match(markdown, /Evidence quality:/);
   assert.match(markdown, /Current blocker: .*accountProofUrl/);
   assert.match(markdown, /Drive\/Docs Evidence Checklist/);
-  assert.match(markdown, /connected TikTok profile @sportsdaily/);
+  assert.match(markdown, /connected TikTok profile @sportsdailyclips/);
   assert.match(html, /Evidence quality:/);
   assert.match(html, /accountProofUrl/);
   assert.match(html, /Drive\/Docs Evidence Checklist/);
@@ -1423,8 +1423,8 @@ test("TikTok MVP proof intake import blocks placeholder combined rows without wr
     await mkdir(tmpDir, { recursive: true });
     await writeFile(combinedProofCsvPath, [
       combinedHeader,
-      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
     ].join("\n") + "\n");
 
     const result = spawnSync(process.execPath, [
@@ -1474,7 +1474,7 @@ test("TikTok MVP proof intake import blocks mismatched combined identity fields"
     await writeFile(combinedProofCsvPath, [
       combinedHeader,
       "sports-daily,Sports Daily Clips,tiktok,@someoneelse,WRONG,https://www.tiktok.com/@someoneelse,https://drive.google.com/file/d/sports-daily-tiktok-proof/view,https://app.metricool.com/planner/sports-daily-tiktok-proof,Sports Daily TikTok account ownership and 2FA security proof verified by Robert without secrets,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
     ].join("\n") + "\n");
 
     const result = spawnSync(process.execPath, [
@@ -1491,9 +1491,9 @@ test("TikTok MVP proof intake import blocks mismatched combined identity fields"
     assert.ok(output.intakeErrors >= 3);
 
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-intake-import.json"), "utf8"));
-    assert.match(report.intakeErrors.join("\n"), /handle must be @sportsdaily/);
+    assert.match(report.intakeErrors.join("\n"), /handle must be @sportsdailyclips/);
     assert.match(report.intakeErrors.join("\n"), /metricool_brand_name must be SPORT/);
-    assert.match(report.intakeErrors.join("\n"), /public_profile_url must be https:\/\/www\.tiktok\.com\/@sportsdaily/);
+    assert.match(report.intakeErrors.join("\n"), /public_profile_url must be https:\/\/www\.tiktok\.com\/@sportsdailyclips/);
     assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "handle"));
     assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "metricool_brand_name"));
     assert.ok(report.fixQueue.some((row) => row.lane === "sports-daily:tiktok" && row.column === "public_profile_url"));
@@ -1654,8 +1654,8 @@ test("TikTok MVP proof refresh runs import and doctor sequentially without apply
     await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, [
       combinedHeader,
-      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
     ].join("\n") + "\n");
     await writeFile(targetAccountCsvPath, [
       accountHeader,
@@ -1664,8 +1664,8 @@ test("TikTok MVP proof refresh runs import and doctor sequentially without apply
     ].join("\n") + "\n");
     await writeFile(targetBridgeCsvPath, [
       bridgeHeader,
-      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real public Metricool proof URL>,Replace this placeholder later",
-      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://example.com/not-metricool,ok",
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,<paste real public Metricool proof URL>,Replace this placeholder later",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://example.com/not-metricool,ok",
     ].join("\n") + "\n");
 
     const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
@@ -1731,8 +1731,8 @@ test("TikTok MVP proof refresh stays blocked when import preview has fixes even 
     await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, [
       combinedHeader,
-      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://drive.google.com/file/d/meme-radar-tiktok-proof/view,https://app.metricool.com/planner/meme-radar-tiktok-proof,Meme Radar TikTok account ownership and 2FA security proof verified by Robert without secrets,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert,,",
     ].join("\n") + "\n");
     await writeFile(targetAccountCsvPath, cleanAccountCsv());
     await writeFile(targetBridgeCsvPath, cleanBridgeCsv());
@@ -1790,8 +1790,8 @@ test("TikTok MVP proof refresh points to proof doctor when import is clean but t
     ].join("\n") + "\n");
     await writeFile(targetBridgeCsvPath, [
       bridgeHeader,
-      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real public Metricool proof URL>,Replace this placeholder later",
-      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://example.com/not-metricool,ok",
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,<paste real public Metricool proof URL>,Replace this placeholder later",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://example.com/not-metricool,ok",
     ].join("\n") + "\n");
 
     const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-refresh.mjs"], {
@@ -1843,8 +1843,8 @@ test("TikTok MVP proof unblocker consolidates open proof fixes without applying"
     await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, [
       combinedHeader,
-      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,https://example.com/not-real,https://example.com/not-metricool,ok,ok,,",
     ].join("\n") + "\n");
     await writeFile(targetAccountCsvPath, [
       accountHeader,
@@ -1853,8 +1853,8 @@ test("TikTok MVP proof unblocker consolidates open proof fixes without applying"
     ].join("\n") + "\n");
     await writeFile(targetBridgeCsvPath, [
       bridgeHeader,
-      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real public Metricool proof URL>,Replace this placeholder later",
-      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://example.com/not-metricool,ok",
+      "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,<paste real public Metricool proof URL>,Replace this placeholder later",
+      "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,https://example.com/not-metricool,ok",
     ].join("\n") + "\n");
 
     const result = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-unblocker.mjs"], {
@@ -2088,8 +2088,8 @@ test("TikTok MVP proof quick fill writes clean proof to combined intake and brid
     await mkdir(path.dirname(targetBridgeCsvPath), { recursive: true });
     await writeFile(defaultCombinedProofCsvPath, [
       combinedHeader,
-      "sports-daily,Sports Daily Clips,tiktok,@sportsdaily,SPORT,https://www.tiktok.com/@sportsdaily,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
-      "meme-radar,Meme Radar,tiktok,@memeradar,memes,https://www.tiktok.com/@memeradar,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "sports-daily,Sports Daily Clips,tiktok,@sportsdailyclips,SPORT,https://www.tiktok.com/@sportsdailyclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
+      "meme-radar,Meme Radar,tiktok,@memeradarclips,memes,https://www.tiktok.com/@memeradarclips,<paste real public ownership proof URL>,<paste real public Metricool proof URL>,Replace ownership proof later,Replace Metricool proof later,,",
     ].join("\n") + "\n");
     await writeFile(quickFillInputPath, JSON.stringify({
       lanes: {
@@ -2124,8 +2124,8 @@ test("TikTok MVP proof quick fill writes clean proof to combined intake and brid
     assert.doesNotMatch(combined, /<paste|example\.com|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
     const bridge = await readFile(targetBridgeCsvPath, "utf8");
     assert.match(bridge, /^account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes/m);
-    assert.match(bridge, /"sports-daily","tiktok","SPORT","","https:\/\/www\.tiktok\.com\/@sportsdaily","https:\/\/app\.metricool\.com\/planner\/sports-daily-tiktok-proof"/);
-    assert.match(bridge, /"meme-radar","tiktok","memes","","https:\/\/www\.tiktok\.com\/@memeradar","https:\/\/app\.metricool\.com\/planner\/meme-radar-tiktok-proof"/);
+    assert.match(bridge, /"sports-daily","tiktok","SPORT","","https:\/\/www\.tiktok\.com\/@sportsdailyclips","https:\/\/app\.metricool\.com\/planner\/sports-daily-tiktok-proof"/);
+    assert.match(bridge, /"meme-radar","tiktok","memes","","https:\/\/www\.tiktok\.com\/@memeradarclips","https:\/\/app\.metricool\.com\/planner\/meme-radar-tiktok-proof"/);
     assert.doesNotMatch(bridge, /<paste|example\.com|access_token=|refresh_token=|client_secret=|cookie=|password=/i);
     const report = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
     assert.equal(report.launchMode, "metricool_approval_required");
@@ -2538,8 +2538,8 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.doesNotMatch(oneScreen, /undefined/);
   assert.doesNotMatch(oneScreen, /preview confirms/i);
   assert.match(oneScreen, /Robert\/operator must manually confirm/);
-  assert.match(oneScreen, /SPORT connected to @sportsdaily/);
-  assert.match(oneScreen, /memes connected to @memeradar/);
+  assert.match(oneScreen, /SPORT connected to @sportsdailyclips/);
+  assert.match(oneScreen, /memes connected to @memeradarclips/);
   assert.match(oneScreen, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(oneScreen, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(oneScreen, /Minimum real proof URLs needed: 2/);
@@ -2641,13 +2641,13 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
           accountOwnershipProofUrl: "",
           metricoolConnectionProofUrl: "",
           accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
-          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdailyclips verified by Robert without secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "",
           metricoolConnectionProofUrl: "",
           accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
-          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradarclips verified by Robert without secrets.",
         },
       },
     }, null, 2));
@@ -2687,13 +2687,13 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
           accountOwnershipProofUrl: "https://drive.google.com/folderview?id=sports-daily-tiktok-proof-folder&utm_source=copy#ownership",
           metricoolConnectionProofUrl: "https://drive.google.com/drive/u/0/folders/sports-daily-tiktok-proof-folder?usp=sharing",
           accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
-          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdailyclips verified by Robert without secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/edit/?usp=sharing#ownership",
           metricoolConnectionProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/preview",
           accountNotes: "Meme Radar ownership proof confirmed by Robert without secrets.",
-          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradarclips verified by Robert without secrets.",
         },
       },
     }, null, 2));
@@ -2715,13 +2715,13 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
           accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
           metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
           accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control; no API keys were shared.",
-          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without API keys or secrets.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdailyclips reviewed by Robert without API keys or secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
           metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit",
           accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control; no API keys were shared.",
-          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without API keys or secrets.",
+          metricoolNotes: "memes Metricool connection proof for @memeradarclips reviewed by Robert without API keys or secrets.",
         },
       },
     }, null, 2));
@@ -2741,13 +2741,13 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
           accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
           metricoolConnectionProofUrl: "https://app.metricool.com/calendar",
           accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
-          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdailyclips reviewed by Robert without secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
           metricoolConnectionProofUrl: "https://metricool.com/resources",
           accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control without secrets.",
-          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection proof for @memeradarclips reviewed by Robert without secrets.",
         },
       },
     }, null, 2));
@@ -2767,13 +2767,13 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
           accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view?api_key=never",
           metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
           accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
-          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdailyclips reviewed by Robert without secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
           metricoolConnectionProofUrl: "https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit",
           accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control without secrets.",
-          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection proof for @memeradarclips reviewed by Robert without secrets.",
         },
       },
     }, null, 2));
@@ -2858,13 +2858,13 @@ test("Goal completion audit exposes external proof gate and refuses to automate 
           accountOwnershipProofUrl: "",
           metricoolConnectionProofUrl: "",
           accountNotes: "Sports Daily Clips TikTok ownership/control confirmed by Robert from Metricool proof without secrets.",
-          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdailyclips verified by Robert without secrets.",
         },
         "meme-radar:tiktok": {
           accountOwnershipProofUrl: "",
           metricoolConnectionProofUrl: "",
           accountNotes: "Meme Radar TikTok ownership/control confirmed by Robert from Metricool proof without secrets.",
-          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradarclips verified by Robert without secrets.",
         },
       },
     }, null, 2));

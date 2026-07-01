@@ -10692,8 +10692,8 @@ const sourceIntakeBatchHeader = "category,title,url,source,platform,target_file_
 const sourceScoutIntakeBatchHeader = "candidate_id,title,category,platform,url,source,status,evidence_type,proof,notes,target_file_name,source_drop_path,recreate_plan,views,likes,comments,shares";
 const metricoolBridgeEvidenceTemplate = [
   "account_id,platform,metricool_brand_name,metricool_blog_id,profile_url,proof,notes",
-  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
-  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
+  "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdailyclips,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after SPORT TikTok is connected in Metricool.",
+  "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradarclips,<paste real Metricool URL or concrete Drive file/folder/Docs proof URL>,Replace this with a real 20+ character note after memes TikTok is connected in Metricool.",
 ].join("\n");
 const tiktokMvpProofQuickFillTemplate = JSON.stringify({
   lanes: {
