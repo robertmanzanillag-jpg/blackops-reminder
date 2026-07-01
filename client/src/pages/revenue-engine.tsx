@@ -531,6 +531,7 @@ type RevenueSnapshot = {
       grade: string;
       score: number;
       batchRow: string;
+      copyableApprovalRequest: string;
       nextAction: string;
     }>;
     blocked: Array<{
@@ -539,6 +540,7 @@ type RevenueSnapshot = {
       reason: string;
       repairBatchRow: string;
       copyableRepairPacket: string;
+      copyableApprovalRequest: string;
       nextAction: string;
     }>;
     safety: {
@@ -6472,6 +6474,17 @@ export default function RevenueEnginePage() {
                             <Badge variant="outline" className="border-zinc-700 text-zinc-300">
                               {money.format(item.estimatedOfferUsd)}
                             </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableApprovalRequest)}
+                              className="border-zinc-700"
+                              data-testid={`button-copy-public-candidate-approval-${item.candidateId}`}
+                            >
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy approval JSON
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -6494,6 +6507,17 @@ export default function RevenueEnginePage() {
                             >
                               <Copy className="mr-1.5 h-3 w-3" />
                               Copy repair
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigator.clipboard.writeText(item.copyableApprovalRequest)}
+                              className="h-7 border-zinc-700 bg-black text-xs text-zinc-100 hover:bg-zinc-900"
+                              data-testid={`button-copy-public-candidate-approval-${item.candidateId}`}
+                            >
+                              <Copy className="mr-1.5 h-3 w-3" />
+                              Copy approval JSON
                             </Button>
                             <Button
                               type="button"

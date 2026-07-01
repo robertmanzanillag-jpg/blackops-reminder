@@ -975,6 +975,14 @@ test("records verified Instagram public lead candidate without requiring email",
   assert.doesNotMatch(result.candidate.blockedReasons.join("; "), /recipientEmail/);
   assert.equal(snapshot.publicLeadImportQueue.readyCount, 1);
   assert.equal(snapshot.publicLeadImportQueue.items[0].contactChannel, "instagram");
+  const approvalRequest = JSON.parse(snapshot.publicLeadImportQueue.items[0].copyableApprovalRequest);
+  assert.deepEqual(revenuePublicLeadCandidateApproveSchema.parse(approvalRequest), {
+    candidateId: result.candidate.id,
+    approvedByRobert: true,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Robert verified public evidence and approved Insta Ready Cafe for Money Sprint import. No outreach, lead creation or website build yet.",
+  });
   assert.equal(snapshot.recentLeads.length, 0);
   assert.equal(snapshot.recentOutreach.length, 0);
 });
@@ -1201,6 +1209,14 @@ test("blocked public candidates expose a repair packet without creating leads", 
   assert.match(blocked.copyableRepairPacket, /REPLACE_PUBLIC_SOURCE_URL/);
   assert.match(blocked.copyableRepairPacket, /publicEvidenceVerified=true/);
   assert.match(blocked.repairBatchRow, /Repair Needed Spa\|Miami\|spa/);
+  const blockedApprovalRequest = JSON.parse(blocked.copyableApprovalRequest);
+  assert.deepEqual(revenuePublicLeadCandidateApproveSchema.parse(blockedApprovalRequest), {
+    candidateId: blocked.candidateId,
+    approvedByRobert: true,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: "Robert verified public evidence and approved Repair Needed Spa for Money Sprint import. No outreach, lead creation or website build yet.",
+  });
   assert.equal(snapshot.recentLeads.length, 0);
   assert.equal(snapshot.recentOutreach.length, 0);
 });

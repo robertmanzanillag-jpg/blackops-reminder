@@ -1172,6 +1172,7 @@ type RevenuePublicLeadImportQueue = {
     grade: ReturnType<typeof qualifyRevenueLead>["grade"];
     score: number;
     batchRow: string;
+    copyableApprovalRequest: string;
     nextAction: string;
   }>;
   blocked: Array<{
@@ -1180,6 +1181,7 @@ type RevenuePublicLeadImportQueue = {
     reason: string;
     repairBatchRow: string;
     copyableRepairPacket: string;
+    copyableApprovalRequest: string;
     nextAction: string;
   }>;
   safety: {
@@ -7751,6 +7753,16 @@ function buildRevenuePublicCandidateRepairPacket(candidate: RevenuePublicLeadCan
   };
 }
 
+function buildRevenuePublicCandidateApprovalRequest(candidate: RevenuePublicLeadCandidate) {
+  return JSON.stringify({
+    candidateId: candidate.id,
+    approvedByRobert: true,
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+    notes: `Robert verified public evidence and approved ${candidate.businessName} for Money Sprint import. No outreach, lead creation or website build yet.`,
+  }, null, 2);
+}
+
 function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQueue {
   loadRevenuePublicLeadCandidates();
   loadRevenueLeads();
@@ -7776,6 +7788,7 @@ function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQ
         grade: candidate.qualification.grade,
         score: candidate.qualification.score,
         batchRow: candidate.batchRow,
+        copyableApprovalRequest: buildRevenuePublicCandidateApprovalRequest(candidate),
         nextAction: "Correr Money Sprint desde candidatos verificados para crear lead, mockup y draft sin contactar.",
       });
       continue;
@@ -7789,6 +7802,7 @@ function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQ
         reason: candidate.blockedReasons.join("; ") || "candidate needs review",
         repairBatchRow: repair.repairBatchRow,
         copyableRepairPacket: repair.copyableRepairPacket,
+        copyableApprovalRequest: buildRevenuePublicCandidateApprovalRequest(candidate),
         nextAction: "Verificar fuente publica, contacto y aprobacion antes de importar.",
       });
     }

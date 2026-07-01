@@ -449,7 +449,10 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(uiSource, /button-approve-public-candidate/);
   assert.match(uiSource, /approvedByRobert:\s*true/);
   assert.match(uiSource, /button-copy-public-candidate-repair/);
+  assert.match(uiSource, /button-copy-public-candidate-approval-/);
+  assert.match(uiSource, /copyableApprovalRequest/);
   assert.match(uiSource, /copyableRepairPacket/);
+  assert.match(engineSource, /buildRevenuePublicCandidateApprovalRequest/);
   assert.match(engineSource, /buildRevenuePublicCandidateRepairPacket/);
   assert.match(uiSource, /button-run-public-scout-agent-command/);
   assert.match(uiSource, /const \[publicScoutEvidenceText, setPublicScoutEvidenceText\] = useState\(""\)/);
