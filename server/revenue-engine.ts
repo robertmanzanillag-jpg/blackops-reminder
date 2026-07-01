@@ -1159,6 +1159,7 @@ type RevenuePublicLeadImportQueue = {
   status: "ready" | "needs_review" | "empty";
   readyCount: number;
   blockedCount: number;
+  copyableMoneySprintRequest: string;
   items: Array<{
     candidateId: string;
     businessName: string;
@@ -7808,12 +7809,32 @@ function buildRevenuePublicLeadImportQueue(limit = 10): RevenuePublicLeadImportQ
     }
   }
 
+  const visibleItems = items.slice(0, visibleLimit);
+  const visibleBlocked = blocked.slice(0, visibleLimit);
+  const readyCandidateIds = visibleItems.map((item) => item.candidateId);
+  const firstReadyItem = visibleItems[0];
+  const copyableMoneySprintRequest = JSON.stringify({
+    area: firstReadyItem?.area || "Miami",
+    niche: firstReadyItem?.niche || "restaurants",
+    offerFocus: "websites",
+    dailyResearchTarget: Math.max(10, readyCandidateIds.length),
+    dailyQualifiedLeadLimit: Math.min(Math.max(readyCandidateIds.length, 5), 25),
+    dailyMockupLimit: Math.min(Math.max(readyCandidateIds.length, 1), 5),
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    candidateIds: readyCandidateIds,
+    maxCandidates: Math.min(Math.max(readyCandidateIds.length, 1), 25),
+  }, null, 2);
+
   return {
     status: items.length > 0 ? "ready" : blocked.length > 0 ? "needs_review" : "empty",
     readyCount: items.length,
     blockedCount: blocked.length,
-    items: items.slice(0, visibleLimit),
-    blocked: blocked.slice(0, visibleLimit),
+    copyableMoneySprintRequest,
+    items: visibleItems,
+    blocked: visibleBlocked,
     safety: {
       persistsLeadOnlyAfterSprint: true,
       sendsOutreach: false,

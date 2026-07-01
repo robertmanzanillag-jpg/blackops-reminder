@@ -518,6 +518,7 @@ type RevenueSnapshot = {
     status: "ready" | "needs_review" | "empty";
     readyCount: number;
     blockedCount: number;
+    copyableMoneySprintRequest: string;
     items: Array<{
       candidateId: string;
       businessName: string;
@@ -6559,6 +6560,17 @@ export default function RevenueEnginePage() {
                     >
                       {publicCandidateSprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
                       Money sprint con candidatos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={(snapshot?.publicLeadImportQueue.readyCount || 0) === 0}
+                      onClick={() => navigator.clipboard.writeText(snapshot?.publicLeadImportQueue.copyableMoneySprintRequest || "")}
+                      className="border-zinc-700"
+                      data-testid="button-copy-public-candidate-money-sprint-request"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy sprint JSON
                     </Button>
                     {publicCandidateSprintMutation.data && (
                       <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-300">

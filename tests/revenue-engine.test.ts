@@ -50,6 +50,7 @@ import {
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
   recordRevenueWebsiteOpportunity,
+  revenueMoneySprintFromPublicCandidatesSchema,
   revenuePublicLeadCandidateApproveSchema,
   revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
@@ -975,6 +976,12 @@ test("records verified Instagram public lead candidate without requiring email",
   assert.doesNotMatch(result.candidate.blockedReasons.join("; "), /recipientEmail/);
   assert.equal(snapshot.publicLeadImportQueue.readyCount, 1);
   assert.equal(snapshot.publicLeadImportQueue.items[0].contactChannel, "instagram");
+  const moneySprintRequest = JSON.parse(snapshot.publicLeadImportQueue.copyableMoneySprintRequest);
+  assert.deepEqual(revenueMoneySprintFromPublicCandidatesSchema.parse(moneySprintRequest).candidateIds, [result.candidate.id]);
+  assert.equal(moneySprintRequest.area, "Miami");
+  assert.equal(moneySprintRequest.niche, "coffee shop");
+  assert.equal(moneySprintRequest.maxPaidDataSpendUsd, 0);
+  assert.equal(moneySprintRequest.requireRobertApprovalToContact, true);
   const approvalRequest = JSON.parse(snapshot.publicLeadImportQueue.items[0].copyableApprovalRequest);
   assert.deepEqual(revenuePublicLeadCandidateApproveSchema.parse(approvalRequest), {
     candidateId: result.candidate.id,
