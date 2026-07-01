@@ -2867,6 +2867,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
   pastePacketText: string;
+  fastPathPastePacketText?: string;
   jsonStarter?: {
     lanes: Record<string, {
       accountOwnershipProofUrl: string;
@@ -2956,6 +2957,7 @@ interface ClipperTikTokMvpProofHandoffSummary {
     markdown: string;
     collectionCsv: string;
     pastePacketTxt: string;
+    fastPathPastePacketTxt?: string;
     jsonStarter?: string;
     oneScreenTxt?: string;
     unblockBoardCsv: string;
@@ -18932,6 +18934,21 @@ export default function ClippersPage() {
                       type="button"
                       size="sm"
                       variant="outline"
+                      onClick={() => {
+                        setTiktokMvpProofLinksPasteText(tiktokMvpProofHandoff?.fastPathPastePacketText || "");
+                        setTiktokMvpProofLinksPastePreview(null);
+                      }}
+                      disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpProofHandoff?.fastPathPastePacketText}
+                      className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                      data-testid="load-clippers-tiktok-mvp-proof-links-fast-path-packet-button"
+                    >
+                      <FileText className="mr-2 h-3.5 w-3.5" />
+                      Load 2-proof packet
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
                       onClick={() => tiktokMvpProofLinksDropImportMutation.mutate()}
                       disabled={tiktokProofFlowBusy || isLoading}
                       className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
@@ -19657,6 +19674,7 @@ export default function ClippersPage() {
                   <p className="break-all">Unblock CSV: {tiktokMvpProofHandoff.paths.unblockBoardCsv}</p>
                   {tiktokMvpProofHandoff.paths.oneScreenTxt && <p className="break-all">One-screen guide: {tiktokMvpProofHandoff.paths.oneScreenTxt}</p>}
                   <p className="break-all">Paste packet: {tiktokMvpProofHandoff.paths.pastePacketTxt}</p>
+                  {tiktokMvpProofHandoff.paths.fastPathPastePacketTxt && <p className="break-all">2-proof packet: {tiktokMvpProofHandoff.paths.fastPathPastePacketTxt}</p>}
                   {tiktokMvpProofHandoff.paths.jsonStarter && <p className="break-all">JSON starter: {tiktokMvpProofHandoff.paths.jsonStarter}</p>}
                 </div>
               </div>

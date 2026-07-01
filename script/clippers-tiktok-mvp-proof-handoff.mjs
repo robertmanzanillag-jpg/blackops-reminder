@@ -8,6 +8,7 @@ const outJsonPath = path.join(reportsDir, "proof-handoff.json");
 const outMarkdownPath = path.join(reportsDir, "proof-handoff.md");
 const outCollectionCsvPath = path.join(reportsDir, "proof-handoff-collection-packets.csv");
 const outPastePacketPath = path.join(reportsDir, "proof-links-paste-packet.txt");
+const outFastPathPastePacketPath = path.join(reportsDir, "proof-links-fast-path-paste-packet.txt");
 const outJsonStarterPath = path.join(reportsDir, "proof-links-json-starter.json");
 const outUnblockBoardCsvPath = path.join(reportsDir, "proof-unblock-board.csv");
 const outOneScreenPath = path.join(reportsDir, "proof-fill-one-screen.txt");
@@ -376,6 +377,24 @@ function renderProofLinksPastePacket() {
   ].join("\n");
 }
 
+function renderFastPathProofLinksPastePacket() {
+  return [
+    "# TikTok MVP Metricool fast-path proof packet",
+    "# Fill only these URLs when each proof clearly shows the TikTok profile connected under Robert control.",
+    "# Accepted: real https://*.metricool.com/... URL or concrete Google Drive file/folder or Docs evidence URL.",
+    "# Never paste passwords, cookies, access tokens, refresh tokens, recovery codes, signed/temporary URLs, API keys, or private screenshots.",
+    "# After filling: Preview links first. Save remains locked until the preview gate is clean/current.",
+    "",
+    ...lanes.flatMap((lane) => [
+      `${lane.key}.metricoolConnectionProofUrl=`,
+      `${lane.key}.accountOwnershipProofUrl=`,
+      `${lane.key}.accountNotes=${lane.accountName} TikTok ownership/control confirmed by Robert from the Metricool or concrete Drive/Docs proof without secrets.`,
+      `${lane.key}.metricoolNotes=${lane.metricoolBrandName} Metricool connection to ${lane.handle} verified by Robert without secrets.`,
+      "",
+    ]),
+  ].join("\n");
+}
+
 function buildProofLinksJsonStarter() {
   return {
     lanes: Object.fromEntries(lanes.map((lane) => [lane.key, {
@@ -490,6 +509,7 @@ function renderMarkdown(summary) {
     "## Paste Packet",
     "",
     `- Proof links paste packet: ${summary.paths.pastePacketTxt}`,
+    `- Metricool fast-path paste packet: ${summary.paths.fastPathPastePacketTxt}`,
     `- Proof links JSON starter: ${summary.paths.jsonStarter}`,
     `- One-screen fill guide: ${summary.paths.oneScreenTxt}`,
     "- Use either the paste packet or JSON starter after filling real proof URLs.",
@@ -582,6 +602,7 @@ async function main() {
     collectionPackets,
     unblockBoard,
     pastePacketText: renderProofLinksPastePacket(),
+    fastPathPastePacketText: renderFastPathProofLinksPastePacket(),
     jsonStarter: buildProofLinksJsonStarter(),
     totals: {
       proofIssues: Array.isArray(proofDrop?.issues) ? proofDrop.issues.length : 0,
@@ -599,6 +620,7 @@ async function main() {
       markdown: outMarkdownPath,
       collectionCsv: outCollectionCsvPath,
       pastePacketTxt: outPastePacketPath,
+      fastPathPastePacketTxt: outFastPathPastePacketPath,
       jsonStarter: outJsonStarterPath,
       oneScreenTxt: outOneScreenPath,
       unblockBoardCsv: outUnblockBoardCsvPath,
@@ -621,6 +643,7 @@ async function main() {
   await writeFile(outMarkdownPath, renderMarkdown(summary));
   await writeFile(outCollectionCsvPath, renderCollectionCsv(summary.collectionPackets));
   await writeFile(outPastePacketPath, renderProofLinksPastePacket());
+  await writeFile(outFastPathPastePacketPath, renderFastPathProofLinksPastePacket());
   await writeFile(outJsonStarterPath, `${JSON.stringify(summary.jsonStarter, null, 2)}\n`);
   await writeFile(outOneScreenPath, renderOneScreenProofFill(summary));
   await writeFile(outUnblockBoardCsvPath, renderUnblockBoardCsv(summary.unblockBoard));
@@ -642,6 +665,7 @@ async function main() {
     reportJsonPath: outJsonPath,
     collectionCsvPath: outCollectionCsvPath,
     pastePacketPath: outPastePacketPath,
+    fastPathPastePacketPath: outFastPathPastePacketPath,
     jsonStarterPath: outJsonStarterPath,
     oneScreenPath: outOneScreenPath,
     nextAction: summary.nextAction,

@@ -942,6 +942,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpProofLinksDropStatus\.nextButton/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-links-drop-status"\]/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
+  assert.match(page, /load-clippers-tiktok-mvp-proof-links-fast-path-packet-button/);
+  assert.match(page, /tiktokMvpProofHandoff\?\.fastPathPastePacketText/);
+  assert.match(page, /Load 2-proof packet/);
   assert.match(page, /import-clippers-tiktok-mvp-proof-links-drop-button/);
   assert.match(page, /create-clippers-tiktok-mvp-proof-links-drop-starter-button/);
   assert.match(page, /ingest-clippers-tiktok-mvp-proof-links-drop-button/);
@@ -1016,6 +1019,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /paths\.unblockBoardCsv/);
   assert.match(page, /paths\.oneScreenTxt/);
   assert.match(page, /One-screen guide/);
+  assert.match(page, /paths\.fastPathPastePacketTxt/);
+  assert.match(page, /2-proof packet/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-gates/);
   assert.match(page, /clippers-tiktok-mvp-proof-handoff-collection-packets/);
   assert.match(page, /paths\.pastePacketTxt/);
@@ -2057,7 +2062,9 @@ test("TikTok MVP proof handoff refreshes previews without applying evidence", as
   assert.match(source, /proofPacketsNeeded/);
   assert.match(source, /proof-handoff-collection-packets\.csv/);
   assert.match(source, /proof-links-paste-packet\.txt/);
+  assert.match(source, /proof-links-fast-path-paste-packet\.txt/);
   assert.match(source, /renderCollectionCsv/);
+  assert.match(source, /renderFastPathProofLinksPastePacket/);
   assert.match(source, /Must be a real HTTPS metricool\.com URL/);
   assert.match(source, /signed\/temporary URLs/);
   assert.match(source, /x-amz\/signature\/expires query params/);
@@ -2100,6 +2107,7 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(output.nextLockedButton, "save_proof_links");
   assert.match(output.collectionCsvPath, /proof-handoff-collection-packets\.csv$/);
   assert.match(output.pastePacketPath, /proof-links-paste-packet\.txt$/);
+  assert.match(output.fastPathPastePacketPath, /proof-links-fast-path-paste-packet\.txt$/);
   assert.match(output.jsonStarterPath, /proof-links-json-starter\.json$/);
   assert.match(output.oneScreenPath, /proof-fill-one-screen\.txt$/);
   assert.equal(output.proofPacketsNeeded, 4);
@@ -2116,6 +2124,11 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.equal(report.totals.fastPathAvailable, true);
   assert.equal(report.nextSafeButton, "preview_proof_links");
   assert.equal(report.nextLockedButton, "save_proof_links");
+  assert.match(report.paths.fastPathPastePacketTxt, /proof-links-fast-path-paste-packet\.txt$/);
+  assert.match(report.fastPathPastePacketText, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(report.fastPathPastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(report.fastPathPastePacketText, /Preview links first/);
+  assert.doesNotMatch(report.fastPathPastePacketText, /ready_to_send|realPublishEnabled=true|video\.publish/i);
   assert.ok([0, 100].includes(report.unblockBoard.impact.metricool100Rows));
   assert.ok([0, 10].includes(report.unblockBoard.impact.metricool100SourceReadyBatches));
   assert.equal(report.unblockBoard.impact.metricool100OperatorReadyBatches, 0);
@@ -2135,6 +2148,11 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.doesNotMatch(JSON.stringify(report.unblockBoard), /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.pastePacketText, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(report.pastePacketText, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+  const fastPathPacket = await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-fast-path-paste-packet.txt"), "utf8");
+  assert.match(fastPathPacket, /TikTok MVP Metricool fast-path proof packet/);
+  assert.match(fastPathPacket, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+  assert.match(fastPathPacket, /meme-radar:tiktok\.accountOwnershipProofUrl=/);
+  assert.doesNotMatch(fastPathPacket, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
   assert.match(report.paths.jsonStarter, /proof-links-json-starter\.json$/);
   assert.deepEqual(Object.keys(report.jsonStarter.lanes).sort(), ["meme-radar:tiktok", "sports-daily:tiktok"]);
   for (const lane of Object.values(report.jsonStarter.lanes)) {
