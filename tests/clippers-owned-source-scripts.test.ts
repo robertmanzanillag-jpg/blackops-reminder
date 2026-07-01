@@ -7916,7 +7916,9 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.operatorNextActions[0].proofLine, "sports-daily:tiktok + meme-radar:tiktok");
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
+    "sports-daily:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
+    "meme-radar:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool\/Drive evidence/);

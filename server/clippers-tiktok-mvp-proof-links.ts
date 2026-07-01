@@ -56,6 +56,13 @@ function validClipperProofNotes(value: unknown, pattern: RegExp): boolean {
   return text.length >= 20 && !hasClipperProofPlaceholder(text) && !containsClipperSecretLikeText(text) && pattern.test(text);
 }
 
+function validMetricoolReuseConfirmationNotes(value: unknown): boolean {
+  return validClipperProofNotes(
+    value,
+    /(?=.*tiktok)(?=.*robert)(?=.*control)(?=.*(metricool|drive|docs|proof|screenshot|captura))/i,
+  );
+}
+
 export function validateClipperTikTokMvpProofLinks(value: any): string {
   const raw = JSON.stringify(value);
   if (!value || typeof value !== "object" || Array.isArray(value)) return "proof-links must be a JSON object";
@@ -76,17 +83,27 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
   const lanes = clipperTikTokMvpProofLaneSpecs.map((spec) => {
     const lane = value?.lanes?.[spec.key] || {};
     const metricoolConnectionProofReady = safeClipperMetricoolConnectionProofUrl(lane.metricoolConnectionProofUrl);
+    const reusesConnectionProofAsOwnership = Boolean(
+      lane.accountOwnershipProofUrl
+      && lane.metricoolConnectionProofUrl
+      && lane.accountOwnershipProofUrl === lane.metricoolConnectionProofUrl,
+    );
+    const metricoolReuseConfirmed = !reusesConnectionProofAsOwnership || validMetricoolReuseConfirmationNotes(lane.accountNotes);
+    const accountNotesReady = validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof|control)/i)
+      && metricoolReuseConfirmed;
     const issues = [
       safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl) ? null : "accountOwnershipProofUrl must be a real safe HTTPS proof URL",
       metricoolConnectionProofReady ? null : "metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL",
-      validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i) ? null : "accountNotes must be 20+ chars and mention ownership/security proof",
+      accountNotesReady ? null : reusesConnectionProofAsOwnership
+        ? "accountNotes must confirm this Metricool/Drive proof shows the TikTok profile under Robert control"
+        : "accountNotes must be 20+ chars and mention ownership/security proof",
       validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i) ? null : "metricoolNotes must be 20+ chars and mention Metricool connection proof",
     ].filter(Boolean);
     return {
       ...spec,
       accountProofReady: safeClipperHttpsProofUrl(lane.accountOwnershipProofUrl),
       metricoolProofReady: metricoolConnectionProofReady,
-      accountNotesReady: validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof)/i),
+      accountNotesReady,
       metricoolNotesReady: validClipperProofNotes(lane.metricoolNotes, /(metricool|connection|connected|brand|profile|verified|verificad|proof|screenshot|captura)/i),
       issues,
       readyForProofDrop: issues.length === 0,
@@ -189,15 +206,20 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
       || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolConnectionProofUrl(url))
       || metricoolConnectionProofUrl
       || "";
-    const usesMetricoolProofAsAccountControl = Boolean(accountOwnershipProofUrl && accountOwnershipProofUrl === metricoolConnectionProofUrl && !explicitLane.accountOwnershipProofUrl);
+    const usesMetricoolProofAsAccountControl = Boolean(accountOwnershipProofUrl && metricoolConnectionProofUrl && accountOwnershipProofUrl === metricoolConnectionProofUrl);
+    const metricoolReuseConfirmed = !usesMetricoolProofAsAccountControl
+      || validMetricoolReuseConfirmationNotes(explicitLane.accountNotes);
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);
     if (!accountOwnershipProofUrl) issues.push(`${spec.key}: could not find a safe non-Metricool HTTPS ownership proof URL.`);
     if (!metricoolConnectionProofUrl) issues.push(`${spec.key}: could not find a safe HTTPS metricool.com or Google Drive/Docs connection proof URL.`);
+    if (!metricoolReuseConfirmed) {
+      issues.push(`${spec.key}: add accountNotes confirming the Metricool/Drive proof shows this TikTok profile under Robert control before reusing it as ownership proof.`);
+    }
     return [spec.key, {
       accountOwnershipProofUrl,
       metricoolConnectionProofUrl,
       accountNotes: explicitLane.accountNotes || (usesMetricoolProofAsAccountControl
-        ? `${spec.metricoolBrandName} Metricool connection proof verifies Robert-controlled TikTok ownership for ${spec.accountName} without secrets.`
+        ? ""
         : `${spec.accountName} TikTok ownership and security proof verified by Robert without secrets.`),
       metricoolNotes: explicitLane.metricoolNotes || `${spec.metricoolBrandName} TikTok profile connected in Metricool approval_required mode without secrets.`,
     }];

@@ -392,10 +392,12 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
       fastPathPasteLines: Number(proofGate.minimumProofUrlsNeeded || 0) > 0
         ? [
           "sports-daily:tiktok.metricoolConnectionProofUrl=",
+          "sports-daily:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
           "meme-radar:tiktok.metricoolConnectionProofUrl=",
+          "meme-radar:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
         ]
         : [],
-      guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs.",
+      guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs and keep the confirmation notes true.",
       nextAction: proofGateFixFirst
         ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs, preview links first, then save only if the preview is clean.`
         : proofRefreshNextAction,
