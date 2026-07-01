@@ -135,7 +135,9 @@ function normalize(value) {
 const unsafeProofQueryParamPattern = /(?:^|[?&#;])(token|code|auth|signature|sig|signed|secret|key|api_key|apikey|access|refresh|session|cookie|expires|expiry|x-amz-signature|x-amz-credential|x-amz-security-token)=/i;
 
 function containsSecret(value) {
-  return /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i.test(String(value || "")) || unsafeProofQueryParamPattern.test(String(value || ""));
+  return /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+/i.test(String(value || ""))
+    || /https:\/\/[^/\s:@]+:[^@\s/]+@/i.test(String(value || ""))
+    || unsafeProofQueryParamPattern.test(String(value || ""));
 }
 
 function hasPlaceholder(value) {
@@ -148,7 +150,7 @@ function safeHttpsUrl(value) {
   try {
     const url = new URL(text);
     if (unsafeProofQueryParamPattern.test(url.search)) return false;
-    return url.protocol === "https:" && !/(^|\.)example\.com$/i.test(url.hostname);
+    return url.protocol === "https:" && !url.username && !url.password && !/(^|\.)example\.com$/i.test(url.hostname);
   } catch {
     return false;
   }
@@ -185,6 +187,51 @@ function validNotes(value) {
   return text.length >= 20 && !hasPlaceholder(text) && !containsSecret(text);
 }
 
+function validMetricoolReuseConfirmationNotes(value) {
+  const text = normalize(value);
+  return validNotes(text) && /(?=.*tiktok)(?=.*robert)(?=.*control)(?=.*(metricool|drive|docs|proof|screenshot|captura))/i.test(text);
+}
+
+function comparableProofUrl(value) {
+  const text = normalize(value);
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    parsed.hash = "";
+    const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const googleDriveFileId = hostname === "drive.google.com"
+      ? parsed.pathname.match(/^\/file\/d\/([^/]+)/i)?.[1] || parsed.searchParams.get("id") || ""
+      : "";
+    const googleDriveFolderId = hostname === "drive.google.com"
+      ? parsed.pathname.match(/^\/drive\/(?:u\/\d+\/)?folders\/([^/]+)/i)?.[1]
+        || (parsed.pathname.match(/^\/folderview/i) ? parsed.searchParams.get("id") : "")
+        || ""
+      : "";
+    if (googleDriveFolderId) return `https://drive.google.com/drive/folders/${googleDriveFolderId}`;
+    if (googleDriveFileId) return `https://drive.google.com/file/d/${googleDriveFileId}`;
+    const googleDocsMatch = hostname === "docs.google.com" ? parsed.pathname.match(/^\/([^/]+)\/d\/([^/]+)/i) : null;
+    if (googleDocsMatch) return `https://docs.google.com/${googleDocsMatch[1].toLowerCase()}/d/${googleDocsMatch[2]}`;
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    const comparableSearch = new URLSearchParams();
+    for (const [key, searchValue] of parsed.searchParams.entries()) {
+      if (/^(utm_|fbclid$|gclid$|msclkid$|igshid$|usp$|sharing$|ref$|source$)/i.test(key)) continue;
+      comparableSearch.append(key, searchValue);
+    }
+    const sortedSearch = Array.from(comparableSearch.entries()).sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+      return leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue);
+    });
+    parsed.search = "";
+    for (const [key, searchValue] of sortedSearch) parsed.searchParams.append(key, searchValue);
+    return parsed.toString();
+  } catch {
+    return text
+      .replace(/#.*$/, "")
+      .replace(/[?&](utm_[^=&]+|fbclid|gclid|msclkid|igshid|usp|sharing|ref|source)=[^&]*/gi, "")
+      .replace(/[?&]$/, "")
+      .replace(/\/+$/, "");
+  }
+}
+
 function lanePayload(input, lane) {
   return input?.lanes?.[lane.key] || input?.[lane.key] || {};
 }
@@ -199,8 +246,17 @@ function validateInput(input) {
     if (!metricoolConnectionProofUrl(row.metricoolConnectionProofUrl)) {
       issues.push(`${lane.key}: metricoolConnectionProofUrl must be a real HTTPS metricool.com URL or Google Drive/Docs evidence URL.`);
     }
-    if (!validNotes(row.accountNotes)) {
-      issues.push(`${lane.key}: accountNotes must be 20+ chars and contain no placeholders or secrets.`);
+    const reusesConnectionProofAsOwnership = Boolean(
+      row.accountOwnershipProofUrl
+      && row.metricoolConnectionProofUrl
+      && comparableProofUrl(row.accountOwnershipProofUrl) === comparableProofUrl(row.metricoolConnectionProofUrl),
+    );
+    const accountNotesReady = validNotes(row.accountNotes)
+      && (!reusesConnectionProofAsOwnership || validMetricoolReuseConfirmationNotes(row.accountNotes));
+    if (!accountNotesReady) {
+      issues.push(reusesConnectionProofAsOwnership
+        ? `${lane.key}: accountNotes must confirm this Metricool/Drive proof shows the TikTok profile under Robert control.`
+        : `${lane.key}: accountNotes must be 20+ chars and contain no placeholders or secrets.`);
     }
     if (!validNotes(row.metricoolNotes)) {
       issues.push(`${lane.key}: metricoolNotes must be 20+ chars and contain no placeholders or secrets.`);

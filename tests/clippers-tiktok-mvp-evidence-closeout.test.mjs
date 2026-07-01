@@ -1642,8 +1642,70 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     const source = await readFile(proofQuickFillPath, "utf8");
     assert.match(source, /unsafeProofQueryParamPattern/);
     assert.match(source, /x-amz-signature/);
+    assert.match(source, /validMetricoolReuseConfirmationNotes/);
+    assert.match(source, /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
     assert.doesNotMatch(source, /ready_to_send|video\.publish|directSocialApisRequired:\s*true|runClipperTikTokMvpEvidenceCloseout\(true\)/);
     assert.match(source, /does not apply final evidence, publish, schedule/);
+
+    await writeFile(quickFillInputPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/folderview?id=sports-daily-tiktok-proof-folder&utm_source=copy#ownership",
+          metricoolConnectionProofUrl: "https://drive.google.com/drive/u/0/folders/sports-daily-tiktok-proof-folder?usp=sharing",
+          accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/edit/?usp=sharing#ownership",
+          metricoolConnectionProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/preview",
+          accountNotes: "Meme Radar ownership proof confirmed by Robert without secrets.",
+          metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+      },
+    }, null, 2));
+    const sameProofResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-quick-fill.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(sameProofResult.status, 0, sameProofResult.stderr || sameProofResult.stdout);
+    const sameProofOutput = JSON.parse(sameProofResult.stdout);
+    assert.equal(sameProofOutput.status, "blocked_invalid_quick_fill");
+    assert.equal(sameProofOutput.appliedToIntake, false);
+    const sameProofAfter = await readFile(defaultCombinedProofCsvPath, "utf8");
+    assert.equal(sameProofAfter, before);
+    const sameProofBridgeAfter = await readFile(targetBridgeCsvPath, "utf8");
+    assert.equal(sameProofBridgeAfter, bridgeBefore);
+    const sameProofReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
+    assert.match(sameProofReport.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
+
+    await writeFile(quickFillInputPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://viewer:secret@drive.google.com/file/d/sports-daily-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://app.metricool.com/planner/sports-daily-tiktok-proof",
+          accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://viewer:secret@docs.google.com/document/d/meme-radar-metricool-proof/edit",
+          accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+      },
+    }, null, 2));
+    const credentialResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-quick-fill.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(credentialResult.status, 0, credentialResult.stderr || credentialResult.stdout);
+    const credentialOutput = JSON.parse(credentialResult.stdout);
+    assert.equal(credentialOutput.status, "blocked_invalid_quick_fill");
+    assert.equal(credentialOutput.appliedToIntake, false);
+    const credentialAfter = await readFile(defaultCombinedProofCsvPath, "utf8");
+    assert.equal(credentialAfter, before);
+    const credentialBridgeAfter = await readFile(targetBridgeCsvPath, "utf8");
+    assert.equal(credentialBridgeAfter, bridgeBefore);
   } finally {
     if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);
