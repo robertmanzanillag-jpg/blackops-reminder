@@ -645,6 +645,49 @@ async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: 
 async function buildClipperTikTokMvpProofLinksDropStatus() {
   try {
     const drop = await readClipperTikTokMvpProofLinksDropPaste();
+    const emptyChecklist = [
+      "sports-daily:tiktok.accountOwnershipProofUrl",
+      "sports-daily:tiktok.metricoolConnectionProofUrl",
+      "sports-daily:tiktok.accountNotes",
+      "sports-daily:tiktok.metricoolNotes",
+      "meme-radar:tiktok.accountOwnershipProofUrl",
+      "meme-radar:tiktok.metricoolConnectionProofUrl",
+      "meme-radar:tiktok.accountNotes",
+      "meme-radar:tiktok.metricoolNotes",
+    ].map((field) => ({
+      laneKey: field.split(".")[0],
+      accountName: field.startsWith("sports-daily") ? "Sports Daily Clips" : "Meme Radar",
+      field: field.split(".")[1],
+      label: field.split(".")[1],
+      status: "missing_or_invalid",
+      required: "create the starter file, then replace placeholders with real public/non-secret proof evidence",
+    }));
+    if (containsClipperSecretLikeText(drop.pasteText)) {
+      return {
+        status: "blocked_secret_like",
+        generatedAt: new Date().toISOString(),
+        scope: "tiktok_only_metricool_mvp",
+        launchMode: "metricool_approval_required",
+        directSocialApisRequired: false,
+        realPublishEnabled: false,
+        rawStored: false,
+        found: true,
+        sourcePath: drop.sourcePath,
+        bytes: drop.bytes,
+        extractedUrls: 0,
+        unsafeBlocked: true,
+        checklist: emptyChecklist,
+        checklistTotals: { ready: 0, total: emptyChecklist.length, missing: emptyChecklist.length },
+        nextButton: "edit_drop_file",
+        issues: ["Remove passwords, tokens, cookies, keys, signed URLs, or credential-looking text from the local proof drop before importing."],
+        guardrails: [
+          "Drop status blocks before parsing when the local proof drop may contain credentials.",
+          "It does not return raw paste text, proofLinksText, or parsed proof fields.",
+          "It does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+        ],
+        nextStep: "Remove passwords, tokens, cookies, keys, signed URLs, or credential-looking text from the local proof drop before importing.",
+      };
+    }
     const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
     const issues = [...parsedPreview.issues, ...parsedPreview.proofLinksPreview.issues];
     const checklist = parsedPreview.proofLinksPreview.lanes.flatMap((lane: any) => [
@@ -682,17 +725,20 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       },
     ]);
     const readyChecklistItems = checklist.filter((item) => item.status === "ready").length;
+    const status = issues.length ? "needs_review" : "ready_for_import";
     return {
-      status: issues.length ? "needs_review" : "ready_for_import",
+      status,
       generatedAt: parsedPreview.generatedAt,
       scope: parsedPreview.scope,
       launchMode: parsedPreview.launchMode,
       directSocialApisRequired: parsedPreview.directSocialApisRequired,
       realPublishEnabled: false,
+      rawStored: false,
       found: true,
       sourcePath: drop.sourcePath,
       bytes: drop.bytes,
       extractedUrls: parsedPreview.extractedUrls,
+      unsafeBlocked: false,
       checklist,
       checklistTotals: {
         ready: readyChecklistItems,
@@ -717,10 +763,12 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       launchMode: "metricool_approval_required",
       directSocialApisRequired: false,
       realPublishEnabled: false,
+      rawStored: false,
       found: false,
       sourcePath: clipperTikTokMvpProofLinksDropPastePaths[0],
       bytes: 0,
       extractedUrls: 0,
+      unsafeBlocked: false,
       checklist: [
         "sports-daily:tiktok.accountOwnershipProofUrl",
         "sports-daily:tiktok.metricoolConnectionProofUrl",
@@ -3698,6 +3746,32 @@ export async function registerRoutes(
   app.post("/api/clippers/import-tiktok-mvp-proof-links-drop", async (_req, res) => {
     try {
       const drop = await readClipperTikTokMvpProofLinksDropPaste();
+      if (containsClipperSecretLikeText(drop.pasteText)) {
+        res.status(400).json({
+          error: "TikTok MVP proof links drop contains secret-like text. Remove credentials/tokens/cookies before importing.",
+          tiktokMvpProofLinksDropImport: {
+            status: "blocked_secret_like",
+            generatedAt: new Date().toISOString(),
+            scope: "tiktok_only_metricool_mvp",
+            launchMode: "metricool_approval_required",
+            directSocialApisRequired: false,
+            realPublishEnabled: false,
+            rawStored: false,
+            sourcePath: drop.sourcePath,
+            bytes: drop.bytes,
+            extractedUrls: 0,
+            issues: ["Remove passwords, tokens, cookies, keys, signed URLs, or credential-looking text from the local proof drop before importing."],
+            guardrails: [
+              "Blocked before parsing because the local proof links drop may contain credentials.",
+              "Does not return proofLinksText or raw proof drop text.",
+              "Does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+            ],
+            nextStep: "Clean the local proof drop file, then run Import drop file again.",
+          },
+          tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
+        });
+        return;
+      }
       const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
       const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(
         parsedPreview.proofLinksText,
@@ -3736,6 +3810,31 @@ export async function registerRoutes(
   app.post("/api/clippers/ingest-tiktok-mvp-proof-links-drop", async (_req, res) => {
     try {
       const drop = await readClipperTikTokMvpProofLinksDropPaste();
+      if (containsClipperSecretLikeText(drop.pasteText)) {
+        res.status(400).json({
+          error: "TikTok MVP proof links drop contains secret-like text. Remove credentials/tokens/cookies before safe ingest.",
+          tiktokMvpProofLinksDropIngest: {
+            status: "blocked_invalid_drop",
+            generatedAt: new Date().toISOString(),
+            scope: "tiktok_only_metricool_mvp",
+            launchMode: "metricool_approval_required",
+            directSocialApisRequired: false,
+            realPublishEnabled: false,
+            rawStored: false,
+            sourcePath: drop.sourcePath,
+            extractedUrls: 0,
+            issues: ["Remove passwords, tokens, cookies, keys, signed URLs, or credential-looking text from the local proof drop before safe ingest."],
+            guardrails: [
+              "Blocked before parsing because the local proof links drop may contain credentials.",
+              "Does not return proofLinksText or raw proof drop text.",
+              "Does not save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+            ],
+            nextStep: "Clean the local proof drop file, then run Import drop file before Safe ingest.",
+          },
+          tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
+        });
+        return;
+      }
       const parsedPreview = extractClipperTikTokMvpProofLinksPaste(drop.pasteText);
       const tiktokMvpProofLinksPreviewGate = await writeClipperTikTokMvpProofLinksPreviewGate(
         parsedPreview.proofLinksText,

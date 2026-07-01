@@ -785,6 +785,11 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.doesNotMatch(proofLinksPasteRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksDropStatusRoute, /buildClipperTikTokMvpProofLinksDropStatus/);
   assert.match(proofLinksDropStatusHelper, /checklistTotals/);
+  assert.ok(
+    proofLinksDropStatusHelper.indexOf("containsClipperSecretLikeText(drop.pasteText)")
+      < proofLinksDropStatusHelper.indexOf("extractClipperTikTokMvpProofLinksPaste(drop.pasteText)"),
+    "proof drop status should block secret-like drops before parsing local proof text",
+  );
   assert.match(proofLinksDropStatusHelper, /nextButton/);
   assert.match(proofLinksDropStatusHelper, /two real non-secret SPORT and memes Metricool URLs or concrete Drive file\/folder\/Docs TikTok proof URLs/);
   assert.match(proofLinksDropStatusHelper, /four-field fallback when ownership proof is separate/);
@@ -1086,6 +1091,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-checklist/);
   assert.match(page, /tiktokMvpProofLinksDropStatus\.checklistTotals\.ready/);
   assert.match(page, /tiktokMvpProofLinksDropStatus\.nextButton/);
+  assert.match(page, /blocked_secret_like/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus\.status === "blocked_secret_like"/);
+  assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| tiktokMvpProofLinksDropStatus\?\.status === "blocked_secret_like"\}/);
+  assert.match(page, /tiktokMvpProofLinksDropImport: data\.tiktokMvpProofLinksDropImport/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus: data\.tiktokMvpProofLinksDropStatus/);
+  assert.match(page, /tiktokMvpProofLinksDropImport\?: ClipperTikTokMvpProofLinksDropImportSummary/);
   assert.match(page, /\["\/api\/clippers\/tiktok-mvp-proof-links-drop-status"\]/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-paste-packet-button/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-fast-path-packet-button/);
@@ -1105,6 +1116,8 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /queryClient\.setQueryData\(\["\/api\/clippers\/tiktok-mvp-proof-links-drop-status"\], error\.tiktokMvpProofLinksDropStatus\)/);
   assert.match(page, /tiktokMvpProofLinksDropIngestMutation/);
   assert.match(page, /tiktokMvpProofLinksDropIngest: data\.tiktokMvpProofLinksDropIngest/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus: data\.tiktokMvpProofLinksDropStatus/);
+  assert.match(page, /tiktokMvpProofLinksDropStatus\?: ClipperTikTokMvpProofLinksDropStatusSummary/);
   assert.match(page, /tiktokMvpProofLinksPastePreview: data\.tiktokMvpProofLinksPastePreview/);
   assert.match(page, /tiktokMvpProofLinksPreviewGate: data\.tiktokMvpProofLinksPreviewGate/);
   assert.match(page, /tiktokMvpProofLinksDropIngest\?: ClipperTikTokMvpProofLinksDropIngestSummary/);
@@ -3051,7 +3064,11 @@ test("TikTok MVP proof drop starter route blocks secret-like existing drops with
     assert.equal(body.tiktokMvpProofLinksDropStarter.overwritten, false);
     assert.equal(body.tiktokMvpProofLinksDropStarter.wroteStarter, false);
     assert.equal(body.tiktokMvpProofLinksDropStarter.rawStored, false);
-    assert.equal(body.tiktokMvpProofLinksDropStatus.status, "needs_review");
+    assert.equal(body.tiktokMvpProofLinksDropStatus.status, "blocked_secret_like");
+    assert.equal(body.tiktokMvpProofLinksDropStatus.rawStored, false);
+    assert.equal(body.tiktokMvpProofLinksDropStatus.unsafeBlocked, true);
+    assert.equal(body.tiktokMvpProofLinksDropStatus.nextButton, "edit_drop_file");
+    assert.match(body.tiktokMvpProofLinksDropStatus.nextStep, /Remove passwords, tokens, cookies, keys/);
     assert.doesNotMatch(
       JSON.stringify(body),
       /neverpaste-this-value|operator_notes|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i,
@@ -3066,6 +3083,79 @@ test("TikTok MVP proof drop starter route blocks secret-like existing drops with
     }
     if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
     else await writeFile(proofLinksFilledDropPath, previousDrop);
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
+  }
+});
+
+test("TikTok MVP proof drop import and ingest block secret-like drops before parsing", async () => {
+  const previousDrop = await readFile(proofLinksFilledDropPath, "utf8").catch(() => null);
+  const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  const secretLikeDrop = [
+    "# unsafe explicit field proof drop",
+    "sports-daily:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/sports-daily-proof",
+    "sports-daily:tiktok.accountNotes=password=neverpaste-this-value",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/meme-radar-proof",
+    "meme-radar:tiktok.accountNotes=Robert confirms this Metricool proof shows Meme Radar TikTok under his control without secrets.",
+  ].join("\n");
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await mkdir(path.dirname(proofLinksFilledDropPath), { recursive: true });
+    await mkdir(path.dirname(proofLinksPreviewGatePath), { recursive: true });
+    await writeFile(proofLinksFilledDropPath, secretLikeDrop);
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    for (const [endpoint, key] of [
+      ["/api/clippers/import-tiktok-mvp-proof-links-drop", "tiktokMvpProofLinksDropImport"],
+      ["/api/clippers/ingest-tiktok-mvp-proof-links-drop", "tiktokMvpProofLinksDropIngest"],
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${address.port}${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 400, `${endpoint}: ${JSON.stringify(body)}`);
+      assert.match(body.error, /secret-like text/i, endpoint);
+      assert.equal(body[key].realPublishEnabled, false, endpoint);
+      assert.equal(body[key].directSocialApisRequired, false, endpoint);
+      assert.equal(body[key].rawStored, false, endpoint);
+      assert.equal(body.tiktokMvpProofLinksDropStatus.status, "blocked_secret_like", endpoint);
+      assert.equal(body.tiktokMvpProofLinksDropStatus.rawStored, false, endpoint);
+      assert.equal(body.tiktokMvpProofLinksDropStatus.unsafeBlocked, true, endpoint);
+      assert.equal("proofLinksText" in body[key], false, endpoint);
+      assert.equal("proofLinksPreview" in body[key], false, endpoint);
+      assert.equal("tiktokMvpProofLinksPastePreview" in body, false, endpoint);
+      assert.equal("tiktokMvpProofLinksPreviewGate" in body, false, endpoint);
+      assert.doesNotMatch(
+        JSON.stringify(body),
+        /neverpaste-this-value|password=|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i,
+        endpoint,
+      );
+      assert.equal(await readFile(proofLinksPath, "utf8").catch(() => null), previousProofLinks, endpoint);
+      assert.equal(await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null), previousPreviewGate, endpoint);
+    }
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
+    if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
+    else await writeFile(proofLinksFilledDropPath, previousDrop);
+    if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
+    else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);
   }

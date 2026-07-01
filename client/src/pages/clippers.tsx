@@ -2768,12 +2768,13 @@ interface ClipperTikTokMvpProofLinksSaveReceiptSummary {
 }
 
 interface ClipperTikTokMvpProofLinksDropImportSummary {
-  status: "needs_review" | "ready_for_proof_links_preview";
+  status: "blocked_secret_like" | "needs_review" | "ready_for_proof_links_preview";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
   launchMode: "metricool_approval_required";
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
+  rawStored?: boolean;
   sourcePath: string;
   bytes: number;
   extractedUrls: number;
@@ -2785,16 +2786,18 @@ interface ClipperTikTokMvpProofLinksDropImportSummary {
 }
 
 interface ClipperTikTokMvpProofLinksDropStatusSummary {
-  status: "missing" | "needs_review" | "ready_for_import";
+  status: "missing" | "blocked_secret_like" | "needs_review" | "ready_for_import";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
   launchMode: "metricool_approval_required";
   directSocialApisRequired: boolean;
   realPublishEnabled: boolean;
+  rawStored?: boolean;
   found: boolean;
   sourcePath: string;
   bytes: number;
   extractedUrls: number;
+  unsafeBlocked?: boolean;
   checklist: Array<{
     laneKey: string;
     accountName: string;
@@ -2808,7 +2811,7 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
     total: number;
     missing: number;
   };
-  nextButton: "create_starter" | "import_drop_file" | "safe_ingest_drop";
+  nextButton: "create_starter" | "edit_drop_file" | "import_drop_file" | "safe_ingest_drop";
   issues: string[];
   guardrails: string[];
   nextStep: string;
@@ -12193,7 +12196,12 @@ export default function ClippersPage() {
     mutationFn: async () => {
       const response = await fetch("/api/clippers/import-tiktok-mvp-proof-links-drop", { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude importar el proof drop local");
+      if (!response.ok) {
+        throw buildClipperMutationError(data.error || "No pude importar el proof drop local", {
+          tiktokMvpProofLinksDropImport: data.tiktokMvpProofLinksDropImport,
+          tiktokMvpProofLinksDropStatus: data.tiktokMvpProofLinksDropStatus,
+        });
+      }
       return data as {
         tiktokMvpProofLinksDropImport: ClipperTikTokMvpProofLinksDropImportSummary;
         tiktokMvpProofLinksPastePreview: ClipperTikTokMvpProofLinksPastePreviewSummary;
@@ -12238,7 +12246,14 @@ export default function ClippersPage() {
         variant: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? undefined : "destructive",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error & {
+      tiktokMvpProofLinksDropImport?: ClipperTikTokMvpProofLinksDropImportSummary;
+      tiktokMvpProofLinksDropStatus?: ClipperTikTokMvpProofLinksDropStatusSummary;
+    }) => {
+      if (error.tiktokMvpProofLinksDropStatus) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], error.tiktokMvpProofLinksDropStatus);
+        refreshTikTokProofDropAuditCaches();
+      }
       toast({ title: "No pude importar proof drop", description: error.message, variant: "destructive" });
     },
   });
@@ -12290,6 +12305,7 @@ export default function ClippersPage() {
       if (!response.ok) {
         throw buildClipperMutationError(data.error || "No pude ingerir el proof drop", {
           tiktokMvpProofLinksDropIngest: data.tiktokMvpProofLinksDropIngest,
+          tiktokMvpProofLinksDropStatus: data.tiktokMvpProofLinksDropStatus,
           tiktokMvpProofLinksPastePreview: data.tiktokMvpProofLinksPastePreview,
           tiktokMvpProofLinksPreviewGate: data.tiktokMvpProofLinksPreviewGate,
         });
@@ -12346,9 +12362,13 @@ export default function ClippersPage() {
     },
     onError: (error: Error & {
       tiktokMvpProofLinksDropIngest?: ClipperTikTokMvpProofLinksDropIngestSummary;
+      tiktokMvpProofLinksDropStatus?: ClipperTikTokMvpProofLinksDropStatusSummary;
       tiktokMvpProofLinksPastePreview?: ClipperTikTokMvpProofLinksPastePreviewSummary;
       tiktokMvpProofLinksPreviewGate?: ClipperTikTokMvpProofLinksPreviewGateSummary;
     }) => {
+      if (error.tiktokMvpProofLinksDropStatus) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], error.tiktokMvpProofLinksDropStatus);
+      }
       if (error.tiktokMvpProofLinksPastePreview) {
         setTiktokMvpProofLinksPastePreview(error.tiktokMvpProofLinksPastePreview);
         setTiktokMvpProofLinksText(error.tiktokMvpProofLinksPastePreview.proofLinksText);
@@ -19057,7 +19077,7 @@ export default function ClippersPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => tiktokMvpProofLinksDropImportMutation.mutate()}
-                      disabled={tiktokProofFlowBusy || isLoading}
+                      disabled={tiktokProofFlowBusy || isLoading || tiktokMvpProofLinksDropStatus?.status === "blocked_secret_like"}
                       className="h-8 border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
                       data-testid="import-clippers-tiktok-mvp-proof-links-drop-button"
                     >
@@ -19106,6 +19126,8 @@ export default function ClippersPage() {
                       "mt-2 rounded-md border bg-black/20 p-2 text-xs",
                       tiktokMvpProofLinksDropStatus.status === "ready_for_import"
                         ? "border-emerald-300/15 text-emerald-100/80"
+                        : tiktokMvpProofLinksDropStatus.status === "blocked_secret_like"
+                          ? "border-red-300/20 text-red-100/80"
                         : tiktokMvpProofLinksDropStatus.status === "needs_review"
                           ? "border-amber-300/15 text-amber-100/80"
                           : "border-zinc-700/70 text-zinc-400"
@@ -19115,6 +19137,8 @@ export default function ClippersPage() {
                           "border text-[10px]",
                           tiktokMvpProofLinksDropStatus.status === "ready_for_import"
                             ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                            : tiktokMvpProofLinksDropStatus.status === "blocked_secret_like"
+                              ? "border-red-300/30 bg-red-300/10 text-red-100"
                             : tiktokMvpProofLinksDropStatus.status === "needs_review"
                               ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
                               : "border-zinc-700 bg-zinc-900 text-zinc-300"
