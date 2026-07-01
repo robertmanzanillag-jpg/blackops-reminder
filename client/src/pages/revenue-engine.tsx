@@ -1108,6 +1108,7 @@ type RevenueScoutDispatchResult = {
       copyablePayloadTemplate: string;
       copyableBrief: string;
       copyableWorkOrders: string;
+      copyableSubagentCommands: string;
       workOrders: Array<{
         taskId: string;
         ownerAgent: string;
@@ -1120,6 +1121,7 @@ type RevenueScoutDispatchResult = {
         resultSlotIds: string[];
         endpoint: string;
         payload: Record<string, unknown>;
+        copyableSubagentCommand: string;
         copyableWorkOrder: string;
       }>;
     };
@@ -5879,6 +5881,17 @@ export default function RevenueEnginePage() {
                           >
                             <Copy className="mr-2 h-3.5 w-3.5" />
                             Copy work orders
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableSubagentCommands || "")}
+                            data-testid="button-copy-scout-subagent-commands"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy subagent commands
                           </Button>
                         </div>
                       </div>

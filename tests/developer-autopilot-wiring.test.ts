@@ -286,6 +286,8 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(serverSource, /connectorIntake/);
   assert.match(serverSource, /workOrders: connectorWorkOrders/);
   assert.match(serverSource, /copyableWorkOrders/);
+  assert.match(serverSource, /copyableSubagentCommands/);
+  assert.match(serverSource, /Revenue Engine public business scout subagent command/);
   assert.match(serverSource, /approvalLocked: true/);
   assert.match(serverSource, /dispatchSummary/);
   assert.match(serverSource, /searchPlaybook/);
@@ -307,7 +309,9 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(uiSource, /panel-scout-connector-intake-contract/);
   assert.match(uiSource, /button-copy-scout-connector-intake/);
   assert.match(uiSource, /button-copy-scout-connector-work-orders/);
+  assert.match(uiSource, /button-copy-scout-subagent-commands/);
   assert.match(uiSource, /connectorIntake\.copyableWorkOrders/);
+  assert.match(uiSource, /connectorIntake\.copyableSubagentCommands/);
   assert.match(uiSource, /panel-business-search-playbook/);
   assert.match(uiSource, /button-copy-business-search-playbook/);
   assert.match(uiSource, /businessScoutQueue\.workPack\.searchPlaybook\.prioritizedSources/);
