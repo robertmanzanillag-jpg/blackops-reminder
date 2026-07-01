@@ -1753,6 +1753,9 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps[0].apiAction, "/api/revenue-engine/daily-scout-sprint");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.steps.some((step) => step.id === "approve_contact_or_collect" && step.approvalRequired), true);
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.blockedActions.includes("charge client"), true);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Revenue Engine first sprint plan/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /Blocked until Robert approval/);
+  assert.match(snapshot.moneyActivationPlan.firstSprintPlan.copyableBrief, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(snapshot.moneyActivationPlan.copyableBrief, /First sprint steps/);
   assert.equal(snapshot.emailProvider.configured, false);
 });

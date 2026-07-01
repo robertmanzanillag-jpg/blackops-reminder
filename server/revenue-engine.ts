@@ -5399,6 +5399,25 @@ function buildRevenueMoneyActivationPlan(input: {
     ],
     blockedActions: ["contact business", "send email/DM/form", "buy paid data", "charge client", "start build", "deploy"],
   };
+  const firstSprintCopyableBrief = [
+    "Revenue Engine first sprint plan",
+    "",
+    `Market: ${firstSprintPlan.area} ${firstSprintPlan.niche}`,
+    `Offer focus: ${firstSprintPlan.offerFocus}`,
+    `Target rows: ${firstSprintPlan.targetRows}`,
+    `Next API action: ${firstSprintPlan.nextApiAction}`,
+    "",
+    "Steps:",
+    ...firstSprintPlan.steps.map((step, index) => [
+      `${index + 1}. ${step.label}`,
+      `   Action: ${step.action}`,
+      `   API: ${step.apiAction}`,
+      `   Approval required: ${step.approvalRequired ? "yes" : "no"}`,
+    ].join("\n")),
+    "",
+    "Blocked until Robert approval:",
+    ...firstSprintPlan.blockedActions.map((action) => `- ${action}`),
+  ].join("\n");
   const status =
     input.launchReadiness.status === "ready_to_start"
     && hardMissing.length === 0
@@ -5436,7 +5455,10 @@ function buildRevenueMoneyActivationPlan(input: {
     ])).slice(0, 8),
     missingBeforeRealMoney: dedupedMissing,
     blockedUntilApproved: approvals,
-    firstSprintPlan,
+    firstSprintPlan: {
+      ...firstSprintPlan,
+      copyableBrief: firstSprintCopyableBrief,
+    },
     nextRobertAction: dedupedMissing[0]?.nextStep
       || input.dailyMoneyCommand.primaryAction
       || "Aprobar el siguiente batch controlado.",

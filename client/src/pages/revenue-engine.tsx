@@ -191,6 +191,7 @@ type RevenueSnapshot = {
         approvalRequired: boolean;
       }>;
       blockedActions: string[];
+      copyableBrief: string;
     };
     nextRobertAction: string;
     copyableBrief: string;
@@ -3615,6 +3616,17 @@ export default function RevenueEnginePage() {
                 <p className="mt-1 text-xs leading-5 text-zinc-500">
                   {snapshot?.moneyActivationPlan.firstSprintPlan.targetRows ?? 0} filas · {snapshot?.moneyActivationPlan.firstSprintPlan.nextApiAction || "/api/revenue-engine/daily-scout-sprint"}
                 </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+                  onClick={() => navigator.clipboard.writeText(snapshot?.moneyActivationPlan.firstSprintPlan.copyableBrief || "")}
+                  data-testid="button-copy-first-sprint-brief"
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copiar sprint
+                </Button>
                 <div className="mt-3 space-y-2">
                   {(snapshot?.moneyActivationPlan.firstSprintPlan.steps || []).map((step) => (
                     <div key={step.id} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
