@@ -461,6 +461,13 @@ type RevenueSnapshot = {
       paymentEvidenceRequired: string[];
       copyableContactPacket: string;
       copyableCloseEvidencePacket: string;
+      copyableOutcomeRequests: {
+        contacted: string;
+        reply: string;
+        callBooked: string;
+        depositCollected: string;
+        lost: string;
+      };
       nextAction: string;
     }>;
     blocked: Array<{
@@ -502,6 +509,7 @@ type RevenueSnapshot = {
       priority: "high" | "medium";
       readiness: string[];
       copyableClosurePacket: string;
+      copyableCloseRequest: string;
       nextAction: string;
     }>;
     safety: {
@@ -4562,6 +4570,28 @@ export default function RevenueEnginePage() {
                           <Copy className="mr-2 h-3.5 w-3.5" />
                           Copy close
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-sky-700 text-sky-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableOutcomeRequests.contacted)}
+                          data-testid={`button-copy-manual-outreach-contacted-request-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy contacted
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-emerald-700 text-emerald-100"
+                          onClick={() => navigator.clipboard.writeText(item.copyableOutcomeRequests.depositCollected)}
+                          data-testid={`button-copy-manual-outreach-deposit-request-${item.draftId}`}
+                        >
+                          <Copy className="mr-2 h-3.5 w-3.5" />
+                          Copy deposit
+                        </Button>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-zinc-300">
@@ -6914,6 +6944,17 @@ export default function RevenueEnginePage() {
                               >
                                 <Copy className="mr-2 h-4 w-4" />
                                 Copy close
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-700 text-emerald-100"
+                                onClick={() => navigator.clipboard.writeText(opportunity.copyableCloseRequest)}
+                                data-testid={`button-copy-website-closure-request-${opportunity.id}`}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Copy request
                               </Button>
                               <Button
                                 type="button"

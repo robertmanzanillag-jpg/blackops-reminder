@@ -51,7 +51,9 @@ import {
   recordRevenueScoutingMission,
   recordRevenueWebsiteOpportunity,
   revenueMoneySprintFromPublicCandidatesSchema,
+  revenueOutreachOutcomeSchema,
   revenuePublicLeadCandidateApproveSchema,
+  revenueWebsiteOpportunityCloseSchema,
   revenueDeliveryWorkspaceDeliverSchema,
   revenueDeliveryWorkspaceGithubHandoffSchema,
   approveRevenueOutreachDraft,
@@ -3434,6 +3436,14 @@ test("snapshot builds a capped manual outreach queue from approved drafts", () =
   assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Manual close evidence packet")), true);
   assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Scope approval must be explicit")), true);
   assert.equal(queue.items.every((item) => item.copyableCloseEvidencePacket.includes("Do not create delivery workspace")), true);
+  const contactedRequest = revenueOutreachOutcomeSchema.parse(JSON.parse(queue.items[0].copyableOutcomeRequests.contacted));
+  assert.equal(contactedRequest.draftId, queue.items[0].draftId);
+  assert.equal(contactedRequest.outcome, "contacted");
+  assert.equal(contactedRequest.outcomeRecordedByRobert, true);
+  const depositRequest = revenueOutreachOutcomeSchema.parse(JSON.parse(queue.items[0].copyableOutcomeRequests.depositCollected));
+  assert.equal(depositRequest.outcome, "deposit_collected");
+  assert.equal(depositRequest.cashCollectedUsd, queue.items[0].depositUsd);
+  assert.equal(depositRequest.paymentConfirmation, "");
   assert.equal(queue.blocked.some((item) => item.businessName === "Needs Approval Cafe" && item.reason.includes("Robert")), true);
   assert.equal(queue.blocked.filter((item) => item.reason.includes("Daily contact limit reached")).length, 2);
 });
@@ -3738,6 +3748,14 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.readyCount, 1);
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.items[0].opportunityId, opportunityResult.opportunity?.id);
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.items[0].closureStage, "collect_deposit");
+  const closeRequest = revenueWebsiteOpportunityCloseSchema.parse(
+    JSON.parse(scopedOnlyResult.snapshot.websiteClosureQueue.items[0].copyableCloseRequest)
+  );
+  assert.equal(closeRequest.opportunityId, opportunityResult.opportunity?.id);
+  assert.equal(closeRequest.depositPaid, false);
+  assert.equal(closeRequest.scopeApproved, true);
+  assert.equal(closeRequest.cashCollectedUsd, 0);
+  assert.equal(closeRequest.paymentConfirmation, "");
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.sendsOutreach, false);
   assert.equal(scopedOnlyResult.snapshot.websiteClosureQueue.safety.collectsPaymentAutomatically, false);
   assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.status, "collect");
@@ -3810,6 +3828,46 @@ test("website opportunity close requires recorded manual deposit outcome", () =>
   assert.equal(fakeClose.snapshot.metrics.cashCollectedUsd, 0);
   assert.equal(fakeClose.snapshot.recentLedger.length, 0);
   assert.equal(fakeClose.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+});
+
+test("website closure request packet does not auto-approve missing scope", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Scope Pending Cafe",
+    contactEmail: "owner@scopepending.example",
+    sourceUrl: "https://example.com/scope-pending-cafe",
+    mockupSlug: "scope-pending-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "website",
+  });
+  const depositOutcome = recordRevenueOutreachOutcome({
+    draftId: draft.id,
+    outcome: "deposit_collected",
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_scope_pending_123",
+    notes: "Robert verified deposit, but scope is still pending.",
+  });
+  assert.equal(depositOutcome.status, "recorded");
+
+  const closureItem = depositOutcome.snapshot.websiteClosureQueue.items.find((item) =>
+    item.opportunityId === opportunityResult.opportunity!.id
+  )!;
+  assert.equal(closureItem.closureStage, "approve_scope");
+  const closeRequest = revenueWebsiteOpportunityCloseSchema.parse(JSON.parse(closureItem.copyableCloseRequest));
+  assert.equal(closeRequest.depositPaid, true);
+  assert.equal(closeRequest.scopeApproved, false);
+  assert.equal(closeRequest.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(closeRequest.paymentConfirmation, "Stripe pi_scope_pending_123");
+
+  const pastedClose = closeRevenueWebsiteOpportunity(closeRequest);
+  assert.equal(pastedClose.status, "blocked");
+  assert.match(pastedClose.reason, /scope no aprobado/);
+  assert.equal(pastedClose.opportunity?.status, "quoted");
+  assert.equal(pastedClose.snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
+  assert.equal(pastedClose.snapshot.recentLedger.length, 0);
 });
 
 test("website closure queue keeps older money-ready opportunities visible", () => {

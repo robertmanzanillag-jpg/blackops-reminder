@@ -723,6 +723,13 @@ type RevenueManualOutreachQueue = {
     paymentEvidenceRequired: string[];
     copyableContactPacket: string;
     copyableCloseEvidencePacket: string;
+    copyableOutcomeRequests: {
+      contacted: string;
+      reply: string;
+      callBooked: string;
+      depositCollected: string;
+      lost: string;
+    };
     nextAction: string;
   }>;
   blocked: Array<{
@@ -893,6 +900,7 @@ type RevenueWebsiteClosureQueue = {
     priority: "high" | "medium";
     readiness: string[];
     copyableClosurePacket: string;
+    copyableCloseRequest: string;
     nextAction: string;
   }>;
   safety: {
@@ -4048,6 +4056,35 @@ function buildRevenueManualCloseEvidencePacket(draft: RevenueOutreachDraft, cont
   };
 }
 
+function buildRevenueManualOutcomeRequests(draft: RevenueOutreachDraft) {
+  const request = (
+    outcome: RevenueOutreachOutcomeInput["outcome"],
+    notes: string,
+    cashCollectedUsd = 0,
+    paymentConfirmation = ""
+  ) => JSON.stringify({
+    draftId: draft.id,
+    outcome,
+    outcomeRecordedByRobert: true,
+    cashCollectedUsd,
+    paymentConfirmation,
+    notes,
+  }, null, 2);
+
+  return {
+    contacted: request("contacted", "Robert confirmed this business was contacted manually from the daily queue."),
+    reply: request("reply", "Robert confirmed the business replied; continue manually toward call, scope and deposit."),
+    callBooked: request("call_booked", "Robert confirmed a call was booked; prepare scope, deposit ask and delivery gates."),
+    depositCollected: request(
+      "deposit_collected",
+      "Robert verified the payment evidence and scope path; close the website opportunity only after scope is explicit.",
+      draft.pricing.depositUsd,
+      ""
+    ),
+    lost: request("lost", "Robert marked this lead lost; capture learning before contacting similar leads."),
+  };
+}
+
 function manualOutreachBlockedReason(draft: RevenueOutreachDraft) {
   const failedGate = draft.qaGates.find((gate) => !gate.passed);
   if (failedGate) return failedGate.fix;
@@ -4108,6 +4145,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
       const contactUrl = contactUrlForRevenueDraft(draft);
       const manualAction = manualActionForRevenueDraft(draft);
       const closeEvidence = buildRevenueManualCloseEvidencePacket(draft, contactUrl);
+      const copyableOutcomeRequests = buildRevenueManualOutcomeRequests(draft);
       return {
         draftId: draft.id,
         businessName: draft.businessName,
@@ -4139,6 +4177,7 @@ function buildRevenueManualOutreachQueue(dailyContactLimit = 10): RevenueManualO
           `Next action: ${manualAction}`,
         ].join("\n"),
         copyableCloseEvidencePacket: closeEvidence.copyableCloseEvidencePacket,
+        copyableOutcomeRequests,
         nextAction: "Revisar evidencia, abrir enlace manual y registrar contacted/reply/call/deposito desde esta cola.",
       };
     }),
@@ -4496,6 +4535,16 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
       : closureStage === "approve_scope"
         ? "Confirmar scope aprobado por Robert/cliente; luego cerrar oportunidad para habilitar delivery."
         : "Confirmar scope y cobrar deposito con referencia antes de cerrar oportunidad.";
+    const copyableCloseRequest = JSON.stringify({
+      opportunityId: opportunity.id,
+      depositPaid: opportunity.depositPaid,
+      scopeApproved: opportunity.scopeApproved,
+      cashCollectedUsd: opportunity.cashCollectedUsd,
+      paymentConfirmation: opportunity.paymentConfirmation || "",
+      notes: opportunity.scopeApproved
+        ? "Robert confirmed scope and verified payment evidence before closing this website opportunity."
+        : "Scope is still pending; Robert must explicitly approve scope before this request can close the website opportunity.",
+    }, null, 2);
 
     return {
       id: opportunity.id,
@@ -4540,6 +4589,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
         "",
         "Guardrail: no build, deploy, publish, or ledger sale until deposit evidence and scope are confirmed.",
       ].join("\n"),
+      copyableCloseRequest,
       nextAction,
     };
   });
