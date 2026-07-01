@@ -955,6 +955,7 @@ type RevenueWebsiteDeliveryHandoffQueue = {
     repoFullNamePattern: string;
     suggestedBranchName: string;
     copyableWorkspaceSetupPacket: string;
+    copyableWorkspaceRequest: string;
     nextAction: string;
   }>;
   blocked: Array<{
@@ -4779,6 +4780,25 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
     }
     const suggestedBranchName = `codex/client-${slugifyRevenueValue(opportunity.businessName)}-website`;
     const repoFullNamePattern = "owner/repo";
+    const workspaceRequest = {
+      leadId: opportunity.sourceLeadId,
+      outreachDraftId: opportunity.sourceOutreachDraftId,
+      websiteOpportunityId: opportunity.id,
+      mockupUrl: opportunity.mockupUrl,
+      repoFullName: "REPLACE_WITH_APPROVED_OWNER_REPO",
+      branchName: suggestedBranchName,
+      projectType: opportunity.projectType,
+      depositPaid: true,
+      scopeApproved: true,
+      cashCollectedUsd: opportunity.cashCollectedUsd,
+      publicDataVerified: true,
+      visualQaPassed: false,
+      technicalQaPassed: false,
+      automationQaPassed: false,
+      clientHandoffReady: false,
+      launchTargetDays: 7,
+      notes: `Create PR-first website delivery workspace for ${opportunity.businessName}; replace repoFullName with the approved GitHub owner/repo before submitting.`,
+    };
     const copyableWorkspaceSetupPacket = [
       `Website delivery workspace setup: ${opportunity.businessName}`,
       `Opportunity: ${opportunity.id}`,
@@ -4794,6 +4814,9 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       "- Enter a real GitHub owner/repo from the app inventory or the exact client repo Robert approved.",
       "- Keep the suggested branch or replace it with another codex/ branch.",
       "- Confirm deposit evidence and scope are already recorded on the sold opportunity.",
+      "",
+      "Copyable workspace request:",
+      JSON.stringify(workspaceRequest, null, 2),
       "",
       "PR-first delivery rules:",
       "- Create a separate branch and pull request.",
@@ -4818,6 +4841,7 @@ function buildRevenueWebsiteDeliveryHandoffQueue(limit = 8): RevenueWebsiteDeliv
       repoFullNamePattern,
       suggestedBranchName,
       copyableWorkspaceSetupPacket,
+      copyableWorkspaceRequest: JSON.stringify(workspaceRequest, null, 2),
       nextAction: "Ingresar repo GitHub owner/repo y crear delivery workspace QA-gated; no desplegar sin PR, second review, App QA y aprobacion de Robert.",
     });
   }

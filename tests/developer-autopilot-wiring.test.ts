@@ -181,7 +181,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /panel-website-build-handoff-queue/);
   assert.match(uiSource, /button-copy-website-build-brief-/);
   assert.match(uiSource, /button-copy-website-workspace-setup-/);
+  assert.match(uiSource, /button-copy-website-workspace-request-/);
   assert.match(uiSource, /copyableWorkspaceSetupPacket/);
+  assert.match(uiSource, /copyableWorkspaceRequest/);
   assert.match(uiSource, /item\.suggestedBranchName/);
   assert.match(uiSource, /repoInput\.branchName \|\| item\.suggestedBranchName/);
   assert.match(engineSource, /repoFullNamePattern/);

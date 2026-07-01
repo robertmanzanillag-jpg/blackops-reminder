@@ -571,6 +571,7 @@ type RevenueSnapshot = {
       repoFullNamePattern: string;
       suggestedBranchName: string;
       copyableWorkspaceSetupPacket: string;
+      copyableWorkspaceRequest: string;
       nextAction: string;
     }>;
     blocked: Array<{
@@ -9028,6 +9029,17 @@ export default function RevenueEnginePage() {
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy repo setup
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-sky-500/30 text-sky-100"
+                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceRequest)}
+                                    data-testid={`button-copy-website-workspace-request-${item.opportunityId}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy workspace JSON
                                   </Button>
                                   <a href={item.mockupUrl} target="_blank" rel="noreferrer">
                                     <Button type="button" size="sm" variant="outline" className="border-zinc-700">

@@ -4182,7 +4182,22 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(soldHandoffItem.suggestedBranchName, "codex/client-handoff-cafe-website");
   assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Website delivery workspace setup: Handoff Cafe/);
   assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Repo required: owner\/repo/);
+  assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Copyable workspace request/);
   assert.match(soldHandoffItem.copyableWorkspaceSetupPacket, /Do not merge to main directly/);
+  const workspaceRequest = JSON.parse(soldHandoffItem.copyableWorkspaceRequest);
+  assert.equal(workspaceRequest.leadId, lead.id);
+  assert.equal(workspaceRequest.outreachDraftId, draft.id);
+  assert.equal(workspaceRequest.websiteOpportunityId, opportunity.id);
+  assert.equal(workspaceRequest.branchName, "codex/client-handoff-cafe-website");
+  assert.equal(workspaceRequest.depositPaid, true);
+  assert.equal(workspaceRequest.scopeApproved, true);
+  assert.equal(workspaceRequest.publicDataVerified, true);
+  assert.equal(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(workspaceRequest.repoFullName), false);
+  assert.throws(
+    () => createWebsiteDeliveryWorkspaceFromLead(workspaceRequest),
+    /repoFullName must be owner\/repo/,
+  );
+  assert.equal(getRevenueEngineSnapshot().recentDeliveryWorkspaces.length, 0);
   assert.match(soldHandoffItem.nextAction, /repo GitHub owner\/repo/);
   const leadStatusBeforeRepoBlock = postSaleSnapshot.recentLeads.find((item) => item.id === lead.id)?.status;
   const missingRepoHandoff = createWebsiteDeliveryWorkspaceFromLead({
@@ -4225,17 +4240,8 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(mainBranchHandoff.snapshot.recentLedger.length, postSaleSnapshot.recentLedger.length);
 
   const handoff = createWebsiteDeliveryWorkspaceFromLead({
-    leadId: lead.id,
-    outreachDraftId: draft.id,
-    websiteOpportunityId: opportunity.id,
-    mockupUrl: preview.previewUrl,
-    projectType: "bundle",
+    ...workspaceRequest,
     repoFullName: "robert/handoff-cafe",
-    branchName: "codex/client-handoff-cafe-website",
-    depositPaid: true,
-    scopeApproved: true,
-    cashCollectedUsd: 2100,
-    publicDataVerified: true,
     visualQaPassed: false,
     technicalQaPassed: false,
     automationQaPassed: false,
