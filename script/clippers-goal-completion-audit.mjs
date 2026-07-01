@@ -188,6 +188,34 @@ function buildTikTokMvpStartGate({ activeMvpReady, tiktokMvpProofReady, proofLin
   };
 }
 
+function buildExternalActionGate({ proofGate = {}, proofLinksPreviewGate = {}, proofHandoff = {}, operatorNextActions = [] }) {
+  const missingProofUrls = Number(proofGate.minimumProofUrlsNeeded || proofHandoff?.unblockBoard?.minimumProofUrlsNeeded || 0);
+  const proofPacketsNeeded = Number(proofGate.proofPacketsNeeded || proofHandoff?.unblockBoard?.missingProofs || 0);
+  const fastPathAvailable = Boolean(proofGate.fastPathAvailable || proofHandoff?.unblockBoard?.fastPathAvailable);
+  const primaryAction = operatorNextActions[0] || {};
+  const waitingForRobertProof = missingProofUrls > 0 || proofLinksPreviewGate.readyForSave !== true;
+  return {
+    status: waitingForRobertProof ? "waiting_for_robert_proof" : "proof_preview_ready",
+    canAutomateWithoutRobert: !waitingForRobertProof,
+    missingProofUrls,
+    proofPacketsNeeded,
+    fastPathAvailable,
+    requiredOwner: waitingForRobertProof ? "Robert/operator" : "app",
+    nextSafeButton: proofGate.nextSafeButton || "preview_proof_links",
+    lockedButton: proofGate.nextLockedButton || "save_proof_links",
+    fastPathPacketPath: primaryAction.fastPathPacketPath || proofHandoff?.paths?.fastPathPastePacketTxt || "",
+    exactFields: Array.isArray(primaryAction.fastPathPasteLines)
+      ? primaryAction.fastPathPasteLines.filter((line) => /\.metricoolConnectionProofUrl=/.test(line))
+      : [],
+    reason: waitingForRobertProof
+      ? "The app cannot truthfully create or approve external Metricool/TikTok proof. Robert must paste real non-secret proof URLs first."
+      : "Proof preview is clean/current; the app can continue the guarded refresh and approval queue flow.",
+    nextStep: waitingForRobertProof
+      ? "Paste real SPORT and memes Metricool or concrete Drive/Docs proof URLs, then run Preview links before saving."
+      : "Save the clean proof links, refresh the audit, then prepare the Metricool approval queue.",
+  };
+}
+
 function renderMarkdown(summary) {
   return [
     "# Clippers Goal Completion Audit",
@@ -225,6 +253,9 @@ function renderMarkdown(summary) {
     `- TikTok quick fill current: ${summary.tiktokMvpProofQuickFill.currentWithProofRefresh}`,
     `- TikTok proof links preview gate status: ${summary.tiktokMvpProofLinksPreviewGate.status}`,
     `- TikTok proof links preview gate fresh: ${summary.tiktokMvpProofLinksPreviewGate.fresh}`,
+    `- External action gate: ${summary.externalActionGate.status}`,
+    `- Can automate without Robert: ${summary.externalActionGate.canAutomateWithoutRobert}`,
+    `- Missing proof URLs: ${summary.externalActionGate.missingProofUrls}`,
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
@@ -258,6 +289,23 @@ function renderMarkdown(summary) {
       `- Next: ${check.nextAction}`,
       "",
     ].join("\n")),
+    "",
+    "## External Action Gate",
+    "",
+    `- Status: ${summary.externalActionGate.status}`,
+    `- Can automate without Robert: ${summary.externalActionGate.canAutomateWithoutRobert}`,
+    `- Missing proof URLs: ${summary.externalActionGate.missingProofUrls}`,
+    `- Proof packets needed: ${summary.externalActionGate.proofPacketsNeeded}`,
+    `- Fast path available: ${summary.externalActionGate.fastPathAvailable}`,
+    `- Required owner: ${summary.externalActionGate.requiredOwner}`,
+    `- Next safe button: ${summary.externalActionGate.nextSafeButton}`,
+    `- Locked button: ${summary.externalActionGate.lockedButton}`,
+    `- Fast path packet: ${summary.externalActionGate.fastPathPacketPath || "missing"}`,
+    `- Reason: ${summary.externalActionGate.reason}`,
+    `- Next: ${summary.externalActionGate.nextStep}`,
+    ...(summary.externalActionGate.exactFields.length
+      ? ["- Exact fields:", ...summary.externalActionGate.exactFields.map((field) => `  - \`${field}\``)]
+      : ["- Exact fields: none"]),
     "",
     "## TikTok MVP Proof Refresh",
     "",
@@ -812,6 +860,12 @@ async function main() {
     proofQuickFillCurrent,
     proofHandoff,
   });
+  const externalActionGate = buildExternalActionGate({
+    proofGate,
+    proofLinksPreviewGate,
+    proofHandoff,
+    operatorNextActions,
+  });
 
   const totals = requirements.reduce((sum, row) => {
     sum.requirements += 1;
@@ -908,6 +962,7 @@ async function main() {
     },
     tiktokMvpProofLinksPreviewGate: proofLinksPreviewGate,
     tiktokMvpStartGate,
+    externalActionGate,
     operatorNextActions,
     requirements,
     totals,
@@ -942,6 +997,9 @@ async function main() {
     proofLinksPreviewGateFresh: summary.tiktokMvpProofLinksPreviewGate.fresh,
     tiktokMvpStartGateStatus: summary.tiktokMvpStartGate.status,
     tiktokMvpStartGatePassed: `${summary.tiktokMvpStartGate.passed}/${summary.tiktokMvpStartGate.total}`,
+    externalActionGateStatus: summary.externalActionGate.status,
+    canAutomateWithoutRobert: summary.externalActionGate.canAutomateWithoutRobert,
+    missingProofUrls: summary.externalActionGate.missingProofUrls,
     nextStep: summary.nextStep,
     operatorNextActions: summary.operatorNextActions.length,
     nextActionsCsvPath: paths.outNextActionsCsv,

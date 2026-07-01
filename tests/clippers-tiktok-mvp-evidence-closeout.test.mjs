@@ -26,6 +26,7 @@ const proofQuickFillPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-
 const proofHandoffPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-handoff.mjs");
 const localVerificationPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-local-verification.mjs");
 const autopilotBoundaryPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-autopilot-boundary.mjs");
+const goalCompletionAuditPath = path.join(process.cwd(), "script/clippers-goal-completion-audit.mjs");
 const closeoutReportPath = path.join(rootDir, "reports/clippers-tiktok-mvp-evidence-closeout.json");
 const combinedProofCsvPath = path.join(tmpDir, "tiktok-mvp-combined-proof-test.csv");
 const defaultCombinedProofCsvPath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/combined-proof-intake.csv");
@@ -2403,6 +2404,68 @@ test("TikTok MVP autopilot boundary separates Codex-ready work from external pro
   assert.match(csv, /external_action/);
   assert.match(csv, /needs_real_external_proof/);
   assert.doesNotMatch(csv, /ready_to_send|realPublishEnabled=true|video\.publish/i);
+});
+
+test("Goal completion audit exposes external proof gate and refuses to automate missing Metricool proof", async () => {
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  try {
+    await mkdir(path.dirname(proofLinksPath), { recursive: true });
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "",
+          metricoolConnectionProofUrl: "",
+          accountNotes: "Sports Daily Clips TikTok ownership/control confirmed by Robert from Metricool proof without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "",
+          metricoolConnectionProofUrl: "",
+          accountNotes: "Meme Radar TikTok ownership/control confirmed by Robert from Metricool proof without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+        },
+      },
+    }, null, 2));
+
+    const handoff = spawnSync(process.execPath, [proofHandoffPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(handoff.status, 0, handoff.stderr || handoff.stdout);
+
+    const audit = spawnSync(process.execPath, [goalCompletionAuditPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(audit.status, 0, audit.stderr || audit.stdout);
+    const output = JSON.parse(audit.stdout);
+    assert.equal(output.externalActionGateStatus, "waiting_for_robert_proof");
+    assert.equal(output.canAutomateWithoutRobert, false);
+    assert.equal(output.missingProofUrls, 2);
+
+    const report = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(report.externalActionGate.status, "waiting_for_robert_proof");
+    assert.equal(report.externalActionGate.canAutomateWithoutRobert, false);
+    assert.equal(report.externalActionGate.missingProofUrls, 2);
+    assert.equal(report.externalActionGate.requiredOwner, "Robert/operator");
+    assert.equal(report.externalActionGate.nextSafeButton, "preview_proof_links");
+    assert.equal(report.externalActionGate.lockedButton, "save_proof_links");
+    assert.match(report.externalActionGate.reason, /cannot truthfully create or approve external Metricool\/TikTok proof/);
+    assert.match(report.externalActionGate.nextStep, /Paste real SPORT and memes Metricool/);
+    assert.deepEqual(report.externalActionGate.exactFields, [
+      "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=",
+    ]);
+    assert.doesNotMatch(JSON.stringify(report.externalActionGate), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+
+    const markdown = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.md"), "utf8");
+    assert.match(markdown, /External Action Gate/);
+    assert.match(markdown, /Can automate without Robert: false/);
+    assert.match(markdown, /Missing proof URLs: 2/);
+  } finally {
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
+  }
 });
 
 test("TikTok MVP autopilot boundary fails closed in source", async () => {

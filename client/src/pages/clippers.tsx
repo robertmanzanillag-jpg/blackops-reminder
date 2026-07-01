@@ -754,6 +754,20 @@ interface ClipperGoalCompletionAuditSummary {
       nextAction: string;
     }>;
   };
+  externalActionGate?: {
+    status: "waiting_for_robert_proof" | "proof_preview_ready";
+    canAutomateWithoutRobert: boolean;
+    missingProofUrls: number;
+    proofPacketsNeeded: number;
+    fastPathAvailable: boolean;
+    requiredOwner: string;
+    nextSafeButton: string;
+    lockedButton: string;
+    fastPathPacketPath?: string;
+    exactFields: string[];
+    reason: string;
+    nextStep: string;
+  };
   requirements: Array<{
     id: string;
     label: string;
@@ -22625,6 +22639,48 @@ export default function ClippersPage() {
                       <p>Direct APIs: {goalCompletionAudit.operatingMode.directSocialApisRequired ? "required" : "deferred"}</p>
                       <p>Deferred: {goalCompletionAudit.operatingMode.deferredPlatforms.join(", ") || "none"}</p>
                     </div>
+                  </div>
+                )}
+                {goalCompletionAudit.externalActionGate && (
+                  <div className={cn(
+                    "mt-3 rounded-md border p-3",
+                    goalCompletionAudit.externalActionGate.canAutomateWithoutRobert
+                      ? "border-emerald-300/15 bg-emerald-950/10"
+                      : "border-amber-300/15 bg-amber-950/10"
+                  )} data-testid="clippers-goal-external-action-gate">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-amber-100">External proof gate</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{goalCompletionAudit.externalActionGate.reason}</p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        goalCompletionAudit.externalActionGate.canAutomateWithoutRobert
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>
+                        {goalCompletionAudit.externalActionGate.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-3">
+                      <p>Can automate: {goalCompletionAudit.externalActionGate.canAutomateWithoutRobert ? "yes" : "no"}</p>
+                      <p>Owner: {goalCompletionAudit.externalActionGate.requiredOwner}</p>
+                      <p>Missing URLs: {formatNumber(goalCompletionAudit.externalActionGate.missingProofUrls)}</p>
+                      <p>Proof packets: {formatNumber(goalCompletionAudit.externalActionGate.proofPacketsNeeded)}</p>
+                      <p>Fast path: {goalCompletionAudit.externalActionGate.fastPathAvailable ? "yes" : "no"}</p>
+                      <p>Next safe: {goalCompletionAudit.externalActionGate.nextSafeButton}</p>
+                    </div>
+                    {goalCompletionAudit.externalActionGate.fastPathPacketPath && (
+                      <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">Fast path packet: {goalCompletionAudit.externalActionGate.fastPathPacketPath}</p>
+                    )}
+                    {goalCompletionAudit.externalActionGate.exactFields.length > 0 && (
+                      <div className="mt-2 grid gap-1 text-[10px] leading-4 text-zinc-500 md:grid-cols-2">
+                        {goalCompletionAudit.externalActionGate.exactFields.map((field) => (
+                          <p key={field} className="break-all rounded border border-white/10 bg-black/20 px-2 py-1">{field}</p>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs leading-5 text-zinc-400">{goalCompletionAudit.externalActionGate.nextStep}</p>
                   </div>
                 )}
                 {goalCompletionAudit.tiktokMvpProofLinksPreviewGate && (
