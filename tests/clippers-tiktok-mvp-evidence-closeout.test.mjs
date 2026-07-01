@@ -2114,6 +2114,8 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
   assert.match(source, /unsafeProofQueryParamPattern/);
   assert.match(source, /x-amz-signature/);
   assert.match(source, /URLs with x-amz\/signature\/expires\/session\/token query params are blocked/);
+  assert.match(source, /validMetricoolReuseConfirmationNotes/);
+  assert.match(source, /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
   assert.match(source, /Local files are inventory only; closeout still requires real public\/non-secret HTTPS proof URLs/);
   assert.doesNotMatch(source, /--apply/);
   assert.doesNotMatch(source, /runClipperTikTokMvpEvidenceCloseout\(true\)/);
@@ -2171,6 +2173,34 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
     assert.equal(report.quickFillStatus, "not_run");
     assert.equal(report.realPublishEnabled, false);
     assert.equal(report.directSocialApisRequired, false);
+
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/folderview?id=sports-daily-tiktok-proof-folder&utm_source=copy#ownership",
+          metricoolConnectionProofUrl: "https://drive.google.com/drive/u/0/folders/sports-daily-tiktok-proof-folder?usp=sharing",
+          accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "SPORT Metricool connection to @sportsdaily verified by Robert without secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/edit/?usp=sharing#ownership",
+          metricoolConnectionProofUrl: "https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/preview",
+          accountNotes: "Meme Radar ownership proof confirmed by Robert without secrets.",
+          metricoolNotes: "memes Metricool connection to @memeradar verified by Robert without secrets.",
+        },
+      },
+    }, null, 2));
+    const sameUrlRunResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-drop-kit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(sameUrlRunResult.status, 0, sameUrlRunResult.stderr || sameUrlRunResult.stdout);
+    const sameUrlOutput = JSON.parse(sameUrlRunResult.stdout);
+    assert.equal(sameUrlOutput.status, "blocked_needs_public_proof_links");
+    assert.equal(sameUrlOutput.readyForQuickFill, false);
+    assert.equal(sameUrlOutput.quickFillStatus, "not_run");
+    const sameUrlReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
+    assert.match(sameUrlReport.issues.join("\n"), /accountNotes must confirm this Metricool\/Drive proof shows the TikTok profile under Robert control/);
   } finally {
     if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
     else await writeFile(proofLinksPath, previousProofLinks);

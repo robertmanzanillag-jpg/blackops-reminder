@@ -63,6 +63,46 @@ function validMetricoolReuseConfirmationNotes(value: unknown): boolean {
   );
 }
 
+function comparableClipperProofUrl(value: unknown): string {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    parsed.hash = "";
+    const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const googleDriveFileId = hostname === "drive.google.com"
+      ? parsed.pathname.match(/^\/file\/d\/([^/]+)/i)?.[1] || parsed.searchParams.get("id") || ""
+      : "";
+    const googleDriveFolderId = hostname === "drive.google.com"
+      ? parsed.pathname.match(/^\/drive\/(?:u\/\d+\/)?folders\/([^/]+)/i)?.[1]
+        || (parsed.pathname.match(/^\/folderview/i) ? parsed.searchParams.get("id") : "")
+        || ""
+      : "";
+    if (googleDriveFolderId) return `https://drive.google.com/drive/folders/${googleDriveFolderId}`;
+    if (googleDriveFileId) return `https://drive.google.com/file/d/${googleDriveFileId}`;
+    const googleDocsMatch = hostname === "docs.google.com" ? parsed.pathname.match(/^\/([^/]+)\/d\/([^/]+)/i) : null;
+    if (googleDocsMatch) return `https://docs.google.com/${googleDocsMatch[1].toLowerCase()}/d/${googleDocsMatch[2]}`;
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    const comparableSearch = new URLSearchParams();
+    for (const [key, searchValue] of parsed.searchParams.entries()) {
+      if (/^(utm_|fbclid$|gclid$|msclkid$|igshid$|usp$|sharing$|ref$|source$)/i.test(key)) continue;
+      comparableSearch.append(key, searchValue);
+    }
+    const sortedSearch = Array.from(comparableSearch.entries()).sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+      return leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue);
+    });
+    parsed.search = "";
+    for (const [key, searchValue] of sortedSearch) parsed.searchParams.append(key, searchValue);
+    return parsed.toString();
+  } catch {
+    return text
+      .replace(/#.*$/, "")
+      .replace(/[?&](utm_[^=&]+|fbclid|gclid|msclkid|igshid|usp|sharing|ref|source)=[^&]*/gi, "")
+      .replace(/[?&]$/, "")
+      .replace(/\/+$/, "");
+  }
+}
+
 export function validateClipperTikTokMvpProofLinks(value: any): string {
   const raw = JSON.stringify(value);
   if (!value || typeof value !== "object" || Array.isArray(value)) return "proof-links must be a JSON object";
@@ -86,7 +126,7 @@ export function auditClipperTikTokMvpProofLinks(value: any) {
     const reusesConnectionProofAsOwnership = Boolean(
       lane.accountOwnershipProofUrl
       && lane.metricoolConnectionProofUrl
-      && lane.accountOwnershipProofUrl === lane.metricoolConnectionProofUrl,
+      && comparableClipperProofUrl(lane.accountOwnershipProofUrl) === comparableClipperProofUrl(lane.metricoolConnectionProofUrl),
     );
     const metricoolReuseConfirmed = !reusesConnectionProofAsOwnership || validMetricoolReuseConfirmationNotes(lane.accountNotes);
     const accountNotesReady = validClipperProofNotes(lane.accountNotes, /(2fa|two-factor|two factor|security|ownership|owner|verification|verified|verificad|screenshot|captura|proof|control)/i)
@@ -206,7 +246,11 @@ export function extractClipperTikTokMvpProofLinksPaste(rawPaste: unknown) {
       || candidateUrls.find((url) => safeClipperHttpsProofUrl(url) && !safeClipperMetricoolConnectionProofUrl(url))
       || metricoolConnectionProofUrl
       || "";
-    const usesMetricoolProofAsAccountControl = Boolean(accountOwnershipProofUrl && metricoolConnectionProofUrl && accountOwnershipProofUrl === metricoolConnectionProofUrl);
+    const usesMetricoolProofAsAccountControl = Boolean(
+      accountOwnershipProofUrl
+      && metricoolConnectionProofUrl
+      && comparableClipperProofUrl(accountOwnershipProofUrl) === comparableClipperProofUrl(metricoolConnectionProofUrl),
+    );
     const metricoolReuseConfirmed = !usesMetricoolProofAsAccountControl
       || validMetricoolReuseConfirmationNotes(explicitLane.accountNotes);
     if (!laneLines.length && !explicitFields.has(spec.key)) issues.push(`${spec.key}: include a line labeled SPORT/sports or memes for this account.`);

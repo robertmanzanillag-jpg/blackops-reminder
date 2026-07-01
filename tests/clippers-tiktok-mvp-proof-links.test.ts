@@ -108,12 +108,12 @@ test("TikTok MVP proof links parser blocks Metricool ownership reuse without exp
 
 test("TikTok MVP proof links parser blocks explicit same-URL reuse with generic ownership notes", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
-    "sports-daily:tiktok.accountOwnershipProofUrl=https://app.metricool.com/planner/sports-daily-tiktok-proof",
-    "sports-daily:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/sports-daily-tiktok-proof",
+    "sports-daily:tiktok.accountOwnershipProofUrl=https://drive.google.com/folderview?id=sports-daily-tiktok-proof-folder&utm_source=copy#ownership",
+    "sports-daily:tiktok.metricoolConnectionProofUrl=https://drive.google.com/drive/u/0/folders/sports-daily-tiktok-proof-folder?usp=sharing",
     "sports-daily:tiktok.accountNotes=Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
     "sports-daily:tiktok.metricoolNotes=SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
-    "meme-radar:tiktok.accountOwnershipProofUrl=https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
-    "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+    "meme-radar:tiktok.accountOwnershipProofUrl=https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/edit/?usp=sharing#ownership",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/spreadsheets/d/meme-radar-metricool-connected-proof/preview",
     "meme-radar:tiktok.accountNotes=Meme Radar ownership proof confirmed by Robert without secrets.",
     "meme-radar:tiktok.metricoolNotes=memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
   ].join("\n"));
