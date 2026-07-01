@@ -3621,7 +3621,30 @@ export async function registerRoutes(
       let handoffForResponse: Record<string, unknown> | null = null;
       if (existing !== null) {
         if (containsClipperSecretLikeText(existing)) {
-          res.status(400).json({ error: "Existing TikTok MVP proof drop contains secret-like text. Remove credentials/tokens/cookies before using the starter flow." });
+          res.status(400).json({
+            error: "Existing TikTok MVP proof drop contains secret-like text. Remove credentials/tokens/cookies before using the starter flow.",
+            tiktokMvpProofLinksDropStarter: {
+              status: "blocked_secret_like_existing",
+              generatedAt: new Date().toISOString(),
+              scope: "tiktok_only_metricool_mvp",
+              launchMode: "metricool_approval_required",
+              directSocialApisRequired: false,
+              realPublishEnabled: false,
+              sourcePath: clipperTikTokMvpProofLinksFilledDropPath,
+              bytes: Buffer.byteLength(existing || "", "utf8"),
+              starterKind: "blocked_existing_drop",
+              overwritten: false,
+              wroteStarter: false,
+              rawStored: false,
+              guardrails: [
+                "Blocked before creating a starter because the existing local proof drop may contain credentials.",
+                "Does not return raw proof drop text.",
+                "Does not overwrite the existing file, save proof-links.json, apply evidence, queue Metricool, create calendar rows, or send posts.",
+              ],
+              nextStep: "Open the local proof drop file, remove passwords/tokens/cookies/keys/signed URLs, then create the starter or import again.",
+            },
+            tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
+          });
           return;
         }
       } else {

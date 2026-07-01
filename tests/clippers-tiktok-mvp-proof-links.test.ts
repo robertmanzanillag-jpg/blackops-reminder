@@ -169,6 +169,15 @@ test("TikTok MVP proof links parser blocks secret-bearing paste text", () => {
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.status, "blocked_proof_actions");
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "preview_proof_links");
   assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextLockedButton, "save_proof_links");
+
+  const nestedSecret = extractClipperTikTokMvpProofLinksPaste([
+    "SPORT Metricool connected proof https://app.metricool.com/planner/sports-daily-tiktok-proof",
+    "memes Metricool connected proof https://app.metricool.com/planner/meme-radar-tiktok-proof",
+    "operator_notes=api_key=neverpaste-this-value",
+  ].join("\n"));
+  assert.equal(nestedSecret.status, "needs_review");
+  assert.match(nestedSecret.issues.join("\n"), /passwords, tokens, cookies, keys, or recovery codes/i);
+  assert.equal(nestedSecret.proofLinksPreview.readyForProofDrop, false);
 });
 
 test("TikTok MVP proof links audit rejects placeholders and non-Metricool proof domains", () => {

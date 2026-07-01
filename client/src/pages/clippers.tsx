@@ -2815,7 +2815,7 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
 }
 
 interface ClipperTikTokMvpProofLinksDropStarterSummary {
-  status: "created" | "preserved_existing";
+  status: "created" | "preserved_existing" | "blocked_secret_like_existing";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
   launchMode: "metricool_approval_required";
@@ -2826,6 +2826,7 @@ interface ClipperTikTokMvpProofLinksDropStarterSummary {
   starterKind?: "metricool_fast_path" | "full_paste_packet" | string;
   overwritten: boolean;
   wroteStarter: boolean;
+  rawStored?: boolean;
   guardrails: string[];
   nextStep: string;
 }
@@ -12246,7 +12247,12 @@ export default function ClippersPage() {
     mutationFn: async () => {
       const response = await fetch("/api/clippers/create-tiktok-mvp-proof-links-drop-starter", { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude crear el proof drop starter");
+      if (!response.ok) {
+        throw buildClipperMutationError(data.error || "No pude crear el proof drop starter", {
+          tiktokMvpProofLinksDropStarter: data.tiktokMvpProofLinksDropStarter,
+          tiktokMvpProofLinksDropStatus: data.tiktokMvpProofLinksDropStatus,
+        });
+      }
       return data as {
         tiktokMvpProofLinksDropStarter: ClipperTikTokMvpProofLinksDropStarterSummary;
         tiktokMvpProofLinksDropStatus: ClipperTikTokMvpProofLinksDropStatusSummary;
@@ -12265,7 +12271,14 @@ export default function ClippersPage() {
         variant: data.tiktokMvpProofLinksDropStarter.status === "created" ? undefined : "destructive",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error & {
+      tiktokMvpProofLinksDropStarter?: ClipperTikTokMvpProofLinksDropStarterSummary;
+      tiktokMvpProofLinksDropStatus?: ClipperTikTokMvpProofLinksDropStatusSummary;
+    }) => {
+      if (error.tiktokMvpProofLinksDropStatus) {
+        queryClient.setQueryData(["/api/clippers/tiktok-mvp-proof-links-drop-status"], error.tiktokMvpProofLinksDropStatus);
+        refreshTikTokProofDropAuditCaches();
+      }
       toast({ title: "No pude crear proof starter", description: error.message, variant: "destructive" });
     },
   });
