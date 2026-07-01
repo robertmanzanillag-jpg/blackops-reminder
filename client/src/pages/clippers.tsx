@@ -12171,13 +12171,13 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? "Proof import listo" : "Proof import bloqueado",
+        title: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? "Proof CSVs listos para stage" : "Proof CSVs bloqueados",
         description: data.tiktokMvpProofIntakeImport.nextStep,
         variant: data.tiktokMvpProofIntakeImport.status === "ready_to_apply" ? undefined : "destructive",
       });
     },
     onError: (error: Error) => {
-      toast({ title: "No pude previsualizar proof import", description: error.message, variant: "destructive" });
+      toast({ title: "No pude previsualizar proof CSV staging", description: error.message, variant: "destructive" });
     },
   });
 
@@ -12188,7 +12188,7 @@ export default function ClippersPage() {
         headers: { "x-clippers-operator-confirm": "apply-tiktok-mvp-proof-intake-import" },
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude aplicar proof intake import");
+      if (!response.ok) throw new Error(data.error || "No pude stagear proof intake CSVs");
       return data as {
         tiktokMvpProofIntakeImport: ClipperTikTokMvpProofIntakeImportSummary;
         tiktokMvpEvidenceCloseout: ClipperTikTokMvpEvidenceCloseoutSummary;
@@ -12214,13 +12214,13 @@ export default function ClippersPage() {
         queryClient.setQueryData(["/api/clippers/tiktok-next-action"], data.tiktokNextAction);
       }
       toast({
-        title: data.postImportApplyError ? "Proof import aplicado con refresh pendiente" : "Proof import aplicado",
+        title: data.postImportApplyError ? "Proof CSVs stageados con refresh pendiente" : "Proof CSVs stageados",
         description: data.postImportApplyError || "Los CSVs objetivo quedaron listos para closeout; esto no publica ni agenda.",
         variant: data.postImportApplyError ? "destructive" : undefined,
       });
     },
     onError: (error: Error) => {
-      toast({ title: "No pude aplicar proof import", description: error.message, variant: "destructive" });
+      toast({ title: "No pude stagear proof CSVs", description: error.message, variant: "destructive" });
     },
   });
 
