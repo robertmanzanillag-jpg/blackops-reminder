@@ -57,6 +57,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(engineSource, /buildRevenueWebsiteBuildHandoffQueue/);
   assert.match(engineSource, /websiteBuildHandoffQueue/);
   assert.match(engineSource, /Top build handoff/);
+  assert.match(engineSource, /copyableBuildPack/);
+  assert.match(engineSource, /Implementation rules/);
+  assert.match(engineSource, /Do not deploy, publish previews, send forms\/messages/);
   assert.match(engineSource, /status === "sold"/);
   assert.match(engineSource, /depositPaid/);
   assert.match(engineSource, /scopeApproved/);
@@ -163,6 +166,9 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /workspace\.approvalSummary\.requiredBeforeClient\.length > 0/);
   assert.match(uiSource, /panel-delivery-blocked-reason-/);
   assert.match(uiSource, /deliveryWorkspaceGithubHandoffMutation/);
+  assert.match(uiSource, /button-copy-website-build-pack-/);
+  assert.match(uiSource, /button-copy-codex-build-pack-/);
+  assert.match(uiSource, /buildPack\.copyableBuildPack/);
   assert.match(uiSource, /clientHandoffReady: reviewChecks\.clientHandoffReady/);
   assert.doesNotMatch(uiSource, /clientHandoffReady: reviewChecks\.rollbackPlanReady/);
   assert.doesNotMatch(uiSource, /clientHandoffReady: deliveryReviewMutation\.data\?\.requiredFixes\.length === 0 && reviewChecks\.depositPaid/);

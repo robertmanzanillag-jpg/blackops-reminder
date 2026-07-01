@@ -575,6 +575,13 @@ type RevenueSnapshot = {
       prUrl: string;
       codexBrief: string;
       publicBuildBrief: string;
+      buildPack: {
+        sections: string[];
+        assets: string[];
+        qaCommands: string[];
+        publicOnly: boolean;
+        copyableBuildPack: string;
+      };
       missing: string[];
       blockedActions: string[];
       nextAction: string;
@@ -880,6 +887,13 @@ type RevenueSnapshot = {
       title: string;
       codexBrief: string;
       publicBuildBrief: string;
+      buildPack: {
+        sections: string[];
+        assets: string[];
+        qaCommands: string[];
+        publicOnly: boolean;
+        copyableBuildPack: string;
+      };
       acceptanceCriteria: string[];
       blockedActions: string[];
       missing: string[];
@@ -5472,6 +5486,17 @@ export default function RevenueEnginePage() {
                             <Copy className="mr-2 h-4 w-4" />
                             Copy public brief
                           </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                            onClick={() => navigator.clipboard.writeText(item.buildPack.copyableBuildPack)}
+                            data-testid={`button-copy-website-build-pack-${item.workspaceId}`}
+                          >
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy build pack
+                          </Button>
                           {item.githubIssueUrl && (
                             <a href={item.githubIssueUrl} target="_blank" rel="noreferrer">
                               <Button type="button" size="sm" variant="outline" className="border-zinc-700">
@@ -9003,6 +9028,17 @@ export default function RevenueEnginePage() {
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Copy public brief
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20"
+                                    onClick={() => navigator.clipboard.writeText(workspace.codexBuildHandoff.buildPack.copyableBuildPack)}
+                                    data-testid={`button-copy-codex-build-pack-${workspace.id}`}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy build pack
                                   </Button>
                                   <Button
                                     type="button"

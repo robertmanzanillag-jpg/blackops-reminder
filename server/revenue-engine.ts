@@ -978,6 +978,13 @@ type RevenueWebsiteBuildHandoffQueue = {
     prUrl: string;
     codexBrief: string;
     publicBuildBrief: string;
+    buildPack: {
+      sections: string[];
+      assets: string[];
+      qaCommands: string[];
+      publicOnly: boolean;
+      copyableBuildPack: string;
+    };
     missing: string[];
     blockedActions: string[];
     nextAction: string;
@@ -4868,6 +4875,7 @@ function buildRevenueWebsiteBuildHandoffQueue(limit = 5): RevenueWebsiteBuildHan
     prUrl: workspace.codexBuildHandoff.prUrl,
     codexBrief: workspace.codexBuildHandoff.codexBrief,
     publicBuildBrief: workspace.codexBuildHandoff.publicBuildBrief,
+    buildPack: workspace.codexBuildHandoff.buildPack,
     missing: workspace.codexBuildHandoff.missing,
     blockedActions: workspace.codexBuildHandoff.blockedActions,
     nextAction: workspace.codexBuildHandoff.nextAction,
@@ -9182,6 +9190,50 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     isWebsiteBuild && deploymentApprovalStatus === "approved" && !deploymentApprovalUrl && "URL/evidencia de aprobacion de deploy",
   ].filter(Boolean) as string[];
   const title = `[Revenue Website Build] ${input.clientName} - ${input.packageName}`;
+  const buildPackSections = [
+    "First viewport with business name, offer, credibility signal and primary CTA.",
+    "Services/menu/offer section grounded only in public business facts and approved scope.",
+    "Contact or booking section with approved contact path, no automatic sending until Robert/client approval.",
+    "Trust section using public evidence, mockup direction and clear next step.",
+    "Footer with source-safe business identity and no private payment or operator details.",
+  ];
+  const buildPackAssets = [
+    input.mockupUrl ? `Approved mockup: ${input.mockupUrl}` : "Approved mockup: pending in Revenue Engine workspace",
+    input.sourceUrl ? `Public source: ${input.sourceUrl}` : "Public source: use Revenue Engine workspace source URL",
+    `Repo: ${repoFullName || "pending"}`,
+    `Branch: ${branchName}`,
+  ];
+  const buildPackQaCommands = [
+    "npm run check",
+    "npm run build",
+    "Run relevant route/API tests for the touched app.",
+    "Capture desktop and mobile verification notes before PR handoff.",
+  ];
+  const copyableBuildPack = [
+    `${title} build pack`,
+    "",
+    "Build target:",
+    `- Client: ${input.clientName}`,
+    `- Package: ${input.packageName}`,
+    `- Project type: ${input.projectType}`,
+    `- Repo: ${repoFullName || "pending"}`,
+    `- Branch: ${branchName}`,
+    "",
+    "Page sections:",
+    ...buildPackSections.map((section) => `- ${section}`),
+    "",
+    "Public assets/context:",
+    ...buildPackAssets.map((asset) => `- ${asset}`),
+    "",
+    "Implementation rules:",
+    "- Build on a codex/ branch and open a PR before merge.",
+    "- Use only public facts, approved mockup direction, and workspace-approved scope.",
+    "- Keep prices, deposits, payment references, operator notes, credentials and private client details out of public GitHub text.",
+    "- Do not deploy, publish previews, send forms/messages, or merge without second review, App QA and explicit Robert deploy approval.",
+    "",
+    "QA commands/evidence:",
+    ...buildPackQaCommands.map((command) => `- ${command}`),
+  ].join("\n");
   const codexBrief = [
     title,
     "",
@@ -9260,6 +9312,13 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     title,
     codexBrief,
     publicBuildBrief,
+    buildPack: {
+      sections: buildPackSections,
+      assets: buildPackAssets,
+      qaCommands: buildPackQaCommands,
+      publicOnly: true,
+      copyableBuildPack,
+    },
     acceptanceCriteria: [
       "PR exists before merge.",
       "Second-agent review passes.",
