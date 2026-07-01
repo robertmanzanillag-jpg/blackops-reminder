@@ -140,9 +140,15 @@ test("web assistant routes Metricool posting requests into approval-gated automa
   assert.ok(direct);
   assert.match(direct.command, /METRICOOL_AUTOMATION/);
   assert.match(direct.command, /"clipsPerAccount":6/);
-  assert.match(direct.command, /"publishMode":"auto_after_connection"/);
+  assert.match(direct.command, /"publishMode":"approval_required"/);
+  assert.doesNotMatch(direct.command, /auto_after_connection/);
+  assert.match(direct.content, /approval_required/);
   assert.match(source, /marketing\.metricool_automation/);
+  assert.doesNotMatch(source, /approval_required\|auto_after_connection|Usa "auto_after_connection"/);
   assert.match(executor, /executeMetricoolAutomationAction/);
+
+  const telegram = readFileSync("server/telegram-chat.ts", "utf8");
+  assert.doesNotMatch(telegram, /approval_required\|auto_after_connection|publishMode:"auto_after_connection"|auto publish/);
 });
 
 test("BlackOps chat loads local Claude skills into web and Telegram prompts", () => {

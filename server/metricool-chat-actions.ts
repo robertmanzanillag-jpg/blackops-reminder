@@ -21,9 +21,7 @@ function normalizePlatform(value: unknown): string | null {
 export function sanitizeMetricoolAutomationInput(input: unknown): MetricoolAutomationInput {
   const value = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const clipsPerAccount = Number(value.clipsPerAccount);
-  const publishMode = value.publishMode === "auto_after_connection" || value.publishMode === "draft_only" || value.publishMode === "approval_required"
-    ? value.publishMode
-    : "approval_required";
+  const publishMode = value.publishMode === "draft_only" ? "draft_only" : "approval_required";
   const riskTolerance = value.riskTolerance === "aggressive" || value.riskTolerance === "safe" || value.riskTolerance === "growth"
     ? value.riskTolerance
     : "growth";
@@ -64,9 +62,8 @@ export function buildDirectMetricoolCommand(message?: string): { content: string
 
   if (!(mentionsMetricool || mentionsSocialAutomation) || !mentionsPublishing || !wantsAction) return null;
 
-  const publishMode = /\b(auto|automatico|automatica|automaticamente|sin aprobar|live|publica ya|postea ya)\b/.test(text)
-    ? "auto_after_connection"
-    : "approval_required";
+  const requestedAutomatic = /\b(auto|automatico|automatica|automaticamente|sin aprobar|live|publica ya|postea ya)\b/.test(text);
+  const publishMode = "approval_required";
   const platforms = [
     text.includes("tiktok") ? "tiktok" : null,
     text.includes("instagram") || text.includes("reel") ? "instagram" : null,
@@ -83,8 +80,8 @@ export function buildDirectMetricoolCommand(message?: string): { content: string
   });
 
   return {
-    content: publishMode === "auto_after_connection"
-      ? "Dale. Voy a preparar la cola Metricool en modo automatico, pero quedara bloqueada por aprobacion y por la bandera de publicacion real hasta que todo este habilitado."
+    content: requestedAutomatic
+      ? "Dale. Voy a preparar la cola Metricool en approval_required; aunque pediste automatico, este MVP queda bloqueado por aprobacion antes de publicar."
       : "Dale. Voy a preparar la cola Metricool en modo approval_required para revisar antes de publicar.",
     command: `[METRICOOL_AUTOMATION: ${JSON.stringify(input)}]`,
   };

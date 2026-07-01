@@ -993,7 +993,7 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
 - [BLACKROOM_TIMER_ADD: {"title": "...", "date": "YYYY-MM-DDTHH:mm", "url": "https://...", "partyTitle": "..."}]
-- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
 - [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
@@ -1052,7 +1052,7 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 Puedes preparar campanas, clips y colas de publicacion con Metricool usando METRICOOL_AUTOMATION.
 - Usa este comando cuando el usuario pida postear, publicar, programar, correr campanas, preparar cola, o automatizar clips/redes con Metricool.
 - publishMode por defecto debe ser "approval_required".
-- Usa "auto_after_connection" solo si el usuario pide explicitamente automatico/live; aun asi el sistema lo pondra como accion pendiente y el backend mantiene las banderas de seguridad.
+- No uses modos automaticos para Clippers/Metricool. Aunque el usuario pida automatico/live, usa "approval_required".
 - Nunca digas que ya publicaste en redes. Di que preparaste la cola o que quedo pendiente de aprobacion.
 - Si el usuario pide publicar inmediatamente, crea la accion Metricool y explica que necesita aprobacion y que real publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true y METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=false.
 
@@ -2258,9 +2258,7 @@ export function registerAssistantRoutes(app: Express): void {
             executionMode: "user_requested",
             actionType: "marketing.metricool_automation",
             resourceType: "metricool_execution_queue",
-            title: metricoolData.publishMode === "auto_after_connection"
-              ? "Preparar Metricool auto publish"
-              : "Preparar cola Metricool",
+            title: "Preparar cola Metricool",
             description: buildMetricoolPendingDescription(metricoolData),
             input: metricoolData,
             proposedChanges: {

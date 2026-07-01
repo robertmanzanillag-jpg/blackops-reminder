@@ -284,7 +284,7 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [CREAR_RECORDATORIO: {"message": "...", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday"]}]
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
-- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
 - [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [RADIO_DRIVE_VIDEO_CLIPS: {"sourceDriveFileId": "GOOGLE_DRIVE_FILE_ID", "sourceDriveUrl": "https://drive.google.com/file/d/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
@@ -310,7 +310,7 @@ INFORMACIÓN SOBRE RADIO:
 METRICOOL / SOCIAL PUBLISHING:
 - Si el usuario pide postear, publicar, programar, correr campanas, preparar cola o automatizar clips/redes con Metricool, usa METRICOOL_AUTOMATION.
 - Usa publishMode:"approval_required" por defecto.
-- Usa publishMode:"auto_after_connection" solo si pide automatico/live explicitamente. Aun asi quedara pendiente de aprobacion.
+- No uses modos automaticos para Clippers/Metricool. Aunque pida automatico/live, usa publishMode:"approval_required".
 - Nunca digas que ya publicaste en redes. Di que queda cola preparada o pendiente de aprobacion.
 
 TIPOS DE INVERSIÓN: stock, etf, crypto, bond, fund`;
@@ -489,7 +489,7 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,
@@ -1023,7 +1023,7 @@ async function processAssistantResponse(userId: string, response: string): Promi
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,
