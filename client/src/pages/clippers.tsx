@@ -2982,7 +2982,7 @@ interface ClipperTikTokMvpOperatingRefreshSummary {
 }
 
 interface ClipperTikTokMvpCloseoutWizardSummary {
-  status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence";
+  status: "ready_for_operator_apply_review" | "blocked_needs_operator_evidence" | "blocked_needs_valid_metricool_tiktok_proof_gate";
   launchDecision: "ready_for_confirmed_apply_only" | "blocked_before_apply";
   generatedAt: string;
   scope: "tiktok_only_metricool_mvp";
@@ -3004,8 +3004,22 @@ interface ClipperTikTokMvpCloseoutWizardSummary {
     ready?: number;
     lanes?: number;
     rejected?: number;
+    controlFieldsPresent?: boolean;
+    minimumProofUrlsNeeded?: number;
+    blockedBy?: string[];
+    failedPreflightChecks?: string[];
+    failedVerifierChecks?: string[];
     path?: string;
   }>;
+  proofGate?: {
+    status: string;
+    controlFieldsPresent: boolean;
+    ready: boolean;
+    minimumProofUrlsNeeded: number;
+    blockedBy: string[];
+    nextStep: string;
+    paths: Record<string, string>;
+  };
   paths: {
     json: string;
     markdown: string;
@@ -12438,6 +12452,15 @@ export default function ClippersPage() {
         if (data.tiktokMvpEvidenceCloseoutPreviewGate) {
           setTiktokMvpEvidenceCloseoutPreviewGate(data.tiktokMvpEvidenceCloseoutPreviewGate);
         }
+        if (data.tiktokMvpCloseoutWizard) {
+          queryClient.setQueryData(["/api/clippers/tiktok-mvp-closeout-wizard"], data.tiktokMvpCloseoutWizard);
+        }
+        if (data.tiktokMvpEvidenceCloseout) {
+          queryClient.setQueryData(["/api/clippers/tiktok-mvp-evidence-closeout"], data.tiktokMvpEvidenceCloseout);
+        }
+        if (data.accountPermissionReadiness) {
+          queryClient.setQueryData(["/api/clippers/account-permission-readiness"], data.accountPermissionReadiness);
+        }
         throw new Error(data.error || "No pude aplicar TikTok MVP evidence closeout");
       }
       return data as {
@@ -17038,6 +17061,8 @@ export default function ClippersPage() {
     || isLoading
     || activeTikTokMvpOperatorButton === "apply_closeout_with_confirmation"
     || (activeTikTokMvpOperatorButton === "preview_or_save_proof_links" && !tiktokMvpProofLinksText.trim());
+  const tiktokMvpCloseoutApplyAllowed = tiktokMvpEvidenceCloseout?.status === "ready_to_apply"
+    && tiktokMvpCloseoutWizard?.status === "ready_for_operator_apply_review";
   const tiktokMetricoolBlockedRows = tiktokMetricoolBridgeDisplayRows.filter((row) => row.status !== "ready_for_metricool_tiktok");
   const metricoolBridgeEvidenceCurrentPreview = metricoolBridgeEvidenceBatchPreview?.raw === metricoolBridgeEvidenceBatchText
     ? metricoolBridgeEvidenceBatchPreview.result
@@ -18360,7 +18385,7 @@ export default function ClippersPage() {
                 type="button"
                 size="sm"
                 onClick={() => tiktokMvpEvidenceCloseoutApplyMutation.mutate()}
-                disabled={tiktokProofFlowBusy || isLoading || tiktokMvpEvidenceCloseout?.status !== "ready_to_apply"}
+                disabled={tiktokProofFlowBusy || isLoading || !tiktokMvpCloseoutApplyAllowed}
                 className="h-8 bg-emerald-200 text-zinc-950 hover:bg-emerald-100"
                 data-testid="apply-clippers-tiktok-mvp-evidence-closeout-button"
               >
@@ -19039,6 +19064,29 @@ export default function ClippersPage() {
                   <p className="break-all">Apply gate CSV: {tiktokMvpCloseoutWizard.paths.applyGateCsv}</p>
                   <p>Real publish: {tiktokMvpCloseoutWizard.realPublishEnabled ? "enabled" : "disabled"}</p>
                 </div>
+                {tiktokMvpCloseoutWizard.proofGate && (
+                  <div className={cn(
+                    "mt-2 rounded-md border bg-black/20 p-2",
+                    tiktokMvpCloseoutWizard.proofGate.ready
+                      ? "border-emerald-300/10 text-emerald-100/80"
+                      : "border-amber-300/10 text-amber-100/80"
+                  )} data-testid="clippers-tiktok-mvp-closeout-proof-gate">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={cn(
+                        "border text-[10px]",
+                        tiktokMvpCloseoutWizard.proofGate.ready
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>
+                        proof gate {tiktokMvpCloseoutWizard.proofGate.status}
+                      </Badge>
+                      <span>controls {tiktokMvpCloseoutWizard.proofGate.controlFieldsPresent ? "present" : "missing"}</span>
+                      <span>min URLs {tiktokMvpCloseoutWizard.proofGate.minimumProofUrlsNeeded}</span>
+                      <span>blockers {tiktokMvpCloseoutWizard.proofGate.blockedBy.length}</span>
+                    </div>
+                    <p className="mt-1">{tiktokMvpCloseoutWizard.proofGate.nextStep}</p>
+                  </div>
+                )}
                 {tiktokMvpCloseoutWizard.operatorSession && (
                   <div className="mt-2 rounded-md border border-emerald-300/10 bg-black/20 p-2" data-testid="clippers-tiktok-mvp-operator-session">
                     <div className="flex flex-wrap items-center gap-2">

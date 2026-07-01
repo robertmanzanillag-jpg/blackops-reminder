@@ -4046,6 +4046,22 @@ export async function registerRoutes(
         });
         return;
       }
+      await runClipperTikTokMvpCloseoutWizard();
+      const tiktokMvpCloseoutWizard = await readClipperTikTokMvpCloseoutWizard();
+      if (tiktokMvpCloseoutWizard.status !== "ready_for_operator_apply_review") {
+        res.status(400).json({
+          error: tiktokMvpCloseoutWizard.nextStep || "TikTok MVP closeout wizard is not ready for operator apply review.",
+          tiktokMvpCloseoutWizard,
+          tiktokMvpEvidenceCloseout: await readClipperTikTokMvpEvidenceCloseout().catch(() => null),
+          accountPermissionReadiness: await readClipperAccountPermissionReadiness().catch(() => null),
+          guardrails: [
+            "Blocked before applying evidence because the closeout wizard did not pass the strict TikTok Metricool proof gate.",
+            "This response does not apply evidence, queue Metricool, create calendar rows, or send posts.",
+            "Refresh Operating proof gate and closeout wizard after every proof or CSV edit.",
+          ],
+        });
+        return;
+      }
       const run = await runClipperTikTokMvpEvidenceCloseout(true);
       const tiktokMvpEvidenceCloseout = await readClipperTikTokMvpEvidenceCloseout();
       if (tiktokMvpEvidenceCloseout.status !== "applied") {

@@ -5519,6 +5519,62 @@ test("TikTok next action fails closed on malformed ready operating proof gate", 
   });
 });
 
+test("TikTok MVP closeout wizard fails closed on malformed operating proof gate", async () => {
+  await withFutureCurrentBatchSchedule(async () => {
+    const operatingRefreshPath = path.join(rootDir, "reports/tiktok-mvp-operating-refresh/operating-refresh.json");
+    const originalOperatingRefresh = await readFile(operatingRefreshPath, "utf8");
+    try {
+      const operatingRefresh = JSON.parse(originalOperatingRefresh);
+      operatingRefresh.proofGate = {
+        status: "ready_for_operator_review",
+        requiredLanes: ["sports-daily:tiktok", "meme-radar:tiktok"],
+        nextStep: "Malformed proof gate must block closeout wizard apply review.",
+        paths: operatingRefresh.proofGate?.paths || {},
+      };
+      await writeFile(operatingRefreshPath, JSON.stringify(operatingRefresh, null, 2));
+
+      const wizardResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-closeout-wizard.mjs"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(wizardResult.status, 0, wizardResult.stderr || wizardResult.stdout);
+      const wizard = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/closeout-wizard.json"), "utf8"));
+
+      assert.equal(wizard.status, "blocked_needs_valid_metricool_tiktok_proof_gate");
+      assert.equal(wizard.launchDecision, "blocked_before_apply");
+      assert.equal(wizard.proofGate.status, "ready_for_operator_review");
+      assert.equal(wizard.proofGate.controlFieldsPresent, false);
+      assert.equal(wizard.proofGate.ready, false);
+      assert.ok(wizard.steps.some((step) => step.id === "operating_proof_gate" && step.status === "blocked"));
+      assert.equal(wizard.operatorSession.status, "blocked_operator_session");
+      assert.notEqual(wizard.operatorSession.recommendedButton, "apply_closeout_with_confirmation");
+      assert.match(wizard.nextStep, /Malformed proof gate/);
+      assert.doesNotMatch(wizard.operatorSession.copyPacket, /Human review can run guarded apply/);
+
+      const scriptSource = await readFile(path.join(process.cwd(), "script/clippers-tiktok-mvp-closeout-wizard.mjs"), "utf8");
+      assert.match(scriptSource, /function proofGateControlFieldsPresent\(proofGate = \{\}\)/);
+      assert.match(scriptSource, /function isProofGateReady\(proofGate = \{\}\)/);
+      assert.match(scriptSource, /blocked_needs_valid_metricool_tiktok_proof_gate/);
+
+      const routesSource = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
+      const applyRoute = routesSource.slice(
+        routesSource.indexOf('app.post("/api/clippers/apply-tiktok-mvp-evidence-closeout"'),
+        routesSource.indexOf('const run = await runClipperTikTokMvpEvidenceCloseout(true)'),
+      );
+      assert.match(applyRoute, /await runClipperTikTokMvpCloseoutWizard\(\)/);
+      assert.match(applyRoute, /tiktokMvpCloseoutWizard\.status !== "ready_for_operator_apply_review"/);
+      assert.match(applyRoute, /strict TikTok Metricool proof gate/);
+
+      const pageSource = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
+      assert.match(pageSource, /const tiktokMvpCloseoutApplyAllowed = tiktokMvpEvidenceCloseout\?\.status === "ready_to_apply"\s+&& tiktokMvpCloseoutWizard\?\.status === "ready_for_operator_apply_review"/);
+      assert.match(pageSource, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| !tiktokMvpCloseoutApplyAllowed\}/);
+      assert.match(pageSource, /if \(data\.tiktokMvpCloseoutWizard\) \{\s+queryClient\.setQueryData\(\["\/api\/clippers\/tiktok-mvp-closeout-wizard"\], data\.tiktokMvpCloseoutWizard\);/);
+    } finally {
+      await writeFile(operatingRefreshPath, originalOperatingRefresh);
+    }
+  });
+});
+
 test("TikTok MVP refresh returns account readiness and updates UI cache", async () => {
   const routes = await readFile(path.join(process.cwd(), "server/routes.ts"), "utf8");
   const mvpNowRefreshPostRoute = routes.slice(

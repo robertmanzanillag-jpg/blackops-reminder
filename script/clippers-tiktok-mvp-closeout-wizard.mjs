@@ -5,6 +5,7 @@ import path from "node:path";
 const rootDir = path.join(process.cwd(), "clippers_workspace");
 const reportsDir = path.join(rootDir, "reports", "tiktok-mvp-proof-intake");
 const closeoutJsonPath = path.join(rootDir, "reports", "clippers-tiktok-mvp-evidence-closeout.json");
+const operatingRefreshJsonPath = path.join(rootDir, "reports", "tiktok-mvp-operating-refresh", "operating-refresh.json");
 const outJsonPath = path.join(reportsDir, "closeout-wizard.json");
 const outMarkdownPath = path.join(reportsDir, "closeout-wizard.md");
 const outHtmlPath = path.join(reportsDir, "closeout-wizard.html");
@@ -54,7 +55,70 @@ function firstBlocked(steps) {
   return steps.find((item) => item.status === "blocked" || item.status === "waiting");
 }
 
-function buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerification }) {
+function proofGateControlFieldsPresent(proofGate = {}) {
+  return [
+    "status",
+    "requiredLanes",
+    "minimumProofUrlsNeeded",
+    "failedPreflightChecks",
+    "failedVerifierChecks",
+    "missingRequiredReports",
+    "boundaryNotReady",
+    "blockedBy",
+    "preflightNotReady",
+  ].every((field) => Object.hasOwn(proofGate, field))
+    && Array.isArray(proofGate.requiredLanes)
+    && typeof proofGate.minimumProofUrlsNeeded === "number"
+    && Array.isArray(proofGate.failedPreflightChecks)
+    && Array.isArray(proofGate.failedVerifierChecks)
+    && Array.isArray(proofGate.missingRequiredReports)
+    && Array.isArray(proofGate.boundaryNotReady)
+    && Array.isArray(proofGate.blockedBy);
+}
+
+function isProofGateReady(proofGate = {}) {
+  const requiredLanes = proofGate.requiredLanes || [];
+  return proofGate.status === "ready_for_operator_review"
+    && proofGateControlFieldsPresent(proofGate)
+    && requiredLanes.includes("sports-daily:tiktok")
+    && requiredLanes.includes("meme-radar:tiktok")
+    && Number(proofGate.minimumProofUrlsNeeded || 0) === 0
+    && Array.isArray(proofGate.failedPreflightChecks)
+    && proofGate.failedPreflightChecks.length === 0
+    && Array.isArray(proofGate.failedVerifierChecks)
+    && proofGate.failedVerifierChecks.length === 0
+    && Array.isArray(proofGate.missingRequiredReports)
+    && proofGate.missingRequiredReports.length === 0
+    && Array.isArray(proofGate.boundaryNotReady)
+    && proofGate.boundaryNotReady.length === 0
+    && Array.isArray(proofGate.blockedBy)
+    && proofGate.blockedBy.length === 0
+    && !proofGate.preflightNotReady;
+}
+
+function proofGateStep(proofGate = {}) {
+  const controlFieldsPresent = proofGateControlFieldsPresent(proofGate);
+  const ready = isProofGateReady(proofGate);
+  return step(
+    "operating_proof_gate",
+    "Operating proof gate",
+    ready ? "done" : "blocked",
+    ready
+      ? "Proof gate is ready for operator review; keep Metricool approval_required."
+      : proofGate.nextStep || "Refresh Operating proof gate and add real non-secret SPORT/memes Metricool proof URLs before closeout apply review.",
+    {
+      statusValue: proofGate.status || "missing",
+      controlFieldsPresent,
+      minimumProofUrlsNeeded: Number(proofGate.minimumProofUrlsNeeded || 0),
+      blockedBy: Array.isArray(proofGate.blockedBy) ? proofGate.blockedBy : [],
+      failedPreflightChecks: Array.isArray(proofGate.failedPreflightChecks) ? proofGate.failedPreflightChecks : [],
+      failedVerifierChecks: Array.isArray(proofGate.failedVerifierChecks) ? proofGate.failedVerifierChecks : [],
+      path: proofGate.paths?.oneScreenGuide || operatingRefreshJsonPath,
+    },
+  );
+}
+
+function buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerification, proofGate }) {
   const proofDropReady = proofDrop?.readyForQuickFill === true;
   const quickFillReady = quickFill?.appliedToIntake === true && (quickFill?.issues?.length || 0) === 0;
   const importReady = importPreview?.status === "ready_to_apply";
@@ -136,6 +200,7 @@ function buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerifi
         commands: Array.isArray(localVerification?.commands) ? localVerification.commands.length : 0,
       },
     ),
+    proofGateStep(proofGate),
   ];
 }
 
@@ -274,13 +339,16 @@ async function main() {
   const importPreview = await readJson(path.join(reportsDir, "proof-intake-import.json"), {});
   const closeout = await readJson(closeoutJsonPath, {});
   const localVerification = await readJson(path.join(reportsDir, "local-verification.json"), {});
-  const steps = buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerification });
-  const blocker = firstBlocked(steps);
+  const operatingRefresh = await readJson(operatingRefreshJsonPath, {});
+  const proofGate = operatingRefresh.proofGate || {};
+  const steps = buildSteps({ proofDrop, quickFill, importPreview, closeout, localVerification, proofGate });
   const allRequiredDone = steps.slice(0, 4).every((item) => item.status === "done");
-  const status = allRequiredDone ? "ready_for_operator_apply_review" : "blocked_needs_operator_evidence";
+  const proofGateReady = isProofGateReady(proofGate);
+  const blocker = proofGateReady ? firstBlocked(steps) : steps.find((item) => item.id === "operating_proof_gate") || firstBlocked(steps);
+  const status = allRequiredDone && proofGateReady ? "ready_for_operator_apply_review" : proofGateReady ? "blocked_needs_operator_evidence" : "blocked_needs_valid_metricool_tiktok_proof_gate";
   const summary = {
     status,
-    launchDecision: allRequiredDone ? "ready_for_confirmed_apply_only" : "blocked_before_apply",
+    launchDecision: allRequiredDone && proofGateReady ? "ready_for_confirmed_apply_only" : "blocked_before_apply",
     generatedAt: new Date().toISOString(),
     scope: "tiktok_only_metricool_mvp",
     launchMode: "metricool_approval_required",
@@ -289,6 +357,15 @@ async function main() {
     steps,
     proofDropRun,
     proofUnblockerRun,
+    proofGate: {
+      status: proofGate.status || "missing",
+      controlFieldsPresent: proofGateControlFieldsPresent(proofGate),
+      ready: proofGateReady,
+      minimumProofUrlsNeeded: Number(proofGate.minimumProofUrlsNeeded || 0),
+      blockedBy: Array.isArray(proofGate.blockedBy) ? proofGate.blockedBy : [],
+      nextStep: proofGate.nextStep || "Run Operating Refresh to rebuild the TikTok MVP proof gate.",
+      paths: proofGate.paths || {},
+    },
     proofCollectionPackets: Array.isArray(proofHandoff?.collectionPackets) ? proofHandoff.collectionPackets : [],
     paths: {
       json: outJsonPath,
