@@ -10600,7 +10600,11 @@ const credentialSecretEnvVarOptions = [
 function isSafeHttpsUrl(value: string) {
   try {
     const url = new URL(value.trim());
-    return url.protocol === "https:" && !metricoolBridgeUnsafeClientPattern.test(url.hostname) && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
+    return url.protocol === "https:"
+      && !url.username
+      && !url.password
+      && !metricoolBridgeUnsafeClientPattern.test(url.hostname)
+      && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
   } catch {
     return false;
   }
@@ -10611,6 +10615,8 @@ function isTikTokProfileUrl(value: string) {
     const url = new URL(value.trim());
     const hostname = url.hostname.toLowerCase();
     return url.protocol === "https:"
+      && !url.username
+      && !url.password
       && (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com"))
       && /^\/@[A-Za-z0-9._-]+\/?$/.test(url.pathname)
       && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
@@ -10624,7 +10630,14 @@ function isMetricoolProofUrl(value: string) {
     const url = new URL(value.trim());
     const hostname = url.hostname.toLowerCase();
     return url.protocol === "https:"
-      && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
+      && !url.username
+      && !url.password
+      && (
+        hostname === "metricool.com"
+        || hostname.endsWith(".metricool.com")
+        || hostname === "drive.google.com"
+        || hostname === "docs.google.com"
+      )
       && !/[?&#;](token|access|refresh|auth|signature|signed|session|cookie|key|secret)=/i.test(url.search);
   } catch {
     return false;
@@ -10699,7 +10712,7 @@ function getMetricoolBridgeEvidenceClientCheck(raw: string) {
       return;
     }
     if (!isMetricoolProofUrl(proof)) {
-      issues.push(`Row ${rowNumber}: proof must be a Metricool HTTPS proof URL.`);
+      issues.push(`Row ${rowNumber}: proof must be a Metricool HTTPS proof URL or Google Drive/Docs evidence URL.`);
       return;
     }
     validRows += 1;
