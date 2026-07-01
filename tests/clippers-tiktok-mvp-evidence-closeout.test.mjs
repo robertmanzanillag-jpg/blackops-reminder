@@ -1087,6 +1087,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /buildTikTokMvpMetricoolFastPathPaste/);
   assert.match(page, /tiktokMvpProofLinksPasteMutation\.mutate\(packetText\)/);
   assert.match(page, /Build & preview 2 URLs/);
+  assert.match(page, /Preview clean; save still required/);
+  assert.match(page, /Packet ready for preview; save still required/);
+  assert.match(page, /Proof drop loaded for preview; save still required/);
+  assert.doesNotMatch(page, /Proof links validos|Proof packet convertido|Proof drop importado/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-status/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-checklist/);
   assert.match(page, /tiktokMvpProofLinksDropStatus\.checklistTotals\.ready/);

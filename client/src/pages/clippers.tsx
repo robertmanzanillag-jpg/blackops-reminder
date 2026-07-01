@@ -12144,7 +12144,7 @@ export default function ClippersPage() {
       syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       setTiktokMvpProofLinksSaveReceipt(null);
       toast({
-        title: data.tiktokMvpProofLinksPreview.readyForProofDrop ? "Proof links validos" : "Proof links con blockers",
+        title: data.tiktokMvpProofLinksPreview.readyForProofDrop ? "Preview clean; save still required" : "Proof links con blockers",
         description: data.tiktokMvpProofLinksPreviewGate.nextStep || data.tiktokMvpProofLinksPreview.nextStep,
         variant: data.tiktokMvpProofLinksPreview.readyForProofDrop ? undefined : "destructive",
       });
@@ -12184,7 +12184,7 @@ export default function ClippersPage() {
       syncGoalCompletionProofLinksPreviewGate(data.tiktokMvpProofLinksPreviewGate);
       setTiktokMvpProofLinksSaveReceipt(null);
       toast({
-        title: data.tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview" ? "Proof packet convertido" : "Proof packet necesita revision",
+        title: data.tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview" ? "Packet ready for preview; save still required" : "Proof packet necesita revision",
         description: data.tiktokMvpProofLinksPreviewGate.nextStep || data.tiktokMvpProofLinksPastePreview.nextStep,
         variant: data.tiktokMvpProofLinksPastePreview.status === "ready_for_proof_links_preview" ? undefined : "destructive",
       });
@@ -12243,7 +12243,7 @@ export default function ClippersPage() {
         nextStep: data.tiktokMvpProofLinksDropImport.nextStep,
       } satisfies ClipperTikTokMvpProofLinksDropStatusSummary);
       toast({
-        title: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "Proof drop importado" : "Proof drop necesita revision",
+        title: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? "Proof drop loaded for preview; save still required" : "Proof drop necesita revision",
         description: `${data.tiktokMvpProofLinksDropImport.sourcePath}: ${data.tiktokMvpProofLinksDropImport.nextStep}`,
         variant: data.tiktokMvpProofLinksDropImport.status === "ready_for_proof_links_preview" ? undefined : "destructive",
       });
