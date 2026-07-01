@@ -15,6 +15,7 @@ const paths = {
   tiktokMvpOperatingRefresh: path.join(reportsDir, "tiktok-mvp-operating-refresh", "operating-refresh.json"),
   tiktokMvpProofRefresh: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-refresh.json"),
   tiktokMvpProofQuickFill: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-quick-fill.json"),
+  tiktokMvpProofLinksPreviewGate: path.join(reportsDir, "tiktok-mvp-proof-intake", "proof-links-preview-gate.json"),
   masterEvidenceCsv: path.join(rootDir, "evidence-drop", "metricool-100-approval-evidence-import.csv"),
   batchEvidenceDir: path.join(scheduledDir, "metricool-100-batch-evidence-imports"),
   outJson: path.join(reportsDir, "clippers-goal-completion-audit.json"),
@@ -157,6 +158,8 @@ function renderMarkdown(summary) {
     `- TikTok proof refresh blockers: ${summary.tiktokMvpProofRefresh.blockers.length}`,
     `- TikTok quick fill status: ${summary.tiktokMvpProofQuickFill.status}`,
     `- TikTok quick fill current: ${summary.tiktokMvpProofQuickFill.currentWithProofRefresh}`,
+    `- TikTok proof links preview gate status: ${summary.tiktokMvpProofLinksPreviewGate.status}`,
+    `- TikTok proof links preview gate fresh: ${summary.tiktokMvpProofLinksPreviewGate.fresh}`,
     `- TikTok external active closeout tasks: ${summary.fullGoal.tiktokExternalCloseoutTasks}`,
     `- TikTok external deferred backlog tasks: ${summary.fullGoal.tiktokExternalDeferredTasks}`,
     `- Full readiness missing: ${summary.fullGoal.fullReadinessMissing}`,
@@ -198,6 +201,18 @@ function renderMarkdown(summary) {
     `- Issues: ${summary.tiktokMvpProofQuickFill.issues}`,
     `- Input JSON: ${summary.tiktokMvpProofQuickFill.paths.inputJson || "missing"}`,
     `- Next: ${summary.tiktokMvpProofQuickFill.nextStep}`,
+    "",
+    "## TikTok MVP Proof Links Preview Gate",
+    "",
+    `- Status: ${summary.tiktokMvpProofLinksPreviewGate.status}`,
+    `- Generated: ${summary.tiktokMvpProofLinksPreviewGate.generatedAt}`,
+    `- Fresh: ${summary.tiktokMvpProofLinksPreviewGate.fresh}`,
+    `- Raw stored: ${summary.tiktokMvpProofLinksPreviewGate.rawStored}`,
+    `- Raw hash present: ${summary.tiktokMvpProofLinksPreviewGate.rawHashPresent}`,
+    `- Ready proof fields: ${summary.tiktokMvpProofLinksPreviewGate.readyProofFields}/${summary.tiktokMvpProofLinksPreviewGate.totalProofFields}`,
+    `- Issues: ${summary.tiktokMvpProofLinksPreviewGate.issues}`,
+    `- Path: ${summary.tiktokMvpProofLinksPreviewGate.path}`,
+    `- Next: ${summary.tiktokMvpProofLinksPreviewGate.nextStep}`,
     "",
     "## Operator Next Actions",
     "",
@@ -329,6 +344,40 @@ function proofRefreshBlockersForAudit(proofRefresh = {}) {
     blockers.unshift("proof_refresh_stale_or_missing");
   }
   return Array.from(new Set(blockers));
+}
+
+function buildProofLinksPreviewGateSummary(gate = {}) {
+  const generatedAt = gate.generatedAt || "missing";
+  const fresh = isFreshGeneratedAt(generatedAt, 30 * 60 * 1000);
+  const readyProofFields = Number(gate.totals?.readyProofFields || 0);
+  const totalProofFields = Number(gate.totals?.totalProofFields || 0);
+  const issues = Number(gate.totals?.issues || 0);
+  const status = gate.status || "missing";
+  const rawStoredExplicitFalse = gate.rawStored === false;
+  const rawStored = gate.rawStored === true ? true : (rawStoredExplicitFalse ? false : "unknown");
+  const readyForSave = status === "ready_for_save"
+    && fresh
+    && rawStoredExplicitFalse
+    && Boolean(gate.rawHash)
+    && issues === 0
+    && totalProofFields > 0
+    && readyProofFields === totalProofFields;
+  return {
+    status,
+    generatedAt,
+    fresh,
+    readyForSave,
+    rawStored,
+    rawStoredExplicitFalse,
+    rawHashPresent: Boolean(gate.rawHash),
+    readyProofFields,
+    totalProofFields,
+    issues,
+    path: paths.tiktokMvpProofLinksPreviewGate,
+    nextStep: readyForSave
+      ? "A clean current proof-links preview gate exists; saving still requires the matching previewHash and real non-secret proof links."
+      : "Run Preview links after pasting real SPORT and memes proof URLs; save only if the preview gate is clean and current.",
+  };
 }
 
 function isQuickFillCurrentWithProofRefresh(quickFill = {}, proofRefresh = {}) {
@@ -470,7 +519,7 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
 
 async function main() {
   await mkdir(reportsDir, { recursive: true });
-  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, evidenceRaw] = await Promise.all([
+  const [accountReadiness, mvpLaunchPack, approvalRun, approvalSession, launchControl, tiktokExternalCloseoutSession, operatingRefresh, proofRefresh, proofQuickFill, proofLinksPreviewGateRaw, evidenceRaw] = await Promise.all([
     readJson(paths.accountReadiness),
     readJson(paths.metricoolMvpLaunchPack),
     readJson(paths.metricool100ApprovalRun),
@@ -480,6 +529,7 @@ async function main() {
     readJson(paths.tiktokMvpOperatingRefresh, {}),
     readJson(paths.tiktokMvpProofRefresh, {}),
     readJson(paths.tiktokMvpProofQuickFill, {}),
+    readJson(paths.tiktokMvpProofLinksPreviewGate, {}),
     readFile(paths.masterEvidenceCsv, "utf8").catch(() => ""),
   ]);
   const evidence = evidenceTotals(parseCsv(evidenceRaw));
@@ -542,6 +592,7 @@ async function main() {
   const proofRefreshFresh = isFreshGeneratedAt(proofRefresh.generatedAt);
   const proofRefreshBlockers = proofRefreshBlockersForAudit(proofRefresh);
   const proofQuickFillCurrent = isQuickFillCurrentWithProofRefresh(proofQuickFill, proofRefresh);
+  const proofLinksPreviewGate = buildProofLinksPreviewGateSummary(proofLinksPreviewGateRaw);
   const proofGateFixFirst = shouldPrioritizeProofGateFix(proofGate, proofGateReady);
   const quickFillRequiredNextStep = proofQuickFill.nextStep || "Quick fill is stale or missing; rerun Quick fill with real non-secret proof before trusting this result.";
   const proofGateNextStep = proofGateFixFirst
@@ -560,7 +611,7 @@ async function main() {
       "tiktok_metricool_proof_gate",
       "TikTok Metricool proof gate",
       tiktokMvpProofReady ? "ready" : "needs_external_action",
-      `proofGate ${proofGate.status || "missing"}; proofGateReady ${proofGateReady}; controlFieldsPresent ${proofGateControlsPresent}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; proofRefresh ${proofRefresh.status || "missing"}; proofRefreshReady ${proofRefreshReady}; proofRefreshFresh ${proofRefreshFresh}; proofRefreshGeneratedAt ${proofRefresh.generatedAt || "missing"}; proofRefreshBlockers ${proofRefreshBlockers.join("+") || "none"}; quickFillCurrent ${proofQuickFillCurrent}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
+      `proofGate ${proofGate.status || "missing"}; proofGateReady ${proofGateReady}; controlFieldsPresent ${proofGateControlsPresent}; lanes ${(proofGate.requiredLanes || []).join("+") || "missing"}; minimumProofUrlsNeeded ${proofGate.minimumProofUrlsNeeded ?? "missing"}; proofLinksPreviewGate ${proofLinksPreviewGate.status}; proofLinksPreviewGateFresh ${proofLinksPreviewGate.fresh}; proofLinksPreviewGateReadyForSave ${proofLinksPreviewGate.readyForSave}; proofLinksPreviewRawStored ${proofLinksPreviewGate.rawStored}; proofRefresh ${proofRefresh.status || "missing"}; proofRefreshReady ${proofRefreshReady}; proofRefreshFresh ${proofRefreshFresh}; proofRefreshGeneratedAt ${proofRefresh.generatedAt || "missing"}; proofRefreshBlockers ${proofRefreshBlockers.join("+") || "none"}; quickFillCurrent ${proofQuickFillCurrent}; failedVerifier ${(proofGate.failedVerifierChecks || []).join("+") || "none"}; failedPreflight ${(proofGate.failedPreflightChecks || []).join("+") || "none"}`,
       proofGateNextStep,
     ),
     requirement(
@@ -755,6 +806,7 @@ async function main() {
         ? (proofQuickFill.nextStep || "Continue from the current quick fill result.")
         : "Quick fill is stale or missing; rerun Quick fill with real non-secret proof before trusting this result.",
     },
+    tiktokMvpProofLinksPreviewGate: proofLinksPreviewGate,
     operatorNextActions,
     requirements,
     totals,
@@ -785,6 +837,8 @@ async function main() {
     fullGoalStatus: summary.fullGoalStatus,
     externalProofFilesNeedRealEvidence: summary.fullGoal.externalProofFilesNeedRealEvidence,
     fullReadinessMissing: summary.fullGoal.fullReadinessMissing,
+    proofLinksPreviewGateStatus: summary.tiktokMvpProofLinksPreviewGate.status,
+    proofLinksPreviewGateFresh: summary.tiktokMvpProofLinksPreviewGate.fresh,
     nextStep: summary.nextStep,
     operatorNextActions: summary.operatorNextActions.length,
     nextActionsCsvPath: paths.outNextActionsCsv,

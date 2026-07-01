@@ -7853,6 +7853,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.ok(output.waitingMetricoolWork >= 1);
   assert.ok(output.needsExternalAction >= 1);
   assert.ok(output.deferred >= 1);
+  assert.ok(["missing", "ready_for_save", "blocked_preview_not_clean"].includes(output.proofLinksPreviewGateStatus));
+  assert.equal(typeof output.proofLinksPreviewGateFresh, "boolean");
 
   const audit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
   assert.ok(["tiktok_mvp_ready_external_work_remaining", "not_ready"].includes(audit.status));
@@ -7878,7 +7880,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.tiktokMvpProofGate.minimumProofUrlsNeeded, 2);
   assert.equal(audit.tiktokMvpProofGate.nextSafeButton, "preview_proof_links");
   assert.equal(audit.tiktokMvpProofGate.nextLockedButton, "save_proof_links");
-  assert.ok(audit.tiktokMvpProofGate.blockedBy.some((item) => /real non-secret Metricool\/Drive proof/i.test(item)));
+  assert.ok(audit.tiktokMvpProofGate.blockedBy.some((item) => /real non-secret Metricool.*Drive|concrete Drive file\/folder\/Docs/i.test(item)));
   assert.equal(audit.tiktokMvpProofRefresh.status, "blocked");
   assert.equal(audit.tiktokMvpProofRefresh.importStatus, "blocked_invalid_intake");
   assert.equal(audit.tiktokMvpProofRefresh.doctorStatus, "needs_proof_fix");
@@ -7888,9 +7890,21 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.ok(["applied_to_combined_intake", "blocked_invalid_quick_fill", "missing"].includes(audit.tiktokMvpProofQuickFill.status));
   assert.equal(typeof audit.tiktokMvpProofQuickFill.currentWithProofRefresh, "boolean");
   assert.match(audit.tiktokMvpProofQuickFill.paths.inputJson || "", /proof-quick-fill-input\.json$/);
+  assert.ok(["missing", "ready_for_save", "blocked_preview_not_clean"].includes(audit.tiktokMvpProofLinksPreviewGate.status));
+  assert.equal(typeof audit.tiktokMvpProofLinksPreviewGate.fresh, "boolean");
+  assert.ok([false, "unknown"].includes(audit.tiktokMvpProofLinksPreviewGate.rawStored));
+  assert.equal(
+    audit.tiktokMvpProofLinksPreviewGate.rawStoredExplicitFalse,
+    audit.tiktokMvpProofLinksPreviewGate.rawStored === false,
+  );
+  assert.match(audit.tiktokMvpProofLinksPreviewGate.path, /proof-links-preview-gate\.json$/);
+  assert.match(audit.tiktokMvpProofLinksPreviewGate.nextStep, /Preview links|proof-links preview gate/i);
   assert.ok(audit.requirements.some((row) => row.id === "tiktok_metricool_proof_gate" && row.status === "needs_external_action"));
   const proofGateRequirement = audit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate");
   assert.match(proofGateRequirement?.evidence || "", /proofRefresh blocked/);
+  assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewGate (missing|ready_for_save|blocked_preview_not_clean)/);
+  assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewGateFresh (true|false)/);
+  assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewRawStored (false|unknown)/);
   assert.match(proofGateRequirement?.evidence || "", /proofRefreshBlockers import_status_blocked_invalid_intake/);
   assert.match(proofGateRequirement?.nextAction || "", /combined proof intake rows|proof doctor fix queue|proof links/i);
   assert.ok(["ready", "needs_external_action"].includes(audit.requirements.find((row) => row.id === "tiktok_metricool_mvp_ready")?.status || ""));
@@ -7916,12 +7930,12 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.operatorNextActions[0].proofLine, "sports-daily:tiktok + meme-radar:tiktok");
   assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
     "sports-daily:tiktok.metricoolConnectionProofUrl=",
-    "sports-daily:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
+    "sports-daily:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Sports Daily TikTok profile connected under Robert control without secrets.",
     "meme-radar:tiktok.metricoolConnectionProofUrl=",
-    "meme-radar:tiktok.accountNotes=Robert confirms this Metricool or Drive proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
+    "meme-radar:tiktok.accountNotes=Robert confirms this Metricool, concrete Drive file/folder, or Docs proof shows the Meme Radar TikTok profile connected under Robert control without secrets.",
   ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
-  assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool\/Drive evidence/);
+  assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool or concrete Drive file\/folder\/Docs evidence/);
   assert.match(audit.operatorNextActions[1].nextAction, /preview links first, then save only if the preview is clean/);
   assert.match(audit.operatorNextActions[2].nextAction, /preview links first, then save only if the preview is clean/);
   assert.match(audit.operatorNextActions[3].nextAction, /preview links first, then save only if the preview is clean/);
@@ -7952,9 +7966,14 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /TikTok proof refresh blockers: \d+/);
   assert.match(markdown, /TikTok quick fill status:/);
   assert.match(markdown, /TikTok quick fill current: (true|false)/);
+  assert.match(markdown, /TikTok proof links preview gate status: (missing|ready_for_save|blocked_preview_not_clean)/);
+  assert.match(markdown, /TikTok proof links preview gate fresh: (true|false)/);
   assert.match(markdown, /TikTok MVP Proof Gate/);
   assert.match(markdown, /TikTok MVP Proof Refresh/);
   assert.match(markdown, /TikTok MVP Proof Quick Fill/);
+  assert.match(markdown, /TikTok MVP Proof Links Preview Gate/);
+  assert.match(markdown, /Raw stored: (false|unknown)/);
+  assert.match(markdown, /proof-links-preview-gate\.json/);
   assert.match(markdown, /Blocker: import_status_blocked_invalid_intake/);
   assert.match(markdown, /Next safe button: preview_proof_links/);
   assert.match(markdown, /preview links first, then save only if the preview is clean/);
@@ -8023,6 +8042,57 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /Next actions CSV:/);
   assert.match(page, /goalCompletionAudit\.operatorNextActions/);
   assert.match(page, /tiktokExternalCloseoutTasks/);
+});
+
+test("goal completion audit fails closed on malformed proof links preview raw storage flags", async () => {
+  const previewGatePath = path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-links-preview-gate.json");
+  const originalGate = await readFile(previewGatePath, "utf8").catch(() => null);
+  await mkdir(path.dirname(previewGatePath), { recursive: true });
+  try {
+    for (const rawStored of [undefined, "true"]) {
+      const gate = {
+        status: "ready_for_save",
+        generatedAt: new Date().toISOString(),
+        scope: "tiktok_only_metricool_mvp",
+        launchMode: "metricool_approval_required",
+        directSocialApisRequired: false,
+        realPublishEnabled: false,
+        rawHash: "safe-preview-hash",
+        totals: {
+          issues: 0,
+          readyProofFields: 4,
+          totalProofFields: 4,
+        },
+        nextStep: "Synthetic malformed gate for test.",
+      } as Record<string, unknown>;
+      if (rawStored !== undefined) gate.rawStored = rawStored;
+      await writeFile(previewGatePath, JSON.stringify(gate, null, 2));
+
+      const result = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const audit = JSON.parse(await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.json"), "utf8"));
+      assert.equal(audit.tiktokMvpProofLinksPreviewGate.status, "ready_for_save");
+      assert.equal(audit.tiktokMvpProofLinksPreviewGate.readyForSave, false);
+      assert.equal(audit.tiktokMvpProofLinksPreviewGate.rawStored, "unknown");
+      assert.equal(audit.tiktokMvpProofLinksPreviewGate.rawStoredExplicitFalse, false);
+      const proofGateRequirement = audit.requirements.find((row: { id: string }) => row.id === "tiktok_metricool_proof_gate");
+      assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewGateReadyForSave false/);
+      assert.match(proofGateRequirement?.evidence || "", /proofLinksPreviewRawStored unknown/);
+    }
+  } finally {
+    if (originalGate === null) {
+      await rm(previewGatePath, { force: true });
+    } else {
+      await writeFile(previewGatePath, originalGate);
+    }
+    spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+  }
 });
 
 test("goal completion audit rejects stale ready proof gates with hidden blockers", async () => {
