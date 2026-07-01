@@ -1101,6 +1101,21 @@ type RevenueScoutDispatchResult = {
       approvalLocked: boolean;
       copyablePayloadTemplate: string;
       copyableBrief: string;
+      copyableWorkOrders: string;
+      workOrders: Array<{
+        taskId: string;
+        ownerAgent: string;
+        sourceAgent: string;
+        source: string;
+        query: string;
+        sourceQuery: string;
+        searchUrl: string;
+        targetRows: number;
+        resultSlotIds: string[];
+        endpoint: string;
+        payload: Record<string, unknown>;
+        copyableWorkOrder: string;
+      }>;
     };
     copyableDispatchBrief: string;
     safety: RevenueDailyScoutSprintSnapshot["safety"];
@@ -5759,6 +5774,9 @@ export default function RevenueEnginePage() {
                           <p className="mt-2 text-xs leading-5 text-zinc-400">
                             POST {scoutDispatchMutation.data.dispatch.connectorIntake.endpoint} · max {scoutDispatchMutation.data.dispatch.connectorIntake.maxResults} resultados · import {scoutDispatchMutation.data.dispatch.connectorIntake.approvalLocked ? "bloqueado" : "activo"}
                           </p>
+                          <p className="mt-1 text-xs text-cyan-100/80">
+                            {scoutDispatchMutation.data.dispatch.connectorIntake.workOrders.length} work orders task-bound
+                          </p>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
@@ -5793,6 +5811,17 @@ export default function RevenueEnginePage() {
                           >
                             <Copy className="mr-2 h-3.5 w-3.5" />
                             Copy payload template
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-cyan-500/30 bg-black"
+                            onClick={() => navigator.clipboard.writeText(scoutDispatchMutation.data?.dispatch.connectorIntake.copyableWorkOrders || "")}
+                            data-testid="button-copy-scout-connector-work-orders"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy work orders
                           </Button>
                         </div>
                       </div>
