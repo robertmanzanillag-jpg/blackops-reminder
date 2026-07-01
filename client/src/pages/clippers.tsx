@@ -16493,6 +16493,23 @@ export default function ClippersPage() {
     }
   };
 
+  const copyGoalMetricoolProofFastPath = async () => {
+    const cleanPacket = goalCompletionPrimaryFastPathLines.join("\n").trim();
+    if (!cleanPacket) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanPacket}\n`);
+      toast({
+        title: "Metricool proof lines copied",
+        description: "Paste real non-secret proof URLs after each equals sign, then preview before saving.",
+      });
+    } catch {
+      toast({
+        title: "Metricool proof lines ready",
+        description: "No pude copiar al clipboard; copia las dos lineas visibles manualmente.",
+      });
+    }
+  };
+
   const appendCredentialBatchTemplate = (envVars: string[], label: string) => {
     const uniqueEnvVars = Array.from(new Set(envVars.map((envVar) => envVar.trim()).filter(Boolean)));
     if (!uniqueEnvVars.length) return;
@@ -22278,6 +22295,17 @@ export default function ClippersPage() {
                         {goalCompletionPrimaryAction.status}
                       </Badge>
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void copyGoalMetricoolProofFastPath()}
+                      className="mt-2 h-8 border-amber-300/20 bg-transparent text-xs text-amber-100 hover:bg-amber-300/10"
+                      data-testid="copy-clippers-goal-primary-proof-fast-path-button"
+                    >
+                      <Copy className="mr-2 h-3.5 w-3.5" />
+                      Copy proof lines
+                    </Button>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       {goalCompletionPrimaryFastPathLines.map((line) => (
                         <p key={line} className="break-all rounded border border-amber-300/15 bg-black/30 p-2 font-mono text-[11px] leading-4 text-amber-50">

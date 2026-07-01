@@ -7989,6 +7989,9 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /Operator next actions/);
   assert.match(page, /clippers-goal-primary-proof-fast-path/);
   assert.match(page, /Paste these two Metricool proof lines first/);
+  assert.match(page, /copy-clippers-goal-primary-proof-fast-path-button/);
+  assert.match(page, /copyGoalMetricoolProofFastPath/);
+  assert.match(page, /Metricool proof lines copied/);
   assert.match(page, /goalCompletionPrimaryFastPathLines/);
   assert.match(page, /fastPathPasteLines\?: string\[\]/);
   assert.match(page, /Next actions CSV:/);
