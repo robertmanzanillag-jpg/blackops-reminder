@@ -11141,6 +11141,9 @@ export default function ClippersPage() {
       nextStep: "Proof links text changed locally; run Preview links again before saving.",
     });
   }
+  function buildClipperMutationError(message: string, payload?: Record<string, unknown>) {
+    return Object.assign(new Error(message), payload || {});
+  }
   const { data: tiktokBatchTracker } = useQuery<ClipperTikTokBatchTrackerSummary | null>({
     queryKey: ["/api/clippers/tiktok-batch-tracker"],
     queryFn: async () => {
@@ -12013,7 +12016,11 @@ export default function ClippersPage() {
         body: JSON.stringify({ proofLinksText: tiktokMvpProofLinksText, previewHash: tiktokMvpProofLinksPreviewGate?.rawHash }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No pude guardar TikTok MVP proof links");
+      if (!response.ok) {
+        throw buildClipperMutationError(data.error || "No pude guardar TikTok MVP proof links", {
+          tiktokMvpProofLinksPreviewGate: data.tiktokMvpProofLinksPreviewGate,
+        });
+      }
       return data as {
         tiktokMvpProofLinks: ClipperTikTokMvpProofLinksSummary;
         tiktokMvpProofDropKit: ClipperTikTokMvpProofDropKitSummary;
@@ -12093,7 +12100,16 @@ export default function ClippersPage() {
         variant: data.tiktokMvpProofDropKit.readyForQuickFill && !data.postProofRefreshError && data.tiktokMvpReadinessVerifier?.status === "pass" ? undefined : "destructive",
       });
     },
-    onError: (error: Error) => {
+    onError: (error: Error & { tiktokMvpProofLinksPreviewGate?: ClipperTikTokMvpProofLinksPreviewGateSummary }) => {
+      if (error.tiktokMvpProofLinksPreviewGate) {
+        setTiktokMvpProofLinksPreviewGate(error.tiktokMvpProofLinksPreviewGate);
+        syncGoalCompletionProofLinksPreviewGate(error.tiktokMvpProofLinksPreviewGate, {
+          status: "blocked_missing_or_stale_preview",
+          fresh: false,
+          readyForSave: false,
+          nextStep: error.tiktokMvpProofLinksPreviewGate.nextStep || error.message,
+        });
+      }
       toast({ title: "No pude guardar proof links", description: error.message, variant: "destructive" });
     },
   });

@@ -1029,6 +1029,12 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpProofLinksPreviewGate/);
   assert.match(page, /previewHash: tiktokMvpProofLinksPreviewGate\?\.rawHash/);
   assert.match(page, /tiktokMvpProofLinksSaveGateReady/);
+  assert.match(page, /buildClipperMutationError/);
+  assert.match(page, /tiktokMvpProofLinksPreviewGate: data\.tiktokMvpProofLinksPreviewGate/);
+  assert.match(page, /onError: \(error: Error & \{ tiktokMvpProofLinksPreviewGate\?: ClipperTikTokMvpProofLinksPreviewGateSummary \}\) =>/);
+  assert.match(page, /setTiktokMvpProofLinksPreviewGate\(error\.tiktokMvpProofLinksPreviewGate\)/);
+  assert.match(page, /syncGoalCompletionProofLinksPreviewGate\(error\.tiktokMvpProofLinksPreviewGate/);
+  assert.match(page, /status: "blocked_missing_or_stale_preview"/);
   assert.match(page, /tiktokMvpEvidenceCloseoutPreviewGate/);
   assert.match(page, /clippers-tiktok-mvp-evidence-closeout-panel/);
   assert.match(page, /clippers-tiktok-mvp-autopilot-boundary-panel/);
