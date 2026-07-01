@@ -3006,6 +3006,87 @@ test("TikTok MVP proof links preview route writes a hash-only clean save gate", 
   }
 });
 
+test("TikTok MVP proof drop ingest blocks invalid local drops but still writes a hash-only gate", async () => {
+  const previousDrop = await readFile(proofLinksFilledDropPath, "utf8").catch(() => null);
+  const previousPreviewGate = await readFile(proofLinksPreviewGatePath, "utf8").catch(() => null);
+  const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+  const invalidDropText = [
+    "# invalid local operator proof drop",
+    "sports-daily:tiktok.metricoolConnectionProofUrl=<paste real Metricool proof>",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=https://example.com/not-real",
+    "sports-daily:tiktok.accountNotes=short",
+    "meme-radar:tiktok.accountNotes=short",
+  ].join("\n");
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  const httpServer = createServer(app);
+  let listening = false;
+  try {
+    await mkdir(path.dirname(proofLinksFilledDropPath), { recursive: true });
+    await mkdir(path.dirname(proofLinksPreviewGatePath), { recursive: true });
+    await writeFile(proofLinksFilledDropPath, invalidDropText);
+    await registerRoutes(httpServer, app);
+    await new Promise((resolve) => {
+      httpServer.listen(0, "127.0.0.1", resolve);
+    });
+    listening = true;
+    const address = httpServer.address();
+    assert.ok(address && typeof address === "object");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/clippers/ingest-tiktok-mvp-proof-links-drop`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.equal(body.tiktokMvpProofLinksDropIngest.status, "blocked_invalid_drop");
+    assert.equal(body.tiktokMvpProofLinksDropIngest.scope, "tiktok_only_metricool_mvp");
+    assert.equal(body.tiktokMvpProofLinksDropIngest.launchMode, "metricool_approval_required");
+    assert.equal(body.tiktokMvpProofLinksDropIngest.directSocialApisRequired, false);
+    assert.equal(body.tiktokMvpProofLinksDropIngest.realPublishEnabled, false);
+    assert.equal(body.tiktokMvpProofLinksDropIngest.extractedUrls, 1);
+    assert.ok(body.tiktokMvpProofLinksDropIngest.issues.length > 0);
+    assert.match(body.tiktokMvpProofLinksDropIngest.nextStep, /Fix the proof links drop file/);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.status, "blocked_preview_not_clean");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.scope, "tiktok_only_metricool_mvp");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.launchMode, "metricool_approval_required");
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.directSocialApisRequired, false);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.realPublishEnabled, false);
+    assert.equal(body.tiktokMvpProofLinksPreviewGate.rawStored, false);
+    assert.match(body.tiktokMvpProofLinksPreviewGate.rawHash, /^[a-f0-9]{64}$/);
+    assert.doesNotMatch(
+      JSON.stringify(body.tiktokMvpProofLinksPreviewGate),
+      /example\.com\/not-real|<paste real Metricool proof>|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i,
+    );
+    assert.match(body.tiktokMvpProofLinksPastePreview.proofLinksText, /example\.com\/not-real/);
+
+    const persistedGate = JSON.parse(await readFile(proofLinksPreviewGatePath, "utf8"));
+    assert.equal(persistedGate.status, "blocked_preview_not_clean");
+    assert.equal(persistedGate.rawHash, body.tiktokMvpProofLinksPreviewGate.rawHash);
+    assert.equal(persistedGate.rawStored, false);
+    assert.doesNotMatch(
+      JSON.stringify(persistedGate),
+      /example\.com\/not-real|<paste real Metricool proof>|ready_to_send|realPublishEnabled\s*[:=]\s*true|video\.publish|access_token=|refresh_token=|client_secret=/i,
+    );
+    const currentProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
+    assert.equal(currentProofLinks, previousProofLinks);
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        httpServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
+    if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
+    else await writeFile(proofLinksFilledDropPath, previousDrop);
+    if (previousPreviewGate === null) await unlink(proofLinksPreviewGatePath).catch(() => undefined);
+    else await writeFile(proofLinksPreviewGatePath, previousPreviewGate);
+    if (previousProofLinks === null) await unlink(proofLinksPath).catch(() => undefined);
+    else await writeFile(proofLinksPath, previousProofLinks);
+  }
+});
+
 test("Goal completion audit watches local proof drop without saving or trusting it as proof", async () => {
   const previousDrop = await readFile(proofLinksFilledDropPath, "utf8").catch(() => null);
   const previousProofLinks = await readFile(proofLinksPath, "utf8").catch(() => null);
