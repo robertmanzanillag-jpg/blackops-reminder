@@ -2123,6 +2123,11 @@ export default function RevenueEnginePage() {
     )?.trim() || "";
     return hasVerifiablePaymentEvidence(value) ? value : null;
   };
+  const automationHasPaymentConfirmation = hasVerifiablePaymentEvidence(automationPaymentConfirmation);
+  const automationCloseRequiresPaymentEvidence = automationCashCollectedUsd > 0 || automationLifecycleTarget === "sale" || automationLifecycleTarget === "delivery";
+  const automationOpportunityRequiresPaymentEvidence = automationDepositPaid || ["sold", "in_delivery", "delivered"].includes(automationOpportunityStatus);
+  const automationAgentPaymentBlocked = automationCloseRequiresPaymentEvidence && !automationHasPaymentConfirmation;
+  const automationOpportunityPaymentBlocked = automationOpportunityRequiresPaymentEvidence && !automationHasPaymentConfirmation;
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
   const [releaseGateInputsByWorkspace, setReleaseGateInputsByWorkspace] = useState<Record<string, DeliveryWorkspaceReleaseGateInput>>({});
   const [reviewNotes, setReviewNotes] = useState("Pre-launch review before sending client preview or turning automations on.");
@@ -7666,6 +7671,11 @@ export default function RevenueEnginePage() {
                           placeholder="Stripe pi_..., Zelle ref..., recibo..."
                           data-testid="input-automation-payment-confirmation"
                         />
+                        {(automationAgentPaymentBlocked || automationOpportunityPaymentBlocked) && (
+                          <p className="text-xs text-amber-300">
+                            Falta referencia verificable para cerrar venta o marcar deposito pagado.
+                          </p>
+                        )}
                       </div>
                       <div className="grid gap-2">
                         {[
@@ -7686,7 +7696,7 @@ export default function RevenueEnginePage() {
                       </div>
                       <Button
                         type="button"
-                        disabled={automationAgentCommandMutation.isPending}
+                        disabled={automationAgentCommandMutation.isPending || automationAgentPaymentBlocked}
                         onClick={() => automationAgentCommandMutation.mutate()}
                         className="w-full bg-fuchsia-600 text-white hover:bg-fuchsia-500"
                         data-testid="button-run-automation-agent-command"
@@ -7717,7 +7727,7 @@ export default function RevenueEnginePage() {
                         </Button>
                         <Button
                           type="button"
-                          disabled={automationOpportunityMutation.isPending}
+                          disabled={automationOpportunityMutation.isPending || automationOpportunityPaymentBlocked}
                           variant="outline"
                           className="border-zinc-700"
                           onClick={() => automationOpportunityMutation.mutate()}

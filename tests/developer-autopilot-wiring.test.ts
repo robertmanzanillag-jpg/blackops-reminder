@@ -175,6 +175,12 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(uiSource, /function hasVerifiablePaymentEvidence/);
   assert.match(uiSource, /genericPaymentEvidence/);
   assert.match(uiSource, /return hasVerifiablePaymentEvidence\(value\) \? value : null/);
+  assert.match(uiSource, /const automationHasPaymentConfirmation = hasVerifiablePaymentEvidence\(automationPaymentConfirmation\)/);
+  assert.match(uiSource, /const automationAgentPaymentBlocked = automationCloseRequiresPaymentEvidence && !automationHasPaymentConfirmation/);
+  assert.match(uiSource, /const automationOpportunityRequiresPaymentEvidence = automationDepositPaid \|\| \["sold", "in_delivery", "delivered"\]\.includes\(automationOpportunityStatus\)/);
+  assert.match(uiSource, /const automationOpportunityPaymentBlocked = automationOpportunityRequiresPaymentEvidence && !automationHasPaymentConfirmation/);
+  assert.match(uiSource, /disabled=\{automationAgentCommandMutation\.isPending \|\| automationAgentPaymentBlocked\}/);
+  assert.match(uiSource, /disabled=\{automationOpportunityMutation\.isPending \|\| automationOpportunityPaymentBlocked\}/);
   assert.match(uiSource, /const closeHasPaymentConfirmation = hasVerifiablePaymentEvidence\(closePaymentConfirmation\)/);
   assert.match(uiSource, /Falta referencia verificable/);
   assert.match(websiteOpportunityCloseMutation, /\/api\/revenue-engine\/outreach-outcome/);
