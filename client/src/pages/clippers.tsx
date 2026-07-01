@@ -737,6 +737,23 @@ interface ClipperGoalCompletionAuditSummary {
     path: string;
     nextStep: string;
   };
+  tiktokMvpStartGate?: {
+    status: "blocked_needs_external_proof_or_operator_pack" | "ready_for_metricool_approval_ops";
+    ready: boolean;
+    passed: number;
+    total: number;
+    blockers: string[];
+    publishMode?: string;
+    readyToImport?: number;
+    nextStep: string;
+    checks: Array<{
+      id: string;
+      label: string;
+      status: "pass" | "blocked";
+      evidence: string;
+      nextAction: string;
+    }>;
+  };
   requirements: Array<{
     id: string;
     label: string;
@@ -22547,6 +22564,53 @@ export default function ClippersPage() {
                       <p>Issues: {formatNumber(goalCompletionAudit.tiktokMvpProofLinksPreviewGate.issues)}</p>
                     </div>
                     <p className="mt-2 break-all text-[10px] leading-4 text-zinc-500">{goalCompletionAudit.tiktokMvpProofLinksPreviewGate.path}</p>
+                  </div>
+                )}
+                {goalCompletionAudit.tiktokMvpStartGate && (
+                  <div className={cn(
+                    "mt-3 rounded-md border p-3",
+                    goalCompletionAudit.tiktokMvpStartGate.ready
+                      ? "border-emerald-300/15 bg-emerald-950/10"
+                      : "border-amber-300/15 bg-amber-950/10"
+                  )} data-testid="clippers-goal-tiktok-mvp-start-gate">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-amber-100">TikTok MVP start gate</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{goalCompletionAudit.tiktokMvpStartGate.nextStep}</p>
+                      </div>
+                      <Badge className={cn(
+                        "w-fit border text-[10px]",
+                        goalCompletionAudit.tiktokMvpStartGate.ready
+                          ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                          : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                      )}>
+                        {goalCompletionAudit.tiktokMvpStartGate.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-zinc-500 md:grid-cols-3">
+                      <p>Passed: {formatNumber(goalCompletionAudit.tiktokMvpStartGate.passed)}/{formatNumber(goalCompletionAudit.tiktokMvpStartGate.total)}</p>
+                      <p>Blockers: {goalCompletionAudit.tiktokMvpStartGate.blockers.join(" + ") || "none"}</p>
+                      <p>Mode: {goalCompletionAudit.tiktokMvpStartGate.publishMode || goalCompletionAudit.operatingMode?.publishMode || "unknown"}</p>
+                      <p>Ready to import: {formatNumber(goalCompletionAudit.tiktokMvpStartGate.readyToImport || 0)}</p>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {goalCompletionAudit.tiktokMvpStartGate.checks.slice(0, 6).map((check) => (
+                        <div key={check.id} className="rounded border border-white/10 bg-black/25 p-2 text-[11px] leading-4">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-white">{check.label}</p>
+                            <Badge className={cn(
+                              "shrink-0 border text-[10px]",
+                              check.status === "pass"
+                                ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                                : "border-amber-300/30 bg-amber-300/10 text-amber-100"
+                            )}>
+                              {check.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-zinc-500">{check.evidence}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-500">

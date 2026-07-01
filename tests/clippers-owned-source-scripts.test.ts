@@ -7899,6 +7899,15 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   );
   assert.match(audit.tiktokMvpProofLinksPreviewGate.path, /proof-links-preview-gate\.json$/);
   assert.match(audit.tiktokMvpProofLinksPreviewGate.nextStep, /Preview links|proof-links preview gate/i);
+  assert.equal(audit.tiktokMvpStartGate.status, "blocked_needs_external_proof_or_operator_pack");
+  assert.equal(audit.tiktokMvpStartGate.ready, false);
+  assert.equal(audit.tiktokMvpStartGate.total, 6);
+  assert.ok(audit.tiktokMvpStartGate.passed >= 1);
+  assert.ok(audit.tiktokMvpStartGate.blockers.includes("proof_gate"));
+  assert.ok(audit.tiktokMvpStartGate.blockers.includes("proof_preview_save_gate"));
+  assert.ok(audit.tiktokMvpStartGate.checks.some((check) => check.id === "no_fake_publish" && check.status === "pass"));
+  assert.ok(audit.tiktokMvpStartGate.checks.some((check) => check.id === "proof_gate" && check.status === "blocked"));
+  assert.match(audit.tiktokMvpStartGate.nextStep, /proof|Preview links/i);
   assert.ok(audit.requirements.some((row) => row.id === "tiktok_metricool_proof_gate" && row.status === "needs_external_action"));
   const proofGateRequirement = audit.requirements.find((row) => row.id === "tiktok_metricool_proof_gate");
   assert.match(proofGateRequirement?.evidence || "", /proofRefresh blocked/);
@@ -7972,6 +7981,10 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(markdown, /TikTok MVP Proof Refresh/);
   assert.match(markdown, /TikTok MVP Proof Quick Fill/);
   assert.match(markdown, /TikTok MVP Proof Links Preview Gate/);
+  assert.match(markdown, /TikTok MVP Start Gate/);
+  assert.match(markdown, /Status: blocked_needs_external_proof_or_operator_pack/);
+  assert.match(markdown, /No fake publish or direct API mode/);
+  assert.match(markdown, /Proof links preview\/save gate/);
   assert.match(markdown, /Raw stored: (false|unknown)/);
   assert.match(markdown, /proof-links-preview-gate\.json/);
   assert.match(markdown, /Blocker: import_status_blocked_invalid_intake/);
@@ -8019,6 +8032,7 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /clippers-goal-completion-audit-panel/);
   assert.match(page, /clippers-goal-operating-mode/);
   assert.match(page, /tiktokMvpProofLinksPreviewGate\?:/);
+  assert.match(page, /tiktokMvpStartGate\?:/);
   assert.match(page, /function buildGoalCompletionProofLinksPreviewGate/);
   assert.match(page, /function syncGoalCompletionProofLinksPreviewGate/);
   assert.match(page, /function markGoalCompletionProofLinksPreviewGateStale/);
@@ -8028,6 +8042,11 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.match(page, /syncGoalCompletionProofLinksPreviewGate\(data\.tiktokMvpProofLinksPreviewGate\)/);
   assert.match(page, /Proof links text changed locally; run Preview links again before saving\./);
   assert.match(page, /clippers-goal-proof-links-preview-gate/);
+  assert.match(page, /clippers-goal-tiktok-mvp-start-gate/);
+  assert.match(page, /TikTok MVP start gate/);
+  assert.match(page, /goalCompletionAudit\.tiktokMvpStartGate\.checks\.slice\(0, 6\)/);
+  assert.match(page, /goalCompletionAudit\.tiktokMvpStartGate\.publishMode/);
+  assert.match(page, /Ready to import:/);
   assert.match(page, /Proof links preview gate/);
   assert.match(page, /goalCompletionAudit\.tiktokMvpProofLinksPreviewGate\.readyForSave/);
   assert.match(page, /Raw stored: \{String\(goalCompletionAudit\.tiktokMvpProofLinksPreviewGate\.rawStored\)\}/);
@@ -8562,7 +8581,9 @@ test("goal completion audit rejects stale ready proof gates with hidden blockers
 
 test("goal completion audit surfaces unsafe Metricool publish mode", async () => {
   const approvalRunPath = path.join(rootDir, "scheduled/metricool-100-approval-run.json");
+  const launchControlPath = path.join(rootDir, "reports/clippers-tiktok-launch-control.json");
   const originalApprovalRun = await readFile(approvalRunPath, "utf8");
+  const originalLaunchControl = await readFile(launchControlPath, "utf8");
   try {
     const approvalRun = JSON.parse(originalApprovalRun);
     approvalRun.realPublishEnabled = true;
@@ -8571,6 +8592,12 @@ test("goal completion audit surfaces unsafe Metricool publish mode", async () =>
       readyToSend: 1,
     };
     await writeFile(approvalRunPath, JSON.stringify(approvalRun, null, 2));
+    const launchControl = JSON.parse(originalLaunchControl);
+    launchControl.totals = {
+      ...(launchControl.totals || {}),
+      readyToImport: 1,
+    };
+    await writeFile(launchControlPath, JSON.stringify(launchControl, null, 2));
 
     const result = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
       cwd: process.cwd(),
@@ -8582,9 +8609,14 @@ test("goal completion audit surfaces unsafe Metricool publish mode", async () =>
     assert.equal(audit.operatingMode.realPublishEnabled, true);
     assert.equal(audit.operatingMode.publishMode, "unsafe_or_direct");
     assert.match(audit.operatingMode.note, /Alerta/);
+    assert.equal(audit.tiktokMvpStartGate.publishMode, "unsafe_or_direct");
+    assert.equal(audit.tiktokMvpStartGate.readyToImport, 1);
+    assert.equal(audit.tiktokMvpStartGate.checks.find((row) => row.id === "no_fake_publish")?.status, "blocked");
+    assert.match(audit.tiktokMvpStartGate.checks.find((row) => row.id === "no_fake_publish")?.evidence || "", /publishMode unsafe_or_direct; readyToImport 1/);
     assert.notEqual(audit.requirements.find((row) => row.id === "no_false_publish")?.status, "ready");
   } finally {
     await writeFile(approvalRunPath, originalApprovalRun);
+    await writeFile(launchControlPath, originalLaunchControl);
     spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
       cwd: process.cwd(),
       encoding: "utf8",

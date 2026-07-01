@@ -123,6 +123,70 @@ function requirement(id, label, status, evidence, nextAction) {
   return { id, label, status, evidence, nextAction };
 }
 
+function buildTikTokMvpStartGate({ activeMvpReady, tiktokMvpProofReady, proofLinksPreviewGate, approvalOnlyQueueReady, strictTikTokSession, currentBatchReady, approvalRunPublishMode, readyToImport, currentBatchId }) {
+  const noFakePublishReady = approvalRunPublishMode === "approval_required" && Number(readyToImport || 0) === 0;
+  const checks = [
+    {
+      id: "active_scope",
+      label: "Active scope is TikTok-only SPORT + memes",
+      status: activeMvpReady ? "pass" : "blocked",
+      evidence: activeMvpReady ? "active MVP lanes are TikTok-only SPORT + memes" : "active MVP account lanes are not fully ready",
+      nextAction: activeMvpReady ? "Keep Instagram/YouTube/streamers deferred." : "Keep the MVP scoped to SPORT and memes TikTok, then finish SPORT/memes proof before starting Metricool work.",
+    },
+    {
+      id: "proof_gate",
+      label: "SPORT and memes proof gate",
+      status: tiktokMvpProofReady ? "pass" : "blocked",
+      evidence: tiktokMvpProofReady ? "proof gate, proof refresh, and quick fill are current" : "real non-secret SPORT + memes proof is still missing or stale",
+      nextAction: tiktokMvpProofReady ? "Use the applied evidence for operator review." : "Paste real Metricool or concrete Drive/Docs proof, preview first, then save only if clean.",
+    },
+    {
+      id: "proof_preview_save_gate",
+      label: "Proof links preview/save gate",
+      status: proofLinksPreviewGate.readyForSave || tiktokMvpProofReady ? "pass" : "blocked",
+      evidence: `previewGate ${proofLinksPreviewGate.status}; fresh ${proofLinksPreviewGate.fresh}; readyForSave ${proofLinksPreviewGate.readyForSave}`,
+      nextAction: proofLinksPreviewGate.readyForSave || tiktokMvpProofReady
+        ? "Preview gate is clean or evidence is already applied."
+        : "Run Preview links after adding real proof URLs; do not save from stale preview text.",
+    },
+    {
+      id: "approval_queue",
+      label: "Metricool approval queue only",
+      status: approvalOnlyQueueReady && strictTikTokSession ? "pass" : "blocked",
+      evidence: approvalOnlyQueueReady && strictTikTokSession ? "100 TikTok rows queued for approval_required; no direct send" : "Metricool queue/session is not in the strict TikTok approval-only shape",
+      nextAction: approvalOnlyQueueReady && strictTikTokSession ? "Keep all work inside Metricool approval review." : "Rebuild the Metricool approval queue/session before operating.",
+    },
+    {
+      id: "current_batch",
+      label: "Current batch 01 operator pack",
+      status: currentBatchReady ? "pass" : "blocked",
+      evidence: currentBatchReady ? `${currentBatchId} has the expected TikTok operator rows` : `${currentBatchId} is not ready as the current operator batch`,
+      nextAction: currentBatchReady ? "Use batch 01 after proof gate passes." : "Prepare launch control/current batch after proof readiness is clean.",
+    },
+    {
+      id: "no_fake_publish",
+      label: "No fake publish or direct API mode",
+      status: noFakePublishReady ? "pass" : "blocked",
+      evidence: `publishMode ${approvalRunPublishMode}; readyToImport ${Number(readyToImport || 0)}`,
+      nextAction: noFakePublishReady
+        ? "Published counts still require live TikTok URLs plus 24h metrics."
+        : "Stop operation and restore Metricool approval_required mode with zero ready-to-import rows.",
+    },
+  ];
+  const blockers = checks.filter((check) => check.status !== "pass");
+  return {
+    status: blockers.length ? "blocked_needs_external_proof_or_operator_pack" : "ready_for_metricool_approval_ops",
+    ready: blockers.length === 0,
+    passed: checks.length - blockers.length,
+    total: checks.length,
+    blockers: blockers.map((check) => check.id),
+    publishMode: approvalRunPublishMode,
+    readyToImport: Number(readyToImport || 0),
+    checks,
+    nextStep: blockers[0]?.nextAction || "Start the TikTok-only Metricool approval workflow; no automatic publishing is enabled.",
+  };
+}
+
 function renderMarkdown(summary) {
   return [
     "# Clippers Goal Completion Audit",
@@ -177,6 +241,22 @@ function renderMarkdown(summary) {
     `- Proof JSON: ${summary.tiktokMvpProofGate.paths.proofLinksJson || "missing"}`,
     "",
     ...(summary.tiktokMvpProofGate.blockedBy.length ? summary.tiktokMvpProofGate.blockedBy.map((item) => `- ${item}`) : ["- none"]),
+    "",
+    "## TikTok MVP Start Gate",
+    "",
+    `- Status: ${summary.tiktokMvpStartGate.status}`,
+    `- Ready: ${summary.tiktokMvpStartGate.ready}`,
+    `- Passed: ${summary.tiktokMvpStartGate.passed}/${summary.tiktokMvpStartGate.total}`,
+    `- Blockers: ${summary.tiktokMvpStartGate.blockers.join(", ") || "none"}`,
+    `- Next: ${summary.tiktokMvpStartGate.nextStep}`,
+    "",
+    ...summary.tiktokMvpStartGate.checks.map((check) => [
+      `### ${check.label}`,
+      `- Status: ${check.status}`,
+      `- Evidence: ${check.evidence}`,
+      `- Next: ${check.nextAction}`,
+      "",
+    ].join("\n")),
     "",
     "## TikTok MVP Proof Refresh",
     "",
@@ -605,6 +685,17 @@ async function main() {
   const tiktokMvpProofReady = proofGateReady && proofRefreshReady && proofQuickFillCurrent;
   const tiktokMvpOperatorReady = tiktokMvpProofReady && activeMvpReady && approvalOnlyQueueReady && strictTikTokSession;
   const currentBatchOperatorReady = tiktokMvpOperatorReady && currentBatchReady;
+  const tiktokMvpStartGate = buildTikTokMvpStartGate({
+    activeMvpReady,
+    tiktokMvpProofReady,
+    proofLinksPreviewGate,
+    approvalOnlyQueueReady,
+    strictTikTokSession,
+    currentBatchReady,
+    approvalRunPublishMode,
+    readyToImport: launchControl.totals?.readyToImport || 0,
+    currentBatchId,
+  });
 
   const requirements = [
     requirement(
@@ -807,6 +898,7 @@ async function main() {
         : "Quick fill is stale or missing; rerun Quick fill with real non-secret proof before trusting this result.",
     },
     tiktokMvpProofLinksPreviewGate: proofLinksPreviewGate,
+    tiktokMvpStartGate,
     operatorNextActions,
     requirements,
     totals,
@@ -839,6 +931,8 @@ async function main() {
     fullReadinessMissing: summary.fullGoal.fullReadinessMissing,
     proofLinksPreviewGateStatus: summary.tiktokMvpProofLinksPreviewGate.status,
     proofLinksPreviewGateFresh: summary.tiktokMvpProofLinksPreviewGate.fresh,
+    tiktokMvpStartGateStatus: summary.tiktokMvpStartGate.status,
+    tiktokMvpStartGatePassed: `${summary.tiktokMvpStartGate.passed}/${summary.tiktokMvpStartGate.total}`,
     nextStep: summary.nextStep,
     operatorNextActions: summary.operatorNextActions.length,
     nextActionsCsvPath: paths.outNextActionsCsv,
