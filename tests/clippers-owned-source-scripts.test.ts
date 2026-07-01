@@ -7893,6 +7893,10 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   assert.equal(audit.operatorNextActions.length, 8);
   assert.equal(audit.operatorNextActions[0].title, "Fast path Metricool TikTok proof gate");
   assert.equal(audit.operatorNextActions[0].proofLine, "sports-daily:tiktok + meme-radar:tiktok");
+  assert.deepEqual(audit.operatorNextActions[0].fastPathPasteLines, [
+    "sports-daily:tiktok.metricoolConnectionProofUrl=",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=",
+  ]);
   assert.match(audit.operatorNextActions[0].buttonOrFile, /proof-fill-one-screen\.txt$/);
   assert.match(audit.operatorNextActions[0].nextAction, /Fill SPORT and memes proof links with real non-secret Metricool\/Drive evidence/);
   assert.equal(audit.operatorNextActions[1].proofLine, "sports-daily:tiktok.accountOwnershipProofUrl=");
@@ -7908,6 +7912,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   const markdown = await readFile(path.join(rootDir, "reports/clippers-goal-completion-audit.md"), "utf8");
   assert.match(markdown, /Full goal status: blocked_external_actions/);
   assert.match(markdown, /Operator Next Actions/);
+  assert.match(markdown, /Fast path paste lines/);
+  assert.match(markdown, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(markdown, /sports-daily:tiktok\.accountOwnershipProofUrl=/);
   assert.match(markdown, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
   assert.match(markdown, /Operator next actions CSV:/);
@@ -7944,6 +7950,8 @@ test("goal completion audit keeps TikTok MVP honest while external work remains"
   const nextActionsCsv = await readFile(path.join(rootDir, "reports/clippers-goal-completion-next-actions.csv"), "utf8");
   assert.match(nextActionsCsv, /Fast path Metricool TikTok proof gate/);
   assert.match(nextActionsCsv, /proof-fill-one-screen\.txt/);
+  assert.match(nextActionsCsv, /fast_path_paste_lines/);
+  assert.match(nextActionsCsv, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
   assert.doesNotMatch(nextActionsCsv, /Current proof refresh blockers: import_status_blocked_invalid_intake/);
   assert.match(nextActionsCsv, /Sports Daily Clips TikTok ownership proof/);
   assert.match(nextActionsCsv, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);

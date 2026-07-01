@@ -207,6 +207,12 @@ function renderMarkdown(summary) {
       `- Owner: ${row.owner}`,
       `- Button/file: ${row.buttonOrFile}`,
       `- Proof line: ${row.proofLine || "n/a"}`,
+      ...(Array.isArray(row.fastPathPasteLines) && row.fastPathPasteLines.length
+        ? [
+          "- Fast path paste lines:",
+          ...row.fastPathPasteLines.map((line) => `  - \`${line}\``),
+        ]
+        : []),
       `- Guardrail: ${row.guardrail}`,
       `- Next: ${row.nextAction}`,
       "",
@@ -239,7 +245,7 @@ function renderCsv(summary) {
 }
 
 function renderNextActionsCsv(summary) {
-  const header = ["priority", "title", "status", "owner", "button_or_file", "proof_line", "guardrail", "next_action"];
+  const header = ["priority", "title", "status", "owner", "button_or_file", "proof_line", "fast_path_paste_lines", "guardrail", "next_action"];
   return [
     header.map(csvCell).join(","),
     ...summary.operatorNextActions.map((row) => [
@@ -249,6 +255,7 @@ function renderNextActionsCsv(summary) {
       row.owner,
       row.buttonOrFile,
       row.proofLine,
+      (row.fastPathPasteLines || []).join(" | "),
       row.guardrail,
       row.nextAction,
     ].map(csvCell).join(",")),
@@ -382,6 +389,12 @@ function buildOperatorNextActions({ accountReadiness, activeMvp, activeMvpReady,
         ? proofGate.paths?.oneScreenGuide || oneScreenProofPath
         : proofRefreshPath,
       proofLine: (proofGate.requiredLanes || []).join(" + "),
+      fastPathPasteLines: Number(proofGate.minimumProofUrlsNeeded || 0) > 0
+        ? [
+          "sports-daily:tiktok.metricoolConnectionProofUrl=",
+          "meme-radar:tiktok.metricoolConnectionProofUrl=",
+        ]
+        : [],
       guardrail: "Metricool keys/MCP readiness do not count; paste only real non-secret Metricool/Drive proof URLs.",
       nextAction: proofGateFixFirst
         ? proofGate.nextStep || `Paste the minimum ${proofGate.minimumProofUrlsNeeded || 2} real proof URLs and preview before saving.`
