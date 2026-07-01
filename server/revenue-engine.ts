@@ -5649,7 +5649,9 @@ function applyRevenueProductionPersistenceGate(input: {
       "- Do not deploy, publish previews or merge without PR review, App QA and explicit Robert approval.",
     ].join("\n"),
   };
-  const dailyMoneyCommand: RevenueDailyMoneyCommand = persistenceItem.status === "blocked"
+  const shouldBlockDailyMoneyCommand = persistenceItem.status === "blocked"
+    || (persistenceItem.status === "needs_data" && input.dailyMoneyCommand.status !== "search");
+  const dailyMoneyCommand: RevenueDailyMoneyCommand = shouldBlockDailyMoneyCommand
     ? {
         ...input.dailyMoneyCommand,
         status: "blocked",

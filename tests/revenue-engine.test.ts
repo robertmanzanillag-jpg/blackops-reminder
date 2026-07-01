@@ -114,6 +114,7 @@ const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
+const testDatabaseUrl = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
 
 test.beforeEach(() => {
   delete process.env.DATABASE_URL;
@@ -755,6 +756,8 @@ test("money sprint preview blocks unfilled scout batch templates", () => {
 });
 
 test("daily money command prioritizes verified public candidates before more searching", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   recordRevenuePublicLeadCandidateBatch({
     source: "google_maps",
     area: "Miami",
@@ -2998,6 +3001,49 @@ test("approves outreach draft for manual queue without sending or side effects",
   assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
 });
 
+test("daily money command blocks real contact queue until production persistence is ready", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Local Persistence Contact Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@localcontact.example",
+    evidence: "Public listing has no website, current menu photos and a visible owner email.",
+    painPoint: "Needs online menu and catering inquiry capture.",
+    estimatedOfferUsd: 4200,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@localcontact.example",
+    contactName: "Owner",
+    businessName: "Local Persistence Contact Cafe",
+    sourceUrl: "https://example.com/local-persistence-contact-cafe",
+    businessSummary: "Local Persistence Contact Cafe has public evidence of no website and a verified contact path.",
+    websitePriceUsd: 3200,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+  });
+
+  const approved = approveRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    approvedByRobert: true,
+    notes: "Robert approved manual outreach, but persistence is still local_file.",
+  });
+
+  assert.equal(approved.snapshot.manualOutreachQueue.readyCount, 1);
+  assert.equal(approved.snapshot.systemReadiness.items.some((item) => item.id === "production_persistence" && item.status === "needs_data"), true);
+  assert.equal(approved.snapshot.dailyMoneyCommand.status, "blocked");
+  assert.equal(approved.snapshot.dailyMoneyCommand.runPacket.status, "blocked");
+  assert.equal(approved.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/expense-preflight");
+  assert.doesNotMatch(approved.snapshot.dailyMoneyCommand.runPacket.apiAction, /outreach-outcome|outreach-send|website-opportunities|delivery-workspace/);
+  assert.match(approved.snapshot.dailyMoneyCommand.copyableOperatorBrief, /production DATABASE_URL missing/);
+});
+
 test("blocks outreach draft approval when non-approval QA gates fail", () => {
   const draftResult = recordRevenueOutreachDraft({
     channel: "gmail",
@@ -3366,6 +3412,8 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
 });
 
 test("website delivery handoff queue requires a sold website opportunity", async () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const readyLead = recordRevenueLead({
     businessName: "Older Ready Cafe",
     area: "Miami",
@@ -3518,6 +3566,8 @@ test("website opportunity close requires recorded manual deposit outcome", () =>
 });
 
 test("website closure queue keeps older money-ready opportunities visible", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const oldReady = createApprovedWebsiteDraftForTest({
     businessName: "Older Closure Cafe",
     contactEmail: "owner@olderclosure.example",
@@ -3675,6 +3725,8 @@ test("website delivery handoff uses sold opportunity draft when outreach draft i
 });
 
 test("website sales packet queue keeps older ready packages visible", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const older = createApprovedWebsiteDraftForTest({
     businessName: "Older Sales Packet Cafe",
     contactEmail: "owner@oldersalespacket.example",
@@ -3705,6 +3757,8 @@ test("website sales packet queue keeps older ready packages visible", () => {
 });
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const sprint = runRevenueMoneySprint({
     area: "Miami",
     niche: "coffee shop",
@@ -4035,6 +4089,8 @@ test("website build queue excludes direct workspaces without sold opportunity ch
 });
 
 test("daily money command keeps delivery collection ahead of open website builds", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const { lead: buildLead, draft: buildDraft } = createApprovedWebsiteDraftForTest({
     businessName: "Build Queue Cafe",
     contactEmail: "owner@buildqueue.example",
@@ -5887,6 +5943,8 @@ test("records reply and call outcomes on approved outreach drafts", () => {
 });
 
 test("records deposit outreach outcome without double-counting ledger cash", () => {
+  process.env.DATABASE_URL = testDatabaseUrl;
+
   const leadResult = recordRevenueLead({
     businessName: "Deposit Ready Cafe",
     area: "Miami",
