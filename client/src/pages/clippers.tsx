@@ -2799,6 +2799,7 @@ interface ClipperTikTokMvpProofLinksDropStatusSummary {
   extractedUrls: number;
   unsafeBlocked?: boolean;
   requiredFastPathPasteLines?: string[];
+  recommendedFastPathPasteLines?: string[];
   checklist: Array<{
     laneKey: string;
     accountName: string;
@@ -16888,6 +16889,44 @@ export default function ClippersPage() {
     });
   };
 
+  const copyProofDropRecommendedFastPathLines = async () => {
+    const cleanPacket = (tiktokMvpProofLinksDropStatus?.recommendedFastPathPasteLines || []).join("\n").trim();
+    if (!cleanPacket) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanPacket}\n`);
+      toast({
+        title: "Ready proof packet copied",
+        description: "Paste real non-secret URLs and write your own confirmation notes, then run Preview links.",
+      });
+    } catch {
+      setTiktokMvpProofLinksPasteText(cleanPacket);
+      setTiktokMvpProofLinksPastePreview(null);
+      setTiktokMvpProofLinksPreview(null);
+      setTiktokMvpProofLinksSaveReceipt(null);
+      setTiktokMvpProofLinksPreviewGate(null);
+      markGoalCompletionProofLinksPreviewGateStale();
+      toast({
+        title: "Ready proof packet loaded",
+        description: "No pude copiar al clipboard; complete real URLs and your own confirmation notes before preview.",
+      });
+    }
+  };
+
+  const loadProofDropRecommendedFastPathLines = () => {
+    const cleanPacket = (tiktokMvpProofLinksDropStatus?.recommendedFastPathPasteLines || []).join("\n").trim();
+    if (!cleanPacket) return;
+    setTiktokMvpProofLinksPasteText(cleanPacket);
+    setTiktokMvpProofLinksPastePreview(null);
+    setTiktokMvpProofLinksPreview(null);
+    setTiktokMvpProofLinksSaveReceipt(null);
+    setTiktokMvpProofLinksPreviewGate(null);
+    markGoalCompletionProofLinksPreviewGateStale();
+    toast({
+      title: "Ready proof packet loaded",
+      description: "Add real non-secret URLs and your own confirmation notes, then run Preview links before saving.",
+    });
+  };
+
   const loadGoalMetricoolProofFastPath = () => {
     const cleanPacket = (goalCompletionPrimaryAction?.fastPathPacketText || goalCompletionPrimaryFastPathLines.join("\n")).trim();
     if (!cleanPacket) return;
@@ -19191,6 +19230,41 @@ export default function ClippersPage() {
                       </div>
                       <p className="mt-1 break-all">{tiktokMvpProofLinksDropStatus.sourcePath}</p>
                       <p className="mt-1">{tiktokMvpProofLinksDropStatus.issues[0] || tiktokMvpProofLinksDropStatus.nextStep}</p>
+                      {(tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines ?? []).length > 0 && (
+                        <div className="mt-2 grid gap-1" data-testid="clippers-tiktok-mvp-proof-links-drop-recommended-lines">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void copyProofDropRecommendedFastPathLines()}
+                              disabled={tiktokProofFlowBusy || isLoading}
+                              className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                              data-testid="copy-clippers-tiktok-mvp-proof-links-drop-recommended-lines-button"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy ready packet
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={loadProofDropRecommendedFastPathLines}
+                              disabled={tiktokProofFlowBusy || isLoading}
+                              className="h-8 border-emerald-300/20 bg-transparent text-emerald-100 hover:bg-emerald-300/10"
+                              data-testid="load-clippers-tiktok-mvp-proof-links-drop-recommended-lines-button"
+                            >
+                              <FileText className="mr-2 h-3.5 w-3.5" />
+                              Load ready packet
+                            </Button>
+                          </div>
+                          {tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines!.map((line) => (
+                            <code key={line} className="rounded border border-emerald-300/10 bg-black/30 px-2 py-1 text-[10px] text-emerald-100">
+                              {line}
+                            </code>
+                          ))}
+                        </div>
+                      )}
                       {(tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines ?? []).length > 0 && (
                         <div className="mt-2 grid gap-1" data-testid="clippers-tiktok-mvp-proof-links-drop-required-lines">
                           <Button

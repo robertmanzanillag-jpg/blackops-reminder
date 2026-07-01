@@ -125,6 +125,23 @@ test("TikTok MVP proof links parser blocks Metricool ownership reuse without exp
   assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
 });
 
+test("TikTok MVP proof links recommended packet stays blocked until Robert writes confirmation notes", () => {
+  const parsed = extractClipperTikTokMvpProofLinksPaste([
+    "sports-daily:tiktok.metricoolConnectionProofUrl=https://app.metricool.com/planner/sports-daily-tiktok-proof",
+    "sports-daily:tiktok.accountNotes=",
+    "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-connected-proof/edit?usp=sharing",
+    "meme-radar:tiktok.accountNotes=",
+  ].join("\n"));
+
+  assert.equal(parsed.status, "needs_review");
+  assert.equal(parsed.realPublishEnabled, false);
+  assert.equal(parsed.proofLinksPreview.readyForProofDrop, false);
+  assert.match(parsed.issues.join("\n"), /add accountNotes confirming the Metricool or concrete Drive file\/folder\/Docs proof shows this TikTok profile under Robert control/i);
+  assert.match(parsed.proofLinksPreview.issues.join("\n"), /accountNotes must confirm this Metricool or concrete Drive file\/folder\/Docs proof shows the TikTok profile under Robert control/i);
+  assert.equal(parsed.proofLinksPreview.goalBoardImpact.nextSafeButton, "preview_proof_links");
+  assert.doesNotMatch(JSON.stringify(parsed), /realPublishEnabled\s*[:=]\s*true|video\.publish|access_token|password=/i);
+});
+
 test("TikTok MVP proof links parser blocks explicit same-URL reuse with generic ownership notes", () => {
   const parsed = extractClipperTikTokMvpProofLinksPaste([
     "sports-daily:tiktok.accountOwnershipProofUrl=https://drive.google.com/folderview?id=sports-daily-tiktok-proof-folder&utm_source=copy#ownership",

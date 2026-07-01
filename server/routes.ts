@@ -627,6 +627,12 @@ const clipperTikTokMvpProofLinksFastPathPasteLines = [
   "sports-daily:tiktok.metricoolConnectionProofUrl=",
   "meme-radar:tiktok.metricoolConnectionProofUrl=",
 ];
+const clipperTikTokMvpProofLinksRecommendedFastPathPasteLines = [
+  "sports-daily:tiktok.metricoolConnectionProofUrl=",
+  "sports-daily:tiktok.accountNotes=",
+  "meme-radar:tiktok.metricoolConnectionProofUrl=",
+  "meme-radar:tiktok.accountNotes=",
+];
 
 async function readClipperTikTokMvpProofLinksDropPaste(): Promise<{ sourcePath: string; pasteText: string; bytes: number }> {
   for (const sourcePath of clipperTikTokMvpProofLinksDropPastePaths) {
@@ -681,6 +687,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
         extractedUrls: 0,
         unsafeBlocked: true,
         requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
+        recommendedFastPathPasteLines: clipperTikTokMvpProofLinksRecommendedFastPathPasteLines,
         checklist: emptyChecklist,
         checklistTotals: { ready: 0, total: emptyChecklist.length, missing: emptyChecklist.length },
         nextButton: "edit_drop_file",
@@ -745,6 +752,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       extractedUrls: parsedPreview.extractedUrls,
       unsafeBlocked: false,
       requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
+      recommendedFastPathPasteLines: clipperTikTokMvpProofLinksRecommendedFastPathPasteLines,
       checklist,
       checklistTotals: {
         ready: readyChecklistItems,
@@ -776,6 +784,7 @@ async function buildClipperTikTokMvpProofLinksDropStatus() {
       extractedUrls: 0,
       unsafeBlocked: false,
       requiredFastPathPasteLines: clipperTikTokMvpProofLinksFastPathPasteLines,
+      recommendedFastPathPasteLines: clipperTikTokMvpProofLinksRecommendedFastPathPasteLines,
       checklist: [
         "sports-daily:tiktok.accountOwnershipProofUrl",
         "sports-daily:tiktok.metricoolConnectionProofUrl",

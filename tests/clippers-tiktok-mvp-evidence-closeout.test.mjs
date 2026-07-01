@@ -1095,6 +1095,14 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /tiktokMvpProofLinksDropStatus\.status === "blocked_secret_like"/);
   assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| tiktokMvpProofLinksDropStatus\?\.status === "blocked_secret_like"\}/);
   assert.match(page, /requiredFastPathPasteLines/);
+  assert.match(page, /recommendedFastPathPasteLines/);
+  assert.match(page, /clippers-tiktok-mvp-proof-links-drop-recommended-lines/);
+  assert.match(page, /copyProofDropRecommendedFastPathLines/);
+  assert.match(page, /copy-clippers-tiktok-mvp-proof-links-drop-recommended-lines-button/);
+  assert.match(page, /loadProofDropRecommendedFastPathLines/);
+  assert.match(page, /load-clippers-tiktok-mvp-proof-links-drop-recommended-lines-button/);
+  assert.match(page, /Copy ready packet/);
+  assert.match(page, /Load ready packet/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-required-lines/);
   assert.match(page, /copyProofDropRequiredFastPathLines/);
   assert.match(page, /copy-clippers-tiktok-mvp-proof-links-drop-required-lines-button/);
@@ -1102,7 +1110,7 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /loadProofDropRequiredFastPathLines/);
   assert.match(page, /load-clippers-tiktok-mvp-proof-links-drop-required-lines-button/);
   const proofDropLoadHelperStart = page.indexOf("const loadProofDropRequiredFastPathLines = () => {");
-  const proofDropLoadHelperEnd = page.indexOf("const loadGoalMetricoolProofFastPath", proofDropLoadHelperStart);
+  const proofDropLoadHelperEnd = page.indexOf("const copyProofDropRecommendedFastPathLines", proofDropLoadHelperStart);
   assert.ok(proofDropLoadHelperStart > 0);
   assert.ok(proofDropLoadHelperEnd > proofDropLoadHelperStart);
   const proofDropLoadHelper = page.slice(proofDropLoadHelperStart, proofDropLoadHelperEnd);
@@ -1113,6 +1121,19 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(proofDropLoadHelper, /setTiktokMvpProofLinksPreviewGate\(null\)/);
   assert.match(proofDropLoadHelper, /markGoalCompletionProofLinksPreviewGateStale\(\)/);
   assert.doesNotMatch(proofDropLoadHelper, /mutate\(/);
+  const proofDropRecommendedLoadHelperStart = page.indexOf("const loadProofDropRecommendedFastPathLines = () => {");
+  const proofDropRecommendedLoadHelperEnd = page.indexOf("const loadGoalMetricoolProofFastPath", proofDropRecommendedLoadHelperStart);
+  assert.ok(proofDropRecommendedLoadHelperStart > 0);
+  assert.ok(proofDropRecommendedLoadHelperEnd > proofDropRecommendedLoadHelperStart);
+  const proofDropRecommendedLoadHelper = page.slice(proofDropRecommendedLoadHelperStart, proofDropRecommendedLoadHelperEnd);
+  assert.match(proofDropRecommendedLoadHelper, /recommendedFastPathPasteLines/);
+  assert.match(proofDropRecommendedLoadHelper, /setTiktokMvpProofLinksPasteText\(cleanPacket\)/);
+  assert.match(proofDropRecommendedLoadHelper, /setTiktokMvpProofLinksPastePreview\(null\)/);
+  assert.match(proofDropRecommendedLoadHelper, /setTiktokMvpProofLinksPreview\(null\)/);
+  assert.match(proofDropRecommendedLoadHelper, /setTiktokMvpProofLinksSaveReceipt\(null\)/);
+  assert.match(proofDropRecommendedLoadHelper, /setTiktokMvpProofLinksPreviewGate\(null\)/);
+  assert.match(proofDropRecommendedLoadHelper, /markGoalCompletionProofLinksPreviewGateStale\(\)/);
+  assert.doesNotMatch(proofDropRecommendedLoadHelper, /mutate\(/);
   assert.match(page, /tiktokMvpProofLinksDropImport: data\.tiktokMvpProofLinksDropImport/);
   assert.match(page, /tiktokMvpProofLinksDropStatus: data\.tiktokMvpProofLinksDropStatus/);
   assert.match(page, /tiktokMvpProofLinksDropImport\?: ClipperTikTokMvpProofLinksDropImportSummary/);
@@ -3091,6 +3112,12 @@ test("TikTok MVP proof drop starter route blocks secret-like existing drops with
       "sports-daily:tiktok.metricoolConnectionProofUrl=",
       "meme-radar:tiktok.metricoolConnectionProofUrl=",
     ]);
+    assert.deepEqual(body.tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines, [
+      "sports-daily:tiktok.metricoolConnectionProofUrl=",
+      "sports-daily:tiktok.accountNotes=",
+      "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      "meme-radar:tiktok.accountNotes=",
+    ]);
     assert.match(body.tiktokMvpProofLinksDropStatus.nextStep, /Remove passwords, tokens, cookies, keys/);
     assert.doesNotMatch(
       JSON.stringify(body),
@@ -3160,6 +3187,12 @@ test("TikTok MVP proof drop import and ingest block secret-like drops before par
       assert.deepEqual(body.tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines, [
         "sports-daily:tiktok.metricoolConnectionProofUrl=",
         "meme-radar:tiktok.metricoolConnectionProofUrl=",
+      ], endpoint);
+      assert.deepEqual(body.tiktokMvpProofLinksDropStatus.recommendedFastPathPasteLines, [
+        "sports-daily:tiktok.metricoolConnectionProofUrl=",
+        "sports-daily:tiktok.accountNotes=",
+        "meme-radar:tiktok.metricoolConnectionProofUrl=",
+        "meme-radar:tiktok.accountNotes=",
       ], endpoint);
       assert.equal("proofLinksText" in body[key], false, endpoint);
       assert.equal("proofLinksPreview" in body[key], false, endpoint);
