@@ -7,6 +7,8 @@ export type RevenuePublicScoutConnectorContext = {
   connectorRunId: string;
 };
 
+export const publicScoutConnectorIntakeEndpoint = "/api/revenue-engine/public-scout-connector-intake";
+
 type ConnectorPayloadObject = {
   area?: unknown;
   niche?: unknown;
@@ -45,5 +47,16 @@ export function buildPublicScoutConnectorIntakePayload(rawJson: string, context:
     connectorRunId: valueOrFallback(payload?.connectorRunId, context.connectorRunId),
     results,
     notes: valueOrFallback(payload?.notes, "Recorded from Revenue Engine verified connector intake UI."),
+  };
+}
+
+export function buildPublicScoutConnectorIntakeRequest(rawJson: string, context: RevenuePublicScoutConnectorContext) {
+  return {
+    endpoint: publicScoutConnectorIntakeEndpoint,
+    init: {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildPublicScoutConnectorIntakePayload(rawJson, context)),
+    },
   };
 }

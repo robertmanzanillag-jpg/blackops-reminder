@@ -411,7 +411,7 @@ test("Revenue Engine exposes public scout evidence intake", () => {
   assert.match(uiSource, /publicScoutEvidenceMutation/);
   assert.match(uiSource, /publicScoutConnectorIntakeMutation/);
   assert.match(uiSource, /publicScoutAgentCommandMutation/);
-  assert.match(uiSource, /buildPublicScoutConnectorIntakePayload/);
+  assert.match(uiSource, /buildPublicScoutConnectorIntakeRequest/);
   assert.match(uiSource, /textarea-public-scout-evidence/);
   assert.match(uiSource, /textarea-public-scout-connector-results/);
   assert.match(uiSource, /Connector payload or results JSON/);

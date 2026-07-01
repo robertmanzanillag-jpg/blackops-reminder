@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPublicScoutConnectorIntakePayload } from "../client/src/lib/revenue-engine-public-scout-connector";
+import {
+  buildPublicScoutConnectorIntakePayload,
+  buildPublicScoutConnectorIntakeRequest,
+} from "../client/src/lib/revenue-engine-public-scout-connector";
 
 const connectorContext = {
   activeScoutArea: "Miami",
@@ -62,4 +65,31 @@ test("public scout connector payload rejects objects without results array", () 
     () => buildPublicScoutConnectorIntakePayload(JSON.stringify({ results: "nope" }), connectorContext),
     /array de resultados o el payload completo/,
   );
+});
+
+test("public scout connector request posts the full dispatch payload body", () => {
+  const request = buildPublicScoutConnectorIntakeRequest(JSON.stringify({
+    area: "Tampa",
+    niche: "dentists",
+    missionId: "daily-scout-2",
+    sourceTaskId: "task-2",
+    connectorName: "browser-public-scout",
+    connectorRunId: "run-2",
+    results: [resultRow],
+    notes: "Verified public-search scout connector intake.",
+  }), connectorContext);
+
+  assert.equal(request.endpoint, "/api/revenue-engine/public-scout-connector-intake");
+  assert.equal(request.init.method, "POST");
+  assert.deepEqual(request.init.headers, { "Content-Type": "application/json" });
+  assert.deepEqual(JSON.parse(request.init.body), {
+    area: "Tampa",
+    niche: "dentists",
+    missionId: "daily-scout-2",
+    sourceTaskId: "task-2",
+    connectorName: "browser-public-scout",
+    connectorRunId: "run-2",
+    results: [resultRow],
+    notes: "Verified public-search scout connector intake.",
+  });
 });

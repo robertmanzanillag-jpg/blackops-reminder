@@ -33,7 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { buildDeliveryWorkspaceQaPayload } from "@/lib/revenue-engine-delivery-qa";
-import { buildPublicScoutConnectorIntakePayload } from "@/lib/revenue-engine-public-scout-connector";
+import { buildPublicScoutConnectorIntakeRequest } from "@/lib/revenue-engine-public-scout-connector";
 
 type RevenueDailyScoutSprintSnapshot = {
   id: string;
@@ -3573,7 +3573,7 @@ export default function RevenueEnginePage() {
 
   const publicScoutConnectorIntakeMutation = useMutation<RevenueVerifiedScoutConnectorIntakeResult>({
     mutationFn: async () => {
-      const payload = buildPublicScoutConnectorIntakePayload(publicScoutConnectorResultsJson, {
+      const request = buildPublicScoutConnectorIntakeRequest(publicScoutConnectorResultsJson, {
         activeScoutArea,
         activeScoutNiche,
         missionId: snapshot?.latestDailyScoutSprint?.id || "",
@@ -3582,11 +3582,7 @@ export default function RevenueEnginePage() {
         connectorRunId: publicScoutConnectorRunId,
       });
 
-      const response = await fetch("/api/revenue-engine/public-scout-connector-intake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(request.endpoint, request.init);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || data.reason || "No se pudo guardar connector intake");
       return data;
