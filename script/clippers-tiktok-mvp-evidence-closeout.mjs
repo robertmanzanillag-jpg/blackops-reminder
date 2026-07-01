@@ -126,10 +126,15 @@ function isMetricoolProofUrl(value) {
   try {
     const url = new URL(normalize(value));
     const hostname = url.hostname.toLowerCase();
+    const normalizedPath = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
     return url.protocol === "https:"
       && !url.username
       && !url.password
       && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
+      && /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+      && Boolean(pathSegments[1])
+      && pathSegments.join("").length >= 8
       && !unsafeParamPattern.test(url.search);
   } catch {
     return false;

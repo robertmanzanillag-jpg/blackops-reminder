@@ -110,7 +110,12 @@ function metricoolProofUrl(value) {
   if (!safeHttpsUrl(text)) return false;
   try {
     const url = new URL(text);
-    return /(^|\.)metricool\.com$/i.test(url.hostname);
+    if (!/(^|\.)metricool\.com$/i.test(url.hostname)) return false;
+    const normalizedPath = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
+    return /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+      && Boolean(pathSegments[1])
+      && pathSegments.join("").length >= 8;
   } catch {
     return false;
   }

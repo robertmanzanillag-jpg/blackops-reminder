@@ -213,7 +213,12 @@ function isClipperMetricoolProofUrl(value: unknown): boolean {
   if (!isClipperSafeHttpsUrl(value)) return false;
   try {
     const parsed = new URL(String(value || "").trim());
-    return /(^|\.)metricool\.com$/i.test(parsed.hostname);
+    if (!/(^|\.)metricool\.com$/i.test(parsed.hostname)) return false;
+    const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
+    return /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+      && Boolean(pathSegments[1])
+      && pathSegments.join("").length >= 8;
   } catch {
     return false;
   }

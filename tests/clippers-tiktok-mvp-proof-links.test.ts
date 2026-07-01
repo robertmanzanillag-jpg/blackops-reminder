@@ -198,7 +198,12 @@ test("TikTok MVP proof links audit rejects generic Metricool pages as proof", ()
     "https://metricool.com/",
     "https://app.metricool.com/",
     "https://app.metricool.com/login",
+    "https://app.metricool.com/dashboard",
+    "https://app.metricool.com/settings",
+    "https://app.metricool.com/calendar",
     "https://metricool.com/pricing",
+    "https://metricool.com/integrations",
+    "https://metricool.com/resources",
   ]) {
     const proofLinks = {
       lanes: {
@@ -224,6 +229,9 @@ test("TikTok MVP proof links audit rejects generic Metricool pages as proof", ()
     assert.equal(audit.status, "blocked", `${metricoolConnectionProofUrl} should keep the proof gate blocked`);
     assert.match(audit.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
   }
+
+  assert.equal(safeClipperMetricoolProofUrl("https://app.metricool.com/planner/sports-daily-tiktok-proof"), true);
+  assert.equal(safeClipperMetricoolProofUrl("https://app.metricool.com/brands/6431687"), true);
 });
 
 test("TikTok MVP proof links audit accepts Google Drive Metricool screenshots as non-secret evidence", () => {

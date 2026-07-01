@@ -344,6 +344,26 @@ test("TikTok MVP evidence closeout rejects credential-bearing proof URLs", async
   assert.match(await readFile(evidenceCloseoutPath, "utf8"), /x-amz-signature/);
 });
 
+test("TikTok MVP evidence closeout rejects generic Metricool proof pages", async () => {
+  await mkdir(tmpDir, { recursive: true });
+  await writeFile(accountCsvPath, cleanAccountCsv());
+  await writeFile(bridgeCsvPath, [
+    bridgeHeader,
+    "sports-daily,tiktok,SPORT,,https://www.tiktok.com/@sportsdaily,https://app.metricool.com/dashboard,SPORT TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+    "meme-radar,tiktok,memes,,https://www.tiktok.com/@memeradar,https://metricool.com/resources,memes TikTok is connected in Metricool with public non-secret proof reviewed by Robert",
+  ].join("\n") + "\n");
+
+  const result = runCloseout();
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.status, "blocked_invalid_evidence");
+
+  const report = JSON.parse(await readFile(closeoutReportPath, "utf8"));
+  assert.equal(report.totals.ready, 0);
+  assert.match(JSON.stringify(report), /proof must be a real Metricool HTTPS URL or concrete Google Drive file\/folder or Docs evidence URL/);
+  assert.match(await readFile(evidenceCloseoutPath, "utf8"), /pathSegments|planner\|brands/);
+});
+
 test("TikTok MVP proof links preview rejects embedded credential proof URLs", async () => {
   const {
     auditClipperTikTokMvpProofLinks,
@@ -1854,6 +1874,35 @@ test("TikTok MVP proof quick fill rejects placeholders without writing combined 
     assert.equal(await readFile(targetBridgeCsvPath, "utf8"), bridgeBefore);
     const assignedSecretReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
     assert.match(assignedSecretReport.issues.join("\n"), /accountNotes/);
+
+    await writeFile(quickFillInputPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://app.metricool.com/settings",
+          accountNotes: "Sports Daily TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "SPORT TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://metricool.com/integrations",
+          accountNotes: "Meme Radar TikTok ownership and 2FA security proof verified by Robert without secrets.",
+          metricoolNotes: "memes TikTok profile connected in Metricool approval_required mode with proof reviewed by Robert.",
+        },
+      },
+    }, null, 2));
+    const genericMetricoolResult = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-quick-fill.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(genericMetricoolResult.status, 0, genericMetricoolResult.stderr || genericMetricoolResult.stdout);
+    const genericMetricoolOutput = JSON.parse(genericMetricoolResult.stdout);
+    assert.equal(genericMetricoolOutput.status, "blocked_invalid_quick_fill");
+    assert.equal(genericMetricoolOutput.appliedToIntake, false);
+    assert.equal(await readFile(defaultCombinedProofCsvPath, "utf8"), before);
+    assert.equal(await readFile(targetBridgeCsvPath, "utf8"), bridgeBefore);
+    const genericMetricoolReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-quick-fill.json"), "utf8"));
+    assert.match(genericMetricoolReport.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
   } finally {
     if (previousCombined === null) await unlink(defaultCombinedProofCsvPath).catch(() => undefined);
     else await writeFile(defaultCombinedProofCsvPath, previousCombined);
@@ -2516,6 +2565,32 @@ test("TikTok MVP proof drop kit prepares local inventory without applying eviden
     assert.equal(safeWordsOutput.readyForQuickFill, true);
     const safeWordsReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
     assert.doesNotMatch(safeWordsReport.issues.join("\n"), /accountNotes|metricoolNotes/);
+
+    await writeFile(proofLinksPath, JSON.stringify({
+      lanes: {
+        "sports-daily:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/sports-daily-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://app.metricool.com/calendar",
+          accountNotes: "Robert confirms this Metricool proof shows Sports Daily TikTok connected under Robert control without secrets.",
+          metricoolNotes: "SPORT Metricool connection proof for @sportsdaily reviewed by Robert without secrets.",
+        },
+        "meme-radar:tiktok": {
+          accountOwnershipProofUrl: "https://drive.google.com/file/d/meme-radar-tiktok-proof/view",
+          metricoolConnectionProofUrl: "https://metricool.com/resources",
+          accountNotes: "Robert confirms this Docs proof shows Meme Radar TikTok connected under Robert control without secrets.",
+          metricoolNotes: "memes Metricool connection proof for @memeradar reviewed by Robert without secrets.",
+        },
+      },
+    }, null, 2));
+    const genericMetricoolRun = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-proof-drop-kit.mjs"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(genericMetricoolRun.status, 0, genericMetricoolRun.stderr || genericMetricoolRun.stdout);
+    const genericMetricoolOutput = JSON.parse(genericMetricoolRun.stdout);
+    assert.equal(genericMetricoolOutput.readyForQuickFill, false);
+    const genericMetricoolReport = JSON.parse(await readFile(path.join(rootDir, "reports/tiktok-mvp-proof-intake/proof-drop-kit.json"), "utf8"));
+    assert.match(genericMetricoolReport.issues.join("\n"), /metricoolConnectionProofUrl must be a real HTTPS metricool\.com URL or concrete Google Drive file\/folder or Docs evidence URL/);
 
     await writeFile(proofLinksPath, JSON.stringify({
       lanes: {

@@ -33149,8 +33149,13 @@ function isMetricoolProofUrl(value: string): boolean {
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase();
+    const normalizedPath = url.pathname.replace(/\/+$/, "").toLowerCase();
+    const pathSegments = normalizedPath.split("/").filter(Boolean);
     return isSafeMetricoolBridgeUrlObject(url)
       && (hostname === "metricool.com" || hostname.endsWith(".metricool.com"))
+      && /^(planner|brands?|posts?|publications?|analytics|reports?)$/i.test(pathSegments[0] || "")
+      && Boolean(pathSegments[1])
+      && pathSegments.join("").length >= 8
       && !url.search;
   } catch {
     return false;

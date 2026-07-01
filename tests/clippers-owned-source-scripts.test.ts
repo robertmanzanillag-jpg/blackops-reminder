@@ -5965,6 +5965,17 @@ test("Metricool bridge evidence batch returns refreshed TikTok next action paylo
   assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokBatchCloseoutVerifier/);
   assert.match(bridgeEvidenceBatchRoute, /readClipperGoalCompletionAudit/);
   assert.match(bridgeEvidenceBatchRoute, /readClipperTikTokNextAction/);
+  const agentSource = await readFile(path.join(process.cwd(), "server/clippers-agent.ts"), "utf8");
+  const metricoolProofUrlHelper = sliceRequired(
+    agentSource,
+    "function isMetricoolProofUrl",
+    "function isConcreteGoogleEvidenceUrl",
+  );
+  assert.match(metricoolProofUrlHelper, /pathSegments/);
+  assert.match(metricoolProofUrlHelper, /planner\|brands\?\|posts\?\|publications\?\|analytics\|reports\?/);
+  assert.match(metricoolProofUrlHelper, /Boolean\(pathSegments\[1\]\)/);
+  assert.match(metricoolProofUrlHelper, /pathSegments\.join\(""\)\.length >= 8/);
+  assert.match(metricoolProofUrlHelper, /hostname === "metricool\.com" \|\| hostname\.endsWith\("\.metricool\.com"\)/);
 
   const page = await readFile(path.join(process.cwd(), "client/src/pages/clippers.tsx"), "utf8");
   assert.match(routes, /preview-metricool-bridge-evidence-batch/);
