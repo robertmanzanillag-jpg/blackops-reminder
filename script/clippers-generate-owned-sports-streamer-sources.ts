@@ -182,10 +182,14 @@ async function writeCategoryArtifacts(category: SourceCategory, categorySpecs: O
     "created_by: local Clippers generation script",
     `created_at: ${new Date().toISOString()}`,
     "",
+    category === "sports"
+      ? "covered_assets: sports-owned-01.mp4 through sports-owned-11.mp4"
+      : "covered_assets: streamers-owned-01.mp4 through streamers-owned-09.mp4",
+    "",
     `These source videos are original generated assets created locally for ${label}.`,
     category === "sports"
-      ? "They use original text/graphic analysis only; no league footage, broadcast footage, team footage, athlete likenesses, copyrighted music, or scraped highlights are included."
-      : "They use original text/graphic commentary only; no streamer raw clips, creator likenesses, copyrighted music, cookies, tokens, passwords, or private screenshots are included.",
+      ? "They use original text/graphic analysis only; no third-party footage, no raw footage, no league footage, no broadcast footage, no team footage, no athlete likenesses, no copyrighted music, and no scraped highlights are included."
+      : "They use original text/graphic commentary only; no third-party footage, no raw footage, no streamer raw clips, no creator likenesses, no copyrighted music, no cookies, no tokens, no passwords, and no private screenshots are included.",
     "They are approved only as owned source inputs for draft creation and Metricool approval queue review.",
     "",
     "Guardrails:",

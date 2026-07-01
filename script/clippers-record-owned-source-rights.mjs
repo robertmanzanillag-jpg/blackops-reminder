@@ -134,8 +134,8 @@ async function readMetricoolPublishGuard() {
     if (parsed?.publishMode !== "approval_required") {
       throw new Error("Metricool publishMode is not explicitly approval_required.");
     }
-    if (parsed?.status !== "approval_required") {
-      throw new Error("Metricool queue status is not explicitly approval_required.");
+    if (parsed?.status !== "approval_required" && parsed?.status !== "blocked") {
+      throw new Error("Metricool queue status must be approval_required or blocked behind safe source readiness.");
     }
     if ((parsed?.totals?.readyToSend || 0) !== 0) {
       throw new Error("Metricool queue has readyToSend items; approval_required guard is not safe.");

@@ -2002,6 +2002,16 @@ test("account permission readiness rejects unsafe Metricool queue state", async 
   }
 });
 
+test("rights registration allows source-readiness blocked queue only when publish controls are safe", async () => {
+  const source = await readFile(path.join(process.cwd(), "script/clippers-record-owned-source-rights.mjs"), "utf8");
+  assert.match(source, /parsed\?\.status !== "approval_required" && parsed\?\.status !== "blocked"/);
+  assert.match(source, /Metricool queue status must be approval_required or blocked behind safe source readiness/);
+  assert.match(source, /parsed\?\.publishMode !== "approval_required"/);
+  assert.match(source, /parsed\?\.realPublishEnabled !== false/);
+  assert.match(source, /\(parsed\?\.totals\?\.readyToSend \|\| 0\) !== 0/);
+  assert.match(source, /can send now; approval_required guard is not safe/);
+});
+
 test("operational readiness blocks unsafe Metricool auto-publish state", async () => {
   const reportPath = path.join(rootDir, "reports/clippers-operational-readiness.json");
   const originalQueue = await readFile(queuePath, "utf8");
@@ -2454,6 +2464,16 @@ test("owned source generator commands have timeout and process group cleanup", a
     assert.ok(source.includes('child.kill("SIGKILL")'), `${scriptPath} should fall back to direct child kill`);
     assert.ok(source.includes("timed out after"), `${scriptPath} should report timeout failures`);
   }
+
+  const memeGenerator = await readFile(path.join(process.cwd(), "script/clippers-generate-owned-meme-sources.ts"), "utf8");
+  assert.match(memeGenerator, /covered_assets: memes-owned-01\.mp4 through memes-owned-14\.mp4/);
+  assert.match(memeGenerator, /no third-party footage, no creator clips, no sports broadcasts, no streamer clips, no copyrighted music, no raw footage/);
+
+  const sportsStreamerGenerator = await readFile(path.join(process.cwd(), "script/clippers-generate-owned-sports-streamer-sources.ts"), "utf8");
+  assert.match(sportsStreamerGenerator, /covered_assets: sports-owned-01\.mp4 through sports-owned-11\.mp4/);
+  assert.match(sportsStreamerGenerator, /covered_assets: streamers-owned-01\.mp4 through streamers-owned-09\.mp4/);
+  assert.match(sportsStreamerGenerator, /no third-party footage, no raw footage, no league footage, no broadcast footage/);
+  assert.match(sportsStreamerGenerator, /no third-party footage, no raw footage, no streamer raw clips/);
 });
 
 test("Metricool 100 operator handoff batches approval-only rows without publishing", async () => {
