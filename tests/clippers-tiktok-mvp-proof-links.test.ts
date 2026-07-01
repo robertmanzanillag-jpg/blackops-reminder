@@ -248,3 +248,28 @@ test("TikTok MVP proof links validator rejects secrets anywhere in JSON", () => 
 
   assert.match(validateClipperTikTokMvpProofLinks(proofLinks), /cannot contain passwords, tokens, cookies, keys, or recovery codes/);
 });
+
+test("TikTok MVP proof links validator rejects JSON-style credential fields", () => {
+  for (const [field, value] of [
+    ["password", "never-paste-this"],
+    ["api_key", "metricool-key"],
+    ["private_key", "-----BEGIN PRIVATE KEY-----"],
+  ]) {
+    const proofLinks = {
+      lanes: {
+        ...cleanProofLinks.lanes,
+        "sports-daily:tiktok": {
+          ...cleanProofLinks.lanes["sports-daily:tiktok"],
+          accountNotes: "Sports Daily ownership proof verified by Robert with safe notes.",
+          [field]: value,
+        },
+      },
+    };
+
+    assert.match(
+      validateClipperTikTokMvpProofLinks(proofLinks),
+      /cannot contain passwords, tokens, cookies, keys, or recovery codes/,
+      `${field} should be blocked`,
+    );
+  }
+});

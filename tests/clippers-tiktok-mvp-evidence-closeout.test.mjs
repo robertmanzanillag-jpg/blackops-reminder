@@ -24,6 +24,7 @@ const proofRefreshPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-pr
 const proofUnblockerPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-unblocker.mjs");
 const proofQuickFillPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-quick-fill.mjs");
 const proofHandoffPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-handoff.mjs");
+const proofDropStarterPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-proof-drop-starter.mjs");
 const localVerificationPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-local-verification.mjs");
 const autopilotBoundaryPath = path.join(process.cwd(), "script/clippers-tiktok-mvp-autopilot-boundary.mjs");
 const goalCompletionAuditPath = path.join(process.cwd(), "script/clippers-goal-completion-audit.mjs");
@@ -688,8 +689,10 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(routes, /does not return raw paste text/);
   assert.doesNotMatch(proofLinksDropStatusRoute, /writeNodeFile|runClipperTikTokMvpProofDropKit|runClipperTikTokMvpCloseoutWizard|--apply|runClipperTikTokMvpEvidenceCloseout\(true\)|runClipperOperationalReadiness|ready_to_send|realPublishEnabled\s*=\s*true|publish|schedule/i);
   assert.match(proofLinksDropStarterRoute, /create-tiktok-mvp-proof-links-drop-starter/);
-  assert.match(proofLinksDropStarterRoute, /!existing\.trim\(\)/);
+  assert.match(proofLinksDropStarterRoute, /existing !== null/);
   assert.match(proofLinksDropStarterRoute, /fastPathPastePacketText/);
+  assert.match(proofLinksDropStarterRoute, /containsClipperSecretLikeText\(existing\)/);
+  assert.match(proofLinksDropStarterRoute, /containsClipperSecretLikeText\(JSON\.stringify\(handoff \|\| \{\}\)\)/);
   assert.match(proofLinksDropStarterRoute, /starterKind/);
   assert.match(proofLinksDropStarterRoute, /metricool_fast_path/);
   assert.match(proofLinksDropStarterRoute, /writeNodeFile/);
@@ -2248,6 +2251,54 @@ test("TikTok MVP proof handoff writes a collection packet CSV", async () => {
   assert.doesNotMatch(oneScreen, /access_token=|refresh_token=|client_secret=|cookie=|password=|bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]+|ready_to_send|realPublishEnabled=true|video\.publish/i);
 });
 
+test("TikTok MVP proof drop starter script creates a local starter without applying evidence", async () => {
+  const previousDrop = await readFile(proofLinksFilledDropPath, "utf8").catch(() => null);
+  try {
+    await unlink(proofLinksFilledDropPath).catch(() => undefined);
+    const result = spawnSync(process.execPath, [proofDropStarterPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "created");
+    assert.equal(output.realPublishEnabled, false);
+    assert.equal(output.directSocialApisRequired, false);
+    assert.match(output.sourcePath, /proof-links-paste-packet-filled\.txt$/);
+    assert.match(output.nextStep, /Fill the blank proof URL lines/);
+    assert.doesNotMatch(JSON.stringify(output), /ready_to_send|realPublishEnabled=true|video\.publish|access_token=|refresh_token=|client_secret=/i);
+
+    const starter = await readFile(proofLinksFilledDropPath, "utf8");
+    assert.match(starter, /TikTok MVP Metricool fast-path proof packet|TikTok MVP proof-links paste packet/);
+    assert.match(starter, /sports-daily:tiktok\.metricoolConnectionProofUrl=/);
+    assert.match(starter, /meme-radar:tiktok\.metricoolConnectionProofUrl=/);
+    assert.doesNotMatch(starter, /access_token=|refresh_token=|client_secret=|cookie=|password=|ready_to_send|video\.publish/i);
+
+    const preserved = spawnSync(process.execPath, [proofDropStarterPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(preserved.status, 0, preserved.stderr || preserved.stdout);
+    const preservedOutput = JSON.parse(preserved.stdout);
+    assert.equal(preservedOutput.status, "preserved_existing");
+    assert.equal(preservedOutput.overwritten, false);
+
+    await writeFile(proofLinksFilledDropPath, "   \n");
+    const emptyPreserved = spawnSync(process.execPath, [proofDropStarterPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+    });
+    assert.equal(emptyPreserved.status, 0, emptyPreserved.stderr || emptyPreserved.stdout);
+    const emptyPreservedOutput = JSON.parse(emptyPreserved.stdout);
+    assert.equal(emptyPreservedOutput.status, "preserved_existing");
+    assert.equal(emptyPreservedOutput.overwritten, false);
+    assert.equal(await readFile(proofLinksFilledDropPath, "utf8"), "   \n");
+  } finally {
+    if (previousDrop === null) await unlink(proofLinksFilledDropPath).catch(() => undefined);
+    else await writeFile(proofLinksFilledDropPath, previousDrop);
+  }
+});
+
 test("TikTok MVP proof drop kit prepares local inventory without applying evidence", async () => {
   const syntaxResult = spawnSync(process.execPath, ["--check", proofDropKitPath], {
     cwd: process.cwd(),
@@ -2583,6 +2634,7 @@ test("Goal completion audit watches local proof drop without saving or trusting 
       "sports-daily:tiktok.metricoolConnectionProofUrl=https://drive.google.com/file/d/sports-daily-metricool-proof/view",
       "meme-radar:tiktok.metricoolConnectionProofUrl=https://docs.google.com/document/d/meme-radar-metricool-proof/edit",
       "operator-reference=http://user:secret@example.com/proof",
+      '{"password":"never-paste-this"}',
     ].join("\n"));
     const blockedAudit = spawnSync(process.execPath, [goalCompletionAuditPath], {
       cwd: process.cwd(),

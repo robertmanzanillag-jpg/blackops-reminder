@@ -3600,16 +3600,30 @@ export async function registerRoutes(
   app.post("/api/clippers/create-tiktok-mvp-proof-links-drop-starter", async (_req, res) => {
     try {
       await mkdirNode("clippers_workspace/proof-drop/tiktok-mvp", { recursive: true });
-      const existing = await readNodeFile(clipperTikTokMvpProofLinksFilledDropPath, "utf8").catch(() => "");
+      const existing = await readNodeFile(clipperTikTokMvpProofLinksFilledDropPath, "utf8").catch((error: any) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      });
       let wroteStarter = false;
-      let starterText = existing;
+      let starterText = existing || "";
       let handoffRun: Record<string, unknown> | null = null;
-      if (!existing.trim()) {
+      let handoffForResponse: Record<string, unknown> | null = null;
+      if (existing !== null) {
+        if (containsClipperSecretLikeText(existing)) {
+          res.status(400).json({ error: "Existing TikTok MVP proof drop contains secret-like text. Remove credentials/tokens/cookies before using the starter flow." });
+          return;
+        }
+      } else {
         let handoff = await readClipperTikTokMvpProofHandoff().catch(() => null);
         if (!handoff?.fastPathPastePacketText && !handoff?.pastePacketText) {
           handoffRun = await runClipperTikTokMvpProofHandoff();
           handoff = await readClipperTikTokMvpProofHandoff();
         }
+        if (containsClipperSecretLikeText(JSON.stringify(handoff || {}))) {
+          res.status(400).json({ error: "TikTok MVP proof handoff contains secret-like text. Refusing to create or return a starter from it." });
+          return;
+        }
+        handoffForResponse = handoff as Record<string, unknown> | null;
         starterText = String(handoff?.fastPathPastePacketText || handoff?.pastePacketText || "").trimEnd();
         if (!starterText.trim()) {
           res.status(400).json({ error: "TikTok MVP proof handoff did not produce a proof links paste packet." });
@@ -3639,7 +3653,7 @@ export async function registerRoutes(
           nextStep: "Open the starter file, replace every blank proof URL with real public/non-secret proof evidence, then run Import drop file. Fast-path proof still requires Preview links before Save.",
         },
         tiktokMvpProofLinksDropStatus: await buildClipperTikTokMvpProofLinksDropStatus(),
-        tiktokMvpProofHandoff: await readClipperTikTokMvpProofHandoff().catch(() => null),
+        tiktokMvpProofHandoff: handoffForResponse,
         run: handoffRun,
       });
     } catch (error: any) {
