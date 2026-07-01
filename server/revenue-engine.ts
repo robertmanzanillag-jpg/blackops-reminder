@@ -3442,6 +3442,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
 
 export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueAutomationOpportunityDeliveryInput) {
   loadRevenueAutomationOpportunities();
+  loadRevenueLedger();
   loadRevenueDeliveryWorkspaces();
   const parsed = revenueAutomationOpportunityDeliverySchema.parse(input);
   const opportunity = revenueAutomationOpportunities.find((item) => item.id === parsed.opportunityId);
@@ -3461,6 +3462,8 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de producir",
     !opportunity.clientApprovedScope && "falta aprobacion escrita de scope",
     !opportunity.depositPaid && "falta deposito pagado",
+    !hasRevenuePaymentEvidence(opportunity.paymentConfirmation) && "falta comprobante/referencia verificable de pago",
+    !findVerifiedAutomationSaleLedgerEntry(opportunity) && "venta de automatizacion no registrada en ledger con cash y referencia verificable",
     opportunity.quote.pricing.estimatedInternalMonthlyCostUsd > 100 && "costo interno supera $100/mes",
     opportunity.quote.pricing.grossMarginPercent < 65 && "margen mensual menor a 65%",
   ].filter(Boolean) as string[];
@@ -3807,13 +3810,27 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
     };
   }
 
-  const existingEntry = revenueLedger.find((entry) => entry.notes.includes(`opportunity:${opportunity.id}`));
-  if (existingEntry) {
+  const unverifiedExistingEntry = findUnverifiedAutomationSaleLedgerEntry(opportunity);
+  if (unverifiedExistingEntry) {
+    opportunity.nextAction = "No registrar venta todavia: existe una fila ledger para esta oportunidad sin cash/referencia verificable; corregir o limpiar ledger antes de cerrar.";
+    opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+
+    return {
+      status: "blocked" as const,
+      reason: opportunity.nextAction,
+      opportunity,
+      entry: null,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+  const verifiedExistingEntry = findVerifiedAutomationSaleLedgerEntry(opportunity);
+  if (verifiedExistingEntry) {
     return {
       status: "already_recorded" as const,
       reason: "Esta oportunidad ya tiene una venta registrada en ledger.",
       opportunity,
-      entry: existingEntry,
+      entry: verifiedExistingEntry,
       snapshot: getRevenueEngineSnapshot(),
     };
   }
@@ -8863,6 +8880,34 @@ function findRevenueLedgerEntryByExactNoteToken(token: string) {
   return revenueLedger.find((entry) =>
     entry.notes.split("|").map((part) => part.trim()).includes(token)
   );
+}
+
+function getRevenueLedgerEntriesByExactNoteToken(token: string) {
+  return revenueLedger.filter((entry) =>
+    entry.notes.split("|").map((part) => part.trim()).includes(token)
+  );
+}
+
+function isVerifiedAutomationSaleLedgerEntry(entry: RevenueLedgerEntry, opportunity: RevenueAutomationOpportunity) {
+  const paymentConfirmation = opportunity.paymentConfirmation.trim();
+  const requiredDepositUsd = opportunity.quote.pricing.requiredDepositUsd;
+  return entry.kind === "automation_sale"
+    && entry.cashCollectedUsd >= requiredDepositUsd
+    && paymentConfirmation.length > 0
+    && entry.notes.includes(paymentConfirmation);
+}
+
+function findUnverifiedAutomationSaleLedgerEntry(opportunity: RevenueAutomationOpportunity) {
+  const token = `Automation opportunity:${opportunity.id}`;
+  return getRevenueLedgerEntriesByExactNoteToken(token)
+    .find((entry) => !isVerifiedAutomationSaleLedgerEntry(entry, opportunity));
+}
+
+function findVerifiedAutomationSaleLedgerEntry(opportunity: RevenueAutomationOpportunity) {
+  const token = `Automation opportunity:${opportunity.id}`;
+  if (findUnverifiedAutomationSaleLedgerEntry(opportunity)) return undefined;
+  return getRevenueLedgerEntriesByExactNoteToken(token)
+    .find((entry) => isVerifiedAutomationSaleLedgerEntry(entry, opportunity));
 }
 
 function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {

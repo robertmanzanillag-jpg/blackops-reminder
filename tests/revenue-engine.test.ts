@@ -6254,6 +6254,58 @@ test("does not double count automation opportunity already recorded in ledger", 
   assert.equal(second.snapshot.metrics.automationsSold, 1);
 });
 
+test("automation close blocks unverified ledger token to avoid double counting", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Repair Ledger Automation",
+    industry: "clinic",
+    request: "Automate consultation forms into Google Sheets, notify staff, send approved booking follow-up, and report booked consultations weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+    paymentConfirmation: "Stripe pi_repair_auto_2500",
+  });
+  const requiredDepositUsd = opportunity.opportunity.quote.pricing.requiredDepositUsd;
+  const invalidLedger = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Repair Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: Math.max(1, requiredDepositUsd - 100),
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `Automation opportunity:${opportunity.opportunity.id} | Payment confirmation:${opportunity.opportunity.paymentConfirmation}`,
+  });
+  assert.ok(invalidLedger.entry);
+
+  const blockedClose = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: requiredDepositUsd,
+    paymentConfirmation: opportunity.opportunity.paymentConfirmation,
+    markScopeApproved: true,
+  });
+
+  assert.equal(blockedClose.status, "blocked");
+  assert.equal(blockedClose.entry, null);
+  assert.match(blockedClose.reason, /limpiar ledger/);
+  assert.equal(blockedClose.snapshot.metrics.automationsSold, 1);
+  assert.equal(blockedClose.snapshot.metrics.cashCollectedUsd, invalidLedger.entry?.cashCollectedUsd);
+
+  const delivery = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(delivery.status, "blocked");
+  assert.equal(delivery.workspace, null);
+});
+
 test("blocks delivery workspace creation from automation opportunity before deposit and scope", () => {
   const opportunity = recordRevenueAutomationOpportunity({
     businessName: "No Deposit Automation",
@@ -6297,6 +6349,13 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     clientApprovedScope: true,
     depositPaid: true,
   });
+  const closeResult = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    paymentConfirmation: "Stripe pi_sold_delivery_2500",
+    markScopeApproved: true,
+  });
+  assert.equal(closeResult.status, "recorded");
 
   const result = createDeliveryWorkspaceFromAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
@@ -6315,6 +6374,158 @@ test("creates delivery workspace from sold automation opportunity with QA correc
   assert.equal(result.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
   assert.equal(result.opportunity?.status, "in_delivery");
   assert.equal(result.snapshot.recentDeliveryWorkspaces[0].input.sourceOpportunityId, opportunity.opportunity.id);
+});
+
+test("blocks automation delivery workspace when sold state was not ledger-recorded", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Direct Sold Automation",
+    industry: "clinic",
+    request: "Automate website consultation forms into Google Sheets, notify staff, send approved booking follow-up, and report booked consultations weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+    paymentConfirmation: "Stripe pi_direct_sold_2500",
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.match(result.reason, /ledger/);
+  assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("blocks automation delivery workspace when ledger token is not a verified paid sale", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Spoofed Ledger Automation",
+    industry: "clinic",
+    request: "Automate consultation forms into Google Sheets, notify staff, send approved booking follow-up, and report booked consultations weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+    paymentConfirmation: "Stripe pi_verified_auto_2500",
+  });
+  const requiredDepositUsd = opportunity.opportunity.quote.pricing.requiredDepositUsd;
+  const attemptDelivery = () => createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+
+  const wrongKind = recordRevenueLedgerEntry({
+    kind: "website_sale",
+    clientName: "Spoofed Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `Automation opportunity:${opportunity.opportunity.id} | Payment confirmation:${opportunity.opportunity.paymentConfirmation}`,
+  });
+  assert.ok(wrongKind.entry);
+  assert.equal(attemptDelivery().status, "blocked");
+
+  const insufficientCash = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Spoofed Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: Math.max(1, requiredDepositUsd - 100),
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `Automation opportunity:${opportunity.opportunity.id} | Payment confirmation:${opportunity.opportunity.paymentConfirmation}`,
+  });
+  assert.ok(insufficientCash.entry);
+  assert.equal(attemptDelivery().status, "blocked");
+
+  const mismatchedPayment = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Spoofed Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `Automation opportunity:${opportunity.opportunity.id} | Payment confirmation:Stripe pi_other_auto_2500`,
+  });
+  assert.ok(mismatchedPayment.entry);
+  const blocked = attemptDelivery();
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.workspace, null);
+  assert.match(blocked.reason, /cash y referencia verificable/);
+  assert.equal(blocked.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("blocks automation close and delivery when mixed ledger rows include a dirty token", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Mixed Ledger Automation",
+    industry: "clinic",
+    request: "Automate consultation forms into Google Sheets, notify staff, send approved booking follow-up, and report booked consultations weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+    paymentConfirmation: "Stripe pi_mixed_auto_2500",
+  });
+  const requiredDepositUsd = opportunity.opportunity.quote.pricing.requiredDepositUsd;
+  const token = `Automation opportunity:${opportunity.opportunity.id}`;
+  const dirtyRow = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Mixed Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: Math.max(1, requiredDepositUsd - 100),
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `${token} | Payment confirmation:${opportunity.opportunity.paymentConfirmation}`,
+  });
+  const validRow = recordRevenueLedgerEntry({
+    kind: "automation_sale",
+    clientName: "Mixed Ledger Automation",
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: `${token} | Payment confirmation:${opportunity.opportunity.paymentConfirmation}`,
+  });
+  assert.ok(dirtyRow.entry);
+  assert.ok(validRow.entry);
+
+  const close = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: requiredDepositUsd,
+    paymentConfirmation: opportunity.opportunity.paymentConfirmation,
+    markScopeApproved: true,
+  });
+  assert.equal(close.status, "blocked");
+  assert.equal(close.entry, null);
+
+  const delivery = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: false,
+    automationQaPassed: false,
+    clientHandoffReady: false,
+    launchTargetDays: 7,
+  });
+  assert.equal(delivery.status, "blocked");
+  assert.equal(delivery.workspace, null);
+  assert.match(delivery.reason, /cash y referencia verificable/);
 });
 
 test("blocks production plan when deposit or cost cap fails", () => {
