@@ -342,6 +342,9 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(serverSource, /run Money Sprint from placeholders/);
   assert.match(serverSource, /productionLaunchChecklist/);
   assert.match(serverSource, /Revenue Engine production launch checklist/);
+  assert.match(serverSource, /productionSetupPacket/);
+  assert.match(serverSource, /Revenue Engine production setup packet/);
+  assert.match(serverSource, /hasStrongSecret\(process\.env\.SESSION_SECRET\)/);
   assert.match(serverSource, /firstSprintPlan/);
   assert.match(serverSource, /\/api\/revenue-engine\/daily-scout-sprint/);
   assert.match(serverSource, /approve_contact_or_collect/);
@@ -363,6 +366,9 @@ test("Revenue Engine exposes money activation plan for first revenue sprint", ()
   assert.match(uiSource, /moneyActivationPlan\.productionLaunchChecklist\.requiredEvidence/);
   assert.match(uiSource, /moneyActivationPlan\.productionLaunchChecklist\.deploymentApprovalPacket/);
   assert.match(uiSource, /panel-deployment-approval-packet/);
+  assert.match(uiSource, /panel-production-setup-packet/);
+  assert.match(uiSource, /button-copy-production-setup-packet/);
+  assert.match(uiSource, /moneyActivationPlan\.productionLaunchChecklist\.productionSetupPacket\.copyableSetupPacket/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan/);
   assert.doesNotMatch(uiSource, /moneyActivationPlan\.firstSprintPlan\.steps \|\| \[\]\)\.slice\(0, 3\)/);
   assert.match(uiSource, /moneyActivationPlan\.firstSprintPlan\.revenuePath/);
