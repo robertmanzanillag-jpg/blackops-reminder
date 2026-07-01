@@ -16850,6 +16850,26 @@ export default function ClippersPage() {
     }
   };
 
+  const copyProofDropRequiredFastPathLines = async () => {
+    const cleanPacket = (tiktokMvpProofLinksDropStatus?.requiredFastPathPasteLines || []).join("\n").trim();
+    if (!cleanPacket) return;
+    try {
+      await navigator.clipboard.writeText(`${cleanPacket}\n`);
+      toast({
+        title: "Proof drop lines copied",
+        description: "Paste real non-secret Metricool or Drive/Docs proof URLs after each equals sign.",
+      });
+    } catch {
+      setTiktokMvpProofLinksPasteText(cleanPacket);
+      setTiktokMvpProofLinksPastePreview(null);
+      setTiktokMvpProofLinksPreview(null);
+      toast({
+        title: "Proof drop lines loaded",
+        description: "No pude copiar al clipboard; las deje en el paste packet para que las completes manualmente.",
+      });
+    }
+  };
+
   const loadGoalMetricoolProofFastPath = () => {
     const cleanPacket = (goalCompletionPrimaryAction?.fastPathPacketText || goalCompletionPrimaryFastPathLines.join("\n")).trim();
     if (!cleanPacket) return;
@@ -19155,6 +19175,18 @@ export default function ClippersPage() {
                       <p className="mt-1">{tiktokMvpProofLinksDropStatus.issues[0] || tiktokMvpProofLinksDropStatus.nextStep}</p>
                       {(tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines ?? []).length > 0 && (
                         <div className="mt-2 grid gap-1" data-testid="clippers-tiktok-mvp-proof-links-drop-required-lines">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void copyProofDropRequiredFastPathLines()}
+                            disabled={tiktokProofFlowBusy || isLoading}
+                            className="h-8 justify-self-start border-cyan-300/20 bg-transparent text-cyan-100 hover:bg-cyan-300/10"
+                            data-testid="copy-clippers-tiktok-mvp-proof-links-drop-required-lines-button"
+                          >
+                            <Copy className="mr-2 h-3.5 w-3.5" />
+                            Copy required lines
+                          </Button>
                           {tiktokMvpProofLinksDropStatus.requiredFastPathPasteLines!.map((line) => (
                             <code key={line} className="rounded border border-cyan-300/10 bg-black/30 px-2 py-1 text-[10px] text-cyan-100">
                               {line}

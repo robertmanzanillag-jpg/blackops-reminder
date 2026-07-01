@@ -1096,6 +1096,9 @@ test("TikTok MVP evidence closeout is wired into guarded API routes and UI contr
   assert.match(page, /disabled=\{tiktokProofFlowBusy \|\| isLoading \|\| tiktokMvpProofLinksDropStatus\?\.status === "blocked_secret_like"\}/);
   assert.match(page, /requiredFastPathPasteLines/);
   assert.match(page, /clippers-tiktok-mvp-proof-links-drop-required-lines/);
+  assert.match(page, /copyProofDropRequiredFastPathLines/);
+  assert.match(page, /copy-clippers-tiktok-mvp-proof-links-drop-required-lines-button/);
+  assert.match(page, /navigator\.clipboard\.writeText\(`\$\{cleanPacket\}\\n`\)/);
   assert.match(page, /tiktokMvpProofLinksDropImport: data\.tiktokMvpProofLinksDropImport/);
   assert.match(page, /tiktokMvpProofLinksDropStatus: data\.tiktokMvpProofLinksDropStatus/);
   assert.match(page, /tiktokMvpProofLinksDropImport\?: ClipperTikTokMvpProofLinksDropImportSummary/);
