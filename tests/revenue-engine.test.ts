@@ -863,6 +863,11 @@ test("daily money command prioritizes verified public candidates before more sea
   assert.match(snapshot.dailyMoneyCommand.primaryAction, /Money Sprint/);
   assert.equal(snapshot.dailyMoneyCommand.funnel.candidatesReady, 1);
   assert.equal(snapshot.dailyMoneyCommand.steps.find((step) => step.id === "import")?.status, "ready");
+  const sprintRequest = revenueMoneySprintFromPublicCandidatesSchema.parse(JSON.parse(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest));
+  assert.deepEqual(sprintRequest.candidateIds, [snapshot.publicLeadImportQueue.items[0].candidateId]);
+  assert.equal(sprintRequest.area, "Miami");
+  assert.equal(sprintRequest.niche, "restaurants");
+  assert.doesNotMatch(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_VERIFIED_PUBLIC_CANDIDATE_IDS/);
 });
 
 test("builds an always-on lead radar with contact and mockup limits", () => {
@@ -3721,6 +3726,11 @@ test("website delivery handoff queue requires a sold website opportunity", async
   const snapshot = getRevenueEngineSnapshot();
 
   assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 1);
+  assert.equal(snapshot.dailyMoneyCommand.status, "contact");
+  const contactRequest = revenueOutreachOutcomeSchema.parse(JSON.parse(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest));
+  assert.equal(contactRequest.draftId, readyDraft.draft.id);
+  assert.equal(contactRequest.outcome, "reply");
+  assert.doesNotMatch(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_MANUAL_CONTACT_DRAFT_ID/);
   assert.equal(snapshot.websiteDeliveryHandoffQueue.readyCount, 0);
   assert.equal(snapshot.websiteDeliveryHandoffQueue.blockedCount, 0);
 
@@ -3762,8 +3772,14 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.status, "collect");
   assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.status, "collect");
   assert.equal(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/website-opportunities/close");
-  assert.match(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.input, /opportunityId, depositPaid, scopeApproved/);
+  assert.match(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.input, /opportunityId=/);
   assert.match(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.gate, /No delivery workspace/);
+  const dailyCloseRequest = revenueWebsiteOpportunityCloseSchema.parse(JSON.parse(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest));
+  assert.equal(dailyCloseRequest.opportunityId, opportunityResult.opportunity!.id);
+  assert.equal(dailyCloseRequest.depositPaid, false);
+  assert.equal(dailyCloseRequest.scopeApproved, true);
+  assert.equal(dailyCloseRequest.cashCollectedUsd, 0);
+  assert.doesNotMatch(scopedOnlyResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_WEBSITE_OPPORTUNITY_ID/);
 
   const preservedOpportunity = recordRevenueWebsiteOpportunity({
     leadId: readyLead.lead.id,
@@ -3797,6 +3813,15 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].opportunityId, opportunityResult.opportunity?.id);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].leadId, readyLead.lead.id);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.items[0].outreachDraftId, readyDraft.draft.id);
+  assert.equal(closeResult.snapshot.dailyMoneyCommand.status, "collect");
+  assert.equal(closeResult.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/website-delivery-workspace");
+  const dailyWorkspaceRequest = JSON.parse(closeResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest);
+  assert.equal(dailyWorkspaceRequest.leadId, readyLead.lead.id);
+  assert.equal(dailyWorkspaceRequest.outreachDraftId, readyDraft.draft.id);
+  assert.equal(dailyWorkspaceRequest.websiteOpportunityId, opportunityResult.opportunity!.id);
+  assert.equal(dailyWorkspaceRequest.branchName, "codex/client-older-ready-cafe-website");
+  assert.equal(dailyWorkspaceRequest.repoFullName, "REPLACE_WITH_APPROVED_OWNER_REPO");
+  assert.doesNotMatch(closeResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_SOLD_LEAD_ID/);
   assert.equal(closeResult.snapshot.metrics.appsSold, 1);
 });
 
@@ -4395,10 +4420,15 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.equal(handoff.snapshot.dailyMoneyCommand.status, "build");
   assert.equal(handoff.snapshot.dailyMoneyCommand.runPacket.status, "build");
   assert.equal(handoff.snapshot.dailyMoneyCommand.runPacket.apiAction, "/api/revenue-engine/delivery-workspaces/github-handoff");
-  assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.input, /workspaceId/);
-  assert.match(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief, /workspaceId, repoFullName, branchName/);
+  assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.input, new RegExp(`workspaceId=${handoff.workspace?.id}`));
+  assert.match(handoff.snapshot.dailyMoneyCommand.copyableOperatorBrief, new RegExp(`workspaceId=${handoff.workspace?.id}`));
   assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.gate, /No merge\/deploy\/client preview/);
   assert.match(handoff.snapshot.dailyMoneyCommand.runPacket.copyableRunPacket, /explicit Robert approval/);
+  const dailyGithubHandoffRequest = revenueDeliveryWorkspaceGithubHandoffSchema.parse(JSON.parse(handoff.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest));
+  assert.equal(dailyGithubHandoffRequest.workspaceId, handoff.workspace?.id);
+  assert.equal(dailyGithubHandoffRequest.repoFullName, "robert/handoff-cafe");
+  assert.equal(dailyGithubHandoffRequest.branchName, "codex/client-handoff-cafe-website");
+  assert.doesNotMatch(handoff.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_DELIVERY_WORKSPACE_ID/);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].workspaceId, handoff.workspace?.id);
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.items[0].codexBrief.includes("PR-First Rules"), true);

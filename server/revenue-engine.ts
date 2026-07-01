@@ -5747,6 +5747,12 @@ function buildRevenueDailyMoneyCommand(input: {
     requireRobertApprovalToContact: true,
     notes: "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
   };
+  const topPublicLeadImportItem = input.publicLeadImportQueue.items[0] || null;
+  const topWebsiteSalesPacket = input.websiteSalesPacketQueue.items[0] || null;
+  const topManualOutreach = input.manualOutreachQueue.items[0] || null;
+  const topWebsiteClosure = input.websiteClosureQueue.items[0] || null;
+  const topDeliveryHandoff = input.websiteDeliveryHandoffQueue.items[0] || null;
+  const topBuildHandoff = input.websiteBuildHandoffQueue.items[0] || null;
   const runPacketByStatus: Record<RevenueDailyMoneyCommand["status"], Omit<RevenueDailyMoneyCommand["runPacket"], "status" | "copyableRunPacket">> = {
     search: {
       apiAction: "/api/revenue-engine/scout-dispatch",
@@ -5757,33 +5763,44 @@ function buildRevenueDailyMoneyCommand(input: {
     },
     sprint: {
       apiAction: "/api/revenue-engine/money-sprint/public-candidates",
-      input: "candidateIds from verified publicLeadImportQueue, writePreviewFiles=true, requireRobertApprovalToContact=true",
+      input: topPublicLeadImportItem
+        ? `candidateIds from verified publicLeadImportQueue, next=${topPublicLeadImportItem.businessName}`
+        : "candidateIds from verified publicLeadImportQueue, writePreviewFiles=true, requireRobertApprovalToContact=true",
       output: "Mockups, website sales packets and draft-only outreach for approved candidates.",
       gate: "No outreach send, paid data spend or placeholder candidates.",
-      copyableApiRequest: JSON.stringify({
-        candidateIds: "REPLACE_WITH_VERIFIED_PUBLIC_CANDIDATE_IDS",
-        writePreviewFiles: true,
-        requireRobertApprovalToContact: true,
-        maxPaidDataSpendUsd: 0,
-      }, null, 2),
+      copyableApiRequest: input.publicLeadImportQueue.copyableMoneySprintRequest,
     },
     sell: {
-      apiAction: "/api/revenue-engine/outreach-drafts/approve",
-      input: "draftId, approvedByRobert=true, notes with manual approval context",
-      output: "Approved manual contact queue entry and close packet.",
-      gate: "Robert approval required before any business contact.",
-      copyableApiRequest: JSON.stringify({
-        draftId: "REPLACE_WITH_REVIEWED_DRAFT_ID",
-        approvedByRobert: true,
-        notes: "Robert approved manual contact after reviewing public evidence, mockup, pricing and channel.",
-      }, null, 2),
+      apiAction: topWebsiteSalesPacket?.draftStatus === "approved"
+        ? "/api/revenue-engine/website-opportunities"
+        : "/api/revenue-engine/outreach-drafts/approve",
+      input: topWebsiteSalesPacket?.draftStatus === "approved"
+        ? "leadId, outreachDraftId, projectType from top reviewed sales packet"
+        : "draftId, approvedByRobert=true, notes with manual approval context",
+      output: topWebsiteSalesPacket?.draftStatus === "approved"
+        ? "Quoted website opportunity ready for manual scope/deposit close gate."
+        : "Approved manual contact queue entry and close packet.",
+      gate: topWebsiteSalesPacket?.draftStatus === "approved"
+        ? "Do not close or build until deposit and scope evidence are recorded."
+        : "Robert approval required before any business contact.",
+      copyableApiRequest: topWebsiteSalesPacket?.draftStatus === "approved"
+        ? topWebsiteSalesPacket.copyableOpportunityRequest
+        : JSON.stringify({
+            draftId: topWebsiteSalesPacket?.outreachDraftId || "REPLACE_WITH_REVIEWED_DRAFT_ID",
+            approvedByRobert: true,
+            notes: topWebsiteSalesPacket
+              ? `Robert approved manual contact for ${topWebsiteSalesPacket.businessName} after reviewing public evidence, mockup, pricing and channel.`
+              : "Robert approved manual contact after reviewing public evidence, mockup, pricing and channel.",
+          }, null, 2),
     },
     contact: {
       apiAction: "/api/revenue-engine/outreach-outcome",
-      input: "draftId, manual outcome, notes, optional cash/payment reference only when verified",
+      input: topManualOutreach
+        ? `draftId=${topManualOutreach.draftId}, manual outcome for ${topManualOutreach.businessName}`
+        : "draftId, manual outcome, notes, optional cash/payment reference only when verified",
       output: "Reply/call/deposit outcome captured without auto-send.",
       gate: "Manual-only channels stay manual; deposit requires verifiable payment evidence.",
-      copyableApiRequest: JSON.stringify({
+      copyableApiRequest: topManualOutreach?.copyableOutcomeRequests.reply || JSON.stringify({
         draftId: "REPLACE_WITH_MANUAL_CONTACT_DRAFT_ID",
         outcome: "reply",
         notes: "REPLACE with manual outreach outcome. Do not include secrets or private customer data.",
@@ -5791,10 +5808,12 @@ function buildRevenueDailyMoneyCommand(input: {
     },
     collect: {
       apiAction: "/api/revenue-engine/website-delivery-workspace",
-      input: "leadId, outreachDraftId, websiteOpportunityId, repoFullName, branchName=codex/..., depositPaid=true, scopeApproved=true, publicDataVerified=true",
+      input: topDeliveryHandoff
+        ? `sold opportunity=${topDeliveryHandoff.opportunityId}, lead=${topDeliveryHandoff.leadId}, branch=${topDeliveryHandoff.suggestedBranchName}`
+        : "leadId, outreachDraftId, websiteOpportunityId, repoFullName, branchName=codex/..., depositPaid=true, scopeApproved=true, publicDataVerified=true",
       output: "QA-gated delivery workspace plus GitHub PR-first build handoff.",
       gate: "No workspace/build until deposit, scope and payment evidence pass.",
-      copyableApiRequest: JSON.stringify({
+      copyableApiRequest: topDeliveryHandoff?.copyableWorkspaceRequest || JSON.stringify({
         leadId: "REPLACE_WITH_SOLD_LEAD_ID",
         outreachDraftId: "REPLACE_WITH_APPROVED_DRAFT_ID",
         websiteOpportunityId: "REPLACE_WITH_SOLD_WEBSITE_OPPORTUNITY_ID",
@@ -5808,10 +5827,12 @@ function buildRevenueDailyMoneyCommand(input: {
     },
     build: {
       apiAction: "/api/revenue-engine/delivery-workspaces/github-handoff",
-      input: "workspaceId, repoFullName, branchName and public build pack",
+      input: topBuildHandoff
+        ? `workspaceId=${topBuildHandoff.workspaceId}, repo=${topBuildHandoff.repoFullName}, branch=${topBuildHandoff.branchName}`
+        : "workspaceId, repoFullName, branchName and public build pack",
       output: "GitHub handoff issue/PR-first brief for second-agent review and App QA.",
       gate: "No merge/deploy/client preview until PR, review, App QA and Robert deploy approval.",
-      copyableApiRequest: JSON.stringify({
+      copyableApiRequest: topBuildHandoff?.copyableGithubHandoffRequest || JSON.stringify({
         workspaceId: "REPLACE_WITH_DELIVERY_WORKSPACE_ID",
         repoFullName: "owner/repo",
         branchName: "codex/client-website-build",
@@ -5834,10 +5855,12 @@ function buildRevenueDailyMoneyCommand(input: {
   const runPacketCore = status === "collect" && input.websiteDeliveryHandoffQueue.readyCount === 0 && input.websiteClosureQueue.readyCount > 0
     ? {
         apiAction: "/api/revenue-engine/website-opportunities/close",
-        input: "opportunityId, depositPaid, scopeApproved, cashCollectedUsd, paymentConfirmation, notes",
+        input: topWebsiteClosure
+          ? `opportunityId=${topWebsiteClosure.opportunityId}, closureStage=${topWebsiteClosure.closureStage}`
+          : "opportunityId, depositPaid, scopeApproved, cashCollectedUsd, paymentConfirmation, notes",
         output: "Sold website opportunity once deposit and scope evidence are complete.",
         gate: "No delivery workspace, ledger sale or build until deposit evidence and scope approval are both recorded.",
-        copyableApiRequest: JSON.stringify({
+        copyableApiRequest: topWebsiteClosure?.copyableCloseRequest || JSON.stringify({
           opportunityId: "REPLACE_WITH_WEBSITE_OPPORTUNITY_ID",
           depositPaid: true,
           scopeApproved: true,
