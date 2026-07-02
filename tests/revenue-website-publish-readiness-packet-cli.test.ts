@@ -98,16 +98,25 @@ function approveWebsiteCreation(draft: ReturnType<typeof createApprovedOutreachD
   });
 }
 
-function approveWebsitePublish(draft: ReturnType<typeof createApprovedOutreachDraft>, creationApprovalDecisionId: string) {
+function approveWebsitePublish(
+  draft: ReturnType<typeof createApprovedOutreachDraft>,
+  creationApprovalDecisionId: string,
+  proofOverrides: Partial<{
+    deployProvider: string;
+    previewDeployUrl: string;
+    appQaEvidenceUrl: string;
+    rollbackPlanUrl: string;
+  }> = {},
+) {
   const proof = {
     robertApprovedPublish: true,
     previewDeployVerified: true,
     appQaTargetPassed: true,
     rollbackVerified: true,
-    deployProvider: "replit",
-    previewDeployUrl: "https://preview.example.com/publish-ready-cafe",
-    appQaEvidenceUrl: "https://github.com/example/repo/actions/runs/123",
-    rollbackPlanUrl: "https://github.com/example/repo/blob/main/ROLLBACK.md",
+    deployProvider: proofOverrides.deployProvider || "replit",
+    previewDeployUrl: proofOverrides.previewDeployUrl || "https://preview.example.com/publish-ready-cafe",
+    appQaEvidenceUrl: proofOverrides.appQaEvidenceUrl || "https://github.com/example/repo/actions/runs/123",
+    rollbackPlanUrl: proofOverrides.rollbackPlanUrl || "https://github.com/example/repo/blob/main/ROLLBACK.md",
   };
   const creationPacket = buildRevenueWebsiteCreationPacket({
     outreachDraftId: draft.id,
@@ -187,6 +196,23 @@ test("parses and validates website publish readiness packet CLI options", () => 
     "--preview-deploy-url is required.",
     "--app-qa-evidence-url is required.",
     "--rollback-plan-url is required.",
+  ]);
+  assert.deepEqual(validateRevenueWebsitePublishReadinessPacketOptions(parseRevenueWebsitePublishReadinessPacketArgs([
+    "--outreach-draft-id=OUTREACH_ID",
+    "--website-creation-approval-decision-id=APPROVAL_ID",
+    "--publish-approval-decision-id=APPROVAL_ID",
+    "--deploy-provider=REPLACE_WITH_DEPLOY_PROVIDER",
+    "--preview-deploy-url=https://example.com/REPLACE_WITH_PREVIEW_DEPLOY_URL",
+    "--app-qa-evidence-url=https://example.com/REPLACE_WITH_APP_QA_EVIDENCE_URL",
+    "--rollback-plan-url=https://example.com/REPLACE_WITH_ROLLBACK_PLAN_URL",
+  ])), [
+    "--outreach-draft-id must be a real outreach draft id, not a placeholder.",
+    "--website-creation-approval-decision-id must be a real approval decision id, not a placeholder.",
+    "--publish-approval-decision-id must be a real approval decision id, not a placeholder.",
+    "--deploy-provider must be real publish context, not a placeholder.",
+    "--preview-deploy-url must be real evidence, not a placeholder.",
+    "--app-qa-evidence-url must be real evidence, not a placeholder.",
+    "--rollback-plan-url must be real evidence, not a placeholder.",
   ]);
 });
 
@@ -269,6 +295,42 @@ test("website publish readiness packet builds safe publish handoff", () => {
   assert.equal(getRevenueWebsitePublishReadinessPacketExitCode(packet), 0);
   assert.match(text, /Revenue website publish readiness packet: ready_for_publish_handoff/);
   assert.match(text, /Files prepared in packet: 4/);
+});
+
+test("website publish readiness packet blocks placeholder proof when builder is called directly", () => {
+  const draft = createApprovedOutreachDraft();
+  const creationApproval = approveWebsiteCreation(draft);
+  const publishApproval = approveWebsitePublish(draft, creationApproval.decision.id, {
+    deployProvider: "REPLACE_WITH_DEPLOY_PROVIDER",
+    previewDeployUrl: "https://example.com/REPLACE_WITH_PREVIEW_DEPLOY_URL",
+    appQaEvidenceUrl: "https://example.com/REPLACE_WITH_APP_QA_EVIDENCE_URL",
+    rollbackPlanUrl: "https://example.com/REPLACE_WITH_ROLLBACK_PLAN_URL",
+  });
+  const packet = buildRevenueWebsitePublishReadinessPacketFromCli({
+    outreachDraftId: draft.id,
+    websiteCreationApprovalDecisionId: creationApproval.decision.id,
+    publishApprovalDecisionId: publishApproval.decision.id,
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "REPLACE_WITH_DEPLOY_PROVIDER",
+    previewDeployUrl: "https://example.com/REPLACE_WITH_PREVIEW_DEPLOY_URL",
+    appQaEvidenceUrl: "https://example.com/REPLACE_WITH_APP_QA_EVIDENCE_URL",
+    rollbackPlanUrl: "https://example.com/REPLACE_WITH_ROLLBACK_PLAN_URL",
+    writeFiles: false,
+    deployWebsite: false,
+    launchTargetDays: 7,
+    json: false,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.gates[0].gate, "cli_options");
+  assert.match(packet.blockedReasons.join("; "), /--deploy-provider must be real publish context/);
+  assert.match(packet.blockedReasons.join("; "), /--preview-deploy-url must be real evidence/);
+  assert.match(packet.blockedReasons.join("; "), /--app-qa-evidence-url must be real evidence/);
+  assert.match(packet.blockedReasons.join("; "), /--rollback-plan-url must be real evidence/);
+  assert.equal(getRevenueWebsitePublishReadinessPacketExitCode(packet), 1);
 });
 
 test("website publish readiness packet blocks stale approval when scaffold content changes", () => {

@@ -13,6 +13,10 @@ function getArgValue(argv: string[], name: string) {
   return arg ? arg.slice(prefix.length).trim() : "";
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_|OUTREACH_ID|APPROVAL_ID)/i.test(value);
+}
+
 export function parseRevenueWebsitePublishReadinessPacketArgs(argv: string[]): RevenueWebsitePublishReadinessPacketCliOptions {
   return {
     outreachDraftId: getArgValue(argv, "--outreach-draft-id"),
@@ -36,11 +40,20 @@ export function parseRevenueWebsitePublishReadinessPacketArgs(argv: string[]): R
 export function validateRevenueWebsitePublishReadinessPacketOptions(options: RevenueWebsitePublishReadinessPacketCliOptions) {
   const errors: string[] = [];
   if (!options.outreachDraftId) errors.push("--outreach-draft-id is required.");
+  else if (hasPlaceholderValue(options.outreachDraftId)) errors.push("--outreach-draft-id must be a real outreach draft id, not a placeholder.");
   if (!options.websiteCreationApprovalDecisionId) errors.push("--website-creation-approval-decision-id is required.");
+  else if (hasPlaceholderValue(options.websiteCreationApprovalDecisionId)) errors.push("--website-creation-approval-decision-id must be a real approval decision id, not a placeholder.");
+  if (options.publishApprovalDecisionId && hasPlaceholderValue(options.publishApprovalDecisionId)) {
+    errors.push("--publish-approval-decision-id must be a real approval decision id, not a placeholder.");
+  }
   if (!options.deployProvider) errors.push("--deploy-provider is required.");
+  else if (hasPlaceholderValue(options.deployProvider)) errors.push("--deploy-provider must be real publish context, not a placeholder.");
   if (!options.previewDeployUrl) errors.push("--preview-deploy-url is required.");
+  else if (hasPlaceholderValue(options.previewDeployUrl)) errors.push("--preview-deploy-url must be real evidence, not a placeholder.");
   if (!options.appQaEvidenceUrl) errors.push("--app-qa-evidence-url is required.");
+  else if (hasPlaceholderValue(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be real evidence, not a placeholder.");
   if (!options.rollbackPlanUrl) errors.push("--rollback-plan-url is required.");
+  else if (hasPlaceholderValue(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be real evidence, not a placeholder.");
   if (!Number.isInteger(options.launchTargetDays) || options.launchTargetDays < 1 || options.launchTargetDays > 60) {
     errors.push("--launch-target-days must be an integer from 1 to 60.");
   }
@@ -48,7 +61,8 @@ export function validateRevenueWebsitePublishReadinessPacketOptions(options: Rev
 }
 
 export function buildRevenueWebsitePublishReadinessPacketFromCli(options: RevenueWebsitePublishReadinessPacketCliOptions) {
-  return buildRevenueWebsitePublishReadinessPacket({
+  const validationErrors = validateRevenueWebsitePublishReadinessPacketOptions(options);
+  const packet = buildRevenueWebsitePublishReadinessPacket({
     outreachDraftId: options.outreachDraftId,
     websiteCreationApprovalDecisionId: options.websiteCreationApprovalDecisionId,
     publishApprovalDecisionId: options.publishApprovalDecisionId,
@@ -64,6 +78,21 @@ export function buildRevenueWebsitePublishReadinessPacketFromCli(options: Revenu
     deployWebsite: options.deployWebsite,
     launchTargetDays: options.launchTargetDays,
   });
+
+  if (validationErrors.length === 0) return packet;
+
+  return {
+    ...packet,
+    status: "blocked" as const,
+    gates: [
+      { gate: "cli_options", passed: false, fix: validationErrors.join(" ") },
+      ...packet.gates,
+    ],
+    blockedReasons: [
+      ...validationErrors,
+      ...packet.blockedReasons,
+    ],
+  };
 }
 
 export function formatRevenueWebsitePublishReadinessPacketText(packet: ReturnType<typeof buildRevenueWebsitePublishReadinessPacketFromCli>) {
