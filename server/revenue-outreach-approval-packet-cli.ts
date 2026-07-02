@@ -24,6 +24,22 @@ function displayBlock(value: string) {
   return displayText(value);
 }
 
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+export function buildRevenueOutreachApprovalDecisionCommand(draftId: string) {
+  return [
+    "npm",
+    "run",
+    "revenue:outreach-approval-decision",
+    "--",
+    `--draft-id=${draftId}`,
+    "--decision=approved",
+    "--approved-action=Approve exact outreach draft for provider send after final Robert review.",
+  ].map(shellQuote).join(" ");
+}
+
 export function parseRevenueOutreachApprovalPacketArgs(argv: string[]): RevenueOutreachApprovalPacketCliOptions {
   return {
     maxDrafts: Number(getArgValue(argv, "--max-drafts") || 10),
@@ -84,6 +100,9 @@ export function formatRevenueOutreachApprovalPacketText(packet: ReturnType<typeo
         `  summary=${displayText(item.businessSummary || "none")}`,
         `  body=${displayBlock(item.body)}`,
         `  manualApproval=${item.readyForManualApproval ? "yes" : "no"}; providerSend=${item.readyForProviderSend ? "yes" : "no"}`,
+        item.readyForManualApproval || item.readyForProviderSend
+          ? `  approvalCommand=${buildRevenueOutreachApprovalDecisionCommand(item.draftId)}`
+          : "",
         item.blockedReasons.length ? `  blocked=${item.blockedReasons.join("; ")}` : "",
       ].filter(Boolean).join("\n"))
       : ["- none"]),

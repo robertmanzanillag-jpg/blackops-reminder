@@ -100,9 +100,16 @@ test("records approved outreach decision without sending or charging", () => {
   assert.equal(result.safety.sendsOutreach, false);
   assert.equal(result.safety.chargesClients, false);
   assert.equal(result.safety.deploys, false);
-  assert.equal(result.nextApiAction, "/api/revenue-engine/outreach-send");
-  assert.deepEqual(result.nextApiBody, { draftId: draft.id, approvalDecisionId: result.decision?.id });
+  assert.match(result.nextCliCommand, /'npm' 'run' 'revenue:outreach-send'/);
+  assert.match(result.nextCliCommand, new RegExp(`--draft-id=${draft.id}`));
+  assert.doesNotMatch(result.nextCliCommand, /--confirmed-by-robert/);
+  assert.doesNotMatch(result.nextCliCommand, /--confirm-send/);
+  assert.equal(result.nextApiAction, "");
+  assert.equal(result.nextApiBody, null);
   assert.equal(decisions.length, 1);
+  assert.match(text, /Next CLI command: 'npm' 'run' 'revenue:outreach-send'/);
+  assert.match(text, /Before sending, get a fresh Robert send approval/);
+  assert.match(text, new RegExp(`--confirm-send='SEND ${draft.id} ${result.decision?.id}'`));
   assert.match(text, /Persists approval decision: yes/);
   assert.match(text, /Sends outreach: no/);
   assert.equal(getRevenueOutreachApprovalDecisionExitCode(result), 0);
@@ -198,7 +205,8 @@ test("outreach approval decision script persists a safe approval record", () => 
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Revenue outreach approval decision: recorded/);
-  assert.match(result.stdout, /approvalDecisionId/);
+  assert.match(result.stdout, /--approval-decision-id=/);
+  assert.match(result.stdout, /Next API action: none/);
   assert.match(result.stdout, /Persists approval decision: yes/);
   assert.match(result.stdout, /Sends outreach: no/);
 });

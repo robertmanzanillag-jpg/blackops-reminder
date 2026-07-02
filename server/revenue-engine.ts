@@ -387,6 +387,7 @@ export type RevenueMoneyReadinessInput = z.infer<typeof revenueMoneyReadinessSch
 export const revenueOutreachSendSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
   approvalDecisionId: z.string().trim().max(200).optional().default(""),
+  sendConfirmation: z.string().trim().max(420).optional().default(""),
 });
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
@@ -5770,6 +5771,9 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
     : null;
   const expectedTargetId = draft ? buildRevenueOutreachApprovalTargetId(draft.id) : "";
   const expectedSnapshotHash = draft ? buildRevenueOutreachSnapshotHash(draft) : "";
+  const expectedSendConfirmation = draft && parsed.approvalDecisionId
+    ? `SEND ${draft.id} ${parsed.approvalDecisionId}`
+    : "";
   const approvalDecisionReady = Boolean(
     draft
     && approvalDecision
@@ -5787,6 +5791,7 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
     { gate: "human_approval", passed: approvalDecisionReady, fix: "Registrar y usar approvalDecisionId valido para este draft exacto antes de contacto externo." },
+    { gate: "typed_send_confirmation", passed: Boolean(expectedSendConfirmation && parsed.sendConfirmation === expectedSendConfirmation), fix: expectedSendConfirmation ? `Escribir confirmacion exacta antes de enviar: ${expectedSendConfirmation}` : "Escribir confirmacion exacta antes de enviar." },
     { gate: "email_channel", passed: providerEmailChannel, fix: `Canal manual-only: ${draft?.channel || "unknown"}. Usar revision manual fuera del proveedor de email.` },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },

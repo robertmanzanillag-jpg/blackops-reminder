@@ -121,6 +121,10 @@ function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutre
   });
 }
 
+function buildOutreachSendConfirmation(draftId: string, approvalDecisionId: string) {
+  return `SEND ${draftId} ${approvalDecisionId}`;
+}
+
 function approveWebsiteCreationForTests(
   draft: Parameters<typeof buildRevenueWebsiteCreationSnapshotHash>[0],
   proof: RevenueWebsiteCreationApprovalProof = {
@@ -2672,7 +2676,11 @@ test("outreach approval packet treats string false includeSent as false", async 
     notes: "",
   });
   const approval = approveOutreachDraftForTests(result.draft);
-  await sendRevenueOutreachDraft({ draftId: result.draft.id, approvalDecisionId: approval.decision.id });
+  await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
+  });
 
   const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: "false" as unknown as boolean });
 
@@ -2728,6 +2736,7 @@ test("blocks provider send for manual-only outreach channels", async () => {
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2756,6 +2765,7 @@ test("blocks outreach send when email provider is missing", async () => {
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2786,6 +2796,7 @@ test("blocks outreach send when email provider values are placeholders", async (
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2822,6 +2833,41 @@ test("blocks outreach send without a valid approvalDecisionId", async () => {
   assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
 });
 
+test("blocks outreach send without exact typed send confirmation", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Typed Confirmation Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Typed Confirmation Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveOutreachDraftForTests(result.draft);
+
+  const missing = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+  });
+  const wrong = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: "SEND wrong draft",
+  });
+
+  assert.equal(missing.status, "blocked");
+  assert.equal(wrong.status, "blocked");
+  assert.equal(missing.gates.some((gate) => gate.gate === "typed_send_confirmation" && gate.passed === false), true);
+  assert.equal(wrong.gates.some((gate) => gate.gate === "typed_send_confirmation" && gate.passed === false), true);
+});
+
 test("blocks outreach send with generic approval decision", async () => {
   process.env.RESEND_API_KEY = "re_test";
   process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
@@ -2854,6 +2900,7 @@ test("blocks outreach send with generic approval decision", async () => {
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2928,6 +2975,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     const sendResult = await sendRevenueOutreachDraft({
       draftId: result.draft.id,
       approvalDecisionId,
+      sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approvalDecisionId),
     });
 
     assert.equal(sendResult.status, "blocked");
@@ -2939,6 +2987,8 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   const source = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
 
   assert.match(source, /approvalDecisionId/);
+  assert.match(source, /sendConfirmation/);
+  assert.match(source, /outreachSendConfirmation\.trim\(\) !== `SEND/);
   assert.doesNotMatch(source, /approvalToSend/);
 });
 
@@ -2970,6 +3020,7 @@ test("uses fallback Resend from email when Revenue Engine from email is a placeh
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "sent");
@@ -3020,6 +3071,7 @@ test("sends approved outreach with configured provider and updates matching lead
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "sent");

@@ -662,6 +662,7 @@ type OutreachSendResult = {
 type OutreachSendVariables = {
   draftId: string;
   approvalDecisionId: string;
+  sendConfirmation: string;
 };
 
 type RevenueAgentRunResult = {
@@ -1301,6 +1302,7 @@ export default function RevenueEnginePage() {
   const [outreachApproved, setOutreachApproved] = useState(false);
   const [outreachMockupUrl, setOutreachMockupUrl] = useState("");
   const [outreachApprovalDecisionId, setOutreachApprovalDecisionId] = useState("");
+  const [outreachSendConfirmation, setOutreachSendConfirmation] = useState("");
   const [improvementCampaignName, setImprovementCampaignName] = useState("Black Room test offer");
   const [improvementPeriodLabel, setImprovementPeriodLabel] = useState("semana 1");
   const [improvementLeadsContacted, setImprovementLeadsContacted] = useState(20);
@@ -1962,13 +1964,14 @@ export default function RevenueEnginePage() {
   });
 
   const outreachSendMutation = useMutation<OutreachSendResult, Error, OutreachSendVariables>({
-    mutationFn: async ({ draftId, approvalDecisionId }) => {
+    mutationFn: async ({ draftId, approvalDecisionId, sendConfirmation }) => {
       const response = await fetch("/api/revenue-engine/outreach-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draftId,
           approvalDecisionId,
+          sendConfirmation,
         }),
       });
       const data = await response.json();
@@ -5990,11 +5993,17 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
 
-                        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
+                        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
                           <Input
                             value={outreachApprovalDecisionId}
                             onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
                             placeholder="approvalDecisionId"
+                            className="border-zinc-800 bg-black"
+                          />
+                          <Input
+                            value={outreachSendConfirmation}
+                            onChange={(event) => setOutreachSendConfirmation(event.target.value)}
+                            placeholder={`SEND ${outreachDraft.draft.id} approvalDecisionId`}
                             className="border-zinc-800 bg-black"
                           />
                           <Button
@@ -6005,10 +6014,12 @@ export default function RevenueEnginePage() {
                               outreachSendMutation.isPending
                               || outreachDraft.draft.delivery.sendStatus === "sent"
                               || !outreachApprovalDecisionId.trim()
+                              || outreachSendConfirmation.trim() !== `SEND ${outreachDraft.draft.id} ${outreachApprovalDecisionId.trim()}`
                             }
                             onClick={() => outreachSendMutation.mutate({
                               draftId: outreachDraft.draft.id,
                               approvalDecisionId: outreachApprovalDecisionId.trim(),
+                              sendConfirmation: outreachSendConfirmation.trim(),
                             })}
                             data-testid="button-send-approved-outreach"
                           >
@@ -6109,11 +6120,17 @@ export default function RevenueEnginePage() {
                               <p>{money.format(draft.pricing.totalSetupUsd)}</p>
                               <p>{draft.delivery.sendStatus}</p>
                             </div>
-                            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
                               <Input
                                 value={outreachApprovalDecisionId}
                                 onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
                                 placeholder="approvalDecisionId"
+                                className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                              />
+                              <Input
+                                value={outreachSendConfirmation}
+                                onChange={(event) => setOutreachSendConfirmation(event.target.value)}
+                                placeholder={`SEND ${draft.id} approvalDecisionId`}
                                 className="h-9 border-zinc-800 bg-zinc-950 text-sm"
                               />
                               <Button
@@ -6126,10 +6143,12 @@ export default function RevenueEnginePage() {
                                   || draft.status !== "approved"
                                   || draft.delivery.sendStatus === "sent"
                                   || !outreachApprovalDecisionId.trim()
+                                  || outreachSendConfirmation.trim() !== `SEND ${draft.id} ${outreachApprovalDecisionId.trim()}`
                                 }
                                 onClick={() => outreachSendMutation.mutate({
                                   draftId: draft.id,
                                   approvalDecisionId: outreachApprovalDecisionId.trim(),
+                                  sendConfirmation: outreachSendConfirmation.trim(),
                                 })}
                                 data-testid={`button-send-draft-${draft.id}`}
                               >

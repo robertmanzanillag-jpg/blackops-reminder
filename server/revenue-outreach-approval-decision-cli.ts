@@ -16,6 +16,10 @@ export type RevenueOutreachApprovalDecisionCliOptions = {
   json: boolean;
 };
 
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 function getArgValue(argv: string[], name: string) {
   const prefix = `${name}=`;
   const arg = argv.find((value) => value.startsWith(prefix));
@@ -110,9 +114,17 @@ export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutr
     contactPathSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
-  const sendBody = options.decision === "approved"
-    ? { draftId: draft.id, approvalDecisionId: result.decision.id }
-    : null;
+  const approvedSendDecision = options.decision === "approved";
+  const nextCliCommand = approvedSendDecision
+    ? [
+      "npm",
+      "run",
+      "revenue:outreach-send",
+      "--",
+      `--draft-id=${draft.id}`,
+      `--approval-decision-id=${result.decision.id}`,
+    ].map(shellQuote).join(" ")
+    : "";
 
   return {
     status: result.decision.guardrail.status === "recorded" ? "recorded" as const : "blocked" as const,
@@ -120,10 +132,11 @@ export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutr
     targetId,
     draftId: draft.id,
     blockers: result.decision.guardrail.status === "recorded" ? [] : [result.decision.guardrail.reason],
-    nextApiAction: sendBody ? "/api/revenue-engine/outreach-send" : "",
-    nextApiBody: sendBody,
-    nextAction: sendBody
-      ? "Use this approvalDecisionId only for the exact reviewed draft; provider send still runs QA and provider gates."
+    nextApiAction: "",
+    nextApiBody: null,
+    nextCliCommand,
+    nextAction: approvedSendDecision
+      ? `Before sending, get a fresh Robert send approval, then rerun the next CLI command with --confirmed-by-robert and --confirm-send=${shellQuote(`SEND ${draft.id} ${result.decision.id}`)}. Provider send still runs QA and provider gates.`
       : "Decision recorded; do not send this draft unless Robert changes the decision.",
     safety: {
       persistsApprovalDecision: result.decision.guardrail.status === "recorded",
@@ -143,6 +156,7 @@ export function formatRevenueOutreachApprovalDecisionText(result: ReturnType<typ
     `Target: ${result.targetId}`,
     `Draft id: ${result.draftId || "none"}`,
     `Blockers: ${result.blockers.length ? result.blockers.join("; ") : "none"}`,
+    `Next CLI command: ${"nextCliCommand" in result && result.nextCliCommand ? result.nextCliCommand : "none"}`,
     `Next API action: ${result.nextApiAction || "none"}`,
     `Next API body: ${result.nextApiBody ? JSON.stringify(result.nextApiBody) : "none"}`,
     `Next action: ${result.nextAction}`,

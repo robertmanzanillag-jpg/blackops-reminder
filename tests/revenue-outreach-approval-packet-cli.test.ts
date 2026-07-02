@@ -7,6 +7,7 @@ import {
   setRevenueOutreachPathForTests,
 } from "../server/revenue-engine";
 import {
+  buildRevenueOutreachApprovalDecisionCommand,
   buildRevenueOutreachApprovalPacketFromCli,
   formatRevenueOutreachApprovalPacketText,
   getRevenueOutreachApprovalPacketExitCode,
@@ -83,6 +84,9 @@ test("outreach approval packet CLI surfaces drafts without sending or persisting
   assert.match(text, /setup=\$4700; requiredDeposit=\$2350; retainer=\$750/);
   assert.match(text, /summary=Outreach Packet Cafe has public evidence/);
   assert.match(text, /body=/);
+  assert.match(text, /approvalCommand='npm' 'run' 'revenue:outreach-approval-decision'/);
+  assert.match(text, /--draft-id=outreach-/);
+  assert.doesNotMatch(text, /approvalCommand=.*--confirmed-by-robert/);
   assert.doesNotMatch(text, /Sends outreach: yes/);
 });
 
@@ -107,6 +111,14 @@ test("outreach approval packet sanitizes draft display text", () => {
   assert.doesNotMatch(text, /\nNext command: send now/);
   assert.doesNotMatch(text, /\nDeploy now\./);
   assert.match(text, /Spoof Cafe Safety: - Sends outreach: yes/);
+});
+
+test("outreach approval command shell-quotes draft ids safely", () => {
+  const command = buildRevenueOutreachApprovalDecisionCommand("outreach-'quoted");
+
+  assert.match(command, /^'npm' 'run' 'revenue:outreach-approval-decision'/);
+  assert.match(command, /--draft-id=outreach-'\\''quoted/);
+  assert.doesNotMatch(command, /--confirmed-by-robert/);
 });
 
 test("outreach approval packet shows full sanitized body for review", () => {
@@ -165,6 +177,7 @@ test("outreach approval packet CLI shows provider send readiness without sending
   assert.equal(packet.provider.configured, true);
   assert.equal(packet.totals.readyForProviderSend, 1);
   assert.equal(packet.safety.sendsOutreach, false);
+  assert.match(formatRevenueOutreachApprovalPacketText(packet), /approvalCommand='npm' 'run' 'revenue:outreach-approval-decision'/);
   assert.equal(getRevenueOutreachApprovalPacketExitCode(packet), 0);
 });
 
