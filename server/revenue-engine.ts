@@ -7834,14 +7834,14 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       label: "Contact businesses",
       status: canContactBusinesses ? "ok" as const : "fail" as const,
       detail: canContactBusinesses ? "Contact is approved with an audited path and a send/manual channel is configured." : "External outreach is blocked until Robert approval, a real send/manual contact path, and audited contact path decision are configured.",
-      nextStep: "Run revenue:contact-path-approval-decision and revenue:contact-path-readiness-packet, then configure the approved manual/provider contact path outside tracked files before contacting businesses.",
+      nextStep: "Queue /api/revenue-engine/contact-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:contact-path-readiness-packet before contacting businesses.",
     },
     {
       id: "collect_money",
       label: "Collect deposits",
       status: canCollectMoney ? "ok" as const : "fail" as const,
       detail: canCollectMoney ? "A live payment path is configured and smoke/deposit evidence is verified." : "No verified live Stripe/payment-link deposit path is configured.",
-      nextStep: "Run revenue:payment-path-approval-decision and revenue:payment-path-readiness-packet, then configure the approved payment link outside tracked files before charging clients.",
+      nextStep: "Queue /api/revenue-engine/payment-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:payment-path-readiness-packet before charging clients.",
     },
     {
       id: "website_build_pipeline",

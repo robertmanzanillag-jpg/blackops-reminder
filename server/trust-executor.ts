@@ -14,6 +14,8 @@ import {
 } from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
+import { buildRevenueContactPathApprovalDecisionFromCli } from "./revenue-contact-path-approval-decision-cli";
+import { buildRevenuePaymentPathApprovalDecisionFromCli } from "./revenue-payment-path-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 
 type JsonRecord = Record<string, any>;
@@ -30,6 +32,98 @@ function candidateIdsInput(input: JsonRecord) {
   return Array.isArray(input.candidateIds)
     ? input.candidateIds.filter((candidateId): candidateId is string => typeof candidateId === "string" && candidateId.trim().length > 0)
     : [];
+}
+
+function booleanInput(input: JsonRecord, key: string) {
+  return input[key] === true;
+}
+
+function numberInput(input: JsonRecord, key: string) {
+  const value = Number(input[key]);
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function executeRevenueFirstMoneyContactPathApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  if (stringInput(input, "requestedReview") !== "approve_first_money_contact_path") {
+    throw new Error("Revenue contact path pending action no longer matches the first-money approval queue.");
+  }
+
+  const result = buildRevenueContactPathApprovalDecisionFromCli({
+    contactMode: stringInput(input, "contactMode") === "email_provider" ? "email_provider" : "manual",
+    fromEmail: stringInput(input, "fromEmail"),
+    manualContactApproved: booleanInput(input, "manualContactApproved"),
+    emailProviderConfigured: booleanInput(input, "emailProviderConfigured"),
+    decision: "approved",
+    approvedAction: stringInput(input, "approvedAction") || "Approve exact manual contact path for first-money outreach.",
+    robertApprovedContactPath: booleanInput(input, "robertApprovedContactPath"),
+    contactPathVerified: booleanInput(input, "contactPathVerified"),
+    evidenceUrl: stringInput(input, "evidenceUrl"),
+    evidenceNote: stringInput(input, "evidenceNote"),
+    confirmedByRobert: true,
+    sendOutreach: false,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue contact path approval blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+      deploys: false,
+    },
+  };
+}
+
+export function executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  if (stringInput(input, "requestedReview") !== "approve_first_money_payment_path") {
+    throw new Error("Revenue payment path pending action no longer matches the first-money approval queue.");
+  }
+
+  const result = buildRevenuePaymentPathApprovalDecisionFromCli({
+    paymentLink: stringInput(input, "paymentLink"),
+    decision: "approved",
+    approvedAction: stringInput(input, "approvedAction") || "Approve exact Stripe payment path for first-money deposits.",
+    robertApprovedPaymentPath: booleanInput(input, "robertApprovedPaymentPath"),
+    paymentSmokeVerified: booleanInput(input, "paymentSmokeVerified"),
+    depositConfirmedByRobert: booleanInput(input, "depositConfirmedByRobert"),
+    expectedDepositUsd: numberInput(input, "expectedDepositUsd"),
+    expectedPackage: stringInput(input, "expectedPackage"),
+    evidenceUrl: stringInput(input, "evidenceUrl"),
+    evidenceNote: stringInput(input, "evidenceNote"),
+    confirmedByRobert: true,
+    chargeClient: false,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue payment path approval blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+      recordsLedgerEntry: false,
+      deploys: false,
+    },
+  };
 }
 
 export function executeRevenueFirstMoneyCandidateApprovalFromPendingInput(input: JsonRecord, userId: string) {
@@ -435,6 +529,16 @@ export async function executeApprovedPendingAction(
 
       case "revenue.first_money_sprint_run": {
         result = executeRevenueFirstMoneyMoneySprintRunFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_contact_path_approval": {
+        result = executeRevenueFirstMoneyContactPathApprovalFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_payment_path_approval": {
+        result = executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput(input, action.userId);
         break;
       }
 

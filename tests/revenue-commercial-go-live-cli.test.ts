@@ -222,7 +222,8 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.safety.publishesWebsites, false);
   assert.equal(packet.safety.commercialGoLiveReady, false);
   assert.equal(packet.executionOrder.some((step) => step.includes("revenue:public-scout-execute")), true);
-  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:contact-path-approval-decision")), true);
+  assert.equal(packet.executionOrder.some((step) => step.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
+  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:contact-path-approval-decision")), false);
   assert.equal(packet.operatorSetupPacket.status, "blocked");
   assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "production-env");
   assert.equal(packet.operatorSetupPacket.safety.editsEnvironment, false);
@@ -230,6 +231,9 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.operatorSetupPacket.safety.deploys, false);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:contact-path-readiness-packet")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-readiness-packet")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-approval-decision")), false);
   assert.equal(packet.requiredEnvironment.some((group) => group.names.includes("DATABASE_URL")), true);
   assert.equal(
     packet.requiredEnvironment.some((group) => group.names.includes("RESEND_API_KEY + REVENUE_ENGINE_FROM_EMAIL/RESEND_FROM_EMAIL")),

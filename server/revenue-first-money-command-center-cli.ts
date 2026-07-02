@@ -365,6 +365,10 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+function trustCenterActionText(endpoint: string, requiredEvidence: string[]) {
+  return `Queue Trust Center action via ${endpoint} with real evidence: ${requiredEvidence.join("; ")}`;
+}
+
 function displayText(value: string | number) {
   return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -386,19 +390,14 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "contact-path-approval",
         gate: "contact_path",
         label: "Approve contact path before outreach",
-        command: npmRunText("revenue:contact-path-approval-decision", [
-          "--contact-mode=manual",
-          "--decision=approved",
-          "--approved-action=Approve exact manual contact path for first-money outreach.",
-          "--manual-contact-approved",
-          "--robert-approved-contact-path",
-          "--contact-path-verified",
-          "--evidence-url=REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
-          "--evidence-note=REPLACE_WITH_CONTACT_PATH_PROOF",
-          "--confirmed-by-robert",
+        command: trustCenterActionText("/api/revenue-engine/contact-path-approval-pending-action", [
+          "contactMode=manual or email_provider",
+          "real evidenceUrl",
+          "real evidenceNote",
+          "Robert-approved contact path flags",
         ]),
         status: "blocked",
-        reason: "Requires Robert-reviewed contact evidence outside tracked files; this command records approval only and never sends outreach.",
+        reason: "Requires Robert-reviewed contact evidence outside tracked files; Trust Center records approval only and never sends outreach.",
       },
       {
         id: "contact-path-readiness",
@@ -423,20 +422,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "payment-path-approval",
         gate: "payment_path",
         label: "Approve payment path before charging",
-        command: npmRunText("revenue:payment-path-approval-decision", [
-          "--payment-link=REPLACE_WITH_STRIPE_PAYMENT_LINK",
-          "--decision=approved",
-          "--approved-action=Approve exact Stripe payment path for first-money deposits.",
-          "--robert-approved-payment-path",
-          "--payment-smoke-verified",
-          "--expected-deposit-usd=1500",
-          "--expected-package=First Money Website Deposit",
-          "--evidence-url=REPLACE_WITH_PAYMENT_EVIDENCE_URL",
-          "--evidence-note=REPLACE_WITH_PAYMENT_PROOF",
-          "--confirmed-by-robert",
+        command: trustCenterActionText("/api/revenue-engine/payment-path-approval-pending-action", [
+          "real HTTPS Stripe paymentLink",
+          "expectedDepositUsd",
+          "expectedPackage",
+          "real evidenceUrl",
+          "real evidenceNote",
+          "Robert-approved payment path flags",
         ]),
         status: "blocked",
-        reason: "Requires a real HTTPS Stripe link and Robert-reviewed payment evidence; this command records approval only and never charges clients.",
+        reason: "Requires a real HTTPS Stripe link and Robert-reviewed payment evidence; Trust Center records approval only and never charges clients.",
       },
       {
         id: "payment-path-readiness",

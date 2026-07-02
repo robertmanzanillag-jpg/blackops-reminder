@@ -156,12 +156,14 @@ test("first-money command center starts with guarded public scouting", () => {
     "website-creation-approval",
   ]);
   assert.equal(packet.setupCommands.every((item) => item.status === "blocked"), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), false);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:ledger-approval-decision")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-creation-approval-decision")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_STRIPE_PAYMENT_LINK")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("real evidenceUrl")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("real HTTPS Stripe paymentLink")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_PAYMENT_EVIDENCE")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
@@ -200,21 +202,15 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.ok(paymentApprovalCommand);
   assert.ok(ledgerApprovalCommand);
   assert.ok(websiteCreationApprovalCommand);
+  assert.match(contactApprovalCommand.command, /contact-path-approval-pending-action/);
+  assert.match(paymentApprovalCommand.command, /payment-path-approval-pending-action/);
+  assert.doesNotMatch(contactApprovalCommand.command, /revenue:contact-path-approval-decision/);
+  assert.doesNotMatch(paymentApprovalCommand.command, /revenue:payment-path-approval-decision/);
 
   const baseEnv = {
     ...process.env,
     REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
   };
-  const contactResult = spawnSync("sh", ["-c", contactApprovalCommand.command], {
-    cwd: process.cwd(),
-    env: baseEnv,
-    encoding: "utf8",
-  });
-  const paymentResult = spawnSync("sh", ["-c", paymentApprovalCommand.command], {
-    cwd: process.cwd(),
-    env: baseEnv,
-    encoding: "utf8",
-  });
   const ledgerResult = spawnSync("sh", ["-c", ledgerApprovalCommand.command], {
     cwd: process.cwd(),
     env: baseEnv,
@@ -226,10 +222,6 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
     encoding: "utf8",
   });
 
-  assert.equal(contactResult.status, 1, `${contactResult.stdout}\n${contactResult.stderr}`);
-  assert.match(`${contactResult.stdout}\n${contactResult.stderr}`, /placeholder/);
-  assert.equal(paymentResult.status, 1, `${paymentResult.stdout}\n${paymentResult.stderr}`);
-  assert.match(`${paymentResult.stdout}\n${paymentResult.stderr}`, /placeholder|Stripe payment/);
   assert.equal(ledgerResult.status, 1, `${ledgerResult.stdout}\n${ledgerResult.stderr}`);
   assert.match(`${ledgerResult.stdout}\n${ledgerResult.stderr}`, /placeholder/);
   assert.equal(websiteResult.status, 1, `${websiteResult.stdout}\n${websiteResult.stderr}`);
@@ -588,7 +580,7 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.activationChecklist[0].status, "needs_robert_approval");
   assert.equal(summary.activationChecklist[0].proofRequired.some((proof) => proof.includes("APPROVE PUBLIC CANDIDATES candidate-review-1")), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "contact_path" && step.status === "blocked_until_evidence"), true);
-  assert.equal(summary.activationChecklist.some((step) => step.id === "payment_path" && step.commandHint.includes("revenue:payment-path-approval-decision")), true);
+  assert.equal(summary.activationChecklist.some((step) => step.id === "payment_path" && step.commandHint.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "publish" && step.safety.includes("Never deploys")), true);
   assert.equal(summary.counts.reviewablePublicCandidates, 2);
   assert.equal("candidateApprovalBatches" in summary, false);

@@ -100,7 +100,13 @@ import {
   executeRevenueFirstMoneyCandidateApprovalFromPendingInput,
   executeRevenueFirstMoneyCandidateReviewFromPendingInput,
   executeRevenueFirstMoneyMoneySprintRunFromPendingInput,
+  executeRevenueFirstMoneyContactPathApprovalFromPendingInput,
+  executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput,
 } from "../server/trust-executor";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+} from "../server/revenue-first-money-approval-pending-action";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -2488,6 +2494,189 @@ test("routes wire public candidate approval pending action without executing app
   assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
   assert.match(trustPolicySource, /"revenue\.first_money_candidate_approval": "medium"/);
   assert.match(trustPolicySource, /actionType\.startsWith\("revenue\."\)\) return "ecommerce"/);
+});
+
+test("routes wire first-money contact and payment approvals through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const contactRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/contact-path-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/payment-path-approval-pending-action"'),
+  );
+  const paymentRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/payment-path-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(contactRouteSource, /revenueContactPathApprovalPendingActionSchema/);
+  assert.match(contactRouteSource, /createPendingActionForApproval/);
+  assert.match(contactRouteSource, /actionType: "revenue\.first_money_contact_path_approval"/);
+  assert.match(contactRouteSource, /resourceType: "revenue_contact_path"/);
+  assert.match(contactRouteSource, /requestedReview: "approve_first_money_contact_path"/);
+  assert.match(contactRouteSource, /sendsOutreach: false/);
+  assert.match(contactRouteSource, /chargesClients: false/);
+  assert.match(contactRouteSource, /editsEnvironment: false/);
+  assert.match(contactRouteSource, /storesSecrets: false/);
+  assert.doesNotMatch(contactRouteSource, /buildRevenueContactPathApprovalDecisionFromCli/);
+
+  assert.match(paymentRouteSource, /revenuePaymentPathApprovalPendingActionSchema/);
+  assert.match(paymentRouteSource, /createPendingActionForApproval/);
+  assert.match(paymentRouteSource, /actionType: "revenue\.first_money_payment_path_approval"/);
+  assert.match(paymentRouteSource, /resourceType: "revenue_payment_path"/);
+  assert.match(paymentRouteSource, /requestedReview: "approve_first_money_payment_path"/);
+  assert.match(paymentRouteSource, /chargesClients: false/);
+  assert.match(paymentRouteSource, /recordsLedgerEntry: false/);
+  assert.match(paymentRouteSource, /sendsOutreach: false/);
+  assert.match(paymentRouteSource, /editsEnvironment: false/);
+  assert.match(paymentRouteSource, /storesSecrets: false/);
+  assert.doesNotMatch(paymentRouteSource, /buildRevenuePaymentPathApprovalDecisionFromCli/);
+
+  assert.match(trustPolicySource, /"revenue\.first_money_contact_path_approval": "critical"/);
+  assert.match(trustPolicySource, /"revenue\.first_money_payment_path_approval": "critical"/);
+});
+
+test("first-money contact and payment approval pending action schemas reject unreviewable payloads before queueing", () => {
+  const validContact = revenueContactPathApprovalPendingActionSchema.parse({
+    contactMode: "manual",
+    manualContactApproved: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this manual contact path.",
+  });
+  assert.equal(validContact.contactMode, "manual");
+  assert.equal(validContact.approvedAction, "Approve exact manual contact path for first-money outreach.");
+
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "email_provider",
+    fromEmail: "not-an-email",
+    emailProviderConfigured: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    evidenceNote: "Real proof note for contact path.",
+  }).success, false);
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "email_provider",
+    emailProviderConfigured: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this provider contact path.",
+  }).success, false);
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "manual",
+    manualContactApproved: false,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this manual contact path.",
+  }).success, false);
+
+  const validPayment = revenuePaymentPathApprovalPendingActionSchema.parse({
+    paymentLink: "https://buy.stripe.com/test_first_money_deposit",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  });
+  assert.equal(validPayment.paymentLink, "https://buy.stripe.com/test_first_money_deposit");
+  assert.equal(validPayment.depositConfirmedByRobert, false);
+
+  assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse({
+    paymentLink: "https://example.com/not-stripe",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  }).success, false);
+  assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse({
+    paymentLink: "https://checkout.stripe.com/c/pay/cs_test_first_money",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: false,
+    depositConfirmedByRobert: false,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  }).success, false);
+});
+
+test("Trust Center executor records first-money contact and payment approvals only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-setup-test");
+  resetRevenueApprovalDecisionsForTests();
+
+  assert.throws(
+    () => executeRevenueFirstMoneyContactPathApprovalFromPendingInput({
+      requestedReview: "wrong_review",
+      contactMode: "manual",
+      manualContactApproved: true,
+      robertApprovedContactPath: true,
+      contactPathVerified: true,
+      evidenceUrl: "https://evidence.example.com/contact-path",
+      evidenceNote: "Manual contact path reviewed by Robert.",
+    }, "trust-executor-first-money-setup-test"),
+    /no longer matches the first-money approval queue/,
+  );
+
+  const contactResult = executeRevenueFirstMoneyContactPathApprovalFromPendingInput({
+    requestedReview: "approve_first_money_contact_path",
+    contactMode: "manual",
+    manualContactApproved: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Manual contact path reviewed by Robert.",
+  }, "trust-executor-first-money-setup-test");
+
+  assert.equal(contactResult.status, "recorded");
+  assert.equal(contactResult.decision?.targetType, "contact_path");
+  assert.equal(contactResult.safety.persistsApprovalDecision, true);
+  assert.equal(contactResult.safety.sendsOutreach, false);
+  assert.equal(contactResult.safety.chargesClients, false);
+  assert.equal(contactResult.safety.editsEnvironment, false);
+  assert.equal(contactResult.safety.storesSecrets, false);
+  assert.equal(contactResult.safety.deploys, false);
+
+  assert.throws(
+    () => executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput({
+      requestedReview: "approve_first_money_payment_path",
+      paymentLink: "https://example.com/not-stripe",
+      robertApprovedPaymentPath: true,
+      paymentSmokeVerified: true,
+      expectedDepositUsd: 1500,
+      expectedPackage: "First Money Website Deposit",
+      evidenceUrl: "https://evidence.example.com/payment-path",
+      evidenceNote: "Stripe payment path smoke tested by Robert.",
+    }, "trust-executor-first-money-setup-test"),
+    /Revenue payment path approval blocked/,
+  );
+
+  const paymentResult = executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput({
+    requestedReview: "approve_first_money_payment_path",
+    paymentLink: "https://buy.stripe.com/test_first_money_deposit",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Stripe payment path smoke tested by Robert.",
+  }, "trust-executor-first-money-setup-test");
+
+  assert.equal(paymentResult.status, "recorded");
+  assert.equal(paymentResult.decision?.targetType, "payment_path");
+  assert.equal(paymentResult.safety.persistsApprovalDecision, true);
+  assert.equal(paymentResult.safety.chargesClients, false);
+  assert.equal(paymentResult.safety.recordsLedgerEntry, false);
+  assert.equal(paymentResult.safety.sendsOutreach, false);
+  assert.equal(paymentResult.safety.editsEnvironment, false);
+  assert.equal(paymentResult.safety.storesSecrets, false);
+  assert.equal(paymentResult.safety.deploys, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
 });
 
 test("Trust Center executor records first-money public candidate approval only", () => {

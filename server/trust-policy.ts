@@ -67,6 +67,8 @@ const ACTION_RISK: Record<string, RiskLevel> = {
   "revenue.first_money_candidate_approval": "medium",
   "revenue.first_money_candidate_review": "medium",
   "revenue.first_money_sprint_run": "high",
+  "revenue.first_money_contact_path_approval": "critical",
+  "revenue.first_money_payment_path_approval": "critical",
   "marketing.publish": "critical",
   "marketing.blackroom_link_add": "high",
   "marketing.blackroom_link_update": "high",

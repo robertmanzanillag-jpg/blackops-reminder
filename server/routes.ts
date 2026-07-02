@@ -38,6 +38,10 @@ import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSourc
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueContactPathReadinessPacket, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupPreview, buildRevenueMockupTemplatePack, buildRevenueOutreachApprovalPacket, buildRevenuePaymentPathReadinessPacket, buildRevenueProjectPlan, buildRevenuePublicScoutSchedule, buildRevenueScoutDispatch, buildRevenueWebsiteCreationPacket, buildRevenueWebsitePublishReadinessPacket, buildRevenueWebsiteScaffold, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, findRevenueMoneySprintArtifactsByBusinessNames, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, improvementReviewSchema, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenuePublicLeadCandidate, recordRevenuePublicScoutRun, recordRevenueSalesAutopilot, recordRevenueScoutingMission, reviewRevenuePublicLeadCandidates, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueContactPathReadinessPacketSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintSchema, revenueOutreachApprovalPacketSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenuePaymentPathReadinessPacketSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateReviewSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutRunSchema, revenuePublicScoutScheduleSchema, revenueSalesAutopilotSchema, revenueScoutDispatchSchema, revenueScoutingMissionSchema, revenueWebsiteCreationPacketSchema, revenueWebsitePublishReadinessPacketSchema, revenueWebsiteScaffoldSchema, runRevenueAutomationAgentCommand, runRevenueMoneySprint, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+} from "./revenue-first-money-approval-pending-action";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
@@ -4924,6 +4928,152 @@ export async function registerRoutes(
       approvalDecisionId: input.approvalDecisionId,
       reviewerNote: "Robert generated this first-money candidate review packet from Revenue Engine.",
     });
+
+  app.post("/api/revenue-engine/contact-path-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueContactPathApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_contact_path_approval",
+        resourceType: "revenue_contact_path",
+        resourceId: input.contactMode,
+        title: `Approve first-money contact path: ${input.contactMode}`,
+        description: [
+          "Approve the exact first-money contact path after Robert reviews evidence.",
+          "This pending action records approval only; it does not send outreach, edit environment files, store secrets, charge clients or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_contact_path",
+        },
+        proposedChanges: {
+          contactMode: input.contactMode,
+          fromEmailConfigured: Boolean(input.fromEmail),
+          manualContactApproved: input.manualContactApproved,
+          emailProviderConfigured: input.emailProviderConfigured,
+          evidenceUrl: input.evidenceUrl,
+          evidenceNote: input.evidenceNote,
+          afterApproval: "Run contact-path readiness with the returned approvalDecisionId before any outreach send.",
+          safety: {
+            persistsApprovalDecision: true,
+            sendsOutreach: false,
+            chargesClients: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "contact_path",
+          sendsOutreach: false,
+          chargesClients: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue contact path approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/payment-path-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenuePaymentPathApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_payment_path_approval",
+        resourceType: "revenue_payment_path",
+        resourceId: input.paymentLink,
+        title: "Approve first-money payment path",
+        description: [
+          "Approve the exact first-money Stripe/payment path after Robert reviews evidence.",
+          "This pending action records approval only; it does not charge clients, edit environment files, store secrets, record ledger entries, send outreach or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_payment_path",
+        },
+        proposedChanges: {
+          paymentLink: input.paymentLink,
+          expectedDepositUsd: input.expectedDepositUsd,
+          expectedPackage: input.expectedPackage,
+          evidenceUrl: input.evidenceUrl,
+          evidenceNote: input.evidenceNote,
+          afterApproval: "Run payment-path readiness with the returned approvalDecisionId before requesting deposits.",
+          safety: {
+            persistsApprovalDecision: true,
+            chargesClients: false,
+            recordsLedgerEntry: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "payment_path",
+          chargesClients: false,
+          recordsLedgerEntry: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          recordsLedgerEntry: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue payment path approval" });
+    }
+  });
 
   app.post("/api/revenue-engine/public-lead-candidates/approval-decision", async (req, res) => {
     try {

@@ -86,8 +86,8 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
     "Run revenue:money-readiness and fix every blocking gate before selling.",
     "Run revenue:public-scout-schedule to prepare guarded public research slots.",
     "Capture public notes and run revenue:public-scout-execute so candidates persist only for Robert review before Money sprint.",
-    "Run revenue:contact-path-approval-decision and revenue:contact-path-readiness-packet before contacting any business.",
-    "Run revenue:payment-path-approval-decision and revenue:payment-path-readiness-packet before exposing a deposit link.",
+    "Queue /api/revenue-engine/contact-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:contact-path-readiness-packet before contacting any business.",
+    "Queue /api/revenue-engine/payment-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:payment-path-readiness-packet before exposing a deposit link.",
     "Only after payment/contact gates pass, draft outreach and proposals.",
     "Only after deposit, App QA, preview deploy and rollback evidence, publish client websites.",
   ];
@@ -116,7 +116,7 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
       status: readiness.canContactBusinesses ? "ready" : "external",
       owner: "Robert",
       command: [
-        "npm run revenue:contact-path-approval-decision -- --contact-mode=manual --manual-contact-approved --decision=approved --approved-action='Approve contact path.' --robert-approved-contact-path --contact-path-verified --evidence-url=EVIDENCE_URL --evidence-note='Contact path verified' --confirmed-by-robert",
+        "Queue Trust Center action via /api/revenue-engine/contact-path-approval-pending-action with contactMode=manual, real evidenceUrl, real evidenceNote, and Robert-approved contact path flags",
         "npm run revenue:contact-path-readiness-packet -- --contact-mode=manual --approval-decision-id=APPROVAL_ID --robert-approved-contact-path --contact-path-verified --evidence-url=EVIDENCE_URL --evidence-note='Contact path verified'",
       ].join(" && "),
       evidence: "Use non-secret evidence URL/note proving the manual/provider path; readiness packet must stay no-send.",
@@ -128,7 +128,7 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
       status: readiness.canCollectMoney ? "ready" : "external",
       owner: "Robert",
       command: [
-        "npm run revenue:payment-path-approval-decision -- --payment-link=STRIPE_PAYMENT_LINK --decision=approved --approved-action='Approve payment path.' --robert-approved-payment-path --payment-smoke-verified --expected-deposit-usd=1500 --expected-package='Website package' --evidence-url=EVIDENCE_URL --evidence-note='Payment path verified' --confirmed-by-robert",
+        "Queue Trust Center action via /api/revenue-engine/payment-path-approval-pending-action with real HTTPS Stripe paymentLink, expectedDepositUsd, expectedPackage, real evidenceUrl, real evidenceNote, and Robert-approved payment path flags",
         "npm run revenue:payment-path-readiness-packet -- --payment-link=STRIPE_PAYMENT_LINK --approval-decision-id=APPROVAL_ID --robert-approved-payment-path --payment-smoke-verified --expected-deposit-usd=1500 --expected-package='Website package' --evidence-url=EVIDENCE_URL --evidence-note='Payment path verified'",
       ].join(" && "),
       evidence: "Use a Stripe/payment-link evidence URL and smoke/deposit note; do not paste API keys or customer payment details.",
