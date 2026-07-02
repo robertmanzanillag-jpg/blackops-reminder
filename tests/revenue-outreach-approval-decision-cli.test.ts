@@ -126,6 +126,25 @@ test("blocks outreach decision without Robert confirmation", () => {
   assert.equal(getRevenueOutreachApprovalDecisionExitCode(result), 1);
 });
 
+test("blocks placeholder outreach approval context when builder is called directly", () => {
+  const draft = createApprovedDraft();
+  const result = buildRevenueOutreachApprovalDecisionFromCli({
+    draftId: draft.id,
+    decision: "approved",
+    approvedAction: "REPLACE_WITH_OUTREACH_APPROVAL_CONTEXT",
+    notes: "TODO final approval note",
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.match(result.blockers.join("; "), /--approved-action must be real approval context/);
+  assert.match(result.blockers.join("; "), /--notes must be real approval context/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
+  assert.equal(getRevenueOutreachApprovalDecisionExitCode(result), 1);
+});
+
 test("blocks approved outreach decision for draft-only copy", () => {
   const draft = recordRevenueOutreachDraft({
     channel: "email",

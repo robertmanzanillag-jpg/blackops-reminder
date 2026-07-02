@@ -56,6 +56,7 @@ export function validateRevenueOutreachApprovalDecisionOptions(options: RevenueO
 }
 
 export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutreachApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueOutreachApprovalDecisionOptions(options);
   const draft = listRevenueOutreachDrafts().find((item) => item.id === options.draftId);
   const approvalBlockers = draft ? [
     draft.status !== "approved" && `${draft.id}: draft status must be approved before external contact`,
@@ -65,6 +66,7 @@ export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutr
     ...draft.qaGates.filter((gate) => !gate.passed).map((gate) => `${draft.id}: ${gate.fix}`),
   ].filter((item): item is string => Boolean(item)) : [];
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record an outreach approval decision.",
     !draft && `${options.draftId || "draft"}: draft not found`,
     ...(options.decision === "approved" ? approvalBlockers : []),
