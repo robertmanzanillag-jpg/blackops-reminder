@@ -629,6 +629,28 @@ type PublicCandidateApprovalDecisionResult = {
   commandCenter: FirstMoneyCommandCenter;
 };
 
+type PublicCandidateApprovalPendingActionResult = {
+  status: "queued" | "blocked";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  blockers?: string[];
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    persistsApprovalDecision: boolean;
+    createsPendingAction: boolean;
+    importsLeads: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    exposesContactDetails: boolean;
+  };
+};
+
 type PublicCandidateReviewPacketResult = {
   status: "ready_for_money_sprint_preview" | "blocked";
   approvalDecisionId: string;
@@ -2241,6 +2263,32 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicCandidateApprovalPendingActionMutation = useMutation<PublicCandidateApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const approval = selectedPublicCandidateBatch;
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateIds: approval?.candidateIds || [],
+          batchId: approval?.id || "",
+          approvedAction: approval?.approvedAction || "Approve first-money public candidate review.",
+          notes: "Queue this first-money candidate batch for Robert Trust Center approval.",
+          area: approval?.area || "",
+          niche: approval?.niche || "",
+          offerFocus: approval?.offerFocus || "websites",
+          confirmationText: publicCandidateApprovalConfirmation,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo enviar el batch a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+    },
+  });
+
   const publicCandidateReviewPacketMutation = useMutation<PublicCandidateReviewPacketResult>({
     mutationFn: async () => {
       const review = selectedPublicCandidateReviewBatch;
@@ -2865,20 +2913,46 @@ export default function RevenueEnginePage() {
                         Escribe exactamente: {selectedPublicCandidateBatch.confirmationText}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      disabled={
-                        publicCandidateApprovalMutation.isPending
-                        || publicCandidateApprovalConfirmation.trim() !== selectedPublicCandidateBatch.confirmationText
-                      }
-                      onClick={() => publicCandidateApprovalMutation.mutate()}
-                      className="bg-amber-500 text-black hover:bg-amber-400"
-                      data-testid="button-approve-public-candidate-batch"
-                    >
-                      {publicCandidateApprovalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                      Aprobar batch
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        disabled={
+                          publicCandidateApprovalPendingActionMutation.isPending
+                          || publicCandidateApprovalConfirmation.trim() !== selectedPublicCandidateBatch.confirmationText
+                        }
+                        onClick={() => publicCandidateApprovalPendingActionMutation.mutate()}
+                        variant="outline"
+                        className="border-fuchsia-500/30 text-fuchsia-100 hover:bg-fuchsia-500/10"
+                        data-testid="button-queue-public-candidate-approval"
+                      >
+                        {publicCandidateApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                        Trust Center
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={
+                          publicCandidateApprovalMutation.isPending
+                          || publicCandidateApprovalConfirmation.trim() !== selectedPublicCandidateBatch.confirmationText
+                        }
+                        onClick={() => publicCandidateApprovalMutation.mutate()}
+                        className="bg-amber-500 text-black hover:bg-amber-400"
+                        data-testid="button-approve-public-candidate-batch"
+                      >
+                        {publicCandidateApprovalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                        Aprobar batch
+                      </Button>
+                    </div>
                   </div>
+                  {publicCandidateApprovalPendingActionMutation.data && (
+                    <p className="mt-3 rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 px-3 py-2 text-xs leading-5 text-fuchsia-100">
+                      Trust Center: {publicCandidateApprovalPendingActionMutation.data.pendingAction?.id || "queued"} listo para aprobacion. No importa leads, no contacta y no cobra.
+                    </p>
+                  )}
+                  {publicCandidateApprovalPendingActionMutation.error && (
+                    <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                      {publicCandidateApprovalPendingActionMutation.error.message}
+                    </p>
+                  )}
                   {publicCandidateApprovalMutation.data && (
                     <p className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs leading-5 text-emerald-100">
                       Decision {publicCandidateApprovalMutation.data.decision?.id || "none"} registrada. Siguiente: {publicCandidateApprovalMutation.data.nextAction}

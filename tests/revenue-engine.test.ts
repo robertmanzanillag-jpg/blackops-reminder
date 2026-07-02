@@ -2452,6 +2452,32 @@ test("routes wire public candidate approval endpoint to trusted builder", () => 
   );
 });
 
+test("routes wire public candidate approval pending action without executing approval", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet"'),
+  );
+
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_candidate_approval"/);
+  assert.match(routeSource, /resourceType: "revenue_public_candidate_batch"/);
+  assert.match(routeSource, /const expectedApproval = commandCenter\.candidateApprovalQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /input\.confirmationText === expectedApproval\.confirmationText/);
+  assert.match(routeSource, /candidateCards: expectedApproval\.candidateCards/);
+  assert.match(routeSource, /requestedReview: "approve_or_reject_first_money_candidate_batch"/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.match(routeSource, /createsPendingAction: true/);
+  assert.match(routeSource, /persistsApprovalDecision: false/);
+  assert.doesNotMatch(routeSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
+  assert.doesNotMatch(routeSource, /decision: input\.decision/);
+  assert.doesNotMatch(routeSource, /confirmedByRobert: true/);
+  assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
+  assert.match(trustPolicySource, /"revenue\.first_money_candidate_approval": "medium"/);
+  assert.match(trustPolicySource, /actionType\.startsWith\("revenue\."\)\) return "ecommerce"/);
+});
+
 test("routes wire public candidate review packet endpoint to guarded review builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
   const routeSource = routesSource.slice(
@@ -3357,9 +3383,18 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /First-money command center/);
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-decision/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
   assert.match(source, /nextCandidateApproval/);
   assert.match(source, /nextCandidateReview/);
   assert.match(source, /button-approve-public-candidate-batch/);
+  assert.match(source, /button-queue-public-candidate-approval/);
+  assert.doesNotMatch(
+    source.slice(
+      source.indexOf("const publicCandidateApprovalPendingActionMutation"),
+      source.indexOf("const publicCandidateReviewPacketMutation"),
+    ),
+    /decision: "approved"/,
+  );
   assert.match(source, /input-public-candidate-approval-confirmation/);
   assert.match(source, /first-money-candidate-approval-cards/);
   assert.match(source, /candidateApprovalQueue/);

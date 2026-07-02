@@ -4973,6 +4973,96 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateApprovalDecisionSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedApproval = commandCenter.candidateApprovalQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = Boolean(
+        expectedApproval
+        && input.batchId === expectedApproval.id
+        && input.area === expectedApproval.area
+        && input.niche === expectedApproval.niche
+        && input.offerFocus === expectedApproval.offerFocus
+        && input.approvedAction === expectedApproval.approvedAction
+        && input.confirmationText === expectedApproval.confirmationText
+        && revenueCandidateIdsMatch(input.candidateIds, expectedApproval.candidateIds),
+      );
+
+      if (!matchesActiveBatch || !expectedApproval) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Pending approval payload must match a queued first-money candidate batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_candidate_approval",
+        resourceType: "revenue_public_candidate_batch",
+        resourceId: expectedApproval.id,
+        title: `Approve first-money candidate batch: ${expectedApproval.area} / ${expectedApproval.niche}`,
+        description: [
+          `Approve ${expectedApproval.count} verified public candidate(s) for guarded internal Money Sprint review.`,
+          "This pending action does not import leads, send outreach, charge clients, write website files or deploy.",
+          `Exact confirmation: ${expectedApproval.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedApproval.id,
+          candidateIds: expectedApproval.candidateIds,
+          area: expectedApproval.area,
+          niche: expectedApproval.niche,
+          offerFocus: expectedApproval.offerFocus,
+          requestedReview: "approve_or_reject_first_money_candidate_batch",
+          approvedAction: expectedApproval.approvedAction,
+          confirmationText: expectedApproval.confirmationText,
+        },
+        proposedChanges: {
+          approvalStatus: "pending_trust_center_review",
+          candidateCards: expectedApproval.candidateCards,
+          totalEstimatedOfferUsd: expectedApproval.totalEstimatedOfferUsd,
+          afterApproval: commandCenter.robertApprovalBrief.afterRobertApproves,
+          blockedActions: commandCenter.robertApprovalBrief.blockedActions,
+          safety: expectedApproval.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedApproval.id,
+          exposesContactDetails: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsApprovalDecision: false,
+          createsPendingAction: true,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          exposesContactDetails: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate approval pending action" });
+    }
+  });
+
   app.post("/api/revenue-engine/public-lead-candidates/review-packet", async (req, res) => {
     try {
       const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
