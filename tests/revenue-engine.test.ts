@@ -1158,6 +1158,55 @@ test("public candidate approval route rejects missing Robert approval without mu
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
 });
 
+test("first-money command center route returns read-only money queue contract", async () => {
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  const routeLayer = (app as any)._router.stack.find((layer: any) =>
+    layer.route?.path === "/api/revenue-engine/first-money-command-center" && layer.route.methods.get
+  );
+  assert.ok(routeLayer, "first-money command center route should be registered");
+  const handler = routeLayer.route.stack[0].handle;
+  const result = { statusCode: 200, body: null as any };
+  const res = {
+    status(code: number) {
+      result.statusCode = code;
+      return res;
+    },
+    json(payload: unknown) {
+      result.body = payload;
+      return res;
+    },
+  };
+
+  await handler({}, res);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.mode, "first-sprint");
+  assert.equal(typeof result.body.nextCommand.command, "string");
+  assert.equal(Array.isArray(result.body.queue), true);
+  assert.equal(typeof result.body.counts.publicCandidates, "number");
+  assert.equal(result.body.safety.writesFiles, false);
+  assert.equal(result.body.safety.sendsOutreach, false);
+  assert.equal(result.body.safety.chargesClients, false);
+  assert.equal(result.body.safety.deploys, false);
+  assert.equal(result.body.safety.printsSecrets, false);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+test("Revenue Engine UI shows first-money command center lane", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(clientSource, /first-money-command-center/);
+  assert.match(clientSource, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(clientSource, /First money command center/);
+  assert.match(clientSource, /buscar negocios/);
+  assert.match(clientSource, /no envia outreach/);
+  assert.match(clientSource, /isFirstMoneyCommandCenterError/);
+  assert.match(clientSource, /No se pudo cargar el command center/);
+});
+
 test("public candidate approval keeps incomplete candidates blocked", () => {
   const candidate = recordRevenuePublicLeadCandidate({
     businessName: "Still Missing Contact Spa",

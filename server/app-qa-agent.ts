@@ -261,7 +261,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
       "Entregar aprobado",
       "Correr QA",
     ],
-    expectedControls: ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControls: ["First money command center", "Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"],
     expectedControlGroups: [
       {
         name: "website_sales_packet",

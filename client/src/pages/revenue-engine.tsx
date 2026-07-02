@@ -1014,6 +1014,48 @@ type RevenueSnapshot = {
   }>;
 };
 
+type RevenueFirstMoneyCommandCenter = {
+  status: string;
+  mode: "first-sprint" | "production-launch";
+  nextCommand: {
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  };
+  queue: Array<{
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  }>;
+  counts: {
+    publicCandidates: number;
+    reviewablePublicCandidates: number;
+    importReadyCandidates: number;
+    leads: number;
+    outreachDrafts: number;
+    reviewableOutreachDrafts: number;
+    approvedOutreachDrafts: number;
+  };
+  readiness: {
+    canSearchBusinesses: boolean;
+    canContactBusinesses: boolean;
+    canCollectMoney: boolean;
+    canBuildWebsites: boolean;
+    remainingGaps: string[];
+  };
+  safety: {
+    writesFiles: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    printsSecrets: boolean;
+  };
+};
+
 type ClarificationGate = {
   status: "clear" | "needs_clarification";
   missing: string[];
@@ -2488,6 +2530,14 @@ export default function RevenueEnginePage() {
     queryFn: async () => {
       const response = await fetch("/api/revenue-engine");
       if (!response.ok) throw new Error("No se pudo cargar Revenue Engine");
+      return response.json();
+    },
+  });
+  const { data: firstMoneyCommandCenter, isError: isFirstMoneyCommandCenterError } = useQuery<RevenueFirstMoneyCommandCenter>({
+    queryKey: ["revenue-engine", "first-money-command-center"],
+    queryFn: async () => {
+      const response = await fetch("/api/revenue-engine/first-money-command-center");
+      if (!response.ok) throw new Error("No se pudo cargar first-money command center");
       return response.json();
     },
   });
@@ -4043,6 +4093,80 @@ export default function RevenueEnginePage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-emerald-500/20 bg-zinc-950/90" data-testid="first-money-command-center">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[1.1fr_0.9fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Search className="h-4 w-4 text-emerald-200" />
+                <p className="text-sm font-medium text-white">First money command center</p>
+                <Badge variant="outline" className={cn(statusTone(isFirstMoneyCommandCenterError ? "failed" : firstMoneyCommandCenter?.nextCommand.status || "review"), "shrink-0")}>
+                  {isFirstMoneyCommandCenterError ? "failed" : firstMoneyCommandCenter?.nextCommand.status || "loading"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-xl font-semibold leading-7 text-white">
+                {isFirstMoneyCommandCenterError ? "No se pudo cargar el command center." : firstMoneyCommandCenter?.nextCommand.label || "Calculando siguiente paso para generar dinero."}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">
+                {isFirstMoneyCommandCenterError ? "Revisa /api/revenue-engine/first-money-command-center antes de operar el siguiente paso de dinero." : firstMoneyCommandCenter?.nextCommand.reason || "El agente revisa si toca buscar negocios, revisar candidatos, preparar outreach o crear handoff de website."}
+              </p>
+              <p className="mt-3 rounded-lg border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 font-mono text-xs leading-5 text-emerald-100">
+                {isFirstMoneyCommandCenterError ? "npm run revenue:first-money-command-center" : firstMoneyCommandCenter?.nextCommand.command || "npm run revenue:first-money-command-center"}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Pipeline de dinero</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Candidatos</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.publicCandidates ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">A revisar</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.reviewablePublicCandidates ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Drafts</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.reviewableOutreachDrafts ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Websites</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.approvedOutreachDrafts ?? 0}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canSearchBusinesses ? statusTone("pass") : statusTone("blocked"))}>
+                  buscar negocios
+                </Badge>
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canContactBusinesses ? statusTone("pass") : statusTone("approval_required"))}>
+                  contacto
+                </Badge>
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canBuildWebsites ? statusTone("pass") : statusTone("approval_required"))}>
+                  websites
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Cola segura</p>
+              <div className="max-h-[188px] space-y-2 overflow-auto pr-1">
+                {(firstMoneyCommandCenter?.queue || []).map((item) => (
+                  <div key={item.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                      <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0")}>
+                        {item.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{item.reason}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-zinc-500">
+                Solo lectura: no escribe archivos, no envia outreach, no cobra clientes y no despliega.
+              </p>
             </div>
           </CardContent>
         </Card>
