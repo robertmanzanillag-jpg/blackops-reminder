@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -72,6 +73,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Setup Trust Center actions",
   ]);
 });
 
@@ -90,6 +92,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Setup Trust Center actions",
   ].join("\n");
 
   assert.deepEqual(
@@ -103,6 +106,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
       "Approved contact path",
       "Approved payment path",
       "Paid website build gate",
+      "Setup Trust Center actions",
     ]),
     [],
   );
@@ -127,6 +131,7 @@ test("visual route body evaluation fails when first-money controls are missing",
       "Approved contact path",
       "Approved payment path",
       "Paid website build gate",
+      "Setup Trust Center actions",
     ],
   );
 
@@ -137,8 +142,18 @@ test("visual route body evaluation fails when first-money controls are missing",
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Setup Trust Center actions",
   ]);
   assert.equal(evaluation.notes.some((note) => note.includes("Controles esperados no visibles")), true);
+});
+
+test("Revenue Engine UI renders every first-money setup action", () => {
+  const source = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(source, /firstMoneyCommandCenter\.setupActionQueue\.map/);
+  assert.doesNotMatch(source, /setupActionQueue\.slice/);
+  assert.match(source, /first-money-setup-action-\$\{action\.id\}/);
+  assert.match(source, /No setup gates are waiting right now/);
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {

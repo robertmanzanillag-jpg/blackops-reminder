@@ -539,6 +539,15 @@ type FirstMoneyCommandCenter = {
   candidateReviewQueue: FirstMoneyCandidateReviewSummary[];
   nextMoneySprintRun: FirstMoneyCandidateReviewSummary | null;
   candidateRunQueue: FirstMoneyCandidateReviewSummary[];
+  setupActionQueue: Array<{
+    id: string;
+    gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation" | "website_publish";
+    label: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+    commandHint: string;
+    safety: string;
+  }>;
   safeSearchAction: {
     id: string;
     label: string;
@@ -3124,6 +3133,35 @@ export default function RevenueEnginePage() {
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100" data-testid="first-money-setup-action-queue">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-white">Setup Trust Center actions</span>
+                  <Badge variant="outline" className="shrink-0 border-amber-500/30 text-amber-100">
+                    {firstMoneyCommandCenter?.setupActionQueue?.length || 0} gates
+                  </Badge>
+                </div>
+                {firstMoneyCommandCenter?.setupActionQueue?.length ? (
+                  <div className="mt-2 space-y-2">
+                    {firstMoneyCommandCenter.setupActionQueue.map((action) => (
+                      <div key={action.id} className="rounded border border-zinc-800 bg-black/40 px-2 py-2" data-testid={`first-money-setup-action-${action.id}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-zinc-100">{action.label}</span>
+                          <Badge variant="outline" className={cn("shrink-0", statusTone(action.status))}>
+                            {action.gate}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-zinc-400">{action.reason}</p>
+                        <p className="mt-1 break-words text-zinc-500">{action.commandHint}</p>
+                        <p className="mt-1 text-zinc-500">{action.safety}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 rounded border border-zinc-800 bg-black/40 px-2 py-2 text-zinc-400">
+                    No setup gates are waiting right now; keep using the activation checklist and Trust Center for any new approval-gated money action.
+                  </p>
+                )}
               </div>
               {firstMoneyCommandCenter?.handoffPacket && (
                 <div className="mt-3 rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs leading-5 text-cyan-100" data-testid="first-money-handoff-packet">

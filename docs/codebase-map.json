@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T21:04:27.541Z",
+  "generatedAt": "2026-07-02T21:14:26.742Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -141,9 +141,9 @@
   "totals": {
     "filesVisible": 494,
     "filesIndexed": 426,
-    "imports": 1608,
+    "imports": 1609,
     "routes": 470,
-    "symbols": 8361
+    "symbols": 8364
   },
   "directories": {
     ".agents/skills": {
@@ -10757,6 +10757,7 @@
         "redactCandidateReviewBatchForSummary",
         "redactCandidateRunBatchForSummary",
         "redactCandidateVerificationQueueForSummary",
+        "redactSetupCommandForSummary",
         "redactedVerificationMissing",
         "remainingApprovalBatchCount",
         "remainingApprovalBatches",
@@ -10766,6 +10767,7 @@
         "robertApprovalBrief",
         "robertReviewReadyCandidates",
         "safeSearchAction",
+        "setupActionQueue",
         "setupCommand",
         "setupCommandIdsForGate",
         "setupCommands",
@@ -14013,6 +14015,7 @@
         "../server/app-qa-agent",
         "@shared/schema",
         "node:assert/strict",
+        "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -14052,6 +14055,7 @@
         "runNow",
         "scan",
         "skipMorningRepeat",
+        "source",
         "tempDir"
       ],
       "routes": []

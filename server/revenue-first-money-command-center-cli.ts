@@ -213,6 +213,18 @@ function redactCandidateRunBatchForSummary(batch: CandidateApprovalBatch | undef
   };
 }
 
+function redactSetupCommandForSummary(item: SetupCommandItem) {
+  return {
+    id: item.id,
+    gate: item.gate,
+    label: item.label,
+    status: item.status,
+    reason: item.reason,
+    commandHint: item.command,
+    safety: "Trust Center/setup guidance only; does not send outreach, charge clients, write website files or deploy.",
+  };
+}
+
 function buildRobertApprovalBrief(
   candidateApprovalQueue: NonNullable<ReturnType<typeof redactCandidateApprovalBatchForSummary>>[],
   candidateReviewQueue: NonNullable<ReturnType<typeof redactCandidateReviewBatchForSummary>>[],
@@ -1221,6 +1233,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
   const candidateRunQueue = packet.candidateApprovalBatches
     .map((batch) => redactCandidateRunBatchForSummary(batch))
     .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateRunBatchForSummary>> => Boolean(batch));
+  const setupActionQueue = packet.setupCommands.map(redactSetupCommandForSummary);
   const safeSearchAction = packet.queue.find((item) => item.id === "public-scout") || null;
   const nextCandidateVerification = packet.candidateVerificationQueue[0] || null;
   const nextCommand = {
@@ -1260,6 +1273,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     candidateReviewQueue,
     nextMoneySprintRun,
     candidateRunQueue,
+    setupActionQueue,
     safeSearchAction,
     moneyUnblockers,
     handoffPacket,

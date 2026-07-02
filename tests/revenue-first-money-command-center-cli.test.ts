@@ -618,6 +618,13 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "website_build" && item.evidenceRequired.some((evidence) => evidence.includes("Deposit proof"))), true);
+  assert.equal(summary.setupActionQueue.length, 7);
+  assert.equal(summary.setupActionQueue.some((item) => item.id === "contact-path-approval" && item.commandHint.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
+  assert.equal(summary.setupActionQueue.some((item) => item.id === "payment-path-approval" && item.commandHint.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(summary.setupActionQueue.some((item) => item.id === "website-publish-approval" && item.commandHint.includes("/api/revenue-engine/website-publish-approval-pending-action")), true);
+  assert.equal(summary.setupActionQueue.every((item) => item.safety.includes("does not send outreach")), true);
+  assert.doesNotMatch(JSON.stringify(summary.setupActionQueue), /revenue:website-publish-approval-decision/);
+  assert.doesNotMatch(JSON.stringify(summary.setupActionQueue), /revenue:payment-path-approval-decision/);
   assert.equal(summary.handoffPacket.status, "blocked_before_live_money");
   assert.equal(summary.handoffPacket.safeToSendToRobert, false);
   assert.equal(summary.handoffPacket.testsToRun.includes("npm run test:revenue-engine"), true);
