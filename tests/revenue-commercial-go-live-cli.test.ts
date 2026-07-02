@@ -222,6 +222,14 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.safety.publishesWebsites, false);
   assert.equal(packet.safety.commercialGoLiveReady, false);
   assert.equal(packet.executionOrder.some((step) => step.includes("revenue:public-scout-execute")), true);
+  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:contact-path-approval-decision")), true);
+  assert.equal(packet.operatorSetupPacket.status, "blocked");
+  assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "production-env");
+  assert.equal(packet.operatorSetupPacket.safety.editsEnvironment, false);
+  assert.equal(packet.operatorSetupPacket.safety.createsSecrets, false);
+  assert.equal(packet.operatorSetupPacket.safety.deploys, false);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:contact-path-readiness-packet")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-readiness-packet")), true);
   assert.equal(packet.requiredEnvironment.some((group) => group.names.includes("DATABASE_URL")), true);
   assert.equal(
     packet.requiredEnvironment.some((group) => group.names.includes("RESEND_API_KEY + REVENUE_ENGINE_FROM_EMAIL/RESEND_FROM_EMAIL")),
@@ -237,6 +245,8 @@ test("reports production go-live ready only when all gates pass", () => {
 
   assert.equal(packet.status, "ready_for_commercial_go_live");
   assert.equal(packet.readiness.ready, true);
+  assert.equal(packet.operatorSetupPacket.status, "ready");
+  assert.equal(packet.operatorSetupPacket.nextExternalStep, null);
   assert.equal(packet.safety.commercialGoLiveReady, true);
   assert.equal(packet.readiness.canCollectMoney, true);
   assert.equal(packet.readiness.canBuildWebsites, true);
@@ -258,6 +268,8 @@ test("keeps first-sprint readiness distinct from commercial go-live", () => {
 
   assert.equal(packet.status, "ready_for_first_money_sprint");
   assert.equal(packet.readiness.ready, true);
+  assert.equal(packet.operatorSetupPacket.status, "blocked");
+  assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "website-publish");
   assert.equal(packet.readiness.canBuildWebsites, false);
   assert.equal(packet.safety.commercialGoLiveReady, false);
 });
@@ -268,6 +280,8 @@ test("formats go-live packet with gates rollback and safety", () => {
 
   assert.match(output, /Revenue commercial go-live: blocked/);
   assert.match(output, /Required environment gates:/);
+  assert.match(output, /Operator setup packet:/);
+  assert.match(output, /contact-path:/);
   assert.match(output, /Rollback notes:/);
   assert.match(output, /Prints secrets: no/);
   assert.match(output, /Charges clients: no/);
@@ -289,6 +303,7 @@ test("commercial go-live script exits 0 only when production gates pass and does
   assert.doesNotMatch(output, /SECRET_DB_PASS/);
   assert.doesNotMatch(output, /SECRET_SESSION/);
   assert.doesNotMatch(output, /revenue-deposit-secret-token/);
+  assert.match(result.stdout, /Operator setup packet:/);
 });
 
 test("commercial go-live script rejects invalid mode", () => {
