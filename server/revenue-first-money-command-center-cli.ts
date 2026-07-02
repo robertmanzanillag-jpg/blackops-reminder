@@ -47,6 +47,16 @@ type CandidateApprovalBatch = {
     estimatedOfferUsd: number;
   }>;
   count: number;
+  totalEstimatedOfferUsd: number;
+  approvalSafety: {
+    persistsApprovalDecision: true;
+    importsLeads: false;
+    sendsOutreach: false;
+    writesPreviewFiles: false;
+    chargesClients: false;
+    deploys: false;
+    paidDataSpendUsd: 0;
+  };
   approvalStatus: "needs_robert_approval" | "ready_for_candidate_review";
   approvalDecisionId: string;
   outputPath: string;
@@ -314,6 +324,16 @@ function buildCandidateApprovalBatch(
       estimatedOfferUsd: candidate.estimatedOfferUsd,
     })),
     count: candidates.length,
+    totalEstimatedOfferUsd: candidates.reduce((total, candidate) => total + candidate.estimatedOfferUsd, 0),
+    approvalSafety: {
+      persistsApprovalDecision: true,
+      importsLeads: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      chargesClients: false,
+      deploys: false,
+      paidDataSpendUsd: 0,
+    },
     approvalStatus,
     approvalDecisionId: matchingApprovalDecision?.id || "",
     outputPath,
@@ -553,7 +573,8 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
         "",
         "Candidate approval batches:",
         ...packet.candidateApprovalBatches.flatMap((batch) => [
-          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${displayText(batch.area)} / ${displayText(batch.niche)}: ${displayText(batch.command)}${batch.moneySprintRunPacketCommand ? `; then ${displayText(batch.moneySprintRunPacketCommand)}` : ""}`,
+          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s), estimated offer total $${batch.totalEstimatedOfferUsd}, in ${displayText(batch.area)} / ${displayText(batch.niche)}: ${displayText(batch.command)}${batch.moneySprintRunPacketCommand ? `; then ${displayText(batch.moneySprintRunPacketCommand)}` : ""}`,
+          `  Approval safety: persistsApprovalDecision=${batch.approvalSafety.persistsApprovalDecision ? "yes" : "no"}; importsLeads=${batch.approvalSafety.importsLeads ? "yes" : "no"}; sendsOutreach=${batch.approvalSafety.sendsOutreach ? "yes" : "no"}; writesPreviewFiles=${batch.approvalSafety.writesPreviewFiles ? "yes" : "no"}; chargesClients=${batch.approvalSafety.chargesClients ? "yes" : "no"}; deploys=${batch.approvalSafety.deploys ? "yes" : "no"}; paidDataSpend=$${batch.approvalSafety.paidDataSpendUsd}`,
           ...batch.candidates.flatMap((candidate, index) => [
             `  ${index + 1}. ${displayText(candidate.businessName)} (${displayText(candidate.websiteStatus)})`,
             `     Candidate: ${candidate.id}`,

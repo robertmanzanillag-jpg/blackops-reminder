@@ -343,8 +343,20 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(reviewCommand?.command || "", /--confirmed-by-robert/);
   assert.equal(packet.candidateApprovalBatches[0].candidates[0].businessName, "Verified Command Cafe");
   assert.equal(packet.candidateApprovalBatches[0].candidates[0].recipientEmail, "owner@verifiedcommand.biz");
+  assert.equal(packet.candidateApprovalBatches[0].totalEstimatedOfferUsd, 3600);
+  assert.deepEqual(packet.candidateApprovalBatches[0].approvalSafety, {
+    persistsApprovalDecision: true,
+    importsLeads: false,
+    sendsOutreach: false,
+    writesPreviewFiles: false,
+    chargesClients: false,
+    deploys: false,
+    paidDataSpendUsd: 0,
+  });
   assert.match(packet.candidateApprovalBatches[0].candidates[0].evidence, /visible public owner email/);
   assert.match(text, /Verified Command Cafe \(no_website\)/);
+  assert.match(text, /estimated offer total \$3600/);
+  assert.match(text, /Approval safety: persistsApprovalDecision=yes; importsLeads=no; sendsOutreach=no; writesPreviewFiles=no; chargesClients=no; deploys=no; paidDataSpend=\$0/);
   assert.match(text, /Contact channel: email/);
   assert.match(text, /Contact value: owner@verifiedcommand\.biz/);
   assert.match(text, /Recipient email: owner@verifiedcommand\.biz/);
@@ -478,6 +490,10 @@ test("first-money command center routes approved public candidate batches to can
   assert.equal(packet.candidateApprovalBatches[0].approvalStatus, "needs_robert_approval");
   assert.equal(packet.candidateApprovalBatches[1].approvalStatus, "ready_for_candidate_review");
   assert.equal(packet.candidateApprovalBatches[1].approvalDecisionId, approval.decision?.id);
+  assert.equal(packet.candidateApprovalBatches[1].totalEstimatedOfferUsd, 3600);
+  assert.equal(packet.candidateApprovalBatches[1].approvalSafety.importsLeads, false);
+  assert.equal(packet.candidateApprovalBatches[1].approvalSafety.sendsOutreach, false);
+  assert.equal(packet.candidateApprovalBatches[1].approvalSafety.chargesClients, false);
   assert.match(packet.candidateApprovalBatches[1].outputPath, /^revenue_workspace\/money-sprint\/public-candidates-/);
   assert.match(packet.candidateApprovalBatches[1].moneySprintRunPacketCommand, /revenue:money-sprint-run-packet/);
   assert.match(
