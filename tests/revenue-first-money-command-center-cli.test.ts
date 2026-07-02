@@ -46,6 +46,12 @@ const originalEnv = {
   REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE,
   REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT,
   REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED: process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED,
+  REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT,
+  REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED: process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED,
+  REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED: process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED,
+  REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED: process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED,
+  REVENUE_ENGINE_WEBSITE_ROLLBACK_VERIFIED: process.env.REVENUE_ENGINE_WEBSITE_ROLLBACK_VERIFIED,
+  REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT,
 };
 
 setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
@@ -284,6 +290,43 @@ test("first-money command center keeps ledger gate visible when payment path is 
   assert.match(packet.setupCommands.find((item) => item.id === "ledger-entry-approval")?.command || "", /revenue:ledger-approval-decision/);
 });
 
+test("first-money activation checklist does not mark paid build ready from publish gates alone", () => {
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+  process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT = "true";
+  process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED = "true";
+  process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED = "true";
+  process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_WEBSITE_ROLLBACK_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT = "true";
+
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const paidBuild = summary.activationChecklist.find((step) => step.id === "paid_build");
+  const publish = summary.activationChecklist.find((step) => step.id === "publish");
+
+  assert.equal(summary.readiness.canBuildWebsites, true);
+  assert.equal(summary.readiness.canCollectMoney, false);
+  assert.equal(paidBuild?.status, "blocked_until_prior_step");
+  assert.equal(paidBuild?.action.includes("payment path"), true);
+  assert.equal(publish?.status, "needs_robert_approval");
+});
+
+test("first-money activation checklist keeps paid build evidence-gated after payment and approved draft", () => {
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  approveCommandCenterPaymentPath();
+  createDraft("approved");
+
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const payment = summary.activationChecklist.find((step) => step.id === "payment_path");
+  const paidBuild = summary.activationChecklist.find((step) => step.id === "paid_build");
+
+  assert.equal(summary.readiness.canCollectMoney, true);
+  assert.equal(payment?.status, "ready_now");
+  assert.equal(paidBuild?.status, "blocked_until_evidence");
+  assert.equal(paidBuild?.safety.includes("not written"), true);
+});
+
 test("first-money command center prioritizes public contact verification for unverified candidates", () => {
   recordRevenuePublicScoutRun({
     area: "Miami",
@@ -457,6 +500,12 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.handoffPacket.deployStatus, "blocked_without_robert_approval");
   assert.equal(summary.handoffPacket.rollbackNotes.some((note) => note.includes("Do not merge or deploy")), true);
   assert.equal(summary.handoffPacket.prReviewStandard.some((item) => item.includes("What changed")), true);
+  assert.equal(summary.activationChecklist[0].id, "candidate_approval");
+  assert.equal(summary.activationChecklist[0].status, "needs_robert_approval");
+  assert.equal(summary.activationChecklist[0].proofRequired.some((proof) => proof.includes("APPROVE PUBLIC CANDIDATES candidate-review-1")), true);
+  assert.equal(summary.activationChecklist.some((step) => step.id === "contact_path" && step.status === "blocked_until_evidence"), true);
+  assert.equal(summary.activationChecklist.some((step) => step.id === "payment_path" && step.commandHint.includes("revenue:payment-path-approval-decision")), true);
+  assert.equal(summary.activationChecklist.some((step) => step.id === "publish" && step.safety.includes("Never deploys")), true);
   assert.equal(summary.counts.reviewablePublicCandidates, 1);
   assert.equal("candidateApprovalBatches" in summary, false);
   assert.equal("setupCommands" in summary, false);

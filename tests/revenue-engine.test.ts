@@ -3357,6 +3357,14 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /handoffPacket\.testsToRun\.join/);
   assert.match(source, /handoffPacket\.qaGate/);
   assert.match(source, /handoffPacket\.rollbackNotes\[0\]/);
+  assert.match(source, /activationChecklist/);
+  assert.match(source, /first-money-activation-checklist/);
+  assert.match(source, /first-money-activation-step-/);
+  assert.doesNotMatch(source, /activationChecklist\.slice\(0, 6\)/);
+  assert.match(source, /step\.proofRequired\.slice/);
+  assert.match(source, /break-words text-zinc-500/);
+  assert.match(source, /step\.commandHint/);
+  assert.match(source, /step\.safety/);
   assert.match(source, /Aun requiere revision por accion/);
   assert.match(source, /canContactBusinesses/);
   assert.match(source, /canCollectMoney/);

@@ -521,6 +521,17 @@ type FirstMoneyCommandCenter = {
     deployStatus: "not_requested" | "blocked_without_robert_approval";
     safeToSendToRobert: boolean;
   };
+  activationChecklist: Array<{
+    id: "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
+    label: string;
+    status: "ready_now" | "needs_robert_approval" | "blocked_until_evidence" | "blocked_until_prior_step";
+    owner: "agent" | "robert" | "external";
+    action: string;
+    proofRequired: string[];
+    commandHint: string;
+    unlocks: string[];
+    safety: string;
+  }>;
   counts: {
     publicCandidates: number;
     reviewablePublicCandidates: number;
@@ -2971,6 +2982,33 @@ export default function RevenueEnginePage() {
                   <p className="mt-2 text-zinc-500">Checks: {firstMoneyCommandCenter.handoffPacket.testsToRun.join(" · ")}</p>
                   <p className="mt-1 text-zinc-500">{firstMoneyCommandCenter.handoffPacket.qaGate}</p>
                   <p className="mt-1 text-zinc-500">Rollback: {firstMoneyCommandCenter.handoffPacket.rollbackNotes[0]}</p>
+                </div>
+              )}
+              {!!firstMoneyCommandCenter?.activationChecklist?.length && (
+                <div className="mt-3 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs leading-5 text-sky-100" data-testid="first-money-activation-checklist">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-white">Activation checklist</span>
+                    <Badge variant="outline" className="shrink-0 border-sky-500/30 text-sky-200">
+                      {firstMoneyCommandCenter.activationChecklist.length} steps
+                    </Badge>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {firstMoneyCommandCenter.activationChecklist.map((step) => (
+                      <div key={step.id} className="rounded border border-zinc-800 bg-black/40 px-2 py-2" data-testid={`first-money-activation-step-${step.id}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-zinc-100">{step.label}</span>
+                          <Badge variant="outline" className={cn("shrink-0", statusTone(step.status === "ready_now" ? "ready" : step.status === "needs_robert_approval" ? "review" : "blocked"))}>
+                            {step.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-zinc-400">{step.action}</p>
+                        <p className="mt-1 text-zinc-500">Owner: {step.owner}</p>
+                        <p className="mt-1 text-zinc-500">Proof: {step.proofRequired.slice(0, 2).join(" | ")}</p>
+                        <p className="mt-1 break-words text-zinc-500">Hint: {step.commandHint}</p>
+                        <p className="mt-1 text-zinc-500">Safety: {step.safety}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -59,6 +59,18 @@ type FirstMoneyHandoffPacket = {
   safeToSendToRobert: boolean;
 };
 
+type FirstMoneyActivationStep = {
+  id: "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
+  label: string;
+  status: "ready_now" | "needs_robert_approval" | "blocked_until_evidence" | "blocked_until_prior_step";
+  owner: "agent" | "robert" | "external";
+  action: string;
+  proofRequired: string[];
+  commandHint: string;
+  unlocks: string[];
+  safety: string;
+};
+
 type CandidateApprovalBatch = {
   id: string;
   area: string;
@@ -496,6 +508,168 @@ function buildFirstMoneyHandoffPacket(packet: ReturnType<typeof buildRevenueFirs
   };
 }
 
+function buildFirstMoneyActivationChecklist(
+  packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>,
+  moneyUnblockers: MoneyUnblockerItem[],
+  nextCandidateApproval: ReturnType<typeof redactCandidateApprovalBatchForSummary>,
+  nextCandidateReview: ReturnType<typeof redactCandidateReviewBatchForSummary>,
+  nextMoneySprintRun: ReturnType<typeof redactCandidateRunBatchForSummary>,
+): FirstMoneyActivationStep[] {
+  const setupCommand = (id: SetupCommandItem["id"]) => packet.setupCommands.find((item) => item.id === id)?.command || "";
+  const contactPath = moneyUnblockers.find((item) => item.id === "contact_path");
+  const paymentPath = moneyUnblockers.find((item) => item.id === "payment_path");
+  const websiteBuild = moneyUnblockers.find((item) => item.id === "website_build");
+  const hasApprovedOutreachDraft = packet.counts.approvedOutreachDrafts > 0;
+  const paidBuildStatus: FirstMoneyActivationStep["status"] = hasApprovedOutreachDraft && packet.readiness.canCollectMoney
+    ? "blocked_until_evidence"
+    : "blocked_until_prior_step";
+  const publishStatus: FirstMoneyActivationStep["status"] = packet.readiness.canBuildWebsites
+    ? "needs_robert_approval"
+    : "blocked_until_prior_step";
+  const candidateStep: FirstMoneyActivationStep = nextCandidateApproval
+    ? {
+      id: "candidate_approval",
+      label: "Approve safe candidate batch",
+      status: "needs_robert_approval",
+      owner: "robert",
+      action: `Approve or reject ${nextCandidateApproval.count} visible candidate card(s) before any lead import.`,
+      proofRequired: [
+        `Exact confirmation text: ${nextCandidateApproval.confirmationText}`,
+        "Robert reviewed business names, website status, public evidence status and estimated offer.",
+        "No contact details are revealed or used before this approval.",
+      ],
+      commandHint: "Use the guarded Revenue Engine approval action with the exact confirmation text.",
+      unlocks: ["candidate review packet", "internal Money Sprint draft generation"],
+      safety: "Records approval only; does not send outreach, charge clients, write website files or deploy.",
+    }
+    : nextCandidateReview
+      ? {
+        id: "candidate_review",
+        label: "Generate reviewed candidate packet",
+        status: "ready_now",
+        owner: "agent",
+        action: `Generate the guarded review packet for ${nextCandidateReview.count} approved candidate(s).`,
+        proofRequired: [
+          `Exact confirmation text: ${nextCandidateReview.confirmationText}`,
+          "The approvalDecisionId matches the active candidate batch.",
+          "Review packet is inspected before running Money Sprint.",
+        ],
+        commandHint: "Use the guarded Revenue Engine review-packet action with the exact confirmation text.",
+        unlocks: ["internal lead import", "draft-only outreach", "mockup planning"],
+        safety: "Creates an internal packet only; no external contact, payment request or deploy.",
+      }
+      : nextMoneySprintRun
+        ? {
+          id: "candidate_review",
+          label: "Run guarded Money Sprint",
+          status: "ready_now",
+          owner: "agent",
+          action: `Run Money Sprint for ${nextMoneySprintRun.count} reviewed candidate(s).`,
+          proofRequired: [
+            `Exact confirmation text: ${nextMoneySprintRun.confirmationText}`,
+            "The review packet was generated from the approved candidate batch.",
+            "Drafts stay internal until a separate outreach approval exists.",
+          ],
+          commandHint: "Use the guarded Revenue Engine Money Sprint action with the exact confirmation text.",
+          unlocks: ["internal leads", "draft-only outreach", "website proposal packet"],
+          safety: "Persists internal leads/drafts only; no external send, client charge, production write or deploy.",
+        }
+        : {
+          id: "candidate_approval",
+          label: "Capture more public candidates",
+          status: packet.readiness.canRunGuardedPublicScoutCapture ? "ready_now" : "blocked_until_prior_step",
+          owner: "agent",
+          action: "Run guarded public scout capture for no-website or weak-website businesses.",
+          proofRequired: [
+            "Public source evidence for each candidate.",
+            "No paid data spend.",
+            "No lead import until Robert approves candidate cards.",
+          ],
+          commandHint: packet.queue.find((item) => item.id === "public-scout")?.command || "Run the guarded public scout schedule.",
+          unlocks: ["candidate approval cards"],
+          safety: "Research capture only; no outreach, payment, website write or deploy.",
+        };
+
+  return [
+    candidateStep,
+    {
+      id: "contact_path",
+      label: "Approve contact path",
+      status: packet.readiness.canContactBusinesses ? "ready_now" : "blocked_until_evidence",
+      owner: "robert",
+      action: packet.readiness.canContactBusinesses
+        ? "Keep using only the approved contact path for separately approved outreach sends."
+        : "Approve the exact manual or provider contact path after evidence is verified outside git.",
+      proofRequired: contactPath?.evidenceRequired || [],
+      commandHint: packet.readiness.canContactBusinesses
+        ? "Contact path is already approved; keep each send behind an outreach approval decision."
+        : setupCommand("contact-path-approval") || "Run contact-path approval and readiness packets with real evidence.",
+      unlocks: ["reviewed outreach send path"],
+      safety: "Approval/readiness only; does not send email, SMS, DMs or contact forms.",
+    },
+    {
+      id: "payment_path",
+      label: "Approve payment path",
+      status: packet.readiness.canCollectMoney ? "ready_now" : "blocked_until_evidence",
+      owner: "robert",
+      action: packet.readiness.canCollectMoney
+        ? "Use only the approved payment path in reviewed proposal/outreach copy."
+        : "Approve the exact Stripe/payment deposit path after smoke evidence is verified outside git.",
+      proofRequired: paymentPath?.evidenceRequired || [],
+      commandHint: packet.readiness.canCollectMoney
+        ? "Payment path is already approved; keep payment requests tied to reviewed proposals."
+        : setupCommand("payment-path-approval") || "Run payment-path approval and readiness packets with real evidence.",
+      unlocks: ["deposit request", "paid ledger approval"],
+      safety: "Approval/readiness only; does not charge clients or record paid revenue.",
+    },
+    {
+      id: "first_outreach",
+      label: "Approve first outreach send",
+      status: packet.readiness.canContactBusinesses && packet.counts.reviewableOutreachDrafts > 0 ? "needs_robert_approval" : "blocked_until_prior_step",
+      owner: "robert",
+      action: "Approve one exact outreach draft only after contact path is ready.",
+      proofRequired: [
+        "Approved contact path decision.",
+        "Exact outreach draft approval packet.",
+        "Exact SEND confirmation for that draft and approvalDecisionId.",
+      ],
+      commandHint: "Run outreach approval packet, then use the guarded outreach-send action with exact confirmation.",
+      unlocks: ["client reply", "deposit conversation"],
+      safety: "One reviewed send at a time; no bulk outreach or unapproved provider send.",
+    },
+    {
+      id: "paid_build",
+      label: "Approve paid website build",
+      status: paidBuildStatus,
+      owner: "robert",
+      action: hasApprovedOutreachDraft && packet.readiness.canCollectMoney
+        ? "Collect client scope/deposit proof and ledger approval before Robert approves website creation."
+        : "Approve website creation only after an approved outreach draft, payment path, client scope, deposit proof, ledger approval and public data verification.",
+      proofRequired: websiteBuild?.evidenceRequired || [],
+      commandHint: setupCommand("website-creation-approval") || "Run website creation approval only after deposit and scope proof exist.",
+      unlocks: ["website scaffold", "delivery workspace"],
+      safety: "Approval only; website files are not written until the paid handoff packet passes.",
+    },
+    {
+      id: "publish",
+      label: "Approve publish/deploy",
+      status: publishStatus,
+      owner: "robert",
+      action: packet.readiness.canBuildWebsites
+        ? "Review final PR/App QA/rollback summary before any deploy command is run."
+        : "Approve deploy only after preview verification, App QA pass, rollback note and explicit Replit/deploy approval.",
+      proofRequired: [
+        "Preview deploy URL verified.",
+        "App QA pass with real base URL.",
+        "Rollback note and Robert publish approval.",
+      ],
+      commandHint: "Run website-publish approval and readiness packets after preview QA; ask Robert before any Replit deploy.",
+      unlocks: ["public client website"],
+      safety: "Never deploys without explicit Robert approval after PR and QA summary.",
+    },
+  ];
+}
+
 type CandidateApprovalInput = {
   id: string;
   businessName: string;
@@ -825,6 +999,13 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
         ? "Use the guarded Revenue Engine approval action with the exact confirmation text."
         : packet.nextCommand.command,
   };
+  const activationChecklist = buildFirstMoneyActivationChecklist(
+    packet,
+    moneyUnblockers,
+    nextCandidateApproval,
+    nextCandidateReview,
+    nextMoneySprintRun,
+  );
   return {
     status: packet.status,
     mode: packet.mode,
@@ -834,6 +1015,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextMoneySprintRun,
     moneyUnblockers,
     handoffPacket,
+    activationChecklist,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,
