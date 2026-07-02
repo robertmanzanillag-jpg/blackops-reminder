@@ -151,6 +151,7 @@ export function buildRevenuePaymentPathApprovalDecisionFromCli(options: RevenueP
     websiteCreationSnapshotHash: "",
     websitePublishSnapshotHash: "",
     paymentPathSnapshotHash: buildRevenuePaymentPathSnapshotHash(paymentSnapshot, proof),
+    contactPathSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"

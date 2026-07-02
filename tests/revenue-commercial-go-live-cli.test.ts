@@ -11,6 +11,10 @@ import {
   buildRevenuePaymentPathSnapshotHash,
 } from "../server/revenue-payment-path-approval";
 import {
+  buildRevenueContactPathApprovalTargetId,
+  buildRevenueContactPathSnapshotHash,
+} from "../server/revenue-contact-path-approval";
+import {
   buildRevenueCommercialGoLivePacket,
   formatRevenueCommercialGoLivePacketText,
   parseRevenueCommercialGoLiveArgs,
@@ -23,6 +27,11 @@ const trackedEnvKeys = [
   "REVENUE_ENGINE_MONEY_MODE",
   "REVENUE_ENGINE_ROBERT_CONTACT_APPROVED",
   "REVENUE_ENGINE_MANUAL_CONTACT_APPROVED",
+  "REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID",
+  "REVENUE_ENGINE_CONTACT_MODE",
+  "REVENUE_ENGINE_CONTACT_PATH_VERIFIED",
+  "REVENUE_ENGINE_CONTACT_EVIDENCE_URL",
+  "REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE",
   "RESEND_API_KEY",
   "REVENUE_ENGINE_FROM_EMAIL",
   "RESEND_FROM_EMAIL",
@@ -78,6 +87,14 @@ function productionReadyEnv(): Record<string, string> {
     REVENUE_ENGINE_MONEY_MODE: "live",
     REVENUE_ENGINE_ROBERT_CONTACT_APPROVED: "true",
     REVENUE_ENGINE_MANUAL_CONTACT_APPROVED: "true",
+    REVENUE_ENGINE_CONTACT_MODE: "manual",
+    REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID: approveProductionContactPath(),
+    REVENUE_ENGINE_CONTACT_PATH_VERIFIED: "true",
+    REVENUE_ENGINE_CONTACT_EVIDENCE_URL: "https://github.com/example/repo/actions/runs/456",
+    REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE: "Contact path verification passed",
+    RESEND_API_KEY: undefined,
+    REVENUE_ENGINE_FROM_EMAIL: undefined,
+    RESEND_FROM_EMAIL: undefined,
     REVENUE_ENGINE_PAYMENT_LINK: paymentLink,
     REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID: approveProductionPaymentPath(paymentLink),
     REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT: "true",
@@ -93,6 +110,38 @@ function productionReadyEnv(): Record<string, string> {
     REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT: "true",
     REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT: "true",
   };
+}
+
+function approveProductionContactPath() {
+  const snapshot = {
+    contactMode: "manual" as const,
+    fromEmail: "",
+    manualContactApproved: true,
+    emailProviderConfigured: false,
+  };
+  const proof = {
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://github.com/example/repo/actions/runs/456",
+    evidenceNote: "Contact path verification passed",
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueContactPathApprovalTargetId(snapshot),
+    targetType: "contact_path",
+    decision: "approved",
+    approvedAction: "Approve exact contact path for go-live test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "contact_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: buildRevenueContactPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  return result.decision.id;
 }
 
 function approveProductionPaymentPath(paymentLink = "https://buy.stripe.com/revenue-deposit-secret-token") {

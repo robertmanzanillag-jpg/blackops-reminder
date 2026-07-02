@@ -123,6 +123,7 @@ export function buildRevenueWebsiteCreationApprovalDecisionFromCli(options: Reve
     websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
     websitePublishSnapshotHash: "",
     paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"

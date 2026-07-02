@@ -11,6 +11,10 @@ import {
   buildRevenuePaymentPathSnapshotHash,
 } from "../server/revenue-payment-path-approval";
 import {
+  buildRevenueContactPathApprovalTargetId,
+  buildRevenueContactPathSnapshotHash,
+} from "../server/revenue-contact-path-approval";
+import {
   formatRevenueMoneyReadinessText,
   isRevenueMoneyModePlaceholder,
   parseRevenueMoneyReadinessArgs,
@@ -23,6 +27,14 @@ const originalEnv = {
   REVENUE_ENGINE_MONEY_MODE: process.env.REVENUE_ENGINE_MONEY_MODE,
   REVENUE_ENGINE_ROBERT_CONTACT_APPROVED: process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED,
   REVENUE_ENGINE_MANUAL_CONTACT_APPROVED: process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED,
+  REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID: process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID,
+  REVENUE_ENGINE_CONTACT_MODE: process.env.REVENUE_ENGINE_CONTACT_MODE,
+  REVENUE_ENGINE_CONTACT_PATH_VERIFIED: process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED,
+  REVENUE_ENGINE_CONTACT_EVIDENCE_URL: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL,
+  REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE,
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  REVENUE_ENGINE_FROM_EMAIL: process.env.REVENUE_ENGINE_FROM_EMAIL,
+  RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED: process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED,
   REVENUE_ENGINE_PAYMENT_LINK: process.env.REVENUE_ENGINE_PAYMENT_LINK,
@@ -101,6 +113,53 @@ function approveEnvPaymentPath(paymentLink = "https://buy.stripe.com/revenue-dep
   return result;
 }
 
+function approveEnvContactPath(contactMode: "manual" | "email_provider" = "manual") {
+  process.env.REVENUE_ENGINE_CONTACT_MODE = contactMode;
+  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/456";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = "Contact path verification passed";
+  if (contactMode === "manual") {
+    process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+    delete process.env.RESEND_API_KEY;
+    delete process.env.REVENUE_ENGINE_FROM_EMAIL;
+    delete process.env.RESEND_FROM_EMAIL;
+  } else {
+    process.env.RESEND_API_KEY = "resend-test-key";
+    process.env.REVENUE_ENGINE_FROM_EMAIL = "sales@example.com";
+  }
+  const snapshot = {
+    contactMode,
+    fromEmail: contactMode === "email_provider" ? "sales@example.com" : "",
+    manualContactApproved: process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED === "true",
+    emailProviderConfigured: contactMode === "email_provider",
+  };
+  const proof = {
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL,
+    evidenceNote: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE,
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueContactPathApprovalTargetId(snapshot),
+    targetType: "contact_path",
+    decision: "approved",
+    approvedAction: "Approve exact contact path for readiness test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "contact_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: buildRevenueContactPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID = result.decision.id;
+  return result;
+}
+
 test("parses revenue money readiness CLI options", () => {
   assert.deepEqual(parseRevenueMoneyReadinessArgs([]), { mode: "first-sprint", json: false });
   assert.deepEqual(parseRevenueMoneyReadinessArgs(["--mode=production-launch", "--json"]), { mode: "production-launch", json: true });
@@ -116,6 +175,11 @@ test("reports dry-run research mode until production money blockers are configur
   delete process.env.REVENUE_ENGINE_MONEY_MODE;
   delete process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
   delete process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+  delete process.env.REVENUE_ENGINE_CONTACT_MODE;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
   delete process.env.STRIPE_SECRET_KEY;
   delete process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED;
   delete process.env.REVENUE_ENGINE_PAYMENT_LINK;
@@ -152,8 +216,7 @@ test("keeps website publishing blocked even when contact and payments are config
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
-  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  approveEnvContactPath();
   approveEnvPaymentPath();
   delete process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED;
   delete process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED;
@@ -176,8 +239,7 @@ test("does not treat test Stripe keys or malformed payment links as live collect
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
-  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  approveEnvContactPath();
   process.env.STRIPE_SECRET_KEY = ["sk", "test", "123"].join("_");
   process.env.REVENUE_ENGINE_PAYMENT_LINK = "not-a-url";
   process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
@@ -204,6 +266,26 @@ test("requires explicit true before manual contact is considered approved", () =
   assert.equal(report.canCollectMoney, true);
   assert.equal(report.ready, false);
   assert.equal(report.checks.find((check) => check.id === "contact_businesses")?.status, "fail");
+});
+
+test("requires audited contact path approval decision before contacting businesses", () => {
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+  process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_MODE = "manual";
+  process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/456";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = "Contact path verification passed";
+  approveEnvPaymentPath();
+
+  const envOnly = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  assert.equal(envOnly.canContactBusinesses, false);
+
+  approveEnvContactPath();
+  const audited = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  assert.equal(audited.canContactBusinesses, true);
 });
 
 test("requires Robert-approved payment link or enabled live Stripe checkout before collecting money", () => {
@@ -313,8 +395,7 @@ test("first sprint readiness can be ready while production-only gaps remain", ()
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
-  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  approveEnvContactPath();
   approveEnvPaymentPath();
   delete process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED;
   delete process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED;
@@ -338,8 +419,7 @@ test("does not treat website deploy enablement alone as publish-ready", () => {
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
-  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  approveEnvContactPath();
   approveEnvPaymentPath();
   process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED = "true";
   process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT = "true";
@@ -360,8 +440,7 @@ test("production launch readiness is not blocked by the nonblocking autonomous s
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
-  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  approveEnvContactPath();
   approveEnvPaymentPath();
   process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED = "true";
   process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED = "true";

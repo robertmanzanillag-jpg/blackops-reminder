@@ -126,6 +126,7 @@ export function buildRevenuePublicCandidateApprovalDecisionFromCli(options: Reve
     websiteCreationSnapshotHash: "",
     websitePublishSnapshotHash: "",
     paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"

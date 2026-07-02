@@ -23,6 +23,10 @@ import {
   buildRevenuePaymentPathApprovalTargetId,
   buildRevenuePaymentPathSnapshotHash,
 } from "./revenue-payment-path-approval";
+import {
+  buildRevenueContactPathApprovalTargetId,
+  buildRevenueContactPathSnapshotHash,
+} from "./revenue-contact-path-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -448,6 +452,18 @@ export const revenuePaymentPathReadinessPacketSchema = z.object({
 
 export type RevenuePaymentPathReadinessPacketInput = z.infer<typeof revenuePaymentPathReadinessPacketSchema>;
 
+export const revenueContactPathReadinessPacketSchema = z.object({
+  contactMode: z.enum(["manual", "email_provider"]),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
+  robertApprovedContactPath: revenueExplicitBooleanSchema.default(false),
+  contactPathVerified: revenueExplicitBooleanSchema.default(false),
+  evidenceUrl: z.string().trim().url().max(300),
+  evidenceNote: z.string().trim().min(8).max(1000),
+  sendOutreach: revenueExplicitBooleanSchema.default(false),
+});
+
+export type RevenueContactPathReadinessPacketInput = z.infer<typeof revenueContactPathReadinessPacketSchema>;
+
 export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
@@ -552,17 +568,18 @@ export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublic
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
-  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "website_publish", "payment_path", "manual"]),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "website_publish", "payment_path", "contact_path", "manual"]),
   decision: z.enum(["approved", "rejected", "needs_changes"]),
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "website_publish_approval_cli", "payment_path_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "website_publish_approval_cli", "payment_path_approval_cli", "contact_path_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
   outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
   websiteCreationSnapshotHash: z.string().trim().max(128).optional().default(""),
   websitePublishSnapshotHash: z.string().trim().max(128).optional().default(""),
   paymentPathSnapshotHash: z.string().trim().max(128).optional().default(""),
+  contactPathSnapshotHash: z.string().trim().max(128).optional().default(""),
   ledgerEntrySnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
@@ -1322,6 +1339,50 @@ function getRevenuePaymentPathApprovalReadyFromEnv(paymentLink: string | undefin
     && approvalDecision.guardrail.status === "recorded"
     && approvalDecision.approvalSource === "payment_path_approval_cli"
     && approvalDecision.paymentPathSnapshotHash === expectedSnapshotHash,
+  );
+}
+
+function normalizeRevenueContactMode(value: string | undefined, emailProvider: RevenueEmailProviderStatus): "manual" | "email_provider" {
+  const mode = String(value || "").trim();
+  if (mode === "manual" || mode === "email_provider") return mode;
+  return emailProvider.configured ? "email_provider" : "manual";
+}
+
+function getRevenueContactPathApprovalReadyFromEnv(emailProvider: RevenueEmailProviderStatus) {
+  loadRevenueApprovalDecisions();
+  const approvalDecisionId = String(process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID || "").trim();
+  const contactMode = normalizeRevenueContactMode(process.env.REVENUE_ENGINE_CONTACT_MODE, emailProvider);
+  const evidenceUrl = String(process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL || "").trim();
+  const evidenceNote = String(process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE || "").trim();
+  if (!approvalDecisionId || evidenceNote.length < 8) return false;
+  try {
+    new URL(evidenceUrl);
+  } catch {
+    return false;
+  }
+  const contactSnapshot = {
+    contactMode,
+    fromEmail: emailProvider.fromEmail || "",
+    manualContactApproved: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED),
+    emailProviderConfigured: emailProvider.configured,
+  };
+  const contactProof = {
+    robertApprovedContactPath: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED),
+    contactPathVerified: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED),
+    evidenceUrl,
+    evidenceNote,
+  };
+  const expectedTargetId = buildRevenueContactPathApprovalTargetId(contactSnapshot);
+  const expectedSnapshotHash = buildRevenueContactPathSnapshotHash(contactSnapshot, contactProof);
+  const approvalDecision = revenueApprovalDecisions.find((item) => item.id === approvalDecisionId);
+  return Boolean(
+    approvalDecision
+    && approvalDecision.targetType === "contact_path"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "contact_path_approval_cli"
+    && approvalDecision.contactPathSnapshotHash === expectedSnapshotHash,
   );
 }
 
@@ -2510,6 +2571,7 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
       websiteCreationSnapshotHash: "",
       websitePublishSnapshotHash: "",
       paymentPathSnapshotHash: "",
+      contactPathSnapshotHash: "",
       ledgerEntrySnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
@@ -5109,6 +5171,80 @@ export function buildRevenuePaymentPathReadinessPacket(input: RevenuePaymentPath
   };
 }
 
+export function buildRevenueContactPathReadinessPacket(input: RevenueContactPathReadinessPacketInput) {
+  const parsed = revenueContactPathReadinessPacketSchema.parse(input);
+  loadRevenueApprovalDecisions();
+  const emailProvider = getRevenueEmailProviderStatus();
+  const contactSnapshot = {
+    contactMode: parsed.contactMode,
+    fromEmail: emailProvider.fromEmail || "",
+    manualContactApproved: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED),
+    emailProviderConfigured: emailProvider.configured,
+  };
+  const contactProof = {
+    robertApprovedContactPath: parsed.robertApprovedContactPath,
+    contactPathVerified: parsed.contactPathVerified,
+    evidenceUrl: parsed.evidenceUrl,
+    evidenceNote: parsed.evidenceNote,
+  };
+  const expectedTargetId = buildRevenueContactPathApprovalTargetId(contactSnapshot);
+  const expectedSnapshotHash = buildRevenueContactPathSnapshotHash(contactSnapshot, contactProof);
+  const approvalDecision = parsed.approvalDecisionId
+    ? revenueApprovalDecisions.find((item) => item.id === parsed.approvalDecisionId)
+    : null;
+  const approvalReady = Boolean(
+    approvalDecision
+    && approvalDecision.targetType === "contact_path"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "contact_path_approval_cli"
+    && approvalDecision.contactPathSnapshotHash === expectedSnapshotHash,
+  );
+  const channelAvailable = parsed.contactMode === "email_provider"
+    ? emailProvider.configured
+    : contactSnapshot.manualContactApproved;
+  const gates = [
+    { gate: "channel_available", passed: channelAvailable, fix: "Configurar el provider aprobado o marcar el canal manual aprobado fuera de archivos trackeados." },
+    { gate: "robert_contact_approval", passed: parsed.robertApprovedContactPath, fix: "Robert debe aprobar este camino de contacto exacto." },
+    { gate: "contact_path_verified", passed: parsed.contactPathVerified, fix: "Verificar el camino de contacto con evidencia antes de contactar negocios." },
+    { gate: "approval_decision", passed: approvalReady, fix: "Registrar y usar approvalDecisionId valido para este contact path exacto." },
+    { gate: "safe_mode", passed: !parsed.sendOutreach, fix: "Este packet no envia outreach; solo prepara/verifica el camino de contacto." },
+  ];
+  const failedGates = gates.filter((gate) => !gate.passed);
+  const readyForContactPath = failedGates.length === 0;
+
+  return {
+    status: readyForContactPath ? "ready_for_contact_path_handoff" as const : "blocked" as const,
+    contactSnapshot: {
+      contactMode: contactSnapshot.contactMode,
+      fromEmailConfigured: Boolean(contactSnapshot.fromEmail),
+      manualContactApproved: contactSnapshot.manualContactApproved,
+      emailProviderConfigured: contactSnapshot.emailProviderConfigured,
+    },
+    approvalDecisionId: parsed.approvalDecisionId,
+    gates,
+    blockedReasons: failedGates.map((gate) => gate.fix),
+    evidence: contactProof,
+    nextAction: readyForContactPath
+      ? "Configure the approved contact path outside tracked files, then keep each outreach send behind draft approval."
+      : "Resolve contact path gates before contacting businesses.",
+    safety: {
+      allowedAction: "prepare_contact_path_readiness_handoff",
+      blockedActions: ["send outreach", "edit secrets", "store provider secret", "charge client", "publish website"],
+      sendsOutreach: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+      chargesClients: false,
+      publishesWebsites: false,
+      requestedSendOutreach: parsed.sendOutreach,
+      requiresRobertApprovalBeforeContact: true,
+      requiresDraftApprovalBeforeEachSend: true,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 function buildAgentWorkOrder(input: RevenueAgentRunInput) {
   const request = input.request.toLowerCase();
   const clarificationGate = buildRevenueClarificationGate({
@@ -7532,6 +7668,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
   const stripeCheckoutReady = hasLiveRevenueStripeKey(process.env.STRIPE_SECRET_KEY) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED);
   const paymentLinkReady = hasRevenuePaymentLink(process.env.REVENUE_ENGINE_PAYMENT_LINK) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT);
   const paymentPathApprovalReady = getRevenuePaymentPathApprovalReadyFromEnv(process.env.REVENUE_ENGINE_PAYMENT_LINK);
+  const contactPathApprovalReady = getRevenueContactPathApprovalReadyFromEnv(emailProvider);
   const paymentVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED) || isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT);
   const paymentReady = (stripeCheckoutReady || (paymentLinkReady && paymentPathApprovalReady)) && paymentVerified;
   const websiteDeployEnabled = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED);
@@ -7541,7 +7678,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
   const websitePublishApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT);
   const deployApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT);
   const productionLaunchReady = databaseReady && sessionSecretReady && moneyModeReady && deployApproved;
-  const canContactBusinesses = moneyModeReady && robertContactApproval && (emailProvider.configured || manualContactApproved);
+  const canContactBusinesses = moneyModeReady && robertContactApproval && contactPathApprovalReady && (emailProvider.configured || manualContactApproved);
   const canCollectMoney = moneyModeReady && paymentReady;
   const websiteDeliveryEvidenceReady = websiteDeployEnabled
     && websiteAppQaTargetPassed
@@ -7596,8 +7733,8 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       id: "contact_businesses",
       label: "Contact businesses",
       status: canContactBusinesses ? "ok" as const : "fail" as const,
-      detail: canContactBusinesses ? "Contact is approved and a send/manual channel is configured." : "External outreach is blocked until Robert approval and a real send/manual contact path are configured.",
-      nextStep: "Keep generating drafts; contact only after explicit Robert approval.",
+      detail: canContactBusinesses ? "Contact is approved with an audited path and a send/manual channel is configured." : "External outreach is blocked until Robert approval, a real send/manual contact path, and audited contact path decision are configured.",
+      nextStep: "Run revenue:contact-path-approval-decision and revenue:contact-path-readiness-packet, then configure the approved manual/provider contact path outside tracked files before contacting businesses.",
     },
     {
       id: "collect_money",
@@ -7657,6 +7794,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       "Public research from Google/Maps/Instagram/directories.",
       "Execute guarded public scout captures into Robert-review candidates with revenue:public-scout-execute.",
       "Generate internal mockups/previews and draft-only outreach.",
+      "Prepare audited contact path readiness packets after Robert approves the exact manual/provider contact path; the packet still cannot send outreach.",
       "Prepare audited payment path readiness packets after Robert approves the exact Stripe payment link and smoke/deposit evidence.",
       "Prepare audited website publish readiness packets after preview/App QA/rollback evidence; the packet still cannot deploy.",
       "Prepare proposals and ask Robert for approval before any contact or spend.",
