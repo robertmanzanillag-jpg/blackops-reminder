@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T21:55:24.134Z
+Generated: 2026-07-02T21:59:19.379Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 

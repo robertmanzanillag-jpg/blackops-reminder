@@ -4441,6 +4441,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun < 5/);
   assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun > 25/);
   assert.match(publicScoutSchedulePanelSource, /publicScoutScheduleMutation\.mutate\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /first-money-public-scout-first-run-commands/);
+  assert.match(publicScoutSchedulePanelSource, /captureNotesPath/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.prepareBrowserSession/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.extractCandidates/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.captureForReview/);
   assert.match(paymentPathMutationSource, /evidenceUrl: paymentPathEvidenceUrl/);
   assert.match(paymentPathMutationSource, /evidenceNote: paymentPathEvidenceNote/);
   assert.match(paymentPathMutationSource, /paymentLink: paymentPathLink/);

@@ -3240,12 +3240,29 @@ export default function RevenueEnginePage() {
                         <p className="text-zinc-300">
                           First run: {publicScoutScheduleMutation.data.runs[0].id} · {publicScoutScheduleMutation.data.runs[0].date} {publicScoutScheduleMutation.data.runs[0].localTime} · {publicScoutScheduleMutation.data.runs[0].targetCandidates} candidates
                         </p>
-                        <p className="mt-1 break-words text-zinc-500">
-                          {[
-                            publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.command,
-                            ...publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.args,
-                          ].join(" ")}
-                        </p>
+                        <div className="mt-2 grid gap-2 text-zinc-500" data-testid="first-money-public-scout-first-run-commands">
+                          <p className="break-words">
+                            Notes: {publicScoutScheduleMutation.data.runs[0].captureNotesPath}
+                          </p>
+                          <p className="break-words">
+                            Session: {[
+                              publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.command,
+                              ...publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.args,
+                            ].join(" ")}
+                          </p>
+                          <p className="break-words">
+                            Extract: {[
+                              publicScoutScheduleMutation.data.runs[0].commands.extractCandidates.command,
+                              ...publicScoutScheduleMutation.data.runs[0].commands.extractCandidates.args,
+                            ].join(" ")}
+                          </p>
+                          <p className="break-words">
+                            Capture: {[
+                              publicScoutScheduleMutation.data.runs[0].commands.captureForReview.command,
+                              ...publicScoutScheduleMutation.data.runs[0].commands.captureForReview.args,
+                            ].join(" ")}
+                          </p>
+                        </div>
                       </div>
                     )}
                     <p className="mt-2 text-zinc-500">
