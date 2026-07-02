@@ -187,16 +187,16 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       ? {
         id: "website-handoff",
         label: "Prepare paid website handoff",
-        command: `npm run revenue:website-creation-packet -- --outreach-draft-id=${approvedDraft.id} --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified`,
+        command: `npm run revenue:website-creation-approval-decision -- --outreach-draft-id=${approvedDraft.id} --decision=approved --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified`,
         status: readiness.canBuildWebsites ? "review" : "blocked",
         reason: readiness.canBuildWebsites
-          ? "Approved draft exists and website publish gates are ready; still requires deposit/scope evidence."
+          ? "Approved draft exists; record audited deposit/scope/public data approval before website handoff."
           : "Website handoff can be prepared only after deposit/scope/public data and publish gates are proven.",
       }
       : {
         id: "website-handoff",
         label: "Prepare paid website handoff",
-        command: "npm run revenue:website-creation-packet -- --outreach-draft-id=OUTREACH_ID --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified",
+        command: "npm run revenue:website-creation-approval-decision -- --outreach-draft-id=OUTREACH_ID --decision=approved --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified",
         status: "blocked",
         reason: "No approved outreach draft exists yet.",
       },

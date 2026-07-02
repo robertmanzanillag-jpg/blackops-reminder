@@ -92,6 +92,7 @@ export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutr
     approvalSource: "outreach_approval_cli",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
+    websiteCreationSnapshotHash: "",
   });
   const sendBody = options.decision === "approved"
     ? { draftId: draft.id, approvalDecisionId: result.decision.id }

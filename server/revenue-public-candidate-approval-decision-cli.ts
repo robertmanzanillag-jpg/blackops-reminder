@@ -123,6 +123,7 @@ export function buildRevenuePublicCandidateApprovalDecisionFromCli(options: Reve
     approvalSource: "public_candidate_approval_cli",
     publicCandidateSnapshotHash: buildRevenuePublicCandidateSnapshotHash(candidates),
     outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"
     ? npmRunText("revenue:public-candidate-review", [

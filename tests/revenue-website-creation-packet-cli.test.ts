@@ -2,13 +2,20 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  recordRevenueTrustedApprovalDecision,
   recordRevenueLead,
   recordRevenueOutreachDraft,
+  resetRevenueApprovalDecisionsForTests,
   resetRevenueLeadsForTests,
   resetRevenueOutreachForTests,
+  setRevenueApprovalDecisionsPathForTests,
   setRevenueLeadsPathForTests,
   setRevenueOutreachPathForTests,
 } from "../server/revenue-engine";
+import {
+  buildRevenueWebsiteCreationApprovalTargetId,
+  buildRevenueWebsiteCreationSnapshotHash,
+} from "../server/revenue-website-creation-approval";
 import {
   buildRevenueWebsiteCreationPacketFromCli,
   formatRevenueWebsiteCreationPacketText,
@@ -19,13 +26,16 @@ import {
 
 const testLeadsPath = "/tmp/revenue-website-creation-packet-cli-leads-test.json";
 const testOutreachPath = "/tmp/revenue-website-creation-packet-cli-outreach-test.json";
+const testApprovalDecisionsPath = "/tmp/revenue-website-creation-packet-cli-decisions-test.json";
 
 setRevenueLeadsPathForTests(testLeadsPath);
 setRevenueOutreachPathForTests(testOutreachPath);
+setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
 
 test.afterEach(() => {
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
 });
 
 function createApprovedOutreachDraft() {
@@ -58,9 +68,32 @@ function createApprovedOutreachDraft() {
   }).draft;
 }
 
+function approveWebsiteCreation(draft: ReturnType<typeof createApprovedOutreachDraft>) {
+  const proof = {
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+  };
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueWebsiteCreationApprovalTargetId(draft.id),
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "Approve exact website creation handoff for CLI test.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "website_creation_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+  });
+}
+
 test("parses and validates website creation packet CLI options", () => {
   const parsed = parseRevenueWebsiteCreationPacketArgs([
     "--outreach-draft-id=outreach-123",
+    "--approval-decision-id=approval-123",
     "--robert-approved-build",
     "--client-approved-scope",
     "--deposit-paid",
@@ -70,6 +103,7 @@ test("parses and validates website creation packet CLI options", () => {
   ]);
 
   assert.equal(parsed.outreachDraftId, "outreach-123");
+  assert.equal(parsed.approvalDecisionId, "approval-123");
   assert.equal(parsed.robertApprovedBuild, true);
   assert.equal(parsed.clientApprovedScope, true);
   assert.equal(parsed.depositPaid, true);
@@ -92,8 +126,10 @@ test("parses and validates website creation packet CLI options", () => {
 
 test("website creation packet CLI blocks missing approvals and unsafe actions", () => {
   const draft = createApprovedOutreachDraft();
+  const approval = approveWebsiteCreation(draft);
   const missingApprovals = buildRevenueWebsiteCreationPacketFromCli({
     outreachDraftId: draft.id,
+    approvalDecisionId: "",
     robertApprovedBuild: false,
     clientApprovedScope: false,
     depositPaid: false,
@@ -105,6 +141,7 @@ test("website creation packet CLI blocks missing approvals and unsafe actions", 
   });
   const unsafe = buildRevenueWebsiteCreationPacketFromCli({
     outreachDraftId: draft.id,
+    approvalDecisionId: approval.decision.id,
     robertApprovedBuild: true,
     clientApprovedScope: true,
     depositPaid: true,
@@ -126,8 +163,10 @@ test("website creation packet CLI blocks missing approvals and unsafe actions", 
 
 test("website creation packet CLI builds a safe paid handoff", () => {
   const draft = createApprovedOutreachDraft();
+  const approval = approveWebsiteCreation(draft);
   const packet = buildRevenueWebsiteCreationPacketFromCli({
     outreachDraftId: draft.id,
+    approvalDecisionId: approval.decision.id,
     robertApprovedBuild: true,
     clientApprovedScope: true,
     depositPaid: true,
@@ -158,7 +197,9 @@ test("website creation packet script exits blocked until all creation gates pass
     ...process.env,
     REVENUE_ENGINE_LEADS_PATH: testLeadsPath,
     REVENUE_ENGINE_OUTREACH_PATH: testOutreachPath,
+    REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
   };
+  const approval = approveWebsiteCreation(draft);
   const blocked = spawnSync(process.execPath, [
     "--import",
     "tsx",
@@ -174,6 +215,7 @@ test("website creation packet script exits blocked until all creation gates pass
     "tsx",
     "script/revenue-website-creation-packet.ts",
     `--outreach-draft-id=${draft.id}`,
+    `--approval-decision-id=${approval.decision.id}`,
     "--robert-approved-build",
     "--client-approved-scope",
     "--deposit-paid",

@@ -6,6 +6,10 @@ import {
   buildRevenueOutreachApprovalTargetId,
   buildRevenueOutreachSnapshotHash,
 } from "./revenue-outreach-approval";
+import {
+  buildRevenueWebsiteCreationApprovalTargetId,
+  buildRevenueWebsiteCreationSnapshotHash,
+} from "./revenue-website-creation-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -384,6 +388,7 @@ export type RevenueManualContactApprovalPacketInput = z.infer<typeof revenueManu
 
 export const revenueWebsiteCreationPacketSchema = z.object({
   outreachDraftId: z.string().trim().min(1).max(180),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
   robertApprovedBuild: revenueExplicitBooleanSchema.default(false),
   clientApprovedScope: revenueExplicitBooleanSchema.default(false),
   depositPaid: revenueExplicitBooleanSchema.default(false),
@@ -504,9 +509,10 @@ export const revenueApprovalDecisionSchema = z.object({
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
   outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
+  websiteCreationSnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
 export type RevenueApprovalDecisionInput = z.infer<typeof revenueApprovalDecisionSchema>;
@@ -2400,6 +2406,7 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
       approvalSource: "generic" as const,
       publicCandidateSnapshotHash: "",
       outreachDraftSnapshotHash: "",
+      websiteCreationSnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
   const spendBlocked = parsed.maxSpendUsd > 100 || (parsed.maxSpendUsd > 0 && snapshot.profitGuard.status !== "scale_carefully");
@@ -4501,6 +4508,13 @@ function scaffoldFileName(value: string) {
 }
 
 export function buildRevenueWebsiteScaffold(input: RevenueWebsiteScaffoldInput) {
+  return buildRevenueWebsiteScaffoldInternal(input, { allowInternalPreview: false });
+}
+
+function buildRevenueWebsiteScaffoldInternal(
+  input: RevenueWebsiteScaffoldInput,
+  options: { allowInternalPreview: boolean },
+) {
   const parsed = revenueWebsiteScaffoldSchema.parse(input);
   const projectPlan = buildRevenueProjectPlan({
     clientName: parsed.clientName,
@@ -4516,7 +4530,7 @@ export function buildRevenueWebsiteScaffold(input: RevenueWebsiteScaffoldInput) 
     launchTargetDays: parsed.launchTargetDays,
     clientRequest: parsed.clientRequest,
   });
-  const canGeneratePreview = projectPlan.decision.status === "ready_to_build";
+  const canGeneratePreview = projectPlan.decision.status === "ready_to_build" && options.allowInternalPreview;
   const slug = scaffoldFileName(`${parsed.clientName}-${parsed.area}`);
   const headline = `${parsed.clientName} turns local interest into booked demand`;
   const subheadline = `${parsed.niche} in ${parsed.area} with a conversion-focused website, verified public proof and clear next steps.`;
@@ -4623,7 +4637,14 @@ export function buildRevenueWebsiteScaffold(input: RevenueWebsiteScaffoldInput) 
     ],
     safety: {
       allowedAction: "generate_internal_website_scaffold",
-      blockedActions: ["deploy website", "publish preview", "contact client", "collect payment", "use unverified public claims"],
+      blockedActions: [
+        "generate scaffold without audited website creation approval",
+        "deploy website",
+        "publish preview",
+        "contact client",
+        "collect payment",
+        "use unverified public claims",
+      ],
       writesFiles: false,
       deploys: false,
       sendsOutreach: false,
@@ -4635,7 +4656,30 @@ export function buildRevenueWebsiteCreationPacket(input: RevenueWebsiteCreationP
   const parsed = revenueWebsiteCreationPacketSchema.parse(input);
   loadRevenueOutreach();
   loadRevenueLeads();
+  loadRevenueApprovalDecisions();
   const draft = revenueOutreachDrafts.find((item) => item.id === parsed.outreachDraftId);
+  const approvalDecision = parsed.approvalDecisionId
+    ? revenueApprovalDecisions.find((item) => item.id === parsed.approvalDecisionId)
+    : null;
+  const websiteCreationProof = {
+    robertApprovedBuild: parsed.robertApprovedBuild,
+    clientApprovedScope: parsed.clientApprovedScope,
+    depositPaid: parsed.depositPaid,
+    publicDataVerified: parsed.publicDataVerified,
+    launchTargetDays: parsed.launchTargetDays,
+  };
+  const expectedTargetId = buildRevenueWebsiteCreationApprovalTargetId(parsed.outreachDraftId);
+  const expectedSnapshotHash = draft ? buildRevenueWebsiteCreationSnapshotHash(draft, websiteCreationProof) : "";
+  const approvalDecisionReady = Boolean(
+    draft
+    && approvalDecision
+    && approvalDecision.targetType === "delivery_workspace"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "website_creation_approval_cli"
+    && approvalDecision.websiteCreationSnapshotHash === expectedSnapshotHash,
+  );
   const lead = draft?.leadId
     ? revenueLeads.find((item) => item.id === draft.leadId)
     : draft
@@ -4653,11 +4697,12 @@ export function buildRevenueWebsiteCreationPacket(input: RevenueWebsiteCreationP
   const painPoint = lead?.painPoint || "Needs a conversion-focused website, lead capture and follow-up path.";
   const hasDraft = Boolean(draft);
   const draftReady = Boolean(draft && (draft.status === "approved" || draft.delivery.sendStatus === "sent"));
-  const hasCommercialProof = parsed.clientApprovedScope && parsed.depositPaid && parsed.publicDataVerified && parsed.robertApprovedBuild;
+  const hasCommercialProof = parsed.clientApprovedScope && parsed.depositPaid && parsed.publicDataVerified && parsed.robertApprovedBuild && approvalDecisionReady;
   const unsafeActionRequested = parsed.writeFiles || parsed.deployWebsite;
   const gates = [
     { gate: "outreach_draft", passed: hasDraft, fix: "Seleccionar un draft de outreach existente." },
     { gate: "draft_ready", passed: draftReady, fix: "Usar un draft aprobado o enviado, no un draft bloqueado/sin aprobar." },
+    { gate: "approval_decision", passed: approvalDecisionReady, fix: "Registrar y usar approvalDecisionId valido para este website handoff exacto." },
     { gate: "robert_build_approval", passed: parsed.robertApprovedBuild, fix: "Robert debe aprobar crear el website antes de preparar build." },
     { gate: "scope", passed: parsed.clientApprovedScope, fix: "Conseguir aprobacion escrita del scope del cliente." },
     { gate: "deposit", passed: parsed.depositPaid, fix: "Cobrar deposito antes de construir/lanzar." },
@@ -4687,7 +4732,9 @@ export function buildRevenueWebsiteCreationPacket(input: RevenueWebsiteCreationP
     primaryCta: "Book a consultation",
     contactEmail: draft.recipientEmail,
   } : null;
-  const scaffold = failedGates.length === 0 && scaffoldInput ? buildRevenueWebsiteScaffold(scaffoldInput) : null;
+  const scaffold = failedGates.length === 0 && scaffoldInput
+    ? buildRevenueWebsiteScaffoldInternal(scaffoldInput, { allowInternalPreview: true })
+    : null;
   const readyForWebsiteCreation = Boolean(scaffold && scaffold.status === "ready_for_internal_preview");
 
   return {

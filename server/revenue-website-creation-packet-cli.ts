@@ -16,6 +16,7 @@ function getArgValue(argv: string[], name: string) {
 export function parseRevenueWebsiteCreationPacketArgs(argv: string[]): RevenueWebsiteCreationPacketCliOptions {
   return {
     outreachDraftId: getArgValue(argv, "--outreach-draft-id"),
+    approvalDecisionId: getArgValue(argv, "--approval-decision-id"),
     robertApprovedBuild: argv.includes("--robert-approved-build"),
     clientApprovedScope: argv.includes("--client-approved-scope"),
     depositPaid: argv.includes("--deposit-paid"),
@@ -39,6 +40,7 @@ export function validateRevenueWebsiteCreationPacketOptions(options: RevenueWebs
 export function buildRevenueWebsiteCreationPacketFromCli(options: RevenueWebsiteCreationPacketCliOptions) {
   return buildRevenueWebsiteCreationPacket({
     outreachDraftId: options.outreachDraftId,
+    approvalDecisionId: options.approvalDecisionId,
     robertApprovedBuild: options.robertApprovedBuild,
     clientApprovedScope: options.clientApprovedScope,
     depositPaid: options.depositPaid,

@@ -78,6 +78,11 @@ import {
   buildRevenueOutreachApprovalTargetId,
   buildRevenueOutreachSnapshotHash,
 } from "../server/revenue-outreach-approval";
+import {
+  buildRevenueWebsiteCreationApprovalTargetId,
+  buildRevenueWebsiteCreationSnapshotHash,
+  type RevenueWebsiteCreationApprovalProof,
+} from "../server/revenue-website-creation-approval";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -106,6 +111,31 @@ function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutre
     approvalSource: "outreach_approval_cli",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
+    websiteCreationSnapshotHash: "",
+  });
+}
+
+function approveWebsiteCreationForTests(
+  draft: Parameters<typeof buildRevenueWebsiteCreationSnapshotHash>[0],
+  proof: RevenueWebsiteCreationApprovalProof = {
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+  },
+) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueWebsiteCreationApprovalTargetId(draft.id),
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "Approve exact paid website creation handoff in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited website creation approval.",
+    approvalSource: "website_creation_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
   });
 }
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
@@ -850,7 +880,7 @@ test("builds production plan only when commercial and cost gates pass", () => {
   assert.equal(plan.subagentCorrections.some((item) => item.agent === "cost-controller"), true);
 });
 
-test("builds website scaffold files only for internally approved paid work", () => {
+test("blocks direct website scaffold without audited website creation approval", () => {
   const scaffold = buildRevenueWebsiteScaffold({
     clientName: "Ready Site Cafe",
     area: "Miami",
@@ -873,13 +903,15 @@ test("builds website scaffold files only for internally approved paid work", () 
     contactEmail: "owner@readysite.example",
   });
 
-  assert.equal(scaffold.status, "ready_for_internal_preview");
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.projectPlan.decision.status, "ready_to_build");
   assert.equal(scaffold.canWriteFiles, false);
   assert.equal(scaffold.canDeploy, false);
   assert.equal(scaffold.safety.writesFiles, false);
   assert.equal(scaffold.safety.deploys, false);
-  assert.equal(scaffold.files.some((file) => file.path.endsWith("index.html") && file.content.includes("Ready Site Cafe")), true);
-  assert.equal(scaffold.files.some((file) => file.path.endsWith("qa-checklist.md") && file.content.includes("Robert approved")), true);
+  assert.equal(scaffold.safety.blockedActions.includes("generate scaffold without audited website creation approval"), true);
 });
 
 test("blocks website scaffold when commercial gates are missing", () => {
@@ -969,9 +1001,11 @@ test("website creation packet turns approved paid outreach into scaffold handoff
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveWebsiteCreationForTests(draftResult.draft);
 
   const packet = buildRevenueWebsiteCreationPacket({
     outreachDraftId: draftResult.draft.id,
+    approvalDecisionId: approval.decision.id,
     robertApprovedBuild: true,
     clientApprovedScope: true,
     depositPaid: true,
@@ -991,6 +1025,89 @@ test("website creation packet turns approved paid outreach into scaffold handoff
   assert.equal(packet.scaffold?.canDeploy, false);
   assert.equal(packet.scaffold?.files.some((file) => file.path.endsWith("index.html") && file.content.includes("Paid Build Cafe")), true);
   assert.equal(packet.nextApiAction, "/api/revenue-engine/website-scaffold");
+});
+
+test("website creation packet blocks raw paid build flags without approval decision", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@rawflagsbuild.example",
+    contactName: "Owner",
+    businessName: "Raw Flags Build Cafe",
+    sourceUrl: "https://example.com/raw-flags-build-cafe",
+    businessSummary: "Raw Flags Build Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: false,
+    deployWebsite: false,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /approvalDecisionId valido/);
+});
+
+test("website creation packet rejects wrong or stale website approval decisions", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@stalewebsite.example",
+    contactName: "Owner",
+    businessName: "Stale Website Cafe",
+    sourceUrl: "https://example.com/stale-website-cafe",
+    businessSummary: "Stale Website Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueWebsiteCreationApprovalTargetId(draftResult.draft.id),
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "Wrong source must not authorize website creation.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draftResult.draft),
+    websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draftResult.draft, {
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+      launchTargetDays: 7,
+    }),
+  });
+  const stale = approveWebsiteCreationForTests(draftResult.draft);
+  draftResult.draft.delivery.sendStatus = "blocked";
+
+  for (const approvalDecisionId of [wrongSource.decision.id, stale.decision.id]) {
+    const packet = buildRevenueWebsiteCreationPacket({
+      outreachDraftId: draftResult.draft.id,
+      approvalDecisionId,
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+    });
+
+    assert.equal(packet.status, "blocked");
+    assert.equal(packet.scaffold, null);
+    assert.match(packet.blockedReasons.join("; "), /approvalDecisionId valido/);
+  }
 });
 
 test("website creation packet treats string false approvals as blocked", () => {
@@ -1039,9 +1156,11 @@ test("website creation packet blocks write and deploy requests", () => {
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveWebsiteCreationForTests(draftResult.draft);
 
   const packet = buildRevenueWebsiteCreationPacket({
     outreachDraftId: draftResult.draft.id,
+    approvalDecisionId: approval.decision.id,
     robertApprovedBuild: true,
     clientApprovedScope: true,
     depositPaid: true,
@@ -2599,6 +2718,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     approvalSource: "public_candidate_approval_cli",
     publicCandidateSnapshotHash: "not-an-outreach-hash",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
   });
   const wrongTarget = recordRevenueTrustedApprovalDecision({
     targetId: buildRevenueOutreachApprovalTargetId("other-draft"),
@@ -2610,6 +2730,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     approvalSource: "outreach_approval_cli",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
   });
   const rejected = recordRevenueTrustedApprovalDecision({
     targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
@@ -2621,6 +2742,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     approvalSource: "outreach_approval_cli",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
   });
   const stale = approveOutreachDraftForTests(result.draft);
   result.draft.delivery.sendStatus = "blocked";

@@ -64,6 +64,7 @@ const approvalFlags = new Set([
   "--deposit-paid",
   "--public-data-verified",
   "--confirmed-by-robert",
+  "--decision=approved",
 ]);
 
 function redactApprovalFlags(command: string) {

@@ -589,7 +589,8 @@ test("first-money command center includes website handoff command for approved d
   assert.equal(packet.counts.approvedOutreachDrafts, 1);
   assert.equal(websiteCommand?.status, "blocked");
   assert.match(websiteCommand?.command || "", new RegExp(draft.id));
-  assert.match(websiteCommand?.command || "", /revenue:website-creation-packet/);
+  assert.match(websiteCommand?.command || "", /revenue:website-creation-approval-decision/);
+  assert.doesNotMatch(websiteCommand?.command || "", /--approval-decision-id=/);
 });
 
 test("first-money command center script reads persisted outreach drafts", () => {

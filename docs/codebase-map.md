@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T01:38:27.910Z
+Generated: 2026-07-02T01:57:31.046Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 454 | 387 | 1465 | 443 | 8241 |
+| 458 | 391 | 1478 | 443 | 8282 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 114 | 111 | server:114 |
+| `server` | 116 | 113 | server:116 |
 | `client/src` | 108 | 106 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
-| `tests` | 76 | 74 | test:76 |
-| `script` | 54 | 52 | script:54 |
+| `tests` | 77 | 75 | test:77 |
+| `script` | 55 | 53 | script:55 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
@@ -119,6 +119,7 @@ Package: `rest-express`
 - `tests/revenue-public-scout-extract-cli.test.ts`
 - `tests/revenue-public-scout-run-cli.test.ts`
 - `tests/revenue-public-scout-schedule-cli.test.ts`
+- `tests/revenue-website-creation-approval-decision-cli.test.ts`
 - `tests/revenue-website-creation-packet-cli.test.ts`
 - `tests/session-config.test.ts`
 - `tests/shopify-oauth.test.ts`
@@ -204,6 +205,7 @@ Package: `rest-express`
 - `script/revenue-public-scout-extract.ts` (script; 5 symbols, 2 imports)
 - `script/revenue-public-scout-run.ts` (script; 6 symbols, 3 imports)
 - `script/revenue-public-scout-schedule.ts` (script; 4 symbols, 2 imports)
+- `script/revenue-website-creation-approval-decision.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-website-creation-packet.ts` (script; 4 symbols, 1 imports)
 - `script/send-ceo-brief.ts` (script; 4 symbols, 2 imports)
 - `script/telegram-webhook.ts` (script; 6 symbols, 3 imports)
@@ -214,7 +216,6 @@ Package: `rest-express`
 - `server/ai-cost-policy.ts` (server; 35 symbols)
 - `server/ai-router.ts` (server; 13 symbols)
 - `server/app-qa-agent.ts` (server; 174 symbols, 7 imports)
-- `server/assistant.ts` (server; 279 symbols, 24 imports, 3 routes)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
