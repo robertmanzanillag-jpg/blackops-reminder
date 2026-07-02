@@ -6,11 +6,83 @@ import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updat
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
 import { executeMetricoolAutomationAction } from "./metricool-chat-actions";
 import { processDriveRadioVideoFile, processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
+import { setRevenueUserDataScope } from "./revenue-engine";
+import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
+import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
+import { revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 
 type JsonRecord = Record<string, any>;
 
 function actionInput(action: PendingAction): JsonRecord {
   return ((action.editedInput || action.input || {}) as JsonRecord) || {};
+}
+
+function stringInput(input: JsonRecord, key: string) {
+  return typeof input[key] === "string" ? input[key].trim() : "";
+}
+
+function candidateIdsInput(input: JsonRecord) {
+  return Array.isArray(input.candidateIds)
+    ? input.candidateIds.filter((candidateId): candidateId is string => typeof candidateId === "string" && candidateId.trim().length > 0)
+    : [];
+}
+
+export function executeRevenueFirstMoneyCandidateApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  const candidateIds = candidateIdsInput(input);
+  const batchId = stringInput(input, "batchId");
+  const area = stringInput(input, "area");
+  const niche = stringInput(input, "niche");
+  const offerFocus = stringInput(input, "offerFocus");
+  const approvedAction = stringInput(input, "approvedAction");
+  const confirmationText = stringInput(input, "confirmationText");
+  const requestedReview = stringInput(input, "requestedReview");
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const expectedApproval = commandCenter.candidateApprovalQueue.find((batch) => batch.id === batchId);
+  const matchesActiveBatch = Boolean(
+    expectedApproval
+    && requestedReview === "approve_or_reject_first_money_candidate_batch"
+    && area === expectedApproval.area
+    && niche === expectedApproval.niche
+    && offerFocus === expectedApproval.offerFocus
+    && approvedAction === expectedApproval.approvedAction
+    && confirmationText === expectedApproval.confirmationText
+    && revenueCandidateIdsMatch(candidateIds, expectedApproval.candidateIds),
+  );
+
+  if (!matchesActiveBatch || !expectedApproval) {
+    throw new Error("Revenue candidate approval pending action no longer matches the active first-money command-center queue.");
+  }
+
+  const result = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds,
+    decision: "approved",
+    approvedAction,
+    notes: "Approved through Trust Center pending action.",
+    area,
+    niche,
+    offerFocus: expectedApproval.offerFocus,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue candidate approval decision blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      importsLeads: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      deploys: false,
+      exposesContactDetails: false,
+    },
+  };
 }
 
 export async function executeApprovedPendingAction(
@@ -159,6 +231,11 @@ export async function executeApprovedPendingAction(
 
       case "marketing.metricool_automation": {
         result = await executeMetricoolAutomationAction(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_candidate_approval": {
+        result = executeRevenueFirstMoneyCandidateApprovalFromPendingInput(input, action.userId);
         break;
       }
 

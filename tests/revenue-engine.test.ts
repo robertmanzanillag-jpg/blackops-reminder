@@ -93,8 +93,10 @@ import {
   buildRevenueContactPathApprovalTargetId,
   buildRevenueContactPathSnapshotHash,
 } from "../server/revenue-contact-path-approval";
+import { buildRevenueFirstMoneyCommandCenterSummary } from "../server/revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch } from "../server/revenue-first-money-route-guards";
+import { executeRevenueFirstMoneyCandidateApprovalFromPendingInput } from "../server/trust-executor";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -2476,6 +2478,93 @@ test("routes wire public candidate approval pending action without executing app
   assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
   assert.match(trustPolicySource, /"revenue\.first_money_candidate_approval": "medium"/);
   assert.match(trustPolicySource, /actionType\.startsWith\("revenue\."\)\) return "ecommerce"/);
+});
+
+test("Trust Center executor records first-money public candidate approval only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
+
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Trust Executor Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@trustexecutor.biz",
+        sourceUrl: "https://public-directory.invalid/trust-executor-cafe",
+        recipientEmail: "owner@trustexecutor.biz",
+        evidence: "Public listing has no website, recent public menu photos and a visible public owner email.",
+        painPoint: "Needs a simple website and catering inquiry follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const batch = commandCenter.candidateApprovalQueue.find((item) => item.candidateIds.includes(candidateId));
+
+  assert.ok(batch);
+  const pendingInput = {
+    batchId: batch.id,
+    candidateIds: batch.candidateIds,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: batch.offerFocus,
+    requestedReview: "approve_or_reject_first_money_candidate_batch",
+    approvedAction: batch.approvedAction,
+    confirmationText: batch.confirmationText,
+  };
+
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateApprovalFromPendingInput({
+      ...pendingInput,
+      confirmationText: "APPROVE PUBLIC CANDIDATES edited-batch",
+    }, "trust-executor-first-money-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+
+  const result = executeRevenueFirstMoneyCandidateApprovalFromPendingInput({
+    ...pendingInput,
+  }, "trust-executor-first-money-test");
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "recorded");
+  assert.ok(result.decision);
+  assert.equal(result.safety.persistsApprovalDecision, true);
+  assert.equal(result.safety.importsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.chargesClients, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.safety.exposesContactDetails, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+  assert.ok(result.commandCenter.candidateReviewQueue.some((item) => (
+    item.approvalDecisionId === result.decision?.id
+    && item.candidateIds.includes(candidateId)
+  )));
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateApprovalFromPendingInput(pendingInput, "trust-executor-first-money-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
 });
 
 test("routes wire public candidate review packet endpoint to guarded review builder", () => {
