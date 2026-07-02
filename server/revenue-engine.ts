@@ -7678,6 +7678,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
   const websitePublishApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT);
   const deployApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT);
   const productionLaunchReady = databaseReady && sessionSecretReady && moneyModeReady && deployApproved;
+  const guardedAutonomousSearchReady = true;
   const canContactBusinesses = moneyModeReady && robertContactApproval && contactPathApprovalReady && (emailProvider.configured || manualContactApproved);
   const canCollectMoney = moneyModeReady && paymentReady;
   const websiteDeliveryEvidenceReady = websiteDeployEnabled
@@ -7704,9 +7705,9 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     {
       id: "autonomous_business_search",
       label: "Guarded business discovery execution",
-      status: "ok" as const,
-      detail: "Guarded scout schedules can now execute captured public notes through revenue:public-scout-execute into Robert-review public candidates without importing leads or sending outreach.",
-      nextStep: "Run revenue:public-scout-schedule, capture public notes, then run revenue:public-scout-execute before Robert review.",
+      status: guardedAutonomousSearchReady ? "ok" as const : "fail" as const,
+      detail: "Guarded public subagent/browser capture can prepare public candidates for Robert review only; it does not run unrestricted scraping, import leads, send outreach, buy data, or publish previews.",
+      nextStep: "Run revenue:public-scout-schedule with subagent_browser, capture public notes only, then run revenue:public-scout-execute before Robert review.",
     },
     {
       id: "production_persistence",
@@ -7783,6 +7784,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     canStartToday: true,
     canSearchBusinesses: true,
     canAutonomousSearchBusinesses: false,
+    canRunGuardedPublicScoutCapture: guardedAutonomousSearchReady,
     canDraftOutreach: true,
     canCreateInternalMockups: true,
     canContactBusinesses,
@@ -7792,7 +7794,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     nextAction: blockingFailedChecks[0]?.nextStep || "Run a guarded public research sprint.",
     allowedToday: [
       "Public research from Google/Maps/Instagram/directories.",
-      "Execute guarded public scout captures into Robert-review candidates with revenue:public-scout-execute.",
+      "Run guarded public subagent/browser scout capture into Robert-review candidates only: no contact, no paid data, no scraping at scale, no lead import, no preview publishing.",
       "Generate internal mockups/previews and draft-only outreach.",
       "Prepare audited contact path readiness packets after Robert approves the exact manual/provider contact path; the packet still cannot send outreach.",
       "Prepare audited payment path readiness packets after Robert approves the exact Stripe payment link and smoke/deposit evidence.",

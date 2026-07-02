@@ -31,6 +31,7 @@ export function formatRevenueMoneyReadinessText(report: {
   canStartToday: boolean;
   canSearchBusinesses: boolean;
   canAutonomousSearchBusinesses: boolean;
+  canRunGuardedPublicScoutCapture?: boolean;
   canContactBusinesses: boolean;
   canCollectMoney: boolean;
   canBuildWebsites: boolean;
@@ -49,6 +50,7 @@ export function formatRevenueMoneyReadinessText(report: {
     `Can start today: ${report.canStartToday ? "yes" : "no"}`,
     `Can search businesses: ${report.canSearchBusinesses ? "yes" : "no"}`,
     `Can autonomously discover businesses: ${report.canAutonomousSearchBusinesses ? "yes" : "no"}`,
+    `Can run guarded public scout capture: ${report.canRunGuardedPublicScoutCapture ? "yes" : "no"}`,
     `Can contact businesses: ${report.canContactBusinesses ? "yes" : "no"}`,
     `Can collect money: ${report.canCollectMoney ? "yes" : "no"}`,
     `Can build/publish websites: ${report.canBuildWebsites ? "yes" : "no"}`,
