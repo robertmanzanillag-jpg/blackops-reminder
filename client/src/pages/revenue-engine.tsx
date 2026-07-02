@@ -685,6 +685,28 @@ type PaymentPathApprovalPendingActionResult = {
   };
 };
 
+type LedgerEntryApprovalPendingActionResult = {
+  status: "queued";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    createsPendingAction: boolean;
+    persistsApprovalDecision: boolean;
+    recordsLedgerEntry: boolean;
+    chargesClients: boolean;
+    sendsOutreach: boolean;
+    editsEnvironment: boolean;
+    storesSecrets: boolean;
+    deploys: boolean;
+  };
+};
+
 type WebsiteCreationApprovalPendingActionResult = {
   status: "queued";
   pendingAction?: {
@@ -1756,6 +1778,13 @@ export default function RevenueEnginePage() {
   const [paymentPathRobertApproved, setPaymentPathRobertApproved] = useState(false);
   const [paymentPathSmokeVerified, setPaymentPathSmokeVerified] = useState(false);
   const [paymentPathDepositConfirmed, setPaymentPathDepositConfirmed] = useState(false);
+  const [ledgerApprovalKind, setLedgerApprovalKind] = useState<"website_sale" | "automation_sale" | "bundle_sale" | "retainer">("website_sale");
+  const [ledgerApprovalClientName, setLedgerApprovalClientName] = useState("");
+  const [ledgerApprovalAmountUsd, setLedgerApprovalAmountUsd] = useState(1500);
+  const [ledgerApprovalCashCollectedUsd, setLedgerApprovalCashCollectedUsd] = useState(1500);
+  const [ledgerApprovalInternalCostUsd, setLedgerApprovalInternalCostUsd] = useState(0);
+  const [ledgerApprovalNotes, setLedgerApprovalNotes] = useState("");
+  const [ledgerApprovalPaymentEvidence, setLedgerApprovalPaymentEvidence] = useState("");
   const [websiteCreationOutreachDraftId, setWebsiteCreationOutreachDraftId] = useState("");
   const [websiteCreationNotes, setWebsiteCreationNotes] = useState("");
   const [websiteCreationLaunchTargetDays, setWebsiteCreationLaunchTargetDays] = useState(7);
@@ -2353,6 +2382,31 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar payment path a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+    },
+  });
+
+  const ledgerEntryApprovalPendingActionMutation = useMutation<LedgerEntryApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/ledger-entry-approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: ledgerApprovalKind,
+          clientName: ledgerApprovalClientName,
+          amountUsd: ledgerApprovalAmountUsd,
+          cashCollectedUsd: ledgerApprovalCashCollectedUsd,
+          estimatedInternalCostUsd: ledgerApprovalInternalCostUsd,
+          notes: ledgerApprovalNotes,
+          paymentEvidence: ledgerApprovalPaymentEvidence,
+          approvedAction: "Approve exact paid ledger entry after Robert verified payment evidence.",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar ledger entry a Trust Center");
       return data;
     },
     onSuccess: () => {
@@ -3541,6 +3595,103 @@ export default function RevenueEnginePage() {
                 {paymentPathApprovalPendingActionMutation.error && (
                   <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
                     {paymentPathApprovalPendingActionMutation.error.message}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 rounded-md border border-lime-500/20 bg-lime-500/5 px-3 py-2 text-xs leading-5 text-lime-100" data-testid="first-money-ledger-entry-approval-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">Ledger entry approval</p>
+                    <p className="mt-1 text-zinc-400">
+                      Queues Trust Center approval only. It does not record ledger entries, charge clients, send outreach, edit env, store secrets, or deploy.
+                    </p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <select
+                        value={ledgerApprovalKind}
+                        onChange={(event) => setLedgerApprovalKind(event.target.value as typeof ledgerApprovalKind)}
+                        className="h-10 rounded-md border border-lime-500/20 bg-black px-3 text-xs text-white outline-none"
+                        data-testid="select-ledger-entry-approval-kind"
+                      >
+                        <option value="website_sale">Website</option>
+                        <option value="automation_sale">Automation</option>
+                        <option value="bundle_sale">Website + automation</option>
+                        <option value="retainer">Retainer</option>
+                      </select>
+                      <Input
+                        value={ledgerApprovalClientName}
+                        onChange={(event) => setLedgerApprovalClientName(event.target.value)}
+                        placeholder="Real client/business name"
+                        className="border-lime-500/20 bg-black text-xs"
+                        data-testid="input-ledger-entry-approval-client-name"
+                      />
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={ledgerApprovalAmountUsd}
+                        onChange={(event) => setLedgerApprovalAmountUsd(Number(event.target.value))}
+                        className="border-lime-500/20 bg-black text-xs"
+                        data-testid="input-ledger-entry-approval-amount"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        value={ledgerApprovalCashCollectedUsd}
+                        onChange={(event) => setLedgerApprovalCashCollectedUsd(Number(event.target.value))}
+                        className="border-lime-500/20 bg-black text-xs"
+                        data-testid="input-ledger-entry-approval-cash-collected"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={ledgerApprovalInternalCostUsd}
+                        onChange={(event) => setLedgerApprovalInternalCostUsd(Number(event.target.value))}
+                        className="border-lime-500/20 bg-black text-xs"
+                        data-testid="input-ledger-entry-approval-internal-cost"
+                      />
+                    </div>
+                    <Input
+                      value={ledgerApprovalPaymentEvidence}
+                      onChange={(event) => setLedgerApprovalPaymentEvidence(event.target.value)}
+                      placeholder="Real collected-cash evidence URL or receipt reference"
+                      className="mt-2 border-lime-500/20 bg-black text-xs"
+                      data-testid="input-ledger-entry-approval-payment-evidence"
+                    />
+                    <Textarea
+                      value={ledgerApprovalNotes}
+                      onChange={(event) => setLedgerApprovalNotes(event.target.value)}
+                      placeholder="Real payment context, package, and cash verification notes"
+                      className="mt-2 min-h-[72px] border-lime-500/20 bg-black text-xs"
+                      data-testid="textarea-ledger-entry-approval-notes"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      ledgerEntryApprovalPendingActionMutation.isPending
+                      || !ledgerApprovalClientName.trim()
+                      || !ledgerApprovalPaymentEvidence.trim()
+                      || ledgerApprovalAmountUsd <= 0
+                      || ledgerApprovalCashCollectedUsd <= 0
+                      || ledgerApprovalInternalCostUsd < 0
+                    }
+                    onClick={() => ledgerEntryApprovalPendingActionMutation.mutate()}
+                    className="bg-lime-600 text-white hover:bg-lime-500"
+                    data-testid="button-queue-ledger-entry-approval"
+                  >
+                    {ledgerEntryApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    Trust Center
+                  </Button>
+                </div>
+                {ledgerEntryApprovalPendingActionMutation.data?.pendingAction && (
+                  <p className="mt-3 rounded-md border border-lime-500/20 bg-black px-3 py-2 text-xs text-lime-100">
+                    Trust Center: {ledgerEntryApprovalPendingActionMutation.data.pendingAction.title}
+                  </p>
+                )}
+                {ledgerEntryApprovalPendingActionMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {ledgerEntryApprovalPendingActionMutation.error.message}
                   </p>
                 )}
               </div>

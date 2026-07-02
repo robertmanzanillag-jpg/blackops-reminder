@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T21:38:44.560Z",
+  "generatedAt": "2026-07-02T21:43:39.009Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -143,7 +143,7 @@
     "filesIndexed": 426,
     "imports": 1609,
     "routes": 470,
-    "symbols": 8377
+    "symbols": 8379
   },
   "directories": {
     ".agents/skills": {
@@ -15236,6 +15236,8 @@
         "first",
         "html",
         "leadResult",
+        "ledgerEntryApprovalMutationSource",
+        "ledgerEntryApprovalPanelSource",
         "ledgerInput",
         "ledgerResult",
         "ledgerRouteSource",

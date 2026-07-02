@@ -75,6 +75,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     "Paid website build gate",
     "Manual contact path approval",
     "Payment path approval",
+    "Ledger entry approval",
     "Website creation approval",
     "Website publish approval",
     "Setup Trust Center actions",
@@ -98,6 +99,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
     "Paid website build gate",
     "Manual contact path approval",
     "Payment path approval",
+    "Ledger entry approval",
     "Website creation approval",
     "Website publish approval",
     "Setup Trust Center actions",
@@ -116,6 +118,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
       "Paid website build gate",
       "Manual contact path approval",
       "Payment path approval",
+      "Ledger entry approval",
       "Website creation approval",
       "Website publish approval",
       "Setup Trust Center actions",
@@ -145,6 +148,7 @@ test("visual route body evaluation fails when first-money controls are missing",
       "Paid website build gate",
       "Manual contact path approval",
       "Payment path approval",
+      "Ledger entry approval",
       "Website creation approval",
       "Website publish approval",
       "Setup Trust Center actions",
@@ -160,6 +164,7 @@ test("visual route body evaluation fails when first-money controls are missing",
     "Paid website build gate",
     "Manual contact path approval",
     "Payment path approval",
+    "Ledger entry approval",
     "Website creation approval",
     "Website publish approval",
     "Setup Trust Center actions",
@@ -178,6 +183,8 @@ test("Revenue Engine UI renders every first-money setup action", () => {
   assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
   assert.match(source, /button-queue-payment-path-approval/);
   assert.match(source, /\/api\/revenue-engine\/payment-path-approval-pending-action/);
+  assert.match(source, /button-queue-ledger-entry-approval/);
+  assert.match(source, /\/api\/revenue-engine\/ledger-entry-approval-pending-action/);
   assert.match(source, /button-queue-website-creation-approval/);
   assert.match(source, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
   assert.match(source, /button-queue-website-publish-approval/);

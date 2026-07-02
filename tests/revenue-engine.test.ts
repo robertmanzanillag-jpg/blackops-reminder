@@ -4316,6 +4316,16 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /depositConfirmedByRobert: paymentPathDepositConfirmed/);
   assert.match(source, /button-queue-payment-path-approval/);
   assert.match(source, /first-money-payment-path-approval-panel/);
+  assert.match(source, /const ledgerEntryApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/ledger-entry-approval-pending-action/);
+  assert.match(source, /kind: ledgerApprovalKind/);
+  assert.match(source, /clientName: ledgerApprovalClientName/);
+  assert.match(source, /amountUsd: ledgerApprovalAmountUsd/);
+  assert.match(source, /cashCollectedUsd: ledgerApprovalCashCollectedUsd/);
+  assert.match(source, /estimatedInternalCostUsd: ledgerApprovalInternalCostUsd/);
+  assert.match(source, /paymentEvidence: ledgerApprovalPaymentEvidence/);
+  assert.match(source, /button-queue-ledger-entry-approval/);
+  assert.match(source, /first-money-ledger-entry-approval-panel/);
   assert.match(source, /const websiteCreationApprovalPendingActionMutation/);
   assert.match(source, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
   assert.match(source, /outreachDraftId: websiteCreationOutreachDraftId/);
@@ -4349,6 +4359,10 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   );
   const paymentPathMutationSource = source.slice(
     source.indexOf("const paymentPathApprovalPendingActionMutation"),
+    source.indexOf("const ledgerEntryApprovalPendingActionMutation"),
+  );
+  const ledgerEntryApprovalMutationSource = source.slice(
+    source.indexOf("const ledgerEntryApprovalPendingActionMutation"),
     source.indexOf("const websiteCreationApprovalPendingActionMutation"),
   );
   const websiteCreationMutationSource = source.slice(
@@ -4365,6 +4379,10 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   );
   const paymentPathPanelSource = source.slice(
     source.indexOf('data-testid="first-money-payment-path-approval-panel"'),
+    source.indexOf('data-testid="first-money-ledger-entry-approval-panel"'),
+  );
+  const ledgerEntryApprovalPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-ledger-entry-approval-panel"'),
     source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
   );
   const websiteCreationPanelSource = source.slice(
@@ -4390,6 +4408,17 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.doesNotMatch(
     paymentPathMutationSource,
     /outreach-send|payment-path-readiness-packet|ledger|decision: "approved"|sendConfirmation/,
+  );
+  assert.match(ledgerEntryApprovalMutationSource, /approvedAction: "Approve exact paid ledger entry after Robert verified payment evidence\."/);
+  assert.match(ledgerEntryApprovalMutationSource, /kind: ledgerApprovalKind/);
+  assert.match(ledgerEntryApprovalMutationSource, /clientName: ledgerApprovalClientName/);
+  assert.match(ledgerEntryApprovalMutationSource, /amountUsd: ledgerApprovalAmountUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /cashCollectedUsd: ledgerApprovalCashCollectedUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /estimatedInternalCostUsd: ledgerApprovalInternalCostUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /paymentEvidence: ledgerApprovalPaymentEvidence/);
+  assert.doesNotMatch(
+    ledgerEntryApprovalMutationSource,
+    /fetch\("\/api\/revenue-engine\/ledger"|decision: "approved"|sendConfirmation|outreach-send|charge|deploy/,
   );
   assert.match(websiteCreationMutationSource, /approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review\."/);
   assert.match(websiteCreationMutationSource, /outreachDraftId: websiteCreationOutreachDraftId/);
@@ -4433,6 +4462,13 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(paymentPathPanelSource, /!paymentPathRobertApproved/);
   assert.match(paymentPathPanelSource, /!\(paymentPathSmokeVerified \|\| paymentPathDepositConfirmed\)/);
   assert.match(paymentPathPanelSource, /paymentPathApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerEntryApprovalPendingActionMutation\.isPending/);
+  assert.match(ledgerEntryApprovalPanelSource, /!ledgerApprovalClientName\.trim\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /!ledgerApprovalPaymentEvidence\.trim\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalAmountUsd <= 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalCashCollectedUsd <= 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalInternalCostUsd < 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerEntryApprovalPendingActionMutation\.mutate\(\)/);
   assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.isPending/);
   assert.match(websiteCreationPanelSource, /!websiteCreationOutreachDraftId\.trim\(\)/);
   assert.match(websiteCreationPanelSource, /!websiteCreationNotes\.trim\(\)/);
