@@ -25,7 +25,7 @@ type CommandQueueItem = {
 };
 
 type SetupCommandItem = CommandQueueItem & {
-  gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation";
+  gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation" | "website_publish";
 };
 
 type MoneyUnblockerItem = {
@@ -377,6 +377,39 @@ function trustCenterPayloadActionText(endpoint: string, payloadShape: Record<str
   ].join(" ");
 }
 
+function buildWebsitePublishApprovalSetupCommand(): SetupCommandItem {
+  return {
+    id: "website-publish-approval",
+    gate: "website_publish",
+    label: "Approve website publish readiness after QA",
+    command: trustCenterPayloadActionText("/api/revenue-engine/website-publish-approval-pending-action", {
+      outreachDraftId: "OUTREACH_ID",
+      websiteCreationApprovalDecisionId: "CREATION_APPROVAL_ID",
+      approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.",
+      notes: "REPLACE_WITH_PREVIEW_APP_QA_ROLLBACK_NOTES",
+      robertApprovedPublish: true,
+      previewDeployVerified: true,
+      appQaTargetPassed: true,
+      rollbackVerified: true,
+      deployProvider: "DEPLOY_PROVIDER",
+      previewDeployUrl: "PREVIEW_URL",
+      appQaEvidenceUrl: "APP_QA_URL",
+      rollbackPlanUrl: "ROLLBACK_URL",
+      launchTargetDays: 7,
+    }, [
+      "real outreachDraftId",
+      "real websiteCreationApprovalDecisionId",
+      "real previewDeployUrl",
+      "real appQaEvidenceUrl",
+      "real rollbackPlanUrl",
+      "real deployProvider",
+      "Robert/App QA/rollback approval flags",
+    ]),
+    status: "blocked",
+    reason: "Runs only after preview deploy verification, App QA evidence, rollback proof and Robert publish approval; Trust Center records approval only and never deploys or publishes.",
+  };
+}
+
 function displayText(value: string | number) {
   return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -531,6 +564,9 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       reason: "Runs only after an approved outreach draft, client-approved scope, deposit proof, and public data verification; Trust Center records approval only and never writes files or deploys.",
     });
   }
+  if (!readiness.canBuildWebsites) {
+    setupCommands.push(buildWebsitePublishApprovalSetupCommand());
+  }
   return setupCommands;
 }
 
@@ -621,6 +657,7 @@ function buildMoneyUnblockers(
       setupCommandIds: [
         ...setupCommandIdsForGate("ledger_entry"),
         ...setupCommandIdsForGate("website_creation"),
+        ...setupCommandIdsForGate("website_publish"),
       ],
     },
   ];
@@ -837,7 +874,7 @@ function buildFirstMoneyActivationChecklist(
         "App QA pass with real base URL.",
         "Rollback note and Robert publish approval.",
       ],
-      commandHint: "Queue /api/revenue-engine/website-publish-approval-pending-action in Trust Center after preview QA, then run website-publish readiness; ask Robert before any Replit deploy.",
+      commandHint: setupCommand("website-publish-approval") || buildWebsitePublishApprovalSetupCommand().command,
       unlocks: ["public client website"],
       safety: "Never deploys without explicit Robert approval after PR and QA summary.",
     },

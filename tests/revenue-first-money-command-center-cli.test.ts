@@ -33,6 +33,7 @@ import {
   revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
   revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
 } from "../server/revenue-first-money-approval-pending-action";
 
 const testLeadsPath = "/tmp/revenue-first-money-command-center-leads-test.json";
@@ -158,7 +159,7 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.nextCommand.id, "public-scout");
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("revenue:public-scout-schedule")), true);
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("--browser-executor=subagent_browser")), true);
-  assert.equal(packet.setupCommands.length, 6);
+  assert.equal(packet.setupCommands.length, 7);
   assert.deepEqual(packet.setupCommands.map((item) => item.id), [
     "contact-path-approval",
     "contact-path-readiness",
@@ -166,16 +167,19 @@ test("first-money command center starts with guarded public scouting", () => {
     "payment-path-readiness",
     "ledger-entry-approval",
     "website-creation-approval",
+    "website-publish-approval",
   ]);
   assert.equal(packet.setupCommands.every((item) => item.status === "blocked"), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/ledger-entry-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/website-creation-approval-pending-action")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/website-publish-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:ledger-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-creation-approval-decision")), false);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-publish-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real evidenceUrl")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real HTTPS Stripe paymentLink")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real paymentEvidence")), true);
@@ -201,6 +205,7 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.match(text, /Approve payment path before charging/);
   assert.match(text, /Approve ledger entry after deposit is collected/);
   assert.match(text, /Approve paid website creation after deposit/);
+  assert.match(text, /Approve website publish readiness after QA/);
   assert.match(text, /never sends outreach/);
   assert.match(text, /never charges clients/);
   assert.match(text, /never records the ledger entry/);
@@ -213,22 +218,27 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   const paymentApprovalCommand = packet.setupCommands.find((item) => item.id === "payment-path-approval");
   const ledgerApprovalCommand = packet.setupCommands.find((item) => item.id === "ledger-entry-approval");
   const websiteCreationApprovalCommand = packet.setupCommands.find((item) => item.id === "website-creation-approval");
+  const websitePublishApprovalCommand = packet.setupCommands.find((item) => item.id === "website-publish-approval");
   assert.ok(contactApprovalCommand);
   assert.ok(paymentApprovalCommand);
   assert.ok(ledgerApprovalCommand);
   assert.ok(websiteCreationApprovalCommand);
+  assert.ok(websitePublishApprovalCommand);
   assert.match(contactApprovalCommand.command, /contact-path-approval-pending-action/);
   assert.match(paymentApprovalCommand.command, /payment-path-approval-pending-action/);
   assert.match(ledgerApprovalCommand.command, /ledger-entry-approval-pending-action/);
   assert.match(websiteCreationApprovalCommand.command, /website-creation-approval-pending-action/);
+  assert.match(websitePublishApprovalCommand.command, /website-publish-approval-pending-action/);
   assert.doesNotMatch(contactApprovalCommand.command, /revenue:contact-path-approval-decision/);
   assert.doesNotMatch(paymentApprovalCommand.command, /revenue:payment-path-approval-decision/);
   assert.doesNotMatch(ledgerApprovalCommand.command, /revenue:ledger-approval-decision/);
   assert.doesNotMatch(websiteCreationApprovalCommand.command, /revenue:website-creation-approval-decision/);
+  assert.doesNotMatch(websitePublishApprovalCommand.command, /revenue:website-publish-approval-decision/);
   const contactPayload = extractPayloadFields(contactApprovalCommand.command);
   const paymentPayload = extractPayloadFields(paymentApprovalCommand.command);
   const ledgerPayload = extractPayloadFields(ledgerApprovalCommand.command);
   const websiteCreationPayload = extractPayloadFields(websiteCreationApprovalCommand.command);
+  const websitePublishPayload = extractPayloadFields(websitePublishApprovalCommand.command);
   assert.match(contactApprovalCommand.command, /"contactMode":"manual"/);
   assert.match(contactApprovalCommand.command, /"robertApprovedContactPath":true/);
   assert.match(contactApprovalCommand.command, /"contactPathVerified":true/);
@@ -241,10 +251,15 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.match(websiteCreationApprovalCommand.command, /"outreachDraftId":"OUTREACH_ID"/);
   assert.match(websiteCreationApprovalCommand.command, /"clientApprovedScope":true/);
   assert.match(websiteCreationApprovalCommand.command, /"publicDataVerified":true/);
+  assert.match(websitePublishApprovalCommand.command, /"websiteCreationApprovalDecisionId":"CREATION_APPROVAL_ID"/);
+  assert.match(websitePublishApprovalCommand.command, /"previewDeployUrl":"PREVIEW_URL"/);
+  assert.match(websitePublishApprovalCommand.command, /"appQaTargetPassed":true/);
+  assert.match(websitePublishApprovalCommand.command, /"rollbackVerified":true/);
   assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse(contactPayload).success, false);
   assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse(paymentPayload).success, false);
   assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse(ledgerPayload).success, false);
   assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse(websiteCreationPayload).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse(websitePublishPayload).success, false);
   assert.match(ledgerApprovalCommand.command, /real paymentEvidence/);
   assert.match(websiteCreationApprovalCommand.command, /real scope\/deposit\/public-data notes/);
 
@@ -316,6 +331,7 @@ test("first-money activation checklist does not mark paid build ready from publi
   process.env.REVENUE_ENGINE_WEBSITE_ROLLBACK_VERIFIED = "true";
   process.env.REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT = "true";
 
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
   const paidBuild = summary.activationChecklist.find((step) => step.id === "paid_build");
   const publish = summary.activationChecklist.find((step) => step.id === "publish");
@@ -325,6 +341,10 @@ test("first-money activation checklist does not mark paid build ready from publi
   assert.equal(paidBuild?.status, "blocked_until_prior_step");
   assert.equal(paidBuild?.action.includes("payment path"), true);
   assert.equal(publish?.status, "needs_robert_approval");
+  assert.equal(packet.setupCommands.some((item) => item.id === "website-publish-approval"), false);
+  assert.match(publish?.commandHint || "", /\/api\/revenue-engine\/website-publish-approval-pending-action/);
+  assert.match(publish?.commandHint || "", /"websiteCreationApprovalDecisionId":"CREATION_APPROVAL_ID"/);
+  assert.doesNotMatch(publish?.commandHint || "", /revenue:website-publish-approval-decision/);
 });
 
 test("first-money activation checklist keeps paid build evidence-gated after payment and approved draft", () => {
