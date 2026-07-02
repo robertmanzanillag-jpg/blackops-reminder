@@ -4914,8 +4914,8 @@ export async function registerRoutes(
       niche: input.niche,
       offerFocus: input.offerFocus,
       dailyResearchTarget: 20,
-      dailyQualifiedLeadLimit: Math.min(5, input.candidateIds.length),
-      dailyMockupLimit: Math.min(2, input.candidateIds.length),
+      dailyQualifiedLeadLimit: 5,
+      dailyMockupLimit: 2,
       dailyContactLimit: 0,
       maxPaidDataSpendUsd: 0,
       requireRobertApprovalToContact: true,
@@ -5111,6 +5111,89 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue public candidate review packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/review-packet-pending-action", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedReview = commandCenter.candidateReviewQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedReview);
+
+      if (!matchesActiveBatch || !expectedReview) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Pending review packet payload must match a queued approved first-money batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_candidate_review",
+        resourceType: "revenue_public_candidate_review_batch",
+        resourceId: expectedReview.id,
+        title: `Generate first-money review packet: ${expectedReview.area} / ${expectedReview.niche}`,
+        description: [
+          `Generate the guarded internal review packet for ${expectedReview.count} Robert-approved public candidate(s).`,
+          "This pending action does not import leads, send outreach, charge clients, write website files or deploy.",
+          `Exact confirmation: ${expectedReview.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedReview.id,
+          candidateIds: expectedReview.candidateIds,
+          approvalDecisionId: expectedReview.approvalDecisionId,
+          area: expectedReview.area,
+          niche: expectedReview.niche,
+          offerFocus: expectedReview.offerFocus,
+          requestedReview: "generate_first_money_candidate_review_packet",
+          confirmationText: expectedReview.confirmationText,
+        },
+        proposedChanges: {
+          reviewStatus: "pending_trust_center_review",
+          candidateNames: expectedReview.candidateNames,
+          totalEstimatedOfferUsd: expectedReview.totalEstimatedOfferUsd,
+          afterApproval: "Generate a sanitized internal Money Sprint review packet for final human review.",
+          blockedActions: ["import leads", "send outreach", "charge clients", "write website files", "deploy"],
+          safety: expectedReview.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedReview.id,
+          approvalDecisionId: expectedReview.approvalDecisionId,
+          exposesContactDetails: false,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsReviewPacket: false,
+          createsPendingAction: true,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          exposesContactDetails: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate review packet pending action" });
     }
   });
 

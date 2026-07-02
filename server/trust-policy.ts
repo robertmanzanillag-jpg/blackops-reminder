@@ -65,6 +65,7 @@ const ACTION_RISK: Record<string, RiskLevel> = {
   "dropshipping.fulfill_order": "critical",
   "dropshipping.order_sample": "high",
   "revenue.first_money_candidate_approval": "medium",
+  "revenue.first_money_candidate_review": "medium",
   "marketing.publish": "critical",
   "marketing.blackroom_link_add": "high",
   "marketing.blackroom_link_update": "high",

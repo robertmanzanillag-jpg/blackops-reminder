@@ -6,10 +6,10 @@ import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updat
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
 import { executeMetricoolAutomationAction } from "./metricool-chat-actions";
 import { processDriveRadioVideoFile, processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
-import { setRevenueUserDataScope } from "./revenue-engine";
+import { reviewRevenuePublicLeadCandidates, setRevenueUserDataScope } from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
-import { revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
+import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 
 type JsonRecord = Record<string, any>;
 
@@ -82,6 +82,90 @@ export function executeRevenueFirstMoneyCandidateApprovalFromPendingInput(input:
       deploys: false,
       exposesContactDetails: false,
     },
+  };
+}
+
+export function executeRevenueFirstMoneyCandidateReviewFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  const candidateIds = candidateIdsInput(input);
+  const approvalDecisionId = stringInput(input, "approvalDecisionId");
+  const reviewInput = {
+    batchId: stringInput(input, "batchId"),
+    candidateIds,
+    approvalDecisionId,
+    area: stringInput(input, "area"),
+    niche: stringInput(input, "niche"),
+    offerFocus: stringInput(input, "offerFocus"),
+    confirmationText: stringInput(input, "confirmationText"),
+  };
+  const requestedReview = stringInput(input, "requestedReview");
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const expectedReview = commandCenter.candidateReviewQueue.find((batch) => batch.id === reviewInput.batchId);
+
+  if (
+    !expectedReview
+    || requestedReview !== "generate_first_money_candidate_review_packet"
+    || !matchesRevenueFirstMoneyApprovedCandidateBatch(reviewInput, expectedReview)
+  ) {
+    throw new Error("Revenue candidate review pending action no longer matches the active first-money command-center queue.");
+  }
+
+  const result = reviewRevenuePublicLeadCandidates({
+    area: reviewInput.area,
+    niche: reviewInput.niche,
+    offerFocus: expectedReview.offerFocus,
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds,
+    approvedByRobert: true,
+    approvalDecisionId,
+    reviewerNote: "Robert approved this first-money candidate review packet through Trust Center.",
+  });
+
+  if (result.status !== "ready_for_money_sprint_preview") {
+    throw new Error(`Revenue candidate review packet blocked: ${result.reviewedCandidates.flatMap((candidate) => candidate.blockedReasons).join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    status: result.status,
+    approvalDecisionId: result.approvalDecisionId,
+    requestedCount: result.requestedCount,
+    foundCount: result.foundCount,
+    approvedCount: result.approvedCount,
+    missingIds: result.missingIds,
+    duplicateIds: result.duplicateIds,
+    reviewedCandidates: result.reviewedCandidates,
+    preview: {
+      totals: result.preview.totals,
+      safety: result.preview.safety,
+    },
+    moneySprintRunPacket: {
+      status: result.moneySprintRunPacket.status,
+      endpoint: result.moneySprintRunPacket.endpoint,
+      method: result.moneySprintRunPacket.method,
+      expectedOutput: result.moneySprintRunPacket.expectedOutput,
+      operatorChecklist: result.moneySprintRunPacket.operatorChecklist,
+      blockedUntil: result.moneySprintRunPacket.blockedUntil,
+      safety: result.moneySprintRunPacket.safety,
+    },
+    nextApiAction: result.nextApiAction,
+    nextAction: result.nextAction,
+    safety: {
+      ...result.safety,
+      persistsLeads: false,
+      persistsPublicCandidates: false,
+      writesPreviewFiles: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      deploys: false,
+      exposesContactDetails: false,
+    },
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
   };
 }
 
@@ -236,6 +320,11 @@ export async function executeApprovedPendingAction(
 
       case "revenue.first_money_candidate_approval": {
         result = executeRevenueFirstMoneyCandidateApprovalFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_candidate_review": {
+        result = executeRevenueFirstMoneyCandidateReviewFromPendingInput(input, action.userId);
         break;
       }
 

@@ -96,7 +96,10 @@ import {
 import { buildRevenueFirstMoneyCommandCenterSummary } from "../server/revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch } from "../server/revenue-first-money-route-guards";
-import { executeRevenueFirstMoneyCandidateApprovalFromPendingInput } from "../server/trust-executor";
+import {
+  executeRevenueFirstMoneyCandidateApprovalFromPendingInput,
+  executeRevenueFirstMoneyCandidateReviewFromPendingInput,
+} from "../server/trust-executor";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -2567,6 +2570,104 @@ test("Trust Center executor records first-money public candidate approval only",
   );
 });
 
+test("Trust Center executor generates sanitized first-money candidate review packet only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-review-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
+
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Trust Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@trustreview.biz",
+        sourceUrl: "https://public-directory.invalid/trust-review-cafe",
+        recipientEmail: "owner@trustreview.biz",
+        evidence: "Public listing has no website, recent public menu photos and a visible public owner email.",
+        painPoint: "Needs a simple website, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approval = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence for review packet.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+  assert.equal(approval.status, "recorded");
+  assert.ok(approval.decision);
+
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const batch = commandCenter.candidateReviewQueue.find((item) => item.candidateIds.includes(candidateId));
+
+  assert.ok(batch);
+  const pendingInput = {
+    batchId: batch.id,
+    candidateIds: batch.candidateIds,
+    approvalDecisionId: batch.approvalDecisionId,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: batch.offerFocus,
+    requestedReview: "generate_first_money_candidate_review_packet",
+    confirmationText: batch.confirmationText,
+  };
+
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateReviewFromPendingInput({
+      ...pendingInput,
+      confirmationText: "REVIEW PUBLIC CANDIDATES edited-batch",
+    }, "trust-executor-first-money-review-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+
+  const result = executeRevenueFirstMoneyCandidateReviewFromPendingInput(pendingInput, "trust-executor-first-money-review-test");
+  const snapshot = getRevenueEngineSnapshot();
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.approvalDecisionId, approval.decision.id);
+  assert.equal(result.approvedCount, 1);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.persistsPublicCandidates, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.chargesClients, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.safety.exposesContactDetails, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+  assert.doesNotMatch(serialized, /importBatchText/);
+  assert.doesNotMatch(serialized, /requestBody/);
+  assert.doesNotMatch(serialized, /"acceptedSeeds"/);
+  assert.doesNotMatch(serialized, /owner@trustreview\.biz/);
+});
+
 test("routes wire public candidate review packet endpoint to guarded review builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
   const routeSource = routesSource.slice(
@@ -2590,6 +2691,31 @@ test("routes wire public candidate review packet endpoint to guarded review buil
   assert.doesNotMatch(routeSource, /requestBody/);
   assert.doesNotMatch(routeSource, /snapshot/);
   assert.doesNotMatch(routeSource, /const expectedReview = commandCenter\.nextCandidateReview/);
+});
+
+test("routes wire public candidate review packet pending action without generating packet", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
+  );
+
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_candidate_review"/);
+  assert.match(routeSource, /resourceType: "revenue_public_candidate_review_batch"/);
+  assert.match(routeSource, /const expectedReview = commandCenter\.candidateReviewQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedReview\)/);
+  assert.match(routeSource, /requestedReview: "generate_first_money_candidate_review_packet"/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.match(routeSource, /createsPendingAction: true/);
+  assert.match(routeSource, /persistsReviewPacket: false/);
+  assert.doesNotMatch(routeSource, /buildGuardedPublicCandidateReview/);
+  assert.doesNotMatch(routeSource, /reviewRevenuePublicLeadCandidates/);
+  assert.doesNotMatch(routeSource, /importBatchText/);
+  assert.doesNotMatch(routeSource, /requestBody/);
+  assert.doesNotMatch(routeSource, /acceptedSeeds/);
+  assert.match(trustPolicySource, /"revenue\.first_money_candidate_review": "medium"/);
 });
 
 test("routes wire public candidate internal Money Sprint execution to guarded review", () => {
@@ -3480,7 +3606,7 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.doesNotMatch(
     source.slice(
       source.indexOf("const publicCandidateApprovalPendingActionMutation"),
-      source.indexOf("const publicCandidateReviewPacketMutation"),
+      source.indexOf("const publicCandidateReviewPacketPendingActionMutation"),
     ),
     /decision: "approved"/,
   );
@@ -3506,10 +3632,12 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /robertApprovalBrief/);
   assert.match(source, /first-money-robert-approval-brief/);
   assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== selectedPublicCandidateBatch\.confirmationText/);
-  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/review-packet"/);
   assert.match(source, /candidateReviewQueue/);
   assert.match(source, /selectedPublicCandidateReviewBatch/);
-  assert.match(source, /button-generate-public-candidate-review-packet/);
+  assert.match(source, /button-queue-public-candidate-review-packet/);
+  assert.match(source, /const publicCandidateReviewPacketPendingActionMutation/);
   assert.match(source, /input-public-candidate-review-confirmation/);
   assert.match(source, /first-money-candidate-review-queue/);
   assert.match(source, /button-select-public-candidate-review-batch-/);

@@ -651,54 +651,26 @@ type PublicCandidateApprovalPendingActionResult = {
   };
 };
 
-type PublicCandidateReviewPacketResult = {
-  status: "ready_for_money_sprint_preview" | "blocked";
-  approvalDecisionId: string;
-  requestedCount: number;
-  foundCount: number;
-  approvedCount: number;
-  reviewedCandidates: Array<{
-    candidateId: string;
-    businessName: string;
-    approvedForPreview: boolean;
-    blockedReasons: string[];
-    grade: string;
-    score: number;
-  }>;
-  preview: {
-    totals: {
-      accepted: number;
-      mockupReady: number;
-      outreachReady: number;
-    };
-  };
-  moneySprintRunPacket: {
+type PublicCandidateReviewPacketPendingActionResult = {
+  status: "queued" | "blocked";
+  pendingAction?: {
+    id: string;
+    title: string;
     status: string;
-    endpoint: string;
-    expectedOutput: {
-      acceptedLeads: number;
-      mockupsToPrepare: number;
-      outreachDraftsToCreate: number;
-      sendsOutreach: boolean;
-      writesPreviewFiles: boolean;
-    };
-    safety: {
-      sendsOutreach: boolean;
-      writesPreviewFiles: boolean;
-      paidDataSpendUsd: number;
-      requiresRobertApprovalBeforeRun: boolean;
-      requiresRobertApprovalBeforeContact: boolean;
-    };
+    actionType: string;
+    resourceType: string;
   };
-  nextAction: string;
-  safety: {
-    persistsLeads: boolean;
-    writesPreviewFiles: boolean;
-    sendsOutreach: boolean;
-    paidDataSpendUsd: number;
-    requiresRobertApproval: boolean;
-  };
+  blockers?: string[];
   commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    persistsReviewPacket: boolean;
+    createsPendingAction: boolean;
+    importsLeads: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    exposesContactDetails: boolean;
+  };
 };
 
 type PublicCandidateMoneySprintRunResult = {
@@ -2289,10 +2261,10 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const publicCandidateReviewPacketMutation = useMutation<PublicCandidateReviewPacketResult>({
+  const publicCandidateReviewPacketPendingActionMutation = useMutation<PublicCandidateReviewPacketPendingActionResult>({
     mutationFn: async () => {
       const review = selectedPublicCandidateReviewBatch;
-      const response = await fetch("/api/revenue-engine/public-lead-candidates/review-packet", {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/review-packet-pending-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2306,12 +2278,11 @@ export default function RevenueEnginePage() {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo generar el packet revisado");
+      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo enviar el packet a Trust Center");
       return data;
     },
     onSuccess: () => {
       refetchFirstMoneyCommandCenter();
-      setPublicCandidateReviewConfirmation("");
     },
   });
 
@@ -3067,37 +3038,21 @@ export default function RevenueEnginePage() {
                     <Button
                       type="button"
                       disabled={
-                        publicCandidateReviewPacketMutation.isPending
+                        publicCandidateReviewPacketPendingActionMutation.isPending
                         || publicCandidateReviewConfirmation.trim() !== selectedPublicCandidateReviewBatch.confirmationText
                       }
-                      onClick={() => publicCandidateReviewPacketMutation.mutate()}
+                      onClick={() => publicCandidateReviewPacketPendingActionMutation.mutate()}
                       className="bg-emerald-600 text-white hover:bg-emerald-500"
-                      data-testid="button-generate-public-candidate-review-packet"
+                      data-testid="button-queue-public-candidate-review-packet"
                     >
-                      {publicCandidateReviewPacketMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                      Generar packet
+                      {publicCandidateReviewPacketPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                      Trust Center
                     </Button>
                   </div>
-                  {publicCandidateReviewPacketMutation.data && (
-                    <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
-                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
-                        Leads aceptados: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.acceptedLeads}
-                      </div>
-                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
-                        Mockups: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.mockupsToPrepare}
-                      </div>
-                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
-                        Outreach drafts: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.outreachDraftsToCreate}
-                      </div>
-                      <p className="rounded-md border border-zinc-800 bg-black px-3 py-2 leading-5 text-zinc-400 md:col-span-3">
-                        {publicCandidateReviewPacketMutation.data.nextAction}
-                      </p>
+                  {publicCandidateReviewPacketPendingActionMutation.data?.pendingAction && (
+                    <div className="mt-3 rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-xs text-emerald-100">
+                      Trust Center: {publicCandidateReviewPacketPendingActionMutation.data.pendingAction.title}
                     </div>
-                  )}
-                  {publicCandidateReviewPacketMutation.error && (
-                    <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
-                      {publicCandidateReviewPacketMutation.error.message}
-                    </p>
                   )}
                   {selectedPublicCandidateRunBatch && (
                     <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
