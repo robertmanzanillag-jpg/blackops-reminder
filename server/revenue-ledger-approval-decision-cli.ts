@@ -29,6 +29,12 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+function hasPlaceholderValue(value: string) {
+  const trimmed = value.trim();
+  return /\b(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+)/i.test(trimmed)
+    || /^(CLIENT[\s_-]*NAME|PAYMENT[\s_-]*EVIDENCE|LEDGER[\s_-]*NOTES)$/i.test(trimmed);
+}
+
 function parseNumberArg(argv: string[], name: string, fallback: number) {
   const value = getArgValue(argv, name);
   return value ? Number(value) : fallback;
@@ -65,6 +71,7 @@ export function validateRevenueLedgerApprovalDecisionOptions(options: RevenueLed
     errors.push("--kind must be website_sale, automation_sale, bundle_sale, or retainer.");
   }
   if (options.clientName.trim().length < 2) errors.push("--client-name is required.");
+  else if (hasPlaceholderValue(options.clientName)) errors.push("--client-name must be the real client/business name, not a placeholder.");
   if (!Number.isFinite(options.amountUsd) || options.amountUsd <= 0 || options.amountUsd > 1000000) {
     errors.push("--amount-usd must be greater than 0 and at most 1000000.");
   }
@@ -79,14 +86,22 @@ export function validateRevenueLedgerApprovalDecisionOptions(options: RevenueLed
   }
   if (options.approvedAction.trim().length < 8) {
     errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes.trim().length > 0 && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes and --payment-evidence must be real ledger/payment context, not placeholders.");
   }
   if (options.decision === "approved" && options.paymentEvidence.trim().length < 8) {
     errors.push("--payment-evidence must describe the collected cash proof for approved ledger entries.");
+  } else if (options.paymentEvidence.trim().length > 0 && hasPlaceholderValue(options.paymentEvidence)) {
+    errors.push("--payment-evidence must be real collected cash proof, not a placeholder.");
   }
   return errors;
 }
 
 export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedgerApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueLedgerApprovalDecisionOptions(options);
   const ledgerInput: RevenueLedgerApprovalSnapshot = {
     kind: options.kind,
     clientName: options.clientName,
@@ -97,6 +112,7 @@ export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedger
   };
   const targetId = buildRevenueLedgerApprovalTargetId(ledgerInput);
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a ledger approval decision.",
     options.decision === "approved" && options.cashCollectedUsd <= 0 && "approved ledger entries require cash collected.",
     options.decision === "approved" && options.paymentEvidence.trim().length < 8 && "--payment-evidence is required for approved ledger entries.",

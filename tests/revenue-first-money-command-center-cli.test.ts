@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   recordRevenueOutreachDraft,
   recordRevenuePublicScoutRun,
+  recordRevenueTrustedApprovalDecision,
   resetRevenueApprovalDecisionsForTests,
   resetRevenueLeadsForTests,
   resetRevenueOutreachForTests,
@@ -14,6 +15,10 @@ import {
   setRevenueOutreachPathForTests,
   setRevenuePublicLeadCandidatesPathForTests,
 } from "../server/revenue-engine";
+import {
+  buildRevenuePaymentPathApprovalTargetId,
+  buildRevenuePaymentPathSnapshotHash,
+} from "../server/revenue-payment-path-approval";
 import {
   buildRevenueFirstMoneyCommandCenter,
   formatRevenueFirstMoneyCommandCenterText,
@@ -28,17 +33,76 @@ const testOutreachPath = "/tmp/revenue-first-money-command-center-outreach-test.
 const testPublicCandidatesPath = "/tmp/revenue-first-money-command-center-public-candidates-test.json";
 const testApprovalDecisionsPath = "/tmp/revenue-first-money-command-center-approval-decisions-test.json";
 
+const originalEnv = {
+  DATABASE_URL: process.env.DATABASE_URL,
+  SESSION_SECRET: process.env.SESSION_SECRET,
+  REVENUE_ENGINE_MONEY_MODE: process.env.REVENUE_ENGINE_MONEY_MODE,
+  REVENUE_ENGINE_PAYMENT_LINK: process.env.REVENUE_ENGINE_PAYMENT_LINK,
+  REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID: process.env.REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID,
+  REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD: process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD,
+  REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE: process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE,
+  REVENUE_ENGINE_PAYMENT_EVIDENCE_URL: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL,
+  REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE,
+  REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT,
+  REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED: process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED,
+};
+
 setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
 setRevenueLeadsPathForTests(testLeadsPath);
 setRevenueOutreachPathForTests(testOutreachPath);
 setRevenuePublicLeadCandidatesPathForTests(testPublicCandidatesPath);
 
 test.afterEach(() => {
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   resetRevenueApprovalDecisionsForTests();
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
   resetRevenuePublicLeadCandidatesForTests();
 });
+
+function approveCommandCenterPaymentPath(paymentLink = "https://buy.stripe.com/revenue-deposit") {
+  process.env.REVENUE_ENGINE_PAYMENT_LINK = paymentLink;
+  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD = "1500";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE = "Website 3D Premium";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/123";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE = "Stripe payment link smoke test passed";
+  const snapshot = {
+    paymentMethod: "payment_link" as const,
+    paymentLink,
+    paymentHost: new URL(paymentLink).hostname.toLowerCase(),
+    expectedDepositUsd: 1500,
+    expectedPackage: "Website 3D Premium",
+  };
+  const proof = {
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    depositConfirmedByRobert: false,
+    paymentLink,
+    evidenceUrl: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL,
+    evidenceNote: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE,
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenuePaymentPathApprovalTargetId(paymentLink),
+    targetType: "payment_path",
+    decision: "approved",
+    approvedAction: "Approve exact payment path for command center test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "payment_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: buildRevenuePaymentPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  process.env.REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID = result.decision.id;
+}
 
 function createDraft(approvalStatus: "draft" | "approved" = "draft") {
   return recordRevenueOutreachDraft({
@@ -75,20 +139,23 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.nextCommand.id, "public-scout");
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("revenue:public-scout-schedule")), true);
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("--browser-executor=subagent_browser")), true);
-  assert.equal(packet.setupCommands.length, 5);
+  assert.equal(packet.setupCommands.length, 6);
   assert.deepEqual(packet.setupCommands.map((item) => item.id), [
     "contact-path-approval",
     "contact-path-readiness",
     "payment-path-approval",
     "payment-path-readiness",
+    "ledger-entry-approval",
     "website-creation-approval",
   ]);
   assert.equal(packet.setupCommands.every((item) => item.status === "blocked"), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:ledger-approval-decision")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-creation-approval-decision")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_STRIPE_PAYMENT_LINK")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_PAYMENT_EVIDENCE")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--charge-client")), false);
@@ -108,9 +175,11 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.match(text, /Setup gates:/);
   assert.match(text, /Approve contact path before outreach/);
   assert.match(text, /Approve payment path before charging/);
+  assert.match(text, /Approve ledger entry after deposit is collected/);
   assert.match(text, /Approve paid website creation after deposit/);
   assert.match(text, /never sends outreach/);
   assert.match(text, /never charges clients/);
+  assert.match(text, /never records the ledger entry/);
   assert.match(text, /never writes files or deploys/);
 });
 
@@ -118,9 +187,11 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const contactApprovalCommand = packet.setupCommands.find((item) => item.id === "contact-path-approval");
   const paymentApprovalCommand = packet.setupCommands.find((item) => item.id === "payment-path-approval");
+  const ledgerApprovalCommand = packet.setupCommands.find((item) => item.id === "ledger-entry-approval");
   const websiteCreationApprovalCommand = packet.setupCommands.find((item) => item.id === "website-creation-approval");
   assert.ok(contactApprovalCommand);
   assert.ok(paymentApprovalCommand);
+  assert.ok(ledgerApprovalCommand);
   assert.ok(websiteCreationApprovalCommand);
 
   const baseEnv = {
@@ -137,6 +208,11 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
     env: baseEnv,
     encoding: "utf8",
   });
+  const ledgerResult = spawnSync("sh", ["-c", ledgerApprovalCommand.command], {
+    cwd: process.cwd(),
+    env: baseEnv,
+    encoding: "utf8",
+  });
   const websiteResult = spawnSync("sh", ["-c", websiteCreationApprovalCommand.command], {
     cwd: process.cwd(),
     env: baseEnv,
@@ -147,12 +223,31 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.match(`${contactResult.stdout}\n${contactResult.stderr}`, /placeholder/);
   assert.equal(paymentResult.status, 1, `${paymentResult.stdout}\n${paymentResult.stderr}`);
   assert.match(`${paymentResult.stdout}\n${paymentResult.stderr}`, /placeholder|Stripe payment/);
+  assert.equal(ledgerResult.status, 1, `${ledgerResult.stdout}\n${ledgerResult.stderr}`);
+  assert.match(`${ledgerResult.stdout}\n${ledgerResult.stderr}`, /placeholder/);
   assert.equal(websiteResult.status, 1, `${websiteResult.stdout}\n${websiteResult.stderr}`);
   assert.match(`${websiteResult.stdout}\n${websiteResult.stderr}`, /placeholder/);
   const persistedDecisions = existsSync(testApprovalDecisionsPath)
     ? JSON.parse(readFileSync(testApprovalDecisionsPath, "utf8"))
     : [];
   assert.deepEqual(persistedDecisions, []);
+});
+
+test("first-money command center keeps ledger gate visible when payment path is ready", () => {
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+  process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  approveCommandCenterPaymentPath();
+
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const setupIds = packet.setupCommands.map((item) => item.id);
+
+  assert.equal(packet.readiness.canCollectMoney, true);
+  assert.equal(packet.readiness.canBuildWebsites, false);
+  assert.equal(setupIds.includes("payment-path-approval"), false);
+  assert.equal(setupIds.includes("payment-path-readiness"), false);
+  assert.equal(setupIds.includes("ledger-entry-approval"), true);
+  assert.match(packet.setupCommands.find((item) => item.id === "ledger-entry-approval")?.command || "", /revenue:ledger-approval-decision/);
 });
 
 test("first-money command center prioritizes public contact verification for unverified candidates", () => {

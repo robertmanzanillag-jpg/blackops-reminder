@@ -53,6 +53,50 @@ test("parses and validates ledger approval decision options", () => {
   ]);
 });
 
+test("rejects placeholder ledger approval context", () => {
+  const parsed = parseRevenueLedgerApprovalDecisionArgs([
+    "--kind=website_sale",
+    "--client-name=REPLACE WITH CLIENT NAME",
+    "--amount-usd=3500",
+    "--cash-collected-usd=1500",
+    "--estimated-internal-cost-usd=35",
+    "--notes=Replace with ledger notes",
+    "--payment-evidence=Replace with payment evidence",
+    "--decision=approved",
+    "--approved-action=Replace with ledger approval context",
+    "--confirmed-by-robert",
+  ]);
+
+  assert.deepEqual(validateRevenueLedgerApprovalDecisionOptions(parsed), [
+    "--client-name must be the real client/business name, not a placeholder.",
+    "--approved-action must be real approval context, not a placeholder.",
+    "--notes and --payment-evidence must be real ledger/payment context, not placeholders.",
+    "--payment-evidence must be real collected cash proof, not a placeholder.",
+  ]);
+});
+
+test("blocks placeholder ledger approval when builder is called directly", () => {
+  const result = buildRevenueLedgerApprovalDecisionFromCli({
+    kind: "website_sale",
+    clientName: "REPLACE WITH CLIENT NAME",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    notes: "Replace with ledger notes | Payment evidence: Replace with payment evidence",
+    paymentEvidence: "Replace with payment evidence",
+    decision: "approved",
+    approvedAction: "Replace with ledger approval context",
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.match(result.blockers.join("; "), /placeholder/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
+});
+
 test("records approved ledger decision without recording ledger entry", () => {
   const result = buildRevenueLedgerApprovalDecisionFromCli({
     kind: "bundle_sale",

@@ -25,7 +25,7 @@ type CommandQueueItem = {
 };
 
 type SetupCommandItem = CommandQueueItem & {
-  gate: "contact_path" | "payment_path" | "website_creation";
+  gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation";
 };
 
 type CandidateApprovalBatch = {
@@ -189,6 +189,27 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         reason: "Runs after the payment path approval decision and confirms the system still does not charge clients by itself.",
       },
     );
+  }
+  if (!readiness.canBuildWebsites) {
+    setupCommands.push({
+      id: "ledger-entry-approval",
+      gate: "ledger_entry",
+      label: "Approve ledger entry after deposit is collected",
+      command: npmRunText("revenue:ledger-approval-decision", [
+        "--kind=website_sale",
+        "--client-name=REPLACE_WITH_CLIENT_NAME",
+        "--amount-usd=3500",
+        "--cash-collected-usd=1500",
+        "--estimated-internal-cost-usd=35",
+        "--notes=REPLACE_WITH_LEDGER_NOTES",
+        "--payment-evidence=REPLACE_WITH_PAYMENT_EVIDENCE",
+        "--decision=approved",
+        "--approved-action=Approve exact paid ledger entry after Robert verified payment evidence.",
+        "--confirmed-by-robert",
+      ]),
+      status: "blocked",
+      reason: "Runs only after money is actually collected and Robert has verified payment evidence; this records approval only and never records the ledger entry or charges clients.",
+    });
   }
   if (!readiness.canBuildWebsites) {
     setupCommands.push({
