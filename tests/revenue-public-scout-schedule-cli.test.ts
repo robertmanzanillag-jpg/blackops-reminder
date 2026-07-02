@@ -8,6 +8,7 @@ import {
   parseRevenuePublicScoutScheduleArgs,
   validateRevenuePublicScoutScheduleOptions,
 } from "../server/revenue-public-scout-schedule-cli";
+import { revenuePublicScoutScheduleSchema } from "../server/revenue-engine";
 
 function fakeOutputPathChecks(options: { existing?: string[]; symlinks?: string[]; directories?: string[]; realpaths?: Record<string, string> } = {}) {
   const existing = new Set([
@@ -77,6 +78,23 @@ test("parses revenue public scout schedule CLI options", () => {
     invalidNumericArgs: [],
   });
   assert.deepEqual(validateRevenuePublicScoutScheduleOptions(parsed), []);
+});
+
+test("public scout schedule defaults to the current local date", () => {
+  const parsed = parseRevenuePublicScoutScheduleArgs([]);
+  assert.match(parsed.startDate, /^\d{4}-\d{2}-\d{2}$/);
+  assert.notEqual(parsed.startDate, "2026-07-01");
+
+  const schemaParsed = revenuePublicScoutScheduleSchema.parse({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 2,
+  });
+  assert.match(schemaParsed.startDate, /^\d{4}-\d{2}-\d{2}$/);
+  assert.notEqual(schemaParsed.startDate, "2026-07-01");
 });
 
 test("validates schedule schema and output path safety", () => {

@@ -73,6 +73,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Guarded public scout schedule",
     "Manual contact path approval",
     "Payment path approval",
     "Ledger entry approval",
@@ -97,6 +98,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Guarded public scout schedule",
     "Manual contact path approval",
     "Payment path approval",
     "Ledger entry approval",
@@ -116,6 +118,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
       "Approved contact path",
       "Approved payment path",
       "Paid website build gate",
+      "Guarded public scout schedule",
       "Manual contact path approval",
       "Payment path approval",
       "Ledger entry approval",
@@ -146,6 +149,7 @@ test("visual route body evaluation fails when first-money controls are missing",
       "Approved contact path",
       "Approved payment path",
       "Paid website build gate",
+      "Guarded public scout schedule",
       "Manual contact path approval",
       "Payment path approval",
       "Ledger entry approval",
@@ -162,6 +166,7 @@ test("visual route body evaluation fails when first-money controls are missing",
     "Approved contact path",
     "Approved payment path",
     "Paid website build gate",
+    "Guarded public scout schedule",
     "Manual contact path approval",
     "Payment path approval",
     "Ledger entry approval",
@@ -179,6 +184,8 @@ test("Revenue Engine UI renders every first-money setup action", () => {
   assert.doesNotMatch(source, /setupActionQueue\.slice/);
   assert.match(source, /first-money-setup-action-\$\{action\.id\}/);
   assert.match(source, /No setup gates are waiting right now/);
+  assert.match(source, /button-prepare-public-scout-schedule/);
+  assert.match(source, /\/api\/revenue-engine\/public-scout-schedule/);
   assert.match(source, /button-queue-contact-path-approval/);
   assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
   assert.match(source, /button-queue-payment-path-approval/);

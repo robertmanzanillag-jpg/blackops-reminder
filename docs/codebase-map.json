@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T21:43:39.009Z",
+  "generatedAt": "2026-07-02T21:55:24.134Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -141,9 +141,9 @@
   "totals": {
     "filesVisible": 494,
     "filesIndexed": 426,
-    "imports": 1609,
+    "imports": 1610,
     "routes": 470,
-    "symbols": 8379
+    "symbols": 8382
   },
   "directories": {
     ".agents/skills": {
@@ -15275,6 +15275,8 @@
         "preview",
         "previewPath",
         "proof",
+        "publicScoutScheduleMutationSource",
+        "publicScoutSchedulePanelSource",
         "publishResult",
         "quote",
         "radar",
@@ -15935,6 +15937,7 @@
       "path": "tests/revenue-public-scout-schedule-cli.test.ts",
       "kind": "test",
       "imports": [
+        "../server/revenue-engine",
         "../server/revenue-public-scout-schedule-cli",
         "node:assert/strict",
         "node:path",
@@ -15957,6 +15960,7 @@
         "parsed",
         "rootSymlink",
         "schedule",
+        "schemaParsed",
         "sensitive",
         "ssh",
         "symlinkOutput",

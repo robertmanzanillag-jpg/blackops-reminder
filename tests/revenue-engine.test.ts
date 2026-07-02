@@ -4298,6 +4298,15 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
   assert.match(source, /First-money command center/);
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(source, /const publicScoutScheduleMutation/);
+  assert.match(source, /\/api\/revenue-engine\/public-scout-schedule/);
+  assert.match(source, /scheduleName: publicScoutScheduleName/);
+  assert.match(source, /area: publicScoutArea/);
+  assert.match(source, /niche: publicScoutNiche/);
+  assert.match(source, /startDate: publicScoutStartDate/);
+  assert.match(source, /browserExecutor: publicScoutBrowserExecutor/);
+  assert.match(source, /button-prepare-public-scout-schedule/);
+  assert.match(source, /first-money-public-scout-schedule-panel/);
   assert.match(source, /const contactPathApprovalPendingActionMutation/);
   assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
   assert.match(source, /contactMode: "manual"/);
@@ -4357,6 +4366,14 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
     source.indexOf("const contactPathApprovalPendingActionMutation"),
     source.indexOf("const paymentPathApprovalPendingActionMutation"),
   );
+  const publicScoutScheduleMutationSource = source.slice(
+    source.indexOf("const publicScoutScheduleMutation"),
+    source.indexOf("const paymentPathApprovalPendingActionMutation"),
+  );
+  const publicScoutSchedulePanelSource = source.slice(
+    source.indexOf('data-testid="first-money-public-scout-schedule-panel"'),
+    source.indexOf('data-testid="first-money-robert-approval-brief"'),
+  );
   const paymentPathMutationSource = source.slice(
     source.indexOf("const paymentPathApprovalPendingActionMutation"),
     source.indexOf("const ledgerEntryApprovalPendingActionMutation"),
@@ -4401,6 +4418,29 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
     contactPathMutationSource,
     /outreach-send|payment-path-readiness-packet|decision: "approved"|sendConfirmation/,
   );
+  assert.match(publicScoutScheduleMutationSource, /offerFocus: "websites"/);
+  assert.match(publicScoutScheduleMutationSource, /dailyMockupLimit: 2/);
+  assert.match(publicScoutScheduleMutationSource, /maxCandidatesPerRun: publicScoutMaxCandidatesPerRun/);
+  assert.match(publicScoutScheduleMutationSource, /browserExecutor: publicScoutBrowserExecutor/);
+  assert.doesNotMatch(
+    publicScoutScheduleMutationSource,
+    /public-scout-run|dailyContactLimit|maxPaidDataSpendUsd|writePreviewFiles|sendConfirmation|decision: "approved"/,
+  );
+  assert.doesNotMatch(publicScoutScheduleMutationSource, /startDate: "2026-07-02"/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutScheduleMutation\.isPending/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutScheduleName\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutArea\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutNiche\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutStartDate\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunDays < 1/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunDays > 14/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunsPerDay < 1/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunsPerDay > 4/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunHourLocal < 0/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunHourLocal > 23/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun < 5/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun > 25/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutScheduleMutation\.mutate\(\)/);
   assert.match(paymentPathMutationSource, /evidenceUrl: paymentPathEvidenceUrl/);
   assert.match(paymentPathMutationSource, /evidenceNote: paymentPathEvidenceNote/);
   assert.match(paymentPathMutationSource, /paymentLink: paymentPathLink/);

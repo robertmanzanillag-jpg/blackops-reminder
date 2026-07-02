@@ -32,6 +32,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+function localIsoDate(date = new Date()) {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 type RevenueSnapshot = {
   metrics: {
     appsSold: number;
@@ -640,6 +645,39 @@ type PublicCandidateApprovalPendingActionResult = {
     deploys: boolean;
     exposesContactDetails: boolean;
   };
+};
+
+type PublicScoutScheduleResult = {
+  status: "ready_for_guarded_schedule";
+  scheduleName: string;
+  timezone: string;
+  runCount: number;
+  runs: Array<{
+    id: string;
+    date: string;
+    localTime: string;
+    executor: "manual_browser" | "subagent_browser";
+    query: string;
+    url: string;
+    targetCandidates: number;
+    captureNotesPath: string;
+    extractedJsonPath: string;
+    commands: {
+      prepareBrowserSession: { command: string; args: string[] };
+      extractCandidates: { command: string; args: string[] };
+      captureForReview: { command: string; args: string[] };
+    };
+    reviewGate: string;
+  }>;
+  safety: {
+    runsBrowserAutomatically: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    writesPreviewFiles: boolean;
+    paidDataSpendUsd: number;
+    requiresRobertReview: boolean;
+  };
+  nextAction: string;
 };
 
 type ContactPathApprovalPendingActionResult = {
@@ -1766,6 +1804,15 @@ export default function RevenueEnginePage() {
   const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
   const [publicCandidateReviewConfirmation, setPublicCandidateReviewConfirmation] = useState("");
   const [publicCandidateRunConfirmation, setPublicCandidateRunConfirmation] = useState("");
+  const [publicScoutScheduleName, setPublicScoutScheduleName] = useState("First-money public scout");
+  const [publicScoutArea, setPublicScoutArea] = useState("Miami");
+  const [publicScoutNiche, setPublicScoutNiche] = useState("coffee shop");
+  const [publicScoutStartDate, setPublicScoutStartDate] = useState(() => localIsoDate());
+  const [publicScoutRunDays, setPublicScoutRunDays] = useState(1);
+  const [publicScoutRunsPerDay, setPublicScoutRunsPerDay] = useState(1);
+  const [publicScoutRunHourLocal, setPublicScoutRunHourLocal] = useState(9);
+  const [publicScoutMaxCandidatesPerRun, setPublicScoutMaxCandidatesPerRun] = useState(8);
+  const [publicScoutBrowserExecutor, setPublicScoutBrowserExecutor] = useState<"manual_browser" | "subagent_browser">("subagent_browser");
   const [contactPathEvidenceUrl, setContactPathEvidenceUrl] = useState("");
   const [contactPathEvidenceNote, setContactPathEvidenceNote] = useState("");
   const [contactPathRobertApproved, setContactPathRobertApproved] = useState(false);
@@ -2360,6 +2407,33 @@ export default function RevenueEnginePage() {
     },
     onSuccess: () => {
       refetchFirstMoneyCommandCenter();
+    },
+  });
+
+  const publicScoutScheduleMutation = useMutation<PublicScoutScheduleResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-scout-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduleName: publicScoutScheduleName,
+          area: publicScoutArea,
+          niche: publicScoutNiche,
+          offerFocus: "websites",
+          dailyResearchTarget: Math.max(20, publicScoutMaxCandidatesPerRun * 3),
+          dailyQualifiedLeadLimit: publicScoutMaxCandidatesPerRun,
+          dailyMockupLimit: 2,
+          startDate: publicScoutStartDate,
+          runDays: publicScoutRunDays,
+          runsPerDay: publicScoutRunsPerDay,
+          runHourLocal: publicScoutRunHourLocal,
+          browserExecutor: publicScoutBrowserExecutor,
+          maxCandidatesPerRun: publicScoutMaxCandidatesPerRun,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo preparar public scout schedule");
+      return data;
     },
   });
 
@@ -3048,6 +3122,143 @@ export default function RevenueEnginePage() {
                   </div>
                 </div>
               )}
+              <div className="mt-3 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3" data-testid="first-money-public-scout-schedule-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs uppercase tracking-wide text-teal-200">Guarded public scout schedule</p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-400">
+                      Prepares public research run slots only. It does not run a browser, import leads, contact businesses, write previews, spend money, or charge clients.
+                    </p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      <Input
+                        value={publicScoutScheduleName}
+                        onChange={(event) => setPublicScoutScheduleName(event.target.value)}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-schedule-name"
+                      />
+                      <Input
+                        value={publicScoutArea}
+                        onChange={(event) => setPublicScoutArea(event.target.value)}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-area"
+                      />
+                      <Input
+                        value={publicScoutNiche}
+                        onChange={(event) => setPublicScoutNiche(event.target.value)}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-niche"
+                      />
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-5">
+                      <Input
+                        type="date"
+                        value={publicScoutStartDate}
+                        onChange={(event) => setPublicScoutStartDate(event.target.value)}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-start-date"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={14}
+                        value={publicScoutRunDays}
+                        onChange={(event) => setPublicScoutRunDays(Number(event.target.value))}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-run-days"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={4}
+                        value={publicScoutRunsPerDay}
+                        onChange={(event) => setPublicScoutRunsPerDay(Number(event.target.value))}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-runs-per-day"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={publicScoutRunHourLocal}
+                        onChange={(event) => setPublicScoutRunHourLocal(Number(event.target.value))}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-run-hour"
+                      />
+                      <Input
+                        type="number"
+                        min={5}
+                        max={25}
+                        value={publicScoutMaxCandidatesPerRun}
+                        onChange={(event) => setPublicScoutMaxCandidatesPerRun(Number(event.target.value))}
+                        className="border-teal-500/20 bg-black text-xs"
+                        data-testid="input-public-scout-max-candidates"
+                      />
+                    </div>
+                    <select
+                      value={publicScoutBrowserExecutor}
+                      onChange={(event) => setPublicScoutBrowserExecutor(event.target.value as typeof publicScoutBrowserExecutor)}
+                      className="mt-2 h-10 w-full rounded-md border border-teal-500/20 bg-black px-3 text-xs text-white outline-none"
+                      data-testid="select-public-scout-browser-executor"
+                    >
+                      <option value="subagent_browser">Subagent browser handoff</option>
+                      <option value="manual_browser">Manual browser handoff</option>
+                    </select>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      publicScoutScheduleMutation.isPending
+                      || !publicScoutScheduleName.trim()
+                      || !publicScoutArea.trim()
+                      || !publicScoutNiche.trim()
+                      || !publicScoutStartDate.trim()
+                      || publicScoutRunDays < 1
+                      || publicScoutRunDays > 14
+                      || publicScoutRunsPerDay < 1
+                      || publicScoutRunsPerDay > 4
+                      || publicScoutRunHourLocal < 0
+                      || publicScoutRunHourLocal > 23
+                      || publicScoutMaxCandidatesPerRun < 5
+                      || publicScoutMaxCandidatesPerRun > 25
+                    }
+                    onClick={() => publicScoutScheduleMutation.mutate()}
+                    className="bg-teal-600 text-white hover:bg-teal-500"
+                    data-testid="button-prepare-public-scout-schedule"
+                  >
+                    {publicScoutScheduleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    Schedule
+                  </Button>
+                </div>
+                {publicScoutScheduleMutation.data && (
+                  <div className="mt-3 rounded-md border border-teal-500/20 bg-black px-3 py-2 text-xs leading-5 text-teal-100" data-testid="first-money-public-scout-schedule-result">
+                    <p className="font-medium text-white">
+                      {publicScoutScheduleMutation.data.scheduleName}: {publicScoutScheduleMutation.data.runCount} guarded run(s)
+                    </p>
+                    <p className="mt-1 text-zinc-400">{publicScoutScheduleMutation.data.nextAction}</p>
+                    {publicScoutScheduleMutation.data.runs[0] && (
+                      <div className="mt-2 rounded border border-zinc-800 bg-zinc-950 px-2 py-2">
+                        <p className="text-zinc-300">
+                          First run: {publicScoutScheduleMutation.data.runs[0].id} · {publicScoutScheduleMutation.data.runs[0].date} {publicScoutScheduleMutation.data.runs[0].localTime} · {publicScoutScheduleMutation.data.runs[0].targetCandidates} candidates
+                        </p>
+                        <p className="mt-1 break-words text-zinc-500">
+                          {[
+                            publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.command,
+                            ...publicScoutScheduleMutation.data.runs[0].commands.prepareBrowserSession.args,
+                          ].join(" ")}
+                        </p>
+                      </div>
+                    )}
+                    <p className="mt-2 text-zinc-500">
+                      Safety: no browser auto-run, no leads persisted, no outreach, no preview writes, ${publicScoutScheduleMutation.data.safety.paidDataSpendUsd} paid data.
+                    </p>
+                  </div>
+                )}
+                {publicScoutScheduleMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {publicScoutScheduleMutation.error.message}
+                  </p>
+                )}
+              </div>
               {firstMoneyCommandCenter?.robertApprovalBrief && (
                 <div className="mt-3 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-3" data-testid="first-money-robert-approval-brief">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

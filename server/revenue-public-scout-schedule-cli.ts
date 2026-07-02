@@ -2,7 +2,7 @@ import type { RevenuePublicScoutScheduleInput } from "./revenue-engine";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildRevenuePublicScoutSchedule, revenuePublicScoutScheduleSchema } from "./revenue-engine";
+import { buildRevenuePublicScoutSchedule, currentLocalIsoDate, revenuePublicScoutScheduleSchema } from "./revenue-engine";
 
 export type RevenuePublicScoutScheduleCliOptions = {
   scheduleName: string;
@@ -61,7 +61,7 @@ export function parseRevenuePublicScoutScheduleArgs(argv: string[]): RevenuePubl
     dailyResearchTarget: numberValue("--daily-research-target", 30),
     dailyQualifiedLeadLimit: numberValue("--daily-qualified-lead-limit", 8),
     dailyMockupLimit: numberValue("--daily-mockup-limit", 3),
-    startDate: getValue("--start-date") || "2026-07-01",
+    startDate: getValue("--start-date") || currentLocalIsoDate(),
     runDays: numberValue("--run-days", 5),
     runsPerDay: numberValue("--runs-per-day", 1),
     runHourLocal: numberValue("--run-hour-local", 9),

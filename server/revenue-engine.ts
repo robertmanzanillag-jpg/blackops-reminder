@@ -545,6 +545,11 @@ function isIsoCalendarDate(value: string) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+export function currentLocalIsoDate(date = new Date()) {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
 export const revenuePublicScoutScheduleSchema = revenueMoneySprintSchema.omit({
   dailyContactLimit: true,
   maxPaidDataSpendUsd: true,
@@ -555,7 +560,7 @@ export const revenuePublicScoutScheduleSchema = revenueMoneySprintSchema.omit({
 }).extend({
   scheduleName: z.string().trim().min(2).max(160).default("Daily public scout"),
   timezone: z.string().trim().min(2).max(80).default("America/New_York"),
-  startDate: z.string().trim().refine(isIsoCalendarDate, "startDate must be a valid YYYY-MM-DD calendar date").default("2026-07-01"),
+  startDate: z.string().trim().refine(isIsoCalendarDate, "startDate must be a valid YYYY-MM-DD calendar date").default(() => currentLocalIsoDate()),
   runDays: z.coerce.number().int().min(1).max(14).default(5),
   runsPerDay: z.coerce.number().int().min(1).max(4).default(1),
   runHourLocal: z.coerce.number().int().min(0).max(23).default(9),
