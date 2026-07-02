@@ -88,6 +88,10 @@ import {
   buildRevenueLedgerApprovalTargetId,
   type RevenueLedgerApprovalSnapshot,
 } from "../server/revenue-ledger-approval";
+import {
+  buildRevenueContactPathApprovalTargetId,
+  buildRevenueContactPathSnapshotHash,
+} from "../server/revenue-contact-path-approval";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -104,6 +108,14 @@ const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
+const originalRevenueMoneyMode = process.env.REVENUE_ENGINE_MONEY_MODE;
+const originalRobertContactApproved = process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+const originalManualContactApproved = process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+const originalContactPathApprovalDecisionId = process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+const originalContactMode = process.env.REVENUE_ENGINE_CONTACT_MODE;
+const originalContactPathVerified = process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+const originalContactEvidenceUrl = process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+const originalContactEvidenceNote = process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
 
 function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutreachSnapshotHash>[0]) {
   return recordRevenueTrustedApprovalDecision({
@@ -167,6 +179,46 @@ function approveLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
   });
 }
 
+function approveManualContactPathForTests() {
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  process.env.REVENUE_ENGINE_CONTACT_MODE = "manual";
+  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/456";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = "Manual contact path verified for test.";
+  const snapshot = {
+    contactMode: "manual" as const,
+    fromEmail: "",
+    manualContactApproved: true,
+    emailProviderConfigured: false,
+  };
+  const proof = {
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL,
+    evidenceNote: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE,
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueContactPathApprovalTargetId(snapshot),
+    targetType: "contact_path",
+    decision: "approved",
+    approvedAction: "Approve exact manual contact path in test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "contact_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: buildRevenueContactPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID = result.decision.id;
+  return result;
+}
+
 function recordApprovedRevenueLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
   const approval = approveLedgerEntryForTests(input);
   return recordRevenueLedgerEntry({
@@ -182,6 +234,14 @@ test.beforeEach(() => {
   delete process.env.RESEND_API_KEY;
   delete process.env.REVENUE_ENGINE_FROM_EMAIL;
   delete process.env.RESEND_FROM_EMAIL;
+  delete process.env.REVENUE_ENGINE_MONEY_MODE;
+  delete process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+  delete process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+  delete process.env.REVENUE_ENGINE_CONTACT_MODE;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
   process.env.REVENUE_MOCKUPS_DIR = testMockupsDir;
   setRevenueLedgerPathForTests(testLedgerPath);
   setRevenueLeadsPathForTests(testLeadsPath);
@@ -228,6 +288,22 @@ test.afterEach(() => {
   else process.env.REVENUE_ENGINE_FROM_EMAIL = originalRevenueEngineFromEmail;
   if (originalResendFromEmail === undefined) delete process.env.RESEND_FROM_EMAIL;
   else process.env.RESEND_FROM_EMAIL = originalResendFromEmail;
+  if (originalRevenueMoneyMode === undefined) delete process.env.REVENUE_ENGINE_MONEY_MODE;
+  else process.env.REVENUE_ENGINE_MONEY_MODE = originalRevenueMoneyMode;
+  if (originalRobertContactApproved === undefined) delete process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+  else process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = originalRobertContactApproved;
+  if (originalManualContactApproved === undefined) delete process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+  else process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = originalManualContactApproved;
+  if (originalContactPathApprovalDecisionId === undefined) delete process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+  else process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID = originalContactPathApprovalDecisionId;
+  if (originalContactMode === undefined) delete process.env.REVENUE_ENGINE_CONTACT_MODE;
+  else process.env.REVENUE_ENGINE_CONTACT_MODE = originalContactMode;
+  if (originalContactPathVerified === undefined) delete process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+  else process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = originalContactPathVerified;
+  if (originalContactEvidenceUrl === undefined) delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+  else process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = originalContactEvidenceUrl;
+  if (originalContactEvidenceNote === undefined) delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
+  else process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = originalContactEvidenceNote;
   if (originalRevenueMockupsDir === undefined) delete process.env.REVENUE_MOCKUPS_DIR;
   else process.env.REVENUE_MOCKUPS_DIR = originalRevenueMockupsDir;
 });
@@ -473,7 +549,32 @@ test("mockup template pack makes AI cost visible and caps monthly spend", () => 
   assert.equal(pack.productionTargets.recommendedContactLimitPerDay, 15);
 });
 
-test("launch readiness is ready to start with only email pending", () => {
+test("launch readiness blocks manual contact until audited contact path is ready", () => {
+  const readiness = buildRevenueLaunchReadiness({
+    area: "Miami",
+    niche: "med spas / aesthetics",
+    dailyResearchTarget: 120,
+    dailyMockupTarget: 5,
+    dailyContactTarget: 10,
+    emailPending: true,
+  });
+
+  assert.equal(readiness.status, "blocked");
+  assert.equal(readiness.blocked, 1);
+  assert.equal(readiness.pendingAllowed, 1);
+  assert.equal(readiness.items.find((item) => item.id === "manual_outreach")?.status, "blocked");
+  assert.equal(readiness.items.find((item) => item.id === "email_sender")?.status, "pending_allowed");
+  assert.equal(readiness.emailPending.isPending, true);
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("outreach drafts"), true);
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("approved contact path"), false);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("no contactar todavia")), true);
+  assert.equal(readiness.summary.includes("no contactar negocios"), true);
+});
+
+test("launch readiness allows manual contact only after audited first-money contact gate", () => {
+  approveManualContactPathForTests();
+
   const readiness = buildRevenueLaunchReadiness({
     area: "Miami",
     niche: "med spas / aesthetics",
@@ -486,18 +587,18 @@ test("launch readiness is ready to start with only email pending", () => {
   assert.equal(readiness.status, "ready_to_start");
   assert.equal(readiness.blocked, 0);
   assert.equal(readiness.pendingAllowed, 1);
-  assert.equal(readiness.items.find((item) => item.id === "email_sender")?.status, "pending_allowed");
-  assert.equal(readiness.emailPending.isPending, true);
-  assert.equal(readiness.emailPending.allowedWhilePending.includes("contact forms"), true);
-  assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
-  assert.equal(readiness.summary.includes("solo falta configurar el correo"), true);
+  assert.equal(readiness.items.find((item) => item.id === "manual_outreach")?.status, "ready");
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("approved contact path"), true);
+  assert.match(readiness.items.find((item) => item.id === "manual_outreach")?.evidence || "", /contact path auditado/);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("canal aprobado")), true);
+  assert.equal(readiness.summary.includes("contact path auditado"), true);
 });
 
-test("snapshot exposes launch readiness without blocking on email provider", () => {
+test("snapshot exposes launch readiness blocked before contact path approval", () => {
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
-  assert.equal(snapshot.launchReadiness.blocked, 0);
+  assert.equal(snapshot.launchReadiness.status, "blocked");
+  assert.equal(snapshot.launchReadiness.blocked, 1);
   assert.equal(snapshot.launchReadiness.emailPending.isPending, true);
   assert.equal(snapshot.emailProvider.configured, false);
 });

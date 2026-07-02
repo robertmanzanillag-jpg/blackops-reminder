@@ -4456,6 +4456,9 @@ export function buildRevenueMockupTemplatePack(input: RevenueMockupTemplatePackI
 export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) {
   const parsed = revenueLaunchReadinessSchema.parse(input);
   const emailProvider = getRevenueEmailProviderStatus();
+  const firstMoneyReadiness = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  const contactBusinessesCheck = firstMoneyReadiness.checks.find((check) => check.id === "contact_businesses");
+  const contactBusinessesReady = firstMoneyReadiness.canContactBusinesses;
   const manualContactChannels = ["contact_form", "phone_permission", "gmail_or_mailto_manual"] as const;
   const launchItems: Array<{
     id: string;
@@ -4495,9 +4498,13 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
     {
       id: "manual_outreach",
       label: "Contacto manual aprobado",
-      status: "ready" as const,
-      evidence: `Canales activos sin email API: ${manualContactChannels.join(", ")}.`,
-      nextStep: `Contactar max ${parsed.dailyContactTarget}/dia por contact form, llamada corta o Gmail/mailto manual.`,
+      status: contactBusinessesReady ? "ready" as const : "blocked" as const,
+      evidence: contactBusinessesReady
+        ? `Canales activos con contact path auditado: ${manualContactChannels.join(", ")}.`
+        : contactBusinessesCheck?.detail || "External outreach is blocked until contact path approval is audited.",
+      nextStep: contactBusinessesReady
+        ? `Contactar max ${parsed.dailyContactTarget}/dia por el canal aprobado y auditable.`
+        : contactBusinessesCheck?.nextStep || "Aprobar contact path antes de contactar negocios.",
     },
     {
       id: "email_sender",
@@ -4537,10 +4544,10 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
   return {
     status: blocked.length > 0 ? "blocked" as const : "ready_to_start" as const,
     summary: blocked.length > 0
-      ? "Hay bloqueos antes de empezar."
+      ? "Puede investigar y preparar mockups/drafts, pero no contactar negocios hasta aprobar el contact path."
       : pending.length === 1 && pending[0].id === "email_sender"
-        ? "Listo para empezar a vender; solo falta configurar el correo de negocio/API."
-        : "Listo para empezar a vender con contacto manual aprobado.",
+        ? "Listo para vender con contact path auditado; solo falta configurar el correo de negocio/API."
+        : "Listo para vender con contacto aprobado y auditado.",
     market: {
       area: parsed.area,
       niche: parsed.niche,
@@ -4556,7 +4563,9 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
       `Dia 1: buscar ${parsed.dailyResearchTarget} candidatos publicos y guardar 20-30 con evidencia.`,
       `Dia 1: seleccionar 10 leads A/B; crear ${parsed.dailyMockupTarget} mockups premium.`,
       `Dia 1-2: preparar ${parsed.dailyContactTarget} drafts personalizados, sin envio automatico.`,
-      "Dia 2: contactar por contact form/Gmail manual y llamar solo los mejores para pedir permiso de enviar mockup.",
+      contactBusinessesReady
+        ? "Dia 2: contactar solo por el canal aprobado y llamar solo los mejores para pedir permiso de enviar mockup."
+        : "Dia 2: no contactar todavia; primero aprobar contact path y readiness packet con evidencia real.",
       "Dia 3-7: registrar replies, objeciones, calls booked y cualquier cash en ledger/improvement review.",
     ],
     contactScripts: {
@@ -4578,7 +4587,13 @@ export function buildRevenueLaunchReadiness(input: RevenueLaunchReadinessInput) 
       isPending: !emailProvider.configured || parsed.emailPending,
       providerConfigured: emailProvider.configured,
       missing: emailProvider.missing,
-      allowedWhilePending: ["research", "lead scoring", "mockups", "outreach drafts", "contact forms", "manual Gmail/mailto", "phone permission calls"],
+      allowedWhilePending: [
+        "research",
+        "lead scoring",
+        "mockups",
+        "outreach drafts",
+        ...(contactBusinessesReady ? ["approved contact path"] : []),
+      ],
     },
   };
 }

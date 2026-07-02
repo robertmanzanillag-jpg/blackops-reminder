@@ -59,10 +59,20 @@ function slugDate(value: string) {
 
 const approvalFlags = new Set([
   "--approved-by-robert",
+  "--manual-contact-approved",
+  "--robert-approved-contact-path",
+  "--contact-path-verified",
+  "--robert-approved-payment-path",
+  "--payment-smoke-verified",
+  "--deposit-confirmed-by-robert",
   "--robert-approved-build",
   "--client-approved-scope",
   "--deposit-paid",
   "--public-data-verified",
+  "--robert-approved-publish",
+  "--preview-deploy-verified",
+  "--app-qa-target-passed",
+  "--rollback-verified",
   "--confirmed-by-robert",
   "--decision=approved",
 ]);
@@ -86,13 +96,25 @@ function redactCommandQueueItem<T extends { command: string }>(item: T): T {
   };
 }
 
+function redactCommandCenter(commandCenter: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>) {
+  return {
+    ...commandCenter,
+    nextCommand: redactCommandQueueItem(commandCenter.nextCommand),
+    queue: commandCenter.queue.map(redactCommandQueueItem),
+    setupCommands: commandCenter.setupCommands.map(redactCommandQueueItem),
+    candidateApprovalBatches: commandCenter.candidateApprovalBatches.map((batch) => ({
+      ...batch,
+      approvalCommand: redactApprovalFlags(batch.approvalCommand),
+      command: redactApprovalFlags(batch.command),
+    })),
+  };
+}
+
 function renderDryRunMarkdown(input: {
   generatedAt: string;
   commandCenter: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>;
 }) {
-  const { commandCenter } = input;
-  const nextCommand = redactCommandQueueItem(commandCenter.nextCommand);
-  const queue = commandCenter.queue.map(redactCommandQueueItem);
+  const commandCenter = redactCommandCenter(input.commandCenter);
   return [
     `# Revenue First Money Dry Run - ${slugDate(input.generatedAt)}`,
     "",
@@ -100,8 +122,8 @@ function renderDryRunMarkdown(input: {
     "",
     `- Status: ${commandCenter.status}`,
     `- Mode: ${commandCenter.mode}`,
-    `- Next command: \`${nextCommand.command}\``,
-    `- Reason: ${nextCommand.reason}`,
+    `- Next command: \`${commandCenter.nextCommand.command}\``,
+    `- Reason: ${commandCenter.nextCommand.reason}`,
     "",
     "## Counts",
     "",
@@ -117,7 +139,7 @@ function renderDryRunMarkdown(input: {
     "",
     "## Command Queue",
     "",
-    ...queue.map((item) => [
+    ...commandCenter.queue.map((item) => [
       `### ${item.label}`,
       "",
       `- ID: ${item.id}`,
@@ -138,11 +160,7 @@ function renderDryRunMarkdown(input: {
     "## Command Center Text",
     "",
     "```text",
-    formatRevenueFirstMoneyCommandCenterText({
-      ...commandCenter,
-      nextCommand,
-      queue,
-    }),
+    formatRevenueFirstMoneyCommandCenterText(commandCenter),
     "```",
     "",
   ].join("\n");
@@ -154,8 +172,7 @@ export function buildRevenueFirstMoneyDryRun(options: RevenueFirstMoneyDryRunCli
     json: false,
   };
   const commandCenter = buildRevenueFirstMoneyCommandCenter(commandCenterOptions);
-  const nextCommand = redactCommandQueueItem(commandCenter.nextCommand);
-  const queue = commandCenter.queue.map(redactCommandQueueItem);
+  const redactedCommandCenter = redactCommandCenter(commandCenter);
   const markdown = renderDryRunMarkdown({
     generatedAt: options.now,
     commandCenter,
@@ -172,8 +189,8 @@ export function buildRevenueFirstMoneyDryRun(options: RevenueFirstMoneyDryRunCli
     generatedAt: options.now,
     outputPath: options.writeFile ? outputPath : "",
     wroteFile: options.writeFile,
-    nextCommand,
-    queue,
+    nextCommand: redactedCommandCenter.nextCommand,
+    queue: redactedCommandCenter.queue,
     counts: commandCenter.counts,
     safety: {
       writesFiles: options.writeFile,

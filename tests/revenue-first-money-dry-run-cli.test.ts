@@ -126,6 +126,31 @@ test("dry run writes an auditable next-action packet without executing unsafe wo
   assert.equal(getRevenueFirstMoneyDryRunExitCode(result), 0);
 });
 
+test("dry run withholds setup gate approval flags from generated command center text", () => {
+  const result = buildRevenueFirstMoneyDryRun({
+    mode: "first-sprint",
+    outputDir: testOutputDir,
+    now: "2026-07-02T12:00:00.000Z",
+    writeFile: true,
+    json: false,
+  });
+  const markdown = readFileSync(result.outputPath, "utf8");
+
+  assert.match(markdown, /Setup gates:/);
+  assert.match(markdown, /approval flags withheld/i);
+  for (const withheldFlag of [
+    "--manual-contact-approved",
+    "--robert-approved-contact-path",
+    "--contact-path-verified",
+    "--robert-approved-payment-path",
+    "--payment-smoke-verified",
+    "--decision=approved",
+    "--confirmed-by-robert",
+  ]) {
+    assert.doesNotMatch(markdown, new RegExp(withheldFlag));
+  }
+});
+
 test("dry-run script writes the persisted packet and reports safety", () => {
   captureReadyCandidate();
   const result = spawnSync(process.execPath, [
