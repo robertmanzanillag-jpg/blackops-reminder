@@ -161,7 +161,15 @@ export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedger
     }
     : null;
   const nextCommand = nextApiBody
-    ? `POST /api/revenue-engine/ledger body ${JSON.stringify(nextApiBody)}`
+    ? npmRunText("revenue:ledger-record", [
+      `--kind=${ledgerInput.kind}`,
+      `--client-name=${ledgerInput.clientName}`,
+      `--amount-usd=${ledgerInput.amountUsd}`,
+      `--cash-collected-usd=${ledgerInput.cashCollectedUsd}`,
+      `--estimated-internal-cost-usd=${ledgerInput.estimatedInternalCostUsd}`,
+      `--notes=${ledgerInput.notes}`,
+      `--approval-decision-id=${result.decision.id}`,
+    ])
     : "";
 
   return {
@@ -173,7 +181,7 @@ export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedger
     nextApiBody,
     nextCommand,
     nextAction: nextApiBody
-      ? "Record the ledger entry with this exact approvalDecisionId and unchanged sale fields."
+      ? `Before recording cash, get a fresh Robert ledger approval, then rerun the next command with --confirmed-by-robert and --confirm-ledger=${shellQuote(`RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${result.decision.id}`)}.`
       : "Decision recorded; do not record this ledger entry unless Robert changes the decision.",
     safety: {
       persistsApprovalDecision: result.decision.guardrail.status === "recorded",

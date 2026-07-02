@@ -162,6 +162,8 @@ export const revenueLedgerEntrySchema = z.object({
   estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
   approvalDecisionId: z.string().trim().max(200).optional().default(""),
+  ledgerConfirmation: z.string().trim().max(500).optional().default(""),
+  confirmedByRobert: revenueExplicitBooleanSchema.default(false),
 });
 
 export type RevenueLedgerEntryInput = z.infer<typeof revenueLedgerEntrySchema>;
@@ -648,11 +650,13 @@ export const revenueAutomationOpportunityCloseSchema = z.object({
   markScopeApproved: z.coerce.boolean().default(true),
   notes: z.string().trim().max(800).optional().default(""),
   approvalDecisionId: z.string().trim().max(200).optional().default(""),
+  ledgerConfirmation: z.string().trim().max(500).optional().default(""),
+  confirmedByRobert: revenueExplicitBooleanSchema.default(false),
 });
 
 export type RevenueAutomationOpportunityCloseInput = z.infer<typeof revenueAutomationOpportunityCloseSchema>;
 
-type RevenueLedgerEntry = RevenueLedgerEntryInput & {
+type RevenueLedgerEntry = Omit<RevenueLedgerEntryInput, "ledgerConfirmation" | "confirmedByRobert"> & {
   id: string;
   createdAt: string;
 };
@@ -847,7 +851,10 @@ const revenuePublicLeadCandidates: RevenuePublicLeadCandidate[] = [];
 const revenueDeliveryWorkspaces: RevenueDeliveryWorkspace[] = [];
 const revenueApprovalDecisions: RevenueApprovalDecision[] = [];
 const revenueAutomationIntakes: RevenueAutomationIntake[] = [];
-const persistedRevenueLedgerEntrySchema = revenueLedgerEntrySchema.extend({
+const persistedRevenueLedgerEntrySchema = revenueLedgerEntrySchema.omit({
+  ledgerConfirmation: true,
+  confirmedByRobert: true,
+}).extend({
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
 });
@@ -2902,6 +2909,8 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
     markScopeApproved: parsed.clientApprovedScope,
     notes: "Cierre ejecutado por automation agent command con guardrails.",
     approvalDecisionId: "",
+    ledgerConfirmation: "",
+    confirmedByRobert: false,
   });
 
   if (closeResult.status !== "recorded") {
@@ -3117,6 +3126,8 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
       parsed.notes,
     ].filter((item) => item.trim().length > 0).join(" | "),
     approvalDecisionId: parsed.approvalDecisionId,
+    ledgerConfirmation: parsed.ledgerConfirmation,
+    confirmedByRobert: parsed.confirmedByRobert,
   });
 
   if (!ledgerResult.entry) {
@@ -5901,6 +5912,9 @@ export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
     const existingApprovedEntry = revenueLedger.find((entry) => entry.approvalDecisionId === parsed.approvalDecisionId);
     const expectedTargetId = buildRevenueLedgerApprovalTargetId(ledgerSnapshot);
     const expectedSnapshotHash = buildRevenueLedgerApprovalSnapshotHash(ledgerSnapshot);
+    const expectedLedgerConfirmation = parsed.approvalDecisionId
+      ? `RECORD ${parsed.kind} ${parsed.clientName} ${parsed.approvalDecisionId}`
+      : "";
     const approvalDecisionReady = Boolean(
       approvalDecision
       && !existingApprovedEntry
@@ -5911,15 +5925,21 @@ export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
       && approvalDecision.approvalSource === "ledger_entry_approval_cli"
       && approvalDecision.ledgerEntrySnapshotHash === expectedSnapshotHash,
     );
+    const ledgerConfirmationReady = Boolean(expectedLedgerConfirmation && parsed.ledgerConfirmation === expectedLedgerConfirmation);
+    const robertConfirmationReady = parsed.confirmedByRobert === true;
 
-    if (!approvalDecisionReady) {
+    if (!approvalDecisionReady || !ledgerConfirmationReady || !robertConfirmationReady) {
       const snapshotBefore = getRevenueEngineSnapshot();
       return {
         entry: null,
         snapshot: snapshotBefore,
         guardrail: {
           status: "blocked" as const,
-          reason: "Venta/cash no registrado: requiere approvalDecisionId auditado para esta entrada exacta del ledger.",
+          reason: !approvalDecisionReady
+            ? "Venta/cash no registrado: requiere approvalDecisionId auditado para esta entrada exacta del ledger."
+            : !ledgerConfirmationReady
+              ? `Venta/cash no registrado: requiere confirmacion exacta ${expectedLedgerConfirmation}.`
+              : "Venta/cash no registrado: requiere confirmacion fresca de Robert.",
         },
       };
     }
@@ -5946,8 +5966,9 @@ export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
     }
   }
 
+  const { ledgerConfirmation: _ledgerConfirmation, confirmedByRobert: _confirmedByRobert, ...entryInput } = parsed;
   const entry: RevenueLedgerEntry = {
-    ...parsed,
+    ...entryInput,
     id: `rev-${Date.now()}-${revenueLedger.length + 1}`,
     createdAt: new Date().toISOString(),
   };

@@ -120,6 +120,10 @@ test("records approved ledger decision without recording ledger entry", () => {
   assert.match(result.decision?.ledgerEntrySnapshotHash || "", /^[a-f0-9]{64}$/);
   assert.equal(result.nextApiBody?.approvalDecisionId, result.decision?.id);
   assert.equal(result.nextApiBody?.notes, result.ledgerInput.notes);
+  assert.match(result.nextCommand, /revenue:ledger-record/);
+  assert.doesNotMatch(result.nextCommand, /--confirmed-by-robert/);
+  assert.doesNotMatch(result.nextCommand, /--confirm-ledger/);
+  assert.match(result.nextAction, /fresh Robert ledger approval/);
   assert.equal(result.safety.persistsApprovalDecision, true);
   assert.equal(result.safety.recordsLedgerEntry, false);
   assert.equal(result.safety.chargesClients, false);
@@ -176,6 +180,7 @@ test("ledger approval decision script persists safe decision", () => {
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /Revenue ledger approval decision: recorded/);
-  assert.match(result.stdout, /approvalDecisionId/);
+  assert.match(result.stdout, /revenue:ledger-record/);
+  assert.match(result.stdout, /--approval-decision-id=/);
   assert.match(result.stdout, /Records ledger entry: no/);
 });

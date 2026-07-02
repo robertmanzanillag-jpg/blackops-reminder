@@ -172,6 +172,8 @@ function recordApprovedRevenueLedgerEntryForTests(input: RevenueLedgerApprovalSn
   return recordRevenueLedgerEntry({
     ...input,
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${input.kind} ${input.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 }
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
@@ -542,6 +544,49 @@ test("blocks raw sale ledger entry without audited approval decision", () => {
   assert.equal(result.snapshot.metrics.revenueUsd, 0);
 });
 
+test("blocks sale ledger entry without exact typed ledger confirmation", () => {
+  const ledgerInput = {
+    kind: "bundle_sale" as const,
+    clientName: "Typed Ledger Client",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Verified deposit.",
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+  const missing = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+  });
+  const wrong = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: "RECORD wrong ledger",
+    confirmedByRobert: true,
+  });
+  const unconfirmed = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+  });
+  const stringFalse = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: "false" as unknown as boolean,
+  });
+
+  assert.equal(missing.entry, null);
+  assert.equal(wrong.entry, null);
+  assert.equal(unconfirmed.entry, null);
+  assert.equal(stringFalse.entry, null);
+  assert.match(missing.guardrail.reason, /confirmacion exacta/);
+  assert.match(wrong.guardrail.reason, /confirmacion exacta/);
+  assert.match(unconfirmed.guardrail.reason, /confirmacion fresca de Robert/);
+  assert.match(stringFalse.guardrail.reason, /confirmacion fresca de Robert/);
+  assert.equal(getRevenueEngineSnapshot().metrics.cashCollectedUsd, 0);
+});
+
 test("blocks ledger sale with wrong source rejected or stale approval decision", () => {
   const ledgerInput = {
     kind: "automation_sale" as const,
@@ -590,6 +635,8 @@ test("blocks ledger sale with wrong source rejected or stale approval decision",
       ...ledgerInput,
       notes: approvalDecisionId === stale.decision.id ? "Automation Sprint deposit changed." : ledgerInput.notes,
       approvalDecisionId,
+      ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approvalDecisionId}`,
+      confirmedByRobert: true,
     });
     assert.equal(result.entry, null);
     assert.equal(result.guardrail.status, "blocked");
@@ -612,10 +659,14 @@ test("blocks replaying the same ledger approval decision twice", () => {
   const first = recordRevenueLedgerEntry({
     ...ledgerInput,
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
   const second = recordRevenueLedgerEntry({
     ...ledgerInput,
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 
   assert.equal(first.entry?.kind, "website_sale");
@@ -2989,6 +3040,9 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /approvalDecisionId/);
   assert.match(source, /sendConfirmation/);
   assert.match(source, /outreachSendConfirmation\.trim\(\) !== `SEND/);
+  assert.match(source, /ledgerConfirmation/);
+  assert.match(source, /ledgerConfirmedByRobert/);
+  assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
   assert.doesNotMatch(source, /approvalToSend/);
 });
 
@@ -3521,6 +3575,8 @@ test("closes automation opportunity into ledger and updates money metrics", () =
     markScopeApproved: true,
     notes: closeNotes,
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 
   assert.equal(result.status, "recorded");
@@ -3624,6 +3680,8 @@ test("does not double count automation opportunity already recorded in ledger", 
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
     markScopeApproved: true,
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
   const second = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
@@ -3769,6 +3827,8 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     markScopeApproved: true,
     notes: "Deposit paid before delivery.",
     approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 
   const result = createDeliveryWorkspaceFromAutomationOpportunity({
@@ -4087,6 +4147,12 @@ test("persists ledger entries across module state reloads", () => {
   assert.equal(snapshot.metrics.automationsSold, 1);
   assert.equal(snapshot.metrics.cashCollectedUsd, 1250);
   assert.equal(snapshot.recentLedger[0].clientName, "Persisted Client");
+  assert.equal("ledgerConfirmation" in snapshot.recentLedger[0], false);
+  assert.equal("confirmedByRobert" in snapshot.recentLedger[0], false);
+
+  const persisted = JSON.parse(readFileSync(testLedgerPath, "utf8"));
+  assert.equal("ledgerConfirmation" in persisted[0], false);
+  assert.equal("confirmedByRobert" in persisted[0], false);
 });
 
 test("pauses improvement loop when spend reaches cap without collected revenue", () => {

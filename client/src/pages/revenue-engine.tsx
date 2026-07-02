@@ -1325,6 +1325,8 @@ export default function RevenueEnginePage() {
   const [ledgerInternalCostUsd, setLedgerInternalCostUsd] = useState(64);
   const [ledgerNotes, setLedgerNotes] = useState("Website 3D Premium + Automation Sprint");
   const [ledgerApprovalDecisionId, setLedgerApprovalDecisionId] = useState("");
+  const [ledgerConfirmation, setLedgerConfirmation] = useState("");
+  const [ledgerConfirmedByRobert, setLedgerConfirmedByRobert] = useState(false);
   const [leadBusinessName, setLeadBusinessName] = useState("No Site Cafe");
   const [leadArea, setLeadArea] = useState("Miami");
   const [leadNiche, setLeadNiche] = useState("coffee shop");
@@ -1759,8 +1761,8 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; approvalDecisionId: string }>({
-    mutationFn: async ({ opportunityId, cashCollectedUsd, approvalDecisionId }) => {
+  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; approvalDecisionId: string; ledgerConfirmation: string; confirmedByRobert: boolean }>({
+    mutationFn: async ({ opportunityId, cashCollectedUsd, approvalDecisionId, ledgerConfirmation: opportunityLedgerConfirmation, confirmedByRobert }) => {
       const response = await fetch("/api/revenue-engine/automation-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1770,6 +1772,8 @@ export default function RevenueEnginePage() {
           markScopeApproved: true,
           notes: "Registrado desde Revenue Engine opportunities.",
           approvalDecisionId,
+          ledgerConfirmation: opportunityLedgerConfirmation,
+          confirmedByRobert,
         }),
       });
       const data = await response.json();
@@ -1996,6 +2000,8 @@ export default function RevenueEnginePage() {
           estimatedInternalCostUsd: ledgerInternalCostUsd,
           notes: ledgerNotes,
           approvalDecisionId: ledgerApprovalDecisionId.trim(),
+          ledgerConfirmation: ledgerConfirmation.trim(),
+          confirmedByRobert: ledgerConfirmedByRobert,
         }),
       });
       const data = await response.json();
@@ -2003,6 +2009,8 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      setLedgerConfirmedByRobert(false);
+      setLedgerConfirmation("");
       refetchSnapshot();
     },
   });
@@ -6611,7 +6619,10 @@ export default function RevenueEnginePage() {
                         <select
                           id="ledger-kind"
                           value={ledgerKind}
-                          onChange={(event) => setLedgerKind(event.target.value as typeof ledgerKind)}
+                          onChange={(event) => {
+                            setLedgerKind(event.target.value as typeof ledgerKind);
+                            setLedgerConfirmedByRobert(false);
+                          }}
                           className="h-10 w-full rounded-md border border-zinc-800 bg-black px-3 text-sm text-white outline-none"
                           data-testid="select-ledger-kind"
                         >
@@ -6629,7 +6640,10 @@ export default function RevenueEnginePage() {
                         <Input
                           id="ledger-client"
                           value={ledgerClientName}
-                          onChange={(event) => setLedgerClientName(event.target.value)}
+                          onChange={(event) => {
+                            setLedgerClientName(event.target.value);
+                            setLedgerConfirmedByRobert(false);
+                          }}
                           className="border-zinc-800 bg-black"
                           data-testid="input-ledger-client"
                         />
@@ -6644,7 +6658,10 @@ export default function RevenueEnginePage() {
                             type="number"
                             min={0}
                             value={ledgerAmountUsd}
-                            onChange={(event) => setLedgerAmountUsd(Number(event.target.value))}
+                            onChange={(event) => {
+                              setLedgerAmountUsd(Number(event.target.value));
+                              setLedgerConfirmedByRobert(false);
+                            }}
                             className="border-zinc-800 bg-black"
                             data-testid="input-ledger-amount"
                           />
@@ -6659,7 +6676,10 @@ export default function RevenueEnginePage() {
                             min={0}
                             disabled={ledgerKind === "expense"}
                             value={ledgerKind === "expense" ? 0 : ledgerCashCollectedUsd}
-                            onChange={(event) => setLedgerCashCollectedUsd(Number(event.target.value))}
+                            onChange={(event) => {
+                              setLedgerCashCollectedUsd(Number(event.target.value));
+                              setLedgerConfirmedByRobert(false);
+                            }}
                             className="border-zinc-800 bg-black disabled:opacity-50"
                             data-testid="input-ledger-cash"
                           />
@@ -6673,7 +6693,10 @@ export default function RevenueEnginePage() {
                             type="number"
                             min={0}
                             value={ledgerInternalCostUsd}
-                            onChange={(event) => setLedgerInternalCostUsd(Number(event.target.value))}
+                            onChange={(event) => {
+                              setLedgerInternalCostUsd(Number(event.target.value));
+                              setLedgerConfirmedByRobert(false);
+                            }}
                             className="border-zinc-800 bg-black"
                             data-testid="input-ledger-cost"
                           />
@@ -6686,7 +6709,10 @@ export default function RevenueEnginePage() {
                         <Textarea
                           id="ledger-notes"
                           value={ledgerNotes}
-                          onChange={(event) => setLedgerNotes(event.target.value)}
+                          onChange={(event) => {
+                            setLedgerNotes(event.target.value);
+                            setLedgerConfirmedByRobert(false);
+                          }}
                           className="min-h-[88px] border-zinc-800 bg-black"
                           data-testid="textarea-ledger-notes"
                         />
@@ -6698,12 +6724,42 @@ export default function RevenueEnginePage() {
                         <Input
                           id="ledger-approval-decision"
                           value={ledgerApprovalDecisionId}
-                          onChange={(event) => setLedgerApprovalDecisionId(event.target.value)}
+                          onChange={(event) => {
+                            setLedgerApprovalDecisionId(event.target.value);
+                            setLedgerConfirmedByRobert(false);
+                          }}
                           className="border-zinc-800 bg-black"
                           data-testid="input-ledger-approval-decision"
                           placeholder="approvalDecisionId"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="ledger-confirmation">
+                          Confirmacion ledger
+                        </label>
+                        <Input
+                          id="ledger-confirmation"
+                          value={ledgerConfirmation}
+                          onChange={(event) => {
+                            setLedgerConfirmation(event.target.value);
+                            setLedgerConfirmedByRobert(false);
+                          }}
+                          className="border-zinc-800 bg-black disabled:opacity-50"
+                          data-testid="input-ledger-confirmation"
+                          disabled={ledgerKind === "expense"}
+                          placeholder={`RECORD ${ledgerKind} ${ledgerClientName} approvalDecisionId`}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={ledgerConfirmedByRobert}
+                          onChange={(event) => setLedgerConfirmedByRobert(event.target.checked)}
+                          className="h-4 w-4"
+                          data-testid="checkbox-ledger-confirmed-by-robert"
+                        />
+                        Robert confirmo registrar este cash exacto
+                      </label>
                       <div className="grid gap-2 sm:grid-cols-2">
                         <Button
                           type="button"
@@ -6718,7 +6774,14 @@ export default function RevenueEnginePage() {
                         </Button>
                         <Button
                           type="submit"
-                          disabled={ledgerMutation.isPending}
+                          disabled={
+                            ledgerMutation.isPending
+                            || (ledgerKind !== "expense" && (
+                              !ledgerApprovalDecisionId.trim()
+                              || ledgerConfirmation.trim() !== `RECORD ${ledgerKind} ${ledgerClientName} ${ledgerApprovalDecisionId.trim()}`
+                              || !ledgerConfirmedByRobert
+                            ))
+                          }
                           className="bg-emerald-600 text-white hover:bg-emerald-500"
                           data-testid="button-record-ledger"
                         >
