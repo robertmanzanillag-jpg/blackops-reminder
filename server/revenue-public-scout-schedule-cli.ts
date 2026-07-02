@@ -103,12 +103,15 @@ function hasSymlinkAncestor(base: string, targetParent: string, checks: OutputPa
 }
 
 function allowedOutputRoots(checks: OutputPathChecks) {
+  const workspaceOutputDir = path.resolve(process.cwd(), "revenue_workspace/public-scout");
   const roots = [
-    path.resolve(process.cwd(), "revenue_workspace/public-scout"),
     path.resolve(os.tmpdir()),
     "/tmp",
   ];
-  return roots.map((root) => checks.exists(root) ? checks.realpath(root) : root);
+  return [
+    workspaceOutputDir,
+    ...roots.map((root) => checks.exists(root) ? checks.realpath(root) : root),
+  ];
 }
 
 function validateOutputPath(value: string, overwrite: boolean, checks: OutputPathChecks) {

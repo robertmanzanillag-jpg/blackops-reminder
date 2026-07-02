@@ -1515,7 +1515,7 @@ test("public scout schedule prepares guarded browser runs without executing outr
     runsPerDay: 2,
     runHourLocal: 9,
     browserExecutor: "subagent_browser",
-    maxCandidatesPerRun: 4,
+    maxCandidatesPerRun: 5,
   });
 
   assert.equal(result.status, "ready_for_guarded_schedule");
@@ -1524,10 +1524,10 @@ test("public scout schedule prepares guarded browser runs without executing outr
   assert.equal(result.runs[0].localTime, "09:00");
   assert.equal(result.runs[1].localTime, "13:00");
   assert.equal(result.runs[2].date, "2026-07-02");
-  assert.equal(result.runs[0].targetCandidates, 4);
+  assert.equal(result.runs[0].targetCandidates, 5);
   assert.equal(result.runs[0].commands.prepareBrowserSession.command, "npm");
   assert.deepEqual(result.runs[0].commands.prepareBrowserSession.args.slice(0, 4), ["run", "revenue:browser-scout-session", "--", "--area=Miami"]);
-  assert.equal(result.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=4"), true);
+  assert.equal(result.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=5"), true);
   assert.equal(result.runs[0].commands.extractCandidates.args.includes("--area=Miami"), true);
   assert.equal(result.runs[0].commands.extractCandidates.args.includes("--niche=coffee shop"), true);
   assert.equal(result.runs[0].commands.extractCandidates.args.includes("--offer-focus=websites"), true);

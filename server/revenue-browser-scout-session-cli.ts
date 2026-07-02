@@ -1,3 +1,6 @@
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { RevenueScoutDispatchInput } from "./revenue-engine";
 
 export type RevenueBrowserScoutSessionCliOptions = {
@@ -12,6 +15,18 @@ export type RevenueBrowserScoutSessionCliOptions = {
   open: boolean;
   outputPath: string;
   capturePath: string;
+};
+
+type OutputPathChecks = {
+  exists: (path: string) => boolean;
+  lstat: (path: string) => { isFile: () => boolean; isSymbolicLink: () => boolean };
+  realpath: (path: string) => string;
+};
+
+const nodeOutputPathChecks: OutputPathChecks = {
+  exists: existsSync,
+  lstat: lstatSync,
+  realpath: realpathSync,
 };
 
 export function parseRevenueBrowserScoutSessionArgs(argv: string[]): RevenueBrowserScoutSessionCliOptions {
@@ -40,7 +55,95 @@ export function parseRevenueBrowserScoutSessionArgs(argv: string[]): RevenueBrow
   };
 }
 
-export function validateRevenueBrowserScoutSessionOptions(options: RevenueBrowserScoutSessionCliOptions): string[] {
+function hasSensitiveOutputPath(value: string) {
+  const segments = value.split(/[\\/]+/).map((segment) => segment.trim().toLowerCase()).filter(Boolean);
+  return segments.some((segment) =>
+    segment.startsWith(".env")
+    || segment.startsWith("credentials")
+    || segment.startsWith("secrets")
+    || [".git", ".ssh", "node_modules"].includes(segment)
+  );
+}
+
+function isPathInside(child: string, parent: string) {
+  const relative = path.relative(parent, child);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function hasSymlinkAncestor(base: string, targetParent: string, checks: OutputPathChecks) {
+  if (!isPathInside(targetParent, base)) return false;
+  let current = base;
+  const relative = path.relative(base, targetParent);
+  const parts = relative ? relative.split(path.sep).filter(Boolean) : [];
+  for (const part of parts) {
+    current = path.join(current, part);
+    if (checks.exists(current) && checks.lstat(current).isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+function allowedOutputRoots(checks: OutputPathChecks) {
+  const workspaceOutputDir = path.resolve(process.cwd(), "revenue_workspace/public-scout");
+  const roots = [
+    path.resolve(os.tmpdir()),
+    "/tmp",
+  ];
+  return [
+    workspaceOutputDir,
+    ...roots.map((root) => checks.exists(root) ? checks.realpath(root) : root),
+  ];
+}
+
+function validateOutputPath(name: "--output" | "--capture", value: string, checks: OutputPathChecks) {
+  const errors: string[] = [];
+  if (hasSensitiveOutputPath(value)) {
+    errors.push(`${name} cannot point to .env, credentials, secrets, .ssh, .git or node_modules paths.`);
+  }
+  const resolved = path.resolve(value);
+  const parent = path.dirname(resolved);
+  const workspaceOutputDir = path.resolve(process.cwd(), "revenue_workspace/public-scout");
+
+  if (!checks.exists(parent)) {
+    errors.push(`${name} parent directory must exist.`);
+    return errors;
+  }
+
+  const parentStats = checks.lstat(parent);
+  const allowedSymlinkParents = new Set(["/tmp", path.resolve(os.tmpdir())]);
+  if (parentStats.isSymbolicLink() && !allowedSymlinkParents.has(parent)) {
+    errors.push(`${name} parent directory cannot be a symlink.`);
+    return errors;
+  }
+  if (isPathInside(resolved, workspaceOutputDir)) {
+    if (checks.exists(workspaceOutputDir) && checks.lstat(workspaceOutputDir).isSymbolicLink()) {
+      errors.push(`${name} workspace directory cannot be a symlink.`);
+      return errors;
+    }
+    if (hasSymlinkAncestor(workspaceOutputDir, parent, checks)) {
+      errors.push(`${name} workspace path cannot include symlink directories.`);
+      return errors;
+    }
+  }
+
+  const realParent = checks.realpath(parent);
+  if (!allowedOutputRoots(checks).some((root) => isPathInside(realParent, root))) {
+    errors.push(`${name} must be inside revenue_workspace/public-scout or the system temp directory.`);
+  }
+
+  if (checks.exists(resolved)) {
+    const outputStats = checks.lstat(resolved);
+    errors.push(`${name} already exists; remove it before writing a new browser scout session file.`);
+    if (outputStats.isSymbolicLink()) errors.push(`${name} cannot be a symlink.`);
+    if (!outputStats.isFile()) errors.push(`${name} must be a regular file when it already exists.`);
+  }
+
+  return errors;
+}
+
+export function validateRevenueBrowserScoutSessionOptions(
+  options: RevenueBrowserScoutSessionCliOptions,
+  checks: OutputPathChecks = nodeOutputPathChecks,
+): string[] {
   const errors: string[] = [];
   if (!["websites", "automations", "both"].includes(options.offerFocus)) {
     errors.push("--offer-focus must be websites, automations or both.");
@@ -48,8 +151,14 @@ export function validateRevenueBrowserScoutSessionOptions(options: RevenueBrowse
   if (options.dailyResearchTarget < 10 || options.dailyResearchTarget > 30) {
     errors.push("--daily-research-target must be between 10 and 30 for a safe browser scout session.");
   }
-  if (options.dailyQualifiedLeadLimit < 1 || options.dailyQualifiedLeadLimit > 25) {
-    errors.push("--daily-qualified-lead-limit must be between 1 and 25.");
+  if (options.dailyQualifiedLeadLimit < 5 || options.dailyQualifiedLeadLimit > 25) {
+    errors.push("--daily-qualified-lead-limit must be between 5 and 25.");
+  }
+  if (options.outputPath) {
+    errors.push(...validateOutputPath("--output", options.outputPath, checks));
+  }
+  if (options.capturePath) {
+    errors.push(...validateOutputPath("--capture", options.capturePath, checks));
   }
   return errors;
 }

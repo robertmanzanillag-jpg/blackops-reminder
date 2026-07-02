@@ -84,6 +84,9 @@ test("validates schedule schema and output path safety", () => {
     "--daily-research-target=0",
     "--output=/tmp/revenue-schedule.json",
   ]);
+  const tooFewCandidatesPerRun = parseRevenuePublicScoutScheduleArgs([
+    "--max-candidates-per-run=4",
+  ]);
   const sensitive = parseRevenuePublicScoutScheduleArgs([
     "--output=/tmp/.env.local",
   ]);
@@ -105,6 +108,7 @@ test("validates schedule schema and output path safety", () => {
   ]);
 
   assert.equal(validateRevenuePublicScoutScheduleOptions(badRange).some((error) => error.includes("dailyResearchTarget")), true);
+  assert.equal(validateRevenuePublicScoutScheduleOptions(tooFewCandidatesPerRun).some((error) => error.includes("maxCandidatesPerRun")), true);
   assert.deepEqual(validateRevenuePublicScoutScheduleOptions(sensitive, fakeOutputPathChecks()), [
     "--output cannot point to .env, credentials, secrets, .ssh, .git or node_modules paths.",
   ]);
@@ -169,6 +173,9 @@ test("rejects symlinked workspace output roots and ancestors", () => {
   const ancestorSymlink = parseRevenuePublicScoutScheduleArgs([
     `--output=${workspaceRoot}/nested/deep/revenue-schedule.json`,
   ]);
+  const symlinkedWorkspaceTarget = parseRevenuePublicScoutScheduleArgs([
+    "--output=/Users/robertmanzanilla/Desktop/revenue-schedule.json",
+  ]);
 
   assert.deepEqual(validateRevenuePublicScoutScheduleOptions(rootSymlink, fakeOutputPathChecks({
     existing: [workspaceRoot, `${workspaceRoot}/nested`],
@@ -183,6 +190,14 @@ test("rejects symlinked workspace output roots and ancestors", () => {
     symlinks: [`${workspaceRoot}/nested`],
   })), [
     "--output workspace path cannot include symlink directories.",
+  ]);
+  assert.deepEqual(validateRevenuePublicScoutScheduleOptions(symlinkedWorkspaceTarget, fakeOutputPathChecks({
+    symlinks: [workspaceRoot],
+    realpaths: {
+      [workspaceRoot]: "/Users/robertmanzanilla/Desktop",
+    },
+  })), [
+    "--output must be inside revenue_workspace/public-scout or the system temp directory.",
   ]);
 });
 
@@ -216,13 +231,13 @@ test("builds a guarded public scout schedule with structured commands", () => {
     "--offer-focus=websites",
     "--run-days=2",
     "--runs-per-day=2",
-    "--max-candidates-per-run=4",
+    "--max-candidates-per-run=5",
   ]));
 
   assert.equal(schedule.status, "ready_for_guarded_schedule");
   assert.equal(schedule.runCount, 4);
   assert.equal(schedule.runs[0].commands.prepareBrowserSession.command, "npm");
-  assert.equal(schedule.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=4"), true);
+  assert.equal(schedule.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=5"), true);
   assert.equal(schedule.runs[0].commands.extractCandidates.args.includes("--source=browser_subagent"), true);
   assert.equal(schedule.runs[0].commands.captureForReview.args.includes(`--scout-run-id=${schedule.runs[0].id}`), true);
   assert.equal(schedule.dispatch.importInstructions.some((item) => item.includes("Batch leads")), false);

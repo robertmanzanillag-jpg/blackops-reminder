@@ -553,7 +553,7 @@ export const revenuePublicScoutScheduleSchema = revenueMoneySprintSchema.omit({
   runsPerDay: z.coerce.number().int().min(1).max(4).default(1),
   runHourLocal: z.coerce.number().int().min(0).max(23).default(9),
   browserExecutor: z.enum(["manual_browser", "subagent_browser"]).default("subagent_browser"),
-  maxCandidatesPerRun: z.coerce.number().int().min(1).max(25).default(8),
+  maxCandidatesPerRun: z.coerce.number().int().min(5).max(25).default(8),
 }).strict();
 
 export type RevenuePublicScoutScheduleInput = z.infer<typeof revenuePublicScoutScheduleSchema>;

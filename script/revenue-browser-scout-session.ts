@@ -28,10 +28,10 @@ async function main() {
   const session = buildRevenueBrowserScoutSession(dispatch, options);
 
   if (options.outputPath) {
-    writeFileSync(options.outputPath, JSON.stringify(session, null, 2));
+    writeFileSync(options.outputPath, JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx" });
   }
   if (options.capturePath) {
-    writeFileSync(options.capturePath, JSON.stringify(session.captureTemplate, null, 2));
+    writeFileSync(options.capturePath, JSON.stringify(session.captureTemplate, null, 2), { encoding: "utf8", flag: "wx" });
   }
   if (options.open) {
     for (const item of session.urlsToOpen) openUrl(item.url);
