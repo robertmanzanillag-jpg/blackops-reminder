@@ -111,6 +111,7 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.safety.chargesClients, false);
   assert.equal(packet.safety.publishesWebsites, false);
   assert.equal(packet.safety.commercialGoLiveReady, false);
+  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:public-scout-execute")), true);
   assert.equal(packet.requiredEnvironment.some((group) => group.names.includes("DATABASE_URL")), true);
   assert.equal(
     packet.requiredEnvironment.some((group) => group.names.includes("RESEND_API_KEY + REVENUE_ENGINE_FROM_EMAIL/RESEND_FROM_EMAIL")),

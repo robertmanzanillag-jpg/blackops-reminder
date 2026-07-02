@@ -75,7 +75,7 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
   const executionOrder = [
     "Run revenue:money-readiness and fix every blocking gate before selling.",
     "Run revenue:public-scout-schedule to prepare guarded public research slots.",
-    "Capture candidates through revenue:public-scout-run and Robert review before Money sprint.",
+    "Capture public notes and run revenue:public-scout-execute so candidates persist only for Robert review before Money sprint.",
     "Only after payment/contact gates pass, draft outreach and proposals.",
     "Only after deposit, App QA, preview deploy and rollback evidence, publish client websites.",
   ];

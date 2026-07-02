@@ -6846,7 +6846,7 @@ export function buildRevenuePublicScoutSchedule(input: RevenuePublicScoutSchedul
       paidDataSpendUsd: 0,
       requiresRobertReview: true,
     },
-    nextAction: "Connect these run slots to a trusted browser executor that captures public notes, then run extract and public-scout-run for Robert review.",
+    nextAction: "Capture public notes for a run slot, then run revenue:public-scout-execute to persist review-only candidates for Robert.",
   };
 }
 
@@ -7278,10 +7278,10 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     },
     {
       id: "autonomous_business_search",
-      label: "Autonomous business search",
-      status: "fail" as const,
-      detail: "The current agent creates safe browser/subagent work orders, guarded scout schedules, local browser scout sessions, structured review candidates from captured public notes, and batch review capture, but it does not yet run a trusted browser executor by itself.",
-      nextStep: "Connect the guarded scout schedule to trusted browser execution with source evidence capture and Robert-review handoff for /api/revenue-engine/public-scout-run.",
+      label: "Guarded business discovery execution",
+      status: "ok" as const,
+      detail: "Guarded scout schedules can now execute captured public notes through revenue:public-scout-execute into Robert-review public candidates without importing leads or sending outreach.",
+      nextStep: "Run revenue:public-scout-schedule, capture public notes, then run revenue:public-scout-execute before Robert review.",
     },
     {
       id: "production_persistence",
@@ -7367,7 +7367,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     nextAction: blockingFailedChecks[0]?.nextStep || "Run a guarded public research sprint.",
     allowedToday: [
       "Public research from Google/Maps/Instagram/directories.",
-      "Save candidates with public evidence and contact path.",
+      "Execute guarded public scout captures into Robert-review candidates with revenue:public-scout-execute.",
       "Generate internal mockups/previews and draft-only outreach.",
       "Prepare proposals and ask Robert for approval before any contact or spend.",
     ],

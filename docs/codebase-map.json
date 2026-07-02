@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T02:19:27.177Z",
+  "generatedAt": "2026-07-02T02:39:55.350Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -50,6 +50,7 @@
     "test:revenue-website-creation-approval-decision-cli": "node --import tsx --test tests/revenue-website-creation-approval-decision-cli.test.ts",
     "test:revenue-website-creation-packet-cli": "node --import tsx --test tests/revenue-website-creation-packet-cli.test.ts",
     "test:revenue-public-scout-extract-cli": "node --import tsx --test tests/revenue-public-scout-extract-cli.test.ts",
+    "test:revenue-public-scout-execute-cli": "node --import tsx --test tests/revenue-public-scout-execute-cli.test.ts",
     "test:revenue-public-scout-schedule-cli": "node --import tsx --test tests/revenue-public-scout-schedule-cli.test.ts",
     "test:revenue-public-scout-run-cli": "node --import tsx --test tests/revenue-public-scout-run-cli.test.ts",
     "test:revenue-public-contact-verification-cli": "node --import tsx --test tests/revenue-public-contact-verification-cli.test.ts",
@@ -65,7 +66,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -93,6 +94,7 @@
     "revenue:website-creation-approval-decision": "node --import tsx script/revenue-website-creation-approval-decision.ts",
     "revenue:website-creation-packet": "node --import tsx script/revenue-website-creation-packet.ts",
     "revenue:public-scout-extract": "node --import tsx script/revenue-public-scout-extract.ts",
+    "revenue:public-scout-execute": "node --import tsx script/revenue-public-scout-execute.ts",
     "revenue:public-scout-schedule": "node --import tsx script/revenue-public-scout-schedule.ts",
     "revenue:public-scout-run": "node --import tsx script/revenue-public-scout-run.ts",
     "revenue:public-contact-verification": "node --import tsx script/revenue-public-contact-verification.ts",
@@ -121,32 +123,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 462,
-    "filesIndexed": 395,
-    "imports": 1489,
+    "filesVisible": 465,
+    "filesIndexed": 398,
+    "imports": 1505,
     "routes": 443,
-    "symbols": 8322
+    "symbols": 8392
   },
   "directories": {
     "script": {
-      "files": 56,
-      "indexed": 54,
+      "files": 57,
+      "indexed": 55,
       "kinds": {
-        "script": 56
+        "script": 57
       }
     },
     "server": {
-      "files": 118,
-      "indexed": 115,
+      "files": 119,
+      "indexed": 116,
       "kinds": {
-        "server": 118
+        "server": 119
       }
     },
     "tests": {
-      "files": 78,
-      "indexed": 76,
+      "files": 79,
+      "indexed": 77,
       "kinds": {
-        "test": 78
+        "test": 79
       }
     },
     ".agents/skills": {
@@ -5371,6 +5373,29 @@
         "main",
         "options",
         "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-scout-execute.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-scout-execute-cli",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "notesPath",
+        "options",
+        "rawNotes",
+        "rawSchedule",
+        "resolvedPathErrors",
+        "result",
+        "run",
+        "schedule",
         "validationErrors"
       ],
       "routes": []
@@ -11705,6 +11730,72 @@
       "routes": []
     },
     {
+      "path": "server/revenue-public-scout-execute-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-public-scout-extract-cli",
+        "node:fs",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "RevenuePublicScoutExecuteCliOptions",
+        "buildRevenuePublicScoutExecute",
+        "formatRevenuePublicScoutExecuteText",
+        "getRevenuePublicScoutExecuteExitCode",
+        "parseRevenuePublicScoutExecuteArgs",
+        "parseRevenuePublicScoutExecuteSchedule",
+        "validateRevenuePublicScoutExecuteOptions",
+        "validateRevenuePublicScoutExecuteResolvedPaths"
+      ],
+      "symbols": [
+        "PathChecks",
+        "PublicScoutSchedule",
+        "PublicScoutScheduleRun",
+        "allowedPublicScoutPathRoots",
+        "arg",
+        "argValue",
+        "args",
+        "blockers",
+        "buildRevenuePublicScoutExecute",
+        "existingAncestor",
+        "expanded",
+        "extractOptions",
+        "extractOptionsFromRun",
+        "extractText",
+        "extractedInput",
+        "formatRevenuePublicScoutExecuteText",
+        "getArgValue",
+        "getRevenuePublicScoutExecuteExitCode",
+        "hasSensitivePath",
+        "isAllowedPublicScoutPath",
+        "isPathInside",
+        "nearestExistingAncestor",
+        "outputPathErrors",
+        "parent",
+        "parseRevenuePublicScoutExecuteArgs",
+        "parseRevenuePublicScoutExecuteSchedule",
+        "parsed",
+        "prefix",
+        "realAncestor",
+        "realTarget",
+        "relative",
+        "resolved",
+        "roots",
+        "schedule",
+        "scoutRunResult",
+        "segments",
+        "selectedRun",
+        "sourceFromExecutor",
+        "validateExistingReadablePath",
+        "validateRevenuePublicScoutExecuteOptions",
+        "validateRevenuePublicScoutExecuteResolvedPaths",
+        "validateWritablePath"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/revenue-public-scout-extract-cli.ts",
       "kind": "server",
       "imports": [
@@ -15493,6 +15584,42 @@
       "routes": []
     },
     {
+      "path": "tests/revenue-public-scout-execute-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-scout-execute-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidates",
+        "dir",
+        "errors",
+        "extracted",
+        "extractedPath",
+        "noteSymlink",
+        "notesPath",
+        "outputSymlink",
+        "parsed",
+        "publicNotes",
+        "result",
+        "schedule",
+        "scheduleJson",
+        "schedulePath",
+        "sensitiveNotesPath",
+        "testCandidatesPath",
+        "text",
+        "unsafeSchedule"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/revenue-public-scout-extract-cli.test.ts",
       "kind": "test",
       "imports": [
@@ -15973,6 +16100,7 @@
     "tests/revenue-public-candidate-review-cli.test.ts",
     "tests/revenue-public-candidate-verification-update-cli.test.ts",
     "tests/revenue-public-contact-verification-cli.test.ts",
+    "tests/revenue-public-scout-execute-cli.test.ts",
     "tests/revenue-public-scout-extract-cli.test.ts",
     "tests/revenue-public-scout-run-cli.test.ts",
     "tests/revenue-public-scout-schedule-cli.test.ts",

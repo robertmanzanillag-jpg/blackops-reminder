@@ -79,7 +79,8 @@ test("reports dry-run research mode until production money blockers are configur
   assert.equal(report.canBuildWebsites, false);
   assert.equal(report.nextApiAction, "/api/revenue-engine/scout-dispatch");
   assert.equal(report.checks.find((check) => check.id === "safe_public_research")?.status, "ok");
-  assert.equal(report.checks.find((check) => check.id === "autonomous_business_search")?.status, "fail");
+  assert.equal(report.checks.find((check) => check.id === "autonomous_business_search")?.status, "ok");
+  assert.ok(report.allowedToday.some((item) => item.includes("revenue:public-scout-execute")));
   assert.equal(report.checks.find((check) => check.id === "production_persistence")?.status, "fail");
   assert.ok(report.blockedUntil.some((item) => item.includes("Postgres")));
 });
@@ -297,7 +298,7 @@ test("production launch readiness is not blocked by the nonblocking autonomous s
   assert.equal(report.status, "production_money_ready");
   assert.equal(report.canBuildWebsites, true);
   assert.deepEqual(report.blockedUntil, []);
-  assert.ok(report.remainingGaps.some((item) => item.includes("trusted browser execution")));
+  assert.deepEqual(report.remainingGaps, []);
 });
 
 test("formats revenue money readiness text output", () => {

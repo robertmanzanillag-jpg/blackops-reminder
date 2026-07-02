@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T02:19:27.177Z
+Generated: 2026-07-02T02:39:55.350Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 462 | 395 | 1489 | 443 | 8322 |
+| 465 | 398 | 1505 | 443 | 8392 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 118 | 115 | server:118 |
+| `server` | 119 | 116 | server:119 |
 | `client/src` | 108 | 106 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
-| `tests` | 78 | 76 | test:78 |
-| `script` | 56 | 54 | script:56 |
+| `tests` | 79 | 77 | test:79 |
+| `script` | 57 | 55 | script:57 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
@@ -117,6 +117,7 @@ Package: `rest-express`
 - `tests/revenue-public-candidate-review-cli.test.ts`
 - `tests/revenue-public-candidate-verification-update-cli.test.ts`
 - `tests/revenue-public-contact-verification-cli.test.ts`
+- `tests/revenue-public-scout-execute-cli.test.ts`
 - `tests/revenue-public-scout-extract-cli.test.ts`
 - `tests/revenue-public-scout-run-cli.test.ts`
 - `tests/revenue-public-scout-schedule-cli.test.ts`
@@ -204,6 +205,7 @@ Package: `rest-express`
 - `script/revenue-public-candidate-review.ts` (script; 5 symbols, 2 imports)
 - `script/revenue-public-candidate-verification-update.ts` (script; 5 symbols, 2 imports)
 - `script/revenue-public-contact-verification.ts` (script; 4 symbols, 2 imports)
+- `script/revenue-public-scout-execute.ts` (script; 10 symbols, 3 imports)
 - `script/revenue-public-scout-extract.ts` (script; 5 symbols, 2 imports)
 - `script/revenue-public-scout-run.ts` (script; 6 symbols, 3 imports)
 - `script/revenue-public-scout-schedule.ts` (script; 4 symbols, 2 imports)
@@ -216,7 +218,6 @@ Package: `rest-express`
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-router.ts` (server; 13 symbols)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
