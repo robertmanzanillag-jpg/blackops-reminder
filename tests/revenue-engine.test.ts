@@ -3334,6 +3334,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /button-approve-public-candidate-batch/);
   assert.match(source, /input-public-candidate-approval-confirmation/);
   assert.match(source, /first-money-candidate-approval-cards/);
+  assert.match(source, /candidateApprovalQueue/);
+  assert.match(source, /first-money-candidate-approval-queue/);
+  assert.match(source, /first-money-candidate-approval-queue-/);
+  assert.match(source, /batch\.confirmationText/);
+  assert.match(source, /Contact and source details stay hidden/);
   assert.match(source, /contacto oculto hasta aprobacion/);
   assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateApproval\.confirmationText/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);

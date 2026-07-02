@@ -473,6 +473,23 @@ test("first-money command center summary omits candidate contact detail payloads
         publicEvidenceVerified: true,
         approvalToImport: false,
       },
+      {
+        businessName: "Summary Privacy Salon",
+        area: "Miami",
+        niche: "hair salon",
+        websiteStatus: "weak_website",
+        contactChannel: "email",
+        contactValue: "owner@summarysalon.biz",
+        sourceUrl: "https://public-directory.invalid/summary-privacy-salon",
+        recipientEmail: "owner@summarysalon.biz",
+        evidence: "Public directory profile shows weak website and a visible salon owner email.",
+        painPoint: "Needs booking CTA and service menu cleanup.",
+        estimatedOfferUsd: 2400,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
     ],
   });
 
@@ -489,6 +506,11 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.contactHiddenUntilApproval, true);
   assert.equal(summary.nextCandidateApproval?.confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-1");
   assert.equal(summary.nextCandidateApproval?.safety.sendsOutreach, false);
+  assert.equal(summary.candidateApprovalQueue.length, 2);
+  assert.equal(summary.candidateApprovalQueue[0].candidateNames[0], "Summary Privacy Cafe");
+  assert.equal(summary.candidateApprovalQueue[1].candidateNames[0], "Summary Privacy Salon");
+  assert.equal(summary.candidateApprovalQueue[1].totalEstimatedOfferUsd, 2400);
+  assert.equal(summary.candidateApprovalQueue[1].candidateCards[0]?.contactHiddenUntilApproval, true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "website_build" && item.evidenceRequired.some((evidence) => evidence.includes("Deposit proof"))), true);
@@ -506,16 +528,19 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.activationChecklist.some((step) => step.id === "contact_path" && step.status === "blocked_until_evidence"), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "payment_path" && step.commandHint.includes("revenue:payment-path-approval-decision")), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "publish" && step.safety.includes("Never deploys")), true);
-  assert.equal(summary.counts.reviewablePublicCandidates, 1);
+  assert.equal(summary.counts.reviewablePublicCandidates, 2);
   assert.equal("candidateApprovalBatches" in summary, false);
   assert.equal("setupCommands" in summary, false);
   assert.equal("queue" in summary, false);
   assert.doesNotMatch(serialized, /owner@summaryprivacy\.biz/);
+  assert.doesNotMatch(serialized, /owner@summarysalon\.biz/);
   assert.doesNotMatch(serialized, /contactValue/);
   assert.doesNotMatch(serialized, /recipientEmail/);
   assert.doesNotMatch(serialized, /sourceUrl/);
   assert.doesNotMatch(serialized, /public-directory\.invalid\/summary-privacy-cafe/);
+  assert.doesNotMatch(serialized, /public-directory\.invalid\/summary-privacy-salon/);
   assert.doesNotMatch(serialized, /Public listing has no website/);
+  assert.doesNotMatch(serialized, /visible salon owner email/);
 });
 
 test("first-money command center sanitizes public candidate approval text", () => {

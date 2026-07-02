@@ -991,6 +991,9 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
     || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "ready_for_candidate_review"),
   );
+  const candidateApprovalQueue = packet.candidateApprovalBatches
+    .map((batch) => redactCandidateApprovalBatchForSummary(batch))
+    .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateApprovalBatchForSummary>> => Boolean(batch));
   const nextCommand = {
     ...packet.nextCommand,
     command: nextCandidateReview
@@ -1011,6 +1014,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     mode: packet.mode,
     nextCommand,
     nextCandidateApproval,
+    candidateApprovalQueue,
     nextCandidateReview,
     nextMoneySprintRun,
     moneyUnblockers,

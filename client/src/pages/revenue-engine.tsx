@@ -414,17 +414,7 @@ type RevenueSnapshot = {
   }>;
 };
 
-type FirstMoneyCommandCenter = {
-  status: string;
-  mode: string;
-  nextCommand: {
-    id: string;
-    label: string;
-    command: string;
-    status: "ready" | "blocked" | "review";
-    reason: string;
-  };
-  nextCandidateApproval: {
+type FirstMoneyCandidateApprovalSummary = {
     id: string;
     candidateIds: string[];
     candidateNames: string[];
@@ -454,7 +444,20 @@ type FirstMoneyCommandCenter = {
       deploys: boolean;
       paidDataSpendUsd: number;
     };
-  } | null;
+  };
+
+type FirstMoneyCommandCenter = {
+  status: string;
+  mode: string;
+  nextCommand: {
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  };
+  nextCandidateApproval: FirstMoneyCandidateApprovalSummary | null;
+  candidateApprovalQueue: FirstMoneyCandidateApprovalSummary[];
   nextCandidateReview: {
     id: string;
     candidateIds: string[];
@@ -2765,6 +2768,29 @@ export default function RevenueEnginePage() {
                       {publicCandidateApprovalMutation.error.message}
                     </p>
                   )}
+                </div>
+              )}
+              {!!firstMoneyCommandCenter?.candidateApprovalQueue?.length && (
+                <div className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3" data-testid="first-money-candidate-approval-queue">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs uppercase tracking-wide text-cyan-200">Approval queue</p>
+                    <Badge variant="outline" className="shrink-0 border-cyan-500/30 text-cyan-100">
+                      {firstMoneyCommandCenter.candidateApprovalQueue.length} batch(es)
+                    </Badge>
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {firstMoneyCommandCenter.candidateApprovalQueue.map((batch) => (
+                      <div key={batch.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs" data-testid={`first-money-candidate-approval-queue-${batch.id}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-white">{batch.area} · {batch.niche}</span>
+                          <span className="text-cyan-100">${batch.totalEstimatedOfferUsd.toLocaleString("en-US")}</span>
+                        </div>
+                        <p className="mt-1 text-zinc-400">{batch.count} candidate(s): {batch.candidateNames.join(", ")}</p>
+                        <p className="mt-1 break-words text-zinc-500">Confirm: {batch.confirmationText}</p>
+                        <p className="mt-1 text-zinc-600">Contact and source details stay hidden until the guarded approval action runs.</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {firstMoneyCommandCenter?.nextCandidateReview && (
