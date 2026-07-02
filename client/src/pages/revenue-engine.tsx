@@ -546,6 +546,10 @@ type FirstMoneyCommandCenter = {
     status: "ready" | "blocked" | "review";
     reason: string;
     commandHint: string;
+    endpoint: string;
+    payloadFields: Record<string, unknown>;
+    requiredEvidence: string[];
+    isPlaceholderTemplate: boolean;
     safety: string;
   }>;
   safeSearchAction: {
@@ -635,6 +639,27 @@ type PublicCandidateApprovalPendingActionResult = {
     chargesClients: boolean;
     deploys: boolean;
     exposesContactDetails: boolean;
+  };
+};
+
+type ContactPathApprovalPendingActionResult = {
+  status: "queued";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    createsPendingAction: boolean;
+    persistsApprovalDecision: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    editsEnvironment: boolean;
+    storesSecrets: boolean;
+    deploys: boolean;
   };
 };
 
@@ -1651,6 +1676,10 @@ export default function RevenueEnginePage() {
   const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
   const [publicCandidateReviewConfirmation, setPublicCandidateReviewConfirmation] = useState("");
   const [publicCandidateRunConfirmation, setPublicCandidateRunConfirmation] = useState("");
+  const [contactPathEvidenceUrl, setContactPathEvidenceUrl] = useState("");
+  const [contactPathEvidenceNote, setContactPathEvidenceNote] = useState("");
+  const [contactPathRobertApproved, setContactPathRobertApproved] = useState(false);
+  const [contactPathVerified, setContactPathVerified] = useState(false);
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -2182,6 +2211,31 @@ export default function RevenueEnginePage() {
     },
     onSuccess: () => {
       refetchSnapshot();
+    },
+  });
+
+  const contactPathApprovalPendingActionMutation = useMutation<ContactPathApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/contact-path-approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactMode: "manual",
+          manualContactApproved: true,
+          emailProviderConfigured: false,
+          approvedAction: "Approve exact manual contact path for first-money outreach.",
+          robertApprovedContactPath: contactPathRobertApproved,
+          contactPathVerified,
+          evidenceUrl: contactPathEvidenceUrl,
+          evidenceNote: contactPathEvidenceNote,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar contact path a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
     },
   });
 
@@ -3134,6 +3188,78 @@ export default function RevenueEnginePage() {
                   </div>
                 ))}
               </div>
+              <div className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs leading-5 text-emerald-100" data-testid="first-money-contact-path-approval-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">Manual contact path approval</p>
+                    <p className="mt-1 text-zinc-400">
+                      Queues Trust Center approval only. It does not send outreach, edit env, store secrets, charge, or deploy.
+                    </p>
+                    <Input
+                      value={contactPathEvidenceUrl}
+                      onChange={(event) => setContactPathEvidenceUrl(event.target.value)}
+                      placeholder="https://..."
+                      className="mt-2 border-emerald-500/20 bg-black text-xs"
+                      data-testid="input-contact-path-evidence-url"
+                    />
+                    <Textarea
+                      value={contactPathEvidenceNote}
+                      onChange={(event) => setContactPathEvidenceNote(event.target.value)}
+                      placeholder="Real manual contact path proof"
+                      className="mt-2 min-h-[72px] border-emerald-500/20 bg-black text-xs"
+                      data-testid="textarea-contact-path-evidence-note"
+                    />
+                    <div className="mt-2 grid gap-2 text-zinc-300">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={contactPathRobertApproved}
+                          onChange={(event) => setContactPathRobertApproved(event.target.checked)}
+                          className="h-4 w-4 accent-emerald-500"
+                          data-testid="checkbox-contact-path-robert-approved"
+                        />
+                        Robert approved manual contact path
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={contactPathVerified}
+                          onChange={(event) => setContactPathVerified(event.target.checked)}
+                          className="h-4 w-4 accent-emerald-500"
+                          data-testid="checkbox-contact-path-verified"
+                        />
+                        Evidence is verified
+                      </label>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      contactPathApprovalPendingActionMutation.isPending
+                      || !contactPathEvidenceUrl.trim()
+                      || !contactPathEvidenceNote.trim()
+                      || !contactPathRobertApproved
+                      || !contactPathVerified
+                    }
+                    onClick={() => contactPathApprovalPendingActionMutation.mutate()}
+                    className="bg-emerald-600 text-white hover:bg-emerald-500"
+                    data-testid="button-queue-contact-path-approval"
+                  >
+                    {contactPathApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    Trust Center
+                  </Button>
+                </div>
+                {contactPathApprovalPendingActionMutation.data?.pendingAction && (
+                  <p className="mt-3 rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-xs text-emerald-100">
+                    Trust Center: {contactPathApprovalPendingActionMutation.data.pendingAction.title}
+                  </p>
+                )}
+                {contactPathApprovalPendingActionMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {contactPathApprovalPendingActionMutation.error.message}
+                  </p>
+                )}
+              </div>
               <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100" data-testid="first-money-setup-action-queue">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-white">Setup Trust Center actions</span>
@@ -3152,6 +3278,21 @@ export default function RevenueEnginePage() {
                           </Badge>
                         </div>
                         <p className="mt-1 text-zinc-400">{action.reason}</p>
+                        {action.endpoint && (
+                          <p className="mt-1 break-words text-amber-100">Endpoint: {action.endpoint}</p>
+                        )}
+                        {!!action.requiredEvidence.length && (
+                          <ul className="mt-1 space-y-1 text-zinc-400">
+                            {action.requiredEvidence.map((evidence) => (
+                              <li key={evidence}>- {evidence}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {Object.keys(action.payloadFields).length > 0 && (
+                          <pre className="mt-2 max-h-40 overflow-auto rounded border border-zinc-800 bg-black px-2 py-2 text-[11px] leading-4 text-zinc-400">
+                            {JSON.stringify(action.payloadFields, null, 2)}
+                          </pre>
+                        )}
                         <p className="mt-1 break-words text-zinc-500">{action.commandHint}</p>
                         <p className="mt-1 text-zinc-500">{action.safety}</p>
                       </div>

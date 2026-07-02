@@ -26,6 +26,9 @@ type CommandQueueItem = {
 
 type SetupCommandItem = CommandQueueItem & {
   gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation" | "website_publish";
+  endpoint?: string;
+  payloadFields?: Record<string, unknown>;
+  requiredEvidence?: string[];
 };
 
 type MoneyUnblockerItem = {
@@ -221,6 +224,10 @@ function redactSetupCommandForSummary(item: SetupCommandItem) {
     status: item.status,
     reason: item.reason,
     commandHint: item.command,
+    endpoint: item.endpoint || "",
+    payloadFields: item.payloadFields || {},
+    requiredEvidence: item.requiredEvidence || [],
+    isPlaceholderTemplate: Boolean(item.payloadFields),
     safety: "Trust Center/setup guidance only; does not send outreach, charge clients, write website files or deploy.",
   };
 }
@@ -390,33 +397,39 @@ function trustCenterPayloadActionText(endpoint: string, payloadShape: Record<str
 }
 
 function buildWebsitePublishApprovalSetupCommand(): SetupCommandItem {
+  const endpoint = "/api/revenue-engine/website-publish-approval-pending-action";
+  const payloadFields = {
+    outreachDraftId: "OUTREACH_ID",
+    websiteCreationApprovalDecisionId: "CREATION_APPROVAL_ID",
+    approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.",
+    notes: "REPLACE_WITH_PREVIEW_APP_QA_ROLLBACK_NOTES",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "DEPLOY_PROVIDER",
+    previewDeployUrl: "PREVIEW_URL",
+    appQaEvidenceUrl: "APP_QA_URL",
+    rollbackPlanUrl: "ROLLBACK_URL",
+    launchTargetDays: 7,
+  };
+  const requiredEvidence = [
+    "real outreachDraftId",
+    "real websiteCreationApprovalDecisionId",
+    "real previewDeployUrl",
+    "real appQaEvidenceUrl",
+    "real rollbackPlanUrl",
+    "real deployProvider",
+    "Robert/App QA/rollback approval flags",
+  ];
   return {
     id: "website-publish-approval",
     gate: "website_publish",
     label: "Approve website publish readiness after QA",
-    command: trustCenterPayloadActionText("/api/revenue-engine/website-publish-approval-pending-action", {
-      outreachDraftId: "OUTREACH_ID",
-      websiteCreationApprovalDecisionId: "CREATION_APPROVAL_ID",
-      approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.",
-      notes: "REPLACE_WITH_PREVIEW_APP_QA_ROLLBACK_NOTES",
-      robertApprovedPublish: true,
-      previewDeployVerified: true,
-      appQaTargetPassed: true,
-      rollbackVerified: true,
-      deployProvider: "DEPLOY_PROVIDER",
-      previewDeployUrl: "PREVIEW_URL",
-      appQaEvidenceUrl: "APP_QA_URL",
-      rollbackPlanUrl: "ROLLBACK_URL",
-      launchTargetDays: 7,
-    }, [
-      "real outreachDraftId",
-      "real websiteCreationApprovalDecisionId",
-      "real previewDeployUrl",
-      "real appQaEvidenceUrl",
-      "real rollbackPlanUrl",
-      "real deployProvider",
-      "Robert/App QA/rollback approval flags",
-    ]),
+    endpoint,
+    payloadFields,
+    requiredEvidence,
+    command: trustCenterPayloadActionText(endpoint, payloadFields, requiredEvidence),
     status: "blocked",
     reason: "Runs only after preview deploy verification, App QA evidence, rollback proof and Robert publish approval; Trust Center records approval only and never deploys or publishes.",
   };
@@ -443,6 +456,23 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "contact-path-approval",
         gate: "contact_path",
         label: "Approve contact path before outreach",
+        endpoint: "/api/revenue-engine/contact-path-approval-pending-action",
+        payloadFields: {
+          contactMode: "manual",
+          manualContactApproved: true,
+          emailProviderConfigured: false,
+          approvedAction: "Approve exact manual/provider contact path for first-money outreach.",
+          robertApprovedContactPath: true,
+          contactPathVerified: true,
+          evidenceUrl: "REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+          evidenceNote: "REPLACE_WITH_CONTACT_PATH_PROOF",
+        },
+        requiredEvidence: [
+          "contactMode=manual or email_provider",
+          "real evidenceUrl",
+          "real evidenceNote",
+          "Robert-approved contact path flags",
+        ],
         command: trustCenterPayloadActionText("/api/revenue-engine/contact-path-approval-pending-action", {
           contactMode: "manual",
           manualContactApproved: true,
@@ -484,6 +514,26 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "payment-path-approval",
         gate: "payment_path",
         label: "Approve payment path before charging",
+        endpoint: "/api/revenue-engine/payment-path-approval-pending-action",
+        payloadFields: {
+          paymentLink: "REPLACE_WITH_STRIPE_PAYMENT_LINK",
+          approvedAction: "Approve exact Stripe payment path for first-money deposits.",
+          robertApprovedPaymentPath: true,
+          paymentSmokeVerified: true,
+          depositConfirmedByRobert: false,
+          expectedDepositUsd: 1500,
+          expectedPackage: "First Money Website Deposit",
+          evidenceUrl: "REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+          evidenceNote: "REPLACE_WITH_PAYMENT_PROOF",
+        },
+        requiredEvidence: [
+          "real HTTPS Stripe paymentLink",
+          "expectedDepositUsd",
+          "expectedPackage",
+          "real evidenceUrl",
+          "real evidenceNote",
+          "Robert-approved payment path flags",
+        ],
         command: trustCenterPayloadActionText("/api/revenue-engine/payment-path-approval-pending-action", {
           paymentLink: "REPLACE_WITH_STRIPE_PAYMENT_LINK",
           approvedAction: "Approve exact Stripe payment path for first-money deposits.",
@@ -529,6 +579,25 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "ledger-entry-approval",
       gate: "ledger_entry",
       label: "Approve ledger entry after deposit is collected",
+      endpoint: "/api/revenue-engine/ledger-entry-approval-pending-action",
+      payloadFields: {
+        kind: "website_sale",
+        clientName: "CLIENT_NAME",
+        amountUsd: 3500,
+        cashCollectedUsd: 1500,
+        estimatedInternalCostUsd: 0,
+        notes: "LEDGER_NOTES",
+        paymentEvidence: "PAYMENT_EVIDENCE",
+        approvedAction: "Approve exact paid ledger entry after Robert verified payment evidence.",
+      },
+      requiredEvidence: [
+        "real clientName",
+        "amountUsd",
+        "cashCollectedUsd",
+        "estimatedInternalCostUsd",
+        "real paymentEvidence",
+        "real ledger notes",
+      ],
       command: trustCenterPayloadActionText("/api/revenue-engine/ledger-entry-approval-pending-action", {
         kind: "website_sale",
         clientName: "CLIENT_NAME",
@@ -555,6 +624,25 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "website-creation-approval",
       gate: "website_creation",
       label: "Approve paid website creation after deposit",
+      endpoint: "/api/revenue-engine/website-creation-approval-pending-action",
+      payloadFields: {
+        outreachDraftId: "OUTREACH_ID",
+        approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review.",
+        notes: "REPLACE_WITH_SCOPE_DEPOSIT_PUBLIC_DATA_NOTES",
+        robertApprovedBuild: true,
+        clientApprovedScope: true,
+        depositPaid: true,
+        publicDataVerified: true,
+        launchTargetDays: 7,
+      },
+      requiredEvidence: [
+        "real outreachDraftId",
+        "real scope/deposit/public-data notes",
+        "Robert-approved build flag",
+        "client-approved scope flag",
+        "deposit-paid flag",
+        "public-data verified flag",
+      ],
       command: trustCenterPayloadActionText("/api/revenue-engine/website-creation-approval-pending-action", {
         outreachDraftId: "OUTREACH_ID",
         approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review.",

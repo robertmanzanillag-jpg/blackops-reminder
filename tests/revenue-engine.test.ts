@@ -4298,6 +4298,36 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
   assert.match(source, /First-money command center/);
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(source, /const contactPathApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
+  assert.match(source, /contactMode: "manual"/);
+  assert.match(source, /manualContactApproved: true/);
+  assert.match(source, /robertApprovedContactPath: contactPathRobertApproved/);
+  assert.match(source, /contactPathVerified/);
+  assert.match(source, /button-queue-contact-path-approval/);
+  assert.match(source, /first-money-contact-path-approval-panel/);
+  const contactPathMutationSource = source.slice(
+    source.indexOf("const contactPathApprovalPendingActionMutation"),
+    source.indexOf("const publicCandidateApprovalPendingActionMutation"),
+  );
+  const contactPathPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-contact-path-approval-panel"'),
+    source.indexOf('data-testid="first-money-setup-action-queue"'),
+  );
+  assert.match(contactPathMutationSource, /evidenceUrl: contactPathEvidenceUrl/);
+  assert.match(contactPathMutationSource, /evidenceNote: contactPathEvidenceNote/);
+  assert.match(contactPathMutationSource, /robertApprovedContactPath: contactPathRobertApproved/);
+  assert.match(contactPathMutationSource, /contactPathVerified/);
+  assert.doesNotMatch(
+    contactPathMutationSource,
+    /outreach-send|payment-path-readiness-packet|decision: "approved"|sendConfirmation/,
+  );
+  assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.isPending/);
+  assert.match(contactPathPanelSource, /!contactPathEvidenceUrl\.trim\(\)/);
+  assert.match(contactPathPanelSource, /!contactPathEvidenceNote\.trim\(\)/);
+  assert.match(contactPathPanelSource, /!contactPathRobertApproved/);
+  assert.match(contactPathPanelSource, /!contactPathVerified/);
+  assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.mutate\(\)/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
   assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(source, /nextCandidateApproval/);

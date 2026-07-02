@@ -622,6 +622,15 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.setupActionQueue.some((item) => item.id === "contact-path-approval" && item.commandHint.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
   assert.equal(summary.setupActionQueue.some((item) => item.id === "payment-path-approval" && item.commandHint.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
   assert.equal(summary.setupActionQueue.some((item) => item.id === "website-publish-approval" && item.commandHint.includes("/api/revenue-engine/website-publish-approval-pending-action")), true);
+  const contactSetup = summary.setupActionQueue.find((item) => item.id === "contact-path-approval");
+  const publishSetup = summary.setupActionQueue.find((item) => item.id === "website-publish-approval");
+  assert.equal(contactSetup?.endpoint, "/api/revenue-engine/contact-path-approval-pending-action");
+  assert.equal(contactSetup?.payloadFields.contactMode, "manual");
+  assert.equal(contactSetup?.requiredEvidence.some((item) => item.includes("real evidenceUrl")), true);
+  assert.equal(contactSetup?.isPlaceholderTemplate, true);
+  assert.equal(publishSetup?.endpoint, "/api/revenue-engine/website-publish-approval-pending-action");
+  assert.equal(publishSetup?.payloadFields.websiteCreationApprovalDecisionId, "CREATION_APPROVAL_ID");
+  assert.equal(publishSetup?.requiredEvidence.some((item) => item.includes("real previewDeployUrl")), true);
   assert.equal(summary.setupActionQueue.every((item) => item.safety.includes("does not send outreach")), true);
   assert.doesNotMatch(JSON.stringify(summary.setupActionQueue), /revenue:website-publish-approval-decision/);
   assert.doesNotMatch(JSON.stringify(summary.setupActionQueue), /revenue:payment-path-approval-decision/);

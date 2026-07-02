@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T21:14:26.742Z",
+  "generatedAt": "2026-07-02T21:23:22.404Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -143,7 +143,7 @@
     "filesIndexed": 426,
     "imports": 1609,
     "routes": 470,
-    "symbols": 8364
+    "symbols": 8371
   },
   "directories": {
     ".agents/skills": {
@@ -10714,6 +10714,7 @@
         "confirmationText",
         "contactPath",
         "displayText",
+        "endpoint",
         "excludedDemoPublicCandidates",
         "firstCandidate",
         "formatRevenueFirstMoneyCommandCenterText",
@@ -10749,6 +10750,7 @@
         "outreachDrafts",
         "packet",
         "parseRevenueFirstMoneyCommandCenterArgs",
+        "payloadFields",
         "paymentPath",
         "productionBlocked",
         "publicCandidates",
@@ -10762,6 +10764,7 @@
         "remainingApprovalBatchCount",
         "remainingApprovalBatches",
         "remainingApprovalCandidateCount",
+        "requiredEvidence",
         "reviewCommand",
         "reviewableDrafts",
         "robertApprovalBrief",
@@ -15221,6 +15224,8 @@
         "closeResult",
         "commandCenter",
         "commandValues",
+        "contactPathMutationSource",
+        "contactPathPanelSource",
         "contactResult",
         "contactRouteSource",
         "converted",
@@ -15355,6 +15360,7 @@
         "contactPayload",
         "contactReadinessCommand",
         "contactResult",
+        "contactSetup",
         "createDraft",
         "draft",
         "extractPayloadFields",
@@ -15377,6 +15383,7 @@
         "persistedDecisions",
         "proof",
         "publish",
+        "publishSetup",
         "readyCandidateId",
         "result",
         "reviewCommand",
