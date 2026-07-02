@@ -234,6 +234,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
       "Manual contact path approval",
       "Payment path approval",
       "Website creation approval",
+      "Website publish approval",
       "Setup Trust Center actions",
     ],
     status: "pass",

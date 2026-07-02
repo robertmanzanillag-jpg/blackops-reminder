@@ -708,6 +708,29 @@ type WebsiteCreationApprovalPendingActionResult = {
   };
 };
 
+type WebsitePublishApprovalPendingActionResult = {
+  status: "queued";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    createsPendingAction: boolean;
+    persistsApprovalDecision: boolean;
+    writesFiles: boolean;
+    deploys: boolean;
+    publishesWebsite: boolean;
+    chargesClients: boolean;
+    sendsOutreach: boolean;
+    editsEnvironment: boolean;
+    storesSecrets: boolean;
+  };
+};
+
 type PublicCandidateReviewPacketPendingActionResult = {
   status: "queued" | "blocked";
   pendingAction?: {
@@ -1740,6 +1763,18 @@ export default function RevenueEnginePage() {
   const [websiteCreationClientScopeApproved, setWebsiteCreationClientScopeApproved] = useState(false);
   const [websiteCreationDepositPaid, setWebsiteCreationDepositPaid] = useState(false);
   const [websiteCreationPublicDataVerified, setWebsiteCreationPublicDataVerified] = useState(false);
+  const [websitePublishOutreachDraftId, setWebsitePublishOutreachDraftId] = useState("");
+  const [websitePublishCreationApprovalDecisionId, setWebsitePublishCreationApprovalDecisionId] = useState("");
+  const [websitePublishDeployProvider, setWebsitePublishDeployProvider] = useState("Replit");
+  const [websitePublishPreviewUrl, setWebsitePublishPreviewUrl] = useState("");
+  const [websitePublishAppQaEvidenceUrl, setWebsitePublishAppQaEvidenceUrl] = useState("");
+  const [websitePublishRollbackPlanUrl, setWebsitePublishRollbackPlanUrl] = useState("");
+  const [websitePublishNotes, setWebsitePublishNotes] = useState("");
+  const [websitePublishLaunchTargetDays, setWebsitePublishLaunchTargetDays] = useState(7);
+  const [websitePublishRobertApproved, setWebsitePublishRobertApproved] = useState(false);
+  const [websitePublishPreviewVerified, setWebsitePublishPreviewVerified] = useState(false);
+  const [websitePublishAppQaPassed, setWebsitePublishAppQaPassed] = useState(false);
+  const [websitePublishRollbackVerified, setWebsitePublishRollbackVerified] = useState(false);
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -2343,6 +2378,36 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar website creation a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+    },
+  });
+
+  const websitePublishApprovalPendingActionMutation = useMutation<WebsitePublishApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/website-publish-approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outreachDraftId: websitePublishOutreachDraftId,
+          websiteCreationApprovalDecisionId: websitePublishCreationApprovalDecisionId,
+          approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.",
+          notes: websitePublishNotes,
+          robertApprovedPublish: websitePublishRobertApproved,
+          previewDeployVerified: websitePublishPreviewVerified,
+          appQaTargetPassed: websitePublishAppQaPassed,
+          rollbackVerified: websitePublishRollbackVerified,
+          deployProvider: websitePublishDeployProvider,
+          previewDeployUrl: websitePublishPreviewUrl,
+          appQaEvidenceUrl: websitePublishAppQaEvidenceUrl,
+          rollbackPlanUrl: websitePublishRollbackPlanUrl,
+          launchTargetDays: websitePublishLaunchTargetDays,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar website publish a Trust Center");
       return data;
     },
     onSuccess: () => {
@@ -3583,6 +3648,155 @@ export default function RevenueEnginePage() {
                 {websiteCreationApprovalPendingActionMutation.error && (
                   <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
                     {websiteCreationApprovalPendingActionMutation.error.message}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 px-3 py-2 text-xs leading-5 text-fuchsia-100" data-testid="first-money-website-publish-approval-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">Website publish approval</p>
+                    <p className="mt-1 text-zinc-400">
+                      Queues Trust Center approval only. It does not write files, deploy, publish websites, charge clients, send outreach, edit env, or store secrets.
+                    </p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <Input
+                        value={websitePublishOutreachDraftId}
+                        onChange={(event) => setWebsitePublishOutreachDraftId(event.target.value)}
+                        placeholder="outreach-draft-id"
+                        className="border-fuchsia-500/20 bg-black text-xs"
+                        data-testid="input-website-publish-outreach-draft-id"
+                      />
+                      <Input
+                        value={websitePublishCreationApprovalDecisionId}
+                        onChange={(event) => setWebsitePublishCreationApprovalDecisionId(event.target.value)}
+                        placeholder="website-creation-approval-decision-id"
+                        className="border-fuchsia-500/20 bg-black text-xs"
+                        data-testid="input-website-publish-creation-approval-decision-id"
+                      />
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-[1fr_120px]">
+                      <Input
+                        value={websitePublishDeployProvider}
+                        onChange={(event) => setWebsitePublishDeployProvider(event.target.value)}
+                        placeholder="Deploy provider"
+                        className="border-fuchsia-500/20 bg-black text-xs"
+                        data-testid="input-website-publish-deploy-provider"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={websitePublishLaunchTargetDays}
+                        onChange={(event) => setWebsitePublishLaunchTargetDays(Number(event.target.value))}
+                        className="border-fuchsia-500/20 bg-black text-xs"
+                        data-testid="input-website-publish-launch-target-days"
+                      />
+                    </div>
+                    <Input
+                      value={websitePublishPreviewUrl}
+                      onChange={(event) => setWebsitePublishPreviewUrl(event.target.value)}
+                      placeholder="https://preview.example.com"
+                      className="mt-2 border-fuchsia-500/20 bg-black text-xs"
+                      data-testid="input-website-publish-preview-url"
+                    />
+                    <Input
+                      value={websitePublishAppQaEvidenceUrl}
+                      onChange={(event) => setWebsitePublishAppQaEvidenceUrl(event.target.value)}
+                      placeholder="https://app-qa-evidence.example.com"
+                      className="mt-2 border-fuchsia-500/20 bg-black text-xs"
+                      data-testid="input-website-publish-app-qa-evidence-url"
+                    />
+                    <Input
+                      value={websitePublishRollbackPlanUrl}
+                      onChange={(event) => setWebsitePublishRollbackPlanUrl(event.target.value)}
+                      placeholder="https://rollback-plan.example.com"
+                      className="mt-2 border-fuchsia-500/20 bg-black text-xs"
+                      data-testid="input-website-publish-rollback-plan-url"
+                    />
+                    <Textarea
+                      value={websitePublishNotes}
+                      onChange={(event) => setWebsitePublishNotes(event.target.value)}
+                      placeholder="Real preview, App QA, rollback, and Robert publish evidence"
+                      className="mt-2 min-h-[72px] border-fuchsia-500/20 bg-black text-xs"
+                      data-testid="textarea-website-publish-notes"
+                    />
+                    <div className="mt-2 grid gap-2 text-zinc-300">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websitePublishRobertApproved}
+                          onChange={(event) => setWebsitePublishRobertApproved(event.target.checked)}
+                          className="h-4 w-4 accent-fuchsia-500"
+                          data-testid="checkbox-website-publish-robert-approved"
+                        />
+                        Robert approved publish readiness
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websitePublishPreviewVerified}
+                          onChange={(event) => setWebsitePublishPreviewVerified(event.target.checked)}
+                          className="h-4 w-4 accent-fuchsia-500"
+                          data-testid="checkbox-website-publish-preview-verified"
+                        />
+                        Preview deploy verified
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websitePublishAppQaPassed}
+                          onChange={(event) => setWebsitePublishAppQaPassed(event.target.checked)}
+                          className="h-4 w-4 accent-fuchsia-500"
+                          data-testid="checkbox-website-publish-app-qa-passed"
+                        />
+                        App QA target passed
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websitePublishRollbackVerified}
+                          onChange={(event) => setWebsitePublishRollbackVerified(event.target.checked)}
+                          className="h-4 w-4 accent-fuchsia-500"
+                          data-testid="checkbox-website-publish-rollback-verified"
+                        />
+                        Rollback plan verified
+                      </label>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      websitePublishApprovalPendingActionMutation.isPending
+                      || !websitePublishOutreachDraftId.trim()
+                      || !websitePublishCreationApprovalDecisionId.trim()
+                      || !websitePublishDeployProvider.trim()
+                      || !websitePublishPreviewUrl.trim()
+                      || !websitePublishAppQaEvidenceUrl.trim()
+                      || !websitePublishRollbackPlanUrl.trim()
+                      || !websitePublishNotes.trim()
+                      || websitePublishLaunchTargetDays < 1
+                      || websitePublishLaunchTargetDays > 60
+                      || !websitePublishRobertApproved
+                      || !websitePublishPreviewVerified
+                      || !websitePublishAppQaPassed
+                      || !websitePublishRollbackVerified
+                    }
+                    onClick={() => websitePublishApprovalPendingActionMutation.mutate()}
+                    className="bg-fuchsia-600 text-white hover:bg-fuchsia-500"
+                    data-testid="button-queue-website-publish-approval"
+                  >
+                    {websitePublishApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    Trust Center
+                  </Button>
+                </div>
+                {websitePublishApprovalPendingActionMutation.data?.pendingAction && (
+                  <p className="mt-3 rounded-md border border-fuchsia-500/20 bg-black px-3 py-2 text-xs text-fuchsia-100">
+                    Trust Center: {websitePublishApprovalPendingActionMutation.data.pendingAction.title}
+                  </p>
+                )}
+                {websitePublishApprovalPendingActionMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {websitePublishApprovalPendingActionMutation.error.message}
                   </p>
                 )}
               </div>

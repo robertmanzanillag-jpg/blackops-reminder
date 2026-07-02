@@ -4327,6 +4327,22 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /launchTargetDays: websiteCreationLaunchTargetDays/);
   assert.match(source, /button-queue-website-creation-approval/);
   assert.match(source, /first-money-website-creation-approval-panel/);
+  assert.match(source, /const websitePublishApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/website-publish-approval-pending-action/);
+  assert.match(source, /outreachDraftId: websitePublishOutreachDraftId/);
+  assert.match(source, /websiteCreationApprovalDecisionId: websitePublishCreationApprovalDecisionId/);
+  assert.match(source, /notes: websitePublishNotes/);
+  assert.match(source, /robertApprovedPublish: websitePublishRobertApproved/);
+  assert.match(source, /previewDeployVerified: websitePublishPreviewVerified/);
+  assert.match(source, /appQaTargetPassed: websitePublishAppQaPassed/);
+  assert.match(source, /rollbackVerified: websitePublishRollbackVerified/);
+  assert.match(source, /deployProvider: websitePublishDeployProvider/);
+  assert.match(source, /previewDeployUrl: websitePublishPreviewUrl/);
+  assert.match(source, /appQaEvidenceUrl: websitePublishAppQaEvidenceUrl/);
+  assert.match(source, /rollbackPlanUrl: websitePublishRollbackPlanUrl/);
+  assert.match(source, /launchTargetDays: websitePublishLaunchTargetDays/);
+  assert.match(source, /button-queue-website-publish-approval/);
+  assert.match(source, /first-money-website-publish-approval-panel/);
   const contactPathMutationSource = source.slice(
     source.indexOf("const contactPathApprovalPendingActionMutation"),
     source.indexOf("const paymentPathApprovalPendingActionMutation"),
@@ -4337,6 +4353,10 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   );
   const websiteCreationMutationSource = source.slice(
     source.indexOf("const websiteCreationApprovalPendingActionMutation"),
+    source.indexOf("const websitePublishApprovalPendingActionMutation"),
+  );
+  const websitePublishMutationSource = source.slice(
+    source.indexOf("const websitePublishApprovalPendingActionMutation"),
     source.indexOf("const publicCandidateApprovalPendingActionMutation"),
   );
   const contactPathPanelSource = source.slice(
@@ -4349,6 +4369,10 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   );
   const websiteCreationPanelSource = source.slice(
     source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
+    source.indexOf('data-testid="first-money-website-publish-approval-panel"'),
+  );
+  const websitePublishPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-website-publish-approval-panel"'),
     source.indexOf('data-testid="first-money-setup-action-queue"'),
   );
   assert.match(contactPathMutationSource, /evidenceUrl: contactPathEvidenceUrl/);
@@ -4378,6 +4402,22 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
     websiteCreationMutationSource,
     /website-creation-packet|website-scaffold|outreach-send|ledger|decision: "approved"|sendConfirmation|deploy/,
   );
+  assert.match(websitePublishMutationSource, /approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review\."/);
+  assert.match(websitePublishMutationSource, /outreachDraftId: websitePublishOutreachDraftId/);
+  assert.match(websitePublishMutationSource, /websiteCreationApprovalDecisionId: websitePublishCreationApprovalDecisionId/);
+  assert.match(websitePublishMutationSource, /notes: websitePublishNotes/);
+  assert.match(websitePublishMutationSource, /robertApprovedPublish: websitePublishRobertApproved/);
+  assert.match(websitePublishMutationSource, /previewDeployVerified: websitePublishPreviewVerified/);
+  assert.match(websitePublishMutationSource, /appQaTargetPassed: websitePublishAppQaPassed/);
+  assert.match(websitePublishMutationSource, /rollbackVerified: websitePublishRollbackVerified/);
+  assert.match(websitePublishMutationSource, /deployProvider: websitePublishDeployProvider/);
+  assert.match(websitePublishMutationSource, /previewDeployUrl: websitePublishPreviewUrl/);
+  assert.match(websitePublishMutationSource, /appQaEvidenceUrl: websitePublishAppQaEvidenceUrl/);
+  assert.match(websitePublishMutationSource, /rollbackPlanUrl: websitePublishRollbackPlanUrl/);
+  assert.doesNotMatch(
+    websitePublishMutationSource,
+    /website-publish-readiness-packet|website-scaffold|outreach-send|ledger|decision: "approved"|sendConfirmation/,
+  );
   assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.isPending/);
   assert.match(contactPathPanelSource, /!contactPathEvidenceUrl\.trim\(\)/);
   assert.match(contactPathPanelSource, /!contactPathEvidenceNote\.trim\(\)/);
@@ -4403,6 +4443,21 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(websiteCreationPanelSource, /!websiteCreationDepositPaid/);
   assert.match(websiteCreationPanelSource, /!websiteCreationPublicDataVerified/);
   assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(websitePublishPanelSource, /websitePublishApprovalPendingActionMutation\.isPending/);
+  assert.match(websitePublishPanelSource, /!websitePublishOutreachDraftId\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishCreationApprovalDecisionId\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishDeployProvider\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishPreviewUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishAppQaEvidenceUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishRollbackPlanUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishNotes\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /websitePublishLaunchTargetDays < 1/);
+  assert.match(websitePublishPanelSource, /websitePublishLaunchTargetDays > 60/);
+  assert.match(websitePublishPanelSource, /!websitePublishRobertApproved/);
+  assert.match(websitePublishPanelSource, /!websitePublishPreviewVerified/);
+  assert.match(websitePublishPanelSource, /!websitePublishAppQaPassed/);
+  assert.match(websitePublishPanelSource, /!websitePublishRollbackVerified/);
+  assert.match(websitePublishPanelSource, /websitePublishApprovalPendingActionMutation\.mutate\(\)/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
   assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(source, /nextCandidateApproval/);
