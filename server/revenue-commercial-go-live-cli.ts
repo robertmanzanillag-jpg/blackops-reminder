@@ -76,6 +76,7 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
     "Run revenue:money-readiness and fix every blocking gate before selling.",
     "Run revenue:public-scout-schedule to prepare guarded public research slots.",
     "Capture public notes and run revenue:public-scout-execute so candidates persist only for Robert review before Money sprint.",
+    "Run revenue:payment-path-approval-decision and revenue:payment-path-readiness-packet before exposing a deposit link.",
     "Only after payment/contact gates pass, draft outreach and proposals.",
     "Only after deposit, App QA, preview deploy and rollback evidence, publish client websites.",
   ];

@@ -185,6 +185,7 @@ export function buildRevenueWebsitePublishApprovalDecisionFromCli(options: Reven
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: "",
     websitePublishSnapshotHash: buildRevenueWebsitePublishSnapshotHash(publishSnapshot, proof),
+    paymentPathSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"

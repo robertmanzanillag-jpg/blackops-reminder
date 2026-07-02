@@ -2224,6 +2224,18 @@ test("routes wire website creation packet endpoint to schema and builder", () =>
   );
 });
 
+test("routes wire payment path readiness packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenuePaymentPathReadinessPacket/);
+  assert.match(routesSource, /revenuePaymentPathReadinessPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/payment-path-readiness-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePaymentPathReadinessPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenuePaymentPathReadinessPacket\(input\)\)/,
+  );
+});
+
 test("routes wire website publish readiness packet endpoint to schema and builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
 

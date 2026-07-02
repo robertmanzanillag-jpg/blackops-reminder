@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  recordRevenueTrustedApprovalDecision,
+  resetRevenueApprovalDecisionsForTests,
+  setRevenueApprovalDecisionsPathForTests,
+} from "../server/revenue-engine";
+import {
+  buildRevenuePaymentPathApprovalTargetId,
+  buildRevenuePaymentPathSnapshotHash,
+} from "../server/revenue-payment-path-approval";
+import {
   buildRevenueCommercialGoLivePacket,
   formatRevenueCommercialGoLivePacketText,
   parseRevenueCommercialGoLiveArgs,
@@ -20,6 +29,11 @@ const trackedEnvKeys = [
   "STRIPE_SECRET_KEY",
   "REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED",
   "REVENUE_ENGINE_PAYMENT_LINK",
+  "REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID",
+  "REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD",
+  "REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE",
+  "REVENUE_ENGINE_PAYMENT_EVIDENCE_URL",
+  "REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE",
   "REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT",
   "REVENUE_ENGINE_PAYMENT_LINK_ALLOWED_HOSTS",
   "REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED",
@@ -33,6 +47,9 @@ const trackedEnvKeys = [
 ] as const;
 
 const originalEnv = Object.fromEntries(trackedEnvKeys.map((key) => [key, process.env[key]]));
+const testApprovalDecisionsPath = "/tmp/revenue-commercial-go-live-approval-decisions-test.json";
+
+setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
 
 function restoreEnv() {
   for (const key of trackedEnvKeys) {
@@ -42,7 +59,10 @@ function restoreEnv() {
   }
 }
 
-test.afterEach(restoreEnv);
+test.afterEach(() => {
+  restoreEnv();
+  resetRevenueApprovalDecisionsForTests();
+});
 
 function clearRevenueGoLiveEnv() {
   for (const key of trackedEnvKeys) {
@@ -51,15 +71,21 @@ function clearRevenueGoLiveEnv() {
 }
 
 function productionReadyEnv(): Record<string, string> {
+  const paymentLink = "https://buy.stripe.com/revenue-deposit-secret-token";
   return {
     DATABASE_URL: "postgres://ceo_user:SECRET_DB_PASS@db.internal:5432/blackops",
     SESSION_SECRET: "SECRET_SESSION_12345678901234567890",
     REVENUE_ENGINE_MONEY_MODE: "live",
     REVENUE_ENGINE_ROBERT_CONTACT_APPROVED: "true",
     REVENUE_ENGINE_MANUAL_CONTACT_APPROVED: "true",
-    REVENUE_ENGINE_PAYMENT_LINK: "https://buy.stripe.com/revenue-deposit-secret-token",
+    REVENUE_ENGINE_PAYMENT_LINK: paymentLink,
+    REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID: approveProductionPaymentPath(paymentLink),
     REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT: "true",
     REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED: "true",
+    REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD: "1500",
+    REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE: "Website 3D Premium",
+    REVENUE_ENGINE_PAYMENT_EVIDENCE_URL: "https://github.com/example/repo/actions/runs/123",
+    REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE: "Stripe payment link smoke test passed",
     REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED: "true",
     REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED: "true",
     REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED: "true",
@@ -67,6 +93,40 @@ function productionReadyEnv(): Record<string, string> {
     REVENUE_ENGINE_WEBSITE_PUBLISH_APPROVED_BY_ROBERT: "true",
     REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT: "true",
   };
+}
+
+function approveProductionPaymentPath(paymentLink = "https://buy.stripe.com/revenue-deposit-secret-token") {
+  const snapshot = {
+    paymentMethod: "payment_link" as const,
+    paymentLink,
+    paymentHost: new URL(paymentLink).hostname.toLowerCase(),
+    expectedDepositUsd: 1500,
+    expectedPackage: "Website 3D Premium",
+  };
+  const proof = {
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    depositConfirmedByRobert: false,
+    paymentLink,
+    evidenceUrl: "https://github.com/example/repo/actions/runs/123",
+    evidenceNote: "Stripe payment link smoke test passed",
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenuePaymentPathApprovalTargetId(paymentLink),
+    targetType: "payment_path",
+    decision: "approved",
+    approvedAction: "Approve exact payment path for go-live test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "payment_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: buildRevenuePaymentPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  return result.decision.id;
 }
 
 function applyEnv(overrides: Record<string, string | undefined>) {
@@ -82,6 +142,7 @@ function runCommercialGoLiveCli(args: string[], overrides: Record<string, string
     env: {
       ...process.env,
       ...Object.fromEntries(trackedEnvKeys.map((key) => [key, "codex-test-placeholder"])),
+      REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
       ...overrides,
     },
     encoding: "utf8",

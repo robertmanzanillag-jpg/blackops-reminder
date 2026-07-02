@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRevenueMoneyReadinessReport } from "../server/revenue-engine";
+import {
+  buildRevenueMoneyReadinessReport,
+  recordRevenueTrustedApprovalDecision,
+  resetRevenueApprovalDecisionsForTests,
+  setRevenueApprovalDecisionsPathForTests,
+} from "../server/revenue-engine";
+import {
+  buildRevenuePaymentPathApprovalTargetId,
+  buildRevenuePaymentPathSnapshotHash,
+} from "../server/revenue-payment-path-approval";
 import {
   formatRevenueMoneyReadinessText,
   isRevenueMoneyModePlaceholder,
@@ -17,6 +26,11 @@ const originalEnv = {
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED: process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED,
   REVENUE_ENGINE_PAYMENT_LINK: process.env.REVENUE_ENGINE_PAYMENT_LINK,
+  REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID: process.env.REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID,
+  REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD: process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD,
+  REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE: process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE,
+  REVENUE_ENGINE_PAYMENT_EVIDENCE_URL: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL,
+  REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE,
   REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT,
   REVENUE_ENGINE_PAYMENT_LINK_ALLOWED_HOSTS: process.env.REVENUE_ENGINE_PAYMENT_LINK_ALLOWED_HOSTS,
   REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED: process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED,
@@ -29,6 +43,10 @@ const originalEnv = {
   REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT: process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT,
 };
 
+const testApprovalDecisionsPath = "/tmp/revenue-money-readiness-approval-decisions-test.json";
+
+setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
+
 function restoreEnv() {
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) delete process.env[key];
@@ -36,7 +54,52 @@ function restoreEnv() {
   }
 }
 
-test.afterEach(restoreEnv);
+test.afterEach(() => {
+  restoreEnv();
+  resetRevenueApprovalDecisionsForTests();
+});
+
+function approveEnvPaymentPath(paymentLink = "https://buy.stripe.com/revenue-deposit") {
+  process.env.REVENUE_ENGINE_PAYMENT_LINK = paymentLink;
+  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD = "1500";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE = "Website 3D Premium";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/123";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE = "Stripe payment link smoke test passed";
+  const snapshot = {
+    paymentMethod: "payment_link" as const,
+    paymentLink,
+    paymentHost: new URL(paymentLink).hostname.toLowerCase(),
+    expectedDepositUsd: 1500,
+    expectedPackage: "Website 3D Premium",
+  };
+  const proof = {
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED === "true",
+    depositConfirmedByRobert: process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT === "true",
+    paymentLink,
+    evidenceUrl: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL,
+    evidenceNote: process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE,
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenuePaymentPathApprovalTargetId(paymentLink),
+    targetType: "payment_path",
+    decision: "approved",
+    approvedAction: "Approve exact payment path for readiness test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "payment_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: buildRevenuePaymentPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  process.env.REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID = result.decision.id;
+  return result;
+}
 
 test("parses revenue money readiness CLI options", () => {
   assert.deepEqual(parseRevenueMoneyReadinessArgs([]), { mode: "first-sprint", json: false });
@@ -91,9 +154,7 @@ test("keeps website publishing blocked even when contact and payments are config
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
   process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
   process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  approveEnvPaymentPath();
   delete process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED;
   delete process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED;
   delete process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED;
@@ -135,9 +196,7 @@ test("requires explicit true before manual contact is considered approved", () =
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
   process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
   process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "false";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  approveEnvPaymentPath();
 
   const report = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
 
@@ -205,8 +264,32 @@ test("requires payment smoke or deposit evidence before collecting money", () =>
   assert.equal(blocked.canCollectMoney, false);
 
   process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT = "true";
+  const confirmedWithoutApproval = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  assert.equal(confirmedWithoutApproval.canCollectMoney, false);
+
+  approveEnvPaymentPath();
   const confirmed = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
   assert.equal(confirmed.canCollectMoney, true);
+});
+
+test("requires audited payment path approval decision for payment-link collection", () => {
+  process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+  process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
+  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD = "1500";
+  process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE = "Website 3D Premium";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/123";
+  process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE = "Stripe payment link smoke test passed";
+
+  const envOnly = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  assert.equal(envOnly.canCollectMoney, false);
+
+  approveEnvPaymentPath();
+  const audited = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
+  assert.equal(audited.canCollectMoney, true);
 });
 
 test("requires an allowed payment host for approved payment links", () => {
@@ -221,6 +304,7 @@ test("requires an allowed payment host for approved payment links", () => {
   assert.equal(blocked.canCollectMoney, false);
 
   process.env.REVENUE_ENGINE_PAYMENT_LINK_ALLOWED_HOSTS = "not-stripe.invalid";
+  approveEnvPaymentPath("https://not-stripe.invalid/pay-me");
   const approvedCustomHost = buildRevenueMoneyReadinessReport({ mode: "first-sprint" });
   assert.equal(approvedCustomHost.canCollectMoney, true);
 });
@@ -231,9 +315,7 @@ test("first sprint readiness can be ready while production-only gaps remain", ()
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
   process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
   process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  approveEnvPaymentPath();
   delete process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED;
   delete process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED;
   delete process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED;
@@ -258,9 +340,7 @@ test("does not treat website deploy enablement alone as publish-ready", () => {
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
   process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
   process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  approveEnvPaymentPath();
   process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED = "true";
   process.env.REVENUE_ENGINE_DEPLOY_APPROVED_BY_ROBERT = "true";
   delete process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED;
@@ -282,9 +362,7 @@ test("production launch readiness is not blocked by the nonblocking autonomous s
   process.env.REVENUE_ENGINE_MONEY_MODE = "live";
   process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
   process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK = "https://buy.stripe.com/revenue-deposit";
-  process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT = "true";
-  process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED = "true";
+  approveEnvPaymentPath();
   process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED = "true";
   process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED = "true";
   process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED = "true";

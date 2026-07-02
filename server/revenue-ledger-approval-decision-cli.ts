@@ -134,6 +134,7 @@ export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedger
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: "",
     websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
     ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
   });
   const nextApiBody = options.decision === "approved"

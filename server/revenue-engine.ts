@@ -19,6 +19,10 @@ import {
   buildRevenueLedgerApprovalSnapshotHash,
   buildRevenueLedgerApprovalTargetId,
 } from "./revenue-ledger-approval";
+import {
+  buildRevenuePaymentPathApprovalTargetId,
+  buildRevenuePaymentPathSnapshotHash,
+} from "./revenue-payment-path-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -429,6 +433,21 @@ export const revenueWebsitePublishReadinessPacketSchema = z.object({
 
 export type RevenueWebsitePublishReadinessPacketInput = z.infer<typeof revenueWebsitePublishReadinessPacketSchema>;
 
+export const revenuePaymentPathReadinessPacketSchema = z.object({
+  paymentLink: z.string().trim().url().max(300),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
+  robertApprovedPaymentPath: revenueExplicitBooleanSchema.default(false),
+  paymentSmokeVerified: revenueExplicitBooleanSchema.default(false),
+  depositConfirmedByRobert: revenueExplicitBooleanSchema.default(false),
+  expectedDepositUsd: z.coerce.number().min(1).max(1000000),
+  expectedPackage: z.string().trim().min(2).max(180),
+  evidenceUrl: z.string().trim().url().max(300),
+  evidenceNote: z.string().trim().min(8).max(1000),
+  chargeClient: revenueExplicitBooleanSchema.default(false),
+});
+
+export type RevenuePaymentPathReadinessPacketInput = z.infer<typeof revenuePaymentPathReadinessPacketSchema>;
+
 export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
@@ -533,16 +552,17 @@ export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublic
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
-  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "website_publish", "manual"]),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "website_publish", "payment_path", "manual"]),
   decision: z.enum(["approved", "rejected", "needs_changes"]),
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "website_publish_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "website_publish_approval_cli", "payment_path_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
   outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
   websiteCreationSnapshotHash: z.string().trim().max(128).optional().default(""),
   websitePublishSnapshotHash: z.string().trim().max(128).optional().default(""),
+  paymentPathSnapshotHash: z.string().trim().max(128).optional().default(""),
   ledgerEntrySnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
@@ -1254,6 +1274,55 @@ function hasRevenuePaymentLink(value: string | undefined) {
   } catch {
     return false;
   }
+}
+
+function getRevenuePaymentPathApprovalReadyFromEnv(paymentLink: string | undefined) {
+  const parsedPaymentLink = String(paymentLink || "").trim();
+  if (!parsedPaymentLink || !hasRevenuePaymentLink(parsedPaymentLink)) return false;
+  loadRevenueApprovalDecisions();
+  const approvalDecisionId = String(process.env.REVENUE_ENGINE_PAYMENT_PATH_APPROVAL_DECISION_ID || "").trim();
+  const expectedDepositUsd = Number(process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_DEPOSIT_USD || 0);
+  const expectedPackage = String(process.env.REVENUE_ENGINE_PAYMENT_EXPECTED_PACKAGE || "").trim();
+  const evidenceUrl = String(process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_URL || "").trim();
+  const evidenceNote = String(process.env.REVENUE_ENGINE_PAYMENT_EVIDENCE_NOTE || "").trim();
+  if (!approvalDecisionId || !Number.isFinite(expectedDepositUsd) || expectedDepositUsd < 1 || expectedPackage.length < 2 || evidenceNote.length < 8) {
+    return false;
+  }
+  let paymentHost = "";
+  try {
+    paymentHost = new URL(parsedPaymentLink).hostname.toLowerCase();
+    if (evidenceUrl) new URL(evidenceUrl);
+    else return false;
+  } catch {
+    return false;
+  }
+  const paymentSnapshot = {
+    paymentMethod: "payment_link" as const,
+    paymentLink: parsedPaymentLink,
+    paymentHost,
+    expectedDepositUsd,
+    expectedPackage,
+  };
+  const paymentProof = {
+    robertApprovedPaymentPath: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT),
+    paymentSmokeVerified: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED),
+    depositConfirmedByRobert: isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT),
+    paymentLink: parsedPaymentLink,
+    evidenceUrl,
+    evidenceNote,
+  };
+  const expectedTargetId = buildRevenuePaymentPathApprovalTargetId(parsedPaymentLink);
+  const expectedSnapshotHash = buildRevenuePaymentPathSnapshotHash(paymentSnapshot, paymentProof);
+  const approvalDecision = revenueApprovalDecisions.find((item) => item.id === approvalDecisionId);
+  return Boolean(
+    approvalDecision
+    && approvalDecision.targetType === "payment_path"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "payment_path_approval_cli"
+    && approvalDecision.paymentPathSnapshotHash === expectedSnapshotHash,
+  );
 }
 
 function hasProductionRevenueDatabaseUrl(value: string | undefined) {
@@ -2440,6 +2509,7 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
       outreachDraftSnapshotHash: "",
       websiteCreationSnapshotHash: "",
       websitePublishSnapshotHash: "",
+      paymentPathSnapshotHash: "",
       ledgerEntrySnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
@@ -4968,6 +5038,77 @@ export function buildRevenueWebsitePublishReadinessPacket(input: RevenueWebsiteP
   };
 }
 
+export function buildRevenuePaymentPathReadinessPacket(input: RevenuePaymentPathReadinessPacketInput) {
+  const parsed = revenuePaymentPathReadinessPacketSchema.parse(input);
+  loadRevenueApprovalDecisions();
+  const paymentUrl = new URL(parsed.paymentLink);
+  const paymentSnapshot = {
+    paymentMethod: "payment_link" as const,
+    paymentLink: parsed.paymentLink,
+    paymentHost: paymentUrl.hostname.toLowerCase(),
+    expectedDepositUsd: parsed.expectedDepositUsd,
+    expectedPackage: parsed.expectedPackage,
+  };
+  const paymentProof = {
+    robertApprovedPaymentPath: parsed.robertApprovedPaymentPath,
+    paymentSmokeVerified: parsed.paymentSmokeVerified,
+    depositConfirmedByRobert: parsed.depositConfirmedByRobert,
+    paymentLink: parsed.paymentLink,
+    evidenceUrl: parsed.evidenceUrl,
+    evidenceNote: parsed.evidenceNote,
+  };
+  const expectedTargetId = buildRevenuePaymentPathApprovalTargetId(parsed.paymentLink);
+  const expectedSnapshotHash = buildRevenuePaymentPathSnapshotHash(paymentSnapshot, paymentProof);
+  const approvalDecision = parsed.approvalDecisionId
+    ? revenueApprovalDecisions.find((item) => item.id === parsed.approvalDecisionId)
+    : null;
+  const approvalReady = Boolean(
+    approvalDecision
+    && approvalDecision.targetType === "payment_path"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "payment_path_approval_cli"
+    && approvalDecision.paymentPathSnapshotHash === expectedSnapshotHash,
+  );
+  const paymentLinkAllowed = hasRevenuePaymentLink(parsed.paymentLink);
+  const verified = parsed.paymentSmokeVerified || parsed.depositConfirmedByRobert;
+  const gates = [
+    { gate: "payment_link_allowed", passed: paymentLinkAllowed, fix: "Usar un payment link HTTPS de Stripe o host permitido explicitamente." },
+    { gate: "robert_payment_path_approval", passed: parsed.robertApprovedPaymentPath, fix: "Robert debe aprobar este payment link exacto." },
+    { gate: "payment_verification", passed: verified, fix: "Registrar smoke test de pago o confirmacion de primer deposito." },
+    { gate: "approval_decision", passed: approvalReady, fix: "Registrar y usar approvalDecisionId valido para este payment path exacto." },
+    { gate: "safe_mode", passed: !parsed.chargeClient, fix: "Este packet no cobra al cliente; solo prepara/verifica el camino de cobro." },
+  ];
+  const failedGates = gates.filter((gate) => !gate.passed);
+  const readyForPaymentPath = failedGates.length === 0;
+
+  return {
+    status: readyForPaymentPath ? "ready_for_payment_path_handoff" as const : "blocked" as const,
+    paymentSnapshot,
+    approvalDecisionId: parsed.approvalDecisionId,
+    gates,
+    blockedReasons: failedGates.map((gate) => gate.fix),
+    evidence: paymentProof,
+    nextAction: readyForPaymentPath
+      ? "Configure the approved payment link outside tracked files, then keep ledger approval separate for actual cash received."
+      : "Resolve payment path gates before asking clients for deposits.",
+    safety: {
+      allowedAction: "prepare_payment_path_readiness_handoff",
+      blockedActions: ["charge client", "edit secrets", "store Stripe secret", "record ledger cash", "send outreach"],
+      chargesClients: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+      recordsLedgerEntry: false,
+      sendsOutreach: false,
+      requestedChargeClient: parsed.chargeClient,
+      requiresRobertApprovalBeforePaymentUse: true,
+      requiresLedgerApprovalForReceivedCash: true,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 function buildAgentWorkOrder(input: RevenueAgentRunInput) {
   const request = input.request.toLowerCase();
   const clarificationGate = buildRevenueClarificationGate({
@@ -7390,8 +7531,9 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
   const manualContactApproved = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED);
   const stripeCheckoutReady = hasLiveRevenueStripeKey(process.env.STRIPE_SECRET_KEY) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_STRIPE_CHECKOUT_ENABLED);
   const paymentLinkReady = hasRevenuePaymentLink(process.env.REVENUE_ENGINE_PAYMENT_LINK) && isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_LINK_APPROVED_BY_ROBERT);
+  const paymentPathApprovalReady = getRevenuePaymentPathApprovalReadyFromEnv(process.env.REVENUE_ENGINE_PAYMENT_LINK);
   const paymentVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_PAYMENT_SMOKE_VERIFIED) || isExplicitRevenueApproval(process.env.REVENUE_ENGINE_DEPOSIT_CONFIRMED_BY_ROBERT);
-  const paymentReady = (stripeCheckoutReady || paymentLinkReady) && paymentVerified;
+  const paymentReady = (stripeCheckoutReady || (paymentLinkReady && paymentPathApprovalReady)) && paymentVerified;
   const websiteDeployEnabled = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_DEPLOY_ENABLED);
   const websiteAppQaTargetPassed = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_APP_QA_TARGET_PASSED);
   const websitePreviewDeployVerified = isExplicitRevenueApproval(process.env.REVENUE_ENGINE_WEBSITE_PREVIEW_DEPLOY_VERIFIED);
@@ -7462,7 +7604,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       label: "Collect deposits",
       status: canCollectMoney ? "ok" as const : "fail" as const,
       detail: canCollectMoney ? "A live payment path is configured and smoke/deposit evidence is verified." : "No verified live Stripe/payment-link deposit path is configured.",
-      nextStep: "Configure Stripe/payment link and record payment smoke or first deposit confirmation before charging clients.",
+      nextStep: "Run revenue:payment-path-approval-decision and revenue:payment-path-readiness-packet, then configure the approved payment link outside tracked files before charging clients.",
     },
     {
       id: "website_build_pipeline",
@@ -7515,6 +7657,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       "Public research from Google/Maps/Instagram/directories.",
       "Execute guarded public scout captures into Robert-review candidates with revenue:public-scout-execute.",
       "Generate internal mockups/previews and draft-only outreach.",
+      "Prepare audited payment path readiness packets after Robert approves the exact Stripe payment link and smoke/deposit evidence.",
       "Prepare audited website publish readiness packets after preview/App QA/rollback evidence; the packet still cannot deploy.",
       "Prepare proposals and ask Robert for approval before any contact or spend.",
     ],
