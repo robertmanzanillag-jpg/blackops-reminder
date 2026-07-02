@@ -179,6 +179,7 @@ export function buildRevenuePublicCandidateReviewInput(options: RevenuePublicCan
     writePreviewFiles: false,
     candidateIds: options.candidateIds,
     approvedByRobert: options.approvedByRobert || approvedByRecordedDecision,
+    approvalDecisionId: options.approvalDecisionId,
     reviewerNote: options.reviewerNote,
   };
 }

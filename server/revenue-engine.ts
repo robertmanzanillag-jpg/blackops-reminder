@@ -27,6 +27,10 @@ import {
   buildRevenueContactPathApprovalTargetId,
   buildRevenueContactPathSnapshotHash,
 } from "./revenue-contact-path-approval";
+import {
+  buildRevenuePublicCandidateApprovalTargetId,
+  buildRevenuePublicCandidateSnapshotHash,
+} from "./revenue-public-candidate-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -564,6 +568,7 @@ export type RevenuePublicScoutScheduleInput = z.infer<typeof revenuePublicScoutS
 export const revenuePublicLeadCandidateReviewSchema = revenueMoneySprintSchema.omit({ seedLeads: true, seedLeadBatchText: true }).extend({
   candidateIds: z.array(z.string().trim().min(1).max(180)).min(1).max(25),
   approvedByRobert: revenueExplicitBooleanSchema.default(false),
+  approvalDecisionId: z.string().trim().max(180).optional().default(""),
   reviewerNote: z.string().trim().max(1000).optional().default(""),
 });
 
@@ -3940,6 +3945,7 @@ function buildRevenueMoneySprintRunPacket(
 
 export function reviewRevenuePublicLeadCandidates(input: RevenuePublicLeadCandidateReviewInput) {
   loadRevenuePublicLeadCandidates();
+  loadRevenueApprovalDecisions();
   const parsed = revenuePublicLeadCandidateReviewSchema.parse(input);
   const seenCandidateIds = new Set<string>();
   const duplicateIds = parsed.candidateIds.filter((id) => {
@@ -3953,11 +3959,29 @@ export function reviewRevenuePublicLeadCandidates(input: RevenuePublicLeadCandid
     .filter((candidate): candidate is RevenuePublicLeadCandidate => Boolean(candidate));
   const missingIds = uniqueCandidateIds.filter((id) => !selectedCandidates.some((candidate) => candidate.id === id));
   const reviewRequestComplete = missingIds.length === 0 && duplicateIds.length === 0;
+  const expectedApprovalTargetId = buildRevenuePublicCandidateApprovalTargetId(uniqueCandidateIds);
+  const expectedApprovalSnapshotHash = selectedCandidates.length === uniqueCandidateIds.length
+    ? buildRevenuePublicCandidateSnapshotHash(selectedCandidates)
+    : "";
+  const matchingApprovalDecision = parsed.approvalDecisionId
+    ? revenueApprovalDecisions.find((decision) =>
+      decision.id === parsed.approvalDecisionId
+      && decision.targetType === "public_candidate"
+      && decision.targetId === expectedApprovalTargetId
+      && decision.decision === "approved"
+      && decision.guardrail.status === "recorded"
+      && decision.approvalSource === "public_candidate_approval_cli"
+      && decision.publicCandidateSnapshotHash === expectedApprovalSnapshotHash,
+    )
+    : undefined;
+  const approvalDecisionVerified = Boolean(matchingApprovalDecision);
   const reviewedCandidates = selectedCandidates.map((candidate) => {
     const freshQualification = qualifyRevenueLead(candidate);
     const freshBatchRow = revenueCandidateBatchRow(candidate);
     const blockedReasons = [
       !parsed.approvedByRobert && "approvedByRobert false",
+      !parsed.approvalDecisionId && "approvalDecisionId required",
+      parsed.approvalDecisionId && !approvalDecisionVerified && "approvalDecisionId must match a recorded public candidate approval decision",
       duplicateIds.length > 0 && `duplicate candidate ids: ${duplicateIds.join(", ")}`,
       missingIds.length > 0 && `missing candidate ids: ${missingIds.join(", ")}`,
       candidate.verificationStatus !== "verified_public" && "verificationStatus must be verified_public",
@@ -4013,6 +4037,7 @@ export function reviewRevenuePublicLeadCandidates(input: RevenuePublicLeadCandid
   return {
     status: reviewRequestComplete && approvedCandidates.length > 0 ? "ready_for_money_sprint_preview" as const : "blocked" as const,
     approvedByRobert: parsed.approvedByRobert,
+    approvalDecisionId: parsed.approvalDecisionId,
     reviewerNote: parsed.reviewerNote,
     requestedCount: parsed.candidateIds.length,
     foundCount: selectedCandidates.length,

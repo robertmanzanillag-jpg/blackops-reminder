@@ -424,6 +424,28 @@ type FirstMoneyCommandCenter = {
     status: "ready" | "blocked" | "review";
     reason: string;
   };
+  nextCandidateApproval: {
+    id: string;
+    candidateIds: string[];
+    candidateNames: string[];
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations" | "both";
+    count: number;
+    totalEstimatedOfferUsd: number;
+    approvalStatus: "needs_robert_approval";
+    approvedAction: string;
+    confirmationText: string;
+    safety: {
+      persistsApprovalDecision: boolean;
+      importsLeads: boolean;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+      chargesClients: boolean;
+      deploys: boolean;
+      paidDataSpendUsd: number;
+    };
+  } | null;
   counts: {
     publicCandidates: number;
     reviewablePublicCandidates: number;
@@ -448,6 +470,28 @@ type FirstMoneyCommandCenter = {
     chargesClients: boolean;
     deploys: boolean;
   };
+};
+
+type PublicCandidateApprovalDecisionResult = {
+  status: "recorded" | "blocked";
+  decision: RevenueSnapshot["recentApprovalDecisions"][number] | null;
+  targetId: string;
+  requestedCount: number;
+  foundCount: number;
+  missingIds: string[];
+  blockers: string[];
+  nextCommand: string;
+  nextAction: string;
+  safety: {
+    persistsApprovalDecision: boolean;
+    persistsLeads: boolean;
+    sendsOutreach: boolean;
+    writesPreviewFiles: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    paidDataSpendUsd: number;
+  };
+  commandCenter: FirstMoneyCommandCenter;
 };
 
 type ClarificationGate = {
@@ -1415,6 +1459,7 @@ export default function RevenueEnginePage() {
   const [agentApprovalToContact, setAgentApprovalToContact] = useState(false);
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
+  const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -1425,7 +1470,7 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const { data: firstMoneyCommandCenter } = useQuery<FirstMoneyCommandCenter>({
+  const { data: firstMoneyCommandCenter, refetch: refetchFirstMoneyCommandCenter } = useQuery<FirstMoneyCommandCenter>({
     queryKey: ["revenue-engine", "first-money-command-center"],
     queryFn: async () => {
       const response = await fetch("/api/revenue-engine/first-money-command-center");
@@ -1925,6 +1970,35 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicCandidateApprovalMutation = useMutation<PublicCandidateApprovalDecisionResult>({
+    mutationFn: async () => {
+      const approval = firstMoneyCommandCenter?.nextCandidateApproval;
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/approval-decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateIds: approval?.candidateIds || [],
+          batchId: approval?.id || "",
+          decision: "approved",
+          approvedAction: approval?.approvedAction || "Approve first-money public candidate review.",
+          notes: "Robert approved this first-money candidate batch from Revenue Engine.",
+          area: approval?.area || "",
+          niche: approval?.niche || "",
+          offerFocus: approval?.offerFocus || "websites",
+          confirmationText: publicCandidateApprovalConfirmation,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo aprobar el batch publico");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
+      refetchFirstMoneyCommandCenter();
+      setPublicCandidateApprovalConfirmation("");
+    },
+  });
+
   const proposalEmailMutation = useMutation<ProposalEmail>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/proposal-email", {
@@ -2409,6 +2483,57 @@ export default function RevenueEnginePage() {
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 {firstMoneyCommandCenter?.nextCommand.reason || "El command center decide usando gates de contacto, pago y build."}
               </p>
+              {firstMoneyCommandCenter?.nextCandidateApproval && (
+                <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-amber-200">Aprobacion Robert pendiente</p>
+                      <p className="mt-1 text-sm font-medium text-white">
+                        {firstMoneyCommandCenter.nextCandidateApproval.count} candidato(s) · {firstMoneyCommandCenter.nextCandidateApproval.area} · {firstMoneyCommandCenter.nextCandidateApproval.niche}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-400">
+                        {firstMoneyCommandCenter.nextCandidateApproval.candidateNames.join(", ")}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Seguro: no importa leads, no contacta, no cobra, no crea previews.
+                      </p>
+                      <Input
+                        value={publicCandidateApprovalConfirmation}
+                        onChange={(event) => setPublicCandidateApprovalConfirmation(event.target.value)}
+                        placeholder={firstMoneyCommandCenter.nextCandidateApproval.confirmationText}
+                        className="mt-3 max-w-xl border-amber-500/20 bg-black text-xs"
+                        data-testid="input-public-candidate-approval-confirmation"
+                      />
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Escribe exactamente: {firstMoneyCommandCenter.nextCandidateApproval.confirmationText}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={
+                        publicCandidateApprovalMutation.isPending
+                        || publicCandidateApprovalConfirmation.trim() !== firstMoneyCommandCenter.nextCandidateApproval.confirmationText
+                      }
+                      onClick={() => publicCandidateApprovalMutation.mutate()}
+                      className="bg-amber-500 text-black hover:bg-amber-400"
+                      data-testid="button-approve-public-candidate-batch"
+                    >
+                      {publicCandidateApprovalMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                      Aprobar batch
+                    </Button>
+                  </div>
+                  {publicCandidateApprovalMutation.data && (
+                    <p className="mt-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs leading-5 text-emerald-100">
+                      Decision {publicCandidateApprovalMutation.data.decision?.id || "none"} registrada. Siguiente: {publicCandidateApprovalMutation.data.nextAction}
+                    </p>
+                  )}
+                  {publicCandidateApprovalMutation.error && (
+                    <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                      {publicCandidateApprovalMutation.error.message}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Gates de dinero</p>

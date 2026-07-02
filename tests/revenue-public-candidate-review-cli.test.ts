@@ -472,12 +472,24 @@ test("public candidate review script prints human-reviewed money sprint packet",
     ],
   });
   const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approvalDecision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve verified public candidate review.",
+    notes: "No external spend.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(approvalDecision);
   const result = spawnSync(process.execPath, [
     "--import",
     "tsx",
     "script/revenue-public-candidate-review.ts",
     `--candidate-ids=${candidateId}`,
-    "--approved-by-robert",
+    `--approval-decision-id=${approvalDecision.id}`,
     "--area=Miami",
     "--niche=coffee shop",
     "--offer-focus=websites",
@@ -490,6 +502,7 @@ test("public candidate review script prints human-reviewed money sprint packet",
       REVENUE_ENGINE_PUBLIC_LEAD_CANDIDATES_PATH: testPublicLeadCandidatesPath,
       REVENUE_ENGINE_LEADS_PATH: testLeadsPath,
       REVENUE_ENGINE_OUTREACH_PATH: testOutreachPath,
+      REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
     },
     encoding: "utf8",
   });

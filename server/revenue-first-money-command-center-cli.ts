@@ -67,6 +67,25 @@ type CandidateApprovalBatch = {
   reason: string;
 };
 
+function redactCandidateApprovalBatchForSummary(batch: CandidateApprovalBatch | undefined) {
+  if (!batch || batch.approvalStatus !== "needs_robert_approval") return null;
+  const confirmationText = `APPROVE PUBLIC CANDIDATES ${batch.id}`;
+  return {
+    id: batch.id,
+    candidateIds: batch.candidateIds,
+    candidateNames: batch.candidateNames,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: "websites" as const,
+    count: batch.count,
+    totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
+    approvalStatus: batch.approvalStatus,
+    approvedAction: "Approve first-money public candidate review.",
+    confirmationText,
+    safety: batch.approvalSafety,
+  };
+}
+
 export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterCliOptions {
   const modeArg = argv.find((arg) => arg.startsWith("--mode="));
   const mode = (modeArg ? modeArg.slice("--mode=".length).trim() : "first-sprint") as RevenueMoneyReadinessInput["mode"];
@@ -551,10 +570,15 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
 
 export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirstMoneyCommandCenterCliOptions) {
   const packet = buildRevenueFirstMoneyCommandCenter(options);
+  const nextCandidateApproval = redactCandidateApprovalBatchForSummary(
+    packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
+    || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "needs_robert_approval"),
+  );
   return {
     status: packet.status,
     mode: packet.mode,
     nextCommand: packet.nextCommand,
+    nextCandidateApproval,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,

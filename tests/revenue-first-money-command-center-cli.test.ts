@@ -437,6 +437,10 @@ test("first-money command center summary omits candidate contact detail payloads
   const serialized = JSON.stringify(summary);
 
   assert.equal(summary.nextCommand.id, "candidate-review");
+  assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Summary Privacy Cafe");
+  assert.equal(summary.nextCandidateApproval?.count, 1);
+  assert.equal(summary.nextCandidateApproval?.confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-1");
+  assert.equal(summary.nextCandidateApproval?.safety.sendsOutreach, false);
   assert.equal(summary.counts.reviewablePublicCandidates, 1);
   assert.equal("candidateApprovalBatches" in summary, false);
   assert.equal("setupCommands" in summary, false);

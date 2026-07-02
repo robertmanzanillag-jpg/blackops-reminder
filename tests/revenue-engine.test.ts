@@ -92,6 +92,7 @@ import {
   buildRevenueContactPathApprovalTargetId,
   buildRevenueContactPathSnapshotHash,
 } from "../server/revenue-contact-path-approval";
+import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -1975,7 +1976,7 @@ test("Robert review promotes captured public candidates to preview batch without
     ],
   });
   const candidateId = capture.recordedCandidates[0].candidate.id;
-  const result = reviewRevenuePublicLeadCandidates({
+  const bypass = reviewRevenuePublicLeadCandidates({
     area: "Miami",
     niche: "coffee shop",
     offerFocus: "websites",
@@ -1990,9 +1991,41 @@ test("Robert review promotes captured public candidates to preview batch without
     approvedByRobert: true,
     reviewerNote: "Robert approved this candidate for preview only.",
   });
+  const approvalDecision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence for preview only.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(approvalDecision);
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+    approvalDecisionId: approvalDecision.id,
+    reviewerNote: "Robert approved this candidate for preview only.",
+  });
   const snapshot = getRevenueEngineSnapshot();
 
+  assert.equal(bypass.status, "blocked");
+  assert.equal(bypass.approvedCount, 0);
+  assert.match(bypass.reviewedCandidates[0].blockedReasons.join("; "), /approvalDecisionId required/);
   assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.approvalDecisionId, approvalDecision.id);
   assert.equal(result.approvedCount, 1);
   assert.match(result.importBatchText, /Robert Review Cafe/);
   assert.equal(result.preview.totals.accepted, 1);
@@ -2050,6 +2083,19 @@ test("Robert review packet strips unsafe money sprint knobs before run handoff",
       },
     ],
   });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approvalDecision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence before adversarial packet sanitization.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(approvalDecision);
   const result = reviewRevenuePublicLeadCandidates({
     area: "Miami",
     niche: "coffee shop",
@@ -2061,8 +2107,9 @@ test("Robert review packet strips unsafe money sprint knobs before run handoff",
     maxPaidDataSpendUsd: 250,
     requireRobertApprovalToContact: false,
     writePreviewFiles: true,
-    candidateIds: [capture.recordedCandidates[0].candidate.id],
+    candidateIds: [candidateId],
     approvedByRobert: true,
+    approvalDecisionId: approvalDecision.id,
   });
   const snapshot = getRevenueEngineSnapshot();
 
@@ -2328,6 +2375,23 @@ test("routes expose first-money command center endpoint", () => {
   assert.match(
     routesSource,
     /res\.json\(buildRevenueFirstMoneyCommandCenterSummary\(\{ mode: "first-sprint", json: false \}\)\)/,
+  );
+});
+
+test("routes wire public candidate approval endpoint to trusted builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
+  assert.match(routesSource, /revenuePublicCandidateApprovalDecisionSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
+  assert.match(routesSource, /batchId: z\.string\(\)/);
+  assert.match(routesSource, /confirmationText: z\.string\(\)/);
+  assert.match(routesSource, /input\.confirmationText === expectedApproval\.confirmationText/);
+  assert.match(routesSource, /confirmedByRobert: true/);
+  assert.doesNotMatch(routesSource, /confirmedByRobert: z\.literal\(true\)/);
+  assert.match(
+    routesSource,
+    /const result = buildRevenuePublicCandidateApprovalDecisionFromCli\(\{[\s\S]{0,500}confirmedByRobert: true,[\s\S]{0,80}json: false,/,
   );
 });
 
@@ -3157,6 +3221,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
   assert.match(source, /First-money command center/);
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-decision/);
+  assert.match(source, /nextCandidateApproval/);
+  assert.match(source, /button-approve-public-candidate-batch/);
+  assert.match(source, /input-public-candidate-approval-confirmation/);
+  assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateApproval\.confirmationText/);
   assert.match(source, /canContactBusinesses/);
   assert.match(source, /canCollectMoney/);
   assert.match(source, /canBuildWebsites/);
