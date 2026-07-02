@@ -1212,6 +1212,72 @@ test("first-money command center reads the full persisted candidate queue", () =
   assert.equal(packet.candidateApprovalBatches.length, 3);
   assert.deepEqual(packet.candidateApprovalBatches.map((batch) => batch.count), [5, 5, 2]);
   assert.equal(packet.candidateApprovalBatches.every((batch) => batch.area === "Miami" && batch.niche === "coffee shop"), true);
+  assert.deepEqual(
+    packet.candidateApprovalBatches.map((batch) => batch.approvalCommand.match(/APPROVE PUBLIC CANDIDATES candidate-review-\d+/)?.[0]),
+    [
+      "APPROVE PUBLIC CANDIDATES candidate-review-1",
+      "APPROVE PUBLIC CANDIDATES candidate-review-2",
+      "APPROVE PUBLIC CANDIDATES candidate-review-3",
+    ],
+  );
+});
+
+test("first-money command center keeps cross-niche approval instructions aligned to batch ids", () => {
+  recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Cross Niche Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@crossnichecafe.biz",
+        sourceUrl: "https://public-directory.invalid/cross-niche-cafe",
+        recipientEmail: "owner@crossnichecafe.biz",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+      {
+        businessName: "Cross Niche Salon",
+        area: "Miami",
+        niche: "hair salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@crossnichesalon.biz",
+        sourceUrl: "https://public-directory.invalid/cross-niche-salon",
+        recipientEmail: "owner@crossnichesalon.biz",
+        evidence: "Public listing has no website, recent salon photos and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+
+  assert.deepEqual(packet.candidateApprovalBatches.map((batch) => batch.id), ["candidate-review-1", "candidate-review-2"]);
+  assert.match(packet.candidateApprovalBatches[0].approvalCommand, /APPROVE PUBLIC CANDIDATES candidate-review-1/);
+  assert.match(packet.candidateApprovalBatches[1].approvalCommand, /APPROVE PUBLIC CANDIDATES candidate-review-2/);
+  assert.match(packet.candidateApprovalBatches[1].approvalCommand, /Miami \/ hair salon/);
 });
 
 test("first-money command center excludes demo and placeholder candidates from actionable counts", () => {

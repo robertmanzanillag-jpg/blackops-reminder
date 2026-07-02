@@ -913,13 +913,13 @@ function buildCandidateApprovalBatches(candidates: CandidateApprovalInput[]) {
     const key = `${candidate.area}\u0000${candidate.niche}`;
     groupedCandidates.set(key, [...(groupedCandidates.get(key) || []), candidate]);
   }
-  return [...groupedCandidates.values()].flatMap((group) => {
-    const batches: CandidateApprovalBatch[] = [];
+  const batches: CandidateApprovalBatch[] = [];
+  for (const group of groupedCandidates.values()) {
     for (let index = 0; index < group.length; index += 5) {
       batches.push(buildCandidateApprovalBatch(group.slice(index, index + 5), batches.length, approvalDecisions));
     }
-    return batches;
-  }).map((batch, index) => ({ ...batch, id: `candidate-review-${index + 1}` }));
+  }
+  return batches;
 }
 
 export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCommandCenterCliOptions) {

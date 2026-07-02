@@ -109,11 +109,12 @@ test("dry run writes an auditable next-action packet without executing unsafe wo
   assert.equal(existsSync(result.outputPath), true);
   assert.match(result.outputPath, /2026-07-02-first-money-dry-run\.md$/);
   assert.match(markdown, /Revenue First Money Dry Run/);
-  assert.match(markdown, /revenue:public-candidate-approval-decision/);
+  assert.match(markdown, /Revenue Engine Trust Center approval action/);
+  assert.doesNotMatch(markdown, /revenue:public-candidate-approval-decision/);
   assert.doesNotMatch(markdown, /--approved-by-robert/);
   assert.doesNotMatch(markdown, /--confirmed-by-robert/);
   assert.match(markdown, /approval flags withheld/i);
-  assert.match(result.nextCommand.command, /approval flags withheld/i);
+  assert.match(result.nextCommand.command, /Revenue Engine Trust Center approval action/);
   assert.doesNotMatch(result.nextCommand.command, /--approved-by-robert/);
   assert.doesNotMatch(result.nextCommand.command, /--confirmed-by-robert/);
   assert.match(markdown, /This dry run does not execute the next command/);

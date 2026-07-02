@@ -212,7 +212,7 @@ test("blocks approval decision without Robert confirmation", () => {
   assert.equal(getRevenuePublicCandidateApprovalDecisionExitCode(result), 1);
 });
 
-test("approval decision script persists a safe approval record", () => {
+test("approval decision script blocks direct manual persistence", () => {
   const candidateId = captureVerifiedCandidate();
   const result = spawnSync(process.execPath, [
     "--import",
@@ -236,10 +236,9 @@ test("approval decision script persists a safe approval record", () => {
     encoding: "utf8",
   });
 
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stdout, /Revenue public candidate approval decision: recorded/);
-  assert.match(result.stdout, /--approval-decision-id=/);
-  assert.doesNotMatch(result.stdout, /--approved-by-robert/);
-  assert.match(result.stdout, /Persists final leads: no/);
-  assert.match(result.stdout, /Sends outreach: no/);
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Direct public candidate approval is disabled/);
+  assert.match(result.stderr, /Trust Center/);
+  assert.equal(result.stdout, "");
+  assert.equal(listRevenueApprovalDecisions().length, 0);
 });
