@@ -25,7 +25,7 @@ type CommandQueueItem = {
 };
 
 type SetupCommandItem = CommandQueueItem & {
-  gate: "contact_path" | "payment_path";
+  gate: "contact_path" | "payment_path" | "website_creation";
 };
 
 type CandidateApprovalBatch = {
@@ -189,6 +189,26 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         reason: "Runs after the payment path approval decision and confirms the system still does not charge clients by itself.",
       },
     );
+  }
+  if (!readiness.canBuildWebsites) {
+    setupCommands.push({
+      id: "website-creation-approval",
+      gate: "website_creation",
+      label: "Approve paid website creation after deposit",
+      command: npmRunText("revenue:website-creation-approval-decision", [
+        "--outreach-draft-id=OUTREACH_ID",
+        "--decision=approved",
+        "--approved-action=Approve paid website creation handoff after client scope and deposit proof.",
+        "--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+        "--robert-approved-build",
+        "--client-approved-scope",
+        "--deposit-paid",
+        "--public-data-verified",
+        "--confirmed-by-robert",
+      ]),
+      status: "blocked",
+      reason: "Runs only after an approved outreach draft, client-approved scope, deposit proof, and public data verification; this command records approval only and never writes files or deploys.",
+    });
   }
   return setupCommands;
 }
@@ -425,9 +445,9 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       : {
         id: "website-handoff",
         label: "Prepare paid website handoff",
-        command: "npm run revenue:website-creation-approval-decision -- --outreach-draft-id=OUTREACH_ID --decision=approved --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified",
+        command: "blocked until an approved outreach draft exists",
         status: "blocked",
-        reason: "No approved outreach draft exists yet.",
+        reason: "No approved outreach draft exists yet; use the website creation setup gate only after scope, deposit and public data evidence are real.",
       },
   ];
   const funnelQueue = queue.filter((item) => item.id !== "readiness");

@@ -35,6 +35,10 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_|OUTREACH_ID)/i.test(value);
+}
+
 export function parseRevenueWebsiteCreationApprovalDecisionArgs(argv: string[]): RevenueWebsiteCreationApprovalDecisionCliOptions {
   return {
     outreachDraftId: getArgValue(argv, "--outreach-draft-id"),
@@ -54,11 +58,17 @@ export function parseRevenueWebsiteCreationApprovalDecisionArgs(argv: string[]):
 export function validateRevenueWebsiteCreationApprovalDecisionOptions(options: RevenueWebsiteCreationApprovalDecisionCliOptions) {
   const errors: string[] = [];
   if (!options.outreachDraftId) errors.push("--outreach-draft-id is required.");
+  else if (hasPlaceholderValue(options.outreachDraftId)) errors.push("--outreach-draft-id must be a real outreach draft id, not a placeholder.");
   if (!["approved", "rejected", "needs_changes"].includes(options.decision)) {
     errors.push("--decision must be approved, rejected, or needs_changes.");
   }
   if (options.approvedAction.trim().length < 8) {
     errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes must be real proof/context, not a placeholder.");
   }
   if (!Number.isInteger(options.launchTargetDays) || options.launchTargetDays < 1 || options.launchTargetDays > 60) {
     errors.push("--launch-target-days must be an integer from 1 to 60.");

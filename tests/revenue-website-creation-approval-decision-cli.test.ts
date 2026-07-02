@@ -97,6 +97,15 @@ test("parses and validates website creation approval decision options", () => {
   assert.deepEqual(validateRevenueWebsiteCreationApprovalDecisionOptions(parseRevenueWebsiteCreationApprovalDecisionArgs([])), [
     "--outreach-draft-id is required.",
   ]);
+  assert.deepEqual(validateRevenueWebsiteCreationApprovalDecisionOptions(parseRevenueWebsiteCreationApprovalDecisionArgs([
+    "--outreach-draft-id=OUTREACH_ID",
+    "--approved-action=REPLACE_WITH_WEBSITE_APPROVAL_CONTEXT",
+    "--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+  ])), [
+    "--outreach-draft-id must be a real outreach draft id, not a placeholder.",
+    "--approved-action must be real approval context, not a placeholder.",
+    "--notes must be real proof/context, not a placeholder.",
+  ]);
 });
 
 test("records approved website creation decision without build side effects", () => {
