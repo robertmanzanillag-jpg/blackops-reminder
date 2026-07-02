@@ -6243,6 +6243,8 @@ export function getDropshippingLaunchReadiness() {
   };
 }
 
+export const getDropshippingLiveSignalReadiness = getDropshippingLaunchReadiness;
+
 export function buildDropshippingDailyReport(cadence: "morning" | "evening" = "morning") {
   const snapshot = getDropshippingCeoSnapshot();
   const topProducts = snapshot.recentProducts.slice(0, 3);

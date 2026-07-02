@@ -2,12 +2,8 @@ import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@sh
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { recordScheduledAutomationRun } from "./automation-registry";
 import { hasRealValue } from "./ceo-doctor-cli";
-import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
-import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
-import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
 
 export type AppQaSeverity = "critical" | "high" | "medium" | "low" | "info";
@@ -48,6 +44,7 @@ export type AppQaRouteProbe = {
   path: string;
   label: string;
   expectedClicks: string[];
+  expectedControls?: string[];
   status: AppQaStatus;
   notes: string[];
 };
@@ -195,8 +192,12 @@ const LIKELY_APP_REPO_KEYWORDS = [
   "portal",
 ];
 
-type GithubRepo = Awaited<ReturnType<typeof listRepositories>>[number];
+type GithubRepo = Awaited<ReturnType<typeof import("./github-client")["listRepositories"]>>[number];
 type AppQaVisualMode = "off" | "manual" | "daily" | "every_scan";
+type Storage = typeof import("./storage")["storage"];
+type CreateDeveloperAutopilotHandoff = typeof import("./developer-autopilot")["createDeveloperAutopilotHandoff"];
+type GithubClient = Pick<typeof import("./github-client"), "isGitHubConnected" | "listRepositories">;
+type RecordScheduledAutomationRun = typeof import("./automation-registry")["recordScheduledAutomationRun"];
 
 type AppQaContext = {
   app: AppProject;
@@ -216,7 +217,14 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
   { path: "/code-agent", label: "Code Agent", expectedClicks: ["Leer archivo", "Guardar cambio"], status: "pass", notes: [] },
   { path: "/github-agent", label: "GitHub Agent", expectedClicks: ["Revisar repo"], status: "pass", notes: [] },
-  { path: "/revenue-engine", label: "Revenue Engine", expectedClicks: ["Crear plan", "QA delivery"], status: "pass", notes: [] },
+  {
+    path: "/revenue-engine",
+    label: "Revenue Engine",
+    expectedClicks: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControls: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    status: "pass",
+    notes: [],
+  },
   { path: "/dropshipping-ceo", label: "Dropshipping CEO", expectedClicks: ["Ciclo diario", "Launch pack"], status: "pass", notes: [] },
   { path: "/marketing-command-center", label: "Marketing HQ", expectedClicks: ["Run day", "Review analytics"], status: "pass", notes: [] },
   { path: "/portfolio", label: "Portfolio", expectedClicks: ["Ver inversion", "Actualizar datos"], status: "pass", notes: [] },
@@ -224,6 +232,29 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/promo-video", label: "Promo Video", expectedClicks: ["Importar videos", "Editar"], status: "pass", notes: [] },
   { path: "/clippers", label: "Clippers", expectedClicks: ["Preflight", "Publishing queue"], status: "pass", notes: [] },
 ];
+
+async function getStorage(): Promise<Storage> {
+  if (!hasRealValue(process.env.DATABASE_URL)) {
+    throw new Error("DATABASE_URL is not configured with a real Postgres URL.");
+  }
+  return (await import("./storage")).storage;
+}
+
+async function getCreateDeveloperAutopilotHandoff(): Promise<CreateDeveloperAutopilotHandoff> {
+  return (await import("./developer-autopilot")).createDeveloperAutopilotHandoff;
+}
+
+async function getGithubClient(): Promise<GithubClient> {
+  const githubClient = await import("./github-client");
+  return {
+    isGitHubConnected: githubClient.isGitHubConnected,
+    listRepositories: githubClient.listRepositories,
+  };
+}
+
+async function getRecordScheduledAutomationRun(): Promise<RecordScheduledAutomationRun> {
+  return (await import("./automation-registry")).recordScheduledAutomationRun;
+}
 
 function getTelegramBotToken(): string | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -399,6 +430,7 @@ export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], f
       continue;
     }
 
+    const createDeveloperAutopilotHandoff = await getCreateDeveloperAutopilotHandoff();
     const handoff = await createDeveloperAutopilotHandoff(
       userId,
       buildBugPatrolAutopilotMessage(finding, repoFullName),
@@ -834,6 +866,11 @@ function normalizeVisualText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function findMissingExpectedVisualControls(bodyText: string, expectedClicks: string[]): string[] {
+  const normalizedBody = normalizeVisualText(bodyText);
+  return expectedClicks.filter((click) => !normalizedBody.includes(normalizeVisualText(click)));
+}
+
 function isVisualAuthScreen(bodyText: string): boolean {
   const normalized = normalizeVisualText(bodyText);
   return normalized.includes("blackops ceo")
@@ -1190,6 +1227,11 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
         if (consoleErrors.length) {
           status = "fail";
           notes.push(`${consoleErrors.length} errores de consola`);
+        }
+        const missingExpectedClicks = findMissingExpectedVisualControls(bodyText, route.expectedControls || []);
+        if (missingExpectedClicks.length) {
+          status = "fail";
+          notes.push(`Controles esperados no visibles: ${missingExpectedClicks.join(", ")}`);
         }
 
         const links = page.locator('a[href^="/"]');
@@ -1600,7 +1642,9 @@ async function analyzeApis(apps: AppProject[]): Promise<AppQaSubAgentReport> {
 export async function runAppQaScan(userId: string, notify = false, recordHistory = false, allowDailyDigest = false): Promise<AppQaScanResult> {
   const startedAt = new Date();
   let apps: AppProject[];
+  let storage: Storage;
   try {
+    storage = await getStorage();
     apps = await storage.getAppProjects(userId);
   } catch (error) {
     const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt);
@@ -1615,6 +1659,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
   let githubReport: AppQaSubAgentReport & { githubApps: AppQaGithubRepoCheck[] };
 
   try {
+    const { isGitHubConnected, listRepositories } = await getGithubClient();
     githubConnected = await isGitHubConnected();
     if (githubConnected) {
       const repos = await listRepositories();
@@ -1721,6 +1766,7 @@ export async function runAppQaScan(userId: string, notify = false, recordHistory
 
 async function recordAppQaHistory(userId: string, result: AppQaScanResult, startedAt: Date): Promise<void> {
   try {
+    const recordScheduledAutomationRun = await getRecordScheduledAutomationRun();
     await recordScheduledAutomationRun(userId, "app-qa-council", startedAt, {
       status: "success",
       resultSummary: result.summary,
@@ -1770,6 +1816,7 @@ export function startAppQaScheduler(): void {
 
   setInterval(async () => {
     try {
+      const storage = await getStorage();
       const configs = await storage.getEnabledTelegramConfigs();
       await Promise.all(configs.map((config) => runAppQaScan(config.userId, false, true, true)));
     } catch (error) {
@@ -1789,6 +1836,7 @@ export const __appQaAgentInternals = {
   emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  findMissingExpectedVisualControls,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,
   isVisualAuthScreen,

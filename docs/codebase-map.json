@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-06-29T06:58:50.339Z",
-  "repoRoot": "/private/tmp/asistente-local-youtube-worker",
+  "generatedAt": "2026-07-02T12:20:32.328Z",
+  "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -36,6 +36,33 @@
     "test:app-qa-agent": "node --import tsx --test tests/app-qa-agent.test.ts",
     "test:google-drive-oauth": "node --import tsx --test tests/google-drive-oauth.test.ts",
     "test:blackroom-links": "node --import tsx --test tests/blackroom-links.test.ts",
+    "test:revenue-money-readiness-cli": "node --import tsx --test tests/revenue-money-readiness-cli.test.ts",
+    "test:revenue-commercial-go-live-cli": "node --import tsx --test tests/revenue-commercial-go-live-cli.test.ts",
+    "test:revenue-first-money-command-center-cli": "node --import tsx --test tests/revenue-first-money-command-center-cli.test.ts",
+    "test:revenue-first-money-dry-run-cli": "node --import tsx --test tests/revenue-first-money-dry-run-cli.test.ts",
+    "test:revenue-browser-scout-session-cli": "node --import tsx --test tests/revenue-browser-scout-session-cli.test.ts",
+    "test:revenue-public-candidate-review-cli": "node --import tsx --test tests/revenue-public-candidate-review-cli.test.ts",
+    "test:revenue-money-sprint-run-packet-cli": "node --import tsx --test tests/revenue-money-sprint-run-packet-cli.test.ts",
+    "test:revenue-outreach-approval-packet-cli": "node --import tsx --test tests/revenue-outreach-approval-packet-cli.test.ts",
+    "test:revenue-outreach-approval-decision-cli": "node --import tsx --test tests/revenue-outreach-approval-decision-cli.test.ts",
+    "test:revenue-manual-contact-approval-packet-cli": "node --import tsx --test tests/revenue-manual-contact-approval-packet-cli.test.ts",
+    "test:revenue-contact-path-approval-decision-cli": "node --import tsx --test tests/revenue-contact-path-approval-decision-cli.test.ts",
+    "test:revenue-contact-path-readiness-packet-cli": "node --import tsx --test tests/revenue-contact-path-readiness-packet-cli.test.ts",
+    "test:revenue-ledger-approval-decision-cli": "node --import tsx --test tests/revenue-ledger-approval-decision-cli.test.ts",
+    "test:revenue-payment-path-approval-decision-cli": "node --import tsx --test tests/revenue-payment-path-approval-decision-cli.test.ts",
+    "test:revenue-payment-path-readiness-packet-cli": "node --import tsx --test tests/revenue-payment-path-readiness-packet-cli.test.ts",
+    "test:revenue-website-creation-approval-decision-cli": "node --import tsx --test tests/revenue-website-creation-approval-decision-cli.test.ts",
+    "test:revenue-website-creation-packet-cli": "node --import tsx --test tests/revenue-website-creation-packet-cli.test.ts",
+    "test:revenue-website-publish-approval-decision-cli": "node --import tsx --test tests/revenue-website-publish-approval-decision-cli.test.ts",
+    "test:revenue-website-publish-readiness-packet-cli": "node --import tsx --test tests/revenue-website-publish-readiness-packet-cli.test.ts",
+    "test:revenue-public-scout-extract-cli": "node --import tsx --test tests/revenue-public-scout-extract-cli.test.ts",
+    "test:revenue-public-scout-execute-cli": "node --import tsx --test tests/revenue-public-scout-execute-cli.test.ts",
+    "test:revenue-public-scout-schedule-cli": "node --import tsx --test tests/revenue-public-scout-schedule-cli.test.ts",
+    "test:revenue-public-scout-run-cli": "node --import tsx --test tests/revenue-public-scout-run-cli.test.ts",
+    "test:revenue-public-contact-verification-cli": "node --import tsx --test tests/revenue-public-contact-verification-cli.test.ts",
+    "test:revenue-public-candidate-verification-update-cli": "node --import tsx --test tests/revenue-public-candidate-verification-update-cli.test.ts",
+    "test:revenue-public-candidate-approval-decision-cli": "node --import tsx --test tests/revenue-public-candidate-approval-decision-cli.test.ts",
+    "test:revenue-public-candidate-block-cli": "node --import tsx --test tests/revenue-public-candidate-block-cli.test.ts",
     "test:readiness": "node --import tsx --test tests/ceo-readiness.test.ts",
     "test:readiness-cli": "node --import tsx --test tests/ceo-readiness-cli.test.ts",
     "test:ceo-smoke-cli": "node --import tsx --test tests/ceo-smoke-cli.test.ts",
@@ -44,7 +71,8 @@
     "test:automation-registry": "node --import tsx --test tests/automation-registry.test.ts",
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-contact-path-approval-decision-cli && npm run test:revenue-contact-path-readiness-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-payment-path-approval-decision-cli && npm run test:revenue-payment-path-readiness-packet-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-website-publish-approval-decision-cli && npm run test:revenue-website-publish-readiness-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -58,6 +86,33 @@
     "ceo:create-go-live-task": "node --import tsx script/create-ceo-go-live-task.ts",
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
+    "revenue:commercial-go-live": "node --import tsx script/revenue-commercial-go-live.ts",
+    "revenue:money-readiness": "node --import tsx script/revenue-money-readiness.ts",
+    "revenue:first-money-command-center": "node --import tsx script/revenue-first-money-command-center.ts",
+    "revenue:first-money-dry-run": "node --import tsx script/revenue-first-money-dry-run.ts",
+    "revenue:browser-scout-session": "node --import tsx script/revenue-browser-scout-session.ts",
+    "revenue:public-candidate-review": "node --import tsx script/revenue-public-candidate-review.ts",
+    "revenue:money-sprint-run-packet": "node --import tsx script/revenue-money-sprint-run-packet.ts",
+    "revenue:outreach-approval-packet": "node --import tsx script/revenue-outreach-approval-packet.ts",
+    "revenue:outreach-approval-decision": "node --import tsx script/revenue-outreach-approval-decision.ts",
+    "revenue:manual-contact-approval-packet": "node --import tsx script/revenue-manual-contact-approval-packet.ts",
+    "revenue:contact-path-approval-decision": "node --import tsx script/revenue-contact-path-approval-decision.ts",
+    "revenue:contact-path-readiness-packet": "node --import tsx script/revenue-contact-path-readiness-packet.ts",
+    "revenue:ledger-approval-decision": "node --import tsx script/revenue-ledger-approval-decision.ts",
+    "revenue:payment-path-approval-decision": "node --import tsx script/revenue-payment-path-approval-decision.ts",
+    "revenue:payment-path-readiness-packet": "node --import tsx script/revenue-payment-path-readiness-packet.ts",
+    "revenue:website-creation-approval-decision": "node --import tsx script/revenue-website-creation-approval-decision.ts",
+    "revenue:website-creation-packet": "node --import tsx script/revenue-website-creation-packet.ts",
+    "revenue:website-publish-approval-decision": "node --import tsx script/revenue-website-publish-approval-decision.ts",
+    "revenue:website-publish-readiness-packet": "node --import tsx script/revenue-website-publish-readiness-packet.ts",
+    "revenue:public-scout-extract": "node --import tsx script/revenue-public-scout-extract.ts",
+    "revenue:public-scout-execute": "node --import tsx script/revenue-public-scout-execute.ts",
+    "revenue:public-scout-schedule": "node --import tsx script/revenue-public-scout-schedule.ts",
+    "revenue:public-scout-run": "node --import tsx script/revenue-public-scout-run.ts",
+    "revenue:public-contact-verification": "node --import tsx script/revenue-public-contact-verification.ts",
+    "revenue:public-candidate-verification-update": "node --import tsx script/revenue-public-candidate-verification-update.ts",
+    "revenue:public-candidate-approval-decision": "node --import tsx script/revenue-public-candidate-approval-decision.ts",
+    "revenue:public-candidate-block": "node --import tsx script/revenue-public-candidate-block.ts",
     "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "metricool:plan": "node --import tsx script/metricool-plan.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
@@ -80,32 +135,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 398,
-    "filesIndexed": 333,
-    "imports": 1331,
-    "routes": 430,
-    "symbols": 7455
+    "filesVisible": 486,
+    "filesIndexed": 418,
+    "imports": 1558,
+    "routes": 446,
+    "symbols": 7960
   },
   "directories": {
     "script": {
-      "files": 36,
-      "indexed": 34,
+      "files": 63,
+      "indexed": 61,
       "kinds": {
-        "script": 36
+        "script": 63
       }
     },
     "server": {
-      "files": 94,
-      "indexed": 91,
+      "files": 128,
+      "indexed": 124,
       "kinds": {
-        "server": 94
+        "server": 128
       }
     },
     "tests": {
-      "files": 58,
-      "indexed": 56,
+      "files": 85,
+      "indexed": 83,
       "kinds": {
-        "test": 58
+        "test": 85
       }
     },
     ".agents/skills": {
@@ -148,7 +203,7 @@
     },
     "client/src": {
       "files": 108,
-      "indexed": 107,
+      "indexed": 106,
       "kinds": {
         "other": 3,
         "client-component": 21,
@@ -160,7 +215,7 @@
     },
     "docs": {
       "files": 11,
-      "indexed": 11,
+      "indexed": 10,
       "kinds": {
         "docs": 11
       }
@@ -3534,109 +3589,6 @@
       "routes": []
     },
     {
-      "path": "client/src/pages/revenue-engine.tsx",
-      "kind": "client-page",
-      "imports": [
-        "@/components/ui/badge",
-        "@/components/ui/button",
-        "@/components/ui/card",
-        "@/components/ui/input",
-        "@/components/ui/progress",
-        "@/components/ui/tabs",
-        "@/components/ui/textarea",
-        "@/lib/utils",
-        "@tanstack/react-query",
-        "lucide-react",
-        "react",
-        "wouter"
-      ],
-      "exports": [
-        "RevenueEnginePage"
-      ],
-      "symbols": [
-        "AutomationAgentCommandResult",
-        "AutomationIntakeConvertResult",
-        "AutomationOpportunityCloseResult",
-        "AutomationOpportunityDeliveryResult",
-        "AutomationOpportunityResult",
-        "AutomationQuote",
-        "ClarificationGate",
-        "DeliveryReview",
-        "DeliveryWorkspaceDeliverResult",
-        "DeliveryWorkspaceImprovementReviewResult",
-        "DeliveryWorkspaceQaUpdateResult",
-        "ImprovementReview",
-        "ImprovementReviewResult",
-        "OutreachDraftResult",
-        "OutreachSendResult",
-        "ProposalEmail",
-        "RevenueAgentRunResult",
-        "RevenueExpensePreflightResult",
-        "RevenueLeadRadar",
-        "RevenueLeadResult",
-        "RevenueLedgerResult",
-        "RevenueMockup",
-        "RevenueMockupTemplatePack",
-        "RevenuePlan",
-        "RevenueProjectPlan",
-        "RevenueSalesAutopilotResult",
-        "RevenueScoutingMission",
-        "RevenueScoutingMissionResult",
-        "RevenueSnapshot",
-        "StatCard",
-        "agentRun",
-        "agentRunMutation",
-        "approvalDecisionMutation",
-        "automationAgentCommandMutation",
-        "automationIntakeAnswerMutation",
-        "automationIntakeConvertMutation",
-        "automationIntakeMutation",
-        "automationOpportunity",
-        "automationOpportunityCloseMutation",
-        "automationOpportunityDeliveryMutation",
-        "automationOpportunityMutation",
-        "automationQuote",
-        "automationQuoteMutation",
-        "copyProposalEmail",
-        "data",
-        "deliveryReview",
-        "deliveryReviewMutation",
-        "deliveryWorkspaceDeliverMutation",
-        "deliveryWorkspaceImprovementMutation",
-        "deliveryWorkspaceMutation",
-        "deliveryWorkspaceQaMutation",
-        "expensePreflightMutation",
-        "firstQueueItem",
-        "handleSubmit",
-        "improvementReview",
-        "improvementReviewMutation",
-        "intake",
-        "leadMutation",
-        "leadRadarMutation",
-        "ledgerMutation",
-        "mockupMutation",
-        "mockupTemplatePackMutation",
-        "money",
-        "outreachDraft",
-        "outreachDraftMutation",
-        "outreachSendMutation",
-        "plan",
-        "planMutation",
-        "projectPlanMutation",
-        "proposalEmail",
-        "proposalEmailMutation",
-        "response",
-        "salesAutopilot",
-        "salesAutopilotMutation",
-        "scoutingMission",
-        "scoutingMissionMutation",
-        "spendPercent",
-        "statusTone",
-        "toggleReviewCheck"
-      ],
-      "routes": []
-    },
-    {
       "path": "client/src/pages/tools.tsx",
       "kind": "client-page",
       "imports": [
@@ -3682,14 +3634,6 @@
     },
     {
       "path": "docs/clippers-tiktok-go-live.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -5207,6 +5151,438 @@
       "routes": []
     },
     {
+      "path": "script/revenue-browser-scout-session.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-browser-scout-session-cli",
+        "../server/revenue-engine",
+        "node:child_process",
+        "node:fs"
+      ],
+      "exports": [],
+      "symbols": [
+        "args",
+        "command",
+        "dispatch",
+        "main",
+        "openUrl",
+        "options",
+        "session",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-commercial-go-live.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-commercial-go-live-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-contact-path-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-contact-path-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "errors",
+        "options",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-contact-path-readiness-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-contact-path-readiness-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "errors",
+        "options",
+        "packet"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-first-money-command-center.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-first-money-command-center-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-first-money-dry-run.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-first-money-dry-run-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-ledger-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-ledger-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-manual-contact-approval-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-manual-contact-approval-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-money-readiness.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-money-readiness-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "report",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-money-sprint-run-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-money-sprint-run-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "review",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-outreach-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-outreach-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-outreach-approval-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-outreach-approval-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-payment-path-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-payment-path-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-payment-path-readiness-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-payment-path-readiness-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-candidate-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-candidate-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-candidate-block.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-candidate-block-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-candidate-review.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-review-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-candidate-verification-update.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-verification-update-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-contact-verification.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-contact-verification-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-scout-execute.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-scout-execute-cli",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "notesPath",
+        "options",
+        "rawNotes",
+        "rawSchedule",
+        "resolvedPathErrors",
+        "result",
+        "run",
+        "schedule",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-scout-extract.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-scout-extract-cli",
+        "node:fs"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "main",
+        "options",
+        "rawNotes",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-scout-run.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-scout-run-cli",
+        "node:fs"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "main",
+        "options",
+        "rawJson",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-public-scout-schedule.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-public-scout-schedule-cli",
+        "node:fs"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "schedule",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-website-creation-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-creation-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-website-creation-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-creation-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-website-publish-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-publish-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-website-publish-readiness-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-publish-readiness-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/send-ceo-brief.ts",
       "kind": "script",
       "imports": [
@@ -5511,12 +5887,8 @@
       "path": "server/app-qa-agent.ts",
       "kind": "server",
       "imports": [
-        "./automation-registry",
         "./ceo-doctor-cli",
-        "./developer-autopilot",
-        "./github-client",
         "./scheduler-time",
-        "./storage",
         "./telegram",
         "@shared/schema",
         "node:fs",
@@ -5553,11 +5925,15 @@
         "AppQaContext",
         "AppQaVisualMode",
         "BUG_PATROL_DEFAULT_COOLDOWN_HOURS",
+        "CreateDeveloperAutopilotHandoff",
         "DAILY_DIGEST_HOUR",
         "DEFAULT_VISUAL_HOURS",
+        "GithubClient",
         "GithubRepo",
         "LIKELY_APP_REPO_KEYWORDS",
+        "RecordScheduledAutomationRun",
         "SAFE_CLICK_TEXT_BLOCKLIST",
+        "Storage",
         "VISUAL_SCREENSHOT_DIR",
         "__appQaAgentInternals",
         "agentLines",
@@ -5596,6 +5972,7 @@
         "contexts",
         "controller",
         "council",
+        "createDeveloperAutopilotHandoff",
         "createFinding",
         "dateKey",
         "describeAppQaStorageError",
@@ -5607,6 +5984,7 @@
         "executablePath",
         "failCount",
         "failureLines",
+        "findMissingExpectedVisualControls",
         "finding",
         "findings",
         "formatDailyDigest",
@@ -5614,10 +5992,15 @@
         "getAppQaIntervalMs",
         "getBugPatrolCooldownMs",
         "getBugPatrolUserMap",
+        "getCreateDeveloperAutopilotHandoff",
+        "getGithubClient",
+        "getRecordScheduledAutomationRun",
+        "getStorage",
         "getTelegramBotToken",
         "getVisualBaseUrl",
         "getVisualHours",
         "getVisualMode",
+        "githubClient",
         "githubReport",
         "handoff",
         "healthyAgents",
@@ -5645,6 +6028,7 @@
         "loadPlaywright",
         "lower",
         "markBugPatrolHandoffCreated",
+        "missingExpectedClicks",
         "mode",
         "newGithubApps",
         "newRepos",
@@ -5652,6 +6036,7 @@
         "normalizeRepo",
         "normalizeVisualText",
         "normalized",
+        "normalizedBody",
         "now",
         "openIncidents",
         "page",
@@ -5664,6 +6049,7 @@
         "raw",
         "recentFailures",
         "recordAppQaHistory",
+        "recordScheduledAutomationRun",
         "repoFullName",
         "report",
         "repos",
@@ -5688,6 +6074,7 @@
         "startedAt",
         "statusCode",
         "statusFromFindings",
+        "storage",
         "subAgents",
         "syntheticApp",
         "telegramConfig",
@@ -7208,6 +7595,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "markDropshippingApprovalOutboxQueued",
         "preflightDropshippingShopifyDraft",
         "prepareDropshippingApprovalOutboxMigration",
@@ -7461,6 +7849,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "getDropshippingPolicyUrls",
         "getFulfillmentActionsPath",
         "getGrowthSprintsPath",
@@ -8447,6 +8836,7 @@
         "userIds"
       ],
       "routes": [
+        "/api/health",
         "/clippers/legal/privacy",
         "/clippers/legal/terms",
         "/clippers/review-demo",
@@ -10034,548 +10424,1120 @@
       ]
     },
     {
-      "path": "server/revenue-engine.ts",
+      "path": "server/revenue-browser-scout-session-cli.ts",
       "kind": "server",
       "imports": [
-        "./ceo-doctor-cli",
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueBrowserScoutSessionCliOptions",
+        "buildRevenueBrowserScoutDispatchInput",
+        "buildRevenueBrowserScoutSession",
+        "formatRevenueBrowserScoutSessionText",
+        "parseRevenueBrowserScoutSessionArgs",
+        "validateRevenueBrowserScoutSessionOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueBrowserScoutDispatchInput",
+        "buildRevenueBrowserScoutSession",
+        "captureTemplate",
+        "formatRevenueBrowserScoutSessionText",
+        "getValue",
+        "numberValue",
+        "parseRevenueBrowserScoutSessionArgs",
+        "prefix",
+        "validateRevenueBrowserScoutSessionOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-commercial-go-live-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueCommercialGoLiveCliOptions",
+        "buildRevenueCommercialGoLivePacket",
+        "formatRevenueCommercialGoLivePacketText",
+        "parseRevenueCommercialGoLiveArgs",
+        "validateRevenueCommercialGoLiveOptions"
+      ],
+      "symbols": [
+        "buildRevenueCommercialGoLivePacket",
+        "commercialGoLiveReady",
+        "executionOrder",
+        "firstMoneySprintReady",
+        "formatRevenueCommercialGoLivePacketText",
+        "mode",
+        "modeArg",
+        "parseRevenueCommercialGoLiveArgs",
+        "readiness",
+        "requiredEnvironment",
+        "rollbackNotes",
+        "validateRevenueCommercialGoLiveOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-contact-path-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-contact-path-approval",
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueContactPathApprovalDecisionCliOptions",
+        "buildRevenueContactPathApprovalDecisionFromCli",
+        "formatRevenueContactPathApprovalDecisionText",
+        "getRevenueContactPathApprovalDecisionExitCode",
+        "parseRevenueContactPathApprovalDecisionArgs",
+        "validateRevenueContactPathApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenueContactPathApprovalDecisionFromCli",
+        "contactSnapshot",
+        "formatRevenueContactPathApprovalDecisionText",
+        "getArgValue",
+        "getRevenueContactPathApprovalDecisionExitCode",
+        "nextCommand",
+        "npmRunText",
+        "parseContactMode",
+        "parseRevenueContactPathApprovalDecisionArgs",
+        "parseUrl",
+        "prefix",
+        "proof",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenueContactPathApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-contact-path-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueContactPathApprovalProof",
+        "RevenueContactPathApprovalSnapshot",
+        "buildRevenueContactPathApprovalTargetId",
+        "buildRevenueContactPathSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenueContactPathApprovalTargetId",
+        "buildRevenueContactPathSnapshotHash",
+        "digest",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-contact-path-readiness-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueContactPathReadinessPacketCliOptions",
+        "buildRevenueContactPathReadinessPacketFromCli",
+        "formatRevenueContactPathReadinessPacketText",
+        "getRevenueContactPathReadinessPacketExitCode",
+        "parseRevenueContactPathReadinessPacketArgs",
+        "validateRevenueContactPathReadinessPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueContactPathReadinessPacketFromCli",
+        "formatRevenueContactPathReadinessPacketText",
+        "getArgValue",
+        "getRevenueContactPathReadinessPacketExitCode",
+        "parseContactMode",
+        "parseRevenueContactPathReadinessPacketArgs",
+        "prefix",
+        "validateRevenueContactPathReadinessPacketOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-first-money-command-center-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueFirstMoneyCommandCenterCliOptions",
+        "buildRevenueFirstMoneyCommandCenter",
+        "formatRevenueFirstMoneyCommandCenterText",
+        "getRevenueFirstMoneyCommandCenterExitCode",
+        "parseRevenueFirstMoneyCommandCenterArgs",
+        "validateRevenueFirstMoneyCommandCenterOptions"
+      ],
+      "symbols": [
+        "CommandQueueItem",
+        "allPublicCandidates",
+        "approvedDraft",
+        "buildRevenueFirstMoneyCommandCenter",
+        "candidateQueueItems",
+        "capturedCandidates",
+        "excludedDemoPublicCandidates",
+        "firstReviewCandidate",
+        "formatRevenueFirstMoneyCommandCenterText",
+        "funnelQueue",
+        "getRevenueFirstMoneyCommandCenterExitCode",
+        "hasValidEmail",
+        "importReadyCandidates",
+        "isDemoCandidate",
+        "isManualContactCandidate",
+        "manualContactPacket",
+        "mode",
+        "modeArg",
+        "nextCommand",
+        "npmRunText",
+        "outreachDrafts",
+        "parseRevenueFirstMoneyCommandCenterArgs",
+        "publicCandidates",
+        "readiness",
+        "reviewBatchCandidates",
+        "reviewCandidateIds",
+        "reviewableDrafts",
+        "robertReviewReadyCandidates",
+        "shellQuote",
+        "snapshot",
+        "text",
+        "validateRevenueFirstMoneyCommandCenterOptions",
+        "verificationCandidateIds",
+        "verificationNeededCandidates"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-first-money-dry-run-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-first-money-command-center-cli",
         "node:fs",
-        "node:path",
+        "node:path"
+      ],
+      "exports": [
+        "RevenueFirstMoneyDryRunCliOptions",
+        "buildRevenueFirstMoneyDryRun",
+        "formatRevenueFirstMoneyDryRunText",
+        "getRevenueFirstMoneyDryRunExitCode",
+        "parseRevenueFirstMoneyDryRunArgs",
+        "validateRevenueFirstMoneyDryRunOptions"
+      ],
+      "symbols": [
+        "approvalFlags",
+        "arg",
+        "buildRevenueFirstMoneyDryRun",
+        "cleaned",
+        "commandCenter",
+        "defaultDryRunOutputDir",
+        "formatRevenueFirstMoneyDryRunText",
+        "getArgValue",
+        "getRevenueFirstMoneyDryRunExitCode",
+        "markdown",
+        "mode",
+        "nextCommand",
+        "now",
+        "outputDir",
+        "outputPath",
+        "parseRevenueFirstMoneyDryRunArgs",
+        "prefix",
+        "queue",
+        "redactApprovalFlags",
+        "redactCommandQueueItem",
+        "redacted",
+        "renderDryRunMarkdown",
+        "slugDate",
+        "validateRevenueFirstMoneyDryRunOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-ledger-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-ledger-approval"
+      ],
+      "exports": [
+        "RevenueLedgerApprovalDecisionCliOptions",
+        "buildRevenueLedgerApprovalDecisionFromCli",
+        "buildRevenueLedgerApprovalNotes",
+        "formatRevenueLedgerApprovalDecisionText",
+        "getRevenueLedgerApprovalDecisionExitCode",
+        "parseRevenueLedgerApprovalDecisionArgs",
+        "validateRevenueLedgerApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "arg",
+        "blockers",
+        "buildRevenueLedgerApprovalDecisionFromCli",
+        "buildRevenueLedgerApprovalNotes",
+        "formatRevenueLedgerApprovalDecisionText",
+        "getArgValue",
+        "getRevenueLedgerApprovalDecisionExitCode",
+        "nextApiBody",
+        "nextCommand",
+        "notes",
+        "npmRunText",
+        "parseNumberArg",
+        "parseRevenueLedgerApprovalDecisionArgs",
+        "paymentEvidence",
+        "prefix",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenueLedgerApprovalDecisionOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-ledger-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueLedgerApprovalSnapshot",
+        "buildRevenueLedgerApprovalSnapshotHash",
+        "buildRevenueLedgerApprovalTargetId"
+      ],
+      "symbols": [
+        "buildRevenueLedgerApprovalSnapshotHash",
+        "buildRevenueLedgerApprovalTargetId",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-manual-contact-approval-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueManualContactApprovalPacketCliOptions",
+        "buildRevenueManualContactApprovalPacketFromCli",
+        "formatRevenueManualContactApprovalPacketText",
+        "getRevenueManualContactApprovalPacketExitCode",
+        "parseRevenueManualContactApprovalPacketArgs",
+        "validateRevenueManualContactApprovalPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueManualContactApprovalPacketFromCli",
+        "formatRevenueManualContactApprovalPacketText",
+        "getArgValue",
+        "getRevenueManualContactApprovalPacketExitCode",
+        "parseRevenueManualContactApprovalPacketArgs",
+        "prefix",
+        "validateRevenueManualContactApprovalPacketOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-money-readiness-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./ceo-doctor-cli"
+      ],
+      "exports": [
+        "RevenueMoneyReadinessCliOptions",
+        "formatRevenueMoneyReadinessText",
+        "isRevenueMoneyModePlaceholder",
+        "parseRevenueMoneyReadinessArgs",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "symbols": [
+        "arg",
+        "formatRevenueMoneyReadinessText",
+        "getValue",
+        "isRevenueMoneyModePlaceholder",
+        "lines",
+        "mode",
+        "parseRevenueMoneyReadinessArgs",
+        "prefix",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-money-sprint-run-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "node:fs"
+      ],
+      "exports": [
+        "RevenueMoneySprintRunPacketCliOptions",
+        "buildRevenueMoneySprintRunPacketExecution",
+        "formatRevenueMoneySprintRunPacketExecutionText",
+        "getRevenueMoneySprintRunPacketExitCode",
+        "parseRevenueMoneySprintRunPacketArgs",
+        "readRevenueMoneySprintRunPacketInput",
+        "validateRevenueMoneySprintRunPacketOptions",
+        "validateRevenueMoneySprintRunPacketReview"
+      ],
+      "symbols": [
+        "MoneySprintRunPacketReviewJson",
+        "approvedCountIsValid",
+        "arg",
+        "batchRowCount",
+        "buildRevenueMoneySprintRunPacketExecution",
+        "countSeedLeadBatchRows",
+        "errors",
+        "formatRevenueMoneySprintRunPacketExecutionText",
+        "getRevenueMoneySprintRunPacketExitCode",
+        "getValue",
+        "lines",
+        "packet",
+        "parseRevenueMoneySprintRunPacketArgs",
+        "parsedRequest",
+        "prefix",
+        "preview",
+        "readRevenueMoneySprintRunPacketInput",
+        "requestBody",
+        "result",
+        "unreadySeedNames",
+        "validateRevenueMoneySprintRunPacketOptions",
+        "validateRevenueMoneySprintRunPacketReview",
+        "validation"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-outreach-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-outreach-approval"
+      ],
+      "exports": [
+        "RevenueOutreachApprovalDecisionCliOptions",
+        "buildRevenueOutreachApprovalDecisionFromCli",
+        "formatRevenueOutreachApprovalDecisionText",
+        "getRevenueOutreachApprovalDecisionExitCode",
+        "parseRevenueOutreachApprovalDecisionArgs",
+        "validateRevenueOutreachApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenueOutreachApprovalDecisionFromCli",
+        "draft",
+        "formatRevenueOutreachApprovalDecisionText",
+        "getArgValue",
+        "getRevenueOutreachApprovalDecisionExitCode",
+        "parseRevenueOutreachApprovalDecisionArgs",
+        "prefix",
+        "result",
+        "sendBody",
+        "targetId",
+        "validateRevenueOutreachApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-outreach-approval-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueOutreachApprovalPacketCliOptions",
+        "buildRevenueOutreachApprovalPacketFromCli",
+        "formatRevenueOutreachApprovalPacketText",
+        "getRevenueOutreachApprovalPacketExitCode",
+        "parseRevenueOutreachApprovalPacketArgs",
+        "validateRevenueOutreachApprovalPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueOutreachApprovalPacketFromCli",
+        "formatRevenueOutreachApprovalPacketText",
+        "getArgValue",
+        "getRevenueOutreachApprovalPacketExitCode",
+        "lines",
+        "parseRevenueOutreachApprovalPacketArgs",
+        "prefix",
+        "validateRevenueOutreachApprovalPacketOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-outreach-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueOutreachApprovalSnapshot",
+        "buildRevenueOutreachApprovalTargetId",
+        "buildRevenueOutreachSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenueOutreachApprovalTargetId",
+        "buildRevenueOutreachSnapshotHash",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-payment-path-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-payment-path-approval"
+      ],
+      "exports": [
+        "RevenuePaymentPathApprovalDecisionCliOptions",
+        "buildRevenuePaymentPathApprovalDecisionFromCli",
+        "formatRevenuePaymentPathApprovalDecisionText",
+        "getRevenuePaymentPathApprovalDecisionExitCode",
+        "parseRevenuePaymentPathApprovalDecisionArgs",
+        "validateRevenuePaymentPathApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenuePaymentPathApprovalDecisionFromCli",
+        "formatRevenuePaymentPathApprovalDecisionText",
+        "getArgValue",
+        "getRevenuePaymentPathApprovalDecisionExitCode",
+        "isAllowedPaymentLink",
+        "nextCommand",
+        "npmRunText",
+        "parseNumberArg",
+        "parseRevenuePaymentPathApprovalDecisionArgs",
+        "parseUrl",
+        "paymentSnapshot",
+        "paymentUrl",
+        "prefix",
+        "proof",
+        "result",
+        "shellQuote",
+        "targetId",
+        "url",
+        "validateRevenuePaymentPathApprovalDecisionOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-payment-path-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenuePaymentPathApprovalProof",
+        "RevenuePaymentPathApprovalSnapshot",
+        "buildRevenuePaymentPathApprovalTargetId",
+        "buildRevenuePaymentPathSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenuePaymentPathApprovalTargetId",
+        "buildRevenuePaymentPathSnapshotHash",
+        "digest",
+        "normalizedPaymentLink",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-payment-path-readiness-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenuePaymentPathReadinessPacketCliOptions",
+        "buildRevenuePaymentPathReadinessPacketFromCli",
+        "formatRevenuePaymentPathReadinessPacketText",
+        "getRevenuePaymentPathReadinessPacketExitCode",
+        "parseRevenuePaymentPathReadinessPacketArgs",
+        "validateRevenuePaymentPathReadinessPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenuePaymentPathReadinessPacketFromCli",
+        "formatRevenuePaymentPathReadinessPacketText",
+        "getArgValue",
+        "getRevenuePaymentPathReadinessPacketExitCode",
+        "parseRevenuePaymentPathReadinessPacketArgs",
+        "prefix",
+        "validateRevenuePaymentPathReadinessPacketOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-candidate-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-public-candidate-approval"
+      ],
+      "exports": [
+        "RevenuePublicCandidateApprovalDecisionCliOptions",
+        "buildRevenuePublicCandidateApprovalDecisionFromCli",
+        "formatRevenuePublicCandidateApprovalDecisionText",
+        "getRevenuePublicCandidateApprovalDecisionExitCode",
+        "parseRevenuePublicCandidateApprovalDecisionArgs",
+        "validateRevenuePublicCandidateApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "allCandidates",
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenuePublicCandidateApprovalDecisionFromCli",
+        "candidateIds",
+        "candidates",
+        "formatRevenuePublicCandidateApprovalDecisionText",
+        "getArgValue",
+        "getRevenuePublicCandidateApprovalDecisionExitCode",
+        "hasValidEmail",
+        "missingIds",
+        "nextCommand",
+        "npmRunText",
+        "parseRevenuePublicCandidateApprovalDecisionArgs",
+        "prefix",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenuePublicCandidateApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-candidate-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenuePublicCandidateApprovalSnapshot",
+        "buildRevenuePublicCandidateApprovalTargetId",
+        "buildRevenuePublicCandidateSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenuePublicCandidateApprovalTargetId",
+        "buildRevenuePublicCandidateSnapshotHash",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-candidate-block-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenuePublicCandidateBlockCliOptions",
+        "buildRevenuePublicCandidateBlockFromCli",
+        "formatRevenuePublicCandidateBlockText",
+        "getRevenuePublicCandidateBlockExitCode",
+        "parseRevenuePublicCandidateBlockArgs",
+        "validateRevenuePublicCandidateBlockOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenuePublicCandidateBlockFromCli",
+        "formatRevenuePublicCandidateBlockText",
+        "getArgValue",
+        "getRevenuePublicCandidateBlockExitCode",
+        "parseRevenuePublicCandidateBlockArgs",
+        "prefix",
+        "validateRevenuePublicCandidateBlockOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-candidate-review-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-public-candidate-approval"
+      ],
+      "exports": [
+        "RevenuePublicCandidateReviewCliOptions",
+        "buildRevenuePublicCandidateReviewInput",
+        "formatRevenuePublicCandidateReviewText",
+        "getRevenuePublicCandidateReviewExitCode",
+        "parseRevenuePublicCandidateReviewArgs",
+        "validateRevenuePublicCandidateReviewOptions"
+      ],
+      "symbols": [
+        "allCandidates",
+        "approvedByRecordedDecision",
+        "arg",
+        "buildRevenuePublicCandidateReviewInput",
+        "candidateIds",
+        "expectedSnapshotHash",
+        "expectedTargetId",
+        "formatRevenuePublicCandidateReviewText",
+        "getRevenuePublicCandidateReviewExitCode",
+        "getValue",
+        "hasMatchingPublicCandidateApprovalDecision",
+        "numberValue",
+        "parseRevenuePublicCandidateReviewArgs",
+        "prefix",
+        "selectedCandidates",
+        "validateRevenuePublicCandidateReviewOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-candidate-verification-update-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenuePublicCandidateVerificationUpdateCliOptions",
+        "buildRevenuePublicCandidateVerificationUpdateInput",
+        "formatRevenuePublicCandidateVerificationUpdateText",
+        "parseRevenuePublicCandidateVerificationUpdateArgs",
+        "validateRevenuePublicCandidateVerificationUpdateOptions"
+      ],
+      "symbols": [
+        "VerificationUpdateResult",
+        "arg",
+        "buildRevenuePublicCandidateVerificationUpdateInput",
+        "emailPattern",
+        "formatCommand",
+        "formatRevenuePublicCandidateVerificationUpdateText",
+        "getValue",
+        "nextReviewCommand",
+        "nextReviewCommandText",
+        "parseRevenuePublicCandidateVerificationUpdateArgs",
+        "prefix",
+        "shellQuote",
+        "validateRevenuePublicCandidateVerificationUpdateOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-contact-verification-cli.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "RevenuePublicContactVerificationCliOptions",
+        "buildRevenuePublicContactVerificationPacket",
+        "formatRevenuePublicContactVerificationText",
+        "parseRevenuePublicContactVerificationArgs",
+        "validateRevenuePublicContactVerificationOptions"
+      ],
+      "symbols": [
+        "PublicCandidateForVerification",
+        "arg",
+        "base",
+        "buildRevenuePublicContactVerificationPacket",
+        "dedupeCandidates",
+        "deduped",
+        "excludedDemoCount",
+        "formatCommand",
+        "formatRevenuePublicContactVerificationText",
+        "getValue",
+        "isDemoCandidate",
+        "key",
+        "matched",
+        "maxCandidates",
+        "missing",
+        "missingIds",
+        "missingVerificationItems",
+        "parseRevenuePublicContactVerificationArgs",
+        "prefix",
+        "realCandidates",
+        "reviewCommandArgs",
+        "seen",
+        "selected",
+        "selectedIds",
+        "shellQuote",
+        "tasks",
+        "text",
+        "validateRevenuePublicContactVerificationOptions",
+        "verificationSearchQueries"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-scout-execute-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-public-scout-extract-cli",
+        "node:fs",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "RevenuePublicScoutExecuteCliOptions",
+        "buildRevenuePublicScoutExecute",
+        "formatRevenuePublicScoutExecuteText",
+        "getRevenuePublicScoutExecuteExitCode",
+        "parseRevenuePublicScoutExecuteArgs",
+        "parseRevenuePublicScoutExecuteSchedule",
+        "validateRevenuePublicScoutExecuteOptions",
+        "validateRevenuePublicScoutExecuteResolvedPaths"
+      ],
+      "symbols": [
+        "PathChecks",
+        "PublicScoutSchedule",
+        "PublicScoutScheduleRun",
+        "allowedPublicScoutPathRoots",
+        "arg",
+        "argValue",
+        "args",
+        "blockers",
+        "buildRevenuePublicScoutExecute",
+        "existingAncestor",
+        "expanded",
+        "extractOptions",
+        "extractOptionsFromRun",
+        "extractText",
+        "extractedInput",
+        "formatRevenuePublicScoutExecuteText",
+        "getArgValue",
+        "getRevenuePublicScoutExecuteExitCode",
+        "hasSensitivePath",
+        "isAllowedPublicScoutPath",
+        "isPathInside",
+        "nearestExistingAncestor",
+        "outputPathErrors",
+        "parent",
+        "parseRevenuePublicScoutExecuteArgs",
+        "parseRevenuePublicScoutExecuteSchedule",
+        "parsed",
+        "prefix",
+        "realAncestor",
+        "realTarget",
+        "relative",
+        "resolved",
+        "roots",
+        "schedule",
+        "scoutRunResult",
+        "segments",
+        "selectedRun",
+        "sourceFromExecutor",
+        "validateExistingReadablePath",
+        "validateRevenuePublicScoutExecuteOptions",
+        "validateRevenuePublicScoutExecuteResolvedPaths",
+        "validateWritablePath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-scout-extract-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenuePublicScoutExtractCliOptions",
+        "buildRevenuePublicScoutExtract",
+        "formatRevenuePublicScoutExtractText",
+        "parseRevenuePublicScoutExtractArgs",
+        "validateRevenuePublicScoutExtractOptions"
+      ],
+      "symbols": [
+        "ExtractedCandidate",
+        "arg",
+        "blocks",
+        "buildRevenuePublicScoutExtract",
+        "businessName",
+        "candidateFromBlock",
+        "candidates",
+        "contactChannel",
+        "contactChannelFromText",
+        "contactValue",
+        "evidence",
+        "explicitRecipientEmail",
+        "fieldValue",
+        "formatRevenuePublicScoutExtractText",
+        "getValue",
+        "hasSensitiveOutputPath",
+        "isLikelyEmail",
+        "key",
+        "lines",
+        "normalized",
+        "normalizedLabels",
+        "parseRevenuePublicScoutExtractArgs",
+        "prefix",
+        "recipientEmail",
+        "segments",
+        "separator",
+        "sourceUrl",
+        "validateRevenuePublicScoutExtractOptions",
+        "websiteStatus",
+        "websiteStatusFromText"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-scout-run-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
         "zod"
       ],
       "exports": [
-        "AutomationQuoteInput",
-        "DeliveryReviewInput",
-        "ImprovementReviewInput",
-        "ProposalEmailInput",
-        "RevenueAgentRunInput",
-        "RevenueApprovalDecisionInput",
-        "RevenueAutomationAgentCommandInput",
-        "RevenueAutomationIntakeAnswerInput",
-        "RevenueAutomationIntakeConvertInput",
-        "RevenueAutomationIntakeInput",
-        "RevenueAutomationOpportunityCloseInput",
-        "RevenueAutomationOpportunityDeliveryInput",
-        "RevenueAutomationOpportunityInput",
-        "RevenueDeliveryWorkspaceDeliverInput",
-        "RevenueDeliveryWorkspaceImprovementReviewInput",
-        "RevenueDeliveryWorkspaceInput",
-        "RevenueDeliveryWorkspaceUpdateInput",
-        "RevenueEnginePlanInput",
-        "RevenueExpensePreflightInput",
-        "RevenueLaunchReadinessInput",
-        "RevenueLeadInput",
-        "RevenueLeadRadarInput",
-        "RevenueLedgerEntryInput",
-        "RevenueMockupInput",
-        "RevenueMockupTemplatePackInput",
-        "RevenueOutreachDraftInput",
-        "RevenueOutreachSendInput",
-        "RevenueProjectPlanInput",
-        "RevenueSalesAutopilotInput",
-        "RevenueScoutingMissionInput",
-        "answerRevenueAutomationIntake",
-        "automationQuoteSchema",
-        "buildAutomationQuote",
-        "buildDeliveryReview",
-        "buildImprovementReview",
-        "buildProposalEmail",
-        "buildRevenueDeliveryWorkspace",
-        "buildRevenueEnginePlan",
-        "buildRevenueLaunchReadiness",
-        "buildRevenueLeadRadar",
-        "buildRevenueMockup",
-        "buildRevenueMockupTemplatePack",
-        "buildRevenueProjectPlan",
-        "buildRevenueScoutingMission",
-        "buildRevenueUserDataPaths",
-        "closeRevenueAutomationOpportunity",
-        "convertRevenueAutomationIntakeToOpportunity",
-        "createDeliveryWorkspaceFromAutomationOpportunity",
-        "deliverRevenueDeliveryWorkspace",
-        "deliveryReviewSchema",
-        "getRevenueEngineSnapshot",
-        "improvementReviewSchema",
-        "preflightRevenueExpense",
-        "proposalEmailSchema",
-        "recordRevenueAgentRun",
-        "recordRevenueApprovalDecision",
-        "recordRevenueAutomationIntake",
-        "recordRevenueAutomationOpportunity",
-        "recordRevenueDeliveryWorkspace",
-        "recordRevenueDeliveryWorkspaceImprovementReview",
-        "recordRevenueImprovementReview",
-        "recordRevenueLead",
-        "recordRevenueLedgerEntry",
-        "recordRevenueOutreachDraft",
-        "recordRevenueSalesAutopilot",
-        "recordRevenueScoutingMission",
-        "resetRevenueAgentRunsForTests",
-        "resetRevenueApprovalDecisionsForTests",
-        "resetRevenueAutomationIntakesForTests",
-        "resetRevenueAutomationOpportunitiesForTests",
-        "resetRevenueDeliveryWorkspacesForTests",
-        "resetRevenueImprovementReviewsForTests",
-        "resetRevenueLeadsForTests",
-        "resetRevenueLedgerForTests",
-        "resetRevenueOutreachForTests",
-        "resetRevenueScoutingMissionsForTests",
-        "revenueAgentRunSchema",
-        "revenueApprovalDecisionSchema",
-        "revenueAutomationAgentCommandSchema",
-        "revenueAutomationIntakeAnswerSchema",
-        "revenueAutomationIntakeConvertSchema",
-        "revenueAutomationIntakeSchema",
-        "revenueAutomationOpportunityCloseSchema",
-        "revenueAutomationOpportunityDeliverySchema",
-        "revenueAutomationOpportunitySchema",
-        "revenueDeliveryWorkspaceDeliverSchema",
-        "revenueDeliveryWorkspaceImprovementReviewSchema",
-        "revenueDeliveryWorkspaceSchema",
-        "revenueDeliveryWorkspaceUpdateSchema",
-        "revenueEnginePlanSchema",
-        "revenueExpensePreflightSchema",
-        "revenueLaunchReadinessSchema",
-        "revenueLeadRadarSchema",
-        "revenueLeadSchema",
-        "revenueLedgerEntrySchema",
-        "revenueMockupSchema",
-        "revenueMockupTemplatePackSchema",
-        "revenueOutreachDraftSchema",
-        "revenueOutreachSendSchema",
-        "revenueProjectPlanSchema",
-        "revenueSalesAutopilotSchema",
-        "revenueScoutingMissionSchema",
-        "runRevenueAutomationAgentCommand",
-        "sendRevenueOutreachDraft",
-        "setRevenueAgentRunsPathForTests",
-        "setRevenueApprovalDecisionsPathForTests",
-        "setRevenueAutomationIntakesPathForTests",
-        "setRevenueAutomationOpportunitiesPathForTests",
-        "setRevenueDeliveryWorkspacesPathForTests",
-        "setRevenueImprovementReviewsPathForTests",
-        "setRevenueLeadsPathForTests",
-        "setRevenueLedgerPathForTests",
-        "setRevenueOutreachPathForTests",
-        "setRevenueOutreachSenderForTests",
-        "setRevenueScoutingMissionsPathForTests",
-        "setRevenueUserDataScope",
-        "updateRevenueDeliveryWorkspaceQa"
+        "RevenuePublicScoutCliOptions",
+        "buildRevenuePublicScoutInput",
+        "buildRevenuePublicScoutSample",
+        "formatRevenuePublicScoutRunText",
+        "getRevenuePublicScoutRunExitCode",
+        "parseRevenuePublicScoutArgs",
+        "validateRevenuePublicScoutOptions"
       ],
       "symbols": [
-        "REVENUE_ENGINE_DATA_FILES",
-        "REVENUE_MONTHLY_COST_CAP_USD",
-        "RevenueAgentRun",
-        "RevenueApprovalDecision",
-        "RevenueAutomationIntake",
-        "RevenueAutomationOpportunity",
-        "RevenueDeliveryWorkspace",
-        "RevenueEmailProviderStatus",
-        "RevenueImprovementReview",
-        "RevenueLead",
-        "RevenueLedgerEntry",
-        "RevenueOutreachDraft",
-        "RevenueOutreachSendPayload",
-        "RevenueOutreachSendResponse",
-        "RevenueScoutingMission",
-        "accent",
-        "agentOperatingContract",
-        "agentRoster",
-        "agentRunResult",
-        "agentRunsPath",
-        "agentScorecard",
-        "allCorrections",
-        "answerRevenueAutomationIntake",
-        "approvalQueue",
-        "approvalQueueItems",
-        "approved",
-        "appsSold",
-        "automationQuoteSchema",
-        "automationUsd",
-        "automationsSold",
+        "arg",
         "base",
-        "baseDir",
-        "blocked",
-        "blockers",
-        "blockingGates",
-        "blockingReasons",
-        "body",
-        "bookingRate",
-        "budgetUsd",
-        "buildAgentWorkOrder",
-        "buildAutomationIntakeAnswerTemplate",
-        "buildAutomationQuote",
-        "buildDeliveryReview",
-        "buildImprovementReview",
-        "buildPipelineStages",
-        "buildProposalEmail",
-        "buildRevenueAgentOperatingContract",
-        "buildRevenueClarificationGate",
-        "buildRevenueDeliveryWorkspace",
-        "buildRevenueEnginePlan",
-        "buildRevenueExecutiveSummary",
-        "buildRevenueLaunchReadiness",
-        "buildRevenueLeadRadar",
-        "buildRevenueMockup",
-        "buildRevenueMockupTemplatePack",
-        "buildRevenueNextBatchPlan",
-        "buildRevenueOperatorConsole",
-        "buildRevenueProfitGuard",
-        "buildRevenueProjectPlan",
-        "buildRevenueScoutingMission",
-        "buildRevenueSystemReadiness",
-        "buildRevenueUserDataPaths",
-        "built",
-        "canDraftOutreach",
-        "canSpendNow",
-        "canSpendUsd",
-        "cashBlocked",
-        "cashCollectedUsd",
-        "cashCoverageUsd",
-        "cashProtected",
-        "channelMix",
-        "clarificationGate",
-        "clarifyingQuestions",
-        "clearRevenueEngineMemory",
-        "closeRate",
-        "closeResult",
-        "closeRevenueAutomationOpportunity",
-        "closedValueUsd",
-        "collectionRatePercent",
-        "complexityScore",
-        "configuredPath",
-        "contactCadenceHours",
-        "contactMode",
-        "contactScore",
-        "convertRevenueAutomationIntakeToOpportunity",
-        "correctionQueue",
-        "costPerBookedCallUsd",
-        "costPerReplyUsd",
-        "countFor",
-        "createDeliveryWorkspaceFromAutomationOpportunity",
-        "dailyAiCostUsd",
-        "data",
-        "decision",
-        "decisionsPath",
-        "deliverRevenueDeliveryWorkspace",
-        "deliveryReview",
-        "deliveryReviewSchema",
-        "depositUsd",
-        "detectedNeeds",
-        "directSpendUsd",
-        "draft",
-        "effectiveQuote",
-        "effectiveRequest",
-        "emailProvider",
-        "encodedBody",
-        "encodedSubject",
-        "encodedTo",
-        "enrichedRequest",
-        "estimatedInternalCostUsd",
-        "estimatedInternalMonthlyCostUsd",
-        "estimatedSpendUsd",
-        "evidenceScore",
-        "executiveSummary",
-        "existing",
-        "existingEntry",
-        "expenses",
-        "experiments",
-        "failedGate",
-        "failedGates",
-        "fromEmail",
-        "gates",
-        "getRevenueAgentRunsPath",
-        "getRevenueApprovalDecisionsPath",
-        "getRevenueAutomationIntakesPath",
-        "getRevenueAutomationOpportunitiesPath",
-        "getRevenueDeliveryWorkspacesPath",
-        "getRevenueEmailProviderStatus",
-        "getRevenueEnginePathEnv",
-        "getRevenueEngineSnapshot",
-        "getRevenueImprovementReviewsPath",
-        "getRevenueLeadsPath",
-        "getRevenueLedgerPath",
-        "getRevenueOutreachPath",
-        "getRevenueScoutingMissionsPath",
-        "grossMarginPercent",
-        "grossMarginUsd",
-        "guardrail",
-        "handoffCorrection",
-        "hasAction",
-        "hasBlockingGate",
-        "hasContact",
-        "hasDataSource",
-        "hasEnoughAnswers",
-        "hasEvidence",
-        "hasOutcome",
-        "hasRecipient",
-        "hasRevenueProof",
-        "hasSource",
-        "hasSummary",
-        "hasTrigger",
-        "hasWebsiteGoal",
-        "improvementReviewSchema",
-        "includeAutomation",
-        "includesAny",
-        "insideCap",
-        "insideSpendCap",
-        "intake",
-        "intakeResult",
-        "intakesPath",
-        "integrationCount",
-        "integrations",
-        "internalCostUsd",
-        "isAutomation",
-        "isBeauty",
-        "isEvents",
-        "isFitness",
-        "isFood",
-        "isFreeMode",
-        "isInsideMonthlyCap",
-        "isSaleEntry",
-        "isWebsite",
-        "isZeroCostMode",
-        "items",
-        "latestImprovementReview",
-        "latestReview",
-        "launchReadiness",
-        "lead",
-        "leadBatchSize",
-        "leadResult",
-        "leadsPath",
-        "ledgerPath",
-        "ledgerResult",
-        "loadRevenueAgentRuns",
-        "loadRevenueApprovalDecisions",
-        "loadRevenueAutomationIntakes",
-        "loadRevenueAutomationOpportunities",
-        "loadRevenueDeliveryWorkspaces",
-        "loadRevenueImprovementReviews",
-        "loadRevenueLeads",
-        "loadRevenueLedger",
-        "loadRevenueOutreach",
-        "loadRevenueScoutingMissions",
-        "lowerRequest",
-        "lowerTools",
-        "manualContactChannels",
-        "markRevenueEngineDataUnloaded",
-        "marketPromise",
-        "maxLeads",
-        "maxSpendUsd",
-        "message",
-        "missing",
-        "missingAnswers",
-        "mission",
-        "missionsPath",
-        "mockup",
-        "mockupCadenceHours",
-        "mockupCostUsd",
-        "mockupSlots",
-        "mode",
-        "monthlyAiCostUsd",
-        "monthlyCostCapUsd",
-        "needCount",
-        "needsApproval",
-        "needsBuildApproval",
-        "needsClarification",
-        "needsContactApproval",
-        "needsData",
-        "needsSpendApproval",
-        "nextBatchPlan",
-        "nextCommand",
-        "nextQuestions",
-        "niche",
-        "nicheLabel",
-        "niches",
-        "notes",
-        "now",
-        "offerLabel",
-        "offerSignals",
-        "operatorConsole",
-        "opportunitiesPath",
-        "opportunity",
-        "opportunityResult",
-        "outreachPath",
-        "outreachResult",
-        "packages",
-        "paidSpendUsd",
-        "pain",
-        "painScore",
+        "buildRevenuePublicScoutInput",
+        "buildRevenuePublicScoutSample",
+        "formatRevenuePublicScoutRunText",
+        "getRevenuePublicScoutRunExitCode",
+        "getValue",
+        "parseRevenuePublicScoutArgs",
+        "parsedJson",
+        "prefix",
+        "revenuePublicScoutJsonSchema",
+        "validateRevenuePublicScoutOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-public-scout-schedule-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "node:fs",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "RevenuePublicScoutScheduleCliOptions",
+        "buildRevenuePublicScoutScheduleCli",
+        "buildRevenuePublicScoutScheduleInput",
+        "formatRevenuePublicScoutScheduleText",
+        "parseRevenuePublicScoutScheduleArgs",
+        "validateRevenuePublicScoutScheduleOptions"
+      ],
+      "symbols": [
+        "OutputPathChecks",
+        "allowedOutputRoots",
+        "allowedSymlinkParents",
+        "arg",
+        "buildRevenuePublicScoutScheduleCli",
+        "buildRevenuePublicScoutScheduleInput",
+        "firstRun",
+        "formatRevenuePublicScoutScheduleText",
+        "getValue",
+        "hasSensitiveOutputPath",
+        "hasSymlinkAncestor",
+        "isPathInside",
+        "numberValue",
+        "outputStats",
+        "parent",
+        "parentStats",
+        "parseRevenuePublicScoutScheduleArgs",
         "parsed",
-        "paths",
-        "pending",
-        "pendingAgentApprovals",
-        "pendingAutomationApprovals",
-        "pendingDeliveryApprovals",
-        "pendingOutreachApprovals",
-        "persistRevenueAgentRuns",
-        "persistRevenueApprovalDecisions",
-        "persistRevenueAutomationIntakes",
-        "persistRevenueAutomationOpportunities",
-        "persistRevenueDeliveryWorkspaces",
-        "persistRevenueImprovementReviews",
-        "persistRevenueLeads",
-        "persistRevenueLedger",
-        "persistRevenueOutreach",
-        "persistRevenueScoutingMissions",
-        "persistedRevenueAgentRunSchema",
-        "persistedRevenueApprovalDecisionSchema",
-        "persistedRevenueAutomationIntakeSchema",
-        "persistedRevenueAutomationOpportunitySchema",
-        "persistedRevenueDeliveryWorkspaceSchema",
-        "persistedRevenueImprovementReviewSchema",
-        "persistedRevenueLeadSchema",
-        "persistedRevenueLedgerEntrySchema",
-        "persistedRevenueOutreachDraftSchema",
-        "persistedRevenueScoutingMissionSchema",
-        "phases",
-        "preflightRevenueExpense",
-        "previousVersion",
-        "primaryCta",
-        "productionMinutesPerDay",
-        "profitGuard",
-        "profitMarginPercent",
-        "profitUsd",
-        "profitable",
-        "projectPlan",
-        "projectedProfitUsd",
-        "projectedSpendUsd",
-        "proposal",
-        "proposalEmailSchema",
-        "provider",
-        "qaGates",
-        "qualification",
-        "qualifiedPerHour",
-        "qualifyRevenueLead",
-        "qualityBlocked",
-        "questions",
-        "quote",
-        "quoteIsClear",
-        "raw",
-        "ready",
-        "rebuilt",
-        "recordRevenueAgentRun",
-        "recordRevenueApprovalDecision",
-        "recordRevenueAutomationIntake",
-        "recordRevenueAutomationOpportunity",
-        "recordRevenueDeliveryWorkspace",
-        "recordRevenueDeliveryWorkspaceImprovementReview",
-        "recordRevenueImprovementReview",
-        "recordRevenueLead",
-        "recordRevenueLedgerEntry",
-        "recordRevenueOutreachDraft",
-        "recordRevenueSalesAutopilot",
-        "recordRevenueScoutingMission",
-        "recorded",
-        "remainingBudgetUsd",
-        "remainingCapUsd",
-        "replyRate",
-        "request",
-        "requiredApprovals",
-        "requiredBeforeClient",
-        "requiredBeforeExternalAction",
-        "requiredDepositUsd",
-        "researchCostUsd",
-        "researchPerHour",
-        "resetRevenueAgentRunsForTests",
-        "resetRevenueApprovalDecisionsForTests",
-        "resetRevenueAutomationIntakesForTests",
-        "resetRevenueAutomationOpportunitiesForTests",
-        "resetRevenueDeliveryWorkspacesForTests",
-        "resetRevenueImprovementReviewsForTests",
-        "resetRevenueLeadsForTests",
-        "resetRevenueLedgerForTests",
-        "resetRevenueOutreachForTests",
-        "resetRevenueScoutingMissionsForTests",
-        "response",
+        "parts",
+        "prefix",
+        "rawValue",
+        "realParent",
+        "relative",
+        "resolved",
+        "roots",
+        "segments",
+        "validateOutputPath",
+        "validateRevenuePublicScoutScheduleOptions",
+        "value",
+        "workspaceOutputDir"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-creation-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-website-creation-approval"
+      ],
+      "exports": [
+        "RevenueWebsiteCreationApprovalDecisionCliOptions",
+        "buildRevenueWebsiteCreationApprovalDecisionFromCli",
+        "formatRevenueWebsiteCreationApprovalDecisionText",
+        "getRevenueWebsiteCreationApprovalDecisionExitCode",
+        "parseRevenueWebsiteCreationApprovalDecisionArgs",
+        "validateRevenueWebsiteCreationApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenueWebsiteCreationApprovalDecisionFromCli",
+        "draft",
+        "formatRevenueWebsiteCreationApprovalDecisionText",
+        "getArgValue",
+        "getRevenueWebsiteCreationApprovalDecisionExitCode",
+        "nextCommand",
+        "npmRunText",
+        "parseRevenueWebsiteCreationApprovalDecisionArgs",
+        "prefix",
+        "proof",
         "result",
-        "retainerUsd",
-        "revenueAgentRunSchema",
-        "revenueApprovalDecisionSchema",
-        "revenueAutomationAgentCommandSchema",
-        "revenueAutomationIntakeAnswerSchema",
-        "revenueAutomationIntakeConvertSchema",
-        "revenueAutomationIntakeSchema",
-        "revenueAutomationOpportunityCloseSchema",
-        "revenueAutomationOpportunityDeliverySchema",
-        "revenueAutomationOpportunitySchema",
-        "revenueDeliveryWorkspaceDeliverSchema",
-        "revenueDeliveryWorkspaceImprovementReviewSchema",
-        "revenueDeliveryWorkspaceSchema",
-        "revenueDeliveryWorkspaceUpdateSchema",
-        "revenueEnginePlanSchema",
-        "revenueExpensePreflightSchema",
-        "revenueLaunchReadinessSchema",
-        "revenueLeadRadarSchema",
-        "revenueLeadSchema",
-        "revenueLedgerEntrySchema",
-        "revenueMockupSchema",
-        "revenueMockupTemplatePackSchema",
-        "revenueOutreachDraftSchema",
-        "revenueOutreachSendSchema",
-        "revenueProjectPlanSchema",
-        "revenueSalesAutopilotSchema",
-        "revenueScoutingMissionSchema",
-        "revenueUsd",
-        "review",
-        "reviewPaused",
-        "reviewsPath",
-        "roiPercent",
-        "roundMoney",
-        "runRevenueAutomationAgentCommand",
-        "safe",
-        "safeNiches",
-        "safeRevenueUserId",
-        "saleBlockers",
-        "sales",
-        "score",
-        "searchRotations",
-        "sendResult",
-        "sendRevenueOutreachDraft",
-        "sendRevenueOutreachPayload",
-        "sendWithResend",
-        "setRevenueAgentRunsPathForTests",
-        "setRevenueApprovalDecisionsPathForTests",
-        "setRevenueAutomationIntakesPathForTests",
-        "setRevenueAutomationOpportunitiesPathForTests",
-        "setRevenueDeliveryWorkspacesPathForTests",
-        "setRevenueImprovementReviewsPathForTests",
-        "setRevenueLeadsPathForTests",
-        "setRevenueLedgerPathForTests",
-        "setRevenueOutreachPathForTests",
-        "setRevenueOutreachSenderForTests",
-        "setRevenueScoutingMissionsPathForTests",
-        "setRevenueUserDataScope",
-        "setupPriceUsd",
-        "setupUsd",
-        "sharedSwapFields",
-        "snapshot",
-        "snapshotBefore",
-        "sourceLine",
-        "spendBlocked",
-        "status",
-        "subject",
-        "syncLeadAfterOutreachDraft",
-        "syncedLead",
-        "systemReadiness",
-        "templates",
-        "textToHtml",
-        "ticketScore",
-        "toolText",
-        "totalCostUsd",
-        "totalProductsSold",
-        "totalSetupUsd",
-        "totalUsd",
-        "updateRevenueDeliveryWorkspaceQa",
-        "valueFor",
-        "wantsAutomation",
-        "wantsWebsite",
-        "websiteScore",
-        "websiteSignals",
-        "wordCount",
-        "workspace",
-        "workspaceIndex",
-        "workspaceResult",
-        "workspacesPath"
+        "shellQuote",
+        "targetId",
+        "validateRevenueWebsiteCreationApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-creation-approval.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-outreach-approval",
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueWebsiteCreationApprovalProof",
+        "RevenueWebsiteCreationApprovalSnapshot",
+        "buildRevenueWebsiteCreationApprovalTargetId",
+        "buildRevenueWebsiteCreationSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenueWebsiteCreationApprovalTargetId",
+        "buildRevenueWebsiteCreationSnapshotHash",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-creation-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueWebsiteCreationPacketCliOptions",
+        "buildRevenueWebsiteCreationPacketFromCli",
+        "formatRevenueWebsiteCreationPacketText",
+        "getRevenueWebsiteCreationPacketExitCode",
+        "parseRevenueWebsiteCreationPacketArgs",
+        "validateRevenueWebsiteCreationPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueWebsiteCreationPacketFromCli",
+        "formatRevenueWebsiteCreationPacketText",
+        "getArgValue",
+        "getRevenueWebsiteCreationPacketExitCode",
+        "parseRevenueWebsiteCreationPacketArgs",
+        "prefix",
+        "validateRevenueWebsiteCreationPacketOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-publish-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-website-publish-approval",
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueWebsitePublishApprovalDecisionCliOptions",
+        "buildRevenueWebsitePublishApprovalDecisionFromCli",
+        "formatRevenueWebsitePublishApprovalDecisionText",
+        "getRevenueWebsitePublishApprovalDecisionExitCode",
+        "parseRevenueWebsitePublishApprovalDecisionArgs",
+        "validateRevenueWebsitePublishApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenueWebsitePublishApprovalDecisionFromCli",
+        "buildScaffoldFilesHash",
+        "creationPacket",
+        "formatRevenueWebsitePublishApprovalDecisionText",
+        "getArgValue",
+        "getRevenueWebsitePublishApprovalDecisionExitCode",
+        "isValidUrl",
+        "nextCommand",
+        "npmRunText",
+        "parseRevenueWebsitePublishApprovalDecisionArgs",
+        "payload",
+        "prefix",
+        "proof",
+        "publishSnapshot",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenueWebsitePublishApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-publish-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueWebsitePublishApprovalProof",
+        "RevenueWebsitePublishApprovalSnapshot",
+        "buildRevenueWebsitePublishApprovalTargetId",
+        "buildRevenueWebsitePublishSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenueWebsitePublishApprovalTargetId",
+        "buildRevenueWebsitePublishSnapshotHash",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-publish-readiness-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueWebsitePublishReadinessPacketCliOptions",
+        "buildRevenueWebsitePublishReadinessPacketFromCli",
+        "formatRevenueWebsitePublishReadinessPacketText",
+        "getRevenueWebsitePublishReadinessPacketExitCode",
+        "parseRevenueWebsitePublishReadinessPacketArgs",
+        "validateRevenueWebsitePublishReadinessPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueWebsitePublishReadinessPacketFromCli",
+        "formatRevenueWebsitePublishReadinessPacketText",
+        "getArgValue",
+        "getRevenueWebsitePublishReadinessPacketExitCode",
+        "parseRevenueWebsitePublishReadinessPacketArgs",
+        "prefix",
+        "validateRevenueWebsitePublishReadinessPacketOptions"
       ],
       "routes": []
     },
@@ -10757,6 +11719,7 @@
         "header",
         "history",
         "host",
+        "html",
         "incident",
         "incidents",
         "input",
@@ -10826,6 +11789,7 @@
         "prepared",
         "preps",
         "prevIncompleteTasks",
+        "previewPath",
         "previousRoute",
         "price",
         "priority",
@@ -11239,6 +12203,7 @@
         "/api/revenue-engine/automation-opportunities/close",
         "/api/revenue-engine/automation-opportunities/delivery-workspace",
         "/api/revenue-engine/automation-quote",
+        "/api/revenue-engine/contact-path-readiness-packet",
         "/api/revenue-engine/delivery-review",
         "/api/revenue-engine/delivery-workspaces",
         "/api/revenue-engine/delivery-workspaces/deliver",
@@ -11251,14 +12216,28 @@
         "/api/revenue-engine/leads",
         "/api/revenue-engine/ledger",
         "/api/revenue-engine/mockup",
+        "/api/revenue-engine/mockup-preview",
+        "/api/revenue-engine/mockup-previews/:slug",
         "/api/revenue-engine/mockup-template-pack",
+        "/api/revenue-engine/money-sprint",
+        "/api/revenue-engine/money-sprint-preview",
+        "/api/revenue-engine/outreach-approval-packet",
         "/api/revenue-engine/outreach-drafts",
         "/api/revenue-engine/outreach-send",
+        "/api/revenue-engine/payment-path-readiness-packet",
         "/api/revenue-engine/plan",
         "/api/revenue-engine/project-plan",
         "/api/revenue-engine/proposal-email",
+        "/api/revenue-engine/public-lead-candidates",
+        "/api/revenue-engine/public-lead-candidates/review",
+        "/api/revenue-engine/public-scout-run",
+        "/api/revenue-engine/public-scout-schedule",
         "/api/revenue-engine/sales-autopilot",
+        "/api/revenue-engine/scout-dispatch",
         "/api/revenue-engine/scouting-mission",
+        "/api/revenue-engine/website-creation-packet",
+        "/api/revenue-engine/website-publish-readiness-packet",
+        "/api/revenue-engine/website-scaffold",
         "/api/shopify/install",
         "/api/shopify/oauth/callback",
         "/api/shopify/oauth/start",
@@ -12640,6 +13619,7 @@
       "symbols": [
         "app",
         "appProject",
+        "body",
         "bugPatrol",
         "council",
         "digest",
@@ -12651,6 +13631,7 @@
         "message",
         "now",
         "previousBaseUrl",
+        "previousDatabaseUrl",
         "previousExecutablePath",
         "previousHours",
         "previousMode",
@@ -12660,6 +13641,7 @@
         "repo",
         "report",
         "result",
+        "revenueRoute",
         "runEveningDeep",
         "runManual",
         "runMorningDeep",
@@ -13672,41 +14654,180 @@
       "routes": []
     },
     {
+      "path": "tests/revenue-browser-scout-session-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-browser-scout-session-cli",
+        "../server/revenue-engine",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "badOffer",
+        "defaults",
+        "dispatch",
+        "input",
+        "options",
+        "output",
+        "parsed",
+        "session",
+        "tooLarge"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-commercial-go-live-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-commercial-go-live-cli",
+        "../server/revenue-contact-path-approval",
+        "../server/revenue-engine",
+        "../server/revenue-payment-path-approval",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "applyEnv",
+        "approveProductionContactPath",
+        "approveProductionPaymentPath",
+        "clearRevenueGoLiveEnv",
+        "originalEnv",
+        "output",
+        "packet",
+        "paymentLink",
+        "productionReadyEnv",
+        "proof",
+        "restoreEnv",
+        "result",
+        "runCommercialGoLiveCli",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "trackedEnvKeys",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-contact-path-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-contact-path-approval-decision-cli",
+        "../server/revenue-engine",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-contact-path-readiness-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-contact-path-approval",
+        "../server/revenue-contact-path-readiness-packet-cli",
+        "../server/revenue-engine",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approveContactPath",
+        "baseEnv",
+        "blocked",
+        "missingApproval",
+        "originalEnv",
+        "packet",
+        "parsed",
+        "proof",
+        "ready",
+        "restoreEnv",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "text",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/revenue-engine.test.ts",
       "kind": "test",
       "imports": [
         "../server/revenue-engine",
+        "../server/revenue-ledger-approval",
+        "../server/revenue-outreach-approval",
+        "../server/revenue-website-creation-approval",
         "node:assert/strict",
+        "node:fs",
         "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "answered",
+        "approval",
+        "approveLedgerEntryForTests",
+        "approveOutreachDraftForTests",
+        "approveWebsiteCreationForTests",
+        "candidateId",
+        "capture",
+        "closeNotes",
+        "closeResult",
+        "commandValues",
         "converted",
         "created",
         "delivered",
+        "draftResult",
+        "duplicate",
         "first",
+        "html",
         "leadResult",
+        "ledgerInput",
+        "maliciousArea",
+        "maliciousNiche",
         "mission",
         "mockup",
         "opportunity",
         "originalResendApiKey",
         "originalResendFromEmail",
         "originalRevenueEngineFromEmail",
+        "originalRevenueMockupsDir",
         "pack",
+        "packet",
+        "parsed",
         "partialDeposit",
         "paths",
+        "persisted",
         "plan",
+        "preview",
+        "previewPath",
         "quote",
         "radar",
         "readiness",
+        "recordApprovedRevenueLedgerEntryForTests",
+        "rejected",
         "result",
         "review",
+        "routesSource",
+        "row",
+        "scaffold",
         "scopedSnapshot",
         "second",
         "sendResult",
         "snapshot",
+        "source",
+        "stale",
         "testAgentRunsPath",
         "testApprovalDecisionsPath",
         "testAutomationIntakesPath",
@@ -13715,9 +14836,645 @@
         "testImprovementReviewsPath",
         "testLeadsPath",
         "testLedgerPath",
+        "testMockupsDir",
         "testOutreachPath",
+        "testPublicLeadCandidatesPath",
         "testScoutingMissionsPath",
-        "updated"
+        "updated",
+        "wrongSource",
+        "wrongTarget"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-first-money-command-center-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-first-money-command-center-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "capture",
+        "createDraft",
+        "draft",
+        "firstCandidateId",
+        "manualCommand",
+        "manualCommands",
+        "outreachCommand",
+        "packet",
+        "readyCandidateId",
+        "result",
+        "reviewCommand",
+        "secondCandidateId",
+        "testLeadsPath",
+        "testOutreachPath",
+        "testPublicCandidatesPath",
+        "text",
+        "unverifiedCandidateId",
+        "verificationCommand",
+        "websiteCommand"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-first-money-dry-run-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-first-money-dry-run-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "captureReadyCandidate",
+        "markdown",
+        "options",
+        "outputPath",
+        "result",
+        "testLeadsPath",
+        "testOutputDir",
+        "testOutreachPath",
+        "testPublicCandidatesPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-ledger-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-ledger-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "decisions",
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-manual-contact-approval-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-manual-contact-approval-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "captureCandidates",
+        "packet",
+        "result",
+        "testPublicCandidatesPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-money-readiness-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-contact-path-approval",
+        "../server/revenue-engine",
+        "../server/revenue-money-readiness-cli",
+        "../server/revenue-payment-path-approval",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approveEnvContactPath",
+        "approveEnvPaymentPath",
+        "approvedCustomHost",
+        "audited",
+        "blocked",
+        "confirmed",
+        "confirmedWithoutApproval",
+        "envOnly",
+        "ipv6Local",
+        "originalEnv",
+        "output",
+        "proof",
+        "readyWithCheckout",
+        "report",
+        "restoreEnv",
+        "result",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "verifiedCheckout",
+        "weakLiveKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-money-sprint-run-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-money-sprint-run-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "baseEnv",
+        "blocked",
+        "dryRun",
+        "execute",
+        "missingApproval",
+        "mixed",
+        "result",
+        "reviewPacket",
+        "snapshot",
+        "tampered",
+        "testLeadsPath",
+        "testOutreachPath",
+        "testPacketPath",
+        "unsafe",
+        "validation"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-outreach-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-outreach-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "createApprovedDraft",
+        "decisions",
+        "draft",
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-outreach-approval-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-outreach-approval-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "createDraft",
+        "empty",
+        "missingProvider",
+        "originalResendApiKey",
+        "originalRevenueEngineFromEmail",
+        "packet",
+        "parsed",
+        "run",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-payment-path-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-payment-path-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-payment-path-readiness-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-payment-path-approval",
+        "../server/revenue-payment-path-readiness-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approvePaymentPath",
+        "baseEnv",
+        "blocked",
+        "missingApproval",
+        "packet",
+        "parsed",
+        "paymentUrl",
+        "proof",
+        "ready",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "text",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-candidate-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidateId",
+        "capture",
+        "captureVerifiedCandidate",
+        "decisions",
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "testPublicLeadCandidatesPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-candidate-block-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-block-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidateId",
+        "candidates",
+        "capture",
+        "captureCandidate",
+        "options",
+        "result",
+        "testPublicLeadCandidatesPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-candidate-review-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-approval",
+        "../server/revenue-public-candidate-approval-decision-cli",
+        "../server/revenue-public-candidate-review-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidateId",
+        "capture",
+        "captureVerifiedReviewCandidate",
+        "decision",
+        "input",
+        "output",
+        "parsed",
+        "result",
+        "targetId",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "testPublicLeadCandidatesPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-candidate-verification-update-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-candidate-verification-update-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidateId",
+        "candidates",
+        "capture",
+        "captureUnverifiedCandidate",
+        "options",
+        "output",
+        "result",
+        "testPublicLeadCandidatesPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-contact-verification-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-contact-verification-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidates",
+        "candidatesForRun",
+        "defaultPacket",
+        "demoCandidate",
+        "firstCandidateId",
+        "includedPacket",
+        "options",
+        "output",
+        "packet",
+        "result",
+        "run",
+        "testPublicLeadCandidatesPath",
+        "unsafeCandidate"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-scout-execute-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-scout-execute-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidates",
+        "dir",
+        "errors",
+        "extracted",
+        "extractedPath",
+        "noteSymlink",
+        "notesPath",
+        "outputSymlink",
+        "parsed",
+        "publicNotes",
+        "result",
+        "schedule",
+        "scheduleJson",
+        "schedulePath",
+        "sensitiveNotesPath",
+        "testCandidatesPath",
+        "text",
+        "unsafeSchedule"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-scout-extract-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-scout-extract-cli",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "existingOutput",
+        "input",
+        "output",
+        "overwriteOutput",
+        "parsed",
+        "publicNotes",
+        "sensitiveOutput"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-scout-run-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-public-scout-run-cli",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "options",
+        "output",
+        "parsed",
+        "result",
+        "sample"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-public-scout-schedule-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-public-scout-schedule-cli",
+        "node:assert/strict",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ancestorSymlink",
+        "badRange",
+        "credentials",
+        "directories",
+        "existing",
+        "fakeOutputPathChecks",
+        "impossibleDate",
+        "input",
+        "invalidNumber",
+        "output",
+        "outsideAllowed",
+        "overwrite",
+        "parsed",
+        "rootSymlink",
+        "schedule",
+        "sensitive",
+        "ssh",
+        "symlinkOutput",
+        "symlinkParent",
+        "symlinkedAncestor",
+        "symlinks",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-website-creation-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "createApprovedOutreachDraft",
+        "decisions",
+        "draft",
+        "leadResult",
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-website-creation-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval",
+        "../server/revenue-website-creation-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approveWebsiteCreation",
+        "baseEnv",
+        "blocked",
+        "createApprovedOutreachDraft",
+        "draft",
+        "leadResult",
+        "missingApprovals",
+        "packet",
+        "parsed",
+        "proof",
+        "ready",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-website-publish-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval",
+        "../server/revenue-website-publish-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approveWebsiteCreation",
+        "createApprovedOutreachDraft",
+        "creationApproval",
+        "draft",
+        "leadResult",
+        "parsed",
+        "proof",
+        "result",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-website-publish-readiness-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval",
+        "../server/revenue-website-publish-approval",
+        "../server/revenue-website-publish-readiness-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approveWebsiteCreation",
+        "approveWebsitePublish",
+        "baseEnv",
+        "blocked",
+        "createApprovedOutreachDraft",
+        "creationApproval",
+        "creationPacket",
+        "draft",
+        "leadResult",
+        "missingApproval",
+        "packet",
+        "parsed",
+        "proof",
+        "publishApproval",
+        "ready",
+        "scaffoldFilesHash",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text",
+        "unsafe"
       ],
       "routes": []
     },
@@ -14051,7 +15808,34 @@
     "tests/radio-youtube-command.test.ts",
     "tests/rate-limit.test.ts",
     "tests/reminder-scheduler.test.ts",
+    "tests/revenue-browser-scout-session-cli.test.ts",
+    "tests/revenue-commercial-go-live-cli.test.ts",
+    "tests/revenue-contact-path-approval-decision-cli.test.ts",
+    "tests/revenue-contact-path-readiness-packet-cli.test.ts",
     "tests/revenue-engine.test.ts",
+    "tests/revenue-first-money-command-center-cli.test.ts",
+    "tests/revenue-first-money-dry-run-cli.test.ts",
+    "tests/revenue-ledger-approval-decision-cli.test.ts",
+    "tests/revenue-manual-contact-approval-packet-cli.test.ts",
+    "tests/revenue-money-readiness-cli.test.ts",
+    "tests/revenue-money-sprint-run-packet-cli.test.ts",
+    "tests/revenue-outreach-approval-decision-cli.test.ts",
+    "tests/revenue-outreach-approval-packet-cli.test.ts",
+    "tests/revenue-payment-path-approval-decision-cli.test.ts",
+    "tests/revenue-payment-path-readiness-packet-cli.test.ts",
+    "tests/revenue-public-candidate-approval-decision-cli.test.ts",
+    "tests/revenue-public-candidate-block-cli.test.ts",
+    "tests/revenue-public-candidate-review-cli.test.ts",
+    "tests/revenue-public-candidate-verification-update-cli.test.ts",
+    "tests/revenue-public-contact-verification-cli.test.ts",
+    "tests/revenue-public-scout-execute-cli.test.ts",
+    "tests/revenue-public-scout-extract-cli.test.ts",
+    "tests/revenue-public-scout-run-cli.test.ts",
+    "tests/revenue-public-scout-schedule-cli.test.ts",
+    "tests/revenue-website-creation-approval-decision-cli.test.ts",
+    "tests/revenue-website-creation-packet-cli.test.ts",
+    "tests/revenue-website-publish-approval-decision-cli.test.ts",
+    "tests/revenue-website-publish-readiness-packet-cli.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/telegram-chat-flow.test.ts",

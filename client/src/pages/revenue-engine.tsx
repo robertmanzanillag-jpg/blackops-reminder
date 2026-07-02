@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Copy,
+  Eye,
   ExternalLink,
   FileCheck2,
   Gauge,
@@ -216,6 +217,37 @@ type RevenueSnapshot = {
     painPoint: string;
     estimatedOfferUsd: number;
     status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+  }>;
+  recentPublicLeadCandidates: Array<{
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    evidence: string;
+    painPoint: string;
+    estimatedOfferUsd: number;
+    status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+    verificationStatus: "needs_review" | "verified_public" | "blocked";
+    publicEvidenceVerified: boolean;
+    approvalToImport: boolean;
+    importReady: boolean;
+    blockedReasons: string[];
+    batchRow: string;
+    qualification: RevenueLeadResult["qualification"];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      persistsLead: boolean;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
   }>;
   recentOutreach: Array<{
     id: string;
@@ -627,6 +659,11 @@ type OutreachSendResult = {
   snapshot: RevenueSnapshot;
 };
 
+type OutreachSendVariables = {
+  draftId: string;
+  approvalDecisionId: string;
+};
+
 type RevenueAgentRunResult = {
   run: RevenueSnapshot["recentAgentRuns"][number];
   snapshot: RevenueSnapshot;
@@ -682,6 +719,104 @@ type RevenueLeadRadar = {
   };
   recommendation: string;
   nextActions: string[];
+};
+
+type RevenueMoneySprint = {
+  status: "ready_to_start" | "needs_spend_approval" | "needs_lead_evidence";
+  mode: string;
+  scoutQueue: Array<{
+    id: string;
+    source: string;
+    query: string;
+    url: string;
+    ownerAgent: string;
+    allowedAction: string;
+    evidenceToCapture: string[];
+    blockedActions: string[];
+  }>;
+  scoutWorkPack: {
+    targetRows: number;
+    batchHeader: string;
+    copyableBatchTemplate: string;
+    subagentBrief: string;
+    importInstructions: string[];
+    qualityGate: string[];
+    safety: {
+      allowedAction: string;
+      blockedActions: string[];
+      paidDataSpendUsd: number;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+  };
+  recordedLeads: Array<{
+    lead: RevenueSnapshot["recentLeads"][number];
+    qualification: RevenueLeadResult["qualification"];
+    deduped: boolean;
+  }>;
+  previews: Array<{
+    status: "mockup_ready" | "needs_evidence";
+    slug: string;
+    previewUrl: string;
+    fileWritten: boolean;
+    htmlBytes: number;
+    nextAction: string;
+  }>;
+  outreachDrafts: RevenueSnapshot["recentOutreach"];
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  operatingLimits: {
+    maxQualifiedLeadsToday: number;
+    maxMockupsToday: number;
+    maxContactsToday: number;
+    maxPaidDataSpendUsd: number;
+    externalContactMode: string;
+  };
+  approvalGates: string[];
+  nextActions: string[];
+  snapshot: RevenueSnapshot;
+};
+
+type RevenueMoneySprintPreview = {
+  status: "ready_to_import" | "needs_spend_approval" | "needs_lead_evidence" | "empty";
+  acceptedSeeds: Array<{
+    rowNumber: number;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    sourceUrl: string;
+    recipientEmail: string;
+    estimatedOfferUsd: number;
+    qualification: RevenueLeadResult["qualification"];
+    mockupReady: boolean;
+    draftReady: boolean;
+    missingForDraft: string[];
+  }>;
+  blockedSeeds: Array<{ businessName: string; reason: string }>;
+  totals: {
+    accepted: number;
+    blocked: number;
+    mockupReady: number;
+    draftReady: number;
+    maxImportable: number;
+  };
+  safety: {
+    persistsData: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    nextAction: string;
+  };
+};
+
+type RevenuePublicLeadCandidateResult = {
+  status: "ready_for_preview" | "needs_review";
+  candidate: RevenueSnapshot["recentPublicLeadCandidates"][number];
+  importBatchText: string;
+  importableCount: number;
+  nextAction: string;
+  snapshot: RevenueSnapshot;
 };
 
 type RevenueMockupTemplatePack = {
@@ -1047,6 +1182,12 @@ function statusTone(status: string) {
   if (status === "collect_first") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "scale_carefully") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
   if (status === "ready_to_start") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_to_import") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "ready_for_preview") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "needs_spend_approval") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_review") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "needs_lead_evidence") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "empty") return "border-zinc-500/40 bg-zinc-500/10 text-zinc-200";
   if (status === "pending_allowed") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "iterate_small_batch") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
   if (status === "sent") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -1102,6 +1243,10 @@ export default function RevenueEnginePage() {
   const [leadRadarDailyResearchTarget, setLeadRadarDailyResearchTarget] = useState(120);
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
+  const [includeLeadInMoneySprint, setIncludeLeadInMoneySprint] = useState(false);
+  const [seedLeadBatchText, setSeedLeadBatchText] = useState("");
+  const [candidatePublicEvidenceVerified, setCandidatePublicEvidenceVerified] = useState(false);
+  const [candidateApprovalToImport, setCandidateApprovalToImport] = useState(false);
   const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
@@ -1155,6 +1300,7 @@ export default function RevenueEnginePage() {
   const [outreachChannel, setOutreachChannel] = useState<"email" | "gmail" | "mailto" | "instagram" | "contact_form">("gmail");
   const [outreachApproved, setOutreachApproved] = useState(false);
   const [outreachMockupUrl, setOutreachMockupUrl] = useState("");
+  const [outreachApprovalDecisionId, setOutreachApprovalDecisionId] = useState("");
   const [improvementCampaignName, setImprovementCampaignName] = useState("Black Room test offer");
   const [improvementPeriodLabel, setImprovementPeriodLabel] = useState("semana 1");
   const [improvementLeadsContacted, setImprovementLeadsContacted] = useState(20);
@@ -1176,6 +1322,7 @@ export default function RevenueEnginePage() {
   const [ledgerCashCollectedUsd, setLedgerCashCollectedUsd] = useState(3000);
   const [ledgerInternalCostUsd, setLedgerInternalCostUsd] = useState(64);
   const [ledgerNotes, setLedgerNotes] = useState("Website 3D Premium + Automation Sprint");
+  const [ledgerApprovalDecisionId, setLedgerApprovalDecisionId] = useState("");
   const [leadBusinessName, setLeadBusinessName] = useState("No Site Cafe");
   const [leadArea, setLeadArea] = useState("Miami");
   const [leadNiche, setLeadNiche] = useState("coffee shop");
@@ -1185,6 +1332,10 @@ export default function RevenueEnginePage() {
   const [leadEvidence, setLeadEvidence] = useState("Instagram activo, no website en bio, menu solo en posts.");
   const [leadPainPoint, setLeadPainPoint] = useState("Necesita menu online, captura de catering y follow-up.");
   const [leadEstimatedOfferUsd, setLeadEstimatedOfferUsd] = useState(2500);
+  const [leadSourceUrl, setLeadSourceUrl] = useState("https://instagram.com/nositecafe");
+  const [leadRecipientEmail, setLeadRecipientEmail] = useState("");
+  const [leadContactName, setLeadContactName] = useState("Owner");
+  const [leadBusinessSummary, setLeadBusinessSummary] = useState("Cafe activo en Miami con social profile, menu en posts y sin website dedicado.");
   const [mockupBusinessName, setMockupBusinessName] = useState("No Site Cafe");
   const [mockupArea, setMockupArea] = useState("Miami");
   const [mockupNiche, setMockupNiche] = useState("coffee shop");
@@ -1292,6 +1443,81 @@ export default function RevenueEnginePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear el radar de leads");
       return data;
+    },
+  });
+
+  const buildMoneySprintPayload = () => {
+    const seedLeadReady = Boolean(
+      includeLeadInMoneySprint
+      && leadBusinessName.trim()
+      && leadArea.trim()
+      && leadNiche.trim()
+      && leadEvidence.trim().length >= 12
+      && leadPainPoint.trim()
+      && leadContactChannel !== "unknown"
+      && leadContactValue.trim()
+    );
+    const seedLeads = seedLeadReady
+      ? [{
+        businessName: leadBusinessName,
+        area: leadArea,
+        niche: leadNiche,
+        websiteStatus: leadWebsiteStatus,
+        contactChannel: leadContactChannel,
+        contactValue: leadContactValue,
+        evidence: leadEvidence,
+        painPoint: leadPainPoint,
+        estimatedOfferUsd: leadEstimatedOfferUsd,
+        status: "research",
+        sourceUrl: leadSourceUrl,
+        recipientEmail: leadRecipientEmail,
+        contactName: leadContactName,
+        businessSummary: leadBusinessSummary,
+      }]
+      : [];
+
+    return {
+      area: scoutingArea,
+      niche: scoutingNiche,
+      offerFocus: scoutingOfferFocus,
+      dailyResearchTarget: leadRadarDailyResearchTarget,
+      dailyQualifiedLeadLimit: scoutingTargetLeadCount,
+      dailyMockupLimit: leadRadarMockupLimit,
+      dailyContactLimit: leadRadarContactLimit,
+      maxPaidDataSpendUsd: scoutingPaidSpendUsd,
+      requireRobertApprovalToContact: true,
+      writePreviewFiles: true,
+      seedLeads,
+      seedLeadBatchText,
+    };
+  };
+
+  const moneySprintPreviewMutation = useMutation<RevenueMoneySprintPreview>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildMoneySprintPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo previsualizar money sprint");
+      return data;
+    },
+  });
+
+  const moneySprintMutation = useMutation<RevenueMoneySprint>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/money-sprint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildMoneySprintPayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo correr money sprint");
+      return data;
+    },
+    onSuccess: () => {
+      refetchSnapshot();
     },
   });
 
@@ -1531,8 +1757,8 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number }>({
-    mutationFn: async ({ opportunityId, cashCollectedUsd }) => {
+  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; approvalDecisionId: string }>({
+    mutationFn: async ({ opportunityId, cashCollectedUsd, approvalDecisionId }) => {
       const response = await fetch("/api/revenue-engine/automation-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1541,6 +1767,7 @@ export default function RevenueEnginePage() {
           cashCollectedUsd,
           markScopeApproved: true,
           notes: "Registrado desde Revenue Engine opportunities.",
+          approvalDecisionId,
         }),
       });
       const data = await response.json();
@@ -1734,14 +1961,14 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const outreachSendMutation = useMutation<OutreachSendResult, Error, string>({
-    mutationFn: async (draftId) => {
+  const outreachSendMutation = useMutation<OutreachSendResult, Error, OutreachSendVariables>({
+    mutationFn: async ({ draftId, approvalDecisionId }) => {
       const response = await fetch("/api/revenue-engine/outreach-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draftId,
-          approvalToSend: true,
+          approvalDecisionId,
         }),
       });
       const data = await response.json();
@@ -1765,6 +1992,7 @@ export default function RevenueEnginePage() {
           cashCollectedUsd: ledgerKind === "expense" ? 0 : ledgerCashCollectedUsd,
           estimatedInternalCostUsd: ledgerInternalCostUsd,
           notes: ledgerNotes,
+          approvalDecisionId: ledgerApprovalDecisionId.trim(),
         }),
       });
       const data = await response.json();
@@ -1817,6 +2045,41 @@ export default function RevenueEnginePage() {
       return data;
     },
     onSuccess: () => {
+      refetchSnapshot();
+    },
+  });
+
+  const publicLeadCandidateMutation = useMutation<RevenuePublicLeadCandidateResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: leadBusinessName,
+          area: leadArea,
+          niche: leadNiche,
+          websiteStatus: leadWebsiteStatus,
+          contactChannel: leadContactChannel,
+          contactValue: leadContactValue,
+          evidence: leadEvidence,
+          painPoint: leadPainPoint,
+          estimatedOfferUsd: leadEstimatedOfferUsd,
+          status: "research",
+          sourceUrl: leadSourceUrl,
+          recipientEmail: leadRecipientEmail,
+          contactName: leadContactName,
+          businessSummary: leadBusinessSummary,
+          verificationStatus: candidatePublicEvidenceVerified ? "verified_public" : "needs_review",
+          publicEvidenceVerified: candidatePublicEvidenceVerified,
+          approvalToImport: candidateApprovalToImport,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo guardar candidato publico");
+      return data;
+    },
+    onSuccess: (data) => {
+      setSeedLeadBatchText(data.importBatchText);
       refetchSnapshot();
     },
   });
@@ -2745,6 +3008,19 @@ export default function RevenueEnginePage() {
                           Incluir websites debiles
                         </label>
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="seed-lead-batch">
+                          Batch leads
+                        </label>
+                        <Textarea
+                          id="seed-lead-batch"
+                          value={seedLeadBatchText}
+                          onChange={(event) => setSeedLeadBatchText(event.target.value)}
+                          className="min-h-[110px] border-zinc-800 bg-black"
+                          placeholder="Business | Area | Niche | no_website | email | owner@site.com | https://source-url | owner@site.com | public evidence | pain point | 3500"
+                          data-testid="textarea-seed-lead-batch"
+                        />
+                      </div>
                       <Button
                         type="submit"
                         disabled={scoutingMissionMutation.isPending}
@@ -2763,6 +3039,26 @@ export default function RevenueEnginePage() {
                       >
                         {leadRadarMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
                         Radar 24/7
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={moneySprintPreviewMutation.isPending}
+                        onClick={() => moneySprintPreviewMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-preview-money-sprint"
+                      >
+                        {moneySprintPreviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                        Preview batch
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={moneySprintMutation.isPending}
+                        onClick={() => moneySprintMutation.mutate()}
+                        className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                        data-testid="button-run-money-sprint"
+                      >
+                        {moneySprintMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                        Money sprint
                       </Button>
                     </form>
                   </CardContent>
@@ -2956,6 +3252,239 @@ export default function RevenueEnginePage() {
                 </Card>
               )}
 
+              {moneySprintPreviewMutation.data && (
+                <Card className="mb-4 border-zinc-700 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Eye className="h-4 w-4 text-zinc-200" />
+                          Batch preview
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">{moneySprintPreviewMutation.data.safety.nextAction}</p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintPreviewMutation.data.status), "shrink-0")}>
+                        {moneySprintPreviewMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_320px]">
+                    <div className="space-y-3">
+                      {moneySprintPreviewMutation.data.acceptedSeeds.slice(0, 8).map((seed) => (
+                        <div key={`${seed.rowNumber}-${seed.businessName}`} className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-white">{seed.businessName}</p>
+                              <p className="mt-1 text-xs text-zinc-500">{seed.area} · {seed.niche} · {seed.contactChannel}</p>
+                            </div>
+                            <Badge variant="outline" className="border-emerald-500/30 text-emerald-100">
+                              Grade {seed.qualification.grade} · {seed.qualification.score}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            <span className={cn("rounded border px-2 py-1", seed.mockupReady ? "border-emerald-500/30 text-emerald-100" : "border-zinc-700 text-zinc-400")}>
+                              mockup {seed.mockupReady ? "ready" : "blocked"}
+                            </span>
+                            <span className={cn("rounded border px-2 py-1", seed.draftReady ? "border-sky-500/30 text-sky-100" : "border-zinc-700 text-zinc-400")}>
+                              draft {seed.draftReady ? "ready" : "blocked"}
+                            </span>
+                          </div>
+                          {seed.missingForDraft.length > 0 && (
+                            <p className="mt-2 text-xs leading-5 text-amber-100">{seed.missingForDraft.join(" · ")}</p>
+                          )}
+                        </div>
+                      ))}
+                      {moneySprintPreviewMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Blocked rows</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintPreviewMutation.data.blockedSeeds.slice(0, 8).map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Totals</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-zinc-300">
+                          <p>Accepted: {moneySprintPreviewMutation.data.totals.accepted}</p>
+                          <p>Blocked: {moneySprintPreviewMutation.data.totals.blocked}</p>
+                          <p>Mockups: {moneySprintPreviewMutation.data.totals.mockupReady}</p>
+                          <p>Drafts: {moneySprintPreviewMutation.data.totals.draftReady}</p>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Safety</p>
+                        <div className="mt-2 space-y-2 text-sm text-zinc-300">
+                          <p>Persist: {moneySprintPreviewMutation.data.safety.persistsData ? "yes" : "no"}</p>
+                          <p>Preview files: {moneySprintPreviewMutation.data.safety.writesPreviewFiles ? "yes" : "no"}</p>
+                          <p>Outreach send: {moneySprintPreviewMutation.data.safety.sendsOutreach ? "yes" : "no"}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {moneySprintMutation.data && (
+                <Card className="mb-4 border-emerald-500/20 bg-zinc-950/80">
+                  <CardHeader>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <BadgeDollarSign className="h-4 w-4 text-emerald-200" />
+                          Money sprint
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {moneySprintMutation.data.operatingLimits.maxQualifiedLeadsToday} leads · {moneySprintMutation.data.operatingLimits.maxMockupsToday} previews · {moneySprintMutation.data.operatingLimits.externalContactMode}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn(statusTone(moneySprintMutation.data.status), "shrink-0")}>
+                        {moneySprintMutation.data.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 xl:grid-cols-[1fr_360px]">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Scout queue</p>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutQueue.slice(0, 8).map((task) => (
+                            <a
+                              key={task.id}
+                              href={task.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-zinc-800 bg-black p-3 transition hover:border-emerald-500/40"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium text-white">{task.query}</p>
+                                  <p className="mt-1 text-xs text-zinc-500">{task.ownerAgent} · {task.source}</p>
+                                </div>
+                                <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-500">{task.evidenceToCapture.join(" · ")}</p>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-zinc-500">Scout work pack</p>
+                            <p className="mt-1 text-sm text-zinc-300">
+                              {moneySprintMutation.data.scoutWorkPack.targetRows} filas · {moneySprintMutation.data.scoutWorkPack.safety.allowedAction}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.copyableBatchTemplate)}
+                              data-testid="button-copy-scout-batch-template"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy rows
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-zinc-700 bg-zinc-950"
+                              onClick={() => navigator.clipboard.writeText(moneySprintMutation.data.scoutWorkPack.subagentBrief)}
+                              data-testid="button-copy-scout-brief"
+                            >
+                              <Copy className="mr-2 h-3.5 w-3.5" />
+                              Copy brief
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {moneySprintMutation.data.scoutWorkPack.importInstructions.map((item) => (
+                            <div key={item} className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {moneySprintMutation.data.previews.length > 0 && (
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Previews</p>
+                          <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            {moneySprintMutation.data.previews.map((preview) => (
+                              <a
+                                key={preview.slug}
+                                href={preview.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 transition hover:border-emerald-400/50"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white">{preview.slug}</p>
+                                  <ExternalLink className="h-4 w-4 shrink-0 text-emerald-200" />
+                                </div>
+                                <p className="mt-2 text-xs leading-5 text-zinc-400">{preview.nextAction}</p>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Approval gates</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.approvalGates.map((gate) => (
+                            <div key={gate} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                              {gate}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Next actions</p>
+                        <div className="mt-2 space-y-2">
+                          {moneySprintMutation.data.nextActions.map((action) => (
+                            <div key={action} className="flex gap-2 text-sm leading-5 text-zinc-300">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                              {action}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(moneySprintMutation.data.recordedLeads.length > 0 || moneySprintMutation.data.outreachDrafts.length > 0) && (
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Created</p>
+                          <p className="mt-2 text-sm text-zinc-300">
+                            {moneySprintMutation.data.recordedLeads.length} leads · {moneySprintMutation.data.outreachDrafts.length} drafts
+                          </p>
+                        </div>
+                      )}
+                      {moneySprintMutation.data.blockedSeeds.length > 0 && (
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                          <p className="text-xs uppercase tracking-wide text-amber-200">Seed blocked</p>
+                          <div className="mt-2 space-y-2">
+                            {moneySprintMutation.data.blockedSeeds.map((seed) => (
+                              <p key={`${seed.businessName}-${seed.reason}`} className="text-sm leading-5 text-zinc-300">
+                                {seed.businessName}: {seed.reason}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid gap-4 xl:grid-cols-[390px_1fr]">
                 <Card className="border-zinc-800 bg-zinc-950/80">
                   <CardHeader>
@@ -3076,6 +3605,47 @@ export default function RevenueEnginePage() {
                         </div>
                       </div>
                       <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-source-url">
+                          Fuente publica
+                        </label>
+                        <Input
+                          id="lead-source-url"
+                          value={leadSourceUrl}
+                          onChange={(event) => setLeadSourceUrl(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          placeholder="https://..."
+                          data-testid="input-lead-source-url"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-recipient-email">
+                            Email para draft
+                          </label>
+                          <Input
+                            id="lead-recipient-email"
+                            type="email"
+                            value={leadRecipientEmail}
+                            onChange={(event) => setLeadRecipientEmail(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            placeholder="owner@business.com"
+                            data-testid="input-lead-recipient-email"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-contact-name">
+                            Nombre
+                          </label>
+                          <Input
+                            id="lead-contact-name"
+                            value={leadContactName}
+                            onChange={(event) => setLeadContactName(event.target.value)}
+                            className="border-zinc-800 bg-black"
+                            data-testid="input-lead-contact-name"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
                         <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-evidence">
                           Evidencia publica
                         </label>
@@ -3099,6 +3669,55 @@ export default function RevenueEnginePage() {
                           data-testid="textarea-lead-pain"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="lead-summary">
+                          Resumen para outreach
+                        </label>
+                        <Textarea
+                          id="lead-summary"
+                          value={leadBusinessSummary}
+                          onChange={(event) => setLeadBusinessSummary(event.target.value)}
+                          className="min-h-[76px] border-zinc-800 bg-black"
+                          data-testid="textarea-lead-summary"
+                        />
+                      </div>
+                      <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300" htmlFor="include-lead-money-sprint">
+                        <input
+                          id="include-lead-money-sprint"
+                          type="checkbox"
+                          checked={includeLeadInMoneySprint}
+                          onChange={(event) => setIncludeLeadInMoneySprint(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                          data-testid="checkbox-include-lead-money-sprint"
+                        />
+                        <span>
+                          Incluir este lead en Money sprint para crear preview y outreach draft si pasa los gates.
+                        </span>
+                      </label>
+                      <div className="grid gap-2 text-sm text-zinc-300">
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-public-verified">
+                          <input
+                            id="candidate-public-verified"
+                            type="checkbox"
+                            checked={candidatePublicEvidenceVerified}
+                            onChange={(event) => setCandidatePublicEvidenceVerified(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-public-verified"
+                          />
+                          <span>Verifique que la fuente/contacto/evidencia son publicos y reales.</span>
+                        </label>
+                        <label className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-black p-3" htmlFor="candidate-approval-import">
+                          <input
+                            id="candidate-approval-import"
+                            type="checkbox"
+                            checked={candidateApprovalToImport}
+                            onChange={(event) => setCandidateApprovalToImport(event.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-700 bg-black text-emerald-500"
+                            data-testid="checkbox-candidate-approval-import"
+                          />
+                          <span>Aprobar solo esta fila para Preview batch. No contacta, no scrapea, no gasta.</span>
+                        </label>
+                      </div>
                       <Button
                         type="submit"
                         disabled={leadMutation.isPending}
@@ -3108,11 +3727,48 @@ export default function RevenueEnginePage() {
                         {leadMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                         Calificar lead
                       </Button>
+                      <Button
+                        type="button"
+                        disabled={publicLeadCandidateMutation.isPending}
+                        onClick={() => publicLeadCandidateMutation.mutate()}
+                        className="w-full bg-zinc-800 text-white hover:bg-zinc-700"
+                        data-testid="button-record-public-candidate"
+                      >
+                        {publicLeadCandidateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                        Guardar candidato publico
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
 
                 <div className="space-y-4">
+                  {publicLeadCandidateMutation.data && (
+                    <Card className="border-zinc-800 bg-zinc-950/80">
+                      <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">{publicLeadCandidateMutation.data.candidate.businessName}</CardTitle>
+                            <p className="mt-1 text-sm text-zinc-500">{publicLeadCandidateMutation.data.nextAction}</p>
+                          </div>
+                          <Badge variant="outline" className={cn(statusTone(publicLeadCandidateMutation.data.status), "shrink-0")}>
+                            {publicLeadCandidateMutation.data.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-3 md:grid-cols-[1fr_220px]">
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3">
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Batch row</p>
+                          <p className="mt-2 break-all text-xs leading-5 text-zinc-300">{publicLeadCandidateMutation.data.candidate.batchRow}</p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-800 bg-black p-3 text-sm text-zinc-300">
+                          <p>{publicLeadCandidateMutation.data.importableCount} listos para preview</p>
+                          <p className="mt-2 text-xs text-zinc-500">
+                            Lead real: {publicLeadCandidateMutation.data.candidate.safety.persistsLead ? "yes" : "no"} · Outreach: {publicLeadCandidateMutation.data.candidate.safety.sendsOutreach ? "yes" : "no"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {leadMutation.data && (
                     <Card className="border-zinc-800 bg-zinc-950/80">
                       <CardHeader>
@@ -5334,13 +5990,26 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
+                          <Input
+                            value={outreachApprovalDecisionId}
+                            onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
+                            placeholder="approvalDecisionId"
+                            className="border-zinc-800 bg-black"
+                          />
                           <Button
                             type="button"
                             variant="outline"
                             className="border-emerald-700 text-emerald-100"
-                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent"}
-                            onClick={() => outreachSendMutation.mutate(outreachDraft.draft.id)}
+                            disabled={
+                              outreachSendMutation.isPending
+                              || outreachDraft.draft.delivery.sendStatus === "sent"
+                              || !outreachApprovalDecisionId.trim()
+                            }
+                            onClick={() => outreachSendMutation.mutate({
+                              draftId: outreachDraft.draft.id,
+                              approvalDecisionId: outreachApprovalDecisionId.trim(),
+                            })}
                             data-testid="button-send-approved-outreach"
                           >
                             {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
@@ -5440,14 +6109,28 @@ export default function RevenueEnginePage() {
                               <p>{money.format(draft.pricing.totalSetupUsd)}</p>
                               <p>{draft.delivery.sendStatus}</p>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                              <Input
+                                value={outreachApprovalDecisionId}
+                                onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
+                                placeholder="approvalDecisionId"
+                                className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                              />
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 className="border-emerald-700 text-emerald-100"
-                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent"}
-                                onClick={() => outreachSendMutation.mutate(draft.id)}
+                                disabled={
+                                  outreachSendMutation.isPending
+                                  || draft.status !== "approved"
+                                  || draft.delivery.sendStatus === "sent"
+                                  || !outreachApprovalDecisionId.trim()
+                                }
+                                onClick={() => outreachSendMutation.mutate({
+                                  draftId: draft.id,
+                                  approvalDecisionId: outreachApprovalDecisionId.trim(),
+                                })}
                                 data-testid={`button-send-draft-${draft.id}`}
                               >
                                 {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
@@ -5987,6 +6670,19 @@ export default function RevenueEnginePage() {
                           onChange={(event) => setLedgerNotes(event.target.value)}
                           className="min-h-[88px] border-zinc-800 bg-black"
                           data-testid="textarea-ledger-notes"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="ledger-approval-decision">
+                          approvalDecisionId venta/cash
+                        </label>
+                        <Input
+                          id="ledger-approval-decision"
+                          value={ledgerApprovalDecisionId}
+                          onChange={(event) => setLedgerApprovalDecisionId(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          data-testid="input-ledger-approval-decision"
+                          placeholder="approvalDecisionId"
                         />
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">
