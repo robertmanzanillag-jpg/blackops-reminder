@@ -446,6 +446,28 @@ type FirstMoneyCommandCenter = {
       paidDataSpendUsd: number;
     };
   } | null;
+  nextCandidateReview: {
+    id: string;
+    candidateIds: string[];
+    candidateNames: string[];
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations" | "both";
+    count: number;
+    totalEstimatedOfferUsd: number;
+    approvalStatus: "ready_for_candidate_review";
+    approvalDecisionId: string;
+    confirmationText: string;
+    safety: {
+      persistsLeads: boolean;
+      persistsPublicCandidates: boolean;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+      chargesClients: boolean;
+      deploys: boolean;
+      paidDataSpendUsd: number;
+    };
+  } | null;
   counts: {
     publicCandidates: number;
     reviewablePublicCandidates: number;
@@ -490,6 +512,56 @@ type PublicCandidateApprovalDecisionResult = {
     chargesClients: boolean;
     deploys: boolean;
     paidDataSpendUsd: number;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+};
+
+type PublicCandidateReviewPacketResult = {
+  status: "ready_for_money_sprint_preview" | "blocked";
+  approvalDecisionId: string;
+  requestedCount: number;
+  foundCount: number;
+  approvedCount: number;
+  reviewedCandidates: Array<{
+    candidateId: string;
+    businessName: string;
+    approvedForPreview: boolean;
+    blockedReasons: string[];
+    grade: string;
+    score: number;
+  }>;
+  preview: {
+    totals: {
+      accepted: number;
+      mockupReady: number;
+      outreachReady: number;
+    };
+  };
+  moneySprintRunPacket: {
+    status: string;
+    endpoint: string;
+    expectedOutput: {
+      acceptedLeads: number;
+      mockupsToPrepare: number;
+      outreachDraftsToCreate: number;
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+    };
+    safety: {
+      sendsOutreach: boolean;
+      writesPreviewFiles: boolean;
+      paidDataSpendUsd: number;
+      requiresRobertApprovalBeforeRun: boolean;
+      requiresRobertApprovalBeforeContact: boolean;
+    };
+  };
+  nextAction: string;
+  safety: {
+    persistsLeads: boolean;
+    writesPreviewFiles: boolean;
+    sendsOutreach: boolean;
+    paidDataSpendUsd: number;
+    requiresRobertApproval: boolean;
   };
   commandCenter: FirstMoneyCommandCenter;
 };
@@ -1460,6 +1532,7 @@ export default function RevenueEnginePage() {
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
   const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
+  const [publicCandidateReviewConfirmation, setPublicCandidateReviewConfirmation] = useState("");
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -1999,6 +2072,32 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const publicCandidateReviewPacketMutation = useMutation<PublicCandidateReviewPacketResult>({
+    mutationFn: async () => {
+      const review = firstMoneyCommandCenter?.nextCandidateReview;
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/review-packet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateIds: review?.candidateIds || [],
+          batchId: review?.id || "",
+          approvalDecisionId: review?.approvalDecisionId || "",
+          area: review?.area || "",
+          niche: review?.niche || "",
+          offerFocus: review?.offerFocus || "websites",
+          confirmationText: publicCandidateReviewConfirmation,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo generar el packet revisado");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+      setPublicCandidateReviewConfirmation("");
+    },
+  });
+
   const proposalEmailMutation = useMutation<ProposalEmail>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/proposal-email", {
@@ -2530,6 +2629,68 @@ export default function RevenueEnginePage() {
                   {publicCandidateApprovalMutation.error && (
                     <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
                       {publicCandidateApprovalMutation.error.message}
+                    </p>
+                  )}
+                </div>
+              )}
+              {firstMoneyCommandCenter?.nextCandidateReview && (
+                <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-emerald-200">Packet revisado listo</p>
+                      <p className="mt-1 text-sm font-medium text-white">
+                        {firstMoneyCommandCenter.nextCandidateReview.count} candidato(s) aprobado(s) · decision {firstMoneyCommandCenter.nextCandidateReview.approvalDecisionId}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-400">
+                        {firstMoneyCommandCenter.nextCandidateReview.candidateNames.join(", ")}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Genera un packet en memoria; no importa leads, no escribe previews y no contacta.
+                      </p>
+                      <Input
+                        value={publicCandidateReviewConfirmation}
+                        onChange={(event) => setPublicCandidateReviewConfirmation(event.target.value)}
+                        placeholder={firstMoneyCommandCenter.nextCandidateReview.confirmationText}
+                        className="mt-3 max-w-xl border-emerald-500/20 bg-black text-xs"
+                        data-testid="input-public-candidate-review-confirmation"
+                      />
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Escribe exactamente: {firstMoneyCommandCenter.nextCandidateReview.confirmationText}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={
+                        publicCandidateReviewPacketMutation.isPending
+                        || publicCandidateReviewConfirmation.trim() !== firstMoneyCommandCenter.nextCandidateReview.confirmationText
+                      }
+                      onClick={() => publicCandidateReviewPacketMutation.mutate()}
+                      className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      data-testid="button-generate-public-candidate-review-packet"
+                    >
+                      {publicCandidateReviewPacketMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
+                      Generar packet
+                    </Button>
+                  </div>
+                  {publicCandidateReviewPacketMutation.data && (
+                    <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
+                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
+                        Leads aceptados: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.acceptedLeads}
+                      </div>
+                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
+                        Mockups: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.mockupsToPrepare}
+                      </div>
+                      <div className="rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-100">
+                        Outreach drafts: {publicCandidateReviewPacketMutation.data.moneySprintRunPacket.expectedOutput.outreachDraftsToCreate}
+                      </div>
+                      <p className="rounded-md border border-zinc-800 bg-black px-3 py-2 leading-5 text-zinc-400 md:col-span-3">
+                        {publicCandidateReviewPacketMutation.data.nextAction}
+                      </p>
+                    </div>
+                  )}
+                  {publicCandidateReviewPacketMutation.error && (
+                    <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                      {publicCandidateReviewPacketMutation.error.message}
                     </p>
                   )}
                 </div>

@@ -86,6 +86,33 @@ function redactCandidateApprovalBatchForSummary(batch: CandidateApprovalBatch | 
   };
 }
 
+function redactCandidateReviewBatchForSummary(batch: CandidateApprovalBatch | undefined) {
+  if (!batch || batch.approvalStatus !== "ready_for_candidate_review" || !batch.approvalDecisionId) return null;
+  const confirmationText = `REVIEW PUBLIC CANDIDATES ${batch.id} ${batch.approvalDecisionId}`;
+  return {
+    id: batch.id,
+    candidateIds: batch.candidateIds,
+    candidateNames: batch.candidateNames,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: "websites" as const,
+    count: batch.count,
+    totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
+    approvalStatus: batch.approvalStatus,
+    approvalDecisionId: batch.approvalDecisionId,
+    confirmationText,
+    safety: {
+      persistsLeads: false,
+      persistsPublicCandidates: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      chargesClients: false,
+      deploys: false,
+      paidDataSpendUsd: 0,
+    },
+  };
+}
+
 export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterCliOptions {
   const modeArg = argv.find((arg) => arg.startsWith("--mode="));
   const mode = (modeArg ? modeArg.slice("--mode=".length).trim() : "first-sprint") as RevenueMoneyReadinessInput["mode"];
@@ -574,11 +601,24 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
     || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "needs_robert_approval"),
   );
+  const nextCandidateReview = redactCandidateReviewBatchForSummary(
+    packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
+    || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "ready_for_candidate_review"),
+  );
+  const nextCommand = {
+    ...packet.nextCommand,
+    command: nextCandidateReview
+      ? "Use the guarded Revenue Engine review-packet action with the exact confirmation text."
+      : nextCandidateApproval
+        ? "Use the guarded Revenue Engine approval action with the exact confirmation text."
+        : packet.nextCommand.command,
+  };
   return {
     status: packet.status,
     mode: packet.mode,
-    nextCommand: packet.nextCommand,
+    nextCommand,
     nextCandidateApproval,
+    nextCandidateReview,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,

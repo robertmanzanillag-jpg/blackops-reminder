@@ -2395,6 +2395,31 @@ test("routes wire public candidate approval endpoint to trusted builder", () => 
   );
 });
 
+test("routes wire public candidate review packet endpoint to guarded review builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/plan"'),
+  );
+
+  assert.match(routesSource, /revenuePublicCandidateReviewPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/review-packet"/);
+  assert.match(routesSource, /const expectedReview = commandCenter\.nextCandidateReview/);
+  assert.match(routesSource, /input\.confirmationText === expectedReview\.confirmationText/);
+  assert.match(routesSource, /candidateIdsMatch\(input\.candidateIds, expectedReview\.candidateIds\)/);
+  assert.match(routesSource, /reviewRevenuePublicLeadCandidates\(\{/);
+  assert.match(routesSource, /maxPaidDataSpendUsd: 0/);
+  assert.match(routesSource, /requireRobertApprovalToContact: true/);
+  assert.match(routesSource, /writePreviewFiles: false/);
+  assert.match(routeSource, /preview: \{\s*totals: result\.preview\.totals,\s*safety: result\.preview\.safety,\s*\}/);
+  assert.match(routeSource, /expectedOutput: result\.moneySprintRunPacket\.expectedOutput/);
+  assert.doesNotMatch(routeSource, /\.\.\.result/);
+  assert.doesNotMatch(routeSource, /importBatchText/);
+  assert.doesNotMatch(routeSource, /acceptedSeeds/);
+  assert.doesNotMatch(routeSource, /requestBody/);
+  assert.doesNotMatch(routeSource, /snapshot/);
+});
+
 test("routes wire public scout run endpoint to schema and builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
 
@@ -3223,9 +3248,14 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-decision/);
   assert.match(source, /nextCandidateApproval/);
+  assert.match(source, /nextCandidateReview/);
   assert.match(source, /button-approve-public-candidate-batch/);
   assert.match(source, /input-public-candidate-approval-confirmation/);
   assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateApproval\.confirmationText/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);
+  assert.match(source, /button-generate-public-candidate-review-packet/);
+  assert.match(source, /input-public-candidate-review-confirmation/);
+  assert.match(source, /publicCandidateReviewConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateReview\.confirmationText/);
   assert.match(source, /canContactBusinesses/);
   assert.match(source, /canCollectMoney/);
   assert.match(source, /canBuildWebsites/);

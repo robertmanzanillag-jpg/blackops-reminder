@@ -4893,13 +4893,28 @@ export async function registerRoutes(
     confirmationText: z.string().trim().min(1).max(120),
   }).strict();
 
+  const revenuePublicCandidateReviewPacketSchema = z.object({
+    batchId: z.string().trim().min(1).max(80),
+    candidateIds: z.array(z.string().trim().min(1).max(180)).min(1).max(25),
+    approvalDecisionId: z.string().trim().min(1).max(180),
+    area: z.string().trim().min(2).max(120),
+    niche: z.string().trim().min(2).max(120),
+    offerFocus: z.enum(["websites", "automations", "both"]).default("websites"),
+    confirmationText: z.string().trim().min(1).max(180),
+  }).strict();
+
+  const candidateIdsMatch = (left: string[], right: string[]) => {
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+    return sortedLeft.length === sortedRight.length
+      && sortedLeft.every((candidateId, index) => candidateId === sortedRight[index]);
+  };
+
   app.post("/api/revenue-engine/public-lead-candidates/approval-decision", async (req, res) => {
     try {
       const input = revenuePublicCandidateApprovalDecisionSchema.parse(req.body);
       const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
       const expectedApproval = commandCenter.nextCandidateApproval;
-      const inputCandidateIds = [...input.candidateIds].sort();
-      const expectedCandidateIds = [...(expectedApproval?.candidateIds || [])].sort();
       const matchesActiveBatch = Boolean(
         expectedApproval
         && input.batchId === expectedApproval.id
@@ -4908,8 +4923,7 @@ export async function registerRoutes(
         && input.offerFocus === expectedApproval.offerFocus
         && input.approvedAction === expectedApproval.approvedAction
         && input.confirmationText === expectedApproval.confirmationText
-        && inputCandidateIds.length === expectedCandidateIds.length
-        && inputCandidateIds.every((candidateId, index) => candidateId === expectedCandidateIds[index]),
+        && candidateIdsMatch(input.candidateIds, expectedApproval.candidateIds),
       );
 
       if (!matchesActiveBatch) {
@@ -4940,6 +4954,81 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to record revenue public candidate approval decision" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/review-packet", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedReview = commandCenter.nextCandidateReview;
+      const matchesActiveBatch = Boolean(
+        expectedReview
+        && input.batchId === expectedReview.id
+        && input.area === expectedReview.area
+        && input.niche === expectedReview.niche
+        && input.offerFocus === expectedReview.offerFocus
+        && input.approvalDecisionId === expectedReview.approvalDecisionId
+        && input.confirmationText === expectedReview.confirmationText
+        && candidateIdsMatch(input.candidateIds, expectedReview.candidateIds),
+      );
+
+      if (!matchesActiveBatch) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Review packet payload must match the active approved first-money batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const result = reviewRevenuePublicLeadCandidates({
+        area: input.area,
+        niche: input.niche,
+        offerFocus: input.offerFocus,
+        dailyResearchTarget: 20,
+        dailyQualifiedLeadLimit: Math.min(5, input.candidateIds.length),
+        dailyMockupLimit: Math.min(2, input.candidateIds.length),
+        dailyContactLimit: 0,
+        maxPaidDataSpendUsd: 0,
+        requireRobertApprovalToContact: true,
+        writePreviewFiles: false,
+        candidateIds: input.candidateIds,
+        approvedByRobert: true,
+        approvalDecisionId: input.approvalDecisionId,
+        reviewerNote: "Robert generated this first-money candidate review packet from Revenue Engine.",
+      });
+      res.status(result.status === "ready_for_money_sprint_preview" ? 200 : 400).json({
+        status: result.status,
+        approvalDecisionId: result.approvalDecisionId,
+        requestedCount: result.requestedCount,
+        foundCount: result.foundCount,
+        approvedCount: result.approvedCount,
+        missingIds: result.missingIds,
+        duplicateIds: result.duplicateIds,
+        reviewedCandidates: result.reviewedCandidates,
+        preview: {
+          totals: result.preview.totals,
+          safety: result.preview.safety,
+        },
+        moneySprintRunPacket: {
+          status: result.moneySprintRunPacket.status,
+          endpoint: result.moneySprintRunPacket.endpoint,
+          method: result.moneySprintRunPacket.method,
+          expectedOutput: result.moneySprintRunPacket.expectedOutput,
+          operatorChecklist: result.moneySprintRunPacket.operatorChecklist,
+          blockedUntil: result.moneySprintRunPacket.blockedUntil,
+          safety: result.moneySprintRunPacket.safety,
+        },
+        nextApiAction: result.nextApiAction,
+        nextAction: result.nextAction,
+        safety: result.safety,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue public candidate review packet" });
     }
   });
 

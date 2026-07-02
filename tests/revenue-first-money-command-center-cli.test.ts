@@ -559,14 +559,26 @@ test("first-money command center routes approved public candidate batches to can
   });
 
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
   const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
+  const serializedSummary = JSON.stringify(summary);
 
   assert.equal(approval.status, "recorded");
   assert.equal(packet.nextCommand.id, "candidate-review");
   assert.match(packet.nextCommand.label, /Run approved public candidate review/);
+  assert.equal(summary.nextCandidateReview?.id, "candidate-review-2");
+  assert.equal(summary.nextCandidateReview?.approvalDecisionId, approval.decision?.id);
+  assert.equal(summary.nextCandidateReview?.confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-2 ${approval.decision?.id}`);
+  assert.equal(summary.nextCandidateReview?.safety.sendsOutreach, false);
+  assert.equal(summary.nextCandidateReview?.safety.writesPreviewFiles, false);
+  assert.equal(summary.nextCommand.command, "Use the guarded Revenue Engine review-packet action with the exact confirmation text.");
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
   assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${approval.decision?.id}`));
   assert.match(reviewCommand?.command || "", new RegExp(candidateId));
+  assert.doesNotMatch(serializedSummary, /owner@approvedcommand\.biz/);
+  assert.doesNotMatch(serializedSummary, /public-directory\.invalid\/approved-command-cafe/);
+  assert.doesNotMatch(serializedSummary, /Public listing has no website/);
+  assert.doesNotMatch(serializedSummary, /--output=revenue_workspace/);
   assert.match(reviewCommand?.command || "", /--output=revenue_workspace\/money-sprint\/public-candidates-/);
   assert.match(reviewCommand?.command || "", /--overwrite/);
   assert.doesNotMatch(reviewCommand?.command || "", new RegExp(pendingCandidateId));
