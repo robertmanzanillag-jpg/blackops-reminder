@@ -28,6 +28,25 @@ type SetupCommandItem = CommandQueueItem & {
   gate: "contact_path" | "payment_path" | "ledger_entry" | "website_creation";
 };
 
+type MoneyUnblockerItem = {
+  id: "production_persistence" | "contact_path" | "payment_path" | "website_build";
+  label: string;
+  status: "ready" | "blocked";
+  gate: "production" | "contact_path" | "payment_path" | "website_creation";
+  reason: string;
+  evidenceRequired: string[];
+  safeNextAction: string;
+  blockedActions: string[];
+  setupCommandIds: string[];
+};
+
+type MoneyUnblockerReadiness = {
+  canContactBusinesses: boolean;
+  canCollectMoney: boolean;
+  canBuildWebsites: boolean;
+  blockedUntil: string[];
+};
+
 type CandidateApprovalBatch = {
   id: string;
   area: string;
@@ -314,6 +333,98 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
     });
   }
   return setupCommands;
+}
+
+function buildMoneyUnblockers(
+  readiness: MoneyUnblockerReadiness,
+  setupCommands: SetupCommandItem[],
+): MoneyUnblockerItem[] {
+  const setupCommandIdsForGate = (gate: SetupCommandItem["gate"]) =>
+    setupCommands.filter((item) => item.gate === gate).map((item) => item.id);
+  const productionBlocked = readiness.blockedUntil.some((blocker) =>
+    /DATABASE_URL|SESSION_SECRET|Switch to live/i.test(blocker),
+  );
+
+  return [
+    {
+      id: "production_persistence",
+      label: "Production DB and session",
+      status: productionBlocked ? "blocked" : "ready",
+      gate: "production",
+      reason: productionBlocked
+        ? "Production persistence and signed-session proof are still required before live revenue mode."
+        : "Production persistence and session gate are not blocking the first-money command center.",
+      evidenceRequired: [
+        "Real production Postgres DATABASE_URL configured outside tracked files.",
+        "Random SESSION_SECRET with at least 32 characters configured outside tracked files.",
+        "PR review, App QA evidence, persistence check, and Robert approval before switching live.",
+      ],
+      safeNextAction: "Prepare the production environment evidence outside git, then run the readiness command again.",
+      blockedActions: ["switch live mode", "contact businesses", "collect payment", "publish websites"],
+      setupCommandIds: [],
+    },
+    {
+      id: "contact_path",
+      label: "Approved contact path",
+      status: readiness.canContactBusinesses ? "ready" : "blocked",
+      gate: "contact_path",
+      reason: readiness.canContactBusinesses
+        ? "A Robert-approved contact path is ready for reviewed outreach."
+        : "Contact path is not approved, so outreach must stay draft-only.",
+      evidenceRequired: [
+        "Exact manual or provider contact method Robert approved.",
+        "Public evidence URL or internal run proof showing the contact path was verified.",
+        "Recorded contact-path approval decision and readiness packet.",
+      ],
+      safeNextAction: readiness.canContactBusinesses
+        ? "Keep each outreach send behind its own draft approval."
+        : "Record contact-path approval only after Robert reviews real contact evidence.",
+      blockedActions: ["send email", "send SMS", "submit contact forms", "DM businesses"],
+      setupCommandIds: setupCommandIdsForGate("contact_path"),
+    },
+    {
+      id: "payment_path",
+      label: "Approved payment path",
+      status: readiness.canCollectMoney ? "ready" : "blocked",
+      gate: "payment_path",
+      reason: readiness.canCollectMoney
+        ? "A Robert-approved payment path is ready for deposit collection."
+        : "Payment path is not approved, so the system cannot ask clients to pay yet.",
+      evidenceRequired: [
+        "Real HTTPS Stripe/payment link for the first-money website deposit.",
+        "Smoke-test evidence URL or proof note for that exact payment path.",
+        "Recorded payment-path approval decision and readiness packet.",
+      ],
+      safeNextAction: readiness.canCollectMoney
+        ? "Use only the approved payment link in reviewed outreach/proposal copy."
+        : "Create/verify the payment link outside git, then record the approval decision.",
+      blockedActions: ["charge clients", "request deposits", "record paid sale"],
+      setupCommandIds: setupCommandIdsForGate("payment_path"),
+    },
+    {
+      id: "website_build",
+      label: "Paid website build gate",
+      status: readiness.canBuildWebsites ? "ready" : "blocked",
+      gate: "website_creation",
+      reason: readiness.canBuildWebsites
+        ? "Website creation gate is ready for paid handoff."
+        : "Websites stay blocked until an approved draft, client scope, deposit proof, and build approval exist.",
+      evidenceRequired: [
+        "Approved outreach draft tied to the client.",
+        "Client-approved scope and public business data verification.",
+        "Deposit proof and audited ledger entry approval.",
+        "Website creation approval decision before scaffold/build work.",
+      ],
+      safeNextAction: readiness.canBuildWebsites
+        ? "Create the website scaffold only from the approved handoff packet."
+        : "Keep preparing internal drafts and approval packets; do not build production sites yet.",
+      blockedActions: ["write production website files", "deploy", "publish mockup as client site"],
+      setupCommandIds: [
+        ...setupCommandIdsForGate("ledger_entry"),
+        ...setupCommandIdsForGate("website_creation"),
+      ],
+    },
+  ];
 }
 
 type CandidateApprovalInput = {
@@ -623,6 +734,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
 
 export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirstMoneyCommandCenterCliOptions) {
   const packet = buildRevenueFirstMoneyCommandCenter(options);
+  const moneyUnblockers = buildMoneyUnblockers(packet.readiness, packet.setupCommands);
   const nextCandidateApproval = redactCandidateApprovalBatchForSummary(
     packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
     || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "needs_robert_approval"),
@@ -650,6 +762,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextCandidateApproval,
     nextCandidateReview,
     nextMoneySprintRun,
+    moneyUnblockers,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,

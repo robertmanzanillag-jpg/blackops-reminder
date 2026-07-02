@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T12:20:32.328Z",
+  "generatedAt": "2026-07-02T17:09:54.060Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -45,10 +45,12 @@
     "test:revenue-money-sprint-run-packet-cli": "node --import tsx --test tests/revenue-money-sprint-run-packet-cli.test.ts",
     "test:revenue-outreach-approval-packet-cli": "node --import tsx --test tests/revenue-outreach-approval-packet-cli.test.ts",
     "test:revenue-outreach-approval-decision-cli": "node --import tsx --test tests/revenue-outreach-approval-decision-cli.test.ts",
+    "test:revenue-outreach-send-cli": "node --import tsx --test tests/revenue-outreach-send-cli.test.ts",
     "test:revenue-manual-contact-approval-packet-cli": "node --import tsx --test tests/revenue-manual-contact-approval-packet-cli.test.ts",
     "test:revenue-contact-path-approval-decision-cli": "node --import tsx --test tests/revenue-contact-path-approval-decision-cli.test.ts",
     "test:revenue-contact-path-readiness-packet-cli": "node --import tsx --test tests/revenue-contact-path-readiness-packet-cli.test.ts",
     "test:revenue-ledger-approval-decision-cli": "node --import tsx --test tests/revenue-ledger-approval-decision-cli.test.ts",
+    "test:revenue-ledger-record-cli": "node --import tsx --test tests/revenue-ledger-record-cli.test.ts",
     "test:revenue-payment-path-approval-decision-cli": "node --import tsx --test tests/revenue-payment-path-approval-decision-cli.test.ts",
     "test:revenue-payment-path-readiness-packet-cli": "node --import tsx --test tests/revenue-payment-path-readiness-packet-cli.test.ts",
     "test:revenue-website-creation-approval-decision-cli": "node --import tsx --test tests/revenue-website-creation-approval-decision-cli.test.ts",
@@ -72,7 +74,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-contact-path-approval-decision-cli && npm run test:revenue-contact-path-readiness-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-payment-path-approval-decision-cli && npm run test:revenue-payment-path-readiness-packet-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-website-publish-approval-decision-cli && npm run test:revenue-website-publish-readiness-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-outreach-send-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-contact-path-approval-decision-cli && npm run test:revenue-contact-path-readiness-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-ledger-record-cli && npm run test:revenue-payment-path-approval-decision-cli && npm run test:revenue-payment-path-readiness-packet-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-website-publish-approval-decision-cli && npm run test:revenue-website-publish-readiness-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -95,10 +97,12 @@
     "revenue:money-sprint-run-packet": "node --import tsx script/revenue-money-sprint-run-packet.ts",
     "revenue:outreach-approval-packet": "node --import tsx script/revenue-outreach-approval-packet.ts",
     "revenue:outreach-approval-decision": "node --import tsx script/revenue-outreach-approval-decision.ts",
+    "revenue:outreach-send": "node --import tsx script/revenue-outreach-send.ts",
     "revenue:manual-contact-approval-packet": "node --import tsx script/revenue-manual-contact-approval-packet.ts",
     "revenue:contact-path-approval-decision": "node --import tsx script/revenue-contact-path-approval-decision.ts",
     "revenue:contact-path-readiness-packet": "node --import tsx script/revenue-contact-path-readiness-packet.ts",
     "revenue:ledger-approval-decision": "node --import tsx script/revenue-ledger-approval-decision.ts",
+    "revenue:ledger-record": "node --import tsx script/revenue-ledger-record.ts",
     "revenue:payment-path-approval-decision": "node --import tsx script/revenue-payment-path-approval-decision.ts",
     "revenue:payment-path-readiness-packet": "node --import tsx script/revenue-payment-path-readiness-packet.ts",
     "revenue:website-creation-approval-decision": "node --import tsx script/revenue-website-creation-approval-decision.ts",
@@ -135,34 +139,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 486,
-    "filesIndexed": 418,
-    "imports": 1558,
-    "routes": 446,
-    "symbols": 7960
+    "filesVisible": 492,
+    "filesIndexed": 424,
+    "imports": 1591,
+    "routes": 453,
+    "symbols": 8238
   },
   "directories": {
-    "script": {
-      "files": 63,
-      "indexed": 61,
-      "kinds": {
-        "script": 63
-      }
-    },
-    "server": {
-      "files": 128,
-      "indexed": 124,
-      "kinds": {
-        "server": 128
-      }
-    },
-    "tests": {
-      "files": 85,
-      "indexed": 83,
-      "kinds": {
-        "test": 85
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -220,11 +203,25 @@
         "docs": 11
       }
     },
+    "script": {
+      "files": 65,
+      "indexed": 63,
+      "kinds": {
+        "script": 65
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 130,
+      "indexed": 126,
+      "kinds": {
+        "server": 130
       }
     },
     "server/replit_integrations": {
@@ -246,6 +243,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 87,
+      "indexed": 85,
+      "kinds": {
+        "test": 87
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -5261,6 +5265,21 @@
       "routes": []
     },
     {
+      "path": "script/revenue-ledger-record.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-ledger-record-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/revenue-manual-contact-approval-packet.ts",
       "kind": "script",
       "imports": [
@@ -5333,6 +5352,21 @@
         "main",
         "options",
         "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-outreach-send.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-outreach-send-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
         "validationErrors"
       ],
       "routes": []
@@ -10427,7 +10461,10 @@
       "path": "server/revenue-browser-scout-session-cli.ts",
       "kind": "server",
       "imports": [
-        "./revenue-engine"
+        "./revenue-engine",
+        "node:fs",
+        "node:os",
+        "node:path"
       ],
       "exports": [
         "RevenueBrowserScoutSessionCliOptions",
@@ -10438,17 +10475,34 @@
         "validateRevenueBrowserScoutSessionOptions"
       ],
       "symbols": [
+        "OutputPathChecks",
+        "allowedOutputRoots",
+        "allowedSymlinkParents",
         "arg",
         "buildRevenueBrowserScoutDispatchInput",
         "buildRevenueBrowserScoutSession",
         "captureTemplate",
         "formatRevenueBrowserScoutSessionText",
         "getValue",
+        "hasSensitiveOutputPath",
+        "hasSymlinkAncestor",
+        "isPathInside",
         "numberValue",
+        "outputStats",
+        "parent",
+        "parentStats",
         "parseRevenueBrowserScoutSessionArgs",
+        "parts",
         "prefix",
+        "realParent",
+        "relative",
+        "resolved",
+        "roots",
+        "segments",
+        "validateOutputPath",
         "validateRevenueBrowserScoutSessionOptions",
-        "value"
+        "value",
+        "workspaceOutputDir"
       ],
       "routes": []
     },
@@ -10466,6 +10520,7 @@
         "validateRevenueCommercialGoLiveOptions"
       ],
       "symbols": [
+        "RevenueGoLiveOperatorStep",
         "buildRevenueCommercialGoLivePacket",
         "commercialGoLiveReady",
         "executionOrder",
@@ -10473,6 +10528,9 @@
         "formatRevenueCommercialGoLivePacketText",
         "mode",
         "modeArg",
+        "nextExternalStep",
+        "nextVerificationStep",
+        "operatorSetupPacket",
         "parseRevenueCommercialGoLiveArgs",
         "readiness",
         "requiredEnvironment",
@@ -10505,6 +10563,7 @@
         "formatRevenueContactPathApprovalDecisionText",
         "getArgValue",
         "getRevenueContactPathApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "nextCommand",
         "npmRunText",
         "parseContactMode",
@@ -10515,7 +10574,8 @@
         "result",
         "shellQuote",
         "targetId",
-        "validateRevenueContactPathApprovalDecisionOptions"
+        "validateRevenueContactPathApprovalDecisionOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10559,10 +10619,13 @@
         "formatRevenueContactPathReadinessPacketText",
         "getArgValue",
         "getRevenueContactPathReadinessPacketExitCode",
+        "hasPlaceholderValue",
+        "packet",
         "parseContactMode",
         "parseRevenueContactPathReadinessPacketArgs",
         "prefix",
-        "validateRevenueContactPathReadinessPacketOptions"
+        "validateRevenueContactPathReadinessPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10570,47 +10633,83 @@
       "path": "server/revenue-first-money-command-center-cli.ts",
       "kind": "server",
       "imports": [
-        "./revenue-engine"
+        "./revenue-engine",
+        "./revenue-public-candidate-approval"
       ],
       "exports": [
         "RevenueFirstMoneyCommandCenterCliOptions",
         "buildRevenueFirstMoneyCommandCenter",
+        "buildRevenueFirstMoneyCommandCenterSummary",
         "formatRevenueFirstMoneyCommandCenterText",
         "getRevenueFirstMoneyCommandCenterExitCode",
         "parseRevenueFirstMoneyCommandCenterArgs",
         "validateRevenueFirstMoneyCommandCenterOptions"
       ],
       "symbols": [
+        "CandidateApprovalBatch",
+        "CandidateApprovalInput",
         "CommandQueueItem",
+        "SetupCommandItem",
+        "activeApprovalBatch",
         "allPublicCandidates",
+        "approvalCommand",
+        "approvalDecisions",
+        "approvalStatus",
         "approvedDraft",
+        "area",
+        "buildCandidateApprovalBatch",
+        "buildCandidateApprovalBatches",
         "buildRevenueFirstMoneyCommandCenter",
+        "buildRevenueFirstMoneyCommandCenterSummary",
+        "buildSetupCommands",
+        "candidateApprovalBatches",
+        "candidateIds",
         "candidateQueueItems",
         "capturedCandidates",
+        "confirmationText",
+        "displayText",
         "excludedDemoPublicCandidates",
-        "firstReviewCandidate",
+        "firstCandidate",
         "formatRevenueFirstMoneyCommandCenterText",
         "funnelQueue",
         "getRevenueFirstMoneyCommandCenterExitCode",
+        "groupedCandidates",
         "hasValidEmail",
         "importReadyCandidates",
         "isDemoCandidate",
         "isManualContactCandidate",
+        "key",
         "manualContactPacket",
+        "matchingApprovalDecision",
         "mode",
         "modeArg",
+        "moneySprintRunPacketCommand",
+        "nextCandidateApproval",
+        "nextCandidateReview",
         "nextCommand",
+        "nextMoneySprintRun",
+        "niche",
         "npmRunText",
+        "outputPath",
         "outreachDrafts",
+        "packet",
         "parseRevenueFirstMoneyCommandCenterArgs",
         "publicCandidates",
         "readiness",
-        "reviewBatchCandidates",
-        "reviewCandidateIds",
+        "redactCandidateApprovalBatchForSummary",
+        "redactCandidateReviewBatchForSummary",
+        "redactCandidateRunBatchForSummary",
+        "remainingApprovalBatchCount",
+        "remainingApprovalBatches",
+        "remainingApprovalCandidateCount",
+        "reviewCommand",
         "reviewableDrafts",
         "robertReviewReadyCandidates",
+        "setupCommands",
         "shellQuote",
         "snapshot",
+        "snapshotHash",
+        "targetId",
         "text",
         "validateRevenueFirstMoneyCommandCenterOptions",
         "verificationCandidateIds",
@@ -10647,16 +10746,16 @@
         "getRevenueFirstMoneyDryRunExitCode",
         "markdown",
         "mode",
-        "nextCommand",
         "now",
         "outputDir",
         "outputPath",
         "parseRevenueFirstMoneyDryRunArgs",
         "prefix",
-        "queue",
         "redactApprovalFlags",
+        "redactCommandCenter",
         "redactCommandQueueItem",
         "redacted",
+        "redactedCommandCenter",
         "renderDryRunMarkdown",
         "slugDate",
         "validateRevenueFirstMoneyDryRunOptions"
@@ -10687,6 +10786,7 @@
         "formatRevenueLedgerApprovalDecisionText",
         "getArgValue",
         "getRevenueLedgerApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "nextApiBody",
         "nextCommand",
         "notes",
@@ -10698,7 +10798,9 @@
         "result",
         "shellQuote",
         "targetId",
+        "trimmed",
         "validateRevenueLedgerApprovalDecisionOptions",
+        "validationErrors",
         "value"
       ],
       "routes": []
@@ -10718,6 +10820,42 @@
         "buildRevenueLedgerApprovalSnapshotHash",
         "buildRevenueLedgerApprovalTargetId",
         "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-ledger-record-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueLedgerRecordCliOptions",
+        "buildRevenueLedgerRecordConfirmation",
+        "formatRevenueLedgerRecordText",
+        "getRevenueLedgerRecordExitCode",
+        "parseRevenueLedgerRecordArgs",
+        "recordRevenueLedgerEntryFromCli",
+        "validateRevenueLedgerRecordOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueLedgerRecordConfirmation",
+        "displayText",
+        "expectedConfirmation",
+        "formatRevenueLedgerRecordText",
+        "getArgValue",
+        "getRevenueLedgerRecordExitCode",
+        "hasPlaceholderValue",
+        "parseNumberArg",
+        "parseRevenueLedgerRecordArgs",
+        "prefix",
+        "recordRevenueLedgerEntryFromCli",
+        "result",
+        "trimmed",
+        "validateRevenueLedgerRecordOptions",
+        "validationErrors",
+        "value"
       ],
       "routes": []
     },
@@ -10743,7 +10881,8 @@
         "getRevenueManualContactApprovalPacketExitCode",
         "parseRevenueManualContactApprovalPacketArgs",
         "prefix",
-        "validateRevenueManualContactApprovalPacketOptions"
+        "validateRevenueManualContactApprovalPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10793,23 +10932,34 @@
       "symbols": [
         "MoneySprintRunPacketReviewJson",
         "approvedCountIsValid",
+        "approvedPersistedCandidates",
+        "approvedReviewedBusinessNames",
+        "approvedReviewedCandidateIds",
+        "approvedReviewedCandidates",
         "arg",
+        "batchBusinessNames",
         "batchRowCount",
         "buildRevenueMoneySprintRunPacketExecution",
         "countSeedLeadBatchRows",
+        "duplicateApprovedCandidateIds",
         "errors",
+        "expectedSeedLeadBatchText",
         "formatRevenueMoneySprintRunPacketExecutionText",
+        "foundCountIsValid",
         "getRevenueMoneySprintRunPacketExitCode",
         "getValue",
         "lines",
         "packet",
         "parseRevenueMoneySprintRunPacketArgs",
         "parsedRequest",
+        "persistedPublicCandidates",
         "prefix",
         "preview",
         "readRevenueMoneySprintRunPacketInput",
         "requestBody",
+        "requestedCountIsValid",
         "result",
+        "seedLeadBatchBusinessNames",
         "unreadySeedNames",
         "validateRevenueMoneySprintRunPacketOptions",
         "validateRevenueMoneySprintRunPacketReview",
@@ -10834,6 +10984,7 @@
       ],
       "symbols": [
         "approvalBlockers",
+        "approvedSendDecision",
         "arg",
         "blockers",
         "buildRevenueOutreachApprovalDecisionFromCli",
@@ -10841,12 +10992,15 @@
         "formatRevenueOutreachApprovalDecisionText",
         "getArgValue",
         "getRevenueOutreachApprovalDecisionExitCode",
+        "hasPlaceholderValue",
+        "nextCliCommand",
         "parseRevenueOutreachApprovalDecisionArgs",
         "prefix",
         "result",
-        "sendBody",
+        "shellQuote",
         "targetId",
-        "validateRevenueOutreachApprovalDecisionOptions"
+        "validateRevenueOutreachApprovalDecisionOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10858,6 +11012,7 @@
       ],
       "exports": [
         "RevenueOutreachApprovalPacketCliOptions",
+        "buildRevenueOutreachApprovalDecisionCommand",
         "buildRevenueOutreachApprovalPacketFromCli",
         "formatRevenueOutreachApprovalPacketText",
         "getRevenueOutreachApprovalPacketExitCode",
@@ -10866,14 +11021,19 @@
       ],
       "symbols": [
         "arg",
+        "buildRevenueOutreachApprovalDecisionCommand",
         "buildRevenueOutreachApprovalPacketFromCli",
+        "displayBlock",
+        "displayText",
         "formatRevenueOutreachApprovalPacketText",
         "getArgValue",
         "getRevenueOutreachApprovalPacketExitCode",
         "lines",
         "parseRevenueOutreachApprovalPacketArgs",
         "prefix",
-        "validateRevenueOutreachApprovalPacketOptions"
+        "shellQuote",
+        "validateRevenueOutreachApprovalPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10892,6 +11052,37 @@
         "buildRevenueOutreachApprovalTargetId",
         "buildRevenueOutreachSnapshotHash",
         "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-outreach-send-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueOutreachSendCliOptions",
+        "formatRevenueOutreachSendText",
+        "getRevenueOutreachSendExitCode",
+        "parseRevenueOutreachSendArgs",
+        "sendRevenueOutreachDraftFromCli",
+        "validateRevenueOutreachSendOptions"
+      ],
+      "symbols": [
+        "arg",
+        "displayText",
+        "expectedConfirmation",
+        "formatRevenueOutreachSendText",
+        "getArgValue",
+        "getRevenueOutreachSendExitCode",
+        "hasPlaceholderValue",
+        "parseRevenueOutreachSendArgs",
+        "prefix",
+        "result",
+        "sendRevenueOutreachDraftFromCli",
+        "validateRevenueOutreachSendOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -10918,6 +11109,7 @@
         "formatRevenuePaymentPathApprovalDecisionText",
         "getArgValue",
         "getRevenuePaymentPathApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "isAllowedPaymentLink",
         "nextCommand",
         "npmRunText",
@@ -10933,6 +11125,7 @@
         "targetId",
         "url",
         "validateRevenuePaymentPathApprovalDecisionOptions",
+        "validationErrors",
         "value"
       ],
       "routes": []
@@ -10978,9 +11171,12 @@
         "formatRevenuePaymentPathReadinessPacketText",
         "getArgValue",
         "getRevenuePaymentPathReadinessPacketExitCode",
+        "hasPlaceholderValue",
+        "packet",
         "parseRevenuePaymentPathReadinessPacketArgs",
         "prefix",
-        "validateRevenuePaymentPathReadinessPacketOptions"
+        "validateRevenuePaymentPathReadinessPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11010,16 +11206,21 @@
         "formatRevenuePublicCandidateApprovalDecisionText",
         "getArgValue",
         "getRevenuePublicCandidateApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "hasValidEmail",
         "missingIds",
         "nextCommand",
+        "normalizedArea",
+        "normalizedNiche",
         "npmRunText",
         "parseRevenuePublicCandidateApprovalDecisionArgs",
         "prefix",
         "result",
         "shellQuote",
         "targetId",
-        "validateRevenuePublicCandidateApprovalDecisionOptions"
+        "trimmed",
+        "validateRevenuePublicCandidateApprovalDecisionOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11063,7 +11264,8 @@
         "getRevenuePublicCandidateBlockExitCode",
         "parseRevenuePublicCandidateBlockArgs",
         "prefix",
-        "validateRevenuePublicCandidateBlockOptions"
+        "validateRevenuePublicCandidateBlockOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11072,34 +11274,59 @@
       "kind": "server",
       "imports": [
         "./revenue-engine",
-        "./revenue-public-candidate-approval"
+        "./revenue-public-candidate-approval",
+        "node:fs",
+        "node:os",
+        "node:path"
       ],
       "exports": [
         "RevenuePublicCandidateReviewCliOptions",
         "buildRevenuePublicCandidateReviewInput",
+        "buildRevenuePublicCandidateReviewNextCliCommand",
         "formatRevenuePublicCandidateReviewText",
         "getRevenuePublicCandidateReviewExitCode",
         "parseRevenuePublicCandidateReviewArgs",
-        "validateRevenuePublicCandidateReviewOptions"
+        "validateRevenuePublicCandidateReviewOptions",
+        "validateRevenuePublicCandidateReviewOutputPath",
+        "writeRevenuePublicCandidateReviewOutput"
       ],
       "symbols": [
         "allCandidates",
+        "allowedMoneySprintOutputRoots",
         "approvedByRecordedDecision",
         "arg",
         "buildRevenuePublicCandidateReviewInput",
+        "buildRevenuePublicCandidateReviewNextCliCommand",
         "candidateIds",
+        "existingRealpath",
         "expectedSnapshotHash",
         "expectedTargetId",
         "formatRevenuePublicCandidateReviewText",
         "getRevenuePublicCandidateReviewExitCode",
         "getValue",
         "hasMatchingPublicCandidateApprovalDecision",
+        "hasSensitivePath",
+        "hasSymlinkAncestor",
+        "isPathInside",
+        "nextCliCommand",
+        "npmRunText",
         "numberValue",
+        "outputStats",
+        "parent",
         "parseRevenuePublicCandidateReviewArgs",
+        "parsed",
         "prefix",
+        "relative",
+        "relativeParts",
+        "resolved",
+        "segments",
         "selectedCandidates",
+        "shellQuote",
         "validateRevenuePublicCandidateReviewOptions",
-        "value"
+        "validateRevenuePublicCandidateReviewOutputPath",
+        "validationErrors",
+        "value",
+        "writeRevenuePublicCandidateReviewOutput"
       ],
       "routes": []
     },
@@ -11173,7 +11400,8 @@
         "tasks",
         "text",
         "validateRevenuePublicContactVerificationOptions",
-        "verificationSearchQueries"
+        "verificationSearchQueries",
+        "verificationUpdateCommandArgs"
       ],
       "routes": []
     },
@@ -11397,6 +11625,7 @@
         "formatRevenueWebsiteCreationApprovalDecisionText",
         "getArgValue",
         "getRevenueWebsiteCreationApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "nextCommand",
         "npmRunText",
         "parseRevenueWebsiteCreationApprovalDecisionArgs",
@@ -11405,7 +11634,8 @@
         "result",
         "shellQuote",
         "targetId",
-        "validateRevenueWebsiteCreationApprovalDecisionOptions"
+        "validateRevenueWebsiteCreationApprovalDecisionOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11451,7 +11681,8 @@
         "getRevenueWebsiteCreationPacketExitCode",
         "parseRevenueWebsiteCreationPacketArgs",
         "prefix",
-        "validateRevenueWebsiteCreationPacketOptions"
+        "validateRevenueWebsiteCreationPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11481,6 +11712,7 @@
         "formatRevenueWebsitePublishApprovalDecisionText",
         "getArgValue",
         "getRevenueWebsitePublishApprovalDecisionExitCode",
+        "hasPlaceholderValue",
         "isValidUrl",
         "nextCommand",
         "npmRunText",
@@ -11492,7 +11724,8 @@
         "result",
         "shellQuote",
         "targetId",
-        "validateRevenueWebsitePublishApprovalDecisionOptions"
+        "validateRevenueWebsitePublishApprovalDecisionOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11535,9 +11768,12 @@
         "formatRevenueWebsitePublishReadinessPacketText",
         "getArgValue",
         "getRevenueWebsitePublishReadinessPacketExitCode",
+        "hasPlaceholderValue",
+        "packet",
         "parseRevenueWebsitePublishReadinessPacketArgs",
         "prefix",
-        "validateRevenueWebsitePublishReadinessPacketOptions"
+        "validateRevenueWebsitePublishReadinessPacketOptions",
+        "validationErrors"
       ],
       "routes": []
     },
@@ -11576,6 +11812,8 @@
         "./radio-template-agent",
         "./reminder-scheduler",
         "./revenue-engine",
+        "./revenue-first-money-command-center-cli",
+        "./revenue-public-candidate-approval-decision-cli",
         "./shopify-oauth",
         "./storage",
         "./telegram-routes",
@@ -11630,18 +11868,21 @@
         "buildClipperExternalCloseoutEvidenceCsvTemplate",
         "buildClipperExternalCloseoutNextActionCopyPacket",
         "buildClipperExternalCloseoutSprintSummary",
+        "buildGuardedPublicCandidateReview",
         "button",
         "byLane",
         "byPriority",
         "cached",
         "cadence",
         "canEditRadioDjName",
+        "candidateIdsMatch",
         "cards",
         "carriedTask",
         "child",
         "clipperCsvCell",
         "clipperOwnerUserId",
         "clipperUniqueStrings",
+        "commandCenter",
         "commitment",
         "commitments",
         "config",
@@ -11686,9 +11927,13 @@
         "eventId",
         "events",
         "existing",
+        "existingArtifacts",
         "existingIds",
         "existingRepos",
         "existingTitles",
+        "expectedApproval",
+        "expectedReview",
+        "expectedRun",
         "externalCloseoutEvidenceImport",
         "externalConnectAutopilot",
         "externalConnectSprint",
@@ -11745,6 +11990,7 @@
         "logs",
         "marked",
         "marketingTasks",
+        "matchesActiveBatch",
         "message",
         "minimalExternalPortalLauncherHtml",
         "missingFields",
@@ -11827,6 +12073,10 @@
         "response",
         "result",
         "results",
+        "revenuePublicCandidateApprovalDecisionSchema",
+        "revenuePublicCandidateMoneySprintRunSchema",
+        "revenuePublicCandidateReviewPacketSchema",
+        "review",
         "rowById",
         "rows",
         "rtWeekStart",
@@ -11845,6 +12095,8 @@
         "shop",
         "slots",
         "snoozedUntil",
+        "sortedLeft",
+        "sortedRight",
         "sourceIngestionSprint",
         "sprint",
         "status",
@@ -12210,6 +12462,7 @@
         "/api/revenue-engine/delivery-workspaces/improvement-review",
         "/api/revenue-engine/delivery-workspaces/qa",
         "/api/revenue-engine/expense-preflight",
+        "/api/revenue-engine/first-money-command-center",
         "/api/revenue-engine/improvement-review",
         "/api/revenue-engine/launch-readiness",
         "/api/revenue-engine/lead-radar",
@@ -12229,7 +12482,10 @@
         "/api/revenue-engine/project-plan",
         "/api/revenue-engine/proposal-email",
         "/api/revenue-engine/public-lead-candidates",
+        "/api/revenue-engine/public-lead-candidates/approval-decision",
         "/api/revenue-engine/public-lead-candidates/review",
+        "/api/revenue-engine/public-lead-candidates/review-packet",
+        "/api/revenue-engine/public-lead-candidates/run-money-sprint",
         "/api/revenue-engine/public-scout-run",
         "/api/revenue-engine/public-scout-schedule",
         "/api/revenue-engine/sales-autopilot",
@@ -14660,19 +14916,34 @@
         "../server/revenue-browser-scout-session-cli",
         "../server/revenue-engine",
         "node:assert/strict",
+        "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "badOffer",
         "defaults",
+        "directories",
         "dispatch",
+        "existing",
+        "existingDirectory",
+        "fakeOutputPathChecks",
         "input",
+        "missingParent",
         "options",
         "output",
+        "outsideAllowed",
         "parsed",
+        "safeTmp",
+        "safeWorkspace",
+        "sensitive",
         "session",
-        "tooLarge"
+        "symlinkOutput",
+        "symlinkedWorkspaceTarget",
+        "symlinks",
+        "tooFewQualifiedLeads",
+        "tooLarge",
+        "workspaceSymlinkAncestor"
       ],
       "routes": []
     },
@@ -14764,9 +15035,11 @@
       "path": "tests/revenue-engine.test.ts",
       "kind": "test",
       "imports": [
+        "../server/revenue-contact-path-approval",
         "../server/revenue-engine",
         "../server/revenue-ledger-approval",
         "../server/revenue-outreach-approval",
+        "../server/revenue-public-candidate-approval-decision-cli",
         "../server/revenue-website-creation-approval",
         "node:assert/strict",
         "node:fs",
@@ -14777,9 +15050,14 @@
       "symbols": [
         "answered",
         "approval",
+        "approvalDecision",
         "approveLedgerEntryForTests",
+        "approveManualContactPathForTests",
         "approveOutreachDraftForTests",
         "approveWebsiteCreationForTests",
+        "artifacts",
+        "buildOutreachSendConfirmation",
+        "bypass",
         "candidateId",
         "capture",
         "closeNotes",
@@ -14796,13 +15074,23 @@
         "ledgerInput",
         "maliciousArea",
         "maliciousNiche",
+        "missing",
         "mission",
         "mockup",
         "opportunity",
+        "originalContactEvidenceNote",
+        "originalContactEvidenceUrl",
+        "originalContactMode",
+        "originalContactPathApprovalDecisionId",
+        "originalContactPathVerified",
+        "originalLead",
+        "originalManualContactApproved",
         "originalResendApiKey",
         "originalResendFromEmail",
         "originalRevenueEngineFromEmail",
         "originalRevenueMockupsDir",
+        "originalRevenueMoneyMode",
+        "originalRobertContactApproved",
         "pack",
         "packet",
         "parsed",
@@ -14812,6 +15100,7 @@
         "plan",
         "preview",
         "previewPath",
+        "proof",
         "quote",
         "radar",
         "readiness",
@@ -14819,6 +15108,7 @@
         "rejected",
         "result",
         "review",
+        "routeSource",
         "routesSource",
         "row",
         "scaffold",
@@ -14828,6 +15118,7 @@
         "snapshot",
         "source",
         "stale",
+        "stringFalse",
         "testAgentRunsPath",
         "testApprovalDecisionsPath",
         "testAutomationIntakesPath",
@@ -14840,11 +15131,17 @@
         "testOutreachPath",
         "testPublicLeadCandidatesPath",
         "testScoutingMissionsPath",
+        "unconfirmed",
         "updated",
+        "wrong",
         "wrongSource",
         "wrongTarget"
       ],
-      "routes": []
+      "routes": [
+        "/api/revenue-engine/plan",
+        "/api/revenue-engine/public-lead-candidates/review-packet",
+        "/api/revenue-engine/public-lead-candidates/run-money-sprint"
+      ]
     },
     {
       "path": "tests/revenue-first-money-command-center-cli.test.ts",
@@ -14852,31 +15149,58 @@
       "imports": [
         "../server/revenue-engine",
         "../server/revenue-first-money-command-center-cli",
+        "../server/revenue-payment-path-approval",
+        "../server/revenue-public-candidate-approval-decision-cli",
         "node:assert/strict",
         "node:child_process",
+        "node:fs",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "approval",
+        "approveCommandCenterPaymentPath",
+        "baseEnv",
+        "candidateId",
         "capture",
+        "contactApprovalCommand",
+        "contactReadinessCommand",
+        "contactResult",
         "createDraft",
         "draft",
         "firstCandidateId",
+        "ledgerApprovalCommand",
+        "ledgerResult",
         "manualCommand",
         "manualCommands",
+        "originalEnv",
         "outreachCommand",
         "packet",
+        "paymentApprovalCommand",
+        "paymentReadinessCommand",
+        "paymentResult",
+        "pendingCandidateId",
+        "persistedDecisions",
+        "proof",
         "readyCandidateId",
         "result",
         "reviewCommand",
         "secondCandidateId",
+        "serialized",
+        "serializedSummary",
+        "setupIds",
+        "snapshot",
+        "summary",
+        "testApprovalDecisionsPath",
         "testLeadsPath",
         "testOutreachPath",
         "testPublicCandidatesPath",
         "text",
         "unverifiedCandidateId",
         "verificationCommand",
-        "websiteCommand"
+        "websiteCommand",
+        "websiteCreationApprovalCommand",
+        "websiteResult"
       ],
       "routes": []
     },
@@ -14923,6 +15247,31 @@
         "result",
         "testApprovalDecisionsPath",
         "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-ledger-record-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-ledger-approval",
+        "../server/revenue-ledger-record-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approveLedger",
+        "input",
+        "ledgerInput",
+        "parsed",
+        "result",
+        "run",
+        "testApprovalDecisionsPath",
+        "testLedgerPath"
       ],
       "routes": []
     },
@@ -14995,20 +15344,32 @@
       ],
       "exports": [],
       "symbols": [
+        "approvedCandidate",
         "base",
         "baseEnv",
         "blocked",
+        "businessName",
+        "candidate",
+        "capture",
+        "captureRunPacketCandidate",
         "dryRun",
+        "duplicated",
         "execute",
+        "forged",
         "missingApproval",
         "mixed",
+        "recipientEmail",
         "result",
         "reviewPacket",
+        "seedLeadBatchText",
         "snapshot",
+        "sourceUrl",
+        "suffix",
         "tampered",
         "testLeadsPath",
         "testOutreachPath",
         "testPacketPath",
+        "testPublicCandidatesPath",
         "unsafe",
         "validation"
       ],
@@ -15049,14 +15410,45 @@
       ],
       "exports": [],
       "symbols": [
+        "command",
         "createDraft",
         "empty",
+        "longNotes",
         "missingProvider",
         "originalResendApiKey",
         "originalRevenueEngineFromEmail",
         "packet",
         "parsed",
         "run",
+        "tail",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-outreach-send-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-outreach-approval",
+        "../server/revenue-outreach-send-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approveDraft",
+        "createApprovedDraft",
+        "draft",
+        "originalResendApiKey",
+        "originalRevenueEngineFromEmail",
+        "parsed",
+        "result",
+        "run",
+        "testApprovalDecisionsPath",
         "testOutreachPath",
         "text"
       ],
@@ -15151,6 +15543,7 @@
         "candidates",
         "capture",
         "captureCandidate",
+        "engineResult",
         "options",
         "result",
         "testPublicLeadCandidatesPath",
@@ -15168,23 +15561,31 @@
         "../server/revenue-public-candidate-review-cli",
         "node:assert/strict",
         "node:child_process",
+        "node:fs",
+        "node:os",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "approvalDecision",
         "candidateId",
         "capture",
         "captureVerifiedReviewCandidate",
         "decision",
         "input",
+        "linkPath",
         "output",
+        "outputDir",
+        "outputPath",
         "parsed",
         "result",
         "targetId",
+        "targetPath",
         "testApprovalDecisionsPath",
         "testLeadsPath",
         "testOutreachPath",
-        "testPublicLeadCandidatesPath"
+        "testPublicLeadCandidatesPath",
+        "written"
       ],
       "routes": []
     },
@@ -15347,7 +15748,9 @@
         "symlinkOutput",
         "symlinkParent",
         "symlinkedAncestor",
+        "symlinkedWorkspaceTarget",
         "symlinks",
+        "tooFewCandidatesPerRun",
         "workspaceRoot"
       ],
       "routes": []
@@ -15816,11 +16219,13 @@
     "tests/revenue-first-money-command-center-cli.test.ts",
     "tests/revenue-first-money-dry-run-cli.test.ts",
     "tests/revenue-ledger-approval-decision-cli.test.ts",
+    "tests/revenue-ledger-record-cli.test.ts",
     "tests/revenue-manual-contact-approval-packet-cli.test.ts",
     "tests/revenue-money-readiness-cli.test.ts",
     "tests/revenue-money-sprint-run-packet-cli.test.ts",
     "tests/revenue-outreach-approval-decision-cli.test.ts",
     "tests/revenue-outreach-approval-packet-cli.test.ts",
+    "tests/revenue-outreach-send-cli.test.ts",
     "tests/revenue-payment-path-approval-decision-cli.test.ts",
     "tests/revenue-payment-path-readiness-packet-cli.test.ts",
     "tests/revenue-public-candidate-approval-decision-cli.test.ts",

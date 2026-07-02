@@ -490,6 +490,17 @@ type FirstMoneyCommandCenter = {
       paidDataSpendUsd: number;
     };
   } | null;
+  moneyUnblockers: Array<{
+    id: "production_persistence" | "contact_path" | "payment_path" | "website_build";
+    label: string;
+    status: "ready" | "blocked";
+    gate: "production" | "contact_path" | "payment_path" | "website_creation";
+    reason: string;
+    evidenceRequired: string[];
+    safeNextAction: string;
+    blockedActions: string[];
+    setupCommandIds: string[];
+  }>;
   counts: {
     publicCandidates: number;
     reviewablePublicCandidates: number;
@@ -2872,10 +2883,25 @@ export default function RevenueEnginePage() {
                   Drafts {firstMoneyCommandCenter?.counts.outreachDrafts ?? 0}
                 </div>
               </div>
-              <div className="mt-3 space-y-2">
-                {(firstMoneyCommandCenter?.readiness.blockedUntil || []).slice(0, 2).map((blocker) => (
-                  <div key={blocker} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100">
-                    {blocker}
+              <div className="mt-3 space-y-2" data-testid="first-money-unblockers">
+                {(firstMoneyCommandCenter?.moneyUnblockers || []).slice(0, 4).map((unblocker) => (
+                  <div
+                    key={unblocker.id}
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-xs leading-5",
+                      unblocker.status === "ready"
+                        ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100"
+                        : "border-amber-500/20 bg-amber-500/5 text-amber-100",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-white">{unblocker.label}</span>
+                      <Badge variant="outline" className={cn("shrink-0", statusTone(unblocker.status))}>
+                        {unblocker.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-zinc-400">{unblocker.reason}</p>
+                    <p className="mt-1 text-zinc-500">{unblocker.safeNextAction}</p>
                   </div>
                 ))}
               </div>

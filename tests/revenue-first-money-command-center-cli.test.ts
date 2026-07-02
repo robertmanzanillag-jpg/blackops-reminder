@@ -441,6 +441,9 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.nextCandidateApproval?.count, 1);
   assert.equal(summary.nextCandidateApproval?.confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-1");
   assert.equal(summary.nextCandidateApproval?.safety.sendsOutreach, false);
+  assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
+  assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);
+  assert.equal(summary.moneyUnblockers.some((item) => item.id === "website_build" && item.evidenceRequired.some((evidence) => evidence.includes("Deposit proof"))), true);
   assert.equal(summary.counts.reviewablePublicCandidates, 1);
   assert.equal("candidateApprovalBatches" in summary, false);
   assert.equal("setupCommands" in summary, false);
