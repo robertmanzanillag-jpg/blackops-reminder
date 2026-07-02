@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T01:57:31.046Z",
+  "generatedAt": "2026-07-02T02:19:27.177Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -46,6 +46,7 @@
     "test:revenue-outreach-approval-packet-cli": "node --import tsx --test tests/revenue-outreach-approval-packet-cli.test.ts",
     "test:revenue-outreach-approval-decision-cli": "node --import tsx --test tests/revenue-outreach-approval-decision-cli.test.ts",
     "test:revenue-manual-contact-approval-packet-cli": "node --import tsx --test tests/revenue-manual-contact-approval-packet-cli.test.ts",
+    "test:revenue-ledger-approval-decision-cli": "node --import tsx --test tests/revenue-ledger-approval-decision-cli.test.ts",
     "test:revenue-website-creation-approval-decision-cli": "node --import tsx --test tests/revenue-website-creation-approval-decision-cli.test.ts",
     "test:revenue-website-creation-packet-cli": "node --import tsx --test tests/revenue-website-creation-packet-cli.test.ts",
     "test:revenue-public-scout-extract-cli": "node --import tsx --test tests/revenue-public-scout-extract-cli.test.ts",
@@ -64,7 +65,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -88,6 +89,7 @@
     "revenue:outreach-approval-packet": "node --import tsx script/revenue-outreach-approval-packet.ts",
     "revenue:outreach-approval-decision": "node --import tsx script/revenue-outreach-approval-decision.ts",
     "revenue:manual-contact-approval-packet": "node --import tsx script/revenue-manual-contact-approval-packet.ts",
+    "revenue:ledger-approval-decision": "node --import tsx script/revenue-ledger-approval-decision.ts",
     "revenue:website-creation-approval-decision": "node --import tsx script/revenue-website-creation-approval-decision.ts",
     "revenue:website-creation-packet": "node --import tsx script/revenue-website-creation-packet.ts",
     "revenue:public-scout-extract": "node --import tsx script/revenue-public-scout-extract.ts",
@@ -119,32 +121,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 458,
-    "filesIndexed": 391,
-    "imports": 1478,
+    "filesVisible": 462,
+    "filesIndexed": 395,
+    "imports": 1489,
     "routes": 443,
-    "symbols": 8282
+    "symbols": 8322
   },
   "directories": {
     "script": {
-      "files": 55,
-      "indexed": 53,
+      "files": 56,
+      "indexed": 54,
       "kinds": {
-        "script": 55
+        "script": 56
       }
     },
     "server": {
-      "files": 116,
-      "indexed": 113,
+      "files": 118,
+      "indexed": 115,
       "kinds": {
-        "server": 116
+        "server": 118
       }
     },
     "tests": {
-      "files": 77,
-      "indexed": 75,
+      "files": 78,
+      "indexed": 76,
       "kinds": {
-        "test": 77
+        "test": 78
       }
     },
     ".agents/skills": {
@@ -5191,6 +5193,21 @@
       "kind": "script",
       "imports": [
         "../server/revenue-first-money-dry-run-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-ledger-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-ledger-approval-decision-cli"
       ],
       "exports": [],
       "symbols": [
@@ -10344,6 +10361,7 @@
       "kind": "server",
       "imports": [
         "./ceo-doctor-cli",
+        "./revenue-ledger-approval",
         "./revenue-outreach-approval",
         "./revenue-website-creation-approval",
         "node:fs",
@@ -10691,8 +10709,10 @@
         "evidenceScore",
         "executiveSummary",
         "existing",
+        "existingApprovedEntry",
         "existingEntry",
         "existingIndex",
+        "existingLedgerEntry",
         "expectedSnapshotHash",
         "expectedTargetId",
         "expenses",
@@ -10790,6 +10810,7 @@
         "leadsPath",
         "ledgerPath",
         "ledgerResult",
+        "ledgerSnapshot",
         "lines",
         "listRevenueApprovalDecisions",
         "listRevenueOutreachDrafts",
@@ -11255,6 +11276,64 @@
         "renderDryRunMarkdown",
         "slugDate",
         "validateRevenueFirstMoneyDryRunOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-ledger-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-ledger-approval"
+      ],
+      "exports": [
+        "RevenueLedgerApprovalDecisionCliOptions",
+        "buildRevenueLedgerApprovalDecisionFromCli",
+        "buildRevenueLedgerApprovalNotes",
+        "formatRevenueLedgerApprovalDecisionText",
+        "getRevenueLedgerApprovalDecisionExitCode",
+        "parseRevenueLedgerApprovalDecisionArgs",
+        "validateRevenueLedgerApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "arg",
+        "blockers",
+        "buildRevenueLedgerApprovalDecisionFromCli",
+        "buildRevenueLedgerApprovalNotes",
+        "formatRevenueLedgerApprovalDecisionText",
+        "getArgValue",
+        "getRevenueLedgerApprovalDecisionExitCode",
+        "nextApiBody",
+        "nextCommand",
+        "notes",
+        "npmRunText",
+        "parseNumberArg",
+        "parseRevenueLedgerApprovalDecisionArgs",
+        "paymentEvidence",
+        "prefix",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenueLedgerApprovalDecisionOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-ledger-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueLedgerApprovalSnapshot",
+        "buildRevenueLedgerApprovalSnapshotHash",
+        "buildRevenueLedgerApprovalTargetId"
+      ],
+      "symbols": [
+        "buildRevenueLedgerApprovalSnapshotHash",
+        "buildRevenueLedgerApprovalTargetId",
+        "payload"
       ],
       "routes": []
     },
@@ -14999,6 +15078,7 @@
       "kind": "test",
       "imports": [
         "../server/revenue-engine",
+        "../server/revenue-ledger-approval",
         "../server/revenue-outreach-approval",
         "../server/revenue-website-creation-approval",
         "node:assert/strict",
@@ -15010,10 +15090,13 @@
       "symbols": [
         "answered",
         "approval",
+        "approveLedgerEntryForTests",
         "approveOutreachDraftForTests",
         "approveWebsiteCreationForTests",
         "candidateId",
         "capture",
+        "closeNotes",
+        "closeResult",
         "commandValues",
         "converted",
         "created",
@@ -15023,6 +15106,7 @@
         "first",
         "html",
         "leadResult",
+        "ledgerInput",
         "maliciousArea",
         "maliciousNiche",
         "mission",
@@ -15044,6 +15128,7 @@
         "quote",
         "radar",
         "readiness",
+        "recordApprovedRevenueLedgerEntryForTests",
         "rejected",
         "result",
         "review",
@@ -15130,6 +15215,26 @@
         "testOutputDir",
         "testOutreachPath",
         "testPublicCandidatesPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-ledger-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-ledger-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "decisions",
+        "parsed",
+        "result",
+        "testApprovalDecisionsPath",
         "text"
       ],
       "routes": []
@@ -15857,6 +15962,7 @@
     "tests/revenue-engine.test.ts",
     "tests/revenue-first-money-command-center-cli.test.ts",
     "tests/revenue-first-money-dry-run-cli.test.ts",
+    "tests/revenue-ledger-approval-decision-cli.test.ts",
     "tests/revenue-manual-contact-approval-packet-cli.test.ts",
     "tests/revenue-money-readiness-cli.test.ts",
     "tests/revenue-money-sprint-run-packet-cli.test.ts",

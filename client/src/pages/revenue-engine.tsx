@@ -1322,6 +1322,7 @@ export default function RevenueEnginePage() {
   const [ledgerCashCollectedUsd, setLedgerCashCollectedUsd] = useState(3000);
   const [ledgerInternalCostUsd, setLedgerInternalCostUsd] = useState(64);
   const [ledgerNotes, setLedgerNotes] = useState("Website 3D Premium + Automation Sprint");
+  const [ledgerApprovalDecisionId, setLedgerApprovalDecisionId] = useState("");
   const [leadBusinessName, setLeadBusinessName] = useState("No Site Cafe");
   const [leadArea, setLeadArea] = useState("Miami");
   const [leadNiche, setLeadNiche] = useState("coffee shop");
@@ -1756,8 +1757,8 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number }>({
-    mutationFn: async ({ opportunityId, cashCollectedUsd }) => {
+  const automationOpportunityCloseMutation = useMutation<AutomationOpportunityCloseResult, Error, { opportunityId: string; cashCollectedUsd: number; approvalDecisionId: string }>({
+    mutationFn: async ({ opportunityId, cashCollectedUsd, approvalDecisionId }) => {
       const response = await fetch("/api/revenue-engine/automation-opportunities/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1766,6 +1767,7 @@ export default function RevenueEnginePage() {
           cashCollectedUsd,
           markScopeApproved: true,
           notes: "Registrado desde Revenue Engine opportunities.",
+          approvalDecisionId,
         }),
       });
       const data = await response.json();
@@ -1990,6 +1992,7 @@ export default function RevenueEnginePage() {
           cashCollectedUsd: ledgerKind === "expense" ? 0 : ledgerCashCollectedUsd,
           estimatedInternalCostUsd: ledgerInternalCostUsd,
           notes: ledgerNotes,
+          approvalDecisionId: ledgerApprovalDecisionId.trim(),
         }),
       });
       const data = await response.json();
@@ -6667,6 +6670,19 @@ export default function RevenueEnginePage() {
                           onChange={(event) => setLedgerNotes(event.target.value)}
                           className="min-h-[88px] border-zinc-800 bg-black"
                           data-testid="textarea-ledger-notes"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500" htmlFor="ledger-approval-decision">
+                          approvalDecisionId venta/cash
+                        </label>
+                        <Input
+                          id="ledger-approval-decision"
+                          value={ledgerApprovalDecisionId}
+                          onChange={(event) => setLedgerApprovalDecisionId(event.target.value)}
+                          className="border-zinc-800 bg-black"
+                          data-testid="input-ledger-approval-decision"
+                          placeholder="approvalDecisionId"
                         />
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2">

@@ -121,6 +121,7 @@ export function buildRevenueWebsiteCreationApprovalDecisionFromCli(options: Reve
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+    ledgerEntrySnapshotHash: "",
   });
   const nextCommand = options.decision === "approved"
     ? npmRunText("revenue:website-creation-packet", [

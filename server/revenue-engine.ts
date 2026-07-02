@@ -10,6 +10,10 @@ import {
   buildRevenueWebsiteCreationApprovalTargetId,
   buildRevenueWebsiteCreationSnapshotHash,
 } from "./revenue-website-creation-approval";
+import {
+  buildRevenueLedgerApprovalSnapshotHash,
+  buildRevenueLedgerApprovalTargetId,
+} from "./revenue-ledger-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -144,6 +148,7 @@ export const revenueLedgerEntrySchema = z.object({
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
 });
 
 export type RevenueLedgerEntryInput = z.infer<typeof revenueLedgerEntrySchema>;
@@ -504,15 +509,16 @@ export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublic
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
-  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "manual"]),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "manual"]),
   decision: z.enum(["approved", "rejected", "needs_changes"]),
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
   outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
   websiteCreationSnapshotHash: z.string().trim().max(128).optional().default(""),
+  ledgerEntrySnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
 export type RevenueApprovalDecisionInput = z.infer<typeof revenueApprovalDecisionSchema>;
@@ -578,6 +584,7 @@ export const revenueAutomationOpportunityCloseSchema = z.object({
   cashCollectedUsd: z.coerce.number().min(1).max(1000000).optional(),
   markScopeApproved: z.coerce.boolean().default(true),
   notes: z.string().trim().max(800).optional().default(""),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
 });
 
 export type RevenueAutomationOpportunityCloseInput = z.infer<typeof revenueAutomationOpportunityCloseSchema>;
@@ -2407,6 +2414,7 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
       publicCandidateSnapshotHash: "",
       outreachDraftSnapshotHash: "",
       websiteCreationSnapshotHash: "",
+      ledgerEntrySnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
   const spendBlocked = parsed.maxSpendUsd > 100 || (parsed.maxSpendUsd > 0 && snapshot.profitGuard.status !== "scale_carefully");
@@ -2734,6 +2742,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
     cashCollectedUsd: parsed.cashCollectedUsd,
     markScopeApproved: parsed.clientApprovedScope,
     notes: "Cierre ejecutado por automation agent command con guardrails.",
+    approvalDecisionId: "",
   });
 
   if (closeResult.status !== "recorded") {
@@ -2746,7 +2755,11 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
       closeResult,
       workspaceResult: null,
       blockedUntilAnswered: [],
-      nextActions: ["Resolver bloqueo de venta.", "No crear delivery hasta que ledger registre cash.", "Revisar Profit Guard antes de gastar."],
+      nextActions: [
+        "Registrar approval decision de ledger usando el opportunity id exacto.",
+        "Cerrar la oportunidad con approvalDecisionId valido despues de aprobar el ledger.",
+        "No crear delivery hasta que ledger registre cash.",
+      ],
       snapshot: closeResult.snapshot,
     };
   }
@@ -2798,6 +2811,7 @@ export function runRevenueAutomationAgentCommand(input: RevenueAutomationAgentCo
 export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueAutomationOpportunityDeliveryInput) {
   loadRevenueAutomationOpportunities();
   loadRevenueDeliveryWorkspaces();
+  loadRevenueLedger();
   const parsed = revenueAutomationOpportunityDeliverySchema.parse(input);
   const opportunity = revenueAutomationOpportunities.find((item) => item.id === parsed.opportunityId);
 
@@ -2811,8 +2825,19 @@ export function createDeliveryWorkspaceFromAutomationOpportunity(input: RevenueA
     };
   }
 
+  const existingLedgerEntry = revenueLedger.find((entry) => (
+    entry.kind === "automation_sale"
+    && entry.clientName === opportunity.businessName
+    && entry.amountUsd === opportunity.quote.pricing.setupPriceUsd
+    && entry.cashCollectedUsd >= opportunity.quote.pricing.requiredDepositUsd
+    && entry.estimatedInternalCostUsd === opportunity.quote.pricing.estimatedInternalMonthlyCostUsd
+    && entry.notes.includes(`Automation opportunity:${opportunity.id}`)
+    && entry.notes.includes(opportunity.quote.scope.packageName)
+  ));
   const blockingReasons = [
     opportunity.status === "blocked" && "la oportunidad esta bloqueada",
+    !["sold", "in_delivery", "delivered"].includes(opportunity.status) && "la oportunidad no esta vendida en ledger",
+    !existingLedgerEntry && "falta venta registrada en ledger para esta oportunidad",
     opportunity.quote.clarificationGate.status !== "clear" && "faltan respuestas antes de producir",
     !opportunity.clientApprovedScope && "falta aprobacion escrita de scope",
     !opportunity.depositPaid && "falta deposito pagado",
@@ -2921,13 +2946,6 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
     };
   }
 
-  opportunity.status = "sold";
-  opportunity.clientApprovedScope = parsed.markScopeApproved || opportunity.clientApprovedScope;
-  opportunity.depositPaid = true;
-  opportunity.nextAction = "Venta registrada en ledger. Crear delivery workspace y mantener QA antes de entregar.";
-  opportunity.updatedAt = new Date().toISOString();
-  persistRevenueAutomationOpportunities();
-
   const ledgerResult = recordRevenueLedgerEntry({
     kind: "automation_sale",
     clientName: opportunity.businessName,
@@ -2939,7 +2957,29 @@ export function closeRevenueAutomationOpportunity(input: RevenueAutomationOpport
       opportunity.quote.scope.packageName,
       parsed.notes,
     ].filter((item) => item.trim().length > 0).join(" | "),
+    approvalDecisionId: parsed.approvalDecisionId,
   });
+
+  if (!ledgerResult.entry) {
+    opportunity.nextAction = ledgerResult.guardrail.reason;
+    opportunity.updatedAt = new Date().toISOString();
+    persistRevenueAutomationOpportunities();
+
+    return {
+      status: "blocked" as const,
+      reason: ledgerResult.guardrail.reason,
+      opportunity,
+      entry: null,
+      snapshot: ledgerResult.snapshot,
+    };
+  }
+
+  opportunity.status = "sold";
+  opportunity.clientApprovedScope = parsed.markScopeApproved || opportunity.clientApprovedScope;
+  opportunity.depositPaid = true;
+  opportunity.nextAction = "Venta registrada en ledger. Crear delivery workspace y mantener QA antes de entregar.";
+  opportunity.updatedAt = new Date().toISOString();
+  persistRevenueAutomationOpportunities();
 
   return {
     status: "recorded" as const,
@@ -5413,7 +5453,47 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
 
 export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
   loadRevenueLedger();
+  loadRevenueApprovalDecisions();
   const parsed = revenueLedgerEntrySchema.parse(input);
+  if (parsed.kind !== "expense") {
+    const ledgerSnapshot = {
+      kind: parsed.kind,
+      clientName: parsed.clientName,
+      amountUsd: parsed.amountUsd,
+      cashCollectedUsd: parsed.cashCollectedUsd,
+      estimatedInternalCostUsd: parsed.estimatedInternalCostUsd,
+      notes: parsed.notes,
+    };
+    const approvalDecision = parsed.approvalDecisionId
+      ? revenueApprovalDecisions.find((item) => item.id === parsed.approvalDecisionId)
+      : null;
+    const existingApprovedEntry = revenueLedger.find((entry) => entry.approvalDecisionId === parsed.approvalDecisionId);
+    const expectedTargetId = buildRevenueLedgerApprovalTargetId(ledgerSnapshot);
+    const expectedSnapshotHash = buildRevenueLedgerApprovalSnapshotHash(ledgerSnapshot);
+    const approvalDecisionReady = Boolean(
+      approvalDecision
+      && !existingApprovedEntry
+      && approvalDecision.targetType === "ledger_entry"
+      && approvalDecision.targetId === expectedTargetId
+      && approvalDecision.decision === "approved"
+      && approvalDecision.guardrail.status === "recorded"
+      && approvalDecision.approvalSource === "ledger_entry_approval_cli"
+      && approvalDecision.ledgerEntrySnapshotHash === expectedSnapshotHash,
+    );
+
+    if (!approvalDecisionReady) {
+      const snapshotBefore = getRevenueEngineSnapshot();
+      return {
+        entry: null,
+        snapshot: snapshotBefore,
+        guardrail: {
+          status: "blocked" as const,
+          reason: "Venta/cash no registrado: requiere approvalDecisionId auditado para esta entrada exacta del ledger.",
+        },
+      };
+    }
+  }
+
   if (parsed.kind === "expense") {
     const snapshotBefore = getRevenueEngineSnapshot();
     const projectedSpendUsd = snapshotBefore.metrics.estimatedSpendUsd + parsed.amountUsd + parsed.estimatedInternalCostUsd;

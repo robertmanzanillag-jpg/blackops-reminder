@@ -83,6 +83,11 @@ import {
   buildRevenueWebsiteCreationSnapshotHash,
   type RevenueWebsiteCreationApprovalProof,
 } from "../server/revenue-website-creation-approval";
+import {
+  buildRevenueLedgerApprovalSnapshotHash,
+  buildRevenueLedgerApprovalTargetId,
+  type RevenueLedgerApprovalSnapshot,
+} from "../server/revenue-ledger-approval";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -136,6 +141,30 @@ function approveWebsiteCreationForTests(
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+  });
+}
+
+function approveLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(input),
+    targetType: "ledger_entry",
+    decision: "approved",
+    approvedAction: "Approve exact paid ledger entry in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited ledger approval.",
+    approvalSource: "ledger_entry_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(input),
+  });
+}
+
+function recordApprovedRevenueLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
+  const approval = approveLedgerEntryForTests(input);
+  return recordRevenueLedgerEntry({
+    ...input,
+    approvalDecisionId: approval.decision.id,
   });
 }
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
@@ -465,7 +494,7 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
 });
 
 test("records sold apps and automations into revenue metrics", () => {
-  const result = recordRevenueLedgerEntry({
+  const result = recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Black Room",
     amountUsd: 6000,
@@ -487,6 +516,104 @@ test("records sold apps and automations into revenue metrics", () => {
   assert.equal(snapshot.executiveSummary.cashCollectedUsd, 3000);
   assert.equal(snapshot.executiveSummary.status, "ready");
   assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "closed" && stage.count === 1 && stage.valueUsd === 6000), true);
+});
+
+test("blocks raw sale ledger entry without audited approval decision", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Raw Cash Client",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Unverified deposit claim.",
+  });
+
+  assert.equal(result.entry, null);
+  assert.equal(result.guardrail.status, "blocked");
+  assert.match(result.guardrail.reason, /approvalDecisionId auditado/);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(result.snapshot.metrics.revenueUsd, 0);
+});
+
+test("blocks ledger sale with wrong source rejected or stale approval decision", () => {
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: "Trust Boundary Cash Client",
+    amountUsd: 3000,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 40,
+    notes: "Automation Sprint deposit.",
+  };
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(ledgerInput),
+    targetType: "ledger_entry",
+    decision: "approved",
+    approvedAction: "Outreach source must not authorize ledger.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "not-a-ledger-hash",
+    websiteCreationSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
+  });
+  const rejected = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(ledgerInput),
+    targetType: "ledger_entry",
+    decision: "rejected",
+    approvedAction: "Rejected ledger decision must not authorize cash.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "ledger_entry_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
+  });
+  const stale = approveLedgerEntryForTests(ledgerInput);
+
+  for (const approvalDecisionId of [
+    wrongSource.decision.id,
+    rejected.decision.id,
+    stale.decision.id,
+  ]) {
+    const result = recordRevenueLedgerEntry({
+      ...ledgerInput,
+      notes: approvalDecisionId === stale.decision.id ? "Automation Sprint deposit changed." : ledgerInput.notes,
+      approvalDecisionId,
+    });
+    assert.equal(result.entry, null);
+    assert.equal(result.guardrail.status, "blocked");
+  }
+
+  assert.equal(getRevenueEngineSnapshot().metrics.cashCollectedUsd, 0);
+});
+
+test("blocks replaying the same ledger approval decision twice", () => {
+  const ledgerInput = {
+    kind: "website_sale" as const,
+    clientName: "Replay Cash Client",
+    amountUsd: 3500,
+    cashCollectedUsd: 1750,
+    estimatedInternalCostUsd: 35,
+    notes: "Website deposit paid.",
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+
+  const first = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+  });
+  const second = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+  });
+
+  assert.equal(first.entry?.kind, "website_sale");
+  assert.equal(second.entry, null);
+  assert.equal(second.guardrail.status, "blocked");
+  assert.equal(second.snapshot.metrics.cashCollectedUsd, 1750);
+  assert.equal(second.snapshot.metrics.revenueUsd, 3500);
 });
 
 test("blocks ledger expense when spend is higher than collected cash", () => {
@@ -541,7 +668,7 @@ test("profit guard collects first before any external spend", () => {
 });
 
 test("profit guard allows small scale only when cash covers spend", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Cash Client",
     amountUsd: 5000,
@@ -564,7 +691,7 @@ test("profit guard allows small scale only when cash covers spend", () => {
 });
 
 test("expense preflight approves only within cash and monthly cap", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Preflight Cash Client",
     amountUsd: 3000,
@@ -587,7 +714,7 @@ test("expense preflight approves only within cash and monthly cap", () => {
 });
 
 test("records ledger expense only after cash covers spend and cap remains safe", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Expense Safe Client",
     amountUsd: 3000,
@@ -3128,7 +3255,7 @@ test("automation agent command blocks sale lifecycle without scope and deposit",
   assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
-test("automation agent command records sale and creates delivery workspace when lifecycle gates pass", () => {
+test("automation agent command blocks sale delivery until ledger approval is recorded", () => {
   const result = runRevenueAutomationAgentCommand({
     businessName: "Lifecycle Gym",
     industry: "gym",
@@ -3152,15 +3279,14 @@ test("automation agent command records sale and creates delivery workspace when 
     launchTargetDays: 7,
   });
 
-  assert.equal(result.status, "delivery_workspace_created");
-  assert.equal(result.closeResult?.status, "recorded");
-  assert.equal(result.closeResult?.entry?.kind, "automation_sale");
-  assert.equal(result.workspaceResult?.status, "created");
-  assert.equal(result.workspaceResult?.workspace?.input.clientName, "Lifecycle Gym");
-  assert.equal(result.workspaceResult?.workspace?.status, "blocked");
-  assert.equal(result.workspaceResult?.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
-  assert.equal(result.snapshot.metrics.automationsSold, 1);
-  assert.equal(result.snapshot.metrics.cashCollectedUsd, 2500);
+  assert.equal(result.status, "sale_blocked");
+  assert.equal(result.closeResult?.status, "blocked");
+  assert.equal(result.closeResult?.entry, null);
+  assert.equal(result.workspaceResult, null);
+  assert.match(result.reason, /approvalDecisionId auditado/);
+  assert.equal(result.nextActions.some((action) => action.includes("opportunity id exacto")), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
 test("blocks automation intake conversion until clarification is complete", () => {
@@ -3277,12 +3403,27 @@ test("closes automation opportunity into ledger and updates money metrics", () =
     clientApprovedScope: false,
     depositPaid: false,
   });
+  const closeNotes = "Deposit paid by client.";
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+      closeNotes,
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
 
   const result = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
     markScopeApproved: true,
-    notes: "Deposit paid by client.",
+    notes: closeNotes,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(result.status, "recorded");
@@ -3293,6 +3434,36 @@ test("closes automation opportunity into ledger and updates money metrics", () =
   assert.equal(result.snapshot.metrics.automationsSold, 1);
   assert.equal(result.snapshot.metrics.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
   assert.equal(result.snapshot.profitGuard.status, "scale_carefully");
+});
+
+test("blocks automation opportunity close without audited ledger approval decision", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Unaudited Ledger Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+    notes: "Deposit paid by client.",
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.entry, null);
+  assert.equal(result.opportunity?.status, "quoted");
+  assert.equal(result.opportunity?.depositPaid, false);
+  assert.match(result.reason, /approvalDecisionId auditado/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
 test("blocks automation opportunity close when deposit is incomplete", () => {
@@ -3338,11 +3509,24 @@ test("does not double count automation opportunity already recorded in ledger", 
     clientApprovedScope: true,
     depositPaid: true,
   });
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
 
   const first = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
     markScopeApproved: true,
+    approvalDecisionId: approval.decision.id,
   });
   const second = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
@@ -3385,6 +3569,77 @@ test("blocks delivery workspace creation from automation opportunity before depo
   assert.equal(result.reason.includes("falta deposito pagado"), true);
 });
 
+test("blocks delivery workspace creation when scope and deposit flags exist without ledger sale", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Unledgered Delivery Gym",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.match(result.reason, /no esta vendida en ledger/);
+  assert.match(result.reason, /falta venta registrada en ledger/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("blocks delivery workspace creation when ledger entry is unrelated to the automation close", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Wrong Ledger Delivery Gym",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  recordApprovedRevenueLedgerEntryForTests({
+    kind: "retainer",
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: 1,
+    cashCollectedUsd: 1,
+    estimatedInternalCostUsd: 0,
+    notes: `Unrelated retainer mentioning opportunity:${opportunity.opportunity.id}`,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.match(result.reason, /falta venta registrada en ledger/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+});
+
 test("creates delivery workspace from sold automation opportunity with QA corrections", () => {
   const opportunity = recordRevenueAutomationOpportunity({
     businessName: "Sold Automation Gym",
@@ -3394,9 +3649,29 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     monthlyBudgetUsd: 900,
     urgency: "this_month",
     sourceLeadId: "",
-    status: "sold",
-    clientApprovedScope: true,
-    depositPaid: true,
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+      "Deposit paid before delivery.",
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+  const closeResult = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+    notes: "Deposit paid before delivery.",
+    approvalDecisionId: approval.decision.id,
   });
 
   const result = createDeliveryWorkspaceFromAutomationOpportunity({
@@ -3409,6 +3684,7 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     launchTargetDays: 7,
   });
 
+  assert.equal(closeResult.status, "recorded");
   assert.equal(result.status, "created");
   assert.equal(result.workspace?.input.sourceOpportunityId, opportunity.opportunity.id);
   assert.equal(result.workspace?.input.clientName, "Sold Automation Gym");
@@ -3699,7 +3975,7 @@ test("persists ready delivery workspaces across module state reloads", () => {
 });
 
 test("persists ledger entries across module state reloads", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "automation_sale",
     clientName: "Persisted Client",
     amountUsd: 2500,
@@ -3794,7 +4070,7 @@ test("scales carefully when collected revenue proves profitable demand", () => {
 });
 
 test("next batch plan scales only when cash and latest review prove demand", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "automation_sale",
     clientName: "Winning Client",
     amountUsd: 3000,

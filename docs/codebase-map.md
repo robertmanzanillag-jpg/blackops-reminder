@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T01:57:31.046Z
+Generated: 2026-07-02T02:19:27.177Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 458 | 391 | 1478 | 443 | 8282 |
+| 462 | 395 | 1489 | 443 | 8322 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 116 | 113 | server:116 |
+| `server` | 118 | 115 | server:118 |
 | `client/src` | 108 | 106 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
-| `tests` | 77 | 75 | test:77 |
-| `script` | 55 | 53 | script:55 |
+| `tests` | 78 | 76 | test:78 |
+| `script` | 56 | 54 | script:56 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
@@ -106,6 +106,7 @@ Package: `rest-express`
 - `tests/revenue-engine.test.ts`
 - `tests/revenue-first-money-command-center-cli.test.ts`
 - `tests/revenue-first-money-dry-run-cli.test.ts`
+- `tests/revenue-ledger-approval-decision-cli.test.ts`
 - `tests/revenue-manual-contact-approval-packet-cli.test.ts`
 - `tests/revenue-money-readiness-cli.test.ts`
 - `tests/revenue-money-sprint-run-packet-cli.test.ts`
@@ -192,6 +193,7 @@ Package: `rest-express`
 - `script/revenue-commercial-go-live.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-first-money-command-center.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-first-money-dry-run.ts` (script; 4 symbols, 1 imports)
+- `script/revenue-ledger-approval-decision.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-manual-contact-approval-packet.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-money-readiness.ts` (script; 4 symbols, 2 imports)
 - `script/revenue-money-sprint-run-packet.ts` (script; 5 symbols, 1 imports)
@@ -215,7 +217,6 @@ Package: `rest-express`
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
 - `server/ai-router.ts` (server; 13 symbols)
-- `server/app-qa-agent.ts` (server; 174 symbols, 7 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
