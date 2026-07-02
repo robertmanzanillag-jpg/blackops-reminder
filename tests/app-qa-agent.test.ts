@@ -74,6 +74,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     "Approved payment path",
     "Paid website build gate",
     "Manual contact path approval",
+    "Payment path approval",
     "Setup Trust Center actions",
   ]);
 });
@@ -94,6 +95,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
     "Approved payment path",
     "Paid website build gate",
     "Manual contact path approval",
+    "Payment path approval",
     "Setup Trust Center actions",
   ].join("\n");
 
@@ -109,6 +111,7 @@ test("visual click scout can detect missing expected Revenue Engine controls", (
       "Approved payment path",
       "Paid website build gate",
       "Manual contact path approval",
+      "Payment path approval",
       "Setup Trust Center actions",
     ]),
     [],
@@ -135,6 +138,7 @@ test("visual route body evaluation fails when first-money controls are missing",
       "Approved payment path",
       "Paid website build gate",
       "Manual contact path approval",
+      "Payment path approval",
       "Setup Trust Center actions",
     ],
   );
@@ -147,6 +151,7 @@ test("visual route body evaluation fails when first-money controls are missing",
     "Approved payment path",
     "Paid website build gate",
     "Manual contact path approval",
+    "Payment path approval",
     "Setup Trust Center actions",
   ]);
   assert.equal(evaluation.notes.some((note) => note.includes("Controles esperados no visibles")), true);
@@ -161,7 +166,10 @@ test("Revenue Engine UI renders every first-money setup action", () => {
   assert.match(source, /No setup gates are waiting right now/);
   assert.match(source, /button-queue-contact-path-approval/);
   assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
+  assert.match(source, /button-queue-payment-path-approval/);
+  assert.match(source, /\/api\/revenue-engine\/payment-path-approval-pending-action/);
   assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/contact-path-readiness-packet"/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/payment-path-readiness-packet"/);
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {

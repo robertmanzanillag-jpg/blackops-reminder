@@ -663,6 +663,28 @@ type ContactPathApprovalPendingActionResult = {
   };
 };
 
+type PaymentPathApprovalPendingActionResult = {
+  status: "queued";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    createsPendingAction: boolean;
+    persistsApprovalDecision: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    recordsLedgerEntry: boolean;
+    editsEnvironment: boolean;
+    storesSecrets: boolean;
+    deploys: boolean;
+  };
+};
+
 type PublicCandidateReviewPacketPendingActionResult = {
   status: "queued" | "blocked";
   pendingAction?: {
@@ -1680,6 +1702,14 @@ export default function RevenueEnginePage() {
   const [contactPathEvidenceNote, setContactPathEvidenceNote] = useState("");
   const [contactPathRobertApproved, setContactPathRobertApproved] = useState(false);
   const [contactPathVerified, setContactPathVerified] = useState(false);
+  const [paymentPathLink, setPaymentPathLink] = useState("");
+  const [paymentPathExpectedDepositUsd, setPaymentPathExpectedDepositUsd] = useState(1500);
+  const [paymentPathExpectedPackage, setPaymentPathExpectedPackage] = useState("First Money Website Deposit");
+  const [paymentPathEvidenceUrl, setPaymentPathEvidenceUrl] = useState("");
+  const [paymentPathEvidenceNote, setPaymentPathEvidenceNote] = useState("");
+  const [paymentPathRobertApproved, setPaymentPathRobertApproved] = useState(false);
+  const [paymentPathSmokeVerified, setPaymentPathSmokeVerified] = useState(false);
+  const [paymentPathDepositConfirmed, setPaymentPathDepositConfirmed] = useState(false);
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -2232,6 +2262,32 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar contact path a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+    },
+  });
+
+  const paymentPathApprovalPendingActionMutation = useMutation<PaymentPathApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/payment-path-approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentLink: paymentPathLink,
+          approvedAction: "Approve exact Stripe payment path for first-money deposits.",
+          robertApprovedPaymentPath: paymentPathRobertApproved,
+          paymentSmokeVerified: paymentPathSmokeVerified,
+          depositConfirmedByRobert: paymentPathDepositConfirmed,
+          expectedDepositUsd: paymentPathExpectedDepositUsd,
+          expectedPackage: paymentPathExpectedPackage,
+          evidenceUrl: paymentPathEvidenceUrl,
+          evidenceNote: paymentPathEvidenceNote,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar payment path a Trust Center");
       return data;
     },
     onSuccess: () => {
@@ -3257,6 +3313,114 @@ export default function RevenueEnginePage() {
                 {contactPathApprovalPendingActionMutation.error && (
                   <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
                     {contactPathApprovalPendingActionMutation.error.message}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 rounded-md border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs leading-5 text-sky-100" data-testid="first-money-payment-path-approval-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">Payment path approval</p>
+                    <p className="mt-1 text-zinc-400">
+                      Queues Trust Center approval only. It does not charge clients, record ledger entries, edit env, store secrets, send outreach, or deploy.
+                    </p>
+                    <Input
+                      value={paymentPathLink}
+                      onChange={(event) => setPaymentPathLink(event.target.value)}
+                      placeholder="https://buy.stripe.com/..."
+                      className="mt-2 border-sky-500/20 bg-black text-xs"
+                      data-testid="input-payment-path-link"
+                    />
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={paymentPathExpectedDepositUsd}
+                        onChange={(event) => setPaymentPathExpectedDepositUsd(Number(event.target.value))}
+                        className="border-sky-500/20 bg-black text-xs"
+                        data-testid="input-payment-path-expected-deposit"
+                      />
+                      <Input
+                        value={paymentPathExpectedPackage}
+                        onChange={(event) => setPaymentPathExpectedPackage(event.target.value)}
+                        className="border-sky-500/20 bg-black text-xs"
+                        data-testid="input-payment-path-expected-package"
+                      />
+                    </div>
+                    <Input
+                      value={paymentPathEvidenceUrl}
+                      onChange={(event) => setPaymentPathEvidenceUrl(event.target.value)}
+                      placeholder="https://..."
+                      className="mt-2 border-sky-500/20 bg-black text-xs"
+                      data-testid="input-payment-path-evidence-url"
+                    />
+                    <Textarea
+                      value={paymentPathEvidenceNote}
+                      onChange={(event) => setPaymentPathEvidenceNote(event.target.value)}
+                      placeholder="Real Stripe/payment-link smoke test or deposit proof"
+                      className="mt-2 min-h-[72px] border-sky-500/20 bg-black text-xs"
+                      data-testid="textarea-payment-path-evidence-note"
+                    />
+                    <div className="mt-2 grid gap-2 text-zinc-300">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={paymentPathRobertApproved}
+                          onChange={(event) => setPaymentPathRobertApproved(event.target.checked)}
+                          className="h-4 w-4 accent-sky-500"
+                          data-testid="checkbox-payment-path-robert-approved"
+                        />
+                        Robert approved payment path
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={paymentPathSmokeVerified}
+                          onChange={(event) => setPaymentPathSmokeVerified(event.target.checked)}
+                          className="h-4 w-4 accent-sky-500"
+                          data-testid="checkbox-payment-path-smoke-verified"
+                        />
+                        Smoke test verified
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={paymentPathDepositConfirmed}
+                          onChange={(event) => setPaymentPathDepositConfirmed(event.target.checked)}
+                          className="h-4 w-4 accent-sky-500"
+                          data-testid="checkbox-payment-path-deposit-confirmed"
+                        />
+                        Deposit already confirmed by Robert
+                      </label>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      paymentPathApprovalPendingActionMutation.isPending
+                      || !paymentPathLink.trim()
+                      || !paymentPathEvidenceUrl.trim()
+                      || !paymentPathEvidenceNote.trim()
+                      || !paymentPathExpectedPackage.trim()
+                      || paymentPathExpectedDepositUsd <= 0
+                      || !paymentPathRobertApproved
+                      || !(paymentPathSmokeVerified || paymentPathDepositConfirmed)
+                    }
+                    onClick={() => paymentPathApprovalPendingActionMutation.mutate()}
+                    className="bg-sky-600 text-white hover:bg-sky-500"
+                    data-testid="button-queue-payment-path-approval"
+                  >
+                    {paymentPathApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    Trust Center
+                  </Button>
+                </div>
+                {paymentPathApprovalPendingActionMutation.data?.pendingAction && (
+                  <p className="mt-3 rounded-md border border-sky-500/20 bg-black px-3 py-2 text-xs text-sky-100">
+                    Trust Center: {paymentPathApprovalPendingActionMutation.data.pendingAction.title}
+                  </p>
+                )}
+                {paymentPathApprovalPendingActionMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {paymentPathApprovalPendingActionMutation.error.message}
                   </p>
                 )}
               </div>
