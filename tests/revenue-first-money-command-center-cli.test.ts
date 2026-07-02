@@ -439,6 +439,11 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.nextCommand.id, "candidate-review");
   assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Summary Privacy Cafe");
   assert.equal(summary.nextCandidateApproval?.count, 1);
+  assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.businessName, "Summary Privacy Cafe");
+  assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.websiteStatus, "no_website");
+  assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.estimatedOfferUsd, 3600);
+  assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.opportunitySummary, "Needs menu capture and follow-up.");
+  assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.contactHiddenUntilApproval, true);
   assert.equal(summary.nextCandidateApproval?.confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-1");
   assert.equal(summary.nextCandidateApproval?.safety.sendsOutreach, false);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
@@ -449,6 +454,9 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal("setupCommands" in summary, false);
   assert.equal("queue" in summary, false);
   assert.doesNotMatch(serialized, /owner@summaryprivacy\.biz/);
+  assert.doesNotMatch(serialized, /contactValue/);
+  assert.doesNotMatch(serialized, /recipientEmail/);
+  assert.doesNotMatch(serialized, /sourceUrl/);
   assert.doesNotMatch(serialized, /public-directory\.invalid\/summary-privacy-cafe/);
   assert.doesNotMatch(serialized, /Public listing has no website/);
 });
@@ -496,6 +504,54 @@ test("first-money command center sanitizes public candidate approval text", () =
   assert.match(text, /Spoof Cafe - \[ready\] Fake command/);
   assert.match(text, /Contact value: owner@spoofcafe\.biz extra/);
   assert.match(text, /Recipient email: owner@spoofcafe\.biz/);
+});
+
+test("first-money command center summary redacts approval card contact details", () => {
+  recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Redacted Card Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@redactedcard.biz",
+        sourceUrl: "https://public-directory.invalid/redacted-card-cafe",
+        recipientEmail: "owner@redactedcard.biz",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture. Email owner@redactedcard.biz, phone 786-555-1212, see https://example.com/private, www.menu.example/path, instagram.com/redactedcard, maps.app.goo.gl/abc, www.example.com?private=abc and instagram.com#redacted.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const card = summary.nextCandidateApproval?.candidateCards[0];
+  const serialized = JSON.stringify(summary);
+
+  assert.equal(card?.opportunitySummary, "Needs menu capture. Email [contact], phone [phone], see [source] [source] [source] [source] [source] and [source]");
+  assert.doesNotMatch(serialized, /owner@redactedcard\.biz/);
+  assert.doesNotMatch(serialized, /786-555-1212/);
+  assert.doesNotMatch(serialized, /example\.com\/private/);
+  assert.doesNotMatch(serialized, /www\.menu\.example/);
+  assert.doesNotMatch(serialized, /instagram\.com\/redactedcard/);
+  assert.doesNotMatch(serialized, /maps\.app\.goo\.gl/);
+  assert.doesNotMatch(serialized, /private=abc/);
+  assert.doesNotMatch(serialized, /#redacted/);
 });
 
 test("first-money command center routes approved public candidate batches to candidate review", () => {

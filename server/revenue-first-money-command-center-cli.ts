@@ -93,6 +93,15 @@ function redactCandidateApprovalBatchForSummary(batch: CandidateApprovalBatch | 
     id: batch.id,
     candidateIds: batch.candidateIds,
     candidateNames: batch.candidateNames,
+    candidateCards: batch.candidates.map((candidate) => ({
+      id: candidate.id,
+      businessName: candidate.businessName,
+      websiteStatus: candidate.websiteStatus,
+      estimatedOfferUsd: candidate.estimatedOfferUsd,
+      opportunitySummary: approvalCardText(candidate.painPoint || "Website opportunity needs Robert review."),
+      evidenceStatus: "verified_public" as const,
+      contactHiddenUntilApproval: true,
+    })),
     area: batch.area,
     niche: batch.niche,
     offerFocus: "websites" as const,
@@ -210,6 +219,15 @@ function npmRunText(script: string, args: string[] = []) {
 
 function displayText(value: string | number) {
   return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function approvalCardText(value: string) {
+  return displayText(value)
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[contact]")
+    .replace(/\bhttps?:\/\/\S+/gi, "[source]")
+    .replace(/\b(?:www\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:[/?#][^\s]*)?/gi, "[source]")
+    .replace(/\+?\d[\d\s().-]{7,}\d/g, "[phone]")
+    .slice(0, 180);
 }
 
 function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadinessReport>): SetupCommandItem[] {

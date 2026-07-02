@@ -428,6 +428,15 @@ type FirstMoneyCommandCenter = {
     id: string;
     candidateIds: string[];
     candidateNames: string[];
+    candidateCards: Array<{
+      id: string;
+      businessName: string;
+      websiteStatus: string;
+      estimatedOfferUsd: number;
+      opportunitySummary: string;
+      evidenceStatus: "verified_public";
+      contactHiddenUntilApproval: boolean;
+    }>;
     area: string;
     niche: string;
     offerFocus: "websites" | "automations" | "both";
@@ -2685,6 +2694,20 @@ export default function RevenueEnginePage() {
                       <p className="mt-1 text-xs text-zinc-500">
                         Seguro: no importa leads, no contacta, no cobra, no crea previews.
                       </p>
+                      <div className="mt-3 grid gap-2" data-testid="first-money-candidate-approval-cards">
+                        {firstMoneyCommandCenter.nextCandidateApproval.candidateCards.map((candidate) => (
+                          <div key={candidate.id} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium text-white">{candidate.businessName}</span>
+                              <span className="text-amber-100">${candidate.estimatedOfferUsd.toLocaleString("en-US")}</span>
+                            </div>
+                            <p className="mt-1 text-zinc-400">{candidate.websiteStatus} · {candidate.opportunitySummary}</p>
+                            <p className="mt-1 text-zinc-600">
+                              Evidencia publica verificada; contacto oculto hasta aprobacion.
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                       <Input
                         value={publicCandidateApprovalConfirmation}
                         onChange={(event) => setPublicCandidateApprovalConfirmation(event.target.value)}
