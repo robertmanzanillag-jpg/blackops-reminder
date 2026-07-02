@@ -857,19 +857,23 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       reason: `${verificationNeededCandidates.length} captured public candidate(s) need public contact/evidence verification before Robert approval.`,
     }
     : null;
+  const hasPendingCandidateWork = Boolean(candidateReviewItem || manualContactReviewItem || candidateVerificationItem);
   const publicScoutItem: CommandQueueItem = {
     id: "public-scout",
     label: "Capture public business candidates",
     command: "npm run revenue:public-scout-schedule -- --area=Miami --niche=coffee_shop --browser-executor=subagent_browser --max-candidates-per-run=8",
     status: readiness.canRunGuardedPublicScoutCapture ? "ready" : "blocked",
     reason: readiness.canRunGuardedPublicScoutCapture
-      ? "No captured candidates are waiting; run guarded public scout capture only. No contact, paid data, lead import, preview publish, or client charging."
+      ? hasPendingCandidateWork
+        ? "Keep filling the pipeline in parallel with guarded public scout capture. No contact, paid data, lead import, preview publish, or client charging."
+        : "No captured candidates are waiting; run guarded public scout capture only. No contact, paid data, lead import, preview publish, or client charging."
       : "Guarded public scout capture is not ready yet.",
   };
   const candidateQueueItems = [
     candidateReviewItem || manualContactReviewItem || candidateVerificationItem || publicScoutItem,
     ...(candidateReviewItem && manualContactReviewItem ? [manualContactReviewItem] : []),
     ...((candidateReviewItem || manualContactReviewItem) && candidateVerificationItem ? [candidateVerificationItem] : []),
+    ...(hasPendingCandidateWork ? [publicScoutItem] : []),
   ];
   const queue: CommandQueueItem[] = [
     {
@@ -1000,6 +1004,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
   const candidateRunQueue = packet.candidateApprovalBatches
     .map((batch) => redactCandidateRunBatchForSummary(batch))
     .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateRunBatchForSummary>> => Boolean(batch));
+  const safeSearchAction = packet.queue.find((item) => item.id === "public-scout") || null;
   const nextCommand = {
     ...packet.nextCommand,
     command: nextCandidateReview
@@ -1025,6 +1030,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     candidateReviewQueue,
     nextMoneySprintRun,
     candidateRunQueue,
+    safeSearchAction,
     moneyUnblockers,
     handoffPacket,
     activationChecklist,

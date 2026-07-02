@@ -485,6 +485,13 @@ type FirstMoneyCommandCenter = {
   candidateReviewQueue: FirstMoneyCandidateReviewSummary[];
   nextMoneySprintRun: FirstMoneyCandidateReviewSummary | null;
   candidateRunQueue: FirstMoneyCandidateReviewSummary[];
+  safeSearchAction: {
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  } | null;
   moneyUnblockers: Array<{
     id: "production_persistence" | "contact_path" | "payment_path" | "website_build";
     label: string;
@@ -2716,6 +2723,25 @@ export default function RevenueEnginePage() {
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 {firstMoneyCommandCenter?.nextCommand.reason || "El command center decide usando gates de contacto, pago y build."}
               </p>
+              {firstMoneyCommandCenter?.safeSearchAction && (
+                <div className="mt-3 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3" data-testid="first-money-safe-search-action">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-teal-200">Busqueda paralela segura</p>
+                      <p className="mt-1 text-sm font-medium text-white">{firstMoneyCommandCenter.safeSearchAction.label}</p>
+                      <p className="mt-1 break-words rounded-md border border-teal-500/15 bg-black px-3 py-2 text-xs leading-5 text-teal-100">
+                        {firstMoneyCommandCenter.safeSearchAction.command}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">
+                        {firstMoneyCommandCenter.safeSearchAction.reason}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className={cn("shrink-0", statusTone(firstMoneyCommandCenter.safeSearchAction.status))}>
+                      {firstMoneyCommandCenter.safeSearchAction.status}
+                    </Badge>
+                  </div>
+                </div>
+              )}
               {selectedPublicCandidateBatch && (
                 <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

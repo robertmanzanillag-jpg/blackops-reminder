@@ -407,11 +407,17 @@ test("first-money command center routes verified public candidates to Robert rev
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const text = formatRevenueFirstMoneyCommandCenterText(packet);
   const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
+  const scoutCommand = packet.queue.find((item) => item.id === "public-scout");
 
   assert.equal(packet.nextCommand.id, "candidate-review");
   assert.equal(packet.counts.verificationNeededPublicCandidates, 0);
   assert.equal(packet.counts.reviewablePublicCandidates, 1);
   assert.equal(reviewCommand?.status, "review");
+  assert.equal(scoutCommand?.status, "ready");
+  assert.match(scoutCommand?.command || "", /revenue:public-scout-schedule/);
+  assert.match(scoutCommand?.command || "", /--browser-executor=subagent_browser/);
+  assert.match(scoutCommand?.reason || "", /Keep filling the pipeline in parallel/);
+  assert.match(scoutCommand?.reason || "", /No contact, paid data, lead import, preview publish, or client charging/);
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.match(reviewCommand?.command || "", /--area=Miami/);
   assert.match(reviewCommand?.command || "", /--niche=coffee shop/);
@@ -512,6 +518,12 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.candidateApprovalQueue[1].totalEstimatedOfferUsd, 2400);
   assert.equal(summary.candidateApprovalQueue[1].confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-2");
   assert.equal(summary.candidateApprovalQueue[1].candidateCards[0]?.contactHiddenUntilApproval, true);
+  assert.equal(summary.safeSearchAction?.id, "public-scout");
+  assert.equal(summary.safeSearchAction?.status, "ready");
+  assert.match(summary.safeSearchAction?.command || "", /revenue:public-scout-schedule/);
+  assert.match(summary.safeSearchAction?.command || "", /--browser-executor=subagent_browser/);
+  assert.match(summary.safeSearchAction?.reason || "", /Keep filling the pipeline in parallel/);
+  assert.match(summary.safeSearchAction?.reason || "", /No contact, paid data, lead import, preview publish, or client charging/);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "website_build" && item.evidenceRequired.some((evidence) => evidence.includes("Deposit proof"))), true);
@@ -882,6 +894,7 @@ test("first-money command center keeps email-ready candidates ahead of manual-on
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const manualCommand = packet.queue.find((item) => item.id === "manual-contact-review");
   const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
+  const scoutCommand = packet.queue.find((item) => item.id === "public-scout");
 
   assert.equal(packet.nextCommand.id, "candidate-review");
   assert.equal(packet.counts.reviewablePublicCandidates, 1);
@@ -890,6 +903,8 @@ test("first-money command center keeps email-ready candidates ahead of manual-on
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.equal(manualCommand?.status, "review");
   assert.match(manualCommand?.command || "", /revenue:manual-contact-approval-packet/);
+  assert.equal(scoutCommand?.status, "ready");
+  assert.match(scoutCommand?.command || "", /revenue:public-scout-schedule/);
 });
 
 test("first-money command center keeps manual and verification commands visible together", () => {
@@ -945,6 +960,7 @@ test("first-money command center keeps manual and verification commands visible 
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const manualCommands = packet.queue.filter((item) => item.id === "manual-contact-review");
   const verificationCommand = packet.queue.find((item) => item.id === "candidate-verification");
+  const scoutCommand = packet.queue.find((item) => item.id === "public-scout");
 
   assert.equal(packet.nextCommand.id, "manual-contact-review");
   assert.equal(packet.counts.manualOnlyPublicCandidates, 1);
@@ -952,6 +968,8 @@ test("first-money command center keeps manual and verification commands visible 
   assert.equal(manualCommands.length, 1);
   assert.equal(verificationCommand?.status, "review");
   assert.match(verificationCommand?.command || "", /revenue:public-contact-verification/);
+  assert.equal(scoutCommand?.status, "ready");
+  assert.match(scoutCommand?.command || "", /revenue:public-scout-schedule/);
 });
 
 test("first-money command center prioritizes verified candidates over additional verification work", () => {
