@@ -28,11 +28,23 @@ import {
   validateRevenueFirstMoneyCommandCenterOptions,
 } from "../server/revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
+} from "../server/revenue-first-money-approval-pending-action";
 
 const testLeadsPath = "/tmp/revenue-first-money-command-center-leads-test.json";
 const testOutreachPath = "/tmp/revenue-first-money-command-center-outreach-test.json";
 const testPublicCandidatesPath = "/tmp/revenue-first-money-command-center-public-candidates-test.json";
 const testApprovalDecisionsPath = "/tmp/revenue-first-money-command-center-approval-decisions-test.json";
+
+function extractPayloadFields(command: string) {
+  const match = command.match(/payload fields (\{.*?\}) using real evidence:/);
+  assert.ok(match, `Expected payload fields JSON in command: ${command}`);
+  return JSON.parse(match[1]);
+}
 
 const originalEnv = {
   DATABASE_URL: process.env.DATABASE_URL,
@@ -168,6 +180,7 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real HTTPS Stripe paymentLink")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real paymentEvidence")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real scope/deposit/public-data notes")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("payload fields")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--charge-client")), false);
   assert.equal(packet.readiness.canAutonomousSearchBusinesses, true);
@@ -212,6 +225,26 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.doesNotMatch(paymentApprovalCommand.command, /revenue:payment-path-approval-decision/);
   assert.doesNotMatch(ledgerApprovalCommand.command, /revenue:ledger-approval-decision/);
   assert.doesNotMatch(websiteCreationApprovalCommand.command, /revenue:website-creation-approval-decision/);
+  const contactPayload = extractPayloadFields(contactApprovalCommand.command);
+  const paymentPayload = extractPayloadFields(paymentApprovalCommand.command);
+  const ledgerPayload = extractPayloadFields(ledgerApprovalCommand.command);
+  const websiteCreationPayload = extractPayloadFields(websiteCreationApprovalCommand.command);
+  assert.match(contactApprovalCommand.command, /"contactMode":"manual"/);
+  assert.match(contactApprovalCommand.command, /"robertApprovedContactPath":true/);
+  assert.match(contactApprovalCommand.command, /"contactPathVerified":true/);
+  assert.match(paymentApprovalCommand.command, /"paymentLink":"REPLACE_WITH_STRIPE_PAYMENT_LINK"/);
+  assert.match(paymentApprovalCommand.command, /"expectedDepositUsd":1500/);
+  assert.match(paymentApprovalCommand.command, /"paymentSmokeVerified":true/);
+  assert.match(ledgerApprovalCommand.command, /"clientName":"CLIENT_NAME"/);
+  assert.match(ledgerApprovalCommand.command, /"cashCollectedUsd":1500/);
+  assert.match(ledgerApprovalCommand.command, /"approvedAction":"Approve exact paid ledger entry after Robert verified payment evidence\."/);
+  assert.match(websiteCreationApprovalCommand.command, /"outreachDraftId":"OUTREACH_ID"/);
+  assert.match(websiteCreationApprovalCommand.command, /"clientApprovedScope":true/);
+  assert.match(websiteCreationApprovalCommand.command, /"publicDataVerified":true/);
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse(contactPayload).success, false);
+  assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse(paymentPayload).success, false);
+  assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse(ledgerPayload).success, false);
+  assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse(websiteCreationPayload).success, false);
   assert.match(ledgerApprovalCommand.command, /real paymentEvidence/);
   assert.match(websiteCreationApprovalCommand.command, /real scope\/deposit\/public-data notes/);
 

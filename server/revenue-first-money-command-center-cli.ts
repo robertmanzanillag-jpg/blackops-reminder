@@ -369,6 +369,14 @@ function trustCenterActionText(endpoint: string, requiredEvidence: string[]) {
   return `Queue Trust Center action via ${endpoint} with real evidence: ${requiredEvidence.join("; ")}`;
 }
 
+function trustCenterPayloadActionText(endpoint: string, payloadShape: Record<string, unknown>, requiredEvidence: string[]) {
+  return [
+    `Queue Trust Center action via ${endpoint}`,
+    `with payload fields ${JSON.stringify(payloadShape)}`,
+    `using real evidence: ${requiredEvidence.join("; ")}`,
+  ].join(" ");
+}
+
 function displayText(value: string | number) {
   return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -390,7 +398,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "contact-path-approval",
         gate: "contact_path",
         label: "Approve contact path before outreach",
-        command: trustCenterActionText("/api/revenue-engine/contact-path-approval-pending-action", [
+        command: trustCenterPayloadActionText("/api/revenue-engine/contact-path-approval-pending-action", {
+          contactMode: "manual",
+          manualContactApproved: true,
+          emailProviderConfigured: false,
+          approvedAction: "Approve exact manual/provider contact path for first-money outreach.",
+          robertApprovedContactPath: true,
+          contactPathVerified: true,
+          evidenceUrl: "REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+          evidenceNote: "REPLACE_WITH_CONTACT_PATH_PROOF",
+        }, [
           "contactMode=manual or email_provider",
           "real evidenceUrl",
           "real evidenceNote",
@@ -422,7 +439,17 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
         id: "payment-path-approval",
         gate: "payment_path",
         label: "Approve payment path before charging",
-        command: trustCenterActionText("/api/revenue-engine/payment-path-approval-pending-action", [
+        command: trustCenterPayloadActionText("/api/revenue-engine/payment-path-approval-pending-action", {
+          paymentLink: "REPLACE_WITH_STRIPE_PAYMENT_LINK",
+          approvedAction: "Approve exact Stripe payment path for first-money deposits.",
+          robertApprovedPaymentPath: true,
+          paymentSmokeVerified: true,
+          depositConfirmedByRobert: false,
+          expectedDepositUsd: 1500,
+          expectedPackage: "First Money Website Deposit",
+          evidenceUrl: "REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+          evidenceNote: "REPLACE_WITH_PAYMENT_PROOF",
+        }, [
           "real HTTPS Stripe paymentLink",
           "expectedDepositUsd",
           "expectedPackage",
@@ -457,7 +484,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "ledger-entry-approval",
       gate: "ledger_entry",
       label: "Approve ledger entry after deposit is collected",
-      command: trustCenterActionText("/api/revenue-engine/ledger-entry-approval-pending-action", [
+      command: trustCenterPayloadActionText("/api/revenue-engine/ledger-entry-approval-pending-action", {
+        kind: "website_sale",
+        clientName: "CLIENT_NAME",
+        amountUsd: 3500,
+        cashCollectedUsd: 1500,
+        estimatedInternalCostUsd: 0,
+        notes: "LEDGER_NOTES",
+        paymentEvidence: "PAYMENT_EVIDENCE",
+        approvedAction: "Approve exact paid ledger entry after Robert verified payment evidence.",
+      }, [
         "real clientName",
         "amountUsd",
         "cashCollectedUsd",
@@ -474,7 +510,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "website-creation-approval",
       gate: "website_creation",
       label: "Approve paid website creation after deposit",
-      command: trustCenterActionText("/api/revenue-engine/website-creation-approval-pending-action", [
+      command: trustCenterPayloadActionText("/api/revenue-engine/website-creation-approval-pending-action", {
+        outreachDraftId: "OUTREACH_ID",
+        approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review.",
+        notes: "REPLACE_WITH_SCOPE_DEPOSIT_PUBLIC_DATA_NOTES",
+        robertApprovedBuild: true,
+        clientApprovedScope: true,
+        depositPaid: true,
+        publicDataVerified: true,
+        launchTargetDays: 7,
+      }, [
         "real outreachDraftId",
         "real scope/deposit/public-data notes",
         "Robert-approved build flag",
