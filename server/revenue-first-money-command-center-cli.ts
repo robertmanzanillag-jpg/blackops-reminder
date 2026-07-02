@@ -100,12 +100,22 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
   const approvedDraft = outreachDrafts.find((draft) => draft.status === "approved");
   const verificationCandidateIds = verificationNeededCandidates.slice(0, 5).map((candidate) => candidate.id).join(",");
   const firstReviewCandidate = robertReviewReadyCandidates[0];
-  const reviewBatchCandidates = firstReviewCandidate
+  const matchingReviewBatchCandidates = firstReviewCandidate
     ? robertReviewReadyCandidates
       .filter((candidate) => candidate.area === firstReviewCandidate.area && candidate.niche === firstReviewCandidate.niche)
-      .slice(0, 5)
     : [];
+  const reviewBatchCandidates = matchingReviewBatchCandidates.slice(0, 5);
+  const overflowReviewBatchCandidates = Math.max(0, matchingReviewBatchCandidates.length - reviewBatchCandidates.length);
+  const otherReviewBatchCandidates = firstReviewCandidate
+    ? robertReviewReadyCandidates.filter((candidate) =>
+      candidate.area !== firstReviewCandidate.area || candidate.niche !== firstReviewCandidate.niche,
+    ).length
+    : 0;
   const reviewCandidateIds = reviewBatchCandidates.map((candidate) => candidate.id).join(",");
+  const remainingReviewReason = [
+    overflowReviewBatchCandidates > 0 && `${overflowReviewBatchCandidates} additional verified candidate(s) remain in this same area/niche batch after the 5-candidate command limit.`,
+    otherReviewBatchCandidates > 0 && `${otherReviewBatchCandidates} additional verified candidate(s) remain in other area/niche batches.`,
+  ].filter(Boolean).join(" ");
   const candidateReviewItem: CommandQueueItem | null = robertReviewReadyCandidates.length > 0 && firstReviewCandidate
     ? {
       id: "candidate-review",
@@ -120,7 +130,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
         "--confirmed-by-robert",
       ]),
       status: "review",
-      reason: `${robertReviewReadyCandidates.length} verified public candidate(s) need an auditable Robert approval decision before candidate review.`,
+      reason: `${reviewBatchCandidates.length} verified public candidate(s) in ${firstReviewCandidate.area} / ${firstReviewCandidate.niche} need an auditable Robert approval decision before candidate review.${remainingReviewReason ? ` ${remainingReviewReason}` : ""}`,
     }
     : null;
   const manualContactReviewItem: CommandQueueItem | null = manualContactPacket.manualContactCount > 0

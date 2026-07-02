@@ -475,6 +475,8 @@ test("first-money command center review command batches only matching area and n
   assert.doesNotMatch(reviewCommand?.command || "", new RegExp(secondCandidateId));
   assert.match(reviewCommand?.command || "", /--area=Miami/);
   assert.match(reviewCommand?.command || "", /--niche=coffee shop/);
+  assert.match(reviewCommand?.reason || "", /1 verified public candidate/);
+  assert.match(reviewCommand?.reason || "", /1 additional verified candidate/);
 });
 
 test("first-money command center reads the full persisted candidate queue", () => {
@@ -510,10 +512,14 @@ test("first-money command center reads the full persisted candidate queue", () =
   });
 
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
 
   assert.equal(packet.counts.publicCandidates, 12);
   assert.equal(packet.counts.reviewablePublicCandidates, 12);
   assert.equal(packet.nextCommand.id, "candidate-review");
+  assert.match(reviewCommand?.reason || "", /5 verified public candidate/);
+  assert.match(reviewCommand?.reason || "", /7 additional verified candidate\(s\) remain in this same area\/niche batch/);
+  assert.doesNotMatch(reviewCommand?.reason || "", /other area\/niche/);
 });
 
 test("first-money command center excludes demo and placeholder candidates from actionable counts", () => {
