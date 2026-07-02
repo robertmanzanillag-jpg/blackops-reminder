@@ -439,6 +439,13 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(scoutCommand?.reason || "", /Keep filling the pipeline in parallel/);
   assert.match(scoutCommand?.reason || "", /No contact, paid data, lead import, preview publish, or client charging/);
   assert.match(reviewCommand?.command || "", /Revenue Engine Trust Center approval action/);
+  assert.match(reviewCommand?.command || "", /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
+  assert.match(reviewCommand?.command || "", /"batchId":"candidate-review-1"/);
+  assert.match(reviewCommand?.command || "", /"candidateIds":\["candidate-/);
+  assert.match(reviewCommand?.command || "", /"area":"Miami"/);
+  assert.match(reviewCommand?.command || "", /"niche":"coffee shop"/);
+  assert.match(reviewCommand?.command || "", /"offerFocus":"websites"/);
+  assert.match(reviewCommand?.command || "", /"approvedAction":"Approve first-money public candidate review\."/);
   assert.match(reviewCommand?.command || "", /APPROVE PUBLIC CANDIDATES candidate-review-1/);
   assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.doesNotMatch(reviewCommand?.command || "", /--confirmed-by-robert/);
@@ -667,13 +674,17 @@ test("first-money command center summary redacts approval card contact details",
   });
 
   const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const card = summary.nextCandidateApproval?.candidateCards[0];
   const serialized = JSON.stringify(summary);
+  const approvalCommand = packet.candidateApprovalBatches[0]?.approvalCommand || "";
 
   assert.equal(card?.businessName, "Redacted Card Cafe [contact] [source]");
   assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Redacted Card Cafe [contact] [source]");
   assert.equal(summary.nextCandidateApproval?.area, "Miami [phone]");
   assert.equal(summary.nextCandidateApproval?.niche, "coffee shop [source]");
+  assert.match(approvalCommand, /"area":"Miami \[phone\]"/);
+  assert.match(approvalCommand, /"niche":"coffee shop \[source\]"/);
   assert.equal(summary.robertApprovalBrief.batches[0].candidateNames[0], "Redacted Card Cafe [contact] [source]");
   assert.equal(card?.opportunitySummary, "Needs menu capture. Email [contact], phone [phone], see [source] [source] [source] [source] [source] and [source]");
   assert.doesNotMatch(serialized, /owner@redactedcard\.biz/);
@@ -685,6 +696,8 @@ test("first-money command center summary redacts approval card contact details",
   assert.doesNotMatch(serialized, /maps\.app\.goo\.gl/);
   assert.doesNotMatch(serialized, /private=abc/);
   assert.doesNotMatch(serialized, /#redacted/);
+  assert.doesNotMatch(approvalCommand, /786-555-1212/);
+  assert.doesNotMatch(approvalCommand, /niche\.example\/private/);
 });
 
 test("first-money command center routes approved public candidate batches to candidate review", () => {
@@ -944,6 +957,9 @@ test("first-money command center keeps email-ready candidates ahead of manual-on
   assert.equal(packet.counts.manualOnlyPublicCandidates, 1);
   assert.equal(packet.counts.verificationNeededPublicCandidates, 0);
   assert.match(reviewCommand?.command || "", /Revenue Engine Trust Center approval action/);
+  assert.match(reviewCommand?.command || "", /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
+  assert.match(reviewCommand?.command || "", /"candidateIds":\["candidate-/);
+  assert.match(reviewCommand?.command || "", /"offerFocus":"websites"/);
   assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.equal(manualCommand?.status, "review");
   assert.match(manualCommand?.command || "", /revenue:manual-contact-approval-packet/);

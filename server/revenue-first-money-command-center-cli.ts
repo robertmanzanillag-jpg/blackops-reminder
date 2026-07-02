@@ -825,6 +825,7 @@ function buildCandidateApprovalBatch(
   const candidateIds = candidates.map((candidate) => candidate.id);
   const area = firstCandidate?.area || "";
   const niche = firstCandidate?.niche || "";
+  const batchId = `candidate-review-${batchIndex + 1}`;
   const targetId = buildRevenuePublicCandidateApprovalTargetId(candidateIds);
   const snapshotHash = buildRevenuePublicCandidateSnapshotHash(candidates);
   const outputPath = `revenue_workspace/money-sprint/public-candidates-${candidateIds.join("_")}.json`;
@@ -836,7 +837,22 @@ function buildCandidateApprovalBatch(
     && decision.approvalSource === "public_candidate_approval_cli"
     && decision.publicCandidateSnapshotHash === snapshotHash,
   );
-  const approvalCommand = `Use the Revenue Engine Trust Center approval action for ${candidateIds.length} candidate(s) (${candidateIds.join(",")}) in ${area} / ${niche} with exact confirmation text: APPROVE PUBLIC CANDIDATES candidate-review-${batchIndex + 1}`;
+  const confirmationText = `APPROVE PUBLIC CANDIDATES ${batchId}`;
+  const approvalPayload = {
+    batchId,
+    candidateIds,
+    area: approvalCardText(area),
+    niche: approvalCardText(niche),
+    offerFocus: "websites",
+    approvedAction: "Approve first-money public candidate review.",
+    confirmationText,
+  };
+  const approvalCommand = [
+    "Queue Revenue Engine Trust Center approval action via /api/revenue-engine/public-lead-candidates/approval-pending-action",
+    `with payload ${JSON.stringify(approvalPayload)}`,
+    `for ${candidateIds.length} candidate(s) (${candidateIds.join(",")}) in ${approvalCardText(area)} / ${approvalCardText(niche)}.`,
+    "This queues approval only; it does not import leads, send outreach, charge clients, write preview files, or deploy.",
+  ].join(" ");
   const reviewCommand = matchingApprovalDecision
     ? npmRunText("revenue:public-candidate-review", [
       `--candidate-ids=${candidateIds.join(",")}`,
@@ -853,7 +869,7 @@ function buildCandidateApprovalBatch(
     : "";
   const approvalStatus = matchingApprovalDecision ? "ready_for_candidate_review" : "needs_robert_approval";
   return {
-    id: `candidate-review-${batchIndex + 1}`,
+    id: batchId,
     area,
     niche,
     candidateIds,

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T20:41:34.598Z",
+  "generatedAt": "2026-07-02T20:50:56.953Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -143,7 +143,7 @@
     "filesIndexed": 426,
     "imports": 1607,
     "routes": 470,
-    "symbols": 8348
+    "symbols": 8351
   },
   "directories": {
     ".agents/skills": {
@@ -10689,9 +10689,11 @@
         "approvalCardText",
         "approvalCommand",
         "approvalDecisions",
+        "approvalPayload",
         "approvalStatus",
         "approvedDraft",
         "area",
+        "batchId",
         "buildCandidateApprovalBatch",
         "buildCandidateApprovalBatches",
         "buildFirstMoneyActivationChecklist",
@@ -15336,6 +15338,7 @@
       "exports": [],
       "symbols": [
         "approval",
+        "approvalCommand",
         "approveCommandCenterPaymentPath",
         "baseEnv",
         "candidateId",
