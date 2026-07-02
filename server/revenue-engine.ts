@@ -3424,7 +3424,7 @@ function revenueBatchCell(value: unknown) {
     .trim();
 }
 
-function revenueCandidateBatchRow(candidate: RevenuePublicLeadCandidateInput) {
+export function revenueCandidateBatchRow(candidate: RevenuePublicLeadCandidateInput) {
   return [
     candidate.businessName,
     candidate.area,

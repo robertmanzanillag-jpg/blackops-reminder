@@ -1,5 +1,12 @@
 import { readFileSync } from "node:fs";
-import { previewRevenueMoneySprintSeeds, revenueMoneySprintSchema, runRevenueMoneySprint, type RevenueMoneySprintInput } from "./revenue-engine";
+import {
+  listRevenuePublicLeadCandidates,
+  previewRevenueMoneySprintSeeds,
+  revenueCandidateBatchRow,
+  revenueMoneySprintSchema,
+  runRevenueMoneySprint,
+  type RevenueMoneySprintInput,
+} from "./revenue-engine";
 
 export type RevenueMoneySprintRunPacketCliOptions = {
   inputPath: string;
@@ -11,7 +18,18 @@ export type RevenueMoneySprintRunPacketCliOptions = {
 type MoneySprintRunPacketReviewJson = {
   status?: string;
   nextApiAction?: string;
+  approvedByRobert?: boolean;
+  requestedCount?: number;
+  foundCount?: number;
   approvedCount?: number;
+  missingIds?: unknown[];
+  duplicateIds?: unknown[];
+  reviewedCandidates?: Array<{
+    candidateId?: unknown;
+    businessName?: unknown;
+    approvedForPreview?: unknown;
+    blockedReasons?: unknown;
+  }>;
   moneySprintRunPacket?: {
     status?: string;
     endpoint?: string;
@@ -38,6 +56,16 @@ function countSeedLeadBatchRows(batchText: string) {
     .map((line) => line.trim())
     .filter(Boolean);
   return Math.max(0, lines.length - 1);
+}
+
+function seedLeadBatchBusinessNames(batchText: string) {
+  return batchText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(1)
+    .map((line) => line.split("|")[0]?.trim() || "")
+    .filter(Boolean);
 }
 
 export function parseRevenueMoneySprintRunPacketArgs(argv: string[]): RevenueMoneySprintRunPacketCliOptions {
@@ -76,7 +104,30 @@ export function validateRevenueMoneySprintRunPacketReview(review: MoneySprintRun
   const parsedRequest = packet ? revenueMoneySprintSchema.safeParse(packet.requestBody) : null;
   const requestBody = parsedRequest?.success ? parsedRequest.data : null;
   const approvedCountIsValid = Number.isInteger(review.approvedCount) && Number(review.approvedCount) > 0;
+  const requestedCountIsValid = Number.isInteger(review.requestedCount) && Number(review.requestedCount) > 0;
+  const foundCountIsValid = Number.isInteger(review.foundCount) && Number(review.foundCount) > 0;
   const batchRowCount = requestBody ? countSeedLeadBatchRows(requestBody.seedLeadBatchText) : 0;
+  const batchBusinessNames = requestBody ? seedLeadBatchBusinessNames(requestBody.seedLeadBatchText) : [];
+  const approvedReviewedCandidates = Array.isArray(review.reviewedCandidates)
+    ? review.reviewedCandidates.filter((candidate) => candidate.approvedForPreview === true)
+    : [];
+  const approvedReviewedBusinessNames = approvedReviewedCandidates
+    .map((candidate) => typeof candidate.businessName === "string" ? candidate.businessName.trim() : "")
+    .filter(Boolean);
+  const approvedReviewedCandidateIds = approvedReviewedCandidates
+    .map((candidate) => typeof candidate.candidateId === "string" ? candidate.candidateId.trim() : "")
+    .filter(Boolean);
+  const duplicateApprovedCandidateIds = approvedReviewedCandidateIds.filter((id, index) => approvedReviewedCandidateIds.indexOf(id) !== index);
+  const persistedPublicCandidates = approvedReviewedCandidateIds.length > 0 ? listRevenuePublicLeadCandidates() : [];
+  const approvedPersistedCandidates = approvedReviewedCandidateIds
+    .map((id) => persistedPublicCandidates.find((candidate) => candidate.id === id))
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+  const expectedSeedLeadBatchText = requestBody && approvedPersistedCandidates.length === approvedReviewedCandidateIds.length
+    ? [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      ...approvedPersistedCandidates.map((candidate) => revenueCandidateBatchRow(candidate)),
+    ].join("\n")
+    : "";
   const preview = requestBody ? previewRevenueMoneySprintSeeds(requestBody) : null;
   const unreadySeedNames = preview
     ? preview.acceptedSeeds
@@ -86,7 +137,29 @@ export function validateRevenueMoneySprintRunPacketReview(review: MoneySprintRun
   const errors = [
     review.status !== "ready_for_money_sprint_preview" && "review status must be ready_for_money_sprint_preview.",
     review.nextApiAction !== "human_review_money_sprint_packet" && "nextApiAction must be human_review_money_sprint_packet.",
+    review.approvedByRobert !== true && "review approvedByRobert must be true.",
     !approvedCountIsValid && "review must approve at least one candidate.",
+    !requestedCountIsValid && "review requestedCount must be greater than 0.",
+    !foundCountIsValid && "review foundCount must be greater than 0.",
+    requestedCountIsValid && foundCountIsValid && review.requestedCount !== review.foundCount && "review requestedCount must match foundCount.",
+    foundCountIsValid && approvedCountIsValid && Number(review.foundCount) < Number(review.approvedCount) && "review foundCount must be at least approvedCount.",
+    !Array.isArray(review.missingIds) && "review missingIds must be present.",
+    Array.isArray(review.missingIds) && review.missingIds.length > 0 && "review missingIds must be empty.",
+    !Array.isArray(review.duplicateIds) && "review duplicateIds must be present.",
+    Array.isArray(review.duplicateIds) && review.duplicateIds.length > 0 && "review duplicateIds must be empty.",
+    !Array.isArray(review.reviewedCandidates) && "reviewedCandidates must be present.",
+    Array.isArray(review.reviewedCandidates) && foundCountIsValid && review.reviewedCandidates.length !== review.foundCount && "reviewedCandidates length must match foundCount.",
+    approvedCountIsValid && approvedReviewedCandidates.length !== review.approvedCount && "approved reviewedCandidates count must match approvedCount.",
+    approvedReviewedCandidates.some((candidate) => Array.isArray(candidate.blockedReasons) && candidate.blockedReasons.length > 0) && "approved reviewedCandidates must not have blockedReasons.",
+    approvedCountIsValid && approvedReviewedCandidateIds.length !== review.approvedCount && "approved reviewedCandidates must include candidateId.",
+    duplicateApprovedCandidateIds.length > 0 && `approved reviewedCandidates must not repeat candidateId: ${Array.from(new Set(duplicateApprovedCandidateIds)).join(", ")}.`,
+    approvedReviewedCandidateIds.length > 0 && approvedPersistedCandidates.length !== approvedReviewedCandidateIds.length && "approved reviewedCandidates must match persisted public candidates.",
+    approvedPersistedCandidates.some((candidate) => candidate.verificationStatus !== "verified_public") && "approved persisted public candidates must still be verified_public.",
+    approvedPersistedCandidates.some((candidate) => !candidate.publicEvidenceVerified) && "approved persisted public candidates must still have verified public evidence.",
+    approvedPersistedCandidates.some((candidate) => candidate.sourceUrl.trim().length === 0) && "approved persisted public candidates must still have sourceUrl.",
+    approvedPersistedCandidates.some((candidate) => candidate.recipientEmail.trim().length === 0) && "approved persisted public candidates must still have recipientEmail.",
+    requestBody && approvedCountIsValid && approvedReviewedBusinessNames.join("\u0000") !== batchBusinessNames.join("\u0000") && "seedLeadBatchText businesses must match approved reviewedCandidates.",
+    requestBody && expectedSeedLeadBatchText.length > 0 && requestBody.seedLeadBatchText.trim() !== expectedSeedLeadBatchText && "seedLeadBatchText must match persisted approved public candidates.",
     !packet && "moneySprintRunPacket is required.",
     packet?.status !== "ready_for_money_sprint_run" && "moneySprintRunPacket.status must be ready_for_money_sprint_run.",
     packet?.method !== "POST" && "moneySprintRunPacket.method must be POST.",

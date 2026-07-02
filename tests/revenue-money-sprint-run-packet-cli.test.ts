@@ -4,10 +4,13 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   getRevenueEngineSnapshot,
+  recordRevenuePublicScoutRun,
   resetRevenueLeadsForTests,
   resetRevenueOutreachForTests,
+  resetRevenuePublicLeadCandidatesForTests,
   setRevenueLeadsPathForTests,
   setRevenueOutreachPathForTests,
+  setRevenuePublicLeadCandidatesPathForTests,
 } from "../server/revenue-engine";
 import {
   buildRevenueMoneySprintRunPacketExecution,
@@ -20,21 +23,92 @@ import {
 
 const testLeadsPath = "/tmp/revenue-money-sprint-run-packet-cli-leads-test.json";
 const testOutreachPath = "/tmp/revenue-money-sprint-run-packet-cli-outreach-test.json";
+const testPublicCandidatesPath = "/tmp/revenue-money-sprint-run-packet-cli-public-candidates-test.json";
 const testPacketPath = "/tmp/revenue-money-sprint-run-packet-cli-packet-test.json";
 
 setRevenueLeadsPathForTests(testLeadsPath);
 setRevenueOutreachPathForTests(testOutreachPath);
+setRevenuePublicLeadCandidatesPathForTests(testPublicCandidatesPath);
 
 test.afterEach(() => {
+  candidateSequence = 0;
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
+  resetRevenuePublicLeadCandidatesForTests();
 });
 
-function reviewPacket(overrides: Record<string, unknown> = {}) {
+let candidateSequence = 0;
+
+function captureRunPacketCandidate(overrides: Partial<{
+  businessName: string;
+  recipientEmail: string;
+  contactValue: string;
+  sourceUrl: string;
+  evidence: string;
+  verificationStatus: "needs_review" | "verified_public" | "blocked";
+  publicEvidenceVerified: boolean;
+}> = {}) {
+  candidateSequence += 1;
+  const suffix = `${candidateSequence}`;
+  const businessName = overrides.businessName || `Run Packet Cafe ${suffix}`;
+  const recipientEmail = overrides.recipientEmail || `owner${suffix}@runpacketcafe.example`;
+  const sourceUrl = overrides.sourceUrl || `https://example.com/run-packet-cafe-${suffix}`;
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName,
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: overrides.contactValue || recipientEmail,
+        sourceUrl,
+        recipientEmail,
+        evidence: overrides.evidence || "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: overrides.verificationStatus || "verified_public",
+        publicEvidenceVerified: overrides.publicEvidenceVerified ?? true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  return capture.recordedCandidates[0].candidate;
+}
+
+function reviewPacket(overrides: Record<string, unknown> = {}, candidates = [captureRunPacketCandidate()]) {
+  const seedLeadBatchText = [
+    "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+    ...candidates.map((candidate) => candidate.batchRow),
+  ].join("\n");
   return {
     status: "ready_for_money_sprint_preview",
     nextApiAction: "human_review_money_sprint_packet",
-    approvedCount: 1,
+    approvedByRobert: true,
+    requestedCount: candidates.length,
+    foundCount: candidates.length,
+    approvedCount: candidates.length,
+    missingIds: [],
+    duplicateIds: [],
+    reviewedCandidates: candidates.map((candidate) => ({
+      candidateId: candidate.id,
+      businessName: candidate.businessName,
+      approvedForPreview: true,
+      blockedReasons: [],
+      grade: "A",
+      score: 90,
+    })),
     moneySprintRunPacket: {
       status: "ready_for_money_sprint_run",
       endpoint: "/api/revenue-engine/money-sprint",
@@ -51,10 +125,7 @@ function reviewPacket(overrides: Record<string, unknown> = {}) {
         requireRobertApprovalToContact: true,
         writePreviewFiles: false,
         seedLeads: [],
-        seedLeadBatchText: [
-          "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
-          "Run Packet Cafe|Miami|coffee shop|no_website|email|owner@runpacketcafe.example|https://example.com/run-packet-cafe|owner@runpacketcafe.example|Public listing has no website, recent menu photos and a visible public owner email.|Needs online menu capture and follow-up.|3600|Owner|Run Packet Cafe has no dedicated website and a clear menu/catering opportunity.",
-        ].join("\n"),
+        seedLeadBatchText,
       },
       safety: {
         sendsOutreach: false,
@@ -64,9 +135,9 @@ function reviewPacket(overrides: Record<string, unknown> = {}) {
         requiresRobertApprovalBeforeContact: true,
       },
       expectedOutput: {
-        acceptedLeads: 1,
-        mockupsToPrepare: 1,
-        outreachDraftsToCreate: 1,
+        acceptedLeads: candidates.length,
+        mockupsToPrepare: candidates.length,
+        outreachDraftsToCreate: candidates.length,
       },
     },
     ...overrides,
@@ -133,6 +204,145 @@ test("blocks tampered packet when batch row count does not match approved count"
   const validation = validateRevenueMoneySprintRunPacketReview(tampered);
 
   assert.match(validation.errors.join("; "), /seedLeadBatchText row count must match approvedCount/);
+});
+
+test("blocks forged packet without explicit complete Robert-approved review", () => {
+  const forged = reviewPacket({
+    approvedByRobert: false,
+    missingIds: undefined,
+    duplicateIds: undefined,
+    reviewedCandidates: undefined,
+  });
+  const validation = validateRevenueMoneySprintRunPacketReview(forged);
+
+  assert.match(validation.errors.join("; "), /review approvedByRobert must be true/);
+  assert.match(validation.errors.join("; "), /review missingIds must be present/);
+  assert.match(validation.errors.join("; "), /review duplicateIds must be present/);
+  assert.match(validation.errors.join("; "), /reviewedCandidates must be present/);
+});
+
+test("accepts mixed complete review when only one found candidate is approved", () => {
+  const approvedCandidate = captureRunPacketCandidate({ businessName: "Run Packet Cafe" });
+  const mixed = reviewPacket({
+    requestedCount: 2,
+    foundCount: 2,
+    approvedCount: 1,
+    reviewedCandidates: [
+      {
+        candidateId: approvedCandidate.id,
+        businessName: "Run Packet Cafe",
+        approvedForPreview: true,
+        blockedReasons: [],
+        grade: "A",
+        score: 90,
+      },
+      {
+        businessName: "Blocked Packet Cafe",
+        approvedForPreview: false,
+        blockedReasons: ["recipientEmail"],
+        grade: "C",
+        score: 55,
+      },
+    ],
+  }, [approvedCandidate]);
+  const validation = validateRevenueMoneySprintRunPacketReview(mixed);
+
+  assert.deepEqual(validation.errors, []);
+});
+
+test("blocks packet when batch businesses do not match approved reviewed candidates", () => {
+  const candidate = captureRunPacketCandidate({ businessName: "Run Packet Cafe" });
+  const forged = reviewPacket({
+    reviewedCandidates: [
+      {
+        candidateId: candidate.id,
+        businessName: "Different Approved Cafe",
+        approvedForPreview: true,
+        blockedReasons: [],
+        grade: "A",
+        score: 90,
+      },
+    ],
+  }, [candidate]);
+  const validation = validateRevenueMoneySprintRunPacketReview(forged);
+
+  assert.match(validation.errors.join("; "), /seedLeadBatchText businesses must match approved reviewedCandidates/);
+});
+
+test("blocks packet when persisted candidate row data was tampered", () => {
+  const candidate = captureRunPacketCandidate({ businessName: "Tamper Proof Cafe" });
+  const base = reviewPacket({}, [candidate]);
+  const forged = reviewPacket({
+    moneySprintRunPacket: {
+      ...base.moneySprintRunPacket,
+      requestBody: {
+        ...base.moneySprintRunPacket.requestBody,
+        seedLeadBatchText: base.moneySprintRunPacket.requestBody.seedLeadBatchText.replace(candidate.recipientEmail, "attacker@example.com"),
+      },
+    },
+  }, [candidate]);
+  const validation = validateRevenueMoneySprintRunPacketReview(forged);
+
+  assert.match(validation.errors.join("; "), /seedLeadBatchText must match persisted approved public candidates/);
+});
+
+test("blocks packet when persisted approved candidate is no longer verified", () => {
+  const candidate = captureRunPacketCandidate({
+    businessName: "Unverified Persisted Cafe",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+  });
+  const forged = reviewPacket({}, [candidate]);
+  const validation = validateRevenueMoneySprintRunPacketReview(forged);
+
+  assert.match(validation.errors.join("; "), /approved persisted public candidates must still be verified_public/);
+  assert.match(validation.errors.join("; "), /approved persisted public candidates must still have verified public evidence/);
+});
+
+test("blocks packet with duplicate approved candidate ids", () => {
+  const candidate = captureRunPacketCandidate({ businessName: "Duplicate Candidate Cafe" });
+  const duplicated = reviewPacket({
+    requestedCount: 2,
+    foundCount: 2,
+    approvedCount: 2,
+    reviewedCandidates: [
+      {
+        candidateId: candidate.id,
+        businessName: candidate.businessName,
+        approvedForPreview: true,
+        blockedReasons: [],
+        grade: "A",
+        score: 90,
+      },
+      {
+        candidateId: candidate.id,
+        businessName: candidate.businessName,
+        approvedForPreview: true,
+        blockedReasons: [],
+        grade: "A",
+        score: 90,
+      },
+    ],
+    moneySprintRunPacket: {
+      ...reviewPacket({}, [candidate]).moneySprintRunPacket,
+      requestBody: {
+        ...reviewPacket({}, [candidate]).moneySprintRunPacket.requestBody,
+        seedLeadBatchText: [
+          "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+          candidate.batchRow,
+          candidate.batchRow,
+        ].join("\n"),
+      },
+      expectedOutput: {
+        acceptedLeads: 2,
+        mockupsToPrepare: 2,
+        outreachDraftsToCreate: 2,
+      },
+    },
+  }, [candidate]);
+  const validation = validateRevenueMoneySprintRunPacketReview(duplicated);
+
+  assert.match(validation.errors.join("; "), /approved reviewedCandidates must not repeat candidateId/);
 });
 
 test("blocks tampered packet when row count matches but preview is not importable", () => {
@@ -227,6 +437,7 @@ test("money sprint run packet script dry-runs and executes only with approval", 
     ...process.env,
     REVENUE_ENGINE_LEADS_PATH: testLeadsPath,
     REVENUE_ENGINE_OUTREACH_PATH: testOutreachPath,
+    REVENUE_ENGINE_PUBLIC_LEAD_CANDIDATES_PATH: testPublicCandidatesPath,
   };
   const dryRun = spawnSync(process.execPath, [
     "--import",
