@@ -686,8 +686,19 @@ test("first-money command center routes approved public candidate batches to can
       },
     ],
   });
-  const pendingCandidateId = capture.recordedCandidates[0].candidate.id;
+  const firstCandidateId = capture.recordedCandidates[0].candidate.id;
   const candidateId = capture.recordedCandidates[1].candidate.id;
+  const firstApproval = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [firstCandidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "",
+    area: "Miami",
+    niche: "hair salon",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
   const approval = buildRevenuePublicCandidateApprovalDecisionFromCli({
     candidateIds: [candidateId],
     decision: "approved",
@@ -705,32 +716,52 @@ test("first-money command center routes approved public candidate batches to can
   const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
   const serializedSummary = JSON.stringify(summary);
 
+  assert.equal(firstApproval.status, "recorded");
   assert.equal(approval.status, "recorded");
   assert.equal(packet.nextCommand.id, "candidate-review");
   assert.match(packet.nextCommand.label, /Run approved public candidate review/);
-  assert.equal(summary.nextCandidateReview?.id, "candidate-review-2");
-  assert.equal(summary.nextCandidateReview?.approvalDecisionId, approval.decision?.id);
-  assert.equal(summary.nextCandidateReview?.confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-2 ${approval.decision?.id}`);
+  assert.equal(summary.nextCandidateReview?.id, "candidate-review-1");
+  assert.equal(summary.nextCandidateReview?.approvalDecisionId, firstApproval.decision?.id);
+  assert.equal(summary.nextCandidateReview?.confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-1 ${firstApproval.decision?.id}`);
   assert.equal(summary.nextCandidateReview?.safety.sendsOutreach, false);
   assert.equal(summary.nextCandidateReview?.safety.writesPreviewFiles, false);
-  assert.equal(summary.nextMoneySprintRun?.id, "candidate-review-2");
-  assert.equal(summary.nextMoneySprintRun?.confirmationText, `RUN MONEY SPRINT candidate-review-2 ${approval.decision?.id}`);
+  assert.equal(summary.candidateReviewQueue.length, 2);
+  assert.deepEqual(summary.candidateReviewQueue.map((batch) => batch.id), ["candidate-review-1", "candidate-review-2"]);
+  assert.deepEqual(summary.candidateReviewQueue.map((batch) => batch.approvalDecisionId), [
+    firstApproval.decision?.id,
+    approval.decision?.id,
+  ]);
+  assert.equal(summary.candidateReviewQueue[0].confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-1 ${firstApproval.decision?.id}`);
+  assert.equal(summary.candidateReviewQueue[1].confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-2 ${approval.decision?.id}`);
+  assert.equal(summary.nextMoneySprintRun?.id, "candidate-review-1");
+  assert.equal(summary.nextMoneySprintRun?.confirmationText, `RUN MONEY SPRINT candidate-review-1 ${firstApproval.decision?.id}`);
   assert.equal(summary.nextMoneySprintRun?.safety.persistsLeads, true);
   assert.equal(summary.nextMoneySprintRun?.safety.sendsOutreach, false);
   assert.equal(summary.nextMoneySprintRun?.safety.writesPreviewFiles, false);
+  assert.equal(summary.candidateRunQueue.length, 2);
+  assert.deepEqual(summary.candidateRunQueue.map((batch) => batch.id), ["candidate-review-1", "candidate-review-2"]);
+  assert.deepEqual(summary.candidateRunQueue.map((batch) => batch.approvalDecisionId), [
+    firstApproval.decision?.id,
+    approval.decision?.id,
+  ]);
+  assert.equal(summary.candidateRunQueue[0].confirmationText, `RUN MONEY SPRINT candidate-review-1 ${firstApproval.decision?.id}`);
+  assert.equal(summary.candidateRunQueue[1].confirmationText, `RUN MONEY SPRINT candidate-review-2 ${approval.decision?.id}`);
   assert.equal(summary.nextCommand.command, "Use the guarded Revenue Engine review-packet action with the exact confirmation text.");
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
-  assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${approval.decision?.id}`));
-  assert.match(reviewCommand?.command || "", new RegExp(candidateId));
+  assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${firstApproval.decision?.id}`));
+  assert.match(reviewCommand?.command || "", new RegExp(firstCandidateId));
   assert.doesNotMatch(serializedSummary, /owner@approvedcommand\.biz/);
+  assert.doesNotMatch(serializedSummary, /owner@pendingcommandsalon\.biz/);
   assert.doesNotMatch(serializedSummary, /public-directory\.invalid\/approved-command-cafe/);
+  assert.doesNotMatch(serializedSummary, /public-directory\.invalid\/pending-command-salon/);
   assert.doesNotMatch(serializedSummary, /Public listing has no website/);
   assert.doesNotMatch(serializedSummary, /--output=revenue_workspace/);
   assert.match(reviewCommand?.command || "", /--output=revenue_workspace\/money-sprint\/public-candidates-/);
   assert.match(reviewCommand?.command || "", /--overwrite/);
-  assert.doesNotMatch(reviewCommand?.command || "", new RegExp(pendingCandidateId));
+  assert.doesNotMatch(reviewCommand?.command || "", new RegExp(candidateId));
   assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
-  assert.equal(packet.candidateApprovalBatches[0].approvalStatus, "needs_robert_approval");
+  assert.equal(packet.candidateApprovalBatches[0].approvalStatus, "ready_for_candidate_review");
+  assert.equal(packet.candidateApprovalBatches[0].approvalDecisionId, firstApproval.decision?.id);
   assert.equal(packet.candidateApprovalBatches[1].approvalStatus, "ready_for_candidate_review");
   assert.equal(packet.candidateApprovalBatches[1].approvalDecisionId, approval.decision?.id);
   assert.equal(packet.candidateApprovalBatches[1].totalEstimatedOfferUsd, 3600);

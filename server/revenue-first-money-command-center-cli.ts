@@ -994,6 +994,12 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
   const candidateApprovalQueue = packet.candidateApprovalBatches
     .map((batch) => redactCandidateApprovalBatchForSummary(batch))
     .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateApprovalBatchForSummary>> => Boolean(batch));
+  const candidateReviewQueue = packet.candidateApprovalBatches
+    .map((batch) => redactCandidateReviewBatchForSummary(batch))
+    .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateReviewBatchForSummary>> => Boolean(batch));
+  const candidateRunQueue = packet.candidateApprovalBatches
+    .map((batch) => redactCandidateRunBatchForSummary(batch))
+    .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateRunBatchForSummary>> => Boolean(batch));
   const nextCommand = {
     ...packet.nextCommand,
     command: nextCandidateReview
@@ -1016,7 +1022,9 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextCandidateApproval,
     candidateApprovalQueue,
     nextCandidateReview,
+    candidateReviewQueue,
     nextMoneySprintRun,
+    candidateRunQueue,
     moneyUnblockers,
     handoffPacket,
     activationChecklist,

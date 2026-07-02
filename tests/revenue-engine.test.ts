@@ -94,6 +94,7 @@ import {
   buildRevenueContactPathSnapshotHash,
 } from "../server/revenue-contact-path-approval";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
+import { matchesRevenueFirstMoneyApprovedCandidateBatch } from "../server/revenue-first-money-route-guards";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -2460,9 +2461,8 @@ test("routes wire public candidate review packet endpoint to guarded review buil
 
   assert.match(routesSource, /revenuePublicCandidateReviewPacketSchema/);
   assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/review-packet"/);
-  assert.match(routesSource, /const expectedReview = commandCenter\.nextCandidateReview/);
-  assert.match(routesSource, /input\.confirmationText === expectedReview\.confirmationText/);
-  assert.match(routesSource, /candidateIdsMatch\(input\.candidateIds, expectedReview\.candidateIds\)/);
+  assert.match(routesSource, /const expectedReview = commandCenter\.candidateReviewQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routesSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedReview\)/);
   assert.match(routesSource, /reviewRevenuePublicLeadCandidates\(\{/);
   assert.match(routesSource, /maxPaidDataSpendUsd: 0/);
   assert.match(routesSource, /requireRobertApprovalToContact: true/);
@@ -2474,6 +2474,7 @@ test("routes wire public candidate review packet endpoint to guarded review buil
   assert.doesNotMatch(routeSource, /acceptedSeeds/);
   assert.doesNotMatch(routeSource, /requestBody/);
   assert.doesNotMatch(routeSource, /snapshot/);
+  assert.doesNotMatch(routeSource, /const expectedReview = commandCenter\.nextCandidateReview/);
 });
 
 test("routes wire public candidate internal Money Sprint execution to guarded review", () => {
@@ -2485,9 +2486,8 @@ test("routes wire public candidate internal Money Sprint execution to guarded re
 
   assert.match(routesSource, /revenuePublicCandidateMoneySprintRunSchema/);
   assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint"/);
-  assert.match(routeSource, /const expectedRun = commandCenter\.nextMoneySprintRun/);
-  assert.match(routeSource, /input\.confirmationText === expectedRun\.confirmationText/);
-  assert.match(routeSource, /candidateIdsMatch\(input\.candidateIds, expectedRun\.candidateIds\)/);
+  assert.match(routeSource, /const expectedRun = commandCenter\.candidateRunQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedRun\)/);
   assert.match(routeSource, /const review = buildGuardedPublicCandidateReview\(input\)/);
   assert.match(routeSource, /review\.status !== "ready_for_money_sprint_preview"/);
   assert.match(routeSource, /review\.moneySprintRunPacket\.status !== "ready_for_money_sprint_run"/);
@@ -2503,6 +2503,31 @@ test("routes wire public candidate internal Money Sprint execution to guarded re
   assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
   assert.doesNotMatch(routeSource, /requestBody:/);
   assert.doesNotMatch(routeSource, /snapshot:/);
+  assert.doesNotMatch(routeSource, /const expectedRun = commandCenter\.nextMoneySprintRun/);
+});
+
+test("first-money route guard only accepts exact queued approved candidate batches", () => {
+  const batch = {
+    id: "candidate-review-2",
+    area: "Miami",
+    niche: "mobile detailing",
+    offerFocus: "websites",
+    approvalDecisionId: "approval-public-candidate-123",
+    confirmationText: "REVIEW PUBLIC CANDIDATES candidate-review-2 approval-public-candidate-123",
+    candidateIds: ["candidate-a", "candidate-b"],
+  };
+  const validInput = {
+    ...batch,
+    batchId: batch.id,
+    candidateIds: ["candidate-b", "candidate-a"],
+  };
+
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch(validInput, batch), true);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, batchId: "candidate-review-1" }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, approvalDecisionId: "approval-public-candidate-stale" }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, confirmationText: batch.confirmationText.toLowerCase() }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, candidateIds: ["candidate-a"] }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch(validInput, undefined), false);
 });
 
 test("routes wire public scout run endpoint to schema and builder", () => {
@@ -3349,14 +3374,23 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /contacto oculto hasta aprobacion/);
   assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== selectedPublicCandidateBatch\.confirmationText/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);
+  assert.match(source, /candidateReviewQueue/);
+  assert.match(source, /selectedPublicCandidateReviewBatch/);
   assert.match(source, /button-generate-public-candidate-review-packet/);
   assert.match(source, /input-public-candidate-review-confirmation/);
-  assert.match(source, /publicCandidateReviewConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateReview\.confirmationText/);
+  assert.match(source, /first-money-candidate-review-queue/);
+  assert.match(source, /button-select-public-candidate-review-batch-/);
+  assert.match(source, /setSelectedPublicCandidateReviewBatchId\(batch\.id\)/);
+  assert.match(source, /const review = selectedPublicCandidateReviewBatch/);
+  assert.match(source, /publicCandidateReviewConfirmation\.trim\(\) !== selectedPublicCandidateReviewBatch\.confirmationText/);
   assert.match(source, /nextMoneySprintRun/);
+  assert.match(source, /candidateRunQueue/);
+  assert.match(source, /selectedPublicCandidateRunBatch/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint/);
   assert.match(source, /button-run-public-candidate-money-sprint/);
   assert.match(source, /input-public-candidate-run-confirmation/);
-  assert.match(source, /publicCandidateRunConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextMoneySprintRun\.confirmationText/);
+  assert.match(source, /const run = selectedPublicCandidateRunBatch/);
+  assert.match(source, /publicCandidateRunConfirmation\.trim\(\) !== selectedPublicCandidateRunBatch\.confirmationText/);
   assert.match(source, /moneyUnblockers/);
   assert.match(source, /first-money-unblockers/);
   assert.match(source, /unblocker\.safeNextAction/);

@@ -446,6 +446,29 @@ type FirstMoneyCandidateApprovalSummary = {
     };
   };
 
+type FirstMoneyCandidateReviewSummary = {
+  id: string;
+  candidateIds: string[];
+  candidateNames: string[];
+  area: string;
+  niche: string;
+  offerFocus: "websites" | "automations" | "both";
+  count: number;
+  totalEstimatedOfferUsd: number;
+  approvalStatus: "ready_for_candidate_review";
+  approvalDecisionId: string;
+  confirmationText: string;
+  safety: {
+    persistsLeads: boolean;
+    persistsPublicCandidates: boolean;
+    sendsOutreach: boolean;
+    writesPreviewFiles: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    paidDataSpendUsd: number;
+  };
+};
+
 type FirstMoneyCommandCenter = {
   status: string;
   mode: string;
@@ -458,50 +481,10 @@ type FirstMoneyCommandCenter = {
   };
   nextCandidateApproval: FirstMoneyCandidateApprovalSummary | null;
   candidateApprovalQueue: FirstMoneyCandidateApprovalSummary[];
-  nextCandidateReview: {
-    id: string;
-    candidateIds: string[];
-    candidateNames: string[];
-    area: string;
-    niche: string;
-    offerFocus: "websites" | "automations" | "both";
-    count: number;
-    totalEstimatedOfferUsd: number;
-    approvalStatus: "ready_for_candidate_review";
-    approvalDecisionId: string;
-    confirmationText: string;
-    safety: {
-      persistsLeads: boolean;
-      persistsPublicCandidates: boolean;
-      sendsOutreach: boolean;
-      writesPreviewFiles: boolean;
-      chargesClients: boolean;
-      deploys: boolean;
-      paidDataSpendUsd: number;
-    };
-  } | null;
-  nextMoneySprintRun: {
-    id: string;
-    candidateIds: string[];
-    candidateNames: string[];
-    area: string;
-    niche: string;
-    offerFocus: "websites" | "automations" | "both";
-    count: number;
-    totalEstimatedOfferUsd: number;
-    approvalStatus: "ready_for_candidate_review";
-    approvalDecisionId: string;
-    confirmationText: string;
-    safety: {
-      persistsLeads: boolean;
-      persistsPublicCandidates: boolean;
-      sendsOutreach: boolean;
-      writesPreviewFiles: boolean;
-      chargesClients: boolean;
-      deploys: boolean;
-      paidDataSpendUsd: number;
-    };
-  } | null;
+  nextCandidateReview: FirstMoneyCandidateReviewSummary | null;
+  candidateReviewQueue: FirstMoneyCandidateReviewSummary[];
+  nextMoneySprintRun: FirstMoneyCandidateReviewSummary | null;
+  candidateRunQueue: FirstMoneyCandidateReviewSummary[];
   moneyUnblockers: Array<{
     id: "production_persistence" | "contact_path" | "payment_path" | "website_build";
     label: string;
@@ -1627,6 +1610,7 @@ export default function RevenueEnginePage() {
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
   const [selectedPublicCandidateBatchId, setSelectedPublicCandidateBatchId] = useState("");
+  const [selectedPublicCandidateReviewBatchId, setSelectedPublicCandidateReviewBatchId] = useState("");
   const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
   const [publicCandidateReviewConfirmation, setPublicCandidateReviewConfirmation] = useState("");
   const [publicCandidateRunConfirmation, setPublicCandidateRunConfirmation] = useState("");
@@ -1656,6 +1640,22 @@ export default function RevenueEnginePage() {
       || queue[0]
       || null;
   }, [firstMoneyCommandCenter, selectedPublicCandidateBatchId]);
+
+  const selectedPublicCandidateReviewBatch = useMemo(() => {
+    const queue = firstMoneyCommandCenter?.candidateReviewQueue || [];
+    return queue.find((batch) => batch.id === selectedPublicCandidateReviewBatchId)
+      || firstMoneyCommandCenter?.nextCandidateReview
+      || queue[0]
+      || null;
+  }, [firstMoneyCommandCenter, selectedPublicCandidateReviewBatchId]);
+
+  const selectedPublicCandidateRunBatch = useMemo(() => {
+    const queue = firstMoneyCommandCenter?.candidateRunQueue || [];
+    return queue.find((batch) => batch.id === selectedPublicCandidateReviewBatchId)
+      || firstMoneyCommandCenter?.nextMoneySprintRun
+      || queue[0]
+      || null;
+  }, [firstMoneyCommandCenter, selectedPublicCandidateReviewBatchId]);
 
   const planMutation = useMutation<RevenuePlan>({
     mutationFn: async () => {
@@ -2180,7 +2180,7 @@ export default function RevenueEnginePage() {
 
   const publicCandidateReviewPacketMutation = useMutation<PublicCandidateReviewPacketResult>({
     mutationFn: async () => {
-      const review = firstMoneyCommandCenter?.nextCandidateReview;
+      const review = selectedPublicCandidateReviewBatch;
       const response = await fetch("/api/revenue-engine/public-lead-candidates/review-packet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2206,7 +2206,7 @@ export default function RevenueEnginePage() {
 
   const publicCandidateMoneySprintRunMutation = useMutation<PublicCandidateMoneySprintRunResult>({
     mutationFn: async () => {
-      const run = firstMoneyCommandCenter?.nextMoneySprintRun;
+      const run = selectedPublicCandidateRunBatch;
       const response = await fetch("/api/revenue-engine/public-lead-candidates/run-money-sprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2227,6 +2227,7 @@ export default function RevenueEnginePage() {
     onSuccess: () => {
       refetchSnapshot();
       refetchFirstMoneyCommandCenter();
+      setSelectedPublicCandidateReviewBatchId("");
       setPublicCandidateRunConfirmation("");
     },
   });
@@ -2823,16 +2824,16 @@ export default function RevenueEnginePage() {
                   </div>
                 </div>
               )}
-              {firstMoneyCommandCenter?.nextCandidateReview && (
+              {selectedPublicCandidateReviewBatch && (
                 <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-emerald-200">Packet revisado listo</p>
                       <p className="mt-1 text-sm font-medium text-white">
-                        {firstMoneyCommandCenter.nextCandidateReview.count} candidato(s) aprobado(s) · decision {firstMoneyCommandCenter.nextCandidateReview.approvalDecisionId}
+                        {selectedPublicCandidateReviewBatch.count} candidato(s) aprobado(s) · decision {selectedPublicCandidateReviewBatch.approvalDecisionId}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-zinc-400">
-                        {firstMoneyCommandCenter.nextCandidateReview.candidateNames.join(", ")}
+                        {selectedPublicCandidateReviewBatch.candidateNames.join(", ")}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         Genera un packet en memoria; no importa leads, no escribe previews y no contacta.
@@ -2840,19 +2841,50 @@ export default function RevenueEnginePage() {
                       <Input
                         value={publicCandidateReviewConfirmation}
                         onChange={(event) => setPublicCandidateReviewConfirmation(event.target.value)}
-                        placeholder={firstMoneyCommandCenter.nextCandidateReview.confirmationText}
+                        placeholder={selectedPublicCandidateReviewBatch.confirmationText}
                         className="mt-3 max-w-xl border-emerald-500/20 bg-black text-xs"
                         data-testid="input-public-candidate-review-confirmation"
                       />
                       <p className="mt-1 text-xs text-zinc-500">
-                        Escribe exactamente: {firstMoneyCommandCenter.nextCandidateReview.confirmationText}
+                        Escribe exactamente: {selectedPublicCandidateReviewBatch.confirmationText}
                       </p>
+                      {!!firstMoneyCommandCenter?.candidateReviewQueue?.length && (
+                        <div className="mt-3 space-y-2" data-testid="first-money-candidate-review-queue">
+                          {firstMoneyCommandCenter.candidateReviewQueue.map((batch) => (
+                            <div
+                              key={batch.id}
+                              className={cn(
+                                "rounded-md border bg-black px-3 py-2 text-xs",
+                                selectedPublicCandidateReviewBatch.id === batch.id ? "border-emerald-500/40" : "border-zinc-800",
+                              )}
+                              data-testid={`first-money-candidate-review-queue-${batch.id}`}
+                            >
+                              <p className="font-medium text-white">{batch.area} · {batch.niche} · {batch.candidateNames.join(", ")}</p>
+                              <p className="mt-1 break-words text-zinc-500">Confirm: {batch.confirmationText}</p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 h-7 border-emerald-500/20 text-xs text-emerald-100 hover:bg-emerald-500/10"
+                                onClick={() => {
+                                  setSelectedPublicCandidateReviewBatchId(batch.id);
+                                  setPublicCandidateReviewConfirmation("");
+                                  setPublicCandidateRunConfirmation("");
+                                }}
+                                data-testid={`button-select-public-candidate-review-batch-${batch.id}`}
+                              >
+                                Select approved batch
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <Button
                       type="button"
                       disabled={
                         publicCandidateReviewPacketMutation.isPending
-                        || publicCandidateReviewConfirmation.trim() !== firstMoneyCommandCenter.nextCandidateReview.confirmationText
+                        || publicCandidateReviewConfirmation.trim() !== selectedPublicCandidateReviewBatch.confirmationText
                       }
                       onClick={() => publicCandidateReviewPacketMutation.mutate()}
                       className="bg-emerald-600 text-white hover:bg-emerald-500"
@@ -2883,13 +2915,13 @@ export default function RevenueEnginePage() {
                       {publicCandidateReviewPacketMutation.error.message}
                     </p>
                   )}
-                  {firstMoneyCommandCenter.nextMoneySprintRun && (
+                  {selectedPublicCandidateRunBatch && (
                     <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="text-xs uppercase tracking-wide text-sky-200">Ejecucion interna</p>
                           <p className="mt-1 text-sm font-medium text-white">
-                            Crea leads y drafts internos para {firstMoneyCommandCenter.nextMoneySprintRun.count} candidato(s).
+                            Crea leads y drafts internos para {selectedPublicCandidateRunBatch.count} candidato(s).
                           </p>
                           <p className="mt-1 text-xs text-zinc-500">
                             No envia outreach, no escribe previews, no cobra, no despliega y bloquea reintentos duplicados.
@@ -2897,19 +2929,19 @@ export default function RevenueEnginePage() {
                           <Input
                             value={publicCandidateRunConfirmation}
                             onChange={(event) => setPublicCandidateRunConfirmation(event.target.value)}
-                            placeholder={firstMoneyCommandCenter.nextMoneySprintRun.confirmationText}
+                            placeholder={selectedPublicCandidateRunBatch.confirmationText}
                             className="mt-3 max-w-xl border-sky-500/20 bg-black text-xs"
                             data-testid="input-public-candidate-run-confirmation"
                           />
                           <p className="mt-1 text-xs text-zinc-500">
-                            Escribe exactamente: {firstMoneyCommandCenter.nextMoneySprintRun.confirmationText}
+                            Escribe exactamente: {selectedPublicCandidateRunBatch.confirmationText}
                           </p>
                         </div>
                         <Button
                           type="button"
                           disabled={
                             publicCandidateMoneySprintRunMutation.isPending
-                            || publicCandidateRunConfirmation.trim() !== firstMoneyCommandCenter.nextMoneySprintRun.confirmationText
+                            || publicCandidateRunConfirmation.trim() !== selectedPublicCandidateRunBatch.confirmationText
                           }
                           onClick={() => publicCandidateMoneySprintRunMutation.mutate()}
                           className="bg-sky-600 text-white hover:bg-sky-500"

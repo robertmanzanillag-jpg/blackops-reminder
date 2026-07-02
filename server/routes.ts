@@ -38,6 +38,7 @@ import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSourc
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueContactPathReadinessPacket, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupPreview, buildRevenueMockupTemplatePack, buildRevenueOutreachApprovalPacket, buildRevenuePaymentPathReadinessPacket, buildRevenueProjectPlan, buildRevenuePublicScoutSchedule, buildRevenueScoutDispatch, buildRevenueWebsiteCreationPacket, buildRevenueWebsitePublishReadinessPacket, buildRevenueWebsiteScaffold, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, findRevenueMoneySprintArtifactsByBusinessNames, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, improvementReviewSchema, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenuePublicLeadCandidate, recordRevenuePublicScoutRun, recordRevenueSalesAutopilot, recordRevenueScoutingMission, reviewRevenuePublicLeadCandidates, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueContactPathReadinessPacketSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintSchema, revenueOutreachApprovalPacketSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenuePaymentPathReadinessPacketSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateReviewSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutRunSchema, revenuePublicScoutScheduleSchema, revenueSalesAutopilotSchema, revenueScoutDispatchSchema, revenueScoutingMissionSchema, revenueWebsiteCreationPacketSchema, revenueWebsitePublishReadinessPacketSchema, revenueWebsiteScaffoldSchema, runRevenueAutomationAgentCommand, runRevenueMoneySprint, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
+import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
@@ -4907,13 +4908,6 @@ export async function registerRoutes(
     confirmationText: z.string().trim().min(1).max(200),
   }).strict();
 
-  const candidateIdsMatch = (left: string[], right: string[]) => {
-    const sortedLeft = [...left].sort();
-    const sortedRight = [...right].sort();
-    return sortedLeft.length === sortedRight.length
-      && sortedLeft.every((candidateId, index) => candidateId === sortedRight[index]);
-  };
-
   const buildGuardedPublicCandidateReview = (input: z.infer<typeof revenuePublicCandidateReviewPacketSchema>) =>
     reviewRevenuePublicLeadCandidates({
       area: input.area,
@@ -4945,7 +4939,7 @@ export async function registerRoutes(
         && input.offerFocus === expectedApproval.offerFocus
         && input.approvedAction === expectedApproval.approvedAction
         && input.confirmationText === expectedApproval.confirmationText
-        && candidateIdsMatch(input.candidateIds, expectedApproval.candidateIds),
+        && revenueCandidateIdsMatch(input.candidateIds, expectedApproval.candidateIds),
       );
 
       if (!matchesActiveBatch) {
@@ -4983,22 +4977,13 @@ export async function registerRoutes(
     try {
       const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
       const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
-      const expectedReview = commandCenter.nextCandidateReview;
-      const matchesActiveBatch = Boolean(
-        expectedReview
-        && input.batchId === expectedReview.id
-        && input.area === expectedReview.area
-        && input.niche === expectedReview.niche
-        && input.offerFocus === expectedReview.offerFocus
-        && input.approvalDecisionId === expectedReview.approvalDecisionId
-        && input.confirmationText === expectedReview.confirmationText
-        && candidateIdsMatch(input.candidateIds, expectedReview.candidateIds),
-      );
+      const expectedReview = commandCenter.candidateReviewQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedReview);
 
       if (!matchesActiveBatch) {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["Review packet payload must match the active approved first-money batch and exact confirmation text."],
+          blockers: ["Review packet payload must match a queued approved first-money batch and exact confirmation text."],
           commandCenter,
         });
       }
@@ -5043,29 +5028,21 @@ export async function registerRoutes(
     try {
       const input = revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
       const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
-      const expectedRun = commandCenter.nextMoneySprintRun;
+      const expectedRun = commandCenter.candidateRunQueue.find((batch) => batch.id === input.batchId);
       if (!expectedRun) {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["No active approved first-money batch is ready for Money Sprint execution."],
+          blockers: ["No queued approved first-money batch is ready for Money Sprint execution."],
           commandCenter,
         });
       }
 
-      const matchesActiveBatch = Boolean(
-        input.batchId === expectedRun.id
-        && input.area === expectedRun.area
-        && input.niche === expectedRun.niche
-        && input.offerFocus === expectedRun.offerFocus
-        && input.approvalDecisionId === expectedRun.approvalDecisionId
-        && input.confirmationText === expectedRun.confirmationText
-        && candidateIdsMatch(input.candidateIds, expectedRun.candidateIds),
-      );
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedRun);
 
       if (!matchesActiveBatch) {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["Money sprint payload must match the active approved first-money batch and exact run confirmation text."],
+          blockers: ["Money sprint payload must match a queued approved first-money batch and exact run confirmation text."],
           commandCenter,
         });
       }
@@ -5074,7 +5051,7 @@ export async function registerRoutes(
       if (review.status !== "ready_for_money_sprint_preview" || review.moneySprintRunPacket.status !== "ready_for_money_sprint_run") {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["Active approved first-money batch is not ready for Money Sprint execution."],
+          blockers: ["Queued approved first-money batch is not ready for Money Sprint execution."],
           reviewedCandidates: review.reviewedCandidates,
           commandCenter,
         });
