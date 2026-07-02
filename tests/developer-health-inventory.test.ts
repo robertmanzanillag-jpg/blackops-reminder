@@ -50,9 +50,11 @@ test("BlackOps Reminder carries the Dialer Planner alternate Replit alias", () =
 
   assert.match(blackops.description || "", /Dialer Planner/);
   assert.equal(blackops.publicUrl, "https://robplanner.replit.app");
+  assert.equal(blackops.healthUrl, "https://robplanner.replit.app/api/health");
   assert.equal(blackops.deploymentProvider, "replit");
   assert.deepEqual((blackops.tags as string[]).includes("alias-dialer-planner"), true);
   assert.deepEqual((blackops.tags as string[]).includes("alternate-replit-deployment"), true);
+  assert.deepEqual((blackops.tags as string[]).includes("liveness-health-endpoint"), true);
 });
 
 test("upsertKnownDeveloperHealthInventory creates missing apps and is idempotent", async () => {

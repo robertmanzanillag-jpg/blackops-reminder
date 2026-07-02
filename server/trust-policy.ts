@@ -64,6 +64,14 @@ const ACTION_RISK: Record<string, RiskLevel> = {
   "dropshipping.contact_supplier": "critical",
   "dropshipping.fulfill_order": "critical",
   "dropshipping.order_sample": "high",
+  "revenue.first_money_candidate_approval": "medium",
+  "revenue.first_money_candidate_review": "medium",
+  "revenue.first_money_sprint_run": "high",
+  "revenue.first_money_contact_path_approval": "critical",
+  "revenue.first_money_payment_path_approval": "critical",
+  "revenue.first_money_ledger_entry_approval": "critical",
+  "revenue.first_money_website_creation_approval": "critical",
+  "revenue.first_money_website_publish_approval": "critical",
   "marketing.publish": "critical",
   "marketing.blackroom_link_add": "high",
   "marketing.blackroom_link_update": "high",
@@ -82,6 +90,7 @@ export function getActionScope(actionType: string): TrustScope {
   if (actionType.startsWith("github.")) return "github";
   if (actionType.startsWith("communications.") || actionType.startsWith("marketing.")) return "communications";
   if (actionType.startsWith("dropshipping.")) return "ecommerce";
+  if (actionType.startsWith("revenue.")) return "ecommerce";
   if (actionType.startsWith("project.")) return "projects";
   if (actionType.startsWith("task.") || actionType.startsWith("reminder.")) return "tasks";
   if (actionType.startsWith("memory.")) return "memory";

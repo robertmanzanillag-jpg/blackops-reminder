@@ -1,0 +1,220 @@
+import {
+  recordRevenueTrustedApprovalDecision,
+} from "./revenue-engine";
+import {
+  buildRevenueLedgerApprovalSnapshotHash,
+  buildRevenueLedgerApprovalTargetId,
+  type RevenueLedgerApprovalSnapshot,
+} from "./revenue-ledger-approval";
+
+export type RevenueLedgerApprovalDecisionCliOptions = RevenueLedgerApprovalSnapshot & {
+  decision: "approved" | "rejected" | "needs_changes";
+  approvedAction: string;
+  paymentEvidence: string;
+  confirmedByRobert: boolean;
+  json: boolean;
+};
+
+function getArgValue(argv: string[], name: string) {
+  const prefix = `${name}=`;
+  const arg = argv.find((value) => value.startsWith(prefix));
+  return arg ? arg.slice(prefix.length).trim() : "";
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function npmRunText(script: string, args: string[] = []) {
+  return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
+}
+
+function hasPlaceholderValue(value: string) {
+  const trimmed = value.trim();
+  return /\b(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+)/i.test(trimmed)
+    || /^(CLIENT[\s_-]*NAME|PAYMENT[\s_-]*EVIDENCE|LEDGER[\s_-]*NOTES)$/i.test(trimmed);
+}
+
+function parseNumberArg(argv: string[], name: string, fallback: number) {
+  const value = getArgValue(argv, name);
+  return value ? Number(value) : fallback;
+}
+
+export function buildRevenueLedgerApprovalNotes(notes: string, paymentEvidence: string) {
+  return [
+    notes.trim(),
+    paymentEvidence.trim() ? `Payment evidence: ${paymentEvidence.trim()}` : "",
+  ].filter(Boolean).join(" | ");
+}
+
+export function parseRevenueLedgerApprovalDecisionArgs(argv: string[]): RevenueLedgerApprovalDecisionCliOptions {
+  const notes = getArgValue(argv, "--notes");
+  const paymentEvidence = getArgValue(argv, "--payment-evidence");
+  return {
+    kind: (getArgValue(argv, "--kind") || "bundle_sale") as RevenueLedgerApprovalDecisionCliOptions["kind"],
+    clientName: getArgValue(argv, "--client-name"),
+    amountUsd: parseNumberArg(argv, "--amount-usd", 0),
+    cashCollectedUsd: parseNumberArg(argv, "--cash-collected-usd", 0),
+    estimatedInternalCostUsd: parseNumberArg(argv, "--estimated-internal-cost-usd", 0),
+    notes: buildRevenueLedgerApprovalNotes(notes, paymentEvidence),
+    decision: (getArgValue(argv, "--decision") || "needs_changes") as RevenueLedgerApprovalDecisionCliOptions["decision"],
+    approvedAction: getArgValue(argv, "--approved-action") || "Approve exact paid ledger entry after Robert verified payment evidence.",
+    paymentEvidence,
+    confirmedByRobert: argv.includes("--confirmed-by-robert"),
+    json: argv.includes("--json"),
+  };
+}
+
+export function validateRevenueLedgerApprovalDecisionOptions(options: RevenueLedgerApprovalDecisionCliOptions) {
+  const errors: string[] = [];
+  if (!["website_sale", "automation_sale", "bundle_sale", "retainer"].includes(options.kind)) {
+    errors.push("--kind must be website_sale, automation_sale, bundle_sale, or retainer.");
+  }
+  if (options.clientName.trim().length < 2) errors.push("--client-name is required.");
+  else if (hasPlaceholderValue(options.clientName)) errors.push("--client-name must be the real client/business name, not a placeholder.");
+  if (!Number.isFinite(options.amountUsd) || options.amountUsd <= 0 || options.amountUsd > 1000000) {
+    errors.push("--amount-usd must be greater than 0 and at most 1000000.");
+  }
+  if (!Number.isFinite(options.cashCollectedUsd) || options.cashCollectedUsd <= 0 || options.cashCollectedUsd > 1000000) {
+    errors.push("--cash-collected-usd must be greater than 0 and at most 1000000.");
+  }
+  if (!Number.isFinite(options.estimatedInternalCostUsd) || options.estimatedInternalCostUsd < 0 || options.estimatedInternalCostUsd > 100000) {
+    errors.push("--estimated-internal-cost-usd must be from 0 to 100000.");
+  }
+  if (!["approved", "rejected", "needs_changes"].includes(options.decision)) {
+    errors.push("--decision must be approved, rejected, or needs_changes.");
+  }
+  if (options.approvedAction.trim().length < 8) {
+    errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes.trim().length > 0 && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes and --payment-evidence must be real ledger/payment context, not placeholders.");
+  }
+  if (options.decision === "approved" && options.paymentEvidence.trim().length < 8) {
+    errors.push("--payment-evidence must describe the collected cash proof for approved ledger entries.");
+  } else if (options.paymentEvidence.trim().length > 0 && hasPlaceholderValue(options.paymentEvidence)) {
+    errors.push("--payment-evidence must be real collected cash proof, not a placeholder.");
+  }
+  return errors;
+}
+
+export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedgerApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueLedgerApprovalDecisionOptions(options);
+  const ledgerInput: RevenueLedgerApprovalSnapshot = {
+    kind: options.kind,
+    clientName: options.clientName,
+    amountUsd: options.amountUsd,
+    cashCollectedUsd: options.cashCollectedUsd,
+    estimatedInternalCostUsd: options.estimatedInternalCostUsd,
+    notes: options.notes,
+  };
+  const targetId = buildRevenueLedgerApprovalTargetId(ledgerInput);
+  const blockers = [
+    ...validationErrors,
+    !options.confirmedByRobert && "--confirmed-by-robert is required to record a ledger approval decision.",
+    options.decision === "approved" && options.cashCollectedUsd <= 0 && "approved ledger entries require cash collected.",
+    options.decision === "approved" && options.paymentEvidence.trim().length < 8 && "--payment-evidence is required for approved ledger entries.",
+  ].filter((item): item is string => Boolean(item));
+
+  if (blockers.length) {
+    return {
+      status: "blocked" as const,
+      decision: null,
+      targetId,
+      ledgerInput,
+      blockers,
+      nextApiBody: null,
+      nextCommand: "",
+      nextAction: "Resolve blockers before recording this ledger decision.",
+      safety: {
+        persistsApprovalDecision: false,
+        recordsLedgerEntry: false,
+        chargesClients: false,
+        sendsOutreach: false,
+        paidDataSpendUsd: 0,
+      },
+    };
+  }
+
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId,
+    targetType: "ledger_entry",
+    decision: options.decision,
+    approvedAction: options.approvedAction,
+    maxSpendUsd: 0,
+    notes: options.paymentEvidence,
+    approvalSource: "ledger_entry_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
+  });
+  const nextApiBody = options.decision === "approved"
+    ? {
+      ...ledgerInput,
+      approvalDecisionId: result.decision.id,
+    }
+    : null;
+  const nextCommand = nextApiBody
+    ? npmRunText("revenue:ledger-record", [
+      `--kind=${ledgerInput.kind}`,
+      `--client-name=${ledgerInput.clientName}`,
+      `--amount-usd=${ledgerInput.amountUsd}`,
+      `--cash-collected-usd=${ledgerInput.cashCollectedUsd}`,
+      `--estimated-internal-cost-usd=${ledgerInput.estimatedInternalCostUsd}`,
+      `--notes=${ledgerInput.notes}`,
+      `--approval-decision-id=${result.decision.id}`,
+    ])
+    : "";
+
+  return {
+    status: result.decision.guardrail.status === "recorded" ? "recorded" as const : "blocked" as const,
+    decision: result.decision,
+    targetId,
+    ledgerInput,
+    blockers: result.decision.guardrail.status === "recorded" ? [] : [result.decision.guardrail.reason],
+    nextApiBody,
+    nextCommand,
+    nextAction: nextApiBody
+      ? `Before recording cash, get a fresh Robert ledger approval, then rerun the next command with --confirmed-by-robert and --confirm-ledger=${shellQuote(`RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${result.decision.id}`)}.`
+      : "Decision recorded; do not record this ledger entry unless Robert changes the decision.",
+    safety: {
+      persistsApprovalDecision: result.decision.guardrail.status === "recorded",
+      recordsLedgerEntry: false,
+      chargesClients: false,
+      sendsOutreach: false,
+      paidDataSpendUsd: 0,
+    },
+  };
+}
+
+export function formatRevenueLedgerApprovalDecisionText(result: ReturnType<typeof buildRevenueLedgerApprovalDecisionFromCli>) {
+  return [
+    `Revenue ledger approval decision: ${result.status}`,
+    `Decision id: ${result.decision?.id || "none"}`,
+    `Target: ${result.targetId}`,
+    `Ledger kind: ${result.ledgerInput.kind}`,
+    `Client: ${result.ledgerInput.clientName || "none"}`,
+    `Cash collected: $${result.ledgerInput.cashCollectedUsd}`,
+    `Blockers: ${result.blockers.length ? result.blockers.join("; ") : "none"}`,
+    `Next API body: ${result.nextApiBody ? JSON.stringify(result.nextApiBody) : "none"}`,
+    `Next command: ${result.nextCommand || "none"}`,
+    `Next action: ${result.nextAction}`,
+    "",
+    "Safety:",
+    `- Persists approval decision: ${result.safety.persistsApprovalDecision ? "yes" : "no"}`,
+    `- Records ledger entry: ${result.safety.recordsLedgerEntry ? "yes" : "no"}`,
+    `- Charges clients: ${result.safety.chargesClients ? "yes" : "no"}`,
+    `- Sends outreach: ${result.safety.sendsOutreach ? "yes" : "no"}`,
+    `- Paid data spend: $${result.safety.paidDataSpendUsd}`,
+  ].join("\n");
+}
+
+export function getRevenueLedgerApprovalDecisionExitCode(result: ReturnType<typeof buildRevenueLedgerApprovalDecisionFromCli>) {
+  return result.status === "recorded" ? 0 : 1;
+}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -10,15 +11,24 @@ import {
   buildRevenueLaunchReadiness,
   buildRevenueLeadRadar,
   buildRevenueMockup,
+  buildRevenueMockupPreview,
   buildRevenueMockupTemplatePack,
+  buildRevenueOutreachApprovalPacket,
   buildRevenueProjectPlan,
+  buildRevenuePublicScoutSchedule,
+  buildRevenueScoutDispatch,
   buildRevenueScoutingMission,
+  buildRevenueWebsiteCreationPacket,
+  buildRevenueWebsiteScaffold,
   closeRevenueAutomationOpportunity,
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
   deliverRevenueDeliveryWorkspace,
+  findRevenueMoneySprintArtifactsByBusinessNames,
   getRevenueEngineSnapshot,
+  getRevenueMockupPreviewPath,
   preflightRevenueExpense,
+  previewRevenueMoneySprintSeeds,
   recordRevenueAgentRun,
   recordRevenueApprovalDecision,
   recordRevenueAutomationIntake,
@@ -29,9 +39,14 @@ import {
   recordRevenueLead,
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
+  recordRevenuePublicLeadCandidate,
+  recordRevenuePublicScoutRun,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  recordRevenueTrustedApprovalDecision,
+  reviewRevenuePublicLeadCandidates,
   runRevenueAutomationAgentCommand,
+  runRevenueMoneySprint,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
   resetRevenueAutomationIntakesForTests,
@@ -41,7 +56,9 @@ import {
   resetRevenueLeadsForTests,
   resetRevenueLedgerForTests,
   resetRevenueOutreachForTests,
+  resetRevenuePublicLeadCandidatesForTests,
   resetRevenueScoutingMissionsForTests,
+  revenuePublicScoutScheduleSchema,
   setRevenueAgentRunsPathForTests,
   setRevenueApprovalDecisionsPathForTests,
   setRevenueAutomationIntakesPathForTests,
@@ -51,12 +68,51 @@ import {
   setRevenueLeadsPathForTests,
   setRevenueLedgerPathForTests,
   setRevenueOutreachPathForTests,
+  setRevenuePublicLeadCandidatesPathForTests,
   setRevenueScoutingMissionsPathForTests,
   setRevenueOutreachSenderForTests,
   sendRevenueOutreachDraft,
   setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
 } from "../server/revenue-engine";
+import {
+  buildRevenueOutreachApprovalTargetId,
+  buildRevenueOutreachSnapshotHash,
+} from "../server/revenue-outreach-approval";
+import {
+  buildRevenueWebsiteCreationApprovalTargetId,
+  buildRevenueWebsiteCreationSnapshotHash,
+  type RevenueWebsiteCreationApprovalProof,
+} from "../server/revenue-website-creation-approval";
+import {
+  buildRevenueLedgerApprovalSnapshotHash,
+  buildRevenueLedgerApprovalTargetId,
+  type RevenueLedgerApprovalSnapshot,
+} from "../server/revenue-ledger-approval";
+import {
+  buildRevenueContactPathApprovalTargetId,
+  buildRevenueContactPathSnapshotHash,
+} from "../server/revenue-contact-path-approval";
+import { buildRevenueFirstMoneyCommandCenterSummary } from "../server/revenue-first-money-command-center-cli";
+import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
+import { matchesRevenueFirstMoneyApprovedCandidateBatch } from "../server/revenue-first-money-route-guards";
+import {
+  executeRevenueFirstMoneyCandidateApprovalFromPendingInput,
+  executeRevenueFirstMoneyCandidateReviewFromPendingInput,
+  executeRevenueFirstMoneyMoneySprintRunFromPendingInput,
+  executeRevenueFirstMoneyContactPathApprovalFromPendingInput,
+  executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput,
+  executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput,
+  executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput,
+  executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput,
+} from "../server/trust-executor";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
+} from "../server/revenue-first-money-approval-pending-action";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -67,15 +123,147 @@ const testAutomationIntakesPath = path.join("/tmp", "revenue-engine-automation-i
 const testAutomationOpportunitiesPath = path.join("/tmp", "revenue-engine-automation-opportunities-test.json");
 const testImprovementReviewsPath = path.join("/tmp", "revenue-engine-improvement-reviews-test.json");
 const testScoutingMissionsPath = path.join("/tmp", "revenue-engine-scouting-missions-test.json");
+const testPublicLeadCandidatesPath = path.join("/tmp", "revenue-engine-public-lead-candidates-test.json");
 const testDeliveryWorkspacesPath = path.join("/tmp", "revenue-engine-delivery-workspaces-test.json");
+const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
+const originalRevenueMoneyMode = process.env.REVENUE_ENGINE_MONEY_MODE;
+const originalRobertContactApproved = process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+const originalManualContactApproved = process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+const originalContactPathApprovalDecisionId = process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+const originalContactMode = process.env.REVENUE_ENGINE_CONTACT_MODE;
+const originalContactPathVerified = process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+const originalContactEvidenceUrl = process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+const originalContactEvidenceNote = process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
+
+function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutreachSnapshotHash>[0]) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Approve exact outreach draft for provider send in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited approval.",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+  });
+}
+
+function buildOutreachSendConfirmation(draftId: string, approvalDecisionId: string) {
+  return `SEND ${draftId} ${approvalDecisionId}`;
+}
+
+function approveWebsiteCreationForTests(
+  draft: Parameters<typeof buildRevenueWebsiteCreationSnapshotHash>[0],
+  proof: RevenueWebsiteCreationApprovalProof = {
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+  },
+) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueWebsiteCreationApprovalTargetId(draft.id),
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "Approve exact paid website creation handoff in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited website creation approval.",
+    approvalSource: "website_creation_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+    websitePublishSnapshotHash: "",
+  });
+}
+
+function approveLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(input),
+    targetType: "ledger_entry",
+    decision: "approved",
+    approvedAction: "Approve exact paid ledger entry in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited ledger approval.",
+    approvalSource: "ledger_entry_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(input),
+  });
+}
+
+function approveManualContactPathForTests() {
+  process.env.REVENUE_ENGINE_MONEY_MODE = "live";
+  process.env.REVENUE_ENGINE_CONTACT_MODE = "manual";
+  process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = "true";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = "https://github.com/example/repo/actions/runs/456";
+  process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = "Manual contact path verified for test.";
+  const snapshot = {
+    contactMode: "manual" as const,
+    fromEmail: "",
+    manualContactApproved: true,
+    emailProviderConfigured: false,
+  };
+  const proof = {
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL,
+    evidenceNote: process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE,
+  };
+  const result = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueContactPathApprovalTargetId(snapshot),
+    targetType: "contact_path",
+    decision: "approved",
+    approvedAction: "Approve exact manual contact path in test.",
+    maxSpendUsd: 0,
+    notes: proof.evidenceNote,
+    approvalSource: "contact_path_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    paymentPathSnapshotHash: "",
+    contactPathSnapshotHash: buildRevenueContactPathSnapshotHash(snapshot, proof),
+    ledgerEntrySnapshotHash: "",
+  });
+  process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID = result.decision.id;
+  return result;
+}
+
+function recordApprovedRevenueLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
+  const approval = approveLedgerEntryForTests(input);
+  return recordRevenueLedgerEntry({
+    ...input,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${input.kind} ${input.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
+  });
+}
+const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
 
 test.beforeEach(() => {
   delete process.env.RESEND_API_KEY;
   delete process.env.REVENUE_ENGINE_FROM_EMAIL;
   delete process.env.RESEND_FROM_EMAIL;
+  delete process.env.REVENUE_ENGINE_MONEY_MODE;
+  delete process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+  delete process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+  delete process.env.REVENUE_ENGINE_CONTACT_MODE;
+  delete process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+  delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
+  process.env.REVENUE_MOCKUPS_DIR = testMockupsDir;
   setRevenueLedgerPathForTests(testLedgerPath);
   setRevenueLeadsPathForTests(testLeadsPath);
   setRevenueOutreachPathForTests(testOutreachPath);
@@ -85,6 +273,7 @@ test.beforeEach(() => {
   setRevenueAutomationOpportunitiesPathForTests(testAutomationOpportunitiesPath);
   setRevenueImprovementReviewsPathForTests(testImprovementReviewsPath);
   setRevenueScoutingMissionsPathForTests(testScoutingMissionsPath);
+  setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
   setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
   resetRevenueLedgerForTests();
   resetRevenueLeadsForTests();
@@ -95,6 +284,7 @@ test.beforeEach(() => {
   resetRevenueAutomationOpportunitiesForTests();
   resetRevenueImprovementReviewsForTests();
   resetRevenueScoutingMissionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
   resetRevenueDeliveryWorkspacesForTests();
 });
 
@@ -109,6 +299,7 @@ test("scopes Revenue Engine JSON paths by authenticated user", () => {
   assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a\/ledger\.json$/);
   assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a\/leads\.json$/);
   assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a\/outreach\.json$/);
+  assert.match(scopedSnapshot.persistence.publicLeadCandidatesPath, /revenue_engine_data\/users\/owner-a\/public_lead_candidates\.json$/);
 });
 
 test.afterEach(() => {
@@ -118,6 +309,24 @@ test.afterEach(() => {
   else process.env.REVENUE_ENGINE_FROM_EMAIL = originalRevenueEngineFromEmail;
   if (originalResendFromEmail === undefined) delete process.env.RESEND_FROM_EMAIL;
   else process.env.RESEND_FROM_EMAIL = originalResendFromEmail;
+  if (originalRevenueMoneyMode === undefined) delete process.env.REVENUE_ENGINE_MONEY_MODE;
+  else process.env.REVENUE_ENGINE_MONEY_MODE = originalRevenueMoneyMode;
+  if (originalRobertContactApproved === undefined) delete process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED;
+  else process.env.REVENUE_ENGINE_ROBERT_CONTACT_APPROVED = originalRobertContactApproved;
+  if (originalManualContactApproved === undefined) delete process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED;
+  else process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = originalManualContactApproved;
+  if (originalContactPathApprovalDecisionId === undefined) delete process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID;
+  else process.env.REVENUE_ENGINE_CONTACT_PATH_APPROVAL_DECISION_ID = originalContactPathApprovalDecisionId;
+  if (originalContactMode === undefined) delete process.env.REVENUE_ENGINE_CONTACT_MODE;
+  else process.env.REVENUE_ENGINE_CONTACT_MODE = originalContactMode;
+  if (originalContactPathVerified === undefined) delete process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED;
+  else process.env.REVENUE_ENGINE_CONTACT_PATH_VERIFIED = originalContactPathVerified;
+  if (originalContactEvidenceUrl === undefined) delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL;
+  else process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_URL = originalContactEvidenceUrl;
+  if (originalContactEvidenceNote === undefined) delete process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE;
+  else process.env.REVENUE_ENGINE_CONTACT_EVIDENCE_NOTE = originalContactEvidenceNote;
+  if (originalRevenueMockupsDir === undefined) delete process.env.REVENUE_MOCKUPS_DIR;
+  else process.env.REVENUE_MOCKUPS_DIR = originalRevenueMockupsDir;
 });
 
 test("caps lead plan spend at the starting monthly budget", () => {
@@ -222,6 +431,87 @@ test("builds an always-on lead radar with contact and mockup limits", () => {
   assert.equal(radar.recommendation.includes("Buscar leads puede correr 24/7"), true);
 });
 
+test("records verified public lead candidates for Robert review without preview import", () => {
+  recordRevenuePublicLeadCandidate({
+    businessName: "Older Orlando Roof",
+    area: "Orlando",
+    niche: "roofers",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@olderroof.example",
+    sourceUrl: "https://example.com/older-roof",
+    recipientEmail: "owner@olderroof.example",
+    evidence: "Public listing has no website, recent roofing photos and verified contact path.",
+    painPoint: "Needs storm repair lead capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Public Scout Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@publicscout.example",
+    sourceUrl: "https://example.com/public-scout-cafe",
+    recipientEmail: "owner@publicscout.example",
+    evidence: "Google listing has no website, public social profile has menu photos and verified contact path.",
+    painPoint: "Needs online menu capture, catering inquiries and follow-up.",
+    estimatedOfferUsd: 3600,
+    status: "research",
+    contactName: "Owner",
+    businessSummary: "Public Scout Cafe is a verified no-website coffee shop candidate with a visible public contact path.",
+    sourceTaskId: "scout-task-01",
+    verificationStatus: "verified_public",
+    publicEvidenceVerified: true,
+    approvalToImport: true,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.candidate.importReady, false);
+  assert.equal(result.importableCount, 0);
+  assert.doesNotMatch(result.importBatchText, /Public Scout Cafe/);
+  assert.doesNotMatch(result.importBatchText, /Older Orlando Roof/);
+  assert.equal(result.importBatchText.split("\n").length, 1);
+  assert.match(result.nextAction, /requires Robert review approval/);
+  assert.equal(result.candidate.safety.persistsLead, false);
+  assert.equal(result.candidate.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentPublicLeadCandidates[0].businessName, "Public Scout Cafe");
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("blocks public lead candidates from import until evidence is verified", () => {
+  const result = recordRevenuePublicLeadCandidate({
+    businessName: "Unverified Salon",
+    area: "Miami",
+    niche: "salon",
+    websiteStatus: "unknown",
+    contactChannel: "unknown",
+    contactValue: "",
+    sourceUrl: "https://example.com/unverified-salon",
+    recipientEmail: "",
+    evidence: "short",
+    painPoint: "Needs review.",
+    estimatedOfferUsd: 1000,
+    status: "research",
+    verificationStatus: "needs_review",
+    publicEvidenceVerified: false,
+    approvalToImport: false,
+  });
+
+  assert.equal(result.status, "needs_review");
+  assert.equal(result.candidate.importReady, false);
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.importBatchText.split("\n").length, 1);
+  assert.match(result.nextAction, /public evidence not verified/);
+  assert.equal(getRevenueEngineSnapshot().recentLeads.length, 0);
+});
+
 test("lead radar caps paid data spend and requires approval", () => {
   const radar = buildRevenueLeadRadar({
     area: "Orlando",
@@ -280,7 +570,32 @@ test("mockup template pack makes AI cost visible and caps monthly spend", () => 
   assert.equal(pack.productionTargets.recommendedContactLimitPerDay, 15);
 });
 
-test("launch readiness is ready to start with only email pending", () => {
+test("launch readiness blocks manual contact until audited contact path is ready", () => {
+  const readiness = buildRevenueLaunchReadiness({
+    area: "Miami",
+    niche: "med spas / aesthetics",
+    dailyResearchTarget: 120,
+    dailyMockupTarget: 5,
+    dailyContactTarget: 10,
+    emailPending: true,
+  });
+
+  assert.equal(readiness.status, "blocked");
+  assert.equal(readiness.blocked, 1);
+  assert.equal(readiness.pendingAllowed, 1);
+  assert.equal(readiness.items.find((item) => item.id === "manual_outreach")?.status, "blocked");
+  assert.equal(readiness.items.find((item) => item.id === "email_sender")?.status, "pending_allowed");
+  assert.equal(readiness.emailPending.isPending, true);
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("outreach drafts"), true);
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("approved contact path"), false);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("no contactar todavia")), true);
+  assert.equal(readiness.summary.includes("no contactar negocios"), true);
+});
+
+test("launch readiness allows manual contact only after audited first-money contact gate", () => {
+  approveManualContactPathForTests();
+
   const readiness = buildRevenueLaunchReadiness({
     area: "Miami",
     niche: "med spas / aesthetics",
@@ -293,24 +608,24 @@ test("launch readiness is ready to start with only email pending", () => {
   assert.equal(readiness.status, "ready_to_start");
   assert.equal(readiness.blocked, 0);
   assert.equal(readiness.pendingAllowed, 1);
-  assert.equal(readiness.items.find((item) => item.id === "email_sender")?.status, "pending_allowed");
-  assert.equal(readiness.emailPending.isPending, true);
-  assert.equal(readiness.emailPending.allowedWhilePending.includes("contact forms"), true);
-  assert.equal(readiness.manualStartPlan.some((step) => step.includes("5 mockups")), true);
-  assert.equal(readiness.summary.includes("solo falta configurar el correo"), true);
+  assert.equal(readiness.items.find((item) => item.id === "manual_outreach")?.status, "ready");
+  assert.equal(readiness.emailPending.allowedWhilePending.includes("approved contact path"), true);
+  assert.match(readiness.items.find((item) => item.id === "manual_outreach")?.evidence || "", /contact path auditado/);
+  assert.equal(readiness.manualStartPlan.some((step) => step.includes("canal aprobado")), true);
+  assert.equal(readiness.summary.includes("contact path auditado"), true);
 });
 
-test("snapshot exposes launch readiness without blocking on email provider", () => {
+test("snapshot exposes launch readiness blocked before contact path approval", () => {
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
-  assert.equal(snapshot.launchReadiness.blocked, 0);
+  assert.equal(snapshot.launchReadiness.status, "blocked");
+  assert.equal(snapshot.launchReadiness.blocked, 1);
   assert.equal(snapshot.launchReadiness.emailPending.isPending, true);
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
 test("records sold apps and automations into revenue metrics", () => {
-  const result = recordRevenueLedgerEntry({
+  const result = recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Black Room",
     amountUsd: 6000,
@@ -332,6 +647,155 @@ test("records sold apps and automations into revenue metrics", () => {
   assert.equal(snapshot.executiveSummary.cashCollectedUsd, 3000);
   assert.equal(snapshot.executiveSummary.status, "ready");
   assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "closed" && stage.count === 1 && stage.valueUsd === 6000), true);
+});
+
+test("blocks raw sale ledger entry without audited approval decision", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "bundle_sale",
+    clientName: "Raw Cash Client",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Unverified deposit claim.",
+  });
+
+  assert.equal(result.entry, null);
+  assert.equal(result.guardrail.status, "blocked");
+  assert.match(result.guardrail.reason, /approvalDecisionId auditado/);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+  assert.equal(result.snapshot.metrics.revenueUsd, 0);
+});
+
+test("blocks sale ledger entry without exact typed ledger confirmation", () => {
+  const ledgerInput = {
+    kind: "bundle_sale" as const,
+    clientName: "Typed Ledger Client",
+    amountUsd: 6000,
+    cashCollectedUsd: 3000,
+    estimatedInternalCostUsd: 64,
+    notes: "Verified deposit.",
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+  const missing = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+  });
+  const wrong = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: "RECORD wrong ledger",
+    confirmedByRobert: true,
+  });
+  const unconfirmed = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+  });
+  const stringFalse = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: "false" as unknown as boolean,
+  });
+
+  assert.equal(missing.entry, null);
+  assert.equal(wrong.entry, null);
+  assert.equal(unconfirmed.entry, null);
+  assert.equal(stringFalse.entry, null);
+  assert.match(missing.guardrail.reason, /confirmacion exacta/);
+  assert.match(wrong.guardrail.reason, /confirmacion exacta/);
+  assert.match(unconfirmed.guardrail.reason, /confirmacion fresca de Robert/);
+  assert.match(stringFalse.guardrail.reason, /confirmacion fresca de Robert/);
+  assert.equal(getRevenueEngineSnapshot().metrics.cashCollectedUsd, 0);
+});
+
+test("blocks ledger sale with wrong source rejected or stale approval decision", () => {
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: "Trust Boundary Cash Client",
+    amountUsd: 3000,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 40,
+    notes: "Automation Sprint deposit.",
+  };
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(ledgerInput),
+    targetType: "ledger_entry",
+    decision: "approved",
+    approvedAction: "Outreach source must not authorize ledger.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "not-a-ledger-hash",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
+  });
+  const rejected = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueLedgerApprovalTargetId(ledgerInput),
+    targetType: "ledger_entry",
+    decision: "rejected",
+    approvedAction: "Rejected ledger decision must not authorize cash.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "ledger_entry_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: "",
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+    ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
+  });
+  const stale = approveLedgerEntryForTests(ledgerInput);
+
+  for (const approvalDecisionId of [
+    wrongSource.decision.id,
+    rejected.decision.id,
+    stale.decision.id,
+  ]) {
+    const result = recordRevenueLedgerEntry({
+      ...ledgerInput,
+      notes: approvalDecisionId === stale.decision.id ? "Automation Sprint deposit changed." : ledgerInput.notes,
+      approvalDecisionId,
+      ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approvalDecisionId}`,
+      confirmedByRobert: true,
+    });
+    assert.equal(result.entry, null);
+    assert.equal(result.guardrail.status, "blocked");
+  }
+
+  assert.equal(getRevenueEngineSnapshot().metrics.cashCollectedUsd, 0);
+});
+
+test("blocks replaying the same ledger approval decision twice", () => {
+  const ledgerInput = {
+    kind: "website_sale" as const,
+    clientName: "Replay Cash Client",
+    amountUsd: 3500,
+    cashCollectedUsd: 1750,
+    estimatedInternalCostUsd: 35,
+    notes: "Website deposit paid.",
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+
+  const first = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
+  });
+  const second = recordRevenueLedgerEntry({
+    ...ledgerInput,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
+  });
+
+  assert.equal(first.entry?.kind, "website_sale");
+  assert.equal(second.entry, null);
+  assert.equal(second.guardrail.status, "blocked");
+  assert.equal(second.snapshot.metrics.cashCollectedUsd, 1750);
+  assert.equal(second.snapshot.metrics.revenueUsd, 3500);
 });
 
 test("blocks ledger expense when spend is higher than collected cash", () => {
@@ -386,7 +850,7 @@ test("profit guard collects first before any external spend", () => {
 });
 
 test("profit guard allows small scale only when cash covers spend", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Cash Client",
     amountUsd: 5000,
@@ -409,7 +873,7 @@ test("profit guard allows small scale only when cash covers spend", () => {
 });
 
 test("expense preflight approves only within cash and monthly cap", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Preflight Cash Client",
     amountUsd: 3000,
@@ -432,7 +896,7 @@ test("expense preflight approves only within cash and monthly cap", () => {
 });
 
 test("records ledger expense only after cash covers spend and cap remains safe", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "bundle_sale",
     clientName: "Expense Safe Client",
     amountUsd: 3000,
@@ -523,6 +987,172 @@ test("qualifies no-website leads for mockup when evidence and contact exist", ()
   assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1 && stage.valueUsd === 2500), true);
 });
 
+test("deduplicates repeated revenue leads by business area and contact", () => {
+  const first = recordRevenueLead({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "instagram",
+    contactValue: "@nositecafe",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu and catering leads.",
+    estimatedOfferUsd: 2500,
+    status: "research",
+  });
+  const second = recordRevenueLead({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "weak_website",
+    contactChannel: "instagram",
+    contactValue: "@nositecafe",
+    evidence: "Updated public evidence confirms no booking CTA and only Instagram ordering.",
+    painPoint: "Needs booking, catering capture and follow-up.",
+    estimatedOfferUsd: 3500,
+    status: "research",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(first.deduped, false);
+  assert.equal(second.deduped, true);
+  assert.equal(first.lead.id, second.lead.id);
+  assert.equal(second.lead.estimatedOfferUsd, 3500);
+  assert.equal(snapshot.recentLeads.length, 1);
+  assert.equal(snapshot.pipelineStages.some((stage) => stage.id === "mockup" && stage.count === 1 && stage.valueUsd === 3500), true);
+});
+
+test("deduplicated revenue leads do not regress advanced pipeline status", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Advanced Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@advanced.example",
+    evidence: "Google listing has no website and Instagram bio only points to posts.",
+    painPoint: "Needs online menu, catering capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "research",
+  });
+
+  recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@advanced.example",
+    contactName: "Owner",
+    businessName: "Advanced Cafe",
+    sourceUrl: "https://example.com/advanced-cafe",
+    businessSummary: "Advanced Cafe has public evidence of weak/no website and needs online menu, catering capture and follow-up.",
+    websitePriceUsd: 2700,
+    automationPriceUsd: 1500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "Draft created first.",
+  });
+
+  const duplicate = recordRevenueLead({
+    businessName: "Advanced Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "unknown",
+    contactChannel: "email",
+    contactValue: "owner@advanced.example",
+    evidence: "",
+    painPoint: "",
+    estimatedOfferUsd: 1500,
+    status: "research",
+  });
+
+  assert.equal(duplicate.deduped, true);
+  assert.equal(duplicate.lead.status, "outreach_ready");
+  assert.equal(duplicate.lead.estimatedOfferUsd, 4200);
+});
+
+test("deduplicated disqualified update cannot remove proposal leads from pipeline", () => {
+  recordRevenueLead({
+    businessName: "Proposal Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@proposal.example",
+    evidence: "Google listing has no website and catering menu only appears in Instagram posts.",
+    painPoint: "Needs online menu, catering capture and follow-up.",
+    estimatedOfferUsd: 4200,
+    status: "proposal_sent",
+  });
+
+  const duplicate = recordRevenueLead({
+    businessName: "Proposal Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "unknown",
+    contactChannel: "email",
+    contactValue: "owner@proposal.example",
+    evidence: "",
+    painPoint: "",
+    estimatedOfferUsd: 1500,
+    status: "disqualified",
+  });
+
+  assert.equal(duplicate.deduped, true);
+  assert.equal(duplicate.lead.status, "proposal_sent");
+});
+
+test("finds Money Sprint artifacts beyond recent snapshot caps", () => {
+  const originalLead = recordRevenueLead({
+    businessName: "Replay Guard Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@replayguard.example",
+    evidence: "Public listing has no website and posts show menu updates without a booking flow.",
+    painPoint: "Needs website, menu, and catering capture.",
+    estimatedOfferUsd: 3200,
+    status: "research",
+  });
+  recordRevenueOutreachDraft({
+    leadId: originalLead.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@replayguard.example",
+    contactName: "Owner",
+    businessName: "Replay Guard Cafe",
+    sourceUrl: "https://example.com/replay-guard",
+    businessSummary: "Replay Guard Cafe has public evidence of no website and needs a menu, booking, and catering lead capture path.",
+    websitePriceUsd: 2400,
+    automationPriceUsd: 800,
+    monthlyRetainerUsd: 500,
+    estimatedInternalMonthlyCostUsd: 35,
+    notes: "Original Money Sprint artifact.",
+  });
+  for (let index = 0; index < 12; index += 1) {
+    recordRevenueLead({
+      businessName: `Later Cafe ${index}`,
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: `owner-${index}@later.example`,
+      evidence: "Public listing has no website and enough activity to qualify this later test lead.",
+      painPoint: "Needs a simple website and contact capture.",
+      estimatedOfferUsd: 2000,
+      status: "research",
+    });
+  }
+
+  const snapshot = getRevenueEngineSnapshot();
+  const artifacts = findRevenueMoneySprintArtifactsByBusinessNames(["Replay Guard Cafe"]);
+
+  assert.equal(snapshot.recentLeads.some((lead) => lead.businessName === "Replay Guard Cafe"), false);
+  assert.deepEqual(artifacts.businessNames, ["Replay Guard Cafe"]);
+  assert.deepEqual(artifacts.leadNames, ["Replay Guard Cafe"]);
+  assert.deepEqual(artifacts.outreachNames, ["Replay Guard Cafe"]);
+});
+
 test("persists leads across module state reloads", () => {
   recordRevenueLead({
     businessName: "Persisted Lead",
@@ -564,6 +1194,31 @@ test("builds a sellable mockup with 3D brief and automation guardrails", () => {
   assert.equal(mockup.qa.some((check) => check.agent === "closer" && check.result === "approval_required"), true);
 });
 
+test("writes a local revenue mockup preview without publishing externally", () => {
+  const preview = buildRevenueMockupPreview({
+    businessName: "No Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    evidence: "Instagram active weekly, no website in bio, menu only in posts.",
+    painPoint: "Needs online menu, events capture and catering leads.",
+    primaryOffer: "Website 3D Premium + Automation Sprint",
+    estimatedOfferUsd: 3500,
+    includeAutomation: true,
+  });
+
+  assert.equal(preview.status, "mockup_ready");
+  assert.equal(preview.fileWritten, true);
+  assert.match(preview.previewUrl, /^\/api\/revenue-engine\/mockup-previews\//);
+  assert.equal("previewPath" in preview, false);
+  const previewPath = getRevenueMockupPreviewPath(preview.slug);
+  assert.equal(existsSync(previewPath), true);
+  const html = readFileSync(previewPath, "utf8");
+  assert.match(html, /No Site Cafe/);
+  assert.match(html, /QA gates before contact/);
+  assert.equal(preview.guardrails.some((item) => item.includes("No requiere hosting pagado")), true);
+});
+
 test("builds production plan only when commercial and cost gates pass", () => {
   const plan = buildRevenueProjectPlan({
     clientName: "No Site Cafe",
@@ -584,6 +1239,303 @@ test("builds production plan only when commercial and cost gates pass", () => {
   assert.equal(plan.budget.insideCostCap, true);
   assert.equal(plan.phases.some((phase) => phase.ownerAgent === "qa-council"), true);
   assert.equal(plan.subagentCorrections.some((item) => item.agent === "cost-controller"), true);
+});
+
+test("blocks direct website scaffold without audited website creation approval", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "Ready Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: true,
+    scopeApproved: true,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/ready-site-cafe",
+    publicEvidence: "Public listing has no website, recent menu photos and a visible business contact path.",
+    painPoint: "Needs online menu, local proof and catering lead capture.",
+    primaryCta: "Request catering",
+    contactEmail: "owner@readysite.example",
+  });
+
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.projectPlan.decision.status, "ready_to_build");
+  assert.equal(scaffold.canWriteFiles, false);
+  assert.equal(scaffold.canDeploy, false);
+  assert.equal(scaffold.safety.writesFiles, false);
+  assert.equal(scaffold.safety.deploys, false);
+  assert.equal(scaffold.safety.blockedActions.includes("generate scaffold without audited website creation approval"), true);
+});
+
+test("blocks website scaffold when commercial gates are missing", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "Unpaid Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: false,
+    scopeApproved: false,
+    publicDataVerified: true,
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/unpaid-site-cafe",
+    publicEvidence: "Public listing has no website and a public contact path.",
+    painPoint: "Needs online ordering and catering lead capture.",
+  });
+
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.canWriteFiles, false);
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("deposito pagado"), true);
+  assert.equal(scaffold.safety.blockedActions.includes("deploy website"), true);
+});
+
+test("website scaffold treats string false approvals as blocked", () => {
+  const scaffold = buildRevenueWebsiteScaffold({
+    clientName: "String False Site Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    packageName: "Website 3D Premium",
+    setupUsd: 3500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalCostUsd: 54,
+    depositPaid: "false",
+    scopeApproved: "false",
+    publicDataVerified: "false",
+    includesAutomation: false,
+    launchTargetDays: 7,
+    clientRequest: "Build a premium local website with lead capture.",
+    sourceUrl: "https://example.com/string-false-site-cafe",
+    publicEvidence: "Public listing has no website and a public contact path.",
+    painPoint: "Needs online ordering and catering lead capture.",
+  } as any);
+
+  assert.equal(scaffold.status, "blocked");
+  assert.equal(scaffold.files.length, 0);
+  assert.equal(scaffold.fileCount, 0);
+  assert.equal(scaffold.projectPlan.decision.status, "blocked");
+  assert.equal(scaffold.projectPlan.decision.missing.includes("deposito pagado"), true);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("scope aprobado"), true);
+  assert.equal(scaffold.projectPlan.decision.missing.includes("data publica verificada"), true);
+});
+
+test("website creation packet turns approved paid outreach into scaffold handoff", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Paid Build Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@paidbuild.example",
+    evidence: "Public listing has no website, menu photos and a visible catering inquiry path.",
+    painPoint: "Needs catering lead capture and online menu conversion.",
+    estimatedOfferUsd: 4700,
+    status: "mockup_ready",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@paidbuild.example",
+    contactName: "Owner",
+    businessName: "Paid Build Cafe",
+    sourceUrl: "https://example.com/paid-build-cafe",
+    businessSummary: "Paid Build Cafe has public evidence of no dedicated website and needs online menu capture plus catering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveWebsiteCreationForTests(draftResult.draft);
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    approvalDecisionId: approval.decision.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: false,
+    deployWebsite: false,
+  });
+
+  assert.equal(packet.status, "ready_for_website_creation_handoff");
+  assert.equal(packet.safety.writesFiles, false);
+  assert.equal(packet.safety.deploys, false);
+  assert.equal(packet.scaffold?.status, "ready_for_internal_preview");
+  assert.equal(packet.scaffoldInput?.projectType, "bundle");
+  assert.equal(packet.scaffoldInput?.includesAutomation, true);
+  assert.equal(packet.scaffoldInput?.packageName, "Website 3D Premium + Automation Sprint");
+  assert.equal(packet.scaffold?.canWriteFiles, false);
+  assert.equal(packet.scaffold?.canDeploy, false);
+  assert.equal(packet.scaffold?.files.some((file) => file.path.endsWith("index.html") && file.content.includes("Paid Build Cafe")), true);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/website-scaffold");
+});
+
+test("website creation packet blocks raw paid build flags without approval decision", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@rawflagsbuild.example",
+    contactName: "Owner",
+    businessName: "Raw Flags Build Cafe",
+    sourceUrl: "https://example.com/raw-flags-build-cafe",
+    businessSummary: "Raw Flags Build Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: false,
+    deployWebsite: false,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /approvalDecisionId valido/);
+});
+
+test("website creation packet rejects wrong or stale website approval decisions", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@stalewebsite.example",
+    contactName: "Owner",
+    businessName: "Stale Website Cafe",
+    sourceUrl: "https://example.com/stale-website-cafe",
+    businessSummary: "Stale Website Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueWebsiteCreationApprovalTargetId(draftResult.draft.id),
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "Wrong source must not authorize website creation.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draftResult.draft),
+    websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draftResult.draft, {
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+      launchTargetDays: 7,
+    }),
+    websitePublishSnapshotHash: "",
+  });
+  const stale = approveWebsiteCreationForTests(draftResult.draft);
+  draftResult.draft.delivery.sendStatus = "blocked";
+
+  for (const approvalDecisionId of [wrongSource.decision.id, stale.decision.id]) {
+    const packet = buildRevenueWebsiteCreationPacket({
+      outreachDraftId: draftResult.draft.id,
+      approvalDecisionId,
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+    });
+
+    assert.equal(packet.status, "blocked");
+    assert.equal(packet.scaffold, null);
+    assert.match(packet.blockedReasons.join("; "), /approvalDecisionId valido/);
+  }
+});
+
+test("website creation packet treats string false approvals as blocked", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@stringfalsebuild.example",
+    contactName: "Owner",
+    businessName: "String False Build Cafe",
+    sourceUrl: "https://example.com/string-false-build-cafe",
+    businessSummary: "String False Build Cafe has public evidence of no dedicated website and needs online ordering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    robertApprovedBuild: "false" as unknown as boolean,
+    clientApprovedScope: "false" as unknown as boolean,
+    depositPaid: "false" as unknown as boolean,
+    publicDataVerified: "false" as unknown as boolean,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /Robert debe aprobar/);
+  assert.match(packet.blockedReasons.join("; "), /deposito/);
+  assert.equal(packet.safety.writesFiles, false);
+});
+
+test("website creation packet blocks write and deploy requests", () => {
+  const draftResult = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@unsafewebsite.example",
+    contactName: "Owner",
+    businessName: "Unsafe Website Cafe",
+    sourceUrl: "https://example.com/unsafe-website-cafe",
+    businessSummary: "Unsafe Website Cafe has public evidence of no dedicated website and needs event lead capture.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveWebsiteCreationForTests(draftResult.draft);
+
+  const packet = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: draftResult.draft.id,
+    approvalDecisionId: approval.decision.id,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: true,
+    deployWebsite: true,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.scaffold, null);
+  assert.match(packet.blockedReasons.join("; "), /no escribe archivos ni despliega/);
+  assert.equal(packet.safety.requestedWriteFiles, true);
+  assert.equal(packet.safety.requestedDeployWebsite, true);
 });
 
 test("records outreach draft without sending and moves matching lead to outreach", () => {
@@ -663,6 +1615,2196 @@ test("sales autopilot prepares lead mockup agent QA and draft without sending", 
   assert.equal(result.snapshot.approvalQueueItems.some((item) => item.source === "outbox" && item.title === "Autopilot Cafe"), true);
 });
 
+test("money sprint creates scout queue previews leads and draft-only outreach", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeads: [
+      {
+        businessName: "Sprint Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@sprintcafe.example",
+        evidence: "Google listing has no website, Instagram bio has no link, menu only appears in posts.",
+        painPoint: "Needs online menu, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 4200,
+        status: "research",
+        sourceUrl: "https://example.com/sprint-cafe-listing",
+        recipientEmail: "owner@sprintcafe.example",
+        contactName: "Owner",
+        businessSummary: "Sprint Cafe has public evidence of no website and needs a stronger online menu, catering capture and follow-up system.",
+      },
+    ],
+  });
+
+  assert.equal(result.status, "ready_to_start");
+  assert.equal(result.scoutQueue.length > 0, true);
+  assert.equal(result.operatingLimits.maxPaidDataSpendUsd, 0);
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].qualification.grade, "A");
+  assert.equal(result.previews.length, 1);
+  assert.equal("previewPath" in result.previews[0], false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), true);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.outreachDrafts[0].status, "draft");
+  assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.approvalGates.some((gate) => gate.includes("No outbound email")), true);
+  assert.equal(result.snapshot.recentLeads[0].businessName, "Sprint Cafe");
+});
+
+test("money sprint treats string false writePreviewFiles as no local preview write", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 1,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: "false",
+    seedLeads: [
+      {
+        businessName: "String False Preview Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@stringfalsepreview.example",
+        evidence: "Google listing has no website, Instagram bio has no link and a public menu photo trail.",
+        painPoint: "Needs online menu and catering inquiry capture.",
+        estimatedOfferUsd: 4200,
+        status: "research",
+        sourceUrl: "https://example.com/string-false-preview-cafe",
+        recipientEmail: "owner@stringfalsepreview.example",
+        contactName: "Owner",
+        businessSummary: "String False Preview Cafe has public evidence of no website and needs an online menu.",
+      },
+    ],
+  } as any);
+
+  assert.equal(result.previews.length, 1);
+  assert.equal("previewPath" in result.previews[0], false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), false);
+});
+
+test("scout dispatch creates safe public research work orders without importing leads", () => {
+  const result = buildRevenueScoutDispatch({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 9,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_public_scout_handoff");
+  assert.equal(result.publicScoutRunEndpoint, "/api/revenue-engine/public-scout-run");
+  assert.equal(result.publicCandidateEndpoint, "/api/revenue-engine/public-lead-candidates");
+  assert.equal(result.previewEndpoint, "/api/revenue-engine/money-sprint-preview");
+  assert.equal(result.workOrders.length, result.scoutQueue.length);
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.approvalToImport, false);
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.verificationStatus, "needs_review");
+  assert.equal(result.workOrders[0].candidatePayloadTemplate.publicEvidenceVerified, false);
+  assert.equal(result.workOrders[0].browserInstructions.some((item) => item.includes("Do not contact")), true);
+  assert.equal(result.safety.blockedActions.includes("contact business"), true);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.persistsLead, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 0);
+});
+
+test("public scout schedule prepares guarded browser runs without executing outreach or writes", () => {
+  const result = buildRevenuePublicScoutSchedule({
+    scheduleName: "Miami cafe scout",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    startDate: "2026-07-01",
+    runDays: 2,
+    runsPerDay: 2,
+    runHourLocal: 9,
+    browserExecutor: "subagent_browser",
+    maxCandidatesPerRun: 5,
+  });
+
+  assert.equal(result.status, "ready_for_guarded_schedule");
+  assert.equal(result.runCount, 4);
+  assert.equal(result.runs[0].date, "2026-07-01");
+  assert.equal(result.runs[0].localTime, "09:00");
+  assert.equal(result.runs[1].localTime, "13:00");
+  assert.equal(result.runs[2].date, "2026-07-02");
+  assert.equal(result.runs[0].targetCandidates, 5);
+  assert.equal(result.runs[0].commands.prepareBrowserSession.command, "npm");
+  assert.deepEqual(result.runs[0].commands.prepareBrowserSession.args.slice(0, 4), ["run", "revenue:browser-scout-session", "--", "--area=Miami"]);
+  assert.equal(result.runs[0].commands.prepareBrowserSession.args.includes("--daily-qualified-lead-limit=5"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--area=Miami"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--niche=coffee shop"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes("--offer-focus=websites"), true);
+  assert.equal(result.runs[0].commands.extractCandidates.args.includes(`--scout-run-id=${result.runs[0].id}`), true);
+  assert.equal(result.runs[0].commands.captureForReview.args.includes("--area=Miami"), true);
+  assert.equal(result.runs[0].commands.captureForReview.args.includes("--source=browser_subagent"), true);
+  assert.equal(result.dispatch.safety.paidDataSpendUsd, 0);
+  assert.equal(result.dispatch.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.runsBrowserAutomatically, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.paidDataSpendUsd, 0);
+  assert.equal(result.safety.requiresRobertReview, true);
+});
+
+test("public scout schedule schema rejects contact spend and write knobs", () => {
+  const parsed = revenuePublicScoutScheduleSchema.safeParse({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 50,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+  });
+
+  assert.equal(parsed.success, false);
+});
+
+test("public scout schedule emits structured args instead of shell strings", () => {
+  const maliciousArea = "Miami$(touch /tmp/revenue-pwn)";
+  const maliciousNiche = "coffee shop`touch /tmp/revenue-pwn2`";
+  const result = buildRevenuePublicScoutSchedule({
+    scheduleName: "Unsafe input scout",
+    area: maliciousArea,
+    niche: maliciousNiche,
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    startDate: "2026-07-01",
+    runDays: 1,
+    runsPerDay: 1,
+    runHourLocal: 9,
+    browserExecutor: "manual_browser",
+    maxCandidatesPerRun: 5,
+  });
+  const commandValues = Object.values(result.runs[0].commands);
+
+  for (const command of commandValues) {
+    assert.equal(command.command, "npm");
+    assert.equal(Array.isArray(command.args), true);
+    assert.equal(command.args.includes(`--area=${maliciousArea}`), true);
+    assert.equal(command.args.some((arg) => arg.includes("$(touch /tmp/revenue-pwn)") || arg.includes("`touch /tmp/revenue-pwn2`")), true);
+    assert.equal(Object.values(command).some((value) => typeof value === "string" && value.includes("npm run")), false);
+  }
+});
+
+test("public scout run captures verified candidates for Robert review without importing leads", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 8,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 4,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    source: "browser_subagent",
+    scoutRunId: "scout-run-miami-coffee-001",
+    candidates: [
+      {
+        businessName: "Batch Scout Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@batchscout.example",
+        sourceUrl: "https://example.com/batch-scout-cafe",
+        recipientEmail: "owner@batchscout.example",
+        evidence: "Google listing has no website, recent menu photos and a public owner email.",
+        painPoint: "Needs online menu, catering lead capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        contactName: "Owner",
+        businessSummary: "Batch Scout Cafe is a no-website coffee shop with visible demand signals and public contact.",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+      {
+        businessName: "Unclear Batch Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "unknown",
+        contactChannel: "unknown",
+        contactValue: "",
+        sourceUrl: "https://example.com/unclear-batch-cafe",
+        recipientEmail: "",
+        evidence: "Needs review.",
+        painPoint: "Needs review.",
+        estimatedOfferUsd: 900,
+        status: "research",
+        verificationStatus: "needs_review",
+        publicEvidenceVerified: false,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.doesNotMatch(result.importBatchText, /Batch Scout Cafe/);
+  assert.doesNotMatch(result.importBatchText, /Unclear Batch Cafe/);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.preview.totals.mockupReady, 0);
+  assert.equal(result.blockedCandidates.length, 2);
+  assert.equal(result.safety.persistsPublicCandidates, true);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.ignoresCaptureImportApproval, true);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.equal(snapshot.recentPublicLeadCandidates.length, 2);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("public scout run does not auto-approve unverified candidates", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: true,
+    candidates: [
+      {
+        businessName: "Almost Verified Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@almostsalon.example",
+        sourceUrl: "https://example.com/almost-salon",
+        recipientEmail: "owner@almostsalon.example",
+        evidence: "Public directory lists services and contact, but QA has not verified the evidence yet.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "needs_review",
+        publicEvidenceVerified: false,
+        approvalToImport: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /public evidence not verified/);
+});
+
+test("public scout run ignores autoApproveVerified for verified candidates", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: true,
+    candidates: [
+      {
+        businessName: "Auto Approve Trap Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@autotrap.example",
+        sourceUrl: "https://example.com/auto-trap-cafe",
+        recipientEmail: "owner@autotrap.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /requires Robert review approval/);
+});
+
+test("public scout run treats string false approval flags as false", () => {
+  const result = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    autoApproveVerified: "false" as unknown as boolean,
+    candidates: [
+      {
+        businessName: "String False Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@stringfalse.example",
+        sourceUrl: "https://example.com/string-false-cafe",
+        recipientEmail: "owner@stringfalse.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: "false" as unknown as boolean,
+        approvalToImport: "false" as unknown as boolean,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "needs_candidate_review");
+  assert.equal(result.importableCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.recordedCandidates[0].candidate.publicEvidenceVerified, false);
+  assert.equal(result.recordedCandidates[0].candidate.approvalToImport, false);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /public evidence not verified/);
+  assert.match(result.blockedCandidates[0].reasons.join("; "), /requires Robert review approval/);
+});
+
+test("Robert review promotes captured public candidates to preview batch without importing leads", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Robert Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@robertreview.example",
+        sourceUrl: "https://example.com/robert-review-cafe",
+        recipientEmail: "owner@robertreview.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and catering inquiry follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const bypass = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+    reviewerNote: "Robert approved this candidate for preview only.",
+  });
+  const approvalDecision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence for preview only.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(approvalDecision);
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+    approvalDecisionId: approvalDecision.id,
+    reviewerNote: "Robert approved this candidate for preview only.",
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(bypass.status, "blocked");
+  assert.equal(bypass.approvedCount, 0);
+  assert.match(bypass.reviewedCandidates[0].blockedReasons.join("; "), /approvalDecisionId required/);
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.approvalDecisionId, approvalDecision.id);
+  assert.equal(result.approvedCount, 1);
+  assert.match(result.importBatchText, /Robert Review Cafe/);
+  assert.equal(result.preview.totals.accepted, 1);
+  assert.equal(result.preview.totals.mockupReady, 1);
+  assert.equal(result.moneySprintRunPacket.status, "ready_for_money_sprint_run");
+  assert.equal(result.moneySprintRunPacket.endpoint, "/api/revenue-engine/money-sprint");
+  assert.equal(result.moneySprintRunPacket.requestBody.maxPaidDataSpendUsd, 0);
+  assert.equal(result.moneySprintRunPacket.requestBody.requireRobertApprovalToContact, true);
+  assert.equal(result.moneySprintRunPacket.requestBody.writePreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.requestBody.seedLeads.length, 0);
+  assert.match(result.moneySprintRunPacket.requestBody.seedLeadBatchText, /Robert Review Cafe/);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.acceptedLeads, 1);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.mockupsToPrepare, 1);
+  assert.equal(result.moneySprintRunPacket.expectedOutput.outreachDraftsToCreate, 1);
+  assert.equal(result.moneySprintRunPacket.safety.sendsOutreach, false);
+  assert.equal(result.moneySprintRunPacket.safety.writesPreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.safety.requiresRobertApprovalBeforeRun, true);
+  assert.equal(result.nextApiAction, "human_review_money_sprint_packet");
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("Robert review packet strips unsafe money sprint knobs before run handoff", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Adversarial Packet Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@adversarialpacket.example",
+        sourceUrl: "https://example.com/adversarial-packet-cafe",
+        recipientEmail: "owner@adversarialpacket.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approvalDecision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence before adversarial packet sanitization.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(approvalDecision);
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: false,
+    writePreviewFiles: true,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+    approvalDecisionId: approvalDecision.id,
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.preview.safety.persistsData, false);
+  assert.equal(result.moneySprintRunPacket.status, "ready_for_money_sprint_run");
+  assert.equal(result.moneySprintRunPacket.requestBody.maxPaidDataSpendUsd, 0);
+  assert.equal(result.moneySprintRunPacket.requestBody.requireRobertApprovalToContact, true);
+  assert.equal(result.moneySprintRunPacket.requestBody.writePreviewFiles, false);
+  assert.equal(result.moneySprintRunPacket.safety.requiresRobertApprovalBeforeRun, true);
+  assert.equal(result.moneySprintRunPacket.safety.paidDataSpendUsd, 0);
+  assert.equal(result.nextApiAction, "human_review_money_sprint_packet");
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("Robert review blocks money sprint packet when requested candidate ids are missing", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Missing Id Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@missingid.example",
+        sourceUrl: "https://example.com/missing-id-cafe",
+        recipientEmail: "owner@missingid.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs online menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [capture.recordedCandidates[0].candidate.id, "missing-id"],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.missingIds, ["missing-id"]);
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.nextApiAction, "/api/revenue-engine/public-scout-run");
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /missing candidate ids: missing-id/);
+});
+
+test("Robert review blocks duplicate candidate ids before money sprint packet", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Duplicate Id Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@duplicateid.example",
+        sourceUrl: "https://example.com/duplicate-id-salon",
+        recipientEmail: "owner@duplicateid.example",
+        evidence: "Public listing has no website, recent service photos and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId, candidateId],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.duplicateIds, [candidateId]);
+  assert.equal(result.foundCount, 1);
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.nextApiAction, "/api/revenue-engine/public-scout-run");
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /duplicate candidate ids:/);
+});
+
+test("Robert review blocks captured candidates without explicit approval", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Needs Robert Salon",
+        area: "Miami",
+        niche: "salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@needsrobert.example",
+        sourceUrl: "https://example.com/needs-robert-salon",
+        recipientEmail: "owner@needsrobert.example",
+        evidence: "Public listing has no website and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3200,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "both",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [capture.recordedCandidates[0].candidate.id],
+    approvedByRobert: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.approvedCount, 0);
+  assert.equal(result.preview.totals.accepted, 0);
+  assert.equal(result.moneySprintRunPacket.status, "blocked");
+  assert.equal(result.moneySprintRunPacket.requestBody.seedLeadBatchText.trim().split(/\r?\n/).length, 1);
+  assert.match(result.moneySprintRunPacket.blockedUntil.join("; "), /no importable leads/i);
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /approvedByRobert false/);
+});
+
+test("Robert review rechecks candidate evidence instead of trusting stored qualification", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Stale Evidence Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@staleevidence.example",
+        sourceUrl: "https://example.com/stale-evidence-cafe",
+        recipientEmail: "owner@staleevidence.example",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const persisted = JSON.parse(readFileSync(testPublicLeadCandidatesPath, "utf8"));
+  persisted[0].evidence = "short";
+  writeFileSync(testPublicLeadCandidatesPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+  setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
+
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds: [candidateId],
+    approvedByRobert: true,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.approvedCount, 0);
+  assert.match(result.reviewedCandidates[0].blockedReasons.join("; "), /evidencia publica revisable/);
+  assert.equal(result.preview.totals.accepted, 0);
+});
+
+test("routes wire scout dispatch endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueScoutDispatch/);
+  assert.match(routesSource, /revenueScoutDispatchSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/scout-dispatch"/);
+  assert.match(
+    routesSource,
+    /const input = revenueScoutDispatchSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueScoutDispatch\(input\)\)/,
+  );
+});
+
+test("routes expose first-money command center endpoint", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueFirstMoneyCommandCenterSummary/);
+  assert.match(routesSource, /app\.get\("\/api\/revenue-engine\/first-money-command-center"/);
+  assert.match(
+    routesSource,
+    /res\.json\(buildRevenueFirstMoneyCommandCenterSummary\(\{ mode: "first-sprint", json: false \}\)\)/,
+  );
+});
+
+test("routes block direct public candidate approval endpoint", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action"'),
+  );
+
+  assert.match(routesSource, /revenuePublicCandidateApprovalDecisionSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
+  assert.match(routesSource, /batchId: z\.string\(\)/);
+  assert.match(routesSource, /confirmationText: z\.string\(\)/);
+  assert.match(routeSource, /Direct public candidate approval is disabled/);
+  assert.match(routeSource, /nextEndpoint: "\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action"/);
+  assert.match(routeSource, /persistsApprovalDecision: false/);
+  assert.match(routeSource, /createsPendingAction: false/);
+  assert.match(routeSource, /importsLeads: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.doesNotMatch(routeSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
+  assert.doesNotMatch(routeSource, /confirmedByRobert: true/);
+  assert.doesNotMatch(routeSource, /const expectedApproval = commandCenter\.candidateApprovalQueue/);
+  assert.doesNotMatch(routesSource, /confirmedByRobert: z\.literal\(true\)/);
+});
+
+test("routes wire public candidate approval pending action without executing approval", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet"'),
+  );
+
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_candidate_approval"/);
+  assert.match(routeSource, /resourceType: "revenue_public_candidate_batch"/);
+  assert.match(routeSource, /const expectedApproval = commandCenter\.candidateApprovalQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /input\.confirmationText === expectedApproval\.confirmationText/);
+  assert.match(routeSource, /candidateCards: expectedApproval\.candidateCards/);
+  assert.match(routeSource, /requestedReview: "approve_or_reject_first_money_candidate_batch"/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.match(routeSource, /createsPendingAction: true/);
+  assert.match(routeSource, /persistsApprovalDecision: false/);
+  assert.doesNotMatch(routeSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
+  assert.doesNotMatch(routeSource, /decision: input\.decision/);
+  assert.doesNotMatch(routeSource, /confirmedByRobert: true/);
+  assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
+  assert.match(trustPolicySource, /"revenue\.first_money_candidate_approval": "medium"/);
+  assert.match(trustPolicySource, /actionType\.startsWith\("revenue\."\)\) return "ecommerce"/);
+});
+
+test("routes wire first-money contact and payment approvals through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const contactRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/contact-path-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/payment-path-approval-pending-action"'),
+  );
+  const paymentRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/payment-path-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(contactRouteSource, /revenueContactPathApprovalPendingActionSchema/);
+  assert.match(contactRouteSource, /createPendingActionForApproval/);
+  assert.match(contactRouteSource, /actionType: "revenue\.first_money_contact_path_approval"/);
+  assert.match(contactRouteSource, /resourceType: "revenue_contact_path"/);
+  assert.match(contactRouteSource, /requestedReview: "approve_first_money_contact_path"/);
+  assert.match(contactRouteSource, /sendsOutreach: false/);
+  assert.match(contactRouteSource, /chargesClients: false/);
+  assert.match(contactRouteSource, /editsEnvironment: false/);
+  assert.match(contactRouteSource, /storesSecrets: false/);
+  assert.doesNotMatch(contactRouteSource, /buildRevenueContactPathApprovalDecisionFromCli/);
+
+  assert.match(paymentRouteSource, /revenuePaymentPathApprovalPendingActionSchema/);
+  assert.match(paymentRouteSource, /createPendingActionForApproval/);
+  assert.match(paymentRouteSource, /actionType: "revenue\.first_money_payment_path_approval"/);
+  assert.match(paymentRouteSource, /resourceType: "revenue_payment_path"/);
+  assert.match(paymentRouteSource, /requestedReview: "approve_first_money_payment_path"/);
+  assert.match(paymentRouteSource, /chargesClients: false/);
+  assert.match(paymentRouteSource, /recordsLedgerEntry: false/);
+  assert.match(paymentRouteSource, /sendsOutreach: false/);
+  assert.match(paymentRouteSource, /editsEnvironment: false/);
+  assert.match(paymentRouteSource, /storesSecrets: false/);
+  assert.doesNotMatch(paymentRouteSource, /buildRevenuePaymentPathApprovalDecisionFromCli/);
+
+  assert.match(trustPolicySource, /"revenue\.first_money_contact_path_approval": "critical"/);
+  assert.match(trustPolicySource, /"revenue\.first_money_payment_path_approval": "critical"/);
+});
+
+test("routes wire first-money ledger and website creation approvals through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const ledgerRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/ledger-entry-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/website-creation-approval-pending-action"'),
+  );
+  const websiteRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/website-creation-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(ledgerRouteSource, /revenueLedgerEntryApprovalPendingActionSchema/);
+  assert.match(ledgerRouteSource, /createPendingActionForApproval/);
+  assert.match(ledgerRouteSource, /actionType: "revenue\.first_money_ledger_entry_approval"/);
+  assert.match(ledgerRouteSource, /resourceType: "revenue_ledger_entry"/);
+  assert.match(ledgerRouteSource, /requestedReview: "approve_first_money_ledger_entry"/);
+  assert.match(ledgerRouteSource, /recordsLedgerEntry: false/);
+  assert.match(ledgerRouteSource, /chargesClients: false/);
+  assert.match(ledgerRouteSource, /sendsOutreach: false/);
+  assert.doesNotMatch(ledgerRouteSource, /buildRevenueLedgerApprovalDecisionFromCli/);
+
+  assert.match(websiteRouteSource, /revenueWebsiteCreationApprovalPendingActionSchema/);
+  assert.match(websiteRouteSource, /createPendingActionForApproval/);
+  assert.match(websiteRouteSource, /actionType: "revenue\.first_money_website_creation_approval"/);
+  assert.match(websiteRouteSource, /resourceType: "revenue_website_creation"/);
+  assert.match(websiteRouteSource, /requestedReview: "approve_first_money_website_creation"/);
+  assert.match(websiteRouteSource, /writesFiles: false/);
+  assert.match(websiteRouteSource, /deploys: false/);
+  assert.match(websiteRouteSource, /publishesPreview: false/);
+  assert.match(websiteRouteSource, /chargesClients: false/);
+  assert.doesNotMatch(websiteRouteSource, /buildRevenueWebsiteCreationApprovalDecisionFromCli/);
+
+  assert.match(trustPolicySource, /"revenue\.first_money_ledger_entry_approval": "critical"/);
+  assert.match(trustPolicySource, /"revenue\.first_money_website_creation_approval": "critical"/);
+});
+
+test("routes wire first-money website publish approval through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/website-publish-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(routeSource, /revenueWebsitePublishApprovalPendingActionSchema/);
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_website_publish_approval"/);
+  assert.match(routeSource, /resourceType: "revenue_website_publish"/);
+  assert.match(routeSource, /requestedReview: "approve_first_money_website_publish"/);
+  assert.match(routeSource, /writesFiles: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.match(routeSource, /publishesWebsite: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.doesNotMatch(routeSource, /buildRevenueWebsitePublishApprovalDecisionFromCli/);
+  assert.match(trustPolicySource, /"revenue\.first_money_website_publish_approval": "critical"/);
+});
+
+test("first-money contact and payment approval pending action schemas reject unreviewable payloads before queueing", () => {
+  const validContact = revenueContactPathApprovalPendingActionSchema.parse({
+    contactMode: "manual",
+    manualContactApproved: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this manual contact path.",
+  });
+  assert.equal(validContact.contactMode, "manual");
+  assert.equal(validContact.approvedAction, "Approve exact manual contact path for first-money outreach.");
+
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "email_provider",
+    fromEmail: "not-an-email",
+    emailProviderConfigured: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    evidenceNote: "Real proof note for contact path.",
+  }).success, false);
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "email_provider",
+    emailProviderConfigured: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this provider contact path.",
+  }).success, false);
+  assert.equal(revenueContactPathApprovalPendingActionSchema.safeParse({
+    contactMode: "manual",
+    manualContactApproved: false,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Robert reviewed this manual contact path.",
+  }).success, false);
+
+  const validPayment = revenuePaymentPathApprovalPendingActionSchema.parse({
+    paymentLink: "https://buy.stripe.com/test_first_money_deposit",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  });
+  assert.equal(validPayment.paymentLink, "https://buy.stripe.com/test_first_money_deposit");
+  assert.equal(validPayment.depositConfirmedByRobert, false);
+
+  assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse({
+    paymentLink: "https://example.com/not-stripe",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  }).success, false);
+  assert.equal(revenuePaymentPathApprovalPendingActionSchema.safeParse({
+    paymentLink: "https://checkout.stripe.com/c/pay/cs_test_first_money",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: false,
+    depositConfirmedByRobert: false,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Robert smoke-tested the payment path.",
+  }).success, false);
+});
+
+test("first-money ledger and website approval pending action schemas reject unreviewable payloads before queueing", () => {
+  const validLedger = revenueLedgerEntryApprovalPendingActionSchema.parse({
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    notes: "Robert verified the deposit receipt.",
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  });
+  assert.equal(validLedger.kind, "website_sale");
+  assert.equal(validLedger.approvedAction, "Approve exact paid ledger entry after Robert verified payment evidence.");
+
+  assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse({
+    kind: "website_sale",
+    clientName: "REPLACE_WITH_CLIENT_NAME",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  }).success, false);
+  assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse({
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 0,
+    estimatedInternalCostUsd: 35,
+    paymentEvidence: "PAYMENT_EVIDENCE",
+  }).success, false);
+
+  const validWebsiteCreation = revenueWebsiteCreationApprovalPendingActionSchema.parse({
+    outreachDraftId: "draft-paid-build-cafe",
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+  });
+  assert.equal(validWebsiteCreation.launchTargetDays, 7);
+  assert.equal(validWebsiteCreation.approvedAction, "Approve paid website creation handoff after scope, deposit, and public data review.");
+
+  assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "OUTREACH_ID",
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+  }).success, false);
+  assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    notes: "REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: false,
+    publicDataVerified: true,
+  }).success, false);
+
+  const validPublish = revenueWebsitePublishApprovalPendingActionSchema.parse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  });
+  assert.equal(validPublish.launchTargetDays, 7);
+  assert.equal(validPublish.approvedAction, "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.");
+
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "CREATION_APPROVAL_ID",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "DEPLOY_PROVIDER",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "DEPLOY_PROVIDER",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: false,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "REPLACE_WITH_PREVIEW_URL",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "file:///tmp/preview.html",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+});
+
+test("Trust Center executor records first-money contact and payment approvals only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-setup-test");
+  resetRevenueApprovalDecisionsForTests();
+
+  assert.throws(
+    () => executeRevenueFirstMoneyContactPathApprovalFromPendingInput({
+      requestedReview: "wrong_review",
+      contactMode: "manual",
+      manualContactApproved: true,
+      robertApprovedContactPath: true,
+      contactPathVerified: true,
+      evidenceUrl: "https://evidence.example.com/contact-path",
+      evidenceNote: "Manual contact path reviewed by Robert.",
+    }, "trust-executor-first-money-setup-test"),
+    /no longer matches the first-money approval queue/,
+  );
+
+  const contactResult = executeRevenueFirstMoneyContactPathApprovalFromPendingInput({
+    requestedReview: "approve_first_money_contact_path",
+    contactMode: "manual",
+    manualContactApproved: true,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://evidence.example.com/contact-path",
+    evidenceNote: "Manual contact path reviewed by Robert.",
+  }, "trust-executor-first-money-setup-test");
+
+  assert.equal(contactResult.status, "recorded");
+  assert.equal(contactResult.decision?.targetType, "contact_path");
+  assert.equal(contactResult.safety.persistsApprovalDecision, true);
+  assert.equal(contactResult.safety.sendsOutreach, false);
+  assert.equal(contactResult.safety.chargesClients, false);
+  assert.equal(contactResult.safety.editsEnvironment, false);
+  assert.equal(contactResult.safety.storesSecrets, false);
+  assert.equal(contactResult.safety.deploys, false);
+
+  assert.throws(
+    () => executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput({
+      requestedReview: "approve_first_money_payment_path",
+      paymentLink: "https://example.com/not-stripe",
+      robertApprovedPaymentPath: true,
+      paymentSmokeVerified: true,
+      expectedDepositUsd: 1500,
+      expectedPackage: "First Money Website Deposit",
+      evidenceUrl: "https://evidence.example.com/payment-path",
+      evidenceNote: "Stripe payment path smoke tested by Robert.",
+    }, "trust-executor-first-money-setup-test"),
+    /Payment link must be an HTTPS Stripe payment/,
+  );
+
+  const paymentResult = executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput({
+    requestedReview: "approve_first_money_payment_path",
+    paymentLink: "https://buy.stripe.com/test_first_money_deposit",
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    expectedDepositUsd: 1500,
+    expectedPackage: "First Money Website Deposit",
+    evidenceUrl: "https://evidence.example.com/payment-path",
+    evidenceNote: "Stripe payment path smoke tested by Robert.",
+  }, "trust-executor-first-money-setup-test");
+
+  assert.equal(paymentResult.status, "recorded");
+  assert.equal(paymentResult.decision?.targetType, "payment_path");
+  assert.equal(paymentResult.safety.persistsApprovalDecision, true);
+  assert.equal(paymentResult.safety.chargesClients, false);
+  assert.equal(paymentResult.safety.recordsLedgerEntry, false);
+  assert.equal(paymentResult.safety.sendsOutreach, false);
+  assert.equal(paymentResult.safety.editsEnvironment, false);
+  assert.equal(paymentResult.safety.storesSecrets, false);
+  assert.equal(paymentResult.safety.deploys, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
+});
+
+test("Trust Center executor records first-money ledger and website creation approvals only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-delivery-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenueLedgerForTests();
+
+  assert.throws(
+    () => executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+      requestedReview: "approve_first_money_ledger_entry",
+      kind: "website_sale",
+      clientName: "REPLACE_WITH_CLIENT_NAME",
+      amountUsd: 3500,
+      cashCollectedUsd: 1500,
+      estimatedInternalCostUsd: 35,
+      paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+    }, "trust-executor-first-money-delivery-test"),
+    /Client name must be real/,
+  );
+  assert.throws(
+    () => executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+      requestedReview: "approve_first_money_ledger_entry",
+      kind: "not_a_sale_kind",
+      clientName: "Paid Build Cafe",
+      amountUsd: 3500,
+      cashCollectedUsd: 1500,
+      estimatedInternalCostUsd: 35,
+      paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+    }, "trust-executor-first-money-delivery-test"),
+    /Invalid enum value|invalid/i,
+  );
+
+  const ledgerResult = executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+    requestedReview: "approve_first_money_ledger_entry",
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    notes: "Robert verified deposit receipt.",
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(ledgerResult.status, "recorded");
+  assert.equal(ledgerResult.decision?.targetType, "ledger_entry");
+  assert.equal(ledgerResult.safety.persistsApprovalDecision, true);
+  assert.equal(ledgerResult.safety.recordsLedgerEntry, false);
+  assert.equal(ledgerResult.safety.chargesClients, false);
+  assert.equal(ledgerResult.safety.sendsOutreach, false);
+  assert.equal(ledgerResult.safety.editsEnvironment, false);
+  assert.equal(ledgerResult.safety.storesSecrets, false);
+  assert.equal(ledgerResult.safety.deploys, false);
+  assert.equal(getRevenueEngineSnapshot().recentLedger.length, 0);
+
+  const leadResult = recordRevenueLead({
+    businessName: "Paid Build Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@paidbuild.example",
+    evidence: "Public listing has no website and visible menu/service photos.",
+    painPoint: "Needs online menu and catering lead capture.",
+    estimatedOfferUsd: 4700,
+    status: "mockup_ready",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@paidbuild.example",
+    contactName: "Owner",
+    businessName: "Paid Build Cafe",
+    sourceUrl: "https://example.com/paid-build-cafe",
+    businessSummary: "Paid Build Cafe has public evidence of no dedicated website.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_creation",
+      outreachDraftId: draftResult.draft.id,
+      notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+      launchTargetDays: 0,
+    }, "trust-executor-first-money-delivery-test"),
+    /Number must be greater than or equal to 1|launchTargetDays|invalid/i,
+  );
+
+  const websiteResult = executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput({
+    requestedReview: "approve_first_money_website_creation",
+    outreachDraftId: draftResult.draft.id,
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(websiteResult.status, "recorded");
+  assert.equal(websiteResult.decision?.targetType, "delivery_workspace");
+  assert.equal(websiteResult.safety.persistsApprovalDecision, true);
+  assert.equal(websiteResult.safety.writesFiles, false);
+  assert.equal(websiteResult.safety.deploys, false);
+  assert.equal(websiteResult.safety.publishesPreview, false);
+  assert.equal(websiteResult.safety.chargesClients, false);
+  assert.equal(websiteResult.safety.sendsOutreach, false);
+  assert.equal(websiteResult.safety.editsEnvironment, false);
+  assert.equal(websiteResult.safety.storesSecrets, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
+
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_publish",
+      outreachDraftId: draftResult.draft.id,
+      websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+      notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+      robertApprovedPublish: true,
+      previewDeployVerified: true,
+      appQaTargetPassed: true,
+      rollbackVerified: true,
+      deployProvider: "Replit",
+      previewDeployUrl: "REPLACE_WITH_PREVIEW_URL",
+      appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+      rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+      launchTargetDays: 7,
+    }, "trust-executor-first-money-delivery-test"),
+    /Evidence URL must be real evidence/,
+  );
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_publish",
+      outreachDraftId: draftResult.draft.id,
+      websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+      notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+      robertApprovedPublish: true,
+      previewDeployVerified: true,
+      appQaTargetPassed: true,
+      rollbackVerified: true,
+      deployProvider: "Replit",
+      previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+      appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+      rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+      launchTargetDays: 7,
+      publishWebsite: true,
+    }, "trust-executor-first-money-delivery-test"),
+    /Unrecognized key|unrecognized_keys|publishWebsite/i,
+  );
+
+  const publishResult = executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+    requestedReview: "approve_first_money_website_publish",
+    outreachDraftId: draftResult.draft.id,
+    websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+    launchTargetDays: 7,
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(publishResult.status, "recorded");
+  assert.equal(publishResult.decision?.targetType, "website_publish");
+  assert.equal(publishResult.safety.persistsApprovalDecision, true);
+  assert.equal(publishResult.safety.writesFiles, false);
+  assert.equal(publishResult.safety.deploys, false);
+  assert.equal(publishResult.safety.publishesWebsite, false);
+  assert.equal(publishResult.safety.chargesClients, false);
+  assert.equal(publishResult.safety.sendsOutreach, false);
+  assert.equal(publishResult.safety.editsEnvironment, false);
+  assert.equal(publishResult.safety.storesSecrets, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 3);
+});
+
+test("Trust Center executor records first-money public candidate approval only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
+
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Trust Executor Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@trustexecutor.biz",
+        sourceUrl: "https://public-directory.invalid/trust-executor-cafe",
+        recipientEmail: "owner@trustexecutor.biz",
+        evidence: "Public listing has no website, recent public menu photos and a visible public owner email.",
+        painPoint: "Needs a simple website and catering inquiry follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const batch = commandCenter.candidateApprovalQueue.find((item) => item.candidateIds.includes(candidateId));
+
+  assert.ok(batch);
+  const pendingInput = {
+    batchId: batch.id,
+    candidateIds: batch.candidateIds,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: batch.offerFocus,
+    requestedReview: "approve_or_reject_first_money_candidate_batch",
+    approvedAction: batch.approvedAction,
+    confirmationText: batch.confirmationText,
+  };
+
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateApprovalFromPendingInput({
+      ...pendingInput,
+      confirmationText: "APPROVE PUBLIC CANDIDATES edited-batch",
+    }, "trust-executor-first-money-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+
+  const result = executeRevenueFirstMoneyCandidateApprovalFromPendingInput({
+    ...pendingInput,
+  }, "trust-executor-first-money-test");
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "recorded");
+  assert.ok(result.decision);
+  assert.equal(result.safety.persistsApprovalDecision, true);
+  assert.equal(result.safety.importsLeads, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.chargesClients, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.safety.exposesContactDetails, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+  assert.ok(result.commandCenter.candidateReviewQueue.some((item) => (
+    item.approvalDecisionId === result.decision?.id
+    && item.candidateIds.includes(candidateId)
+  )));
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateApprovalFromPendingInput(pendingInput, "trust-executor-first-money-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+});
+
+test("Trust Center executor generates sanitized first-money candidate review packet only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-review-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
+
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Trust Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@trustreview.biz",
+        sourceUrl: "https://public-directory.invalid/trust-review-cafe",
+        recipientEmail: "owner@trustreview.biz",
+        evidence: "Public listing has no website, recent public menu photos and a visible public owner email.",
+        painPoint: "Needs a simple website, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approval = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence for review packet.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+  assert.equal(approval.status, "recorded");
+  assert.ok(approval.decision);
+
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const batch = commandCenter.candidateReviewQueue.find((item) => item.candidateIds.includes(candidateId));
+
+  assert.ok(batch);
+  const pendingInput = {
+    batchId: batch.id,
+    candidateIds: batch.candidateIds,
+    approvalDecisionId: batch.approvalDecisionId,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: batch.offerFocus,
+    requestedReview: "generate_first_money_candidate_review_packet",
+    confirmationText: batch.confirmationText,
+  };
+
+  assert.throws(
+    () => executeRevenueFirstMoneyCandidateReviewFromPendingInput({
+      ...pendingInput,
+      confirmationText: "REVIEW PUBLIC CANDIDATES edited-batch",
+    }, "trust-executor-first-money-review-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+
+  const result = executeRevenueFirstMoneyCandidateReviewFromPendingInput(pendingInput, "trust-executor-first-money-review-test");
+  const snapshot = getRevenueEngineSnapshot();
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.status, "ready_for_money_sprint_preview");
+  assert.equal(result.approvalDecisionId, approval.decision.id);
+  assert.equal(result.approvedCount, 1);
+  assert.equal(result.safety.persistsLeads, false);
+  assert.equal(result.safety.persistsPublicCandidates, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.chargesClients, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(result.safety.exposesContactDetails, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+  assert.doesNotMatch(serialized, /importBatchText/);
+  assert.doesNotMatch(serialized, /requestBody/);
+  assert.doesNotMatch(serialized, /"acceptedSeeds"/);
+  assert.doesNotMatch(serialized, /owner@trustreview\.biz/);
+});
+
+test("Trust Center executor runs first-money internal Money Sprint only after exact approval", () => {
+  setRevenueUserDataScope("trust-executor-first-money-run-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenuePublicLeadCandidatesForTests();
+
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Trust Run Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@trustrun.biz",
+        sourceUrl: "https://public-directory.invalid/trust-run-cafe",
+        recipientEmail: "owner@trustrun.biz",
+        evidence: "Public listing has no website, recent public menu photos and a visible public owner email.",
+        painPoint: "Needs a simple website, catering inquiry capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const candidateId = capture.recordedCandidates[0].candidate.id;
+  const approval = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved public evidence for internal Money Sprint.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+  assert.equal(approval.status, "recorded");
+  assert.ok(approval.decision);
+
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const batch = commandCenter.candidateRunQueue.find((item) => item.candidateIds.includes(candidateId));
+
+  assert.ok(batch);
+  const pendingInput = {
+    batchId: batch.id,
+    candidateIds: batch.candidateIds,
+    approvalDecisionId: batch.approvalDecisionId,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: batch.offerFocus,
+    requestedReview: "run_first_money_internal_money_sprint",
+    confirmationText: batch.confirmationText,
+  };
+
+  assert.throws(
+    () => executeRevenueFirstMoneyMoneySprintRunFromPendingInput({
+      ...pendingInput,
+      confirmationText: "RUN MONEY SPRINT edited-batch",
+    }, "trust-executor-first-money-run-test"),
+    /no longer matches the active first-money command-center queue/,
+  );
+
+  const result = executeRevenueFirstMoneyMoneySprintRunFromPendingInput(pendingInput, "trust-executor-first-money-run-test");
+  const snapshot = getRevenueEngineSnapshot();
+  const serialized = JSON.stringify(result);
+
+  assert.equal(result.executed, true);
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.outreachDrafts[0].sendStatus, "not_sent");
+  assert.equal(result.previews.every((preview) => preview.fileWritten === false), true);
+  assert.equal(result.safety.persistsLeads, true);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.chargesClients, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(snapshot.recentLeads.length, 1);
+  assert.equal(snapshot.recentOutreach.length, 1);
+  assert.doesNotMatch(serialized, /requestBody/);
+  assert.doesNotMatch(serialized, /seedLeadBatchText/);
+  assert.doesNotMatch(serialized, /owner@trustrun\.biz/);
+  assert.throws(
+    () => executeRevenueFirstMoneyMoneySprintRunFromPendingInput(pendingInput, "trust-executor-first-money-run-test"),
+    /already has internal artifacts/,
+  );
+});
+
+test("routes wire public candidate review packet endpoint to guarded review builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
+  );
+
+  assert.match(routesSource, /revenuePublicCandidateReviewPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/review-packet"/);
+  assert.match(routesSource, /const expectedReview = commandCenter\.candidateReviewQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routesSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedReview\)/);
+  assert.match(routesSource, /reviewRevenuePublicLeadCandidates\(\{/);
+  assert.match(routesSource, /maxPaidDataSpendUsd: 0/);
+  assert.match(routesSource, /requireRobertApprovalToContact: true/);
+  assert.match(routesSource, /writePreviewFiles: false/);
+  assert.match(routeSource, /preview: \{\s*totals: result\.preview\.totals,\s*safety: result\.preview\.safety,\s*\}/);
+  assert.match(routeSource, /expectedOutput: result\.moneySprintRunPacket\.expectedOutput/);
+  assert.doesNotMatch(routeSource, /\.\.\.result/);
+  assert.doesNotMatch(routeSource, /importBatchText/);
+  assert.doesNotMatch(routeSource, /acceptedSeeds/);
+  assert.doesNotMatch(routeSource, /requestBody/);
+  assert.doesNotMatch(routeSource, /snapshot/);
+  assert.doesNotMatch(routeSource, /const expectedReview = commandCenter\.nextCandidateReview/);
+});
+
+test("routes wire public candidate review packet pending action without generating packet", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action"'),
+  );
+
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_candidate_review"/);
+  assert.match(routeSource, /resourceType: "revenue_public_candidate_review_batch"/);
+  assert.match(routeSource, /const expectedReview = commandCenter\.candidateReviewQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedReview\)/);
+  assert.match(routeSource, /requestedReview: "generate_first_money_candidate_review_packet"/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.match(routeSource, /createsPendingAction: true/);
+  assert.match(routeSource, /persistsReviewPacket: false/);
+  assert.doesNotMatch(routeSource, /buildGuardedPublicCandidateReview/);
+  assert.doesNotMatch(routeSource, /reviewRevenuePublicLeadCandidates/);
+  assert.doesNotMatch(routeSource, /importBatchText/);
+  assert.doesNotMatch(routeSource, /requestBody/);
+  assert.doesNotMatch(routeSource, /acceptedSeeds/);
+  assert.match(trustPolicySource, /"revenue\.first_money_candidate_review": "medium"/);
+});
+
+test("routes block direct public candidate internal Money Sprint execution", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/plan"'),
+  );
+
+  assert.match(routesSource, /revenuePublicCandidateMoneySprintRunSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint"/);
+  assert.match(routeSource, /Direct internal Money Sprint execution is disabled/);
+  assert.match(routeSource, /nextEndpoint: "\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint-pending-action"/);
+  assert.match(routeSource, /persistsLeads: false/);
+  assert.match(routeSource, /createsPendingAction: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /writesPreviewFiles: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.doesNotMatch(routeSource, /const expectedRun = commandCenter\.candidateRunQueue/);
+  assert.doesNotMatch(routeSource, /matchesRevenueFirstMoneyApprovedCandidateBatch/);
+  assert.doesNotMatch(routeSource, /buildGuardedPublicCandidateReview/);
+  assert.doesNotMatch(routeSource, /findRevenueMoneySprintArtifactsByBusinessNames/);
+  assert.doesNotMatch(routeSource, /runRevenueMoneySprint\(/);
+  assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
+  assert.doesNotMatch(routeSource, /requestBody/);
+});
+
+test("routes wire public candidate internal Money Sprint pending action without executing run", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
+  );
+
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_sprint_run"/);
+  assert.match(routeSource, /resourceType: "revenue_internal_money_sprint_batch"/);
+  assert.match(routeSource, /const expectedRun = commandCenter\.candidateRunQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
+  assert.match(routeSource, /matchesRevenueFirstMoneyApprovedCandidateBatch\(input, expectedRun\)/);
+  assert.match(routeSource, /const review = buildGuardedPublicCandidateReview\(input\)/);
+  assert.match(routeSource, /findRevenueMoneySprintArtifactsByBusinessNames\(expectedRun\.candidateNames\)/);
+  assert.match(routeSource, /requestedReview: "run_first_money_internal_money_sprint"/);
+  assert.match(routeSource, /createsPendingAction: true/);
+  assert.match(routeSource, /persistsLeads: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /writesPreviewFiles: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.doesNotMatch(routeSource, /runRevenueMoneySprint\(/);
+  assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
+  assert.doesNotMatch(routeSource, /requestBody:/);
+  assert.match(trustPolicySource, /"revenue\.first_money_sprint_run": "high"/);
+});
+
+test("first-money route guard only accepts exact queued approved candidate batches", () => {
+  const batch = {
+    id: "candidate-review-2",
+    area: "Miami",
+    niche: "mobile detailing",
+    offerFocus: "websites",
+    approvalDecisionId: "approval-public-candidate-123",
+    confirmationText: "REVIEW PUBLIC CANDIDATES candidate-review-2 approval-public-candidate-123",
+    candidateIds: ["candidate-a", "candidate-b"],
+  };
+  const validInput = {
+    ...batch,
+    batchId: batch.id,
+    candidateIds: ["candidate-b", "candidate-a"],
+  };
+
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch(validInput, batch), true);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, batchId: "candidate-review-1" }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, approvalDecisionId: "approval-public-candidate-stale" }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, confirmationText: batch.confirmationText.toLowerCase() }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch({ ...validInput, candidateIds: ["candidate-a"] }, batch), false);
+  assert.equal(matchesRevenueFirstMoneyApprovedCandidateBatch(validInput, undefined), false);
+});
+
+test("routes wire public scout run endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /recordRevenuePublicScoutRun/);
+  assert.match(routesSource, /revenuePublicScoutRunSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-scout-run"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicScoutRunSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(recordRevenuePublicScoutRun\(input\)\)/,
+  );
+});
+
+test("routes wire public scout schedule endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenuePublicScoutSchedule/);
+  assert.match(routesSource, /revenuePublicScoutScheduleSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-scout-schedule"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicScoutScheduleSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenuePublicScoutSchedule\(input\)\)/,
+  );
+});
+
+test("routes wire public candidate review endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /reviewRevenuePublicLeadCandidates/);
+  assert.match(routesSource, /revenuePublicLeadCandidateReviewSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/review"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePublicLeadCandidateReviewSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(reviewRevenuePublicLeadCandidates\(input\)\)/,
+  );
+});
+
+test("routes wire outreach approval packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueOutreachApprovalPacket/);
+  assert.match(routesSource, /revenueOutreachApprovalPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/outreach-approval-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueOutreachApprovalPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueOutreachApprovalPacket\(input\)\)/,
+  );
+});
+
+test("routes wire website creation packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsiteCreationPacket/);
+  assert.match(routesSource, /revenueWebsiteCreationPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-creation-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsiteCreationPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsiteCreationPacket\(input\)\)/,
+  );
+});
+
+test("routes wire payment path readiness packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenuePaymentPathReadinessPacket/);
+  assert.match(routesSource, /revenuePaymentPathReadinessPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/payment-path-readiness-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenuePaymentPathReadinessPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenuePaymentPathReadinessPacket\(input\)\)/,
+  );
+});
+
+test("routes wire contact path readiness packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueContactPathReadinessPacket/);
+  assert.match(routesSource, /revenueContactPathReadinessPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/contact-path-readiness-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueContactPathReadinessPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueContactPathReadinessPacket\(input\)\)/,
+  );
+});
+
+test("routes wire website publish readiness packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsitePublishReadinessPacket/);
+  assert.match(routesSource, /revenueWebsitePublishReadinessPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-publish-readiness-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsitePublishReadinessPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsitePublishReadinessPacket\(input\)\)/,
+  );
+});
+
+test("routes wire website scaffold endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsiteScaffold/);
+  assert.match(routesSource, /revenueWebsiteScaffoldSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-scaffold"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsiteScaffoldSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsiteScaffold\(input\)\)/,
+  );
+});
+
+test("money sprint parses pasted lead batches with partial failures", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "restaurant",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer|contactName|summary",
+      "Batch Bistro|Miami|restaurant|no_website|email|owner@batchbistro.example|https://example.com/batch-bistro|owner@batchbistro.example|Google listing has no website and recent menu photos are only on public social profiles.|Needs menu, catering inquiry capture and follow-up.|3500|Owner|Batch Bistro has no dedicated website and a clear catering/menu opportunity.",
+      "Bad Row|Miami|restaurant|no_website|email|owner@badrow.example|notaurl|owner@badrow.example|short|Needs website.|2500|Owner|",
+    ].join("\n"),
+  });
+
+  assert.equal(result.status, "ready_to_start");
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].lead.businessName, "Batch Bistro");
+  assert.equal(result.previews.length, 1);
+  assert.equal(result.previews[0].fileWritten, false);
+  assert.equal(existsSync(getRevenueMockupPreviewPath(result.previews[0].slug)), false);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.outreachDrafts[0].status, "draft");
+  assert.equal(result.outreachDrafts[0].delivery.sendStatus, "not_sent");
+  assert.equal(result.blockedSeeds.length, 1);
+  assert.equal(result.blockedSeeds[0].businessName, "Bad Row");
+});
+
+test("money sprint parses quoted CSV batches with pipes inside evidence", () => {
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business,area,niche,website,channel,contact,sourceUrl,recipientEmail,evidence,painPoint,offer",
+      "\"CSV Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@csvsalon.example\",\"https://example.com/csv-salon\",\"owner@csvsalon.example\",\"Google listing has no website | Instagram profile has recent service photos and contact path.\",\"Needs booking capture and follow-up.\",\"3200\"",
+    ].join("\n"),
+  });
+
+  assert.equal(result.recordedLeads.length, 1);
+  assert.equal(result.recordedLeads[0].lead.businessName, "CSV Salon");
+  assert.equal(result.recordedLeads[0].lead.evidence.includes("| Instagram"), true);
+  assert.equal(result.outreachDrafts.length, 1);
+  assert.equal(result.blockedSeeds.length, 0);
+});
+
+test("money sprint preview parses batch without persisting leads drafts or previews", () => {
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Miami",
+    niche: "salon",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business,area,niche,website,channel,contact,sourceUrl,recipientEmail,evidence,painPoint,offer",
+      "\"Preview Salon\",\"Miami\",\"salon\",\"no_website\",\"email\",\"owner@previewsalon.example\",\"https://example.com/preview-salon\",\"owner@previewsalon.example\",\"Public profile has no website, recent service photos and a verified contact path.\",\"Needs online booking capture and follow-up.\",\"3200\"",
+      "\"Weak Row\",\"Miami\",\"salon\",\"unknown\",\"unknown\",\"\",\"\",\"\",\"short\",\"Needs review.\",\"1000\"",
+    ].join("\n"),
+  });
+  const snapshot = getRevenueEngineSnapshot();
+
+  assert.equal(result.status, "ready_to_import");
+  assert.equal(result.totals.accepted, 2);
+  assert.equal(result.totals.mockupReady, 1);
+  assert.equal(result.totals.draftReady, 1);
+  assert.equal(result.acceptedSeeds[0].businessName, "Preview Salon");
+  assert.equal(result.acceptedSeeds[0].draftReady, true);
+  assert.equal(result.acceptedSeeds[1].draftReady, false);
+  assert.equal(result.safety.persistsData, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(snapshot.recentLeads.length, 0);
+  assert.equal(snapshot.recentOutreach.length, 0);
+});
+
+test("money sprint preview respects daily mockup limit", () => {
+  const row = (index: number) => [
+    `Limit Cafe ${index}`,
+    "Miami",
+    "coffee shop",
+    "no_website",
+    "email",
+    `owner${index}@limitcafe.example`,
+    `https://example.com/limit-cafe-${index}`,
+    `owner${index}@limitcafe.example`,
+    "Google listing has no website, public social profile has products and verified contact path.",
+    "Needs online menu capture and follow-up.",
+    "3200",
+  ].join("|");
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 1,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      row(1),
+      row(2),
+      row(3),
+    ].join("\n"),
+  });
+
+  assert.equal(result.totals.accepted, 3);
+  assert.equal(result.totals.mockupReady, 1);
+  assert.deepEqual(result.acceptedSeeds.map((seed) => seed.mockupReady), [true, false, false]);
+});
+
+test("money sprint preview requires approval before paid data spend", () => {
+  const result = previewRevenueMoneySprintSeeds({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: true,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      [
+        "Approval Roof Co",
+        "Orlando",
+        "roofers",
+        "no_website",
+        "email",
+        "owner@approvalroof.example",
+        "https://example.com/approval-roof",
+        "owner@approvalroof.example",
+        "Google listing has no website, public profile has verified service photos and contact path.",
+        "Needs storm repair lead capture and follow-up.",
+        "4200",
+      ].join("|"),
+    ].join("\n"),
+  });
+
+  assert.equal(result.status, "needs_spend_approval");
+  assert.equal(result.totals.mockupReady, 1);
+  assert.equal(result.safety.persistsData, false);
+  assert.equal(result.safety.writesPreviewFiles, false);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.match(result.safety.nextAction, /approval/i);
+});
+
+test("money sprint caps pasted lead batch at remaining seed lead slots", () => {
+  const row = (index: number) => [
+    `Batch Cafe ${index}`,
+    "Miami",
+    "coffee shop",
+    "no_website",
+    "email",
+    `owner${index}@batchcafe.example`,
+    `https://example.com/batch-cafe-${index}`,
+    `owner${index}@batchcafe.example`,
+    "Google listing has no website, public profile has recent products and contact path.",
+    "Needs online ordering inquiry capture and follow-up.",
+    "3000",
+  ].join("|");
+  const result = runRevenueMoneySprint({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "both",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 25,
+    dailyMockupLimit: 25,
+    dailyContactLimit: 10,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeadBatchText: [
+      "business|area|niche|website|channel|contact|sourceUrl|recipientEmail|evidence|painPoint|offer",
+      ...Array.from({ length: 27 }, (_, index) => row(index + 1)),
+    ].join("\n"),
+  });
+
+  assert.equal(result.recordedLeads.length, 25);
+  assert.equal(result.blockedSeeds.filter((seed) => seed.reason === "batch limit 25").length, 2);
+  assert.equal(result.outreachDrafts.every((draft) => draft.status === "draft" && draft.delivery.sendStatus === "not_sent"), true);
+});
+
+test("money sprint surfaces paid data approval amount without spending automatically", () => {
+  const result = runRevenueMoneySprint({
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    dailyResearchTarget: 30,
+    dailyQualifiedLeadLimit: 10,
+    dailyMockupLimit: 3,
+    dailyContactLimit: 5,
+    maxPaidDataSpendUsd: 250,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    seedLeads: [],
+  });
+
+  assert.equal(result.status, "needs_spend_approval");
+  assert.equal(result.operatingLimits.maxPaidDataSpendUsd, 100);
+  assert.equal(result.mission.budgetGate.requiresApprovalToSpend, true);
+  assert.equal(result.previews.length, 0);
+  assert.equal(result.outreachDrafts.length, 0);
+});
+
 test("sales autopilot blocks when internal cost breaks the starting cap", () => {
   const result = recordRevenueSalesAutopilot({
     businessName: "Expensive Automation",
@@ -736,6 +3878,177 @@ test("persists outreach drafts across module state reloads", () => {
   assert.equal(snapshot.recentOutreach[0].status, "approved");
 });
 
+test("outreach approval packet surfaces draft-only approvals without sending", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@approvalpacket.example",
+    contactName: "Owner",
+    businessName: "Approval Packet Cafe",
+    sourceUrl: "https://example.com/approval-packet-cafe",
+    businessSummary: "Approval Packet Cafe has public evidence of no dedicated website and needs online menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "ready_for_robert_approval");
+  assert.equal(packet.totals.readyForManualApproval, 1);
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.equal(packet.items[0].readyForManualApproval, true);
+  assert.equal(packet.items[0].readyForProviderSend, false);
+  assert.equal(packet.items[0].failedGates[0].gate, "approval");
+  assert.equal(packet.safety.sendsOutreach, false);
+  assert.equal(packet.safety.persistsData, false);
+  assert.equal(packet.snapshot.recentOutreach[0].delivery.sendStatus, "not_sent");
+});
+
+test("outreach approval packet blocks approved drafts until provider is configured", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@providerpacket.example",
+    contactName: "Owner",
+    businessName: "Provider Packet Cafe",
+    sourceUrl: "https://example.com/provider-packet-cafe",
+    businessSummary: "Provider Packet Cafe has public evidence of weak conversion and needs online order capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "needs_fixes");
+  assert.equal(packet.provider.configured, false);
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.match(packet.items[0].blockedReasons.join("; "), /email provider missing/);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/outreach-drafts");
+});
+
+test("outreach approval packet marks approved drafts ready for reviewed send when provider is configured", () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@sendpacket.example",
+    contactName: "Owner",
+    businessName: "Send Packet Cafe",
+    sourceUrl: "https://example.com/send-packet-cafe",
+    businessSummary: "Send Packet Cafe has public evidence of no dedicated website and needs menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "ready_for_approved_send_review");
+  assert.equal(packet.provider.configured, true);
+  assert.equal(packet.totals.readyForProviderSend, 1);
+  assert.equal(packet.items[0].readyForProviderSend, true);
+  assert.equal(packet.nextApiAction, "/api/revenue-engine/outreach-send");
+  assert.match(packet.nextAction, /approvalDecisionId/);
+  assert.equal(packet.safety.requiresRobertApprovalBeforeSend, true);
+});
+
+test("outreach approval packet treats string false includeSent as false", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  setRevenueOutreachSenderForTests(async () => ({ id: "email_include_sent_false" }));
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@includesentfalse.example",
+    contactName: "Owner",
+    businessName: "Include Sent False Cafe",
+    sourceUrl: "https://example.com/include-sent-false-cafe",
+    businessSummary: "Include Sent False Cafe has public evidence of no dedicated website and needs menu capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveOutreachDraftForTests(result.draft);
+  await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: "false" as unknown as boolean });
+
+  assert.equal(packet.totals.reviewed, 0);
+  assert.equal(packet.items.some((item) => item.draftId === result.draft.id), false);
+});
+
+test("outreach approval packet keeps non-email channels manual-only", () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  recordRevenueOutreachDraft({
+    channel: "instagram",
+    approvalStatus: "approved",
+    recipientEmail: "owner@manualonly.example",
+    contactName: "Owner",
+    businessName: "Manual Only Studio",
+    sourceUrl: "https://example.com/manual-only-studio",
+    businessSummary: "Manual Only Studio has public evidence of no dedicated website and needs booking capture plus follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: false });
+
+  assert.equal(packet.status, "needs_fixes");
+  assert.equal(packet.totals.readyForProviderSend, 0);
+  assert.equal(packet.items[0].readyForProviderSend, false);
+  assert.match(packet.items[0].blockedReasons.join("; "), /manual-only channel: instagram/);
+});
+
+test("blocks provider send for manual-only outreach channels", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "instagram",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Manual Channel Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Manual Channel Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveOutreachDraftForTests(result.draft);
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.reason, "Canal manual-only: instagram. Usar revision manual fuera del proveedor de email.");
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
+});
+
 test("blocks outreach send when email provider is missing", async () => {
   const result = recordRevenueOutreachDraft({
     channel: "gmail",
@@ -751,10 +4064,12 @@ test("blocks outreach send when email provider is missing", async () => {
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -780,10 +4095,12 @@ test("blocks outreach send when email provider values are placeholders", async (
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -791,6 +4108,519 @@ test("blocks outreach send when email provider values are placeholders", async (
   assert.equal(sendResult.provider.missing.includes("RESEND_API_KEY"), true);
   assert.equal(sendResult.provider.missing.includes("REVENUE_ENGINE_FROM_EMAIL"), true);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
+});
+
+test("blocks outreach send without a valid approvalDecisionId", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "String False Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "String False Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.reason, "Registrar y usar approvalDecisionId valido para este draft exacto antes de contacto externo.");
+  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+});
+
+test("blocks outreach send without exact typed send confirmation", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Typed Confirmation Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Typed Confirmation Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = approveOutreachDraftForTests(result.draft);
+
+  const missing = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+  });
+  const wrong = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: "SEND wrong draft",
+  });
+
+  assert.equal(missing.status, "blocked");
+  assert.equal(wrong.status, "blocked");
+  assert.equal(missing.gates.some((gate) => gate.gate === "typed_send_confirmation" && gate.passed === false), true);
+  assert.equal(wrong.gates.some((gate) => gate.gate === "typed_send_confirmation" && gate.passed === false), true);
+});
+
+test("blocks outreach send with generic approval decision", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Generic Decision Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Generic Decision Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = recordRevenueApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Generic approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "human_approval" && gate.passed === false), true);
+});
+
+test("blocks outreach send with wrong approval source target decision or stale snapshot", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Trust Boundary Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Trust Boundary Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Public candidate approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "public_candidate_approval_cli",
+    publicCandidateSnapshotHash: "not-an-outreach-hash",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+  });
+  const wrongTarget = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId("other-draft"),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Wrong draft approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+  });
+  const rejected = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "rejected",
+    approvedAction: "Rejected approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+    websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
+  });
+  const stale = approveOutreachDraftForTests(result.draft);
+  result.draft.delivery.sendStatus = "blocked";
+
+  for (const approvalDecisionId of [
+    wrongSource.decision.id,
+    wrongTarget.decision.id,
+    rejected.decision.id,
+    stale.decision.id,
+  ]) {
+    const sendResult = await sendRevenueOutreachDraft({
+      draftId: result.draft.id,
+      approvalDecisionId,
+      sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approvalDecisionId),
+    });
+
+    assert.equal(sendResult.status, "blocked");
+    assert.equal(sendResult.gates.some((gate) => gate.gate === "human_approval" && gate.passed === false), true);
+  }
+});
+
+test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
+  const source = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(source, /approvalDecisionId/);
+  assert.match(source, /sendConfirmation/);
+  assert.match(source, /outreachSendConfirmation\.trim\(\) !== `SEND/);
+  assert.match(source, /ledgerConfirmation/);
+  assert.match(source, /ledgerConfirmedByRobert/);
+  assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
+  assert.match(source, /First-money command center/);
+  assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(source, /const publicScoutScheduleMutation/);
+  assert.match(source, /\/api\/revenue-engine\/public-scout-schedule/);
+  assert.match(source, /scheduleName: publicScoutScheduleName/);
+  assert.match(source, /area: publicScoutArea/);
+  assert.match(source, /niche: publicScoutNiche/);
+  assert.match(source, /startDate: publicScoutStartDate/);
+  assert.match(source, /browserExecutor: publicScoutBrowserExecutor/);
+  assert.match(source, /button-prepare-public-scout-schedule/);
+  assert.match(source, /first-money-public-scout-schedule-panel/);
+  assert.match(source, /const contactPathApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
+  assert.match(source, /contactMode: "manual"/);
+  assert.match(source, /manualContactApproved: true/);
+  assert.match(source, /robertApprovedContactPath: contactPathRobertApproved/);
+  assert.match(source, /contactPathVerified/);
+  assert.match(source, /button-queue-contact-path-approval/);
+  assert.match(source, /first-money-contact-path-approval-panel/);
+  assert.match(source, /const paymentPathApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/payment-path-approval-pending-action/);
+  assert.match(source, /paymentLink: paymentPathLink/);
+  assert.match(source, /expectedDepositUsd: paymentPathExpectedDepositUsd/);
+  assert.match(source, /expectedPackage: paymentPathExpectedPackage/);
+  assert.match(source, /robertApprovedPaymentPath: paymentPathRobertApproved/);
+  assert.match(source, /paymentSmokeVerified: paymentPathSmokeVerified/);
+  assert.match(source, /depositConfirmedByRobert: paymentPathDepositConfirmed/);
+  assert.match(source, /button-queue-payment-path-approval/);
+  assert.match(source, /first-money-payment-path-approval-panel/);
+  assert.match(source, /const ledgerEntryApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/ledger-entry-approval-pending-action/);
+  assert.match(source, /kind: ledgerApprovalKind/);
+  assert.match(source, /clientName: ledgerApprovalClientName/);
+  assert.match(source, /amountUsd: ledgerApprovalAmountUsd/);
+  assert.match(source, /cashCollectedUsd: ledgerApprovalCashCollectedUsd/);
+  assert.match(source, /estimatedInternalCostUsd: ledgerApprovalInternalCostUsd/);
+  assert.match(source, /paymentEvidence: ledgerApprovalPaymentEvidence/);
+  assert.match(source, /button-queue-ledger-entry-approval/);
+  assert.match(source, /first-money-ledger-entry-approval-panel/);
+  assert.match(source, /const websiteCreationApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
+  assert.match(source, /outreachDraftId: websiteCreationOutreachDraftId/);
+  assert.match(source, /notes: websiteCreationNotes/);
+  assert.match(source, /robertApprovedBuild: websiteCreationRobertApproved/);
+  assert.match(source, /clientApprovedScope: websiteCreationClientScopeApproved/);
+  assert.match(source, /depositPaid: websiteCreationDepositPaid/);
+  assert.match(source, /publicDataVerified: websiteCreationPublicDataVerified/);
+  assert.match(source, /launchTargetDays: websiteCreationLaunchTargetDays/);
+  assert.match(source, /button-queue-website-creation-approval/);
+  assert.match(source, /first-money-website-creation-approval-panel/);
+  assert.match(source, /const websitePublishApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/website-publish-approval-pending-action/);
+  assert.match(source, /outreachDraftId: websitePublishOutreachDraftId/);
+  assert.match(source, /websiteCreationApprovalDecisionId: websitePublishCreationApprovalDecisionId/);
+  assert.match(source, /notes: websitePublishNotes/);
+  assert.match(source, /robertApprovedPublish: websitePublishRobertApproved/);
+  assert.match(source, /previewDeployVerified: websitePublishPreviewVerified/);
+  assert.match(source, /appQaTargetPassed: websitePublishAppQaPassed/);
+  assert.match(source, /rollbackVerified: websitePublishRollbackVerified/);
+  assert.match(source, /deployProvider: websitePublishDeployProvider/);
+  assert.match(source, /previewDeployUrl: websitePublishPreviewUrl/);
+  assert.match(source, /appQaEvidenceUrl: websitePublishAppQaEvidenceUrl/);
+  assert.match(source, /rollbackPlanUrl: websitePublishRollbackPlanUrl/);
+  assert.match(source, /launchTargetDays: websitePublishLaunchTargetDays/);
+  assert.match(source, /button-queue-website-publish-approval/);
+  assert.match(source, /first-money-website-publish-approval-panel/);
+  const contactPathMutationSource = source.slice(
+    source.indexOf("const contactPathApprovalPendingActionMutation"),
+    source.indexOf("const paymentPathApprovalPendingActionMutation"),
+  );
+  const publicScoutScheduleMutationSource = source.slice(
+    source.indexOf("const publicScoutScheduleMutation"),
+    source.indexOf("const paymentPathApprovalPendingActionMutation"),
+  );
+  const publicScoutSchedulePanelSource = source.slice(
+    source.indexOf('data-testid="first-money-public-scout-schedule-panel"'),
+    source.indexOf('data-testid="first-money-robert-approval-brief"'),
+  );
+  const paymentPathMutationSource = source.slice(
+    source.indexOf("const paymentPathApprovalPendingActionMutation"),
+    source.indexOf("const ledgerEntryApprovalPendingActionMutation"),
+  );
+  const ledgerEntryApprovalMutationSource = source.slice(
+    source.indexOf("const ledgerEntryApprovalPendingActionMutation"),
+    source.indexOf("const websiteCreationApprovalPendingActionMutation"),
+  );
+  const websiteCreationMutationSource = source.slice(
+    source.indexOf("const websiteCreationApprovalPendingActionMutation"),
+    source.indexOf("const websitePublishApprovalPendingActionMutation"),
+  );
+  const websitePublishMutationSource = source.slice(
+    source.indexOf("const websitePublishApprovalPendingActionMutation"),
+    source.indexOf("const publicCandidateApprovalPendingActionMutation"),
+  );
+  const contactPathPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-contact-path-approval-panel"'),
+    source.indexOf('data-testid="first-money-payment-path-approval-panel"'),
+  );
+  const paymentPathPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-payment-path-approval-panel"'),
+    source.indexOf('data-testid="first-money-ledger-entry-approval-panel"'),
+  );
+  const ledgerEntryApprovalPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-ledger-entry-approval-panel"'),
+    source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
+  );
+  const websiteCreationPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
+    source.indexOf('data-testid="first-money-website-publish-approval-panel"'),
+  );
+  const websitePublishPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-website-publish-approval-panel"'),
+    source.indexOf('data-testid="first-money-setup-action-queue"'),
+  );
+  assert.match(contactPathMutationSource, /evidenceUrl: contactPathEvidenceUrl/);
+  assert.match(contactPathMutationSource, /evidenceNote: contactPathEvidenceNote/);
+  assert.match(contactPathMutationSource, /robertApprovedContactPath: contactPathRobertApproved/);
+  assert.match(contactPathMutationSource, /contactPathVerified/);
+  assert.doesNotMatch(
+    contactPathMutationSource,
+    /outreach-send|payment-path-readiness-packet|decision: "approved"|sendConfirmation/,
+  );
+  assert.match(publicScoutScheduleMutationSource, /offerFocus: "websites"/);
+  assert.match(publicScoutScheduleMutationSource, /dailyMockupLimit: 2/);
+  assert.match(publicScoutScheduleMutationSource, /maxCandidatesPerRun: publicScoutMaxCandidatesPerRun/);
+  assert.match(publicScoutScheduleMutationSource, /browserExecutor: publicScoutBrowserExecutor/);
+  assert.doesNotMatch(
+    publicScoutScheduleMutationSource,
+    /public-scout-run|dailyContactLimit|maxPaidDataSpendUsd|writePreviewFiles|sendConfirmation|decision: "approved"/,
+  );
+  assert.doesNotMatch(publicScoutScheduleMutationSource, /startDate: "2026-07-02"/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutScheduleMutation\.isPending/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutScheduleName\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutArea\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutNiche\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /!publicScoutStartDate\.trim\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunDays < 1/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunDays > 14/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunsPerDay < 1/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunsPerDay > 4/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunHourLocal < 0/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutRunHourLocal > 23/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun < 5/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutMaxCandidatesPerRun > 25/);
+  assert.match(publicScoutSchedulePanelSource, /publicScoutScheduleMutation\.mutate\(\)/);
+  assert.match(publicScoutSchedulePanelSource, /first-money-public-scout-first-run-commands/);
+  assert.match(publicScoutSchedulePanelSource, /captureNotesPath/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.prepareBrowserSession/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.extractCandidates/);
+  assert.match(publicScoutSchedulePanelSource, /commands\.captureForReview/);
+  assert.match(paymentPathMutationSource, /evidenceUrl: paymentPathEvidenceUrl/);
+  assert.match(paymentPathMutationSource, /evidenceNote: paymentPathEvidenceNote/);
+  assert.match(paymentPathMutationSource, /paymentLink: paymentPathLink/);
+  assert.match(paymentPathMutationSource, /robertApprovedPaymentPath: paymentPathRobertApproved/);
+  assert.doesNotMatch(
+    paymentPathMutationSource,
+    /outreach-send|payment-path-readiness-packet|ledger|decision: "approved"|sendConfirmation/,
+  );
+  assert.match(ledgerEntryApprovalMutationSource, /approvedAction: "Approve exact paid ledger entry after Robert verified payment evidence\."/);
+  assert.match(ledgerEntryApprovalMutationSource, /kind: ledgerApprovalKind/);
+  assert.match(ledgerEntryApprovalMutationSource, /clientName: ledgerApprovalClientName/);
+  assert.match(ledgerEntryApprovalMutationSource, /amountUsd: ledgerApprovalAmountUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /cashCollectedUsd: ledgerApprovalCashCollectedUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /estimatedInternalCostUsd: ledgerApprovalInternalCostUsd/);
+  assert.match(ledgerEntryApprovalMutationSource, /paymentEvidence: ledgerApprovalPaymentEvidence/);
+  assert.doesNotMatch(
+    ledgerEntryApprovalMutationSource,
+    /fetch\("\/api\/revenue-engine\/ledger"|decision: "approved"|sendConfirmation|outreach-send|charge|deploy/,
+  );
+  assert.match(websiteCreationMutationSource, /approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review\."/);
+  assert.match(websiteCreationMutationSource, /outreachDraftId: websiteCreationOutreachDraftId/);
+  assert.match(websiteCreationMutationSource, /notes: websiteCreationNotes/);
+  assert.match(websiteCreationMutationSource, /robertApprovedBuild: websiteCreationRobertApproved/);
+  assert.match(websiteCreationMutationSource, /clientApprovedScope: websiteCreationClientScopeApproved/);
+  assert.match(websiteCreationMutationSource, /depositPaid: websiteCreationDepositPaid/);
+  assert.match(websiteCreationMutationSource, /publicDataVerified: websiteCreationPublicDataVerified/);
+  assert.doesNotMatch(
+    websiteCreationMutationSource,
+    /website-creation-packet|website-scaffold|outreach-send|ledger|decision: "approved"|sendConfirmation|deploy/,
+  );
+  assert.match(websitePublishMutationSource, /approvedAction: "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review\."/);
+  assert.match(websitePublishMutationSource, /outreachDraftId: websitePublishOutreachDraftId/);
+  assert.match(websitePublishMutationSource, /websiteCreationApprovalDecisionId: websitePublishCreationApprovalDecisionId/);
+  assert.match(websitePublishMutationSource, /notes: websitePublishNotes/);
+  assert.match(websitePublishMutationSource, /robertApprovedPublish: websitePublishRobertApproved/);
+  assert.match(websitePublishMutationSource, /previewDeployVerified: websitePublishPreviewVerified/);
+  assert.match(websitePublishMutationSource, /appQaTargetPassed: websitePublishAppQaPassed/);
+  assert.match(websitePublishMutationSource, /rollbackVerified: websitePublishRollbackVerified/);
+  assert.match(websitePublishMutationSource, /deployProvider: websitePublishDeployProvider/);
+  assert.match(websitePublishMutationSource, /previewDeployUrl: websitePublishPreviewUrl/);
+  assert.match(websitePublishMutationSource, /appQaEvidenceUrl: websitePublishAppQaEvidenceUrl/);
+  assert.match(websitePublishMutationSource, /rollbackPlanUrl: websitePublishRollbackPlanUrl/);
+  assert.doesNotMatch(
+    websitePublishMutationSource,
+    /website-publish-readiness-packet|website-scaffold|outreach-send|ledger|decision: "approved"|sendConfirmation/,
+  );
+  assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.isPending/);
+  assert.match(contactPathPanelSource, /!contactPathEvidenceUrl\.trim\(\)/);
+  assert.match(contactPathPanelSource, /!contactPathEvidenceNote\.trim\(\)/);
+  assert.match(contactPathPanelSource, /!contactPathRobertApproved/);
+  assert.match(contactPathPanelSource, /!contactPathVerified/);
+  assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(paymentPathPanelSource, /paymentPathApprovalPendingActionMutation\.isPending/);
+  assert.match(paymentPathPanelSource, /!paymentPathLink\.trim\(\)/);
+  assert.match(paymentPathPanelSource, /!paymentPathEvidenceUrl\.trim\(\)/);
+  assert.match(paymentPathPanelSource, /!paymentPathEvidenceNote\.trim\(\)/);
+  assert.match(paymentPathPanelSource, /!paymentPathExpectedPackage\.trim\(\)/);
+  assert.match(paymentPathPanelSource, /paymentPathExpectedDepositUsd <= 0/);
+  assert.match(paymentPathPanelSource, /!paymentPathRobertApproved/);
+  assert.match(paymentPathPanelSource, /!\(paymentPathSmokeVerified \|\| paymentPathDepositConfirmed\)/);
+  assert.match(paymentPathPanelSource, /paymentPathApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerEntryApprovalPendingActionMutation\.isPending/);
+  assert.match(ledgerEntryApprovalPanelSource, /!ledgerApprovalClientName\.trim\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /!ledgerApprovalPaymentEvidence\.trim\(\)/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalAmountUsd <= 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalCashCollectedUsd <= 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerApprovalInternalCostUsd < 0/);
+  assert.match(ledgerEntryApprovalPanelSource, /ledgerEntryApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.isPending/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationOutreachDraftId\.trim\(\)/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationNotes\.trim\(\)/);
+  assert.match(websiteCreationPanelSource, /websiteCreationLaunchTargetDays < 1/);
+  assert.match(websiteCreationPanelSource, /websiteCreationLaunchTargetDays > 60/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationRobertApproved/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationClientScopeApproved/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationDepositPaid/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationPublicDataVerified/);
+  assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(websitePublishPanelSource, /websitePublishApprovalPendingActionMutation\.isPending/);
+  assert.match(websitePublishPanelSource, /!websitePublishOutreachDraftId\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishCreationApprovalDecisionId\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishDeployProvider\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishPreviewUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishAppQaEvidenceUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishRollbackPlanUrl\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /!websitePublishNotes\.trim\(\)/);
+  assert.match(websitePublishPanelSource, /websitePublishLaunchTargetDays < 1/);
+  assert.match(websitePublishPanelSource, /websitePublishLaunchTargetDays > 60/);
+  assert.match(websitePublishPanelSource, /!websitePublishRobertApproved/);
+  assert.match(websitePublishPanelSource, /!websitePublishPreviewVerified/);
+  assert.match(websitePublishPanelSource, /!websitePublishAppQaPassed/);
+  assert.match(websitePublishPanelSource, /!websitePublishRollbackVerified/);
+  assert.match(websitePublishPanelSource, /websitePublishApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
+  assert.match(source, /nextCandidateApproval/);
+  assert.match(source, /nextCandidateReview/);
+  assert.match(source, /button-queue-public-candidate-approval/);
+  assert.doesNotMatch(source, /button-approve-public-candidate-batch/);
+  assert.doesNotMatch(
+    source.slice(
+      source.indexOf("const publicCandidateApprovalPendingActionMutation"),
+      source.indexOf("const publicCandidateReviewPacketPendingActionMutation"),
+    ),
+    /decision: "approved"/,
+  );
+  assert.match(source, /input-public-candidate-approval-confirmation/);
+  assert.match(source, /first-money-candidate-approval-cards/);
+  assert.match(source, /candidateApprovalQueue/);
+  assert.match(source, /first-money-candidate-approval-queue/);
+  assert.match(source, /first-money-candidate-approval-queue-/);
+  assert.match(source, /selectedPublicCandidateBatch/);
+  assert.match(source, /button-select-public-candidate-batch-/);
+  assert.match(source, /setSelectedPublicCandidateBatchId\(batch\.id\)/);
+  assert.match(source, /const approval = selectedPublicCandidateBatch/);
+  assert.match(source, /batch\.confirmationText/);
+  assert.match(source, /Contact and source details stay hidden/);
+  assert.match(source, /contacto oculto hasta aprobacion/);
+  assert.match(source, /safeSearchAction/);
+  assert.match(source, /first-money-safe-search-action/);
+  assert.match(source, /Busqueda paralela segura/);
+  assert.match(source, /canAutonomousSearchBusinesses/);
+  assert.match(source, /Auto scout/);
+  assert.match(source, /candidateVerificationQueue/);
+  assert.match(source, /first-money-candidate-verification-queue/);
+  assert.match(source, /robertApprovalBrief/);
+  assert.match(source, /first-money-robert-approval-brief/);
+  assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== selectedPublicCandidateBatch\.confirmationText/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/review-packet"/);
+  assert.match(source, /candidateReviewQueue/);
+  assert.match(source, /selectedPublicCandidateReviewBatch/);
+  assert.match(source, /button-queue-public-candidate-review-packet/);
+  assert.match(source, /const publicCandidateReviewPacketPendingActionMutation/);
+  assert.match(source, /input-public-candidate-review-confirmation/);
+  assert.match(source, /first-money-candidate-review-queue/);
+  assert.match(source, /button-select-public-candidate-review-batch-/);
+  assert.match(source, /setSelectedPublicCandidateReviewBatchId\(batch\.id\)/);
+  assert.match(source, /const review = selectedPublicCandidateReviewBatch/);
+  assert.match(source, /publicCandidateReviewConfirmation\.trim\(\) !== selectedPublicCandidateReviewBatch\.confirmationText/);
+  assert.match(source, /nextMoneySprintRun/);
+  assert.match(source, /candidateRunQueue/);
+  assert.match(source, /selectedPublicCandidateRunBatch/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint"/);
+  assert.match(source, /button-queue-public-candidate-money-sprint/);
+  assert.match(source, /input-public-candidate-run-confirmation/);
+  assert.match(source, /const run = selectedPublicCandidateRunBatch/);
+  assert.match(source, /const publicCandidateMoneySprintRunPendingActionMutation/);
+  assert.match(source, /publicCandidateRunConfirmation\.trim\(\) !== selectedPublicCandidateRunBatch\.confirmationText/);
+  assert.match(source, /moneyUnblockers/);
+  assert.match(source, /first-money-unblockers/);
+  assert.match(source, /unblocker\.safeNextAction/);
+  assert.match(source, /first-money-unblocker-evidence-/);
+  assert.match(source, /unblocker\.evidenceRequired\.slice/);
+  assert.match(source, /unblocker\.blockedActions\.join/);
+  assert.match(source, /unblocker\.status === "ready" \? "Guardrails activos" : "Sigue bloqueado"/);
+  assert.match(source, /handoffPacket/);
+  assert.match(source, /first-money-handoff-packet/);
+  assert.match(source, /handoffPacket\.testsToRun\.join/);
+  assert.match(source, /handoffPacket\.qaGate/);
+  assert.match(source, /handoffPacket\.rollbackNotes\[0\]/);
+  assert.match(source, /activationChecklist/);
+  assert.match(source, /first-money-activation-checklist/);
+  assert.match(source, /first-money-activation-step-/);
+  assert.doesNotMatch(source, /activationChecklist\.slice\(0, 6\)/);
+  assert.match(source, /step\.proofRequired\.slice/);
+  assert.match(source, /break-words text-zinc-500/);
+  assert.match(source, /step\.commandHint/);
+  assert.match(source, /step\.safety/);
+  assert.match(source, /Aun requiere revision por accion/);
+  assert.match(source, /canContactBusinesses/);
+  assert.match(source, /canCollectMoney/);
+  assert.match(source, /canBuildWebsites/);
+  assert.doesNotMatch(source, /approvalToSend/);
 });
 
 test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
@@ -816,10 +4646,12 @@ test("uses fallback Resend from email when Revenue Engine from email is a placeh
     assert.equal(payload.from, "Revenue Engine <sales@example.com>");
     return { id: "email_fallback_sender" };
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "sent");
@@ -865,10 +4697,12 @@ test("sends approved outreach with configured provider and updates matching lead
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
+    sendConfirmation: buildOutreachSendConfirmation(result.draft.id, approval.decision.id),
   });
 
   assert.equal(sendResult.status, "sent");
@@ -1149,7 +4983,7 @@ test("automation agent command blocks sale lifecycle without scope and deposit",
   assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
-test("automation agent command records sale and creates delivery workspace when lifecycle gates pass", () => {
+test("automation agent command blocks sale delivery until ledger approval is recorded", () => {
   const result = runRevenueAutomationAgentCommand({
     businessName: "Lifecycle Gym",
     industry: "gym",
@@ -1173,15 +5007,14 @@ test("automation agent command records sale and creates delivery workspace when 
     launchTargetDays: 7,
   });
 
-  assert.equal(result.status, "delivery_workspace_created");
-  assert.equal(result.closeResult?.status, "recorded");
-  assert.equal(result.closeResult?.entry?.kind, "automation_sale");
-  assert.equal(result.workspaceResult?.status, "created");
-  assert.equal(result.workspaceResult?.workspace?.input.clientName, "Lifecycle Gym");
-  assert.equal(result.workspaceResult?.workspace?.status, "blocked");
-  assert.equal(result.workspaceResult?.workspace?.correctionQueue.some((item) => item.agent === "automation-qa"), true);
-  assert.equal(result.snapshot.metrics.automationsSold, 1);
-  assert.equal(result.snapshot.metrics.cashCollectedUsd, 2500);
+  assert.equal(result.status, "sale_blocked");
+  assert.equal(result.closeResult?.status, "blocked");
+  assert.equal(result.closeResult?.entry, null);
+  assert.equal(result.workspaceResult, null);
+  assert.match(result.reason, /approvalDecisionId auditado/);
+  assert.equal(result.nextActions.some((action) => action.includes("opportunity id exacto")), true);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
 test("blocks automation intake conversion until clarification is complete", () => {
@@ -1298,12 +5131,29 @@ test("closes automation opportunity into ledger and updates money metrics", () =
     clientApprovedScope: false,
     depositPaid: false,
   });
+  const closeNotes = "Deposit paid by client.";
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+      closeNotes,
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
 
   const result = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
     markScopeApproved: true,
-    notes: "Deposit paid by client.",
+    notes: closeNotes,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 
   assert.equal(result.status, "recorded");
@@ -1314,6 +5164,36 @@ test("closes automation opportunity into ledger and updates money metrics", () =
   assert.equal(result.snapshot.metrics.automationsSold, 1);
   assert.equal(result.snapshot.metrics.cashCollectedUsd, opportunity.opportunity.quote.pricing.requiredDepositUsd);
   assert.equal(result.snapshot.profitGuard.status, "scale_carefully");
+});
+
+test("blocks automation opportunity close without audited ledger approval decision", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Unaudited Ledger Automation",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+
+  const result = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+    notes: "Deposit paid by client.",
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.entry, null);
+  assert.equal(result.opportunity?.status, "quoted");
+  assert.equal(result.opportunity?.depositPaid, false);
+  assert.match(result.reason, /approvalDecisionId auditado/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
 });
 
 test("blocks automation opportunity close when deposit is incomplete", () => {
@@ -1359,11 +5239,26 @@ test("does not double count automation opportunity already recorded in ledger", 
     clientApprovedScope: true,
     depositPaid: true,
   });
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
 
   const first = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
     cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
     markScopeApproved: true,
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
   const second = closeRevenueAutomationOpportunity({
     opportunityId: opportunity.opportunity.id,
@@ -1406,6 +5301,77 @@ test("blocks delivery workspace creation from automation opportunity before depo
   assert.equal(result.reason.includes("falta deposito pagado"), true);
 });
 
+test("blocks delivery workspace creation when scope and deposit flags exist without ledger sale", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Unledgered Delivery Gym",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "quoted",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.match(result.reason, /no esta vendida en ledger/);
+  assert.match(result.reason, /falta venta registrada en ledger/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+  assert.equal(result.snapshot.metrics.cashCollectedUsd, 0);
+});
+
+test("blocks delivery workspace creation when ledger entry is unrelated to the automation close", () => {
+  const opportunity = recordRevenueAutomationOpportunity({
+    businessName: "Wrong Ledger Delivery Gym",
+    industry: "gym",
+    request: "Automate trial signup form into Google Sheets, notify owner, send approved follow-up, and report booked trials weekly.",
+    currentTools: "Google Sheets, Gmail",
+    monthlyBudgetUsd: 900,
+    urgency: "this_month",
+    sourceLeadId: "",
+    status: "sold",
+    clientApprovedScope: true,
+    depositPaid: true,
+  });
+
+  recordApprovedRevenueLedgerEntryForTests({
+    kind: "retainer",
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: 1,
+    cashCollectedUsd: 1,
+    estimatedInternalCostUsd: 0,
+    notes: `Unrelated retainer mentioning opportunity:${opportunity.opportunity.id}`,
+  });
+
+  const result = createDeliveryWorkspaceFromAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+    launchTargetDays: 7,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.workspace, null);
+  assert.match(result.reason, /falta venta registrada en ledger/);
+  assert.equal(result.snapshot.metrics.automationsSold, 0);
+});
+
 test("creates delivery workspace from sold automation opportunity with QA corrections", () => {
   const opportunity = recordRevenueAutomationOpportunity({
     businessName: "Sold Automation Gym",
@@ -1415,9 +5381,31 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     monthlyBudgetUsd: 900,
     urgency: "this_month",
     sourceLeadId: "",
-    status: "sold",
-    clientApprovedScope: true,
-    depositPaid: true,
+    status: "quoted",
+    clientApprovedScope: false,
+    depositPaid: false,
+  });
+  const ledgerInput = {
+    kind: "automation_sale" as const,
+    clientName: opportunity.opportunity.businessName,
+    amountUsd: opportunity.opportunity.quote.pricing.setupPriceUsd,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunity.opportunity.quote.pricing.estimatedInternalMonthlyCostUsd,
+    notes: [
+      `Automation opportunity:${opportunity.opportunity.id}`,
+      opportunity.opportunity.quote.scope.packageName,
+      "Deposit paid before delivery.",
+    ].join(" | "),
+  };
+  const approval = approveLedgerEntryForTests(ledgerInput);
+  const closeResult = closeRevenueAutomationOpportunity({
+    opportunityId: opportunity.opportunity.id,
+    cashCollectedUsd: opportunity.opportunity.quote.pricing.requiredDepositUsd,
+    markScopeApproved: true,
+    notes: "Deposit paid before delivery.",
+    approvalDecisionId: approval.decision.id,
+    ledgerConfirmation: `RECORD ${ledgerInput.kind} ${ledgerInput.clientName} ${approval.decision.id}`,
+    confirmedByRobert: true,
   });
 
   const result = createDeliveryWorkspaceFromAutomationOpportunity({
@@ -1430,6 +5418,7 @@ test("creates delivery workspace from sold automation opportunity with QA correc
     launchTargetDays: 7,
   });
 
+  assert.equal(closeResult.status, "recorded");
   assert.equal(result.status, "created");
   assert.equal(result.workspace?.input.sourceOpportunityId, opportunity.opportunity.id);
   assert.equal(result.workspace?.input.clientName, "Sold Automation Gym");
@@ -1720,7 +5709,7 @@ test("persists ready delivery workspaces across module state reloads", () => {
 });
 
 test("persists ledger entries across module state reloads", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "automation_sale",
     clientName: "Persisted Client",
     amountUsd: 2500,
@@ -1735,6 +5724,12 @@ test("persists ledger entries across module state reloads", () => {
   assert.equal(snapshot.metrics.automationsSold, 1);
   assert.equal(snapshot.metrics.cashCollectedUsd, 1250);
   assert.equal(snapshot.recentLedger[0].clientName, "Persisted Client");
+  assert.equal("ledgerConfirmation" in snapshot.recentLedger[0], false);
+  assert.equal("confirmedByRobert" in snapshot.recentLedger[0], false);
+
+  const persisted = JSON.parse(readFileSync(testLedgerPath, "utf8"));
+  assert.equal("ledgerConfirmation" in persisted[0], false);
+  assert.equal("confirmedByRobert" in persisted[0], false);
 });
 
 test("pauses improvement loop when spend reaches cap without collected revenue", () => {
@@ -1815,7 +5810,7 @@ test("scales carefully when collected revenue proves profitable demand", () => {
 });
 
 test("next batch plan scales only when cash and latest review prove demand", () => {
-  recordRevenueLedgerEntry({
+  recordApprovedRevenueLedgerEntryForTests({
     kind: "automation_sale",
     clientName: "Winning Client",
     amountUsd: 3000,

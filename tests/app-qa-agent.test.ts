@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
-import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runBugPatrolHandoffs } from "../server/app-qa-agent";
+import { __appQaAgentInternals, analyzeAppTelemetry, analyzeImprovementIdeas, runAppQaScan, runBugPatrolHandoffs } from "../server/app-qa-agent";
 
 function appProject(overrides: Partial<AppProject> = {}): AppProject {
   return {
@@ -45,6 +46,160 @@ test("route scout keeps a map of pages and expected clicks", () => {
     __appQaAgentInternals.LOCAL_ROUTE_MAP.some((route) => route.path === "/agents-office" && route.expectedClicks.length > 0),
     true,
   );
+});
+
+test("route scout covers Revenue Engine money flow clicks", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine");
+
+  assert.ok(revenueRoute);
+  assert.deepEqual(
+    [
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+    ].every((click) => revenueRoute.expectedClicks.includes(click)),
+    true,
+  );
+  assert.equal(revenueRoute.expectedClicks.includes("Aprobar batch"), false);
+  assert.equal(revenueRoute.expectedClicks.includes("Ejecutar interno"), false);
+  assert.deepEqual(revenueRoute.expectedControls, [
+    "First-money command center",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
+    "Guarded public scout schedule",
+    "Manual contact path approval",
+    "Payment path approval",
+    "Ledger entry approval",
+    "Website creation approval",
+    "Website publish approval",
+    "Setup Trust Center actions",
+  ]);
+});
+
+test("visual click scout can detect missing expected Revenue Engine controls", () => {
+  const body = [
+    "Revenue Engine",
+    "First-money command center",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Aprobar batch",
+    "Generar packet",
+    "Ejecutar interno",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
+    "Guarded public scout schedule",
+    "Manual contact path approval",
+    "Payment path approval",
+    "Ledger entry approval",
+    "Website creation approval",
+    "Website publish approval",
+    "Setup Trust Center actions",
+  ].join("\n");
+
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, [
+      "First-money command center",
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+      "Production DB and session",
+      "Approved contact path",
+      "Approved payment path",
+      "Paid website build gate",
+      "Guarded public scout schedule",
+      "Manual contact path approval",
+      "Payment path approval",
+      "Ledger entry approval",
+      "Website creation approval",
+      "Website publish approval",
+      "Setup Trust Center actions",
+    ]),
+    [],
+  );
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Missing button"]),
+    ["Missing button"],
+  );
+});
+
+test("visual route body evaluation fails when first-money controls are missing", () => {
+  const evaluation = __appQaAgentInternals.evaluateVisualRouteBody(
+    [
+      "Revenue Engine",
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+    ].join("\n"),
+    [
+      "First-money command center",
+      "Production DB and session",
+      "Approved contact path",
+      "Approved payment path",
+      "Paid website build gate",
+      "Guarded public scout schedule",
+      "Manual contact path approval",
+      "Payment path approval",
+      "Ledger entry approval",
+      "Website creation approval",
+      "Website publish approval",
+      "Setup Trust Center actions",
+    ],
+  );
+
+  assert.equal(evaluation.status, "fail");
+  assert.deepEqual(evaluation.missingExpectedControls, [
+    "First-money command center",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
+    "Guarded public scout schedule",
+    "Manual contact path approval",
+    "Payment path approval",
+    "Ledger entry approval",
+    "Website creation approval",
+    "Website publish approval",
+    "Setup Trust Center actions",
+  ]);
+  assert.equal(evaluation.notes.some((note) => note.includes("Controles esperados no visibles")), true);
+});
+
+test("Revenue Engine UI renders every first-money setup action", () => {
+  const source = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(source, /firstMoneyCommandCenter\.setupActionQueue\.map/);
+  assert.doesNotMatch(source, /setupActionQueue\.slice/);
+  assert.match(source, /first-money-setup-action-\$\{action\.id\}/);
+  assert.match(source, /No setup gates are waiting right now/);
+  assert.match(source, /button-prepare-public-scout-schedule/);
+  assert.match(source, /\/api\/revenue-engine\/public-scout-schedule/);
+  assert.match(source, /button-queue-contact-path-approval/);
+  assert.match(source, /\/api\/revenue-engine\/contact-path-approval-pending-action/);
+  assert.match(source, /button-queue-payment-path-approval/);
+  assert.match(source, /\/api\/revenue-engine\/payment-path-approval-pending-action/);
+  assert.match(source, /button-queue-ledger-entry-approval/);
+  assert.match(source, /\/api\/revenue-engine\/ledger-entry-approval-pending-action/);
+  assert.match(source, /button-queue-website-creation-approval/);
+  assert.match(source, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
+  assert.match(source, /button-queue-website-publish-approval/);
+  assert.match(source, /\/api\/revenue-engine\/website-publish-approval-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/contact-path-readiness-packet"/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/payment-path-readiness-packet"/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/website-creation-packet"/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/website-publish-readiness-packet"/);
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {
@@ -519,6 +674,27 @@ test("storage unavailable result blocks release without throwing", () => {
   assert.ok(result.failCount >= 1);
   assert.equal(result.subAgents.some((agent) => agent.id === "api-scout" && agent.status === "fail"), true);
   assert.match(result.summary, /bloqueo release/);
+});
+
+test("runAppQaScan blocks release quickly when DATABASE_URL is missing", async () => {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+
+  try {
+    const result = await runAppQaScan("user-1", false, false, false);
+
+    assert.equal(result.council.status, "fail");
+    assert.equal(result.githubError, "App QA storage unavailable");
+    assert.ok(result.failCount >= 1);
+    assert.match(result.summary, /bloqueo release/);
+    assert.equal(result.routeMap.some((route) => route.path === "/revenue-engine"), true);
+  } finally {
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+  }
 });
 
 test("storage unavailable result keeps useful AggregateError details", () => {

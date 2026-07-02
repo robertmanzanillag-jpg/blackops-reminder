@@ -79,6 +79,15 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
 });
 
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "blackops-reminder",
+    checkedAt: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
+});
+
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
   const escapedTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return [

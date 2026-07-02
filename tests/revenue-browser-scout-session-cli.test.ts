@@ -1,0 +1,227 @@
+import assert from "node:assert/strict";
+import path from "node:path";
+import test from "node:test";
+import { buildRevenueScoutDispatch } from "../server/revenue-engine";
+import {
+  buildRevenueBrowserScoutDispatchInput,
+  buildRevenueBrowserScoutSession,
+  formatRevenueBrowserScoutSessionText,
+  parseRevenueBrowserScoutSessionArgs,
+  validateRevenueBrowserScoutSessionOptions,
+} from "../server/revenue-browser-scout-session-cli";
+
+function fakeOutputPathChecks(options: { existing?: string[]; symlinks?: string[]; directories?: string[] } = {}) {
+  const existing = new Set(options.existing || []);
+  const symlinks = new Set(options.symlinks || []);
+  const directories = new Set(options.directories || []);
+  return {
+    exists: (targetPath: string) =>
+      existing.has(targetPath)
+      || symlinks.has(targetPath)
+      || directories.has(targetPath)
+      || targetPath === "/tmp"
+      || targetPath === path.resolve(process.cwd(), "revenue_workspace/public-scout"),
+    lstat: (targetPath: string) => ({
+      isFile: () => !directories.has(targetPath),
+      isSymbolicLink: () => symlinks.has(targetPath),
+    }),
+    realpath: (targetPath: string) => targetPath,
+  };
+}
+
+test("parses revenue browser scout session CLI options", () => {
+  const parsed = parseRevenueBrowserScoutSessionArgs([
+    "--area=Orlando",
+    "--niche=roofers",
+    "--offer-focus=websites",
+    "--daily-research-target=12",
+    "--daily-qualified-lead-limit=6",
+    "--daily-mockup-limit=2",
+    "--daily-contact-limit=1",
+    "--capture=/tmp/revenue-capture.json",
+    "--output=/tmp/revenue-session.json",
+    "--json",
+    "--open",
+  ]);
+
+  assert.deepEqual(parsed, {
+    area: "Orlando",
+    niche: "roofers",
+    offerFocus: "websites",
+    dailyResearchTarget: 12,
+    dailyQualifiedLeadLimit: 6,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 1,
+    json: true,
+    open: true,
+    outputPath: "/tmp/revenue-session.json",
+    capturePath: "/tmp/revenue-capture.json",
+  });
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(parsed), []);
+
+  const defaults = parseRevenueBrowserScoutSessionArgs([]);
+  assert.equal(defaults.capturePath, "");
+  assert.equal(defaults.outputPath, "");
+});
+
+test("validates browser scout session safety limits", () => {
+  const badOffer = parseRevenueBrowserScoutSessionArgs(["--offer-focus=banana"]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(badOffer), [
+    "--offer-focus must be websites, automations or both.",
+  ]);
+
+  const tooLarge = parseRevenueBrowserScoutSessionArgs(["--daily-research-target=100"]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(tooLarge), [
+    "--daily-research-target must be between 10 and 30 for a safe browser scout session.",
+  ]);
+
+  const tooFewQualifiedLeads = parseRevenueBrowserScoutSessionArgs(["--daily-qualified-lead-limit=3"]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(tooFewQualifiedLeads), [
+    "--daily-qualified-lead-limit must be between 5 and 25.",
+  ]);
+});
+
+test("validates browser scout session output and capture paths", () => {
+  const safeTmp = parseRevenueBrowserScoutSessionArgs([
+    "--output=/tmp/revenue-session.json",
+    "--capture=/tmp/revenue-capture.json",
+  ]);
+  const safeWorkspace = parseRevenueBrowserScoutSessionArgs([
+    `--capture=${path.resolve(process.cwd(), "revenue_workspace/public-scout/capture.json")}`,
+  ]);
+  const sensitive = parseRevenueBrowserScoutSessionArgs([
+    "--output=/tmp/.env",
+    "--capture=/tmp/credentials/capture.json",
+  ]);
+  const outsideAllowed = parseRevenueBrowserScoutSessionArgs([
+    "--output=/Users/robertmanzanilla/Desktop/session.json",
+  ]);
+  const missingParent = parseRevenueBrowserScoutSessionArgs([
+    "--capture=/tmp/missing/revenue-capture.json",
+  ]);
+  const existingDirectory = parseRevenueBrowserScoutSessionArgs([
+    "--output=/tmp/existing-dir",
+  ]);
+  const symlinkOutput = parseRevenueBrowserScoutSessionArgs([
+    "--capture=/tmp/revenue-capture-link.json",
+  ]);
+  const workspaceSymlinkAncestor = parseRevenueBrowserScoutSessionArgs([
+    `--output=${path.resolve(process.cwd(), "revenue_workspace/public-scout/link/child/session.json")}`,
+  ]);
+  const symlinkedWorkspaceTarget = parseRevenueBrowserScoutSessionArgs([
+    "--output=/Users/robertmanzanilla/Desktop/session.json",
+  ]);
+
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(safeTmp, fakeOutputPathChecks()), []);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(safeWorkspace, fakeOutputPathChecks()), []);
+  assert.equal(validateRevenueBrowserScoutSessionOptions(sensitive, fakeOutputPathChecks()).some((error) => error.includes("cannot point to .env")), true);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(outsideAllowed, fakeOutputPathChecks({
+    existing: ["/Users/robertmanzanilla/Desktop"],
+    directories: ["/Users/robertmanzanilla/Desktop"],
+  })), [
+    "--output must be inside revenue_workspace/public-scout or the system temp directory.",
+  ]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(missingParent, fakeOutputPathChecks()), [
+    "--capture parent directory must exist.",
+  ]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(existingDirectory, fakeOutputPathChecks({
+    existing: ["/tmp/existing-dir"],
+    directories: ["/tmp/existing-dir"],
+  })), [
+    "--output already exists; remove it before writing a new browser scout session file.",
+    "--output must be a regular file when it already exists.",
+  ]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(symlinkOutput, fakeOutputPathChecks({
+    existing: ["/tmp/revenue-capture-link.json"],
+    symlinks: ["/tmp/revenue-capture-link.json"],
+  })), [
+    "--capture already exists; remove it before writing a new browser scout session file.",
+    "--capture cannot be a symlink.",
+  ]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(workspaceSymlinkAncestor, fakeOutputPathChecks({
+    existing: [
+      path.resolve(process.cwd(), "revenue_workspace/public-scout/link"),
+      path.resolve(process.cwd(), "revenue_workspace/public-scout/link/child"),
+    ],
+    directories: [
+      path.resolve(process.cwd(), "revenue_workspace/public-scout/link/child"),
+    ],
+    symlinks: [path.resolve(process.cwd(), "revenue_workspace/public-scout/link")],
+  })), [
+    "--output workspace path cannot include symlink directories.",
+  ]);
+  assert.deepEqual(validateRevenueBrowserScoutSessionOptions(symlinkedWorkspaceTarget, {
+    exists: (targetPath: string) =>
+      targetPath === path.resolve(process.cwd(), "revenue_workspace/public-scout")
+      || targetPath === "/Users/robertmanzanilla/Desktop",
+    lstat: (targetPath: string) => ({
+      isFile: () => false,
+      isSymbolicLink: () => targetPath === path.resolve(process.cwd(), "revenue_workspace/public-scout"),
+    }),
+    realpath: (targetPath: string) =>
+      targetPath === path.resolve(process.cwd(), "revenue_workspace/public-scout")
+        ? "/Users/robertmanzanilla/Desktop"
+        : targetPath,
+  }), [
+    "--output must be inside revenue_workspace/public-scout or the system temp directory.",
+  ]);
+});
+
+test("builds dispatch input with no spend contacts or preview writes", () => {
+  const input = buildRevenueBrowserScoutDispatchInput(parseRevenueBrowserScoutSessionArgs([
+    "--area=Miami",
+    "--niche=coffee shop",
+    "--offer-focus=websites",
+    "--daily-contact-limit=3",
+  ]));
+
+  assert.equal(input.area, "Miami");
+  assert.equal(input.niche, "coffee shop");
+  assert.equal(input.maxPaidDataSpendUsd, 0);
+  assert.equal(input.requireRobertApprovalToContact, true);
+  assert.equal(input.writePreviewFiles, false);
+  assert.deepEqual(input.seedLeads, []);
+  assert.equal(input.seedLeadBatchText, "");
+});
+
+test("builds browser scout session manifest with capture template locked for review", () => {
+  const options = parseRevenueBrowserScoutSessionArgs([
+    "--area=Miami",
+    "--niche=coffee shop",
+    "--offer-focus=websites",
+    "--daily-research-target=10",
+    "--daily-qualified-lead-limit=6",
+    "--capture=/tmp/candidates.json",
+  ]);
+  const dispatch = buildRevenueScoutDispatch(buildRevenueBrowserScoutDispatchInput(options));
+  const session = buildRevenueBrowserScoutSession(dispatch, options);
+
+  assert.equal(session.status, "ready_for_browser_scout_session");
+  assert.equal(session.openMode, "dry_run_manifest");
+  assert.equal(session.urlCount, dispatch.workOrders.length);
+  assert.equal(session.capturePath, "/tmp/candidates.json");
+  assert.equal(session.captureTemplate.maxPaidDataSpendUsd, 0);
+  assert.equal(session.captureTemplate.writePreviewFiles, false);
+  assert.equal(session.captureTemplate.autoApproveVerified, false);
+  assert.equal(session.captureTemplate.candidates[0].verificationStatus, "needs_review");
+  assert.equal(session.captureTemplate.candidates[0].publicEvidenceVerified, false);
+  assert.equal(session.captureTemplate.candidates[0].approvalToImport, false);
+  assert.match(session.nextCommand, /revenue:public-scout-run/);
+  assert.equal(session.safety.opensBrowserTabs, false);
+  assert.equal(session.safety.persistsLeads, false);
+  assert.equal(session.safety.sendsOutreach, false);
+  assert.equal(session.safety.writesPreviewFiles, false);
+});
+
+test("formats browser scout session with safety claims visible", () => {
+  const options = parseRevenueBrowserScoutSessionArgs(["--area=Miami", "--niche=salon"]);
+  const dispatch = buildRevenueScoutDispatch(buildRevenueBrowserScoutDispatchInput(options));
+  const output = formatRevenueBrowserScoutSessionText(buildRevenueBrowserScoutSession(dispatch, options));
+
+  assert.match(output, /Revenue browser scout session: ready_for_browser_scout_session/);
+  assert.match(output, /Next command: npm run revenue:public-scout-run/);
+  assert.match(output, /Opens browser tabs: no/);
+  assert.match(output, /Paid data spend: \$0/);
+  assert.match(output, /Persists final leads: no/);
+  assert.match(output, /Sends outreach: no/);
+});

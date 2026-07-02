@@ -36,8 +36,17 @@ import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getSho
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
-import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, improvementReviewSchema, preflightRevenueExpense, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueSalesAutopilot, recordRevenueScoutingMission, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, runRevenueAutomationAgentCommand, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
-import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
+import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueContactPathReadinessPacket, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupPreview, buildRevenueMockupTemplatePack, buildRevenueOutreachApprovalPacket, buildRevenuePaymentPathReadinessPacket, buildRevenueProjectPlan, buildRevenuePublicScoutSchedule, buildRevenueScoutDispatch, buildRevenueWebsiteCreationPacket, buildRevenueWebsitePublishReadinessPacket, buildRevenueWebsiteScaffold, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, findRevenueMoneySprintArtifactsByBusinessNames, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, improvementReviewSchema, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenuePublicLeadCandidate, recordRevenuePublicScoutRun, recordRevenueSalesAutopilot, recordRevenueScoutingMission, reviewRevenuePublicLeadCandidates, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueContactPathReadinessPacketSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintSchema, revenueOutreachApprovalPacketSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenuePaymentPathReadinessPacketSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateReviewSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutRunSchema, revenuePublicScoutScheduleSchema, revenueSalesAutopilotSchema, revenueScoutDispatchSchema, revenueScoutingMissionSchema, revenueWebsiteCreationPacketSchema, revenueWebsitePublishReadinessPacketSchema, revenueWebsiteScaffoldSchema, runRevenueAutomationAgentCommand, runRevenueMoneySprint, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
+} from "./revenue-first-money-approval-pending-action";
+import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
+import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
@@ -4871,6 +4880,818 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/revenue-engine/first-money-command-center", async (_req, res) => {
+    try {
+      res.json(buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch revenue first-money command center" });
+    }
+  });
+
+  const revenuePublicCandidateApprovalDecisionSchema = z.object({
+    batchId: z.string().trim().min(1).max(80),
+    candidateIds: z.array(z.string().trim().min(1).max(180)).min(1).max(25),
+    decision: z.enum(["approved", "rejected", "needs_changes"]).default("approved"),
+    approvedAction: z.string().trim().min(8).max(500).default("Approve first-money public candidate review."),
+    notes: z.string().trim().max(1000).optional().default(""),
+    area: z.string().trim().min(2).max(120),
+    niche: z.string().trim().min(2).max(120),
+    offerFocus: z.enum(["websites", "automations", "both"]).default("websites"),
+    confirmationText: z.string().trim().min(1).max(120),
+  }).strict();
+
+  const revenuePublicCandidateReviewPacketSchema = z.object({
+    batchId: z.string().trim().min(1).max(80),
+    candidateIds: z.array(z.string().trim().min(1).max(180)).min(1).max(25),
+    approvalDecisionId: z.string().trim().min(1).max(180),
+    area: z.string().trim().min(2).max(120),
+    niche: z.string().trim().min(2).max(120),
+    offerFocus: z.enum(["websites", "automations", "both"]).default("websites"),
+    confirmationText: z.string().trim().min(1).max(180),
+  }).strict();
+
+  const revenuePublicCandidateMoneySprintRunSchema = revenuePublicCandidateReviewPacketSchema.extend({
+    confirmationText: z.string().trim().min(1).max(200),
+  }).strict();
+
+  const buildGuardedPublicCandidateReview = (input: z.infer<typeof revenuePublicCandidateReviewPacketSchema>) =>
+    reviewRevenuePublicLeadCandidates({
+      area: input.area,
+      niche: input.niche,
+      offerFocus: input.offerFocus,
+      dailyResearchTarget: 20,
+      dailyQualifiedLeadLimit: 5,
+      dailyMockupLimit: 2,
+      dailyContactLimit: 0,
+      maxPaidDataSpendUsd: 0,
+      requireRobertApprovalToContact: true,
+      writePreviewFiles: false,
+      candidateIds: input.candidateIds,
+      approvedByRobert: true,
+      approvalDecisionId: input.approvalDecisionId,
+      reviewerNote: "Robert generated this first-money candidate review packet from Revenue Engine.",
+    });
+
+  app.post("/api/revenue-engine/contact-path-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueContactPathApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_contact_path_approval",
+        resourceType: "revenue_contact_path",
+        resourceId: input.contactMode,
+        title: `Approve first-money contact path: ${input.contactMode}`,
+        description: [
+          "Approve the exact first-money contact path after Robert reviews evidence.",
+          "This pending action records approval only; it does not send outreach, edit environment files, store secrets, charge clients or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_contact_path",
+        },
+        proposedChanges: {
+          contactMode: input.contactMode,
+          fromEmailConfigured: Boolean(input.fromEmail),
+          manualContactApproved: input.manualContactApproved,
+          emailProviderConfigured: input.emailProviderConfigured,
+          evidenceUrl: input.evidenceUrl,
+          evidenceNote: input.evidenceNote,
+          afterApproval: "Run contact-path readiness with the returned approvalDecisionId before any outreach send.",
+          safety: {
+            persistsApprovalDecision: true,
+            sendsOutreach: false,
+            chargesClients: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "contact_path",
+          sendsOutreach: false,
+          chargesClients: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue contact path approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/payment-path-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenuePaymentPathApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_payment_path_approval",
+        resourceType: "revenue_payment_path",
+        resourceId: input.paymentLink,
+        title: "Approve first-money payment path",
+        description: [
+          "Approve the exact first-money Stripe/payment path after Robert reviews evidence.",
+          "This pending action records approval only; it does not charge clients, edit environment files, store secrets, record ledger entries, send outreach or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_payment_path",
+        },
+        proposedChanges: {
+          paymentLink: input.paymentLink,
+          expectedDepositUsd: input.expectedDepositUsd,
+          expectedPackage: input.expectedPackage,
+          evidenceUrl: input.evidenceUrl,
+          evidenceNote: input.evidenceNote,
+          afterApproval: "Run payment-path readiness with the returned approvalDecisionId before requesting deposits.",
+          safety: {
+            persistsApprovalDecision: true,
+            chargesClients: false,
+            recordsLedgerEntry: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "payment_path",
+          chargesClients: false,
+          recordsLedgerEntry: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          recordsLedgerEntry: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue payment path approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/ledger-entry-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueLedgerEntryApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_ledger_entry_approval",
+        resourceType: "revenue_ledger_entry",
+        resourceId: `${input.kind}:${input.clientName}`,
+        title: `Approve first-money ledger entry: ${input.clientName}`,
+        description: [
+          "Approve the exact first-money ledger entry after Robert verifies collected cash evidence.",
+          "This pending action records approval only; it does not record the ledger entry, charge clients, send outreach, edit environment files, store secrets or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_ledger_entry",
+        },
+        proposedChanges: {
+          kind: input.kind,
+          clientName: input.clientName,
+          amountUsd: input.amountUsd,
+          cashCollectedUsd: input.cashCollectedUsd,
+          estimatedInternalCostUsd: input.estimatedInternalCostUsd,
+          paymentEvidence: input.paymentEvidence,
+          afterApproval: "Run revenue:ledger-record with the returned approvalDecisionId and exact typed ledger confirmation.",
+          safety: {
+            persistsApprovalDecision: true,
+            recordsLedgerEntry: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "ledger_entry",
+          recordsLedgerEntry: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          recordsLedgerEntry: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue ledger entry approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-creation-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueWebsiteCreationApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_website_creation_approval",
+        resourceType: "revenue_website_creation",
+        resourceId: input.outreachDraftId,
+        title: `Approve first-money website creation: ${input.outreachDraftId}`,
+        description: [
+          "Approve the exact first-money website creation handoff after Robert verifies scope, deposit, and public data evidence.",
+          "This pending action records approval only; it does not write files, deploy, publish previews, charge clients, send outreach, edit environment files or store secrets.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_website_creation",
+        },
+        proposedChanges: {
+          outreachDraftId: input.outreachDraftId,
+          launchTargetDays: input.launchTargetDays,
+          notes: input.notes,
+          afterApproval: "Run revenue:website-creation-packet with the returned approvalDecisionId; the packet still cannot write or deploy.",
+          safety: {
+            persistsApprovalDecision: true,
+            writesFiles: false,
+            deploys: false,
+            publishesPreview: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "website_creation",
+          writesFiles: false,
+          deploys: false,
+          publishesPreview: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          writesFiles: false,
+          deploys: false,
+          publishesPreview: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue website creation approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-publish-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueWebsitePublishApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_website_publish_approval",
+        resourceType: "revenue_website_publish",
+        resourceId: input.outreachDraftId,
+        title: `Approve first-money website publish readiness: ${input.outreachDraftId}`,
+        description: [
+          "Approve the exact first-money website publish readiness handoff after Robert verifies preview deploy, App QA, rollback, and publish evidence.",
+          "This pending action records approval only; it does not write files, deploy, publish websites, charge clients, send outreach, edit environment files or store secrets.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_website_publish",
+        },
+        proposedChanges: {
+          outreachDraftId: input.outreachDraftId,
+          websiteCreationApprovalDecisionId: input.websiteCreationApprovalDecisionId,
+          deployProvider: input.deployProvider,
+          previewDeployUrl: input.previewDeployUrl,
+          appQaEvidenceUrl: input.appQaEvidenceUrl,
+          rollbackPlanUrl: input.rollbackPlanUrl,
+          launchTargetDays: input.launchTargetDays,
+          afterApproval: "Run revenue:website-publish-readiness-packet with the returned publish approvalDecisionId; the packet still cannot deploy or publish.",
+          safety: {
+            persistsApprovalDecision: true,
+            writesFiles: false,
+            deploys: false,
+            publishesWebsite: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "website_publish",
+          writesFiles: false,
+          deploys: false,
+          publishesWebsite: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          writesFiles: false,
+          deploys: false,
+          publishesWebsite: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue website publish approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/approval-decision", async (req, res) => {
+    try {
+      revenuePublicCandidateApprovalDecisionSchema.parse(req.body);
+      res.status(409).json({
+        status: "blocked",
+        blockers: ["Direct public candidate approval is disabled; queue the Trust Center pending action instead."],
+        nextEndpoint: "/api/revenue-engine/public-lead-candidates/approval-pending-action",
+        safety: {
+          persistsApprovalDecision: false,
+          createsPendingAction: false,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          exposesContactDetails: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public candidate approval decision" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateApprovalDecisionSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedApproval = commandCenter.candidateApprovalQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = Boolean(
+        expectedApproval
+        && input.batchId === expectedApproval.id
+        && input.area === expectedApproval.area
+        && input.niche === expectedApproval.niche
+        && input.offerFocus === expectedApproval.offerFocus
+        && input.approvedAction === expectedApproval.approvedAction
+        && input.confirmationText === expectedApproval.confirmationText
+        && revenueCandidateIdsMatch(input.candidateIds, expectedApproval.candidateIds),
+      );
+
+      if (!matchesActiveBatch || !expectedApproval) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Pending approval payload must match a queued first-money candidate batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_candidate_approval",
+        resourceType: "revenue_public_candidate_batch",
+        resourceId: expectedApproval.id,
+        title: `Approve first-money candidate batch: ${expectedApproval.area} / ${expectedApproval.niche}`,
+        description: [
+          `Approve ${expectedApproval.count} verified public candidate(s) for guarded internal Money Sprint review.`,
+          "This pending action does not import leads, send outreach, charge clients, write website files or deploy.",
+          `Exact confirmation: ${expectedApproval.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedApproval.id,
+          candidateIds: expectedApproval.candidateIds,
+          area: expectedApproval.area,
+          niche: expectedApproval.niche,
+          offerFocus: expectedApproval.offerFocus,
+          requestedReview: "approve_or_reject_first_money_candidate_batch",
+          approvedAction: expectedApproval.approvedAction,
+          confirmationText: expectedApproval.confirmationText,
+        },
+        proposedChanges: {
+          approvalStatus: "pending_trust_center_review",
+          candidateCards: expectedApproval.candidateCards,
+          totalEstimatedOfferUsd: expectedApproval.totalEstimatedOfferUsd,
+          afterApproval: commandCenter.robertApprovalBrief.afterRobertApproves,
+          blockedActions: commandCenter.robertApprovalBrief.blockedActions,
+          safety: expectedApproval.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedApproval.id,
+          exposesContactDetails: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsApprovalDecision: false,
+          createsPendingAction: true,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          exposesContactDetails: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate approval pending action" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/review-packet", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedReview = commandCenter.candidateReviewQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedReview);
+
+      if (!matchesActiveBatch) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Review packet payload must match a queued approved first-money batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const result = buildGuardedPublicCandidateReview(input);
+      res.status(result.status === "ready_for_money_sprint_preview" ? 200 : 400).json({
+        status: result.status,
+        approvalDecisionId: result.approvalDecisionId,
+        requestedCount: result.requestedCount,
+        foundCount: result.foundCount,
+        approvedCount: result.approvedCount,
+        missingIds: result.missingIds,
+        duplicateIds: result.duplicateIds,
+        reviewedCandidates: result.reviewedCandidates,
+        preview: {
+          totals: result.preview.totals,
+          safety: result.preview.safety,
+        },
+        moneySprintRunPacket: {
+          status: result.moneySprintRunPacket.status,
+          endpoint: result.moneySprintRunPacket.endpoint,
+          method: result.moneySprintRunPacket.method,
+          expectedOutput: result.moneySprintRunPacket.expectedOutput,
+          operatorChecklist: result.moneySprintRunPacket.operatorChecklist,
+          blockedUntil: result.moneySprintRunPacket.blockedUntil,
+          safety: result.moneySprintRunPacket.safety,
+        },
+        nextApiAction: result.nextApiAction,
+        nextAction: result.nextAction,
+        safety: result.safety,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue public candidate review packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/review-packet-pending-action", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateReviewPacketSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedReview = commandCenter.candidateReviewQueue.find((batch) => batch.id === input.batchId);
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedReview);
+
+      if (!matchesActiveBatch || !expectedReview) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Pending review packet payload must match a queued approved first-money batch and exact confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_candidate_review",
+        resourceType: "revenue_public_candidate_review_batch",
+        resourceId: expectedReview.id,
+        title: `Generate first-money review packet: ${expectedReview.area} / ${expectedReview.niche}`,
+        description: [
+          `Generate the guarded internal review packet for ${expectedReview.count} Robert-approved public candidate(s).`,
+          "This pending action does not import leads, send outreach, charge clients, write website files or deploy.",
+          `Exact confirmation: ${expectedReview.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedReview.id,
+          candidateIds: expectedReview.candidateIds,
+          approvalDecisionId: expectedReview.approvalDecisionId,
+          area: expectedReview.area,
+          niche: expectedReview.niche,
+          offerFocus: expectedReview.offerFocus,
+          requestedReview: "generate_first_money_candidate_review_packet",
+          confirmationText: expectedReview.confirmationText,
+        },
+        proposedChanges: {
+          reviewStatus: "pending_trust_center_review",
+          candidateNames: expectedReview.candidateNames,
+          totalEstimatedOfferUsd: expectedReview.totalEstimatedOfferUsd,
+          afterApproval: "Generate a sanitized internal Money Sprint review packet for final human review.",
+          blockedActions: ["import leads", "send outreach", "charge clients", "write website files", "deploy"],
+          safety: expectedReview.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedReview.id,
+          approvalDecisionId: expectedReview.approvalDecisionId,
+          exposesContactDetails: false,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsReviewPacket: false,
+          createsPendingAction: true,
+          importsLeads: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          exposesContactDetails: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate review packet pending action" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedRun = commandCenter.candidateRunQueue.find((batch) => batch.id === input.batchId);
+      if (!expectedRun) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["No queued approved first-money batch is ready for Money Sprint execution."],
+          commandCenter,
+        });
+      }
+
+      const matchesActiveBatch = matchesRevenueFirstMoneyApprovedCandidateBatch(input, expectedRun);
+
+      if (!matchesActiveBatch) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Pending Money Sprint payload must match a queued approved first-money batch and exact run confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const review = buildGuardedPublicCandidateReview(input);
+      if (review.status !== "ready_for_money_sprint_preview" || review.moneySprintRunPacket.status !== "ready_for_money_sprint_run") {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Queued approved first-money batch is not ready for Money Sprint execution."],
+          reviewedCandidates: review.reviewedCandidates,
+          commandCenter,
+        });
+      }
+
+      const existingArtifacts = findRevenueMoneySprintArtifactsByBusinessNames(expectedRun.candidateNames);
+      if (existingArtifacts.businessNames.length > 0) {
+        return res.status(409).json({
+          status: "blocked",
+          blockers: [`Money Sprint already has internal artifacts for: ${existingArtifacts.businessNames.join(", ")}`],
+          commandCenter,
+        });
+      }
+
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_sprint_run",
+        resourceType: "revenue_internal_money_sprint_batch",
+        resourceId: expectedRun.id,
+        title: `Run guarded internal Money Sprint: ${expectedRun.area} / ${expectedRun.niche}`,
+        description: [
+          `Create internal leads, mockup records and draft-only outreach for ${expectedRun.count} approved public candidate(s).`,
+          "This pending action does not send outreach, charge clients, write website files, write preview files or deploy.",
+          `Exact confirmation: ${expectedRun.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedRun.id,
+          candidateIds: expectedRun.candidateIds,
+          approvalDecisionId: expectedRun.approvalDecisionId,
+          area: expectedRun.area,
+          niche: expectedRun.niche,
+          offerFocus: expectedRun.offerFocus,
+          requestedReview: "run_first_money_internal_money_sprint",
+          confirmationText: expectedRun.confirmationText,
+        },
+        proposedChanges: {
+          runStatus: "pending_trust_center_review",
+          candidateNames: expectedRun.candidateNames,
+          totalEstimatedOfferUsd: expectedRun.totalEstimatedOfferUsd,
+          expectedOutput: review.moneySprintRunPacket.expectedOutput,
+          afterApproval: "Persist internal leads, mockup records and draft-only outreach for final human review.",
+          blockedActions: ["send outreach", "charge clients", "write website files", "write preview files", "deploy"],
+          safety: review.moneySprintRunPacket.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedRun.id,
+          approvalDecisionId: expectedRun.approvalDecisionId,
+          importsLeads: true,
+          sendsOutreach: false,
+          chargesClients: false,
+          writesPreviewFiles: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsLeads: false,
+          createsPendingAction: true,
+          sendsOutreach: false,
+          chargesClients: false,
+          writesPreviewFiles: false,
+          deploys: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate Money Sprint pending action" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint", async (req, res) => {
+    try {
+      revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
+      res.status(409).json({
+        status: "blocked",
+        blockers: ["Direct internal Money Sprint execution is disabled; queue the Trust Center pending action instead."],
+        nextEndpoint: "/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action",
+        safety: {
+          persistsLeads: false,
+          createsPendingAction: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          writesPreviewFiles: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to execute revenue public candidate Money Sprint" });
+    }
+  });
+
   app.post("/api/revenue-engine/plan", async (req, res) => {
     try {
       const input = revenueEnginePlanSchema.parse(req.body);
@@ -4904,6 +5725,102 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue lead radar" });
+    }
+  });
+
+  app.post("/api/revenue-engine/scout-dispatch", async (req, res) => {
+    try {
+      const input = revenueScoutDispatchSchema.parse(req.body);
+      res.json(buildRevenueScoutDispatch(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue scout dispatch" });
+    }
+  });
+
+  app.post("/api/revenue-engine/money-sprint", async (req, res) => {
+    try {
+      const input = revenueMoneySprintSchema.parse(req.body);
+      res.json(runRevenueMoneySprint(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to run revenue money sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/money-sprint-preview", async (req, res) => {
+    try {
+      const input = revenueMoneySprintSchema.parse(req.body);
+      res.json(previewRevenueMoneySprintSeeds(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to preview revenue money sprint" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates", async (req, res) => {
+    try {
+      const input = revenuePublicLeadCandidateSchema.parse(req.body);
+      res.json(recordRevenuePublicLeadCandidate(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public lead candidate" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-scout-run", async (req, res) => {
+    try {
+      const input = revenuePublicScoutRunSchema.parse(req.body);
+      res.json(recordRevenuePublicScoutRun(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record revenue public scout run" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-scout-schedule", async (req, res) => {
+    try {
+      const input = revenuePublicScoutScheduleSchema.parse(req.body);
+      res.json(buildRevenuePublicScoutSchedule(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue public scout schedule" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/review", async (req, res) => {
+    try {
+      const input = revenuePublicLeadCandidateReviewSchema.parse(req.body);
+      res.json(reviewRevenuePublicLeadCandidates(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to review revenue public lead candidates" });
+    }
+  });
+
+  app.post("/api/revenue-engine/outreach-approval-packet", async (req, res) => {
+    try {
+      const input = revenueOutreachApprovalPacketSchema.parse(req.body);
+      res.json(buildRevenueOutreachApprovalPacket(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue outreach approval packet" });
     }
   });
 
@@ -5207,6 +6124,32 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/revenue-engine/mockup-preview", async (req, res) => {
+    try {
+      const input = revenueMockupSchema.parse(req.body);
+      res.json(buildRevenueMockupPreview(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue mockup preview" });
+    }
+  });
+
+  app.get("/api/revenue-engine/mockup-previews/:slug", async (req, res) => {
+    try {
+      const previewPath = getRevenueMockupPreviewPath(req.params.slug);
+      const html = await readNodeFile(previewPath, "utf8");
+      res.set("Cache-Control", "no-store");
+      res.type("html").send(html);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") {
+        return res.status(404).json({ error: "Mockup preview not found" });
+      }
+      res.status(400).json({ error: "Invalid mockup preview" });
+    }
+  });
+
   app.post("/api/revenue-engine/mockup-template-pack", async (req, res) => {
     try {
       const input = revenueMockupTemplatePackSchema.parse(req.body);
@@ -5228,6 +6171,66 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue project plan" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-creation-packet", async (req, res) => {
+    try {
+      const input = revenueWebsiteCreationPacketSchema.parse(req.body);
+      res.json(buildRevenueWebsiteCreationPacket(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue website creation packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/payment-path-readiness-packet", async (req, res) => {
+    try {
+      const input = revenuePaymentPathReadinessPacketSchema.parse(req.body);
+      res.json(buildRevenuePaymentPathReadinessPacket(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue payment path readiness packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/contact-path-readiness-packet", async (req, res) => {
+    try {
+      const input = revenueContactPathReadinessPacketSchema.parse(req.body);
+      res.json(buildRevenueContactPathReadinessPacket(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue contact path readiness packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-publish-readiness-packet", async (req, res) => {
+    try {
+      const input = revenueWebsitePublishReadinessPacketSchema.parse(req.body);
+      res.json(buildRevenueWebsitePublishReadinessPacket(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue website publish readiness packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-scaffold", async (req, res) => {
+    try {
+      const input = revenueWebsiteScaffoldSchema.parse(req.body);
+      res.json(buildRevenueWebsiteScaffold(input));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to build revenue website scaffold" });
     }
   });
 
