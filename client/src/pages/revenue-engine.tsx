@@ -2925,6 +2925,26 @@ export default function RevenueEnginePage() {
                     </div>
                     <p className="mt-1 text-zinc-400">{unblocker.reason}</p>
                     <p className="mt-1 text-zinc-500">{unblocker.safeNextAction}</p>
+                    <div className="mt-2 grid gap-2" data-testid={`first-money-unblocker-evidence-${unblocker.id}`}>
+                      <div>
+                        <p className="text-zinc-500">Evidencia requerida</p>
+                        <ul className="mt-1 space-y-1 text-zinc-300">
+                          {unblocker.evidenceRequired.slice(0, 3).map((item) => (
+                            <li key={item}>- {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-zinc-500">
+                          {unblocker.status === "ready" ? "Guardrails activos" : "Sigue bloqueado"}
+                        </p>
+                        <p className="mt-1 text-zinc-400">
+                          {unblocker.status === "ready"
+                            ? `Aun requiere revision por accion: ${unblocker.blockedActions.join(", ")}`
+                            : unblocker.blockedActions.join(", ")}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

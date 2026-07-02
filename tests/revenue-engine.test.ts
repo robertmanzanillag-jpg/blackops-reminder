@@ -3348,6 +3348,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /moneyUnblockers/);
   assert.match(source, /first-money-unblockers/);
   assert.match(source, /unblocker\.safeNextAction/);
+  assert.match(source, /first-money-unblocker-evidence-/);
+  assert.match(source, /unblocker\.evidenceRequired\.slice/);
+  assert.match(source, /unblocker\.blockedActions\.join/);
+  assert.match(source, /unblocker\.status === "ready" \? "Guardrails activos" : "Sigue bloqueado"/);
+  assert.match(source, /Aun requiere revision por accion/);
   assert.match(source, /canContactBusinesses/);
   assert.match(source, /canCollectMoney/);
   assert.match(source, /canBuildWebsites/);
