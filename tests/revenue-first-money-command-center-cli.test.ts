@@ -943,7 +943,32 @@ test("first-money command center includes website handoff command for approved d
   assert.equal(websiteCommand?.status, "blocked");
   assert.match(websiteCommand?.command || "", new RegExp(draft.id));
   assert.match(websiteCommand?.command || "", /revenue:website-creation-approval-decision/);
+  assert.match(websiteCommand?.command || "", /--approved-action=Approve paid website creation handoff after client scope and deposit proof\./);
+  assert.match(websiteCommand?.command || "", /--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF/);
+  assert.match(websiteCommand?.command || "", /--launch-target-days=7/);
+  assert.match(websiteCommand?.command || "", /--confirmed-by-robert/);
   assert.doesNotMatch(websiteCommand?.command || "", /--approval-decision-id=/);
+});
+
+test("first-money website handoff command cannot persist placeholder website approval", () => {
+  createDraft("approved");
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const websiteCommand = packet.queue.find((item) => item.id === "website-handoff");
+  assert.ok(websiteCommand);
+
+  const result = spawnSync("sh", ["-c", websiteCommand.command], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      REVENUE_ENGINE_LEADS_PATH: testLeadsPath,
+      REVENUE_ENGINE_OUTREACH_PATH: testOutreachPath,
+      REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
+    },
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
+  assert.match(`${result.stdout}\n${result.stderr}`, /placeholder/);
 });
 
 test("first-money command center script reads persisted outreach drafts", () => {

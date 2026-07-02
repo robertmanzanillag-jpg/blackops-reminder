@@ -477,7 +477,18 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       ? {
         id: "website-handoff",
         label: "Prepare paid website handoff",
-        command: `npm run revenue:website-creation-approval-decision -- --outreach-draft-id=${approvedDraft.id} --decision=approved --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified`,
+        command: npmRunText("revenue:website-creation-approval-decision", [
+          `--outreach-draft-id=${approvedDraft.id}`,
+          "--decision=approved",
+          "--approved-action=Approve paid website creation handoff after client scope and deposit proof.",
+          "--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+          "--robert-approved-build",
+          "--client-approved-scope",
+          "--deposit-paid",
+          "--public-data-verified",
+          "--launch-target-days=7",
+          "--confirmed-by-robert",
+        ]),
         status: readiness.canBuildWebsites ? "review" : "blocked",
         reason: readiness.canBuildWebsites
           ? "Approved draft exists; record audited deposit/scope/public data approval before website handoff."
