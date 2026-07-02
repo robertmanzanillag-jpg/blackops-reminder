@@ -449,6 +449,14 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "website_build" && item.evidenceRequired.some((evidence) => evidence.includes("Deposit proof"))), true);
+  assert.equal(summary.handoffPacket.status, "blocked_before_live_money");
+  assert.equal(summary.handoffPacket.safeToSendToRobert, false);
+  assert.equal(summary.handoffPacket.testsToRun.includes("npm run test:revenue-engine"), true);
+  assert.equal(summary.handoffPacket.testsToRun.includes("npm run test:app-qa-agent"), true);
+  assert.equal(summary.handoffPacket.qaGate.includes("APP_QA_BASE_URL"), true);
+  assert.equal(summary.handoffPacket.deployStatus, "blocked_without_robert_approval");
+  assert.equal(summary.handoffPacket.rollbackNotes.some((note) => note.includes("Do not merge or deploy")), true);
+  assert.equal(summary.handoffPacket.prReviewStandard.some((item) => item.includes("What changed")), true);
   assert.equal(summary.counts.reviewablePublicCandidates, 1);
   assert.equal("candidateApprovalBatches" in summary, false);
   assert.equal("setupCommands" in summary, false);

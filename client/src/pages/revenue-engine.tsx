@@ -510,6 +510,17 @@ type FirstMoneyCommandCenter = {
     blockedActions: string[];
     setupCommandIds: string[];
   }>;
+  handoffPacket: {
+    status: "ready_for_robert_review" | "blocked_before_live_money";
+    summary: string;
+    prReviewStandard: string[];
+    testsToRun: string[];
+    qaGate: string;
+    risks: string[];
+    rollbackNotes: string[];
+    deployStatus: "not_requested" | "blocked_without_robert_approval";
+    safeToSendToRobert: boolean;
+  };
   counts: {
     publicCandidates: number;
     reviewablePublicCandidates: number;
@@ -2948,6 +2959,20 @@ export default function RevenueEnginePage() {
                   </div>
                 ))}
               </div>
+              {firstMoneyCommandCenter?.handoffPacket && (
+                <div className="mt-3 rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs leading-5 text-cyan-100" data-testid="first-money-handoff-packet">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-white">Robert handoff</span>
+                    <Badge variant="outline" className={cn("shrink-0", statusTone(firstMoneyCommandCenter.handoffPacket.safeToSendToRobert ? "ready" : "blocked"))}>
+                      {firstMoneyCommandCenter.handoffPacket.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-zinc-400">{firstMoneyCommandCenter.handoffPacket.summary}</p>
+                  <p className="mt-2 text-zinc-500">Checks: {firstMoneyCommandCenter.handoffPacket.testsToRun.join(" · ")}</p>
+                  <p className="mt-1 text-zinc-500">{firstMoneyCommandCenter.handoffPacket.qaGate}</p>
+                  <p className="mt-1 text-zinc-500">Rollback: {firstMoneyCommandCenter.handoffPacket.rollbackNotes[0]}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

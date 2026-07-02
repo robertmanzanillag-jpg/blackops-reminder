@@ -47,6 +47,18 @@ type MoneyUnblockerReadiness = {
   blockedUntil: string[];
 };
 
+type FirstMoneyHandoffPacket = {
+  status: "ready_for_robert_review" | "blocked_before_live_money";
+  summary: string;
+  prReviewStandard: string[];
+  testsToRun: string[];
+  qaGate: string;
+  risks: string[];
+  rollbackNotes: string[];
+  deployStatus: "not_requested" | "blocked_without_robert_approval";
+  safeToSendToRobert: boolean;
+};
+
 type CandidateApprovalBatch = {
   id: string;
   area: string;
@@ -445,6 +457,45 @@ function buildMoneyUnblockers(
   ];
 }
 
+function buildFirstMoneyHandoffPacket(packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>): FirstMoneyHandoffPacket {
+  const liveBlocked = !packet.readiness.canContactBusinesses
+    || !packet.readiness.canCollectMoney
+    || !packet.readiness.canBuildWebsites
+    || packet.readiness.blockedUntil.length > 0;
+  return {
+    status: liveBlocked ? "blocked_before_live_money" : "ready_for_robert_review",
+    summary: liveBlocked
+      ? "First-money workflow can prepare safe candidate approval and internal drafts, but live contact, payment, build, and deploy remain gated."
+      : "First-money workflow has the required contact, payment, build, and readiness gates for Robert review.",
+    prReviewStandard: [
+      "What broke or risk found: first-money flow was not ready to safely move from candidates to money without guarded approvals.",
+      "What changed: Revenue Engine now guides candidate approval, guarded internal Money Sprint execution, unblocker evidence, and App QA visibility.",
+      "Evidence required before Robert-ready claim: PR exists, second-agent review passes, tests pass, App QA passes, and remaining live-money gates are explicit.",
+      "Deployment: Replit deploy remains blocked until Robert explicitly approves after PR and QA summary.",
+      "Rollback: revert the PR branch or disable Revenue Engine first-money UI actions; no external contact/payment/deploy is performed by these gates.",
+    ],
+    testsToRun: [
+      "npm run test:revenue-engine",
+      "npm run test:revenue-first-money-command-center-cli",
+      "npm run test:app-qa-agent",
+      "npm run check",
+      "git diff --check",
+    ],
+    qaGate: "Run App QA with a real APP_QA_BASE_URL/PUBLIC_BASE_URL before any live contact, payment request, website build, or deploy approval.",
+    risks: [
+      ...packet.readiness.blockedUntil,
+      ...packet.readiness.remainingGaps,
+    ].slice(0, 8),
+    rollbackNotes: [
+      "Do not merge or deploy this PR if App QA reports any warning/failure.",
+      "If merged UI behavior is confusing, revert the PR commit range for codex/revenue-first-money-workflow.",
+      "No outreach, payment, production website write, or deploy should have happened from this workflow before explicit approvals.",
+    ],
+    deployStatus: "blocked_without_robert_approval",
+    safeToSendToRobert: !liveBlocked,
+  };
+}
+
 type CandidateApprovalInput = {
   id: string;
   businessName: string;
@@ -753,6 +804,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
 export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirstMoneyCommandCenterCliOptions) {
   const packet = buildRevenueFirstMoneyCommandCenter(options);
   const moneyUnblockers = buildMoneyUnblockers(packet.readiness, packet.setupCommands);
+  const handoffPacket = buildFirstMoneyHandoffPacket(packet);
   const nextCandidateApproval = redactCandidateApprovalBatchForSummary(
     packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
     || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "needs_robert_approval"),
@@ -781,6 +833,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextCandidateReview,
     nextMoneySprintRun,
     moneyUnblockers,
+    handoffPacket,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,
