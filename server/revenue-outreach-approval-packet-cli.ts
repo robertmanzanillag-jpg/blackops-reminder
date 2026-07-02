@@ -13,6 +13,17 @@ function getArgValue(argv: string[], name: string) {
   return arg ? arg.slice(prefix.length).trim() : "";
 }
 
+function displayText(value: string | number) {
+  return String(value)
+    .replace(/[\p{Cf}\u0000-\u001f\u007f-\u009f]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function displayBlock(value: string) {
+  return displayText(value);
+}
+
 export function parseRevenueOutreachApprovalPacketArgs(argv: string[]): RevenueOutreachApprovalPacketCliOptions {
   return {
     maxDrafts: Number(getArgValue(argv, "--max-drafts") || 10),
@@ -59,8 +70,14 @@ export function formatRevenueOutreachApprovalPacketText(packet: ReturnType<typeo
     "Drafts:",
     ...(packet.items.length
       ? packet.items.map((item) => [
-        `- ${item.businessName} (${item.draftId})`,
-        `  status=${item.status}; sendStatus=${item.sendStatus}; channel=${item.channel}`,
+        `- ${displayText(item.businessName)} (${item.draftId})`,
+        `  status=${item.status}; sendStatus=${item.sendStatus}; channel=${displayText(item.channel)}`,
+        `  recipient=${displayText(item.recipientEmail || "none")}`,
+        `  subject=${displayText(item.subject)}`,
+        `  source=${displayText(item.sourceUrl || "none")}`,
+        `  setup=$${item.estimatedSetupUsd}; requiredDeposit=$${item.requiredDepositUsd}; retainer=$${item.monthlyRetainerUsd}`,
+        `  summary=${displayText(item.businessSummary || "none")}`,
+        `  body=${displayBlock(item.body)}`,
         `  manualApproval=${item.readyForManualApproval ? "yes" : "no"}; providerSend=${item.readyForProviderSend ? "yes" : "no"}`,
         item.blockedReasons.length ? `  blocked=${item.blockedReasons.join("; ")}` : "",
       ].filter(Boolean).join("\n"))

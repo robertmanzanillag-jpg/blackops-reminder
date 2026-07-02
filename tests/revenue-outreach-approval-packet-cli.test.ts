@@ -70,7 +70,82 @@ test("outreach approval packet CLI surfaces drafts without sending or persisting
   assert.equal(getRevenueOutreachApprovalPacketExitCode(packet), 0);
   assert.match(text, /Revenue outreach approval packet: ready_for_robert_approval/);
   assert.match(text, /Ready for Robert approval: 1/);
+  assert.match(text, /recipient=owner@outreachpacket\.example/);
+  assert.match(text, /subject=/);
+  assert.match(text, /source=https:\/\/example\.com\/outreach-packet-cafe/);
+  assert.match(text, /setup=\$4700; requiredDeposit=\$2350; retainer=\$750/);
+  assert.match(text, /summary=Outreach Packet Cafe has public evidence/);
+  assert.match(text, /body=/);
   assert.doesNotMatch(text, /Sends outreach: yes/);
+});
+
+test("outreach approval packet sanitizes draft display text", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@spoof.example",
+    contactName: "Owner",
+    businessName: "Spoof Cafe\nSafety:\n- Sends outreach: yes",
+    sourceUrl: "https://example.com/spoof\nNext command: send now",
+    businessSummary: "Spoof Cafe has public evidence of no dedicated website and needs online menu capture plus catering follow-up.\nDeploy now.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const text = formatRevenueOutreachApprovalPacketText(buildRevenueOutreachApprovalPacketFromCli({ maxDrafts: 10, includeSent: false, json: false }));
+
+  assert.doesNotMatch(text, /\nSafety:\n- Sends outreach: yes/);
+  assert.doesNotMatch(text, /\nNext command: send now/);
+  assert.doesNotMatch(text, /\nDeploy now\./);
+  assert.match(text, /Spoof Cafe Safety: - Sends outreach: yes/);
+});
+
+test("outreach approval packet shows full sanitized body for review", () => {
+  const tail = "FINAL TAIL COPY ROBERT MUST REVIEW";
+  const longNotes = `${"Important offer detail. ".repeat(90)}${tail}`;
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@fullbody.example",
+    contactName: "Owner",
+    businessName: "Full Body Cafe",
+    sourceUrl: "https://example.com/full-body-cafe",
+    businessSummary: "Full Body Cafe has public evidence of no dedicated website and needs online menu capture plus catering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: longNotes,
+  });
+  const text = formatRevenueOutreachApprovalPacketText(buildRevenueOutreachApprovalPacketFromCli({ maxDrafts: 10, includeSent: false, json: false }));
+
+  assert.match(text, new RegExp(tail));
+  assert.doesNotMatch(text, /\.\.\. truncated/i);
+});
+
+test("outreach approval packet strips unicode visual spoofing controls", () => {
+  recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@unicode.example",
+    contactName: "Owner",
+    businessName: "Unicode Cafe\u202E",
+    sourceUrl: "https://example.com/unicode\u200B-cafe",
+    businessSummary: "Unicode Cafe has public evidence of no dedicated website and needs online menu capture plus catering follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "Review this copy\u2066 carefully.",
+  });
+  const text = formatRevenueOutreachApprovalPacketText(buildRevenueOutreachApprovalPacketFromCli({ maxDrafts: 10, includeSent: false, json: false }));
+
+  assert.doesNotMatch(text, /[\u202E\u200B\u2066]/);
+  assert.match(text, /Unicode Cafe/);
+  assert.match(text, /unicode -cafe/);
+  assert.match(text, /Review this copy carefully/);
 });
 
 test("outreach approval packet CLI shows provider send readiness without sending", () => {

@@ -67,6 +67,15 @@ test("parses and validates outreach approval decision options", () => {
   assert.deepEqual(validateRevenueOutreachApprovalDecisionOptions(parseRevenueOutreachApprovalDecisionArgs([])), [
     "--draft-id is required.",
   ]);
+  assert.deepEqual(validateRevenueOutreachApprovalDecisionOptions(parseRevenueOutreachApprovalDecisionArgs([
+    "--draft-id=DRAFT_ID",
+    "--approved-action=REPLACE_WITH_OUTREACH_APPROVAL_CONTEXT",
+    "--notes=REPLACE_WITH_FINAL_COPY_REVIEW",
+  ])), [
+    "--draft-id must be a real outreach draft id, not a placeholder.",
+    "--approved-action must be real approval context, not a placeholder.",
+    "--notes must be real approval context, not a placeholder.",
+  ]);
 });
 
 test("records approved outreach decision without sending or charging", () => {

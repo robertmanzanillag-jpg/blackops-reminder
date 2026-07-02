@@ -22,6 +22,10 @@ function getArgValue(argv: string[], name: string) {
   return arg ? arg.slice(prefix.length).trim() : "";
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_|DRAFT_ID)/i.test(value);
+}
+
 export function parseRevenueOutreachApprovalDecisionArgs(argv: string[]): RevenueOutreachApprovalDecisionCliOptions {
   return {
     draftId: getArgValue(argv, "--draft-id"),
@@ -36,11 +40,17 @@ export function parseRevenueOutreachApprovalDecisionArgs(argv: string[]): Revenu
 export function validateRevenueOutreachApprovalDecisionOptions(options: RevenueOutreachApprovalDecisionCliOptions) {
   const errors: string[] = [];
   if (!options.draftId) errors.push("--draft-id is required.");
+  else if (hasPlaceholderValue(options.draftId)) errors.push("--draft-id must be a real outreach draft id, not a placeholder.");
   if (!["approved", "rejected", "needs_changes"].includes(options.decision)) {
     errors.push("--decision must be approved, rejected, or needs_changes.");
   }
   if (options.approvedAction.trim().length < 8) {
     errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes must be real approval context, not a placeholder.");
   }
   return errors;
 }
