@@ -50,6 +50,10 @@ function isValidUrl(value: string) {
   }
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_|OUTREACH_ID|APPROVAL_ID)/i.test(value);
+}
+
 function buildScaffoldFilesHash(files: Array<{ path: string; purpose: string; content: string }>) {
   const payload = files.map((file) => ({
     path: file.path,
@@ -84,19 +88,30 @@ export function parseRevenueWebsitePublishApprovalDecisionArgs(argv: string[]): 
 export function validateRevenueWebsitePublishApprovalDecisionOptions(options: RevenueWebsitePublishApprovalDecisionCliOptions) {
   const errors: string[] = [];
   if (!options.outreachDraftId) errors.push("--outreach-draft-id is required.");
+  else if (hasPlaceholderValue(options.outreachDraftId)) errors.push("--outreach-draft-id must be a real outreach draft id, not a placeholder.");
   if (!options.websiteCreationApprovalDecisionId) errors.push("--website-creation-approval-decision-id is required.");
+  else if (hasPlaceholderValue(options.websiteCreationApprovalDecisionId)) errors.push("--website-creation-approval-decision-id must be a real approval decision id, not a placeholder.");
   if (!["approved", "rejected", "needs_changes"].includes(options.decision)) {
     errors.push("--decision must be approved, rejected, or needs_changes.");
   }
   if (options.approvedAction.trim().length < 8) {
     errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes must be real proof/context, not a placeholder.");
   }
   if (!options.deployProvider) errors.push("--deploy-provider is required.");
+  else if (hasPlaceholderValue(options.deployProvider)) errors.push("--deploy-provider must be real publish context, not a placeholder.");
   if (!options.previewDeployUrl) errors.push("--preview-deploy-url is required.");
+  else if (hasPlaceholderValue(options.previewDeployUrl)) errors.push("--preview-deploy-url must be real evidence, not a placeholder.");
   else if (!isValidUrl(options.previewDeployUrl)) errors.push("--preview-deploy-url must be a valid URL.");
   if (!options.appQaEvidenceUrl) errors.push("--app-qa-evidence-url is required.");
+  else if (hasPlaceholderValue(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be real evidence, not a placeholder.");
   else if (!isValidUrl(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be a valid URL.");
   if (!options.rollbackPlanUrl) errors.push("--rollback-plan-url is required.");
+  else if (hasPlaceholderValue(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be real evidence, not a placeholder.");
   else if (!isValidUrl(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be a valid URL.");
   if (!Number.isInteger(options.launchTargetDays) || options.launchTargetDays < 1 || options.launchTargetDays > 60) {
     errors.push("--launch-target-days must be an integer from 1 to 60.");
@@ -105,6 +120,7 @@ export function validateRevenueWebsitePublishApprovalDecisionOptions(options: Re
 }
 
 export function buildRevenueWebsitePublishApprovalDecisionFromCli(options: RevenueWebsitePublishApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueWebsitePublishApprovalDecisionOptions(options);
   const creationPacket = buildRevenueWebsiteCreationPacket({
     outreachDraftId: options.outreachDraftId,
     approvalDecisionId: options.websiteCreationApprovalDecisionId,
@@ -146,6 +162,7 @@ export function buildRevenueWebsitePublishApprovalDecisionFromCli(options: Reven
     !options.rollbackVerified && "--rollback-verified is required for approved publish readiness.",
   ].filter((item): item is string => Boolean(item));
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a website publish decision.",
     !publishSnapshot && "website publish snapshot could not be built from the creation packet.",
     ...(options.decision === "approved" ? approvalBlockers : []),

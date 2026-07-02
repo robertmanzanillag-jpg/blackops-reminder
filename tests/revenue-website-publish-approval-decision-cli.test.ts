@@ -138,6 +138,25 @@ test("parses and validates website publish approval decision options", () => {
     "--app-qa-evidence-url must be a valid URL.",
     "--rollback-plan-url must be a valid URL.",
   ]);
+  assert.deepEqual(validateRevenueWebsitePublishApprovalDecisionOptions(parseRevenueWebsitePublishApprovalDecisionArgs([
+    "--outreach-draft-id=OUTREACH_ID",
+    "--website-creation-approval-decision-id=APPROVAL_ID",
+    "--approved-action=REPLACE_WITH_PUBLISH_APPROVAL_CONTEXT",
+    "--notes=REPLACE_WITH_PUBLISH_PROOF",
+    "--deploy-provider=REPLACE_WITH_DEPLOY_PROVIDER",
+    "--preview-deploy-url=https://example.com/REPLACE_WITH_PREVIEW_DEPLOY_URL",
+    "--app-qa-evidence-url=https://example.com/REPLACE_WITH_APP_QA_EVIDENCE_URL",
+    "--rollback-plan-url=https://example.com/REPLACE_WITH_ROLLBACK_PLAN_URL",
+  ])), [
+    "--outreach-draft-id must be a real outreach draft id, not a placeholder.",
+    "--website-creation-approval-decision-id must be a real approval decision id, not a placeholder.",
+    "--approved-action must be real approval context, not a placeholder.",
+    "--notes must be real proof/context, not a placeholder.",
+    "--deploy-provider must be real publish context, not a placeholder.",
+    "--preview-deploy-url must be real evidence, not a placeholder.",
+    "--app-qa-evidence-url must be real evidence, not a placeholder.",
+    "--rollback-plan-url must be real evidence, not a placeholder.",
+  ]);
 });
 
 test("blocks approved website publish decision without Robert confirmation or evidence", () => {
@@ -202,6 +221,37 @@ test("records approved website publish decision without publish side effects", (
   assert.match(result.nextCommand, /revenue:website-publish-readiness-packet/);
   assert.match(text, /Revenue website publish approval decision: recorded/);
   assert.equal(getRevenueWebsitePublishApprovalDecisionExitCode(result), 0);
+});
+
+test("blocks placeholder website publish approval when builder is called directly", () => {
+  const draft = createApprovedOutreachDraft();
+  const creationApproval = approveWebsiteCreation(draft);
+  const result = buildRevenueWebsitePublishApprovalDecisionFromCli({
+    outreachDraftId: draft.id,
+    websiteCreationApprovalDecisionId: creationApproval.decision.id,
+    decision: "approved",
+    approvedAction: "REPLACE_WITH_PUBLISH_APPROVAL_CONTEXT",
+    notes: "REPLACE_WITH_PUBLISH_PROOF",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "REPLACE_WITH_DEPLOY_PROVIDER",
+    previewDeployUrl: "https://example.com/REPLACE_WITH_PREVIEW_DEPLOY_URL",
+    appQaEvidenceUrl: "https://example.com/REPLACE_WITH_APP_QA_EVIDENCE_URL",
+    rollbackPlanUrl: "https://example.com/REPLACE_WITH_ROLLBACK_PLAN_URL",
+    launchTargetDays: 7,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.match(result.blockers.join("; "), /--approved-action must be real approval context/);
+  assert.match(result.blockers.join("; "), /--preview-deploy-url must be real evidence/);
+  assert.match(result.blockers.join("; "), /--app-qa-evidence-url must be real evidence/);
+  assert.match(result.blockers.join("; "), /--rollback-plan-url must be real evidence/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
 });
 
 test("website publish approval decision script persists safe decision", () => {
