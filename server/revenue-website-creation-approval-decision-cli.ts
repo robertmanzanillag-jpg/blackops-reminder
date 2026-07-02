@@ -77,6 +77,7 @@ export function validateRevenueWebsiteCreationApprovalDecisionOptions(options: R
 }
 
 export function buildRevenueWebsiteCreationApprovalDecisionFromCli(options: RevenueWebsiteCreationApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueWebsiteCreationApprovalDecisionOptions(options);
   const draft = listRevenueOutreachDrafts().find((item) => item.id === options.outreachDraftId);
   const proof = {
     robertApprovedBuild: options.robertApprovedBuild,
@@ -93,6 +94,7 @@ export function buildRevenueWebsiteCreationApprovalDecisionFromCli(options: Reve
     !options.publicDataVerified && "--public-data-verified is required for approved website creation.",
   ].filter((item): item is string => Boolean(item)) : [];
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a website creation decision.",
     !draft && `${options.outreachDraftId || "outreach draft"}: draft not found`,
     ...(options.decision === "approved" ? approvalBlockers : []),

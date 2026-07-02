@@ -165,6 +165,29 @@ test("blocks approved website creation decision without Robert confirmation or d
   assert.equal(listRevenueApprovalDecisions().length, 0);
 });
 
+test("blocks placeholder website creation approval when builder is called directly", () => {
+  const draft = createApprovedOutreachDraft();
+  const result = buildRevenueWebsiteCreationApprovalDecisionFromCli({
+    outreachDraftId: draft.id,
+    decision: "approved",
+    approvedAction: "REPLACE_WITH_WEBSITE_APPROVAL_CONTEXT",
+    notes: "REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.match(result.blockers.join("; "), /--approved-action must be real approval context/);
+  assert.match(result.blockers.join("; "), /--notes must be real proof\/context/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
+});
+
 test("website creation approval decision script persists safe decision", () => {
   const draft = createApprovedOutreachDraft();
   const result = spawnSync(process.execPath, [
