@@ -36,7 +36,7 @@ import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getSho
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
-import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueContactPathReadinessPacket, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupPreview, buildRevenueMockupTemplatePack, buildRevenueOutreachApprovalPacket, buildRevenuePaymentPathReadinessPacket, buildRevenueProjectPlan, buildRevenuePublicScoutSchedule, buildRevenueScoutDispatch, buildRevenueWebsiteCreationPacket, buildRevenueWebsitePublishReadinessPacket, buildRevenueWebsiteScaffold, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, improvementReviewSchema, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenuePublicLeadCandidate, recordRevenuePublicScoutRun, recordRevenueSalesAutopilot, recordRevenueScoutingMission, reviewRevenuePublicLeadCandidates, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueContactPathReadinessPacketSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintSchema, revenueOutreachApprovalPacketSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenuePaymentPathReadinessPacketSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateReviewSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutRunSchema, revenuePublicScoutScheduleSchema, revenueSalesAutopilotSchema, revenueScoutDispatchSchema, revenueScoutingMissionSchema, revenueWebsiteCreationPacketSchema, revenueWebsitePublishReadinessPacketSchema, revenueWebsiteScaffoldSchema, runRevenueAutomationAgentCommand, runRevenueMoneySprint, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
+import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueContactPathReadinessPacket, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupPreview, buildRevenueMockupTemplatePack, buildRevenueOutreachApprovalPacket, buildRevenuePaymentPathReadinessPacket, buildRevenueProjectPlan, buildRevenuePublicScoutSchedule, buildRevenueScoutDispatch, buildRevenueWebsiteCreationPacket, buildRevenueWebsitePublishReadinessPacket, buildRevenueWebsiteScaffold, closeRevenueAutomationOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, deliverRevenueDeliveryWorkspace, deliveryReviewSchema, findRevenueMoneySprintArtifactsByBusinessNames, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, improvementReviewSchema, preflightRevenueExpense, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenuePublicLeadCandidate, recordRevenuePublicScoutRun, recordRevenueSalesAutopilot, recordRevenueScoutingMission, reviewRevenuePublicLeadCandidates, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueContactPathReadinessPacketSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintSchema, revenueOutreachApprovalPacketSchema, revenueOutreachDraftSchema, revenueOutreachSendSchema, revenuePaymentPathReadinessPacketSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateReviewSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutRunSchema, revenuePublicScoutScheduleSchema, revenueSalesAutopilotSchema, revenueScoutDispatchSchema, revenueScoutingMissionSchema, revenueWebsiteCreationPacketSchema, revenueWebsitePublishReadinessPacketSchema, revenueWebsiteScaffoldSchema, runRevenueAutomationAgentCommand, runRevenueMoneySprint, sendRevenueOutreachDraft, setRevenueUserDataScope, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
@@ -4903,12 +4903,34 @@ export async function registerRoutes(
     confirmationText: z.string().trim().min(1).max(180),
   }).strict();
 
+  const revenuePublicCandidateMoneySprintRunSchema = revenuePublicCandidateReviewPacketSchema.extend({
+    confirmationText: z.string().trim().min(1).max(200),
+  }).strict();
+
   const candidateIdsMatch = (left: string[], right: string[]) => {
     const sortedLeft = [...left].sort();
     const sortedRight = [...right].sort();
     return sortedLeft.length === sortedRight.length
       && sortedLeft.every((candidateId, index) => candidateId === sortedRight[index]);
   };
+
+  const buildGuardedPublicCandidateReview = (input: z.infer<typeof revenuePublicCandidateReviewPacketSchema>) =>
+    reviewRevenuePublicLeadCandidates({
+      area: input.area,
+      niche: input.niche,
+      offerFocus: input.offerFocus,
+      dailyResearchTarget: 20,
+      dailyQualifiedLeadLimit: Math.min(5, input.candidateIds.length),
+      dailyMockupLimit: Math.min(2, input.candidateIds.length),
+      dailyContactLimit: 0,
+      maxPaidDataSpendUsd: 0,
+      requireRobertApprovalToContact: true,
+      writePreviewFiles: false,
+      candidateIds: input.candidateIds,
+      approvedByRobert: true,
+      approvalDecisionId: input.approvalDecisionId,
+      reviewerNote: "Robert generated this first-money candidate review packet from Revenue Engine.",
+    });
 
   app.post("/api/revenue-engine/public-lead-candidates/approval-decision", async (req, res) => {
     try {
@@ -4981,22 +5003,7 @@ export async function registerRoutes(
         });
       }
 
-      const result = reviewRevenuePublicLeadCandidates({
-        area: input.area,
-        niche: input.niche,
-        offerFocus: input.offerFocus,
-        dailyResearchTarget: 20,
-        dailyQualifiedLeadLimit: Math.min(5, input.candidateIds.length),
-        dailyMockupLimit: Math.min(2, input.candidateIds.length),
-        dailyContactLimit: 0,
-        maxPaidDataSpendUsd: 0,
-        requireRobertApprovalToContact: true,
-        writePreviewFiles: false,
-        candidateIds: input.candidateIds,
-        approvedByRobert: true,
-        approvalDecisionId: input.approvalDecisionId,
-        reviewerNote: "Robert generated this first-money candidate review packet from Revenue Engine.",
-      });
+      const result = buildGuardedPublicCandidateReview(input);
       res.status(result.status === "ready_for_money_sprint_preview" ? 200 : 400).json({
         status: result.status,
         approvalDecisionId: result.approvalDecisionId,
@@ -5029,6 +5036,110 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to build revenue public candidate review packet" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint", async (req, res) => {
+    try {
+      const input = revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
+      const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+      const expectedRun = commandCenter.nextMoneySprintRun;
+      if (!expectedRun) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["No active approved first-money batch is ready for Money Sprint execution."],
+          commandCenter,
+        });
+      }
+
+      const matchesActiveBatch = Boolean(
+        input.batchId === expectedRun.id
+        && input.area === expectedRun.area
+        && input.niche === expectedRun.niche
+        && input.offerFocus === expectedRun.offerFocus
+        && input.approvalDecisionId === expectedRun.approvalDecisionId
+        && input.confirmationText === expectedRun.confirmationText
+        && candidateIdsMatch(input.candidateIds, expectedRun.candidateIds),
+      );
+
+      if (!matchesActiveBatch) {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Money sprint payload must match the active approved first-money batch and exact run confirmation text."],
+          commandCenter,
+        });
+      }
+
+      const review = buildGuardedPublicCandidateReview(input);
+      if (review.status !== "ready_for_money_sprint_preview" || review.moneySprintRunPacket.status !== "ready_for_money_sprint_run") {
+        return res.status(400).json({
+          status: "blocked",
+          blockers: ["Active approved first-money batch is not ready for Money Sprint execution."],
+          reviewedCandidates: review.reviewedCandidates,
+          commandCenter,
+        });
+      }
+
+      const existingArtifacts = findRevenueMoneySprintArtifactsByBusinessNames(expectedRun.candidateNames);
+      if (existingArtifacts.businessNames.length > 0) {
+        return res.status(409).json({
+          status: "blocked",
+          blockers: [`Money Sprint already has internal artifacts for: ${existingArtifacts.businessNames.join(", ")}`],
+          commandCenter,
+        });
+      }
+
+      const result = runRevenueMoneySprint({
+        ...review.moneySprintRunPacket.requestBody,
+        dailyContactLimit: 0,
+        maxPaidDataSpendUsd: 0,
+        requireRobertApprovalToContact: true,
+        writePreviewFiles: false,
+      });
+      res.json({
+        status: result.status,
+        executed: true,
+        recordedLeads: result.recordedLeads.map((item) => ({
+          id: item.lead.id,
+          businessName: item.lead.businessName,
+          status: item.lead.status,
+          grade: item.qualification.grade,
+          score: item.qualification.score,
+          deduped: item.deduped,
+        })),
+        previews: result.previews.map((preview) => ({
+          slug: preview.slug,
+          businessName: preview.mockup.input.businessName,
+          fileWritten: preview.fileWritten,
+          decisionStatus: preview.status,
+        })),
+        outreachDrafts: result.outreachDrafts.map((draft) => ({
+          id: draft.id,
+          businessName: draft.businessName,
+          status: draft.status,
+          sendStatus: draft.delivery.sendStatus,
+          channel: draft.channel,
+        })),
+        blockedSeeds: result.blockedSeeds,
+        operatingLimits: result.operatingLimits,
+        approvalGates: result.approvalGates,
+        nextActions: result.nextActions,
+        safety: {
+          persistsLeads: true,
+          writesPreviewFiles: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          deploys: false,
+          paidDataSpendUsd: 0,
+          requiresRobertApproval: true,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to execute revenue public candidate Money Sprint" });
     }
   });
 

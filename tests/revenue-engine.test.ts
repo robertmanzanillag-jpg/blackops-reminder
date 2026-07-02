@@ -24,6 +24,7 @@ import {
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
   deliverRevenueDeliveryWorkspace,
+  findRevenueMoneySprintArtifactsByBusinessNames,
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
   preflightRevenueExpense,
@@ -1079,6 +1080,58 @@ test("deduplicated disqualified update cannot remove proposal leads from pipelin
 
   assert.equal(duplicate.deduped, true);
   assert.equal(duplicate.lead.status, "proposal_sent");
+});
+
+test("finds Money Sprint artifacts beyond recent snapshot caps", () => {
+  const originalLead = recordRevenueLead({
+    businessName: "Replay Guard Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@replayguard.example",
+    evidence: "Public listing has no website and posts show menu updates without a booking flow.",
+    painPoint: "Needs website, menu, and catering capture.",
+    estimatedOfferUsd: 3200,
+    status: "research",
+  });
+  recordRevenueOutreachDraft({
+    leadId: originalLead.lead.id,
+    channel: "gmail",
+    approvalStatus: "draft",
+    recipientEmail: "owner@replayguard.example",
+    contactName: "Owner",
+    businessName: "Replay Guard Cafe",
+    sourceUrl: "https://example.com/replay-guard",
+    businessSummary: "Replay Guard Cafe has public evidence of no website and needs a menu, booking, and catering lead capture path.",
+    websitePriceUsd: 2400,
+    automationPriceUsd: 800,
+    monthlyRetainerUsd: 500,
+    estimatedInternalMonthlyCostUsd: 35,
+    notes: "Original Money Sprint artifact.",
+  });
+  for (let index = 0; index < 12; index += 1) {
+    recordRevenueLead({
+      businessName: `Later Cafe ${index}`,
+      area: "Miami",
+      niche: "coffee shop",
+      websiteStatus: "no_website",
+      contactChannel: "email",
+      contactValue: `owner-${index}@later.example`,
+      evidence: "Public listing has no website and enough activity to qualify this later test lead.",
+      painPoint: "Needs a simple website and contact capture.",
+      estimatedOfferUsd: 2000,
+      status: "research",
+    });
+  }
+
+  const snapshot = getRevenueEngineSnapshot();
+  const artifacts = findRevenueMoneySprintArtifactsByBusinessNames(["Replay Guard Cafe"]);
+
+  assert.equal(snapshot.recentLeads.some((lead) => lead.businessName === "Replay Guard Cafe"), false);
+  assert.deepEqual(artifacts.businessNames, ["Replay Guard Cafe"]);
+  assert.deepEqual(artifacts.leadNames, ["Replay Guard Cafe"]);
+  assert.deepEqual(artifacts.outreachNames, ["Replay Guard Cafe"]);
 });
 
 test("persists leads across module state reloads", () => {
@@ -2399,7 +2452,7 @@ test("routes wire public candidate review packet endpoint to guarded review buil
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
   const routeSource = routesSource.slice(
     routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/review-packet"'),
-    routesSource.indexOf('app.post("/api/revenue-engine/plan"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
   );
 
   assert.match(routesSource, /revenuePublicCandidateReviewPacketSchema/);
@@ -2418,6 +2471,35 @@ test("routes wire public candidate review packet endpoint to guarded review buil
   assert.doesNotMatch(routeSource, /acceptedSeeds/);
   assert.doesNotMatch(routeSource, /requestBody/);
   assert.doesNotMatch(routeSource, /snapshot/);
+});
+
+test("routes wire public candidate internal Money Sprint execution to guarded review", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/plan"'),
+  );
+
+  assert.match(routesSource, /revenuePublicCandidateMoneySprintRunSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint"/);
+  assert.match(routeSource, /const expectedRun = commandCenter\.nextMoneySprintRun/);
+  assert.match(routeSource, /input\.confirmationText === expectedRun\.confirmationText/);
+  assert.match(routeSource, /candidateIdsMatch\(input\.candidateIds, expectedRun\.candidateIds\)/);
+  assert.match(routeSource, /const review = buildGuardedPublicCandidateReview\(input\)/);
+  assert.match(routeSource, /review\.status !== "ready_for_money_sprint_preview"/);
+  assert.match(routeSource, /review\.moneySprintRunPacket\.status !== "ready_for_money_sprint_run"/);
+  assert.match(routeSource, /findRevenueMoneySprintArtifactsByBusinessNames\(expectedRun\.candidateNames\)/);
+  assert.match(routeSource, /existingArtifacts\.businessNames\.length > 0/);
+  assert.doesNotMatch(routeSource, /recentLeads/);
+  assert.doesNotMatch(routeSource, /recentOutreach/);
+  assert.match(routeSource, /runRevenueMoneySprint\(\{/);
+  assert.match(routeSource, /dailyContactLimit: 0/);
+  assert.match(routeSource, /maxPaidDataSpendUsd: 0/);
+  assert.match(routeSource, /requireRobertApprovalToContact: true/);
+  assert.match(routeSource, /writePreviewFiles: false/);
+  assert.doesNotMatch(routeSource, /sendRevenueOutreachDraft/);
+  assert.doesNotMatch(routeSource, /requestBody:/);
+  assert.doesNotMatch(routeSource, /snapshot:/);
 });
 
 test("routes wire public scout run endpoint to schema and builder", () => {
@@ -3256,6 +3338,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /button-generate-public-candidate-review-packet/);
   assert.match(source, /input-public-candidate-review-confirmation/);
   assert.match(source, /publicCandidateReviewConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateReview\.confirmationText/);
+  assert.match(source, /nextMoneySprintRun/);
+  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/run-money-sprint/);
+  assert.match(source, /button-run-public-candidate-money-sprint/);
+  assert.match(source, /input-public-candidate-run-confirmation/);
+  assert.match(source, /publicCandidateRunConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextMoneySprintRun\.confirmationText/);
   assert.match(source, /canContactBusinesses/);
   assert.match(source, /canCollectMoney/);
   assert.match(source, /canBuildWebsites/);

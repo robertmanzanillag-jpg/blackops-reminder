@@ -5599,6 +5599,36 @@ export function listRevenueOutreachDrafts() {
   return [...revenueOutreachDrafts];
 }
 
+export function findRevenueMoneySprintArtifactsByBusinessNames(businessNames: string[]) {
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  const normalizedNames = new Set(
+    businessNames
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (normalizedNames.size === 0) {
+    return {
+      leadNames: [] as string[],
+      outreachNames: [] as string[],
+      businessNames: [] as string[],
+    };
+  }
+
+  const leadNames = revenueLeads
+    .filter((lead) => normalizedNames.has(lead.businessName.trim().toLowerCase()))
+    .map((lead) => lead.businessName);
+  const outreachNames = revenueOutreachDrafts
+    .filter((draft) => normalizedNames.has(draft.businessName.trim().toLowerCase()))
+    .map((draft) => draft.businessName);
+
+  return {
+    leadNames: Array.from(new Set(leadNames)),
+    outreachNames: Array.from(new Set(outreachNames)),
+    businessNames: Array.from(new Set([...leadNames, ...outreachNames])),
+  };
+}
+
 export function buildRevenueOutreachApprovalPacket(input: RevenueOutreachApprovalPacketInput = { maxDrafts: 10, includeSent: false }) {
   loadRevenueOutreach();
   const parsed = revenueOutreachApprovalPacketSchema.parse(input);

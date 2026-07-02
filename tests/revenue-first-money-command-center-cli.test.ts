@@ -571,6 +571,11 @@ test("first-money command center routes approved public candidate batches to can
   assert.equal(summary.nextCandidateReview?.confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-2 ${approval.decision?.id}`);
   assert.equal(summary.nextCandidateReview?.safety.sendsOutreach, false);
   assert.equal(summary.nextCandidateReview?.safety.writesPreviewFiles, false);
+  assert.equal(summary.nextMoneySprintRun?.id, "candidate-review-2");
+  assert.equal(summary.nextMoneySprintRun?.confirmationText, `RUN MONEY SPRINT candidate-review-2 ${approval.decision?.id}`);
+  assert.equal(summary.nextMoneySprintRun?.safety.persistsLeads, true);
+  assert.equal(summary.nextMoneySprintRun?.safety.sendsOutreach, false);
+  assert.equal(summary.nextMoneySprintRun?.safety.writesPreviewFiles, false);
   assert.equal(summary.nextCommand.command, "Use the guarded Revenue Engine review-packet action with the exact confirmation text.");
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
   assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${approval.decision?.id}`));

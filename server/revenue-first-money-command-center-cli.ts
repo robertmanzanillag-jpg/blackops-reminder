@@ -113,6 +113,32 @@ function redactCandidateReviewBatchForSummary(batch: CandidateApprovalBatch | un
   };
 }
 
+function redactCandidateRunBatchForSummary(batch: CandidateApprovalBatch | undefined) {
+  if (!batch || batch.approvalStatus !== "ready_for_candidate_review" || !batch.approvalDecisionId) return null;
+  return {
+    id: batch.id,
+    candidateIds: batch.candidateIds,
+    candidateNames: batch.candidateNames,
+    area: batch.area,
+    niche: batch.niche,
+    offerFocus: "websites" as const,
+    count: batch.count,
+    totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
+    approvalStatus: batch.approvalStatus,
+    approvalDecisionId: batch.approvalDecisionId,
+    confirmationText: `RUN MONEY SPRINT ${batch.id} ${batch.approvalDecisionId}`,
+    safety: {
+      persistsLeads: true,
+      persistsPublicCandidates: false,
+      sendsOutreach: false,
+      writesPreviewFiles: false,
+      chargesClients: false,
+      deploys: false,
+      paidDataSpendUsd: 0,
+    },
+  };
+}
+
 export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterCliOptions {
   const modeArg = argv.find((arg) => arg.startsWith("--mode="));
   const mode = (modeArg ? modeArg.slice("--mode=".length).trim() : "first-sprint") as RevenueMoneyReadinessInput["mode"];
@@ -605,6 +631,10 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
     || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "ready_for_candidate_review"),
   );
+  const nextMoneySprintRun = redactCandidateRunBatchForSummary(
+    packet.candidateApprovalBatches.find((batch) => batch.command === packet.nextCommand.command)
+    || packet.candidateApprovalBatches.find((batch) => batch.approvalStatus === "ready_for_candidate_review"),
+  );
   const nextCommand = {
     ...packet.nextCommand,
     command: nextCandidateReview
@@ -619,6 +649,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextCommand,
     nextCandidateApproval,
     nextCandidateReview,
+    nextMoneySprintRun,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,
