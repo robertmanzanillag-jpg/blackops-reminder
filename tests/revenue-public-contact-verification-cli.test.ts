@@ -97,6 +97,12 @@ test("builds a safe public contact verification packet without side effects", ()
   assert.ok(packet.tasks[0].searchQueries.some((query) => query.includes("Muse In the Gables")));
   assert.deepEqual(packet.tasks[0].nextReviewCommand.command, "npm");
   assert.ok(packet.tasks[0].nextReviewCommand.args.includes("revenue:public-candidate-review"));
+  assert.deepEqual(packet.tasks[0].nextVerificationUpdateCommand.command, "npm");
+  assert.ok(packet.tasks[0].nextVerificationUpdateCommand.args.includes("revenue:public-candidate-verification-update"));
+  assert.ok(packet.tasks[0].nextVerificationUpdateCommand.args.includes("--contact-channel=CONTACT_CHANNEL"));
+  assert.ok(packet.tasks[0].nextVerificationUpdateCommand.args.includes("--confirm-public-evidence"));
+  assert.equal(packet.tasks[0].nextVerificationUpdateCommand.args.some((arg) => arg.includes("approved-by-robert")), false);
+  assert.equal(packet.tasks[0].nextVerificationUpdateCommand.args.some((arg) => arg.includes("approvalToImport")), false);
 });
 
 test("marks candidates with verified public data as waiting only for Robert approval", () => {
@@ -138,6 +144,9 @@ test("formats public contact verification packet for operator review", () => {
   assert.match(output, /Sends outreach: no/);
   assert.match(output, /Muse In the Gables/);
   assert.match(output, /Queries:/);
+  assert.match(output, /Verification update command:/);
+  assert.match(output, /revenue:public-candidate-verification-update/);
+  assert.doesNotMatch(output, /--approved-by-robert/);
 });
 
 test("formats review commands with structured args and shell-escaped text", () => {
@@ -165,6 +174,8 @@ test("formats review commands with structured args and shell-escaped text", () =
   ]);
   assert.match(packet.tasks[0].nextReviewCommandText, /'--area=Miami" --approved-by-robert "'/);
   assert.match(packet.tasks[0].nextReviewCommandText, /'--niche=hair salon'\\''s'/);
+  assert.match(packet.tasks[0].nextVerificationUpdateCommandText, /revenue:public-candidate-verification-update/);
+  assert.match(packet.tasks[0].nextVerificationUpdateCommandText, /'--candidate-id=candidate-unsafe'/);
 });
 
 test("excludes demo sample and placeholder candidates by default and includes them only when requested", () => {

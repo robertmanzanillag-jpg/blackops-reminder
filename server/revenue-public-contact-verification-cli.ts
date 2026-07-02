@@ -92,6 +92,24 @@ function reviewCommandArgs(candidate: PublicCandidateForVerification) {
   ];
 }
 
+function verificationUpdateCommandArgs(candidate: PublicCandidateForVerification) {
+  return [
+    "run",
+    "revenue:public-candidate-verification-update",
+    "--",
+    `--candidate-id=${candidate.id}`,
+    "--contact-channel=CONTACT_CHANNEL",
+    "--contact-value=PUBLIC_CONTACT_VALUE",
+    "--recipient-email=PUBLIC_EMAIL_IF_EMAIL_CHANNEL",
+    `--source-url=${candidate.sourceUrl || "PUBLIC_SOURCE_URL"}`,
+    "--evidence=PUBLIC_EVIDENCE_SUMMARY",
+    `--pain-point=${candidate.painPoint || "Needs a conversion-focused website and follow-up path."}`,
+    "--notes=Verified from public sources only; no contact made.",
+    "--verified-by=Robert",
+    "--confirm-public-evidence",
+  ];
+}
+
 function formatCommand(command: string, args: string[]) {
   return [command, ...args.map(shellQuote)].join(" ");
 }
@@ -151,6 +169,11 @@ export function buildRevenuePublicContactVerificationPacket(
         args: reviewCommandArgs(candidate),
       },
       nextReviewCommandText: formatCommand("npm", reviewCommandArgs(candidate)),
+      nextVerificationUpdateCommand: {
+        command: "npm",
+        args: verificationUpdateCommandArgs(candidate),
+      },
+      nextVerificationUpdateCommandText: formatCommand("npm", verificationUpdateCommandArgs(candidate)),
       readyForRobertReview: missing.every((item) => item === "Robert approval is still required before import."),
     };
   });
@@ -201,6 +224,7 @@ export function formatRevenuePublicContactVerificationText(packet: ReturnType<ty
       `   Source: ${task.sourceUrl || "missing"}`,
       `   Missing: ${task.missing.length ? task.missing.join("; ") : "Robert approval only"}`,
       `   Queries: ${task.searchQueries.join(" | ")}`,
+      `   Verification update command: ${task.nextVerificationUpdateCommandText}`,
       `   Review command: ${task.nextReviewCommandText}`,
     ]),
   ].join("\n");
