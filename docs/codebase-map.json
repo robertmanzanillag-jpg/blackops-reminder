@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T20:50:56.953Z",
+  "generatedAt": "2026-07-02T20:57:16.981Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -141,9 +141,9 @@
   "totals": {
     "filesVisible": 494,
     "filesIndexed": 426,
-    "imports": 1607,
+    "imports": 1608,
     "routes": 470,
-    "symbols": 8351
+    "symbols": 8358
   },
   "directories": {
     ".agents/skills": {
@@ -10777,6 +10777,7 @@
         "totalCandidates",
         "totalEstimatedOfferUsd",
         "trustCenterActionText",
+        "trustCenterPayloadActionText",
         "validateRevenueFirstMoneyCommandCenterOptions",
         "verificationCandidateIds",
         "verificationNeededCandidates",
@@ -15327,6 +15328,7 @@
       "kind": "test",
       "imports": [
         "../server/revenue-engine",
+        "../server/revenue-first-money-approval-pending-action",
         "../server/revenue-first-money-command-center-cli",
         "../server/revenue-payment-path-approval",
         "../server/revenue-public-candidate-approval-decision-cli",
@@ -15345,21 +15347,26 @@
         "capture",
         "card",
         "contactApprovalCommand",
+        "contactPayload",
         "contactReadinessCommand",
         "contactResult",
         "createDraft",
         "draft",
+        "extractPayloadFields",
         "firstApproval",
         "firstCandidateId",
         "ledgerApprovalCommand",
+        "ledgerPayload",
         "manualCommand",
         "manualCommands",
+        "match",
         "originalEnv",
         "outreachCommand",
         "packet",
         "paidBuild",
         "payment",
         "paymentApprovalCommand",
+        "paymentPayload",
         "paymentReadinessCommand",
         "paymentResult",
         "persistedDecisions",
@@ -15383,7 +15390,8 @@
         "unverifiedCandidateId",
         "verificationCommand",
         "websiteCommand",
-        "websiteCreationApprovalCommand"
+        "websiteCreationApprovalCommand",
+        "websiteCreationPayload"
       ],
       "routes": []
     },
