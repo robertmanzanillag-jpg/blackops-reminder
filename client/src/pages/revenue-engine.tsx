@@ -659,6 +659,11 @@ type OutreachSendResult = {
   snapshot: RevenueSnapshot;
 };
 
+type OutreachSendVariables = {
+  draftId: string;
+  approvalDecisionId: string;
+};
+
 type RevenueAgentRunResult = {
   run: RevenueSnapshot["recentAgentRuns"][number];
   snapshot: RevenueSnapshot;
@@ -1295,6 +1300,7 @@ export default function RevenueEnginePage() {
   const [outreachChannel, setOutreachChannel] = useState<"email" | "gmail" | "mailto" | "instagram" | "contact_form">("gmail");
   const [outreachApproved, setOutreachApproved] = useState(false);
   const [outreachMockupUrl, setOutreachMockupUrl] = useState("");
+  const [outreachApprovalDecisionId, setOutreachApprovalDecisionId] = useState("");
   const [improvementCampaignName, setImprovementCampaignName] = useState("Black Room test offer");
   const [improvementPeriodLabel, setImprovementPeriodLabel] = useState("semana 1");
   const [improvementLeadsContacted, setImprovementLeadsContacted] = useState(20);
@@ -1953,14 +1959,14 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const outreachSendMutation = useMutation<OutreachSendResult, Error, string>({
-    mutationFn: async (draftId) => {
+  const outreachSendMutation = useMutation<OutreachSendResult, Error, OutreachSendVariables>({
+    mutationFn: async ({ draftId, approvalDecisionId }) => {
       const response = await fetch("/api/revenue-engine/outreach-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draftId,
-          approvalToSend: true,
+          approvalDecisionId,
         }),
       });
       const data = await response.json();
@@ -5981,13 +5987,26 @@ export default function RevenueEnginePage() {
                           ))}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
+                          <Input
+                            value={outreachApprovalDecisionId}
+                            onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
+                            placeholder="approvalDecisionId"
+                            className="border-zinc-800 bg-black"
+                          />
                           <Button
                             type="button"
                             variant="outline"
                             className="border-emerald-700 text-emerald-100"
-                            disabled={outreachSendMutation.isPending || outreachDraft.draft.delivery.sendStatus === "sent"}
-                            onClick={() => outreachSendMutation.mutate(outreachDraft.draft.id)}
+                            disabled={
+                              outreachSendMutation.isPending
+                              || outreachDraft.draft.delivery.sendStatus === "sent"
+                              || !outreachApprovalDecisionId.trim()
+                            }
+                            onClick={() => outreachSendMutation.mutate({
+                              draftId: outreachDraft.draft.id,
+                              approvalDecisionId: outreachApprovalDecisionId.trim(),
+                            })}
                             data-testid="button-send-approved-outreach"
                           >
                             {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
@@ -6087,14 +6106,28 @@ export default function RevenueEnginePage() {
                               <p>{money.format(draft.pricing.totalSetupUsd)}</p>
                               <p>{draft.delivery.sendStatus}</p>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                              <Input
+                                value={outreachApprovalDecisionId}
+                                onChange={(event) => setOutreachApprovalDecisionId(event.target.value)}
+                                placeholder="approvalDecisionId"
+                                className="h-9 border-zinc-800 bg-zinc-950 text-sm"
+                              />
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
                                 className="border-emerald-700 text-emerald-100"
-                                disabled={outreachSendMutation.isPending || draft.status !== "approved" || draft.delivery.sendStatus === "sent"}
-                                onClick={() => outreachSendMutation.mutate(draft.id)}
+                                disabled={
+                                  outreachSendMutation.isPending
+                                  || draft.status !== "approved"
+                                  || draft.delivery.sendStatus === "sent"
+                                  || !outreachApprovalDecisionId.trim()
+                                }
+                                onClick={() => outreachSendMutation.mutate({
+                                  draftId: draft.id,
+                                  approvalDecisionId: outreachApprovalDecisionId.trim(),
+                                })}
                                 data-testid={`button-send-draft-${draft.id}`}
                               >
                                 {outreachSendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

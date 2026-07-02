@@ -2,6 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
+import {
+  buildRevenueOutreachApprovalTargetId,
+  buildRevenueOutreachSnapshotHash,
+} from "./revenue-outreach-approval";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -360,7 +364,7 @@ export type RevenueMoneyReadinessInput = z.infer<typeof revenueMoneyReadinessSch
 
 export const revenueOutreachSendSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
-  approvalToSend: revenueExplicitBooleanSchema.default(false),
+  approvalDecisionId: z.string().trim().max(200).optional().default(""),
 });
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
@@ -500,8 +504,9 @@ export const revenueApprovalDecisionSchema = z.object({
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
+  outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
 export type RevenueApprovalDecisionInput = z.infer<typeof revenueApprovalDecisionSchema>;
@@ -1186,7 +1191,7 @@ function getRevenueEmailProviderStatus(): RevenueEmailProviderStatus {
     fromEmail,
     missing,
     monthlyCostUsd: 0,
-    sendPolicy: "Solo envia drafts approved con approvalToSend=true; si falta provider queda en Gmail/mailto manual.",
+    sendPolicy: "Solo envia drafts approved con approvalDecisionId auditable; si falta provider queda en Gmail/mailto manual.",
   };
 }
 
@@ -2385,15 +2390,16 @@ export function recordRevenueScoutingMission(input: RevenueScoutingMissionInput)
   };
 }
 
-function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInput, options: { allowTrustedPublicCandidateApproval: boolean }) {
+function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInput, options: { allowTrustedApprovalSource: boolean }) {
   loadRevenueApprovalDecisions();
   const rawParsed = revenueApprovalDecisionSchema.parse(input);
-  const parsed = options.allowTrustedPublicCandidateApproval
+  const parsed = options.allowTrustedApprovalSource
     ? rawParsed
     : {
       ...rawParsed,
       approvalSource: "generic" as const,
       publicCandidateSnapshotHash: "",
+      outreachDraftSnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
   const spendBlocked = parsed.maxSpendUsd > 100 || (parsed.maxSpendUsd > 0 && snapshot.profitGuard.status !== "scale_carefully");
@@ -2420,11 +2426,11 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
 }
 
 export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInput) {
-  return recordRevenueApprovalDecisionInternal(input, { allowTrustedPublicCandidateApproval: false });
+  return recordRevenueApprovalDecisionInternal(input, { allowTrustedApprovalSource: false });
 }
 
 export function recordRevenueTrustedApprovalDecision(input: RevenueApprovalDecisionInput) {
-  return recordRevenueApprovalDecisionInternal(input, { allowTrustedPublicCandidateApproval: true });
+  return recordRevenueApprovalDecisionInternal(input, { allowTrustedApprovalSource: true });
 }
 
 export function listRevenueApprovalDecisions() {
@@ -5026,6 +5032,11 @@ export function recordRevenueOutreachDraft(input: RevenueOutreachDraftInput) {
   };
 }
 
+export function listRevenueOutreachDrafts() {
+  loadRevenueOutreach();
+  return [...revenueOutreachDrafts];
+}
+
 export function buildRevenueOutreachApprovalPacket(input: RevenueOutreachApprovalPacketInput = { maxDrafts: 10, includeSent: false }) {
   loadRevenueOutreach();
   const parsed = revenueOutreachApprovalPacketSchema.parse(input);
@@ -5072,7 +5083,7 @@ export function buildRevenueOutreachApprovalPacket(input: RevenueOutreachApprova
       })),
       blockedReasons,
       nextAction: readyForProviderSend
-        ? "Run outreach send only after Robert confirms approvalToSend=true."
+        ? "Record an audited outreach approval decision before provider send."
         : readyForManualApproval
           ? "Robert can approve this draft after final copy/source review."
           : blockedReasons.length
@@ -5097,7 +5108,7 @@ export function buildRevenueOutreachApprovalPacket(input: RevenueOutreachApprova
     items,
     nextApiAction: readyForSendCount > 0 ? "/api/revenue-engine/outreach-send" : "/api/revenue-engine/outreach-drafts",
     nextAction: readyForSendCount > 0
-      ? "Robert reviews approved drafts, then sends one at a time with approvalToSend=true; record replies/deposits after contact."
+      ? "Robert reviews approved drafts, records an outreach approval decision, then sends one at a time with approvalDecisionId; record replies/deposits after contact."
       : readyForApprovalCount > 0
         ? "Robert reviews ready drafts and explicitly approves selected drafts before any send."
         : items.length > 0
@@ -5239,14 +5250,30 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
 export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) {
   const parsed = revenueOutreachSendSchema.parse(input);
   loadRevenueOutreach();
+  loadRevenueApprovalDecisions();
   const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId);
+  const approvalDecision = parsed.approvalDecisionId
+    ? revenueApprovalDecisions.find((item) => item.id === parsed.approvalDecisionId)
+    : null;
+  const expectedTargetId = draft ? buildRevenueOutreachApprovalTargetId(draft.id) : "";
+  const expectedSnapshotHash = draft ? buildRevenueOutreachSnapshotHash(draft) : "";
+  const approvalDecisionReady = Boolean(
+    draft
+    && approvalDecision
+    && approvalDecision.targetType === "outbox"
+    && approvalDecision.targetId === expectedTargetId
+    && approvalDecision.decision === "approved"
+    && approvalDecision.guardrail.status === "recorded"
+    && approvalDecision.approvalSource === "outreach_approval_cli"
+    && approvalDecision.outreachDraftSnapshotHash === expectedSnapshotHash,
+  );
   const provider = getRevenueEmailProviderStatus();
   const providerEmailChannel = draft ? ["email", "gmail", "mailto"].includes(draft.channel) : true;
   const now = new Date().toISOString();
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
-    { gate: "human_approval", passed: parsed.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "human_approval", passed: approvalDecisionReady, fix: "Registrar y usar approvalDecisionId valido para este draft exacto antes de contacto externo." },
     { gate: "email_channel", passed: providerEmailChannel, fix: `Canal manual-only: ${draft?.channel || "unknown"}. Usar revision manual fuera del proveedor de email.` },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },

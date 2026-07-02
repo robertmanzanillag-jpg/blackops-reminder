@@ -42,6 +42,7 @@ import {
   recordRevenuePublicScoutRun,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  recordRevenueTrustedApprovalDecision,
   reviewRevenuePublicLeadCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
@@ -73,6 +74,10 @@ import {
   setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
 } from "../server/revenue-engine";
+import {
+  buildRevenueOutreachApprovalTargetId,
+  buildRevenueOutreachSnapshotHash,
+} from "../server/revenue-outreach-approval";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
 const testLeadsPath = path.join("/tmp", "revenue-engine-leads-test.json");
@@ -89,6 +94,20 @@ const testMockupsDir = path.join("/tmp", "revenue-engine-mockups-test");
 const originalResendApiKey = process.env.RESEND_API_KEY;
 const originalRevenueEngineFromEmail = process.env.REVENUE_ENGINE_FROM_EMAIL;
 const originalResendFromEmail = process.env.RESEND_FROM_EMAIL;
+
+function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutreachSnapshotHash>[0]) {
+  return recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Approve exact outreach draft for provider send in test.",
+    maxSpendUsd: 0,
+    notes: "Test-only audited approval.",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
+  });
+}
 const originalRevenueMockupsDir = process.env.REVENUE_MOCKUPS_DIR;
 
 test.beforeEach(() => {
@@ -2342,7 +2361,7 @@ test("outreach approval packet marks approved drafts ready for reviewed send whe
   assert.equal(packet.totals.readyForProviderSend, 1);
   assert.equal(packet.items[0].readyForProviderSend, true);
   assert.equal(packet.nextApiAction, "/api/revenue-engine/outreach-send");
-  assert.match(packet.nextAction, /approvalToSend=true/);
+  assert.match(packet.nextAction, /approvalDecisionId/);
   assert.equal(packet.safety.requiresRobertApprovalBeforeSend, true);
 });
 
@@ -2364,7 +2383,8 @@ test("outreach approval packet treats string false includeSent as false", async 
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
-  await sendRevenueOutreachDraft({ draftId: result.draft.id, approvalToSend: true });
+  const approval = approveOutreachDraftForTests(result.draft);
+  await sendRevenueOutreachDraft({ draftId: result.draft.id, approvalDecisionId: approval.decision.id });
 
   const packet = buildRevenueOutreachApprovalPacket({ maxDrafts: 5, includeSent: "false" as unknown as boolean });
 
@@ -2415,10 +2435,11 @@ test("blocks provider send for manual-only outreach channels", async () => {
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2442,10 +2463,11 @@ test("blocks outreach send when email provider is missing", async () => {
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2471,10 +2493,11 @@ test("blocks outreach send when email provider values are placeholders", async (
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(sendResult.status, "blocked");
@@ -2484,7 +2507,7 @@ test("blocks outreach send when email provider values are placeholders", async (
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
 });
 
-test("blocks outreach send when approvalToSend is string false", async () => {
+test("blocks outreach send without a valid approvalDecisionId", async () => {
   process.env.RESEND_API_KEY = "re_test";
   process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
   const result = recordRevenueOutreachDraft({
@@ -2504,12 +2527,125 @@ test("blocks outreach send when approvalToSend is string false", async () => {
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: "false" as unknown as boolean,
   });
 
   assert.equal(sendResult.status, "blocked");
-  assert.equal(sendResult.reason, "Marcar approvalToSend=true para contacto externo.");
+  assert.equal(sendResult.reason, "Registrar y usar approvalDecisionId valido para este draft exacto antes de contacto externo.");
   assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+});
+
+test("blocks outreach send with generic approval decision", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Generic Decision Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Generic Decision Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const approval = recordRevenueApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Generic approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalDecisionId: approval.decision.id,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "human_approval" && gate.passed === false), true);
+});
+
+test("blocks outreach send with wrong approval source target decision or stale snapshot", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  const result = recordRevenueOutreachDraft({
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Trust Boundary Send",
+    sourceUrl: "https://example.com",
+    businessSummary: "Trust Boundary Send has public data and a clear need for website conversion and follow-up.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+  const wrongSource = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Public candidate approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "public_candidate_approval_cli",
+    publicCandidateSnapshotHash: "not-an-outreach-hash",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+  });
+  const wrongTarget = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId("other-draft"),
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "Wrong draft approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+  });
+  const rejected = recordRevenueTrustedApprovalDecision({
+    targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
+    targetType: "outbox",
+    decision: "rejected",
+    approvedAction: "Rejected approval must not authorize outreach send.",
+    maxSpendUsd: 0,
+    notes: "",
+    approvalSource: "outreach_approval_cli",
+    publicCandidateSnapshotHash: "",
+    outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
+  });
+  const stale = approveOutreachDraftForTests(result.draft);
+  result.draft.delivery.sendStatus = "blocked";
+
+  for (const approvalDecisionId of [
+    wrongSource.decision.id,
+    wrongTarget.decision.id,
+    rejected.decision.id,
+    stale.decision.id,
+  ]) {
+    const sendResult = await sendRevenueOutreachDraft({
+      draftId: result.draft.id,
+      approvalDecisionId,
+    });
+
+    assert.equal(sendResult.status, "blocked");
+    assert.equal(sendResult.gates.some((gate) => gate.gate === "human_approval" && gate.passed === false), true);
+  }
+});
+
+test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
+  const source = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(source, /approvalDecisionId/);
+  assert.doesNotMatch(source, /approvalToSend/);
 });
 
 test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
@@ -2535,10 +2671,11 @@ test("uses fallback Resend from email when Revenue Engine from email is a placeh
     assert.equal(payload.from, "Revenue Engine <sales@example.com>");
     return { id: "email_fallback_sender" };
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(sendResult.status, "sent");
@@ -2584,10 +2721,11 @@ test("sends approved outreach with configured provider and updates matching lead
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
   });
+  const approval = approveOutreachDraftForTests(result.draft);
 
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
-    approvalToSend: true,
+    approvalDecisionId: approval.decision.id,
   });
 
   assert.equal(sendResult.status, "sent");

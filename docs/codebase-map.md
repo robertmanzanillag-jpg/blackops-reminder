@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T00:54:00.830Z
+Generated: 2026-07-02T01:38:27.910Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 450 | 383 | 1454 | 443 | 8200 |
+| 454 | 387 | 1465 | 443 | 8241 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 112 | 109 | server:112 |
+| `server` | 114 | 111 | server:114 |
 | `client/src` | 108 | 106 | ui-component:55, client-page:22, client-component:21, client-lib:4 |
-| `tests` | 75 | 73 | test:75 |
-| `script` | 53 | 51 | script:53 |
+| `tests` | 76 | 74 | test:76 |
+| `script` | 54 | 52 | script:54 |
 | `.` | 24 | 17 | other:15, docs:8, package:1 |
 | `docs` | 11 | 10 | docs:11 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
@@ -109,6 +109,7 @@ Package: `rest-express`
 - `tests/revenue-manual-contact-approval-packet-cli.test.ts`
 - `tests/revenue-money-readiness-cli.test.ts`
 - `tests/revenue-money-sprint-run-packet-cli.test.ts`
+- `tests/revenue-outreach-approval-decision-cli.test.ts`
 - `tests/revenue-outreach-approval-packet-cli.test.ts`
 - `tests/revenue-public-candidate-approval-decision-cli.test.ts`
 - `tests/revenue-public-candidate-block-cli.test.ts`
@@ -193,6 +194,7 @@ Package: `rest-express`
 - `script/revenue-manual-contact-approval-packet.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-money-readiness.ts` (script; 4 symbols, 2 imports)
 - `script/revenue-money-sprint-run-packet.ts` (script; 5 symbols, 1 imports)
+- `script/revenue-outreach-approval-decision.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-outreach-approval-packet.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-public-candidate-approval-decision.ts` (script; 4 symbols, 1 imports)
 - `script/revenue-public-candidate-block.ts` (script; 4 symbols, 1 imports)
@@ -213,7 +215,6 @@ Package: `rest-express`
 - `server/ai-router.ts` (server; 13 symbols)
 - `server/app-qa-agent.ts` (server; 174 symbols, 7 imports)
 - `server/assistant.ts` (server; 279 symbols, 24 imports, 3 routes)
-- `server/automation-registry.ts` (server; 20 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
