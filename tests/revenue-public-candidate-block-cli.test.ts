@@ -85,6 +85,22 @@ test("parses and validates public candidate block options", () => {
   ]);
 });
 
+test("public candidate block builder rejects invalid direct CLI options", () => {
+  assert.throws(
+    () => buildRevenuePublicCandidateBlockFromCli({
+      candidateId: "",
+      blockReason: "short",
+      sourceUrl: "not-a-url",
+      evidence: "too short",
+      notes: "",
+      verifiedBy: "Robert",
+      confirmPublicMismatch: false,
+      json: false,
+    }),
+    /--candidate-id is required\..*--confirm-public-mismatch is required/,
+  );
+});
+
 test("blocks an existing candidate by id without duplicating it", () => {
   const candidateId = captureCandidate();
   const result = blockRevenuePublicLeadCandidate({
@@ -115,7 +131,7 @@ test("blocks an existing candidate by id without duplicating it", () => {
 
 test("candidate block requires explicit public mismatch confirmation", () => {
   const candidateId = captureCandidate();
-  const result = buildRevenuePublicCandidateBlockFromCli({
+  const engineResult = blockRevenuePublicLeadCandidate({
     candidateId,
     blockReason: "Wrong market after public verification.",
     sourceUrl: "https://example.com/public-profile",
@@ -123,14 +139,29 @@ test("candidate block requires explicit public mismatch confirmation", () => {
     notes: "Blocked from public verification only.",
     verifiedBy: "Robert",
     confirmPublicMismatch: false,
-    json: false,
   });
-  const text = formatRevenuePublicCandidateBlockText(result);
+  const text = formatRevenuePublicCandidateBlockText(engineResult);
 
-  assert.equal(result.status, "confirmation_required");
-  assert.equal(result.updated, false);
-  assert.equal(getRevenuePublicCandidateBlockExitCode(result), 1);
+  assert.equal(engineResult.status, "confirmation_required");
+  assert.equal(engineResult.updated, false);
+  assert.equal(engineResult.safety.persistsPublicCandidate, false);
+  assert.equal(getRevenuePublicCandidateBlockExitCode(engineResult), 1);
   assert.match(text, /Persists public candidate: no/);
+  assert.equal(listRevenuePublicLeadCandidates()[0].verificationStatus, "needs_review");
+
+  assert.throws(
+    () => buildRevenuePublicCandidateBlockFromCli({
+      candidateId,
+      blockReason: "Wrong market after public verification.",
+      sourceUrl: "https://example.com/public-profile",
+      evidence: "Public profile points to another city and should not be used for this batch.",
+      notes: "Blocked from public verification only.",
+      verifiedBy: "Robert",
+      confirmPublicMismatch: false,
+      json: false,
+    }),
+    /--confirm-public-mismatch is required after checking public sources\./,
+  );
   assert.equal(listRevenuePublicLeadCandidates()[0].verificationStatus, "needs_review");
 });
 

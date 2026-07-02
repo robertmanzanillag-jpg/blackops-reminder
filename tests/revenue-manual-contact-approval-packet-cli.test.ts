@@ -119,6 +119,13 @@ test("parses and validates manual contact approval packet options", () => {
   ]);
 });
 
+test("manual contact approval packet builder rejects invalid direct CLI options", () => {
+  assert.throws(
+    () => buildRevenueManualContactApprovalPacketFromCli({ maxCandidates: 0, json: false }),
+    /--max-candidates must be an integer from 1 to 50\./,
+  );
+});
+
 test("manual contact approval packet lists only verified manual-only candidates", () => {
   captureCandidates();
 

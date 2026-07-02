@@ -29,6 +29,11 @@ export function validateRevenueManualContactApprovalPacketOptions(options: Reven
 }
 
 export function buildRevenueManualContactApprovalPacketFromCli(options: RevenueManualContactApprovalPacketCliOptions) {
+  const validationErrors = validateRevenueManualContactApprovalPacketOptions(options);
+  if (validationErrors.length) {
+    throw new Error(validationErrors.join(" "));
+  }
+
   return buildRevenueManualContactApprovalPacket({
     maxCandidates: options.maxCandidates,
   });

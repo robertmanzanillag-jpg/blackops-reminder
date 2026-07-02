@@ -38,6 +38,11 @@ export function validateRevenueWebsiteCreationPacketOptions(options: RevenueWebs
 }
 
 export function buildRevenueWebsiteCreationPacketFromCli(options: RevenueWebsiteCreationPacketCliOptions) {
+  const validationErrors = validateRevenueWebsiteCreationPacketOptions(options);
+  if (validationErrors.length) {
+    throw new Error(validationErrors.join(" "));
+  }
+
   return buildRevenueWebsiteCreationPacket({
     outreachDraftId: options.outreachDraftId,
     approvalDecisionId: options.approvalDecisionId,

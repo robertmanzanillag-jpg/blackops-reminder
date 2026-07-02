@@ -41,6 +41,11 @@ export function validateRevenueOutreachApprovalPacketOptions(options: RevenueOut
 }
 
 export function buildRevenueOutreachApprovalPacketFromCli(options: RevenueOutreachApprovalPacketCliOptions) {
+  const validationErrors = validateRevenueOutreachApprovalPacketOptions(options);
+  if (validationErrors.length) {
+    throw new Error(validationErrors.join(" "));
+  }
+
   return buildRevenueOutreachApprovalPacket({
     maxDrafts: options.maxDrafts,
     includeSent: options.includeSent,

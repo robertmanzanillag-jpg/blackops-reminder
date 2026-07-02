@@ -57,6 +57,13 @@ test("parses and validates outreach approval packet CLI options", () => {
   );
 });
 
+test("outreach approval packet builder rejects invalid direct CLI options", () => {
+  assert.throws(
+    () => buildRevenueOutreachApprovalPacketFromCli({ maxDrafts: 0, includeSent: false, json: false }),
+    /--max-drafts must be an integer from 1 to 50\./,
+  );
+});
+
 test("outreach approval packet CLI surfaces drafts without sending or persisting", () => {
   createDraft("draft");
   const packet = buildRevenueOutreachApprovalPacketFromCli({ maxDrafts: 10, includeSent: false, json: false });

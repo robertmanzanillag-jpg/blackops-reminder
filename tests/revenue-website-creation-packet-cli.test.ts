@@ -125,6 +125,24 @@ test("parses and validates website creation packet CLI options", () => {
   );
 });
 
+test("website creation packet builder rejects invalid direct CLI options", () => {
+  assert.throws(
+    () => buildRevenueWebsiteCreationPacketFromCli({
+      outreachDraftId: "",
+      approvalDecisionId: "",
+      robertApprovedBuild: false,
+      clientApprovedScope: false,
+      depositPaid: false,
+      publicDataVerified: false,
+      writeFiles: false,
+      deployWebsite: false,
+      launchTargetDays: 0,
+      json: false,
+    }),
+    /--outreach-draft-id is required\. --launch-target-days must be an integer from 1 to 60\./,
+  );
+});
+
 test("website creation packet CLI blocks missing approvals and unsafe actions", () => {
   const draft = createApprovedOutreachDraft();
   const approval = approveWebsiteCreation(draft);

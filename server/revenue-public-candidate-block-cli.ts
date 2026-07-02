@@ -37,6 +37,11 @@ export function validateRevenuePublicCandidateBlockOptions(options: RevenuePubli
 }
 
 export function buildRevenuePublicCandidateBlockFromCli(options: RevenuePublicCandidateBlockCliOptions) {
+  const validationErrors = validateRevenuePublicCandidateBlockOptions(options);
+  if (validationErrors.length) {
+    throw new Error(validationErrors.join(" "));
+  }
+
   return blockRevenuePublicLeadCandidate({
     candidateId: options.candidateId,
     blockReason: options.blockReason,
