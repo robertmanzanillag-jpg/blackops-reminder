@@ -2,9 +2,14 @@ import {
   buildRevenueManualContactApprovalPacket,
   buildRevenueMoneyReadinessReport,
   getRevenueEngineSnapshot,
+  listRevenueApprovalDecisions,
   listRevenuePublicLeadCandidates,
   type RevenueMoneyReadinessInput,
 } from "./revenue-engine";
+import {
+  buildRevenuePublicCandidateApprovalTargetId,
+  buildRevenuePublicCandidateSnapshotHash,
+} from "./revenue-public-candidate-approval";
 
 export type RevenueFirstMoneyCommandCenterCliOptions = {
   mode: RevenueMoneyReadinessInput["mode"];
@@ -26,6 +31,10 @@ type CandidateApprovalBatch = {
   candidateIds: string[];
   candidateNames: string[];
   count: number;
+  approvalStatus: "needs_robert_approval" | "ready_for_candidate_review";
+  approvalDecisionId: string;
+  approvalCommand: string;
+  reviewCommand: string;
   command: string;
   reason: string;
 };
@@ -80,14 +89,58 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+type CandidateApprovalInput = {
+  id: string;
+  businessName: string;
+  area: string;
+  niche: string;
+  contactChannel: string;
+  contactValue: string;
+  recipientEmail: string;
+  sourceUrl: string;
+  evidence: string;
+  verificationStatus: string;
+  publicEvidenceVerified: boolean;
+};
+
 function buildCandidateApprovalBatch(
-  candidates: Array<{ id: string; businessName: string; area: string; niche: string }>,
+  candidates: CandidateApprovalInput[],
   batchIndex: number,
+  approvalDecisions: ReturnType<typeof listRevenueApprovalDecisions>,
 ): CandidateApprovalBatch {
   const firstCandidate = candidates[0];
   const candidateIds = candidates.map((candidate) => candidate.id);
   const area = firstCandidate?.area || "";
   const niche = firstCandidate?.niche || "";
+  const targetId = buildRevenuePublicCandidateApprovalTargetId(candidateIds);
+  const snapshotHash = buildRevenuePublicCandidateSnapshotHash(candidates);
+  const matchingApprovalDecision = approvalDecisions.find((decision) =>
+    decision.targetType === "public_candidate"
+    && decision.targetId === targetId
+    && decision.decision === "approved"
+    && decision.guardrail.status === "recorded"
+    && decision.approvalSource === "public_candidate_approval_cli"
+    && decision.publicCandidateSnapshotHash === snapshotHash,
+  );
+  const approvalCommand = npmRunText("revenue:public-candidate-approval-decision", [
+    `--candidate-ids=${candidateIds.join(",")}`,
+    "--decision=approved",
+    "--approved-action=Approve first-money public candidate review.",
+    `--area=${area}`,
+    `--niche=${niche}`,
+    "--offer-focus=websites",
+    "--confirmed-by-robert",
+  ]);
+  const reviewCommand = matchingApprovalDecision
+    ? npmRunText("revenue:public-candidate-review", [
+      `--candidate-ids=${candidateIds.join(",")}`,
+      `--approval-decision-id=${matchingApprovalDecision.id}`,
+      `--area=${area}`,
+      `--niche=${niche}`,
+      "--offer-focus=websites",
+    ])
+    : "";
+  const approvalStatus = matchingApprovalDecision ? "ready_for_candidate_review" : "needs_robert_approval";
   return {
     id: `candidate-review-${batchIndex + 1}`,
     area,
@@ -95,23 +148,20 @@ function buildCandidateApprovalBatch(
     candidateIds,
     candidateNames: candidates.map((candidate) => candidate.businessName),
     count: candidates.length,
-    command: npmRunText("revenue:public-candidate-approval-decision", [
-      `--candidate-ids=${candidateIds.join(",")}`,
-      "--decision=approved",
-      "--approved-action=Approve first-money public candidate review.",
-      `--area=${area}`,
-      `--niche=${niche}`,
-      "--offer-focus=websites",
-      "--confirmed-by-robert",
-    ]),
-    reason: `${candidates.length} verified public candidate(s) in ${area} / ${niche} need an auditable Robert approval decision before candidate review.`,
+    approvalStatus,
+    approvalDecisionId: matchingApprovalDecision?.id || "",
+    approvalCommand,
+    reviewCommand,
+    command: reviewCommand || approvalCommand,
+    reason: matchingApprovalDecision
+      ? `${candidates.length} verified public candidate(s) in ${area} / ${niche} have a matching Robert approval decision and are ready for candidate review.`
+      : `${candidates.length} verified public candidate(s) in ${area} / ${niche} need an auditable Robert approval decision before candidate review.`,
   };
 }
 
-function buildCandidateApprovalBatches(
-  candidates: Array<{ id: string; businessName: string; area: string; niche: string }>,
-) {
-  const groupedCandidates = new Map<string, Array<{ id: string; businessName: string; area: string; niche: string }>>();
+function buildCandidateApprovalBatches(candidates: CandidateApprovalInput[]) {
+  const approvalDecisions = listRevenueApprovalDecisions();
+  const groupedCandidates = new Map<string, CandidateApprovalInput[]>();
   for (const candidate of candidates) {
     const key = `${candidate.area}\u0000${candidate.niche}`;
     groupedCandidates.set(key, [...(groupedCandidates.get(key) || []), candidate]);
@@ -119,7 +169,7 @@ function buildCandidateApprovalBatches(
   return [...groupedCandidates.values()].flatMap((group) => {
     const batches: CandidateApprovalBatch[] = [];
     for (let index = 0; index < group.length; index += 5) {
-      batches.push(buildCandidateApprovalBatch(group.slice(index, index + 5), batches.length));
+      batches.push(buildCandidateApprovalBatch(group.slice(index, index + 5), batches.length, approvalDecisions));
     }
     return batches;
   }).map((batch, index) => ({ ...batch, id: `candidate-review-${index + 1}` }));
@@ -156,16 +206,22 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
   const approvedDraft = outreachDrafts.find((draft) => draft.status === "approved");
   const verificationCandidateIds = verificationNeededCandidates.slice(0, 5).map((candidate) => candidate.id).join(",");
   const candidateApprovalBatches = buildCandidateApprovalBatches(robertReviewReadyCandidates);
-  const firstApprovalBatch = candidateApprovalBatches[0];
-  const remainingApprovalBatchCount = Math.max(0, candidateApprovalBatches.length - 1);
-  const remainingApprovalCandidateCount = candidateApprovalBatches.slice(1).reduce((total, batch) => total + batch.count, 0);
-  const candidateReviewItem: CommandQueueItem | null = firstApprovalBatch
+  const activeApprovalBatch = candidateApprovalBatches.find((batch) => batch.approvalStatus === "ready_for_candidate_review")
+    || candidateApprovalBatches[0];
+  const remainingApprovalBatches = activeApprovalBatch
+    ? candidateApprovalBatches.filter((batch) => batch.id !== activeApprovalBatch.id)
+    : [];
+  const remainingApprovalBatchCount = remainingApprovalBatches.length;
+  const remainingApprovalCandidateCount = remainingApprovalBatches.reduce((total, batch) => total + batch.count, 0);
+  const candidateReviewItem: CommandQueueItem | null = activeApprovalBatch
     ? {
       id: "candidate-review",
-      label: "Record Robert approval for verified public candidates",
-      command: firstApprovalBatch.command,
+      label: activeApprovalBatch.approvalStatus === "ready_for_candidate_review"
+        ? "Run approved public candidate review"
+        : "Record Robert approval for verified public candidates",
+      command: activeApprovalBatch.command,
       status: "review",
-      reason: `${firstApprovalBatch.reason}${remainingApprovalBatchCount > 0 ? ` ${remainingApprovalCandidateCount} additional verified candidate(s) remain across ${remainingApprovalBatchCount} approval batch(es).` : ""}`,
+      reason: `${activeApprovalBatch.reason}${remainingApprovalBatchCount > 0 ? ` ${remainingApprovalCandidateCount} additional verified candidate(s) remain across ${remainingApprovalBatchCount} approval batch(es).` : ""}`,
     }
     : null;
   const manualContactReviewItem: CommandQueueItem | null = manualContactPacket.manualContactCount > 0
@@ -318,7 +374,7 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
         "",
         "Candidate approval batches:",
         ...packet.candidateApprovalBatches.map((batch) =>
-          `- ${batch.id}: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}`,
+          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}`,
         ),
       ]
       : []),

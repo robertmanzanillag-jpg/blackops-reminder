@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   recordRevenueOutreachDraft,
   recordRevenuePublicScoutRun,
+  resetRevenueApprovalDecisionsForTests,
   resetRevenueLeadsForTests,
   resetRevenueOutreachForTests,
   resetRevenuePublicLeadCandidatesForTests,
+  setRevenueApprovalDecisionsPathForTests,
   setRevenueLeadsPathForTests,
   setRevenueOutreachPathForTests,
   setRevenuePublicLeadCandidatesPathForTests,
@@ -18,16 +20,20 @@ import {
   parseRevenueFirstMoneyCommandCenterArgs,
   validateRevenueFirstMoneyCommandCenterOptions,
 } from "../server/revenue-first-money-command-center-cli";
+import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "../server/revenue-public-candidate-approval-decision-cli";
 
 const testLeadsPath = "/tmp/revenue-first-money-command-center-leads-test.json";
 const testOutreachPath = "/tmp/revenue-first-money-command-center-outreach-test.json";
 const testPublicCandidatesPath = "/tmp/revenue-first-money-command-center-public-candidates-test.json";
+const testApprovalDecisionsPath = "/tmp/revenue-first-money-command-center-approval-decisions-test.json";
 
+setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
 setRevenueLeadsPathForTests(testLeadsPath);
 setRevenueOutreachPathForTests(testOutreachPath);
 setRevenuePublicLeadCandidatesPathForTests(testPublicCandidatesPath);
 
 test.afterEach(() => {
+  resetRevenueApprovalDecisionsForTests();
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
   resetRevenuePublicLeadCandidatesForTests();
@@ -173,6 +179,88 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(reviewCommand?.command || "", /--offer-focus=websites/);
   assert.match(reviewCommand?.command || "", /--decision=approved/);
   assert.match(reviewCommand?.command || "", /--confirmed-by-robert/);
+});
+
+test("first-money command center routes approved public candidate batches to candidate review", () => {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Pending Command Salon",
+        area: "Miami",
+        niche: "hair salon",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@pendingcommandsalon.biz",
+        sourceUrl: "https://public-directory.invalid/pending-command-salon",
+        recipientEmail: "owner@pendingcommandsalon.biz",
+        evidence: "Public listing has no website, recent salon photos and a visible public owner email.",
+        painPoint: "Needs booking capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+      {
+        businessName: "Approved Command Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@approvedcommand.biz",
+        sourceUrl: "https://public-directory.invalid/approved-command-cafe",
+        recipientEmail: "owner@approvedcommand.biz",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+  const pendingCandidateId = capture.recordedCandidates[0].candidate.id;
+  const candidateId = capture.recordedCandidates[1].candidate.id;
+  const approval = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
+
+  assert.equal(approval.status, "recorded");
+  assert.equal(packet.nextCommand.id, "candidate-review");
+  assert.match(packet.nextCommand.label, /Run approved public candidate review/);
+  assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
+  assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${approval.decision?.id}`));
+  assert.match(reviewCommand?.command || "", new RegExp(candidateId));
+  assert.doesNotMatch(reviewCommand?.command || "", new RegExp(pendingCandidateId));
+  assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
+  assert.equal(packet.candidateApprovalBatches[0].approvalStatus, "needs_robert_approval");
+  assert.equal(packet.candidateApprovalBatches[1].approvalStatus, "ready_for_candidate_review");
+  assert.equal(packet.candidateApprovalBatches[1].approvalDecisionId, approval.decision?.id);
+  assert.equal(packet.safety.sendsOutreach, false);
+  assert.equal(packet.safety.chargesClients, false);
+  assert.equal(packet.safety.deploys, false);
 });
 
 test("first-money command center routes verified manual-only candidates to Robert review", () => {
