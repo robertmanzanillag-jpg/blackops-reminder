@@ -37,6 +37,12 @@ function hasValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function hasPlaceholderValue(value: string) {
+  const trimmed = value.trim();
+  return /\b(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+)/i.test(trimmed)
+    || /^(CANDIDATE[\s_-]*IDS?|AREA|NICHE|OFFER[\s_-]*FOCUS)$/i.test(trimmed);
+}
+
 export function parseRevenuePublicCandidateApprovalDecisionArgs(argv: string[]): RevenuePublicCandidateApprovalDecisionCliOptions {
   const candidateIds = getArgValue(argv, "--candidate-ids")
     .split(",")
@@ -58,6 +64,7 @@ export function parseRevenuePublicCandidateApprovalDecisionArgs(argv: string[]):
 export function validateRevenuePublicCandidateApprovalDecisionOptions(options: RevenuePublicCandidateApprovalDecisionCliOptions) {
   const errors: string[] = [];
   if (options.candidateIds.length === 0) errors.push("--candidate-ids is required.");
+  else if (options.candidateIds.some(hasPlaceholderValue)) errors.push("--candidate-ids must contain real candidate ids, not placeholders.");
   if (!["approved", "rejected", "needs_changes"].includes(options.decision)) {
     errors.push("--decision must be approved, rejected, or needs_changes.");
   }
@@ -66,24 +73,41 @@ export function validateRevenuePublicCandidateApprovalDecisionOptions(options: R
   }
   if (options.approvedAction.trim().length < 8) {
     errors.push("--approved-action must describe the approved/rejected action.");
+  } else if (hasPlaceholderValue(options.approvedAction)) {
+    errors.push("--approved-action must be real approval context, not a placeholder.");
+  }
+  if (options.notes.trim().length > 0 && hasPlaceholderValue(options.notes)) {
+    errors.push("--notes must be real approval context, not a placeholder.");
+  }
+  if (options.decision === "approved") {
+    if (options.area.trim().length < 2) errors.push("--area is required for approved public candidate decisions.");
+    else if (hasPlaceholderValue(options.area)) errors.push("--area must be the real candidate area, not a placeholder.");
+    if (options.niche.trim().length < 2) errors.push("--niche is required for approved public candidate decisions.");
+    else if (hasPlaceholderValue(options.niche)) errors.push("--niche must be the real candidate niche, not a placeholder.");
   }
   return errors;
 }
 
 export function buildRevenuePublicCandidateApprovalDecisionFromCli(options: RevenuePublicCandidateApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenuePublicCandidateApprovalDecisionOptions(options);
   const allCandidates = listRevenuePublicLeadCandidates();
   const candidates = options.candidateIds
     .map((id) => allCandidates.find((candidate) => candidate.id === id))
     .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
   const missingIds = options.candidateIds.filter((id) => !candidates.some((candidate) => candidate.id === id));
+  const normalizedArea = options.area.trim().toLowerCase();
+  const normalizedNiche = options.niche.trim().toLowerCase();
   const approvalBlockers = candidates.flatMap((candidate) => [
     candidate.verificationStatus !== "verified_public" && `${candidate.id}: verificationStatus must be verified_public`,
     !candidate.publicEvidenceVerified && `${candidate.id}: public evidence not verified`,
     candidate.sourceUrl.trim().length === 0 && `${candidate.id}: sourceUrl required`,
     candidate.recipientEmail.trim().length === 0 && `${candidate.id}: recipientEmail required`,
     candidate.recipientEmail.trim().length > 0 && !hasValidEmail(candidate.recipientEmail) && `${candidate.id}: recipientEmail must be valid`,
+    candidate.area.trim().toLowerCase() !== normalizedArea && `${candidate.id}: --area must match candidate area (${candidate.area})`,
+    candidate.niche.trim().toLowerCase() !== normalizedNiche && `${candidate.id}: --niche must match candidate niche (${candidate.niche})`,
   ].filter((item): item is string => Boolean(item)));
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a public candidate decision.",
     ...missingIds.map((id) => `${id}: candidate not found`),
     ...(options.decision === "approved" ? approvalBlockers : []),

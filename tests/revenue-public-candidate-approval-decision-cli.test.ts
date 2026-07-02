@@ -28,10 +28,10 @@ test.afterEach(() => {
   resetRevenueApprovalDecisionsForTests();
 });
 
-function captureVerifiedCandidate() {
+function captureVerifiedCandidate(area = "Miami, FL", niche = "hair salon") {
   const capture = recordRevenuePublicScoutRun({
-    area: "Miami, FL",
-    niche: "hair salon",
+    area,
+    niche,
     offerFocus: "websites",
     scoutRunId: "approval-decision-test",
     dailyResearchTarget: 20,
@@ -44,8 +44,8 @@ function captureVerifiedCandidate() {
     candidates: [
       {
         businessName: "Approval Decision Salon",
-        area: "Miami, FL",
-        niche: "hair salon",
+        area,
+        niche,
         websiteStatus: "no_website",
         contactChannel: "email",
         contactValue: "owner@approvaldecisionsalon.biz",
@@ -93,6 +93,68 @@ test("parses and validates public candidate approval decision options", () => {
   assert.deepEqual(validateRevenuePublicCandidateApprovalDecisionOptions(parseRevenuePublicCandidateApprovalDecisionArgs([])), [
     "--candidate-ids is required.",
   ]);
+});
+
+test("rejects placeholder public candidate approval context", () => {
+  const parsed = parseRevenuePublicCandidateApprovalDecisionArgs([
+    "--candidate-ids=REPLACE WITH CANDIDATE IDS",
+    "--decision=approved",
+    "--approved-action=Replace with candidate approval context",
+    "--notes=Replace with public evidence review",
+    "--area=Replace with area",
+    "--niche=Replace with niche",
+    "--offer-focus=websites",
+    "--confirmed-by-robert",
+  ]);
+
+  assert.deepEqual(validateRevenuePublicCandidateApprovalDecisionOptions(parsed), [
+    "--candidate-ids must contain real candidate ids, not placeholders.",
+    "--approved-action must be real approval context, not a placeholder.",
+    "--notes must be real approval context, not a placeholder.",
+    "--area must be the real candidate area, not a placeholder.",
+    "--niche must be the real candidate niche, not a placeholder.",
+  ]);
+});
+
+test("blocks placeholder public candidate approval when builder is called directly", () => {
+  const result = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: ["REPLACE WITH CANDIDATE IDS"],
+    decision: "approved",
+    approvedAction: "Replace with candidate approval context",
+    notes: "Replace with public evidence review",
+    area: "Replace with area",
+    niche: "Replace with niche",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.match(result.blockers.join("; "), /placeholder/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
+});
+
+test("blocks approved public candidate decision when area or niche do not match candidate", () => {
+  const candidateId = captureVerifiedCandidate("Miami, FL", "mobile auto detailing");
+  const result = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve first-money public candidate review.",
+    notes: "Robert approved the public evidence.",
+    area: "Miami, FL",
+    niche: "hair salon",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.match(result.blockers.join("; "), /--niche must match candidate niche/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
 });
 
 test("records approved public candidate decision without importing or contacting", () => {
