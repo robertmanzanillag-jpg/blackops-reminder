@@ -19,6 +19,17 @@ type CommandQueueItem = {
   reason: string;
 };
 
+type CandidateApprovalBatch = {
+  id: string;
+  area: string;
+  niche: string;
+  candidateIds: string[];
+  candidateNames: string[];
+  count: number;
+  command: string;
+  reason: string;
+};
+
 export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterCliOptions {
   const modeArg = argv.find((arg) => arg.startsWith("--mode="));
   const mode = (modeArg ? modeArg.slice("--mode=".length).trim() : "first-sprint") as RevenueMoneyReadinessInput["mode"];
@@ -69,6 +80,51 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+function buildCandidateApprovalBatch(
+  candidates: Array<{ id: string; businessName: string; area: string; niche: string }>,
+  batchIndex: number,
+): CandidateApprovalBatch {
+  const firstCandidate = candidates[0];
+  const candidateIds = candidates.map((candidate) => candidate.id);
+  const area = firstCandidate?.area || "";
+  const niche = firstCandidate?.niche || "";
+  return {
+    id: `candidate-review-${batchIndex + 1}`,
+    area,
+    niche,
+    candidateIds,
+    candidateNames: candidates.map((candidate) => candidate.businessName),
+    count: candidates.length,
+    command: npmRunText("revenue:public-candidate-approval-decision", [
+      `--candidate-ids=${candidateIds.join(",")}`,
+      "--decision=approved",
+      "--approved-action=Approve first-money public candidate review.",
+      `--area=${area}`,
+      `--niche=${niche}`,
+      "--offer-focus=websites",
+      "--confirmed-by-robert",
+    ]),
+    reason: `${candidates.length} verified public candidate(s) in ${area} / ${niche} need an auditable Robert approval decision before candidate review.`,
+  };
+}
+
+function buildCandidateApprovalBatches(
+  candidates: Array<{ id: string; businessName: string; area: string; niche: string }>,
+) {
+  const groupedCandidates = new Map<string, Array<{ id: string; businessName: string; area: string; niche: string }>>();
+  for (const candidate of candidates) {
+    const key = `${candidate.area}\u0000${candidate.niche}`;
+    groupedCandidates.set(key, [...(groupedCandidates.get(key) || []), candidate]);
+  }
+  return [...groupedCandidates.values()].flatMap((group) => {
+    const batches: CandidateApprovalBatch[] = [];
+    for (let index = 0; index < group.length; index += 5) {
+      batches.push(buildCandidateApprovalBatch(group.slice(index, index + 5), batches.length));
+    }
+    return batches;
+  }).map((batch, index) => ({ ...batch, id: `candidate-review-${index + 1}` }));
+}
+
 export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCommandCenterCliOptions) {
   const readiness = buildRevenueMoneyReadinessReport({ mode: options.mode });
   const snapshot = getRevenueEngineSnapshot();
@@ -99,38 +155,17 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
   const reviewableDrafts = outreachDrafts.filter((draft) => draft.status === "draft" || draft.status === "approved");
   const approvedDraft = outreachDrafts.find((draft) => draft.status === "approved");
   const verificationCandidateIds = verificationNeededCandidates.slice(0, 5).map((candidate) => candidate.id).join(",");
-  const firstReviewCandidate = robertReviewReadyCandidates[0];
-  const matchingReviewBatchCandidates = firstReviewCandidate
-    ? robertReviewReadyCandidates
-      .filter((candidate) => candidate.area === firstReviewCandidate.area && candidate.niche === firstReviewCandidate.niche)
-    : [];
-  const reviewBatchCandidates = matchingReviewBatchCandidates.slice(0, 5);
-  const overflowReviewBatchCandidates = Math.max(0, matchingReviewBatchCandidates.length - reviewBatchCandidates.length);
-  const otherReviewBatchCandidates = firstReviewCandidate
-    ? robertReviewReadyCandidates.filter((candidate) =>
-      candidate.area !== firstReviewCandidate.area || candidate.niche !== firstReviewCandidate.niche,
-    ).length
-    : 0;
-  const reviewCandidateIds = reviewBatchCandidates.map((candidate) => candidate.id).join(",");
-  const remainingReviewReason = [
-    overflowReviewBatchCandidates > 0 && `${overflowReviewBatchCandidates} additional verified candidate(s) remain in this same area/niche batch after the 5-candidate command limit.`,
-    otherReviewBatchCandidates > 0 && `${otherReviewBatchCandidates} additional verified candidate(s) remain in other area/niche batches.`,
-  ].filter(Boolean).join(" ");
-  const candidateReviewItem: CommandQueueItem | null = robertReviewReadyCandidates.length > 0 && firstReviewCandidate
+  const candidateApprovalBatches = buildCandidateApprovalBatches(robertReviewReadyCandidates);
+  const firstApprovalBatch = candidateApprovalBatches[0];
+  const remainingApprovalBatchCount = Math.max(0, candidateApprovalBatches.length - 1);
+  const remainingApprovalCandidateCount = candidateApprovalBatches.slice(1).reduce((total, batch) => total + batch.count, 0);
+  const candidateReviewItem: CommandQueueItem | null = firstApprovalBatch
     ? {
       id: "candidate-review",
       label: "Record Robert approval for verified public candidates",
-      command: npmRunText("revenue:public-candidate-approval-decision", [
-        `--candidate-ids=${reviewCandidateIds}`,
-        "--decision=approved",
-        "--approved-action=Approve first-money public candidate review.",
-        `--area=${firstReviewCandidate.area}`,
-        `--niche=${firstReviewCandidate.niche}`,
-        "--offer-focus=websites",
-        "--confirmed-by-robert",
-      ]),
+      command: firstApprovalBatch.command,
       status: "review",
-      reason: `${reviewBatchCandidates.length} verified public candidate(s) in ${firstReviewCandidate.area} / ${firstReviewCandidate.niche} need an auditable Robert approval decision before candidate review.${remainingReviewReason ? ` ${remainingReviewReason}` : ""}`,
+      reason: `${firstApprovalBatch.reason}${remainingApprovalBatchCount > 0 ? ` ${remainingApprovalCandidateCount} additional verified candidate(s) remain across ${remainingApprovalBatchCount} approval batch(es).` : ""}`,
     }
     : null;
   const manualContactReviewItem: CommandQueueItem | null = manualContactPacket.manualContactCount > 0
@@ -234,6 +269,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       reviewableOutreachDrafts: reviewableDrafts.length,
       approvedOutreachDrafts: outreachDrafts.filter((draft) => draft.status === "approved").length,
     },
+    candidateApprovalBatches,
     readiness: {
       ready: readiness.ready,
       canStartToday: readiness.canStartToday,
@@ -277,6 +313,15 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
     "",
     "Command queue:",
     ...packet.queue.map((item) => `- [${item.status}] ${item.label}: ${item.command} (${item.reason})`),
+    ...(packet.candidateApprovalBatches.length
+      ? [
+        "",
+        "Candidate approval batches:",
+        ...packet.candidateApprovalBatches.map((batch) =>
+          `- ${batch.id}: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}`,
+        ),
+      ]
+      : []),
     "",
     "Safety:",
     `- Writes files: ${packet.safety.writesFiles ? "yes" : "no"}`,
