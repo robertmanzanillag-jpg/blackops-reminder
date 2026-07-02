@@ -329,8 +329,8 @@ test("first-money activation checklist keeps paid build evidence-gated after pay
 
 test("first-money command center prioritizes public contact verification for unverified candidates", () => {
   recordRevenuePublicScoutRun({
-    area: "Miami",
-    niche: "coffee shop",
+    area: "Miami 786-555-1212",
+    niche: "coffee shop https://niche.example/private",
     offerFocus: "websites",
     dailyResearchTarget: 20,
     dailyQualifiedLeadLimit: 5,
@@ -543,6 +543,16 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.nextCommand.id, "candidate-review");
   assert.equal(summary.readiness.canAutonomousSearchBusinesses, true);
   assert.equal(summary.readiness.canRunGuardedPublicScoutCapture, true);
+  assert.equal(summary.robertApprovalBrief.status, "needs_robert_candidate_approval");
+  assert.equal(summary.robertApprovalBrief.totalBatches, 2);
+  assert.equal(summary.robertApprovalBrief.totalCandidates, 2);
+  assert.equal(summary.robertApprovalBrief.totalEstimatedOfferUsd, 6000);
+  assert.equal(summary.robertApprovalBrief.nextApprovalText, "APPROVE PUBLIC CANDIDATES candidate-review-1");
+  assert.equal(summary.robertApprovalBrief.safety.exposesContactDetails, false);
+  assert.equal(summary.robertApprovalBrief.safety.sendsOutreach, false);
+  assert.equal(summary.robertApprovalBrief.safety.chargesClients, false);
+  assert.equal(summary.robertApprovalBrief.blockedActions.some((action) => action.includes("No outreach")), true);
+  assert.equal(summary.robertApprovalBrief.afterRobertApproves.some((action) => action.includes("guarded candidate review packet")), true);
   assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Summary Privacy Cafe");
   assert.equal(summary.nextCandidateApproval?.count, 1);
   assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.businessName, "Summary Privacy Cafe");
@@ -655,9 +665,9 @@ test("first-money command center summary redacts approval card contact details",
     writePreviewFiles: false,
     candidates: [
       {
-        businessName: "Redacted Card Cafe",
-        area: "Miami",
-        niche: "coffee shop",
+        businessName: "Redacted Card Cafe owner@redactedcard.biz https://private-redacted.biz/path",
+        area: "Miami 786-555-1212",
+        niche: "coffee shop https://niche.example/private",
         websiteStatus: "no_website",
         contactChannel: "email",
         contactValue: "owner@redactedcard.biz",
@@ -678,10 +688,16 @@ test("first-money command center summary redacts approval card contact details",
   const card = summary.nextCandidateApproval?.candidateCards[0];
   const serialized = JSON.stringify(summary);
 
+  assert.equal(card?.businessName, "Redacted Card Cafe [contact] [source]");
+  assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Redacted Card Cafe [contact] [source]");
+  assert.equal(summary.nextCandidateApproval?.area, "Miami [phone]");
+  assert.equal(summary.nextCandidateApproval?.niche, "coffee shop [source]");
+  assert.equal(summary.robertApprovalBrief.batches[0].candidateNames[0], "Redacted Card Cafe [contact] [source]");
   assert.equal(card?.opportunitySummary, "Needs menu capture. Email [contact], phone [phone], see [source] [source] [source] [source] [source] and [source]");
   assert.doesNotMatch(serialized, /owner@redactedcard\.biz/);
   assert.doesNotMatch(serialized, /786-555-1212/);
-  assert.doesNotMatch(serialized, /example\.com\/private/);
+  assert.doesNotMatch(serialized, /private-redacted\.biz\/path/);
+  assert.doesNotMatch(serialized, /niche\.example\/private/);
   assert.doesNotMatch(serialized, /www\.menu\.example/);
   assert.doesNotMatch(serialized, /instagram\.com\/redactedcard/);
   assert.doesNotMatch(serialized, /maps\.app\.goo\.gl/);
@@ -773,6 +789,11 @@ test("first-money command center routes approved public candidate batches to can
   assert.equal(packet.nextCommand.id, "candidate-review");
   assert.match(packet.nextCommand.label, /Run approved public candidate review/);
   assert.equal(summary.nextCandidateReview?.id, "candidate-review-1");
+  assert.equal(summary.robertApprovalBrief.status, "ready_for_review_packet");
+  assert.equal(summary.robertApprovalBrief.nextApprovalText, "");
+  assert.equal(summary.robertApprovalBrief.nextReviewText, `REVIEW PUBLIC CANDIDATES candidate-review-1 ${firstApproval.decision?.id}`);
+  assert.equal(summary.robertApprovalBrief.totalCandidates, 0);
+  assert.equal(summary.robertApprovalBrief.safety.importsLeads, false);
   assert.equal(summary.nextCandidateReview?.approvalDecisionId, firstApproval.decision?.id);
   assert.equal(summary.nextCandidateReview?.confirmationText, `REVIEW PUBLIC CANDIDATES candidate-review-1 ${firstApproval.decision?.id}`);
   assert.equal(summary.nextCandidateReview?.safety.sendsOutreach, false);

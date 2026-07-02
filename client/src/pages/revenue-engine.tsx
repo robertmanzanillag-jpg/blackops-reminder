@@ -501,6 +501,36 @@ type FirstMoneyCommandCenter = {
     status: "ready" | "blocked" | "review";
     reason: string;
   };
+  robertApprovalBrief: {
+    status: "needs_robert_candidate_approval" | "ready_for_review_packet" | "no_candidate_approval_waiting";
+    headline: string;
+    totalBatches: number;
+    totalCandidates: number;
+    totalEstimatedOfferUsd: number;
+    nextApprovalText: string;
+    nextReviewText: string;
+    batches: Array<{
+      id: string;
+      area: string;
+      niche: string;
+      count: number;
+      totalEstimatedOfferUsd: number;
+      candidateNames: string[];
+      confirmationText: string;
+      cards: FirstMoneyCandidateApprovalSummary["candidateCards"];
+    }>;
+    afterRobertApproves: string[];
+    blockedActions: string[];
+    safety: {
+      exposesContactDetails: boolean;
+      persistsApprovalDecisionOnly: boolean;
+      importsLeads: boolean;
+      sendsOutreach: boolean;
+      chargesClients: boolean;
+      deploys: boolean;
+      paidDataSpendUsd: number;
+    };
+  };
   nextCandidateVerification: FirstMoneyCandidateVerificationSummary | null;
   candidateVerificationQueue: FirstMoneyCandidateVerificationSummary[];
   nextCandidateApproval: FirstMoneyCandidateApprovalSummary | null;
@@ -2765,6 +2795,34 @@ export default function RevenueEnginePage() {
                     <Badge variant="outline" className={cn("shrink-0", statusTone(firstMoneyCommandCenter.safeSearchAction.status))}>
                       {firstMoneyCommandCenter.safeSearchAction.status}
                     </Badge>
+                  </div>
+                </div>
+              )}
+              {firstMoneyCommandCenter?.robertApprovalBrief && (
+                <div className="mt-3 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-3" data-testid="first-money-robert-approval-brief">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-fuchsia-200">Robert approval brief</p>
+                      <p className="mt-1 text-sm font-medium text-white">{firstMoneyCommandCenter.robertApprovalBrief.headline}</p>
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {firstMoneyCommandCenter.robertApprovalBrief.totalCandidates} candidato(s) · ${firstMoneyCommandCenter.robertApprovalBrief.totalEstimatedOfferUsd.toLocaleString("en-US")} oferta potencial · {firstMoneyCommandCenter.robertApprovalBrief.totalBatches} batch(es)
+                      </p>
+                      {(firstMoneyCommandCenter.robertApprovalBrief.nextApprovalText || firstMoneyCommandCenter.robertApprovalBrief.nextReviewText) && (
+                        <p className="mt-2 break-words rounded-md border border-fuchsia-500/15 bg-black px-3 py-2 text-xs leading-5 text-fuchsia-100">
+                          {firstMoneyCommandCenter.robertApprovalBrief.nextApprovalText || firstMoneyCommandCenter.robertApprovalBrief.nextReviewText}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="shrink-0 border-fuchsia-500/30 text-fuchsia-100">
+                      {firstMoneyCommandCenter.robertApprovalBrief.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                    {firstMoneyCommandCenter.robertApprovalBrief.afterRobertApproves.slice(0, 2).map((item) => (
+                      <div key={item} className="rounded-md border border-fuchsia-500/15 bg-black px-3 py-2 text-zinc-300">
+                        {item}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

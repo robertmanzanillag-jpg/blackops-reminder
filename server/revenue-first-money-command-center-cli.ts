@@ -138,18 +138,18 @@ function redactCandidateApprovalBatchForSummary(batch: CandidateApprovalBatch | 
   return {
     id: batch.id,
     candidateIds: batch.candidateIds,
-    candidateNames: batch.candidateNames,
+    candidateNames: batch.candidateNames.map(approvalCardText),
     candidateCards: batch.candidates.map((candidate) => ({
       id: candidate.id,
-      businessName: candidate.businessName,
-      websiteStatus: candidate.websiteStatus,
+      businessName: approvalCardText(candidate.businessName),
+      websiteStatus: approvalCardText(candidate.websiteStatus),
       estimatedOfferUsd: candidate.estimatedOfferUsd,
       opportunitySummary: approvalCardText(candidate.painPoint || "Website opportunity needs Robert review."),
       evidenceStatus: "verified_public" as const,
       contactHiddenUntilApproval: true,
     })),
-    area: batch.area,
-    niche: batch.niche,
+    area: approvalCardText(batch.area),
+    niche: approvalCardText(batch.niche),
     offerFocus: "websites" as const,
     count: batch.count,
     totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
@@ -166,9 +166,9 @@ function redactCandidateReviewBatchForSummary(batch: CandidateApprovalBatch | un
   return {
     id: batch.id,
     candidateIds: batch.candidateIds,
-    candidateNames: batch.candidateNames,
-    area: batch.area,
-    niche: batch.niche,
+    candidateNames: batch.candidateNames.map(approvalCardText),
+    area: approvalCardText(batch.area),
+    niche: approvalCardText(batch.niche),
     offerFocus: "websites" as const,
     count: batch.count,
     totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
@@ -192,9 +192,9 @@ function redactCandidateRunBatchForSummary(batch: CandidateApprovalBatch | undef
   return {
     id: batch.id,
     candidateIds: batch.candidateIds,
-    candidateNames: batch.candidateNames,
-    area: batch.area,
-    niche: batch.niche,
+    candidateNames: batch.candidateNames.map(approvalCardText),
+    area: approvalCardText(batch.area),
+    niche: approvalCardText(batch.niche),
     offerFocus: "websites" as const,
     count: batch.count,
     totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
@@ -206,6 +206,64 @@ function redactCandidateRunBatchForSummary(batch: CandidateApprovalBatch | undef
       persistsPublicCandidates: false,
       sendsOutreach: false,
       writesPreviewFiles: false,
+      chargesClients: false,
+      deploys: false,
+      paidDataSpendUsd: 0,
+    },
+  };
+}
+
+function buildRobertApprovalBrief(
+  candidateApprovalQueue: NonNullable<ReturnType<typeof redactCandidateApprovalBatchForSummary>>[],
+  candidateReviewQueue: NonNullable<ReturnType<typeof redactCandidateReviewBatchForSummary>>[],
+) {
+  const totalCandidates = candidateApprovalQueue.reduce((total, batch) => total + batch.count, 0);
+  const totalEstimatedOfferUsd = candidateApprovalQueue.reduce((total, batch) => total + batch.totalEstimatedOfferUsd, 0);
+  const nextApproval = candidateApprovalQueue[0] || null;
+  const nextReview = candidateReviewQueue[0] || null;
+  const status = nextApproval
+    ? "needs_robert_candidate_approval" as const
+    : nextReview
+      ? "ready_for_review_packet" as const
+      : "no_candidate_approval_waiting" as const;
+  return {
+    status,
+    headline: nextApproval
+      ? `${totalCandidates} verified public candidate(s) are waiting for Robert approval before internal Money Sprint work.`
+      : nextReview
+        ? "Robert approval exists; the next safe step is generating the guarded review packet."
+        : "No candidate approval is waiting right now; keep guarded public scouting active.",
+    totalBatches: candidateApprovalQueue.length,
+    totalCandidates,
+    totalEstimatedOfferUsd,
+    nextApprovalText: nextApproval?.confirmationText || "",
+    nextReviewText: nextReview?.confirmationText || "",
+    batches: candidateApprovalQueue.map((batch) => ({
+      id: batch.id,
+      area: batch.area,
+      niche: batch.niche,
+      count: batch.count,
+      totalEstimatedOfferUsd: batch.totalEstimatedOfferUsd,
+      candidateNames: batch.candidateNames,
+      confirmationText: batch.confirmationText,
+      cards: batch.candidateCards,
+    })),
+    afterRobertApproves: [
+      "Record the candidate approval decision only; do not import leads or contact businesses from the approval action.",
+      "Generate the guarded candidate review packet with the matching approvalDecisionId.",
+      "Run the internal Money Sprint packet to create internal leads and draft-only outreach; sends stay blocked.",
+    ],
+    blockedActions: [
+      "No outreach send.",
+      "No payment request.",
+      "No website file write.",
+      "No preview publish or deploy.",
+    ],
+    safety: {
+      exposesContactDetails: false,
+      persistsApprovalDecisionOnly: true,
+      importsLeads: false,
+      sendsOutreach: false,
       chargesClients: false,
       deploys: false,
       paidDataSpendUsd: 0,
@@ -1097,6 +1155,13 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
       : nextCandidateApproval
         ? "Use the guarded Revenue Engine approval action with the exact confirmation text."
         : packet.nextCommand.command,
+    reason: nextCandidateReview
+      ? `${nextCandidateReview.count} approved public candidate(s) in ${nextCandidateReview.area} / ${nextCandidateReview.niche} are ready for the guarded review packet.`
+      : nextCandidateApproval
+        ? `${nextCandidateApproval.count} verified public candidate(s) in ${nextCandidateApproval.area} / ${nextCandidateApproval.niche} need Robert approval before internal Money Sprint work.`
+        : nextCandidateVerification
+          ? `${nextCandidateVerification.businessName} needs public verification before Robert approval.`
+          : packet.nextCommand.reason,
   };
   const activationChecklist = buildFirstMoneyActivationChecklist(
     packet,
@@ -1106,10 +1171,12 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     nextCandidateReview,
     nextMoneySprintRun,
   );
+  const robertApprovalBrief = buildRobertApprovalBrief(candidateApprovalQueue, candidateReviewQueue);
   return {
     status: packet.status,
     mode: packet.mode,
     nextCommand,
+    robertApprovalBrief,
     nextCandidateApproval,
     nextCandidateVerification,
     candidateVerificationQueue: packet.candidateVerificationQueue,

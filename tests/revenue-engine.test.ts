@@ -3379,6 +3379,8 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /Auto scout/);
   assert.match(source, /candidateVerificationQueue/);
   assert.match(source, /first-money-candidate-verification-queue/);
+  assert.match(source, /robertApprovalBrief/);
+  assert.match(source, /first-money-robert-approval-brief/);
   assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== selectedPublicCandidateBatch\.confirmationText/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);
   assert.match(source, /candidateReviewQueue/);
