@@ -1,3 +1,6 @@
+import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   listRevenueApprovalDecisions,
   listRevenuePublicLeadCandidates,
@@ -22,6 +25,8 @@ export type RevenuePublicCandidateReviewCliOptions = {
   dailyMockupLimit: number;
   dailyContactLimit: number;
   reviewerNote: string;
+  outputPath: string;
+  overwrite: boolean;
 };
 
 export function parseRevenuePublicCandidateReviewArgs(argv: string[]): RevenuePublicCandidateReviewCliOptions {
@@ -52,7 +57,76 @@ export function parseRevenuePublicCandidateReviewArgs(argv: string[]): RevenuePu
     dailyMockupLimit: numberValue("--daily-mockup-limit", 2),
     dailyContactLimit: numberValue("--daily-contact-limit", 0),
     reviewerNote: getValue("--note"),
+    outputPath: getValue("--output"),
+    overwrite: argv.includes("--overwrite"),
   };
+}
+
+function isPathInside(child: string, parent: string) {
+  const relative = path.relative(parent, child);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function hasSensitivePath(value: string) {
+  const segments = value.split(/[\\/]+/).map((segment) => segment.trim().toLowerCase()).filter(Boolean);
+  return segments.some((segment) =>
+    segment.startsWith(".env")
+    || segment.startsWith("credentials")
+    || segment.startsWith("secrets")
+    || [".git", ".ssh", "node_modules"].includes(segment)
+  );
+}
+
+function existingRealpath(value: string) {
+  try {
+    return realpathSync(value);
+  } catch {
+    return path.resolve(value);
+  }
+}
+
+function allowedMoneySprintOutputRoots() {
+  return [
+    path.resolve(process.cwd(), "revenue_workspace", "money-sprint"),
+    path.resolve(os.tmpdir()),
+    existingRealpath(os.tmpdir()),
+    "/tmp",
+    existingRealpath("/tmp"),
+  ];
+}
+
+function hasSymlinkAncestor(resolvedPath: string) {
+  const parent = path.dirname(resolvedPath);
+  const parsed = path.parse(parent);
+  let current = parsed.root;
+  if (existsSync(current) && lstatSync(current).isSymbolicLink()) return true;
+  const relativeParts = path.relative(parsed.root, parent).split(path.sep).filter(Boolean);
+  for (const part of relativeParts) {
+    current = path.join(current, part);
+    if (!existsSync(current)) break;
+    if (lstatSync(current).isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+export function validateRevenuePublicCandidateReviewOutputPath(outputPath: string, overwrite: boolean): string[] {
+  if (!outputPath) return [];
+  const errors: string[] = [];
+  const resolved = path.resolve(outputPath);
+  if (hasSensitivePath(outputPath)) {
+    errors.push("--output cannot point to .env, credentials, secrets, .ssh, .git or node_modules paths.");
+  }
+  if (!allowedMoneySprintOutputRoots().some((root) => isPathInside(resolved, root))) {
+    errors.push("--output must be inside revenue_workspace/money-sprint or the system temp directory.");
+  }
+  if (existsSync(resolved)) {
+    if (lstatSync(resolved).isSymbolicLink()) errors.push("--output cannot be a symlink.");
+    if (!overwrite) errors.push("--output already exists; pass --overwrite to replace it.");
+  }
+  if (hasSymlinkAncestor(resolved)) {
+    errors.push("--output parent directories cannot contain symlinks.");
+  }
+  return errors;
 }
 
 function hasMatchingPublicCandidateApprovalDecision(options: RevenuePublicCandidateReviewCliOptions) {
@@ -84,6 +158,7 @@ export function validateRevenuePublicCandidateReviewOptions(options: RevenuePubl
   if (options.dailyResearchTarget < 10 || options.dailyResearchTarget > 500) {
     errors.push("--daily-research-target must be between 10 and 500.");
   }
+  errors.push(...validateRevenuePublicCandidateReviewOutputPath(options.outputPath, options.overwrite));
   return errors;
 }
 
@@ -201,6 +276,16 @@ export function formatRevenuePublicCandidateReviewText(result: {
     "Import batch text:",
     result.importBatchText,
   ].join("\n");
+}
+
+export function writeRevenuePublicCandidateReviewOutput(outputPath: string, result: unknown) {
+  if (!outputPath) return null;
+  const validationErrors = validateRevenuePublicCandidateReviewOutputPath(outputPath, true);
+  if (validationErrors.length) throw new Error(validationErrors.join("\n"));
+  const resolved = path.resolve(outputPath);
+  mkdirSync(path.dirname(resolved), { recursive: true });
+  writeFileSync(resolved, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  return resolved;
 }
 
 export function getRevenuePublicCandidateReviewExitCode(result: { approvedCount: number; moneySprintRunPacket?: { status: string } }) {

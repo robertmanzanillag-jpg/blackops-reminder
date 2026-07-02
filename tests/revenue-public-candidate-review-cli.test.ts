@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import os from "node:os";
 import test from "node:test";
 import {
   recordRevenueApprovalDecision,
@@ -27,6 +29,7 @@ import {
   getRevenuePublicCandidateReviewExitCode,
   parseRevenuePublicCandidateReviewArgs,
   validateRevenuePublicCandidateReviewOptions,
+  writeRevenuePublicCandidateReviewOutput,
 } from "../server/revenue-public-candidate-review-cli";
 
 const testPublicLeadCandidatesPath = "/tmp/revenue-public-candidate-review-cli-candidates-test.json";
@@ -74,8 +77,14 @@ test("parses public candidate review CLI options", () => {
     dailyMockupLimit: 3,
     dailyContactLimit: 2,
     reviewerNote: "Robert approved preview batch",
+    outputPath: "",
+    overwrite: false,
   });
   assert.deepEqual(validateRevenuePublicCandidateReviewOptions(parsed), []);
+  assert.deepEqual(validateRevenuePublicCandidateReviewOptions({
+    ...parsed,
+    outputPath: "/secrets/review.json",
+  }), ["--output cannot point to .env, credentials, secrets, .ssh, .git or node_modules paths.", "--output must be inside revenue_workspace/money-sprint or the system temp directory."]);
 });
 
 function captureVerifiedReviewCandidate() {
@@ -260,6 +269,30 @@ test("validates public candidate review CLI options", () => {
   ]);
 });
 
+test("public candidate review output rejects symlink ancestors", () => {
+  const targetPath = `${os.tmpdir()}/revenue-public-candidate-review-symlink-target`;
+  const linkPath = `${os.tmpdir()}/revenue-public-candidate-review-symlink-link`;
+  rmSync(targetPath, { recursive: true, force: true });
+  rmSync(linkPath, { recursive: true, force: true });
+  mkdirSync(targetPath, { recursive: true });
+  symlinkSync(targetPath, linkPath, "dir");
+
+  assert.deepEqual(validateRevenuePublicCandidateReviewOptions({
+    ...parseRevenuePublicCandidateReviewArgs([
+      "--candidate-ids=candidate-1",
+      `--output=${linkPath}/nested/review.json`,
+      "--overwrite",
+    ]),
+  }), ["--output parent directories cannot contain symlinks."]);
+  assert.throws(
+    () => writeRevenuePublicCandidateReviewOutput(`${linkPath}/nested/review.json`, { ok: true }),
+    /--output parent directories cannot contain symlinks\./,
+  );
+
+  rmSync(linkPath, { recursive: true, force: true });
+  rmSync(targetPath, { recursive: true, force: true });
+});
+
 test("builds review input with spend outreach and preview writes disabled", () => {
   const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
     "--candidate-ids=candidate-1",
@@ -360,6 +393,8 @@ test("public candidate review exit code follows approved count", () => {
 });
 
 test("public candidate review script prints human-reviewed money sprint packet", () => {
+  const outputPath = `${realpathSync(os.tmpdir())}/revenue-public-candidate-review-cli-output.json`;
+  rmSync(outputPath, { force: true });
   const capture = recordRevenuePublicScoutRun({
     area: "Miami",
     niche: "coffee shop",
@@ -401,6 +436,8 @@ test("public candidate review script prints human-reviewed money sprint packet",
     "--area=Miami",
     "--niche=coffee shop",
     "--offer-focus=websites",
+    `--output=${outputPath}`,
+    "--overwrite",
   ], {
     cwd: process.cwd(),
     env: {
@@ -421,6 +458,14 @@ test("public candidate review script prints human-reviewed money sprint packet",
   assert.match(result.stdout, /Packet paid spend: \$0/);
   assert.match(result.stdout, /Packet sends outreach: no/);
   assert.doesNotMatch(output, /\/api\/revenue-engine\/money-sprint-preview/);
+  assert.equal(existsSync(outputPath), true);
+  const written = JSON.parse(readFileSync(outputPath, "utf8"));
+  assert.equal(written.status, "ready_for_money_sprint_preview");
+  assert.equal(written.moneySprintRunPacket.status, "ready_for_money_sprint_run");
+  assert.equal(written.moneySprintRunPacket.safety.sendsOutreach, false);
+  assert.equal(written.moneySprintRunPacket.safety.writesPreviewFiles, false);
+  assert.equal(written.moneySprintRunPacket.safety.paidDataSpendUsd, 0);
+  rmSync(outputPath, { force: true });
 });
 
 test("public candidate review script exits blocked when any requested id is missing", () => {

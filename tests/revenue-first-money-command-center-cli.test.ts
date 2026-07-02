@@ -253,11 +253,19 @@ test("first-money command center routes approved public candidate batches to can
   assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
   assert.match(reviewCommand?.command || "", new RegExp(`--approval-decision-id=${approval.decision?.id}`));
   assert.match(reviewCommand?.command || "", new RegExp(candidateId));
+  assert.match(reviewCommand?.command || "", /--output=revenue_workspace\/money-sprint\/public-candidates-/);
+  assert.match(reviewCommand?.command || "", /--overwrite/);
   assert.doesNotMatch(reviewCommand?.command || "", new RegExp(pendingCandidateId));
   assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.equal(packet.candidateApprovalBatches[0].approvalStatus, "needs_robert_approval");
   assert.equal(packet.candidateApprovalBatches[1].approvalStatus, "ready_for_candidate_review");
   assert.equal(packet.candidateApprovalBatches[1].approvalDecisionId, approval.decision?.id);
+  assert.match(packet.candidateApprovalBatches[1].outputPath, /^revenue_workspace\/money-sprint\/public-candidates-/);
+  assert.match(packet.candidateApprovalBatches[1].moneySprintRunPacketCommand, /revenue:money-sprint-run-packet/);
+  assert.match(
+    packet.candidateApprovalBatches[1].moneySprintRunPacketCommand,
+    new RegExp(`--input=${packet.candidateApprovalBatches[1].outputPath}`),
+  );
   assert.equal(packet.safety.sendsOutreach, false);
   assert.equal(packet.safety.chargesClients, false);
   assert.equal(packet.safety.deploys, false);

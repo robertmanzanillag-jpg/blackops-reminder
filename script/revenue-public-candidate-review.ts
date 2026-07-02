@@ -6,6 +6,7 @@ import {
   getRevenuePublicCandidateReviewExitCode,
   parseRevenuePublicCandidateReviewArgs,
   validateRevenuePublicCandidateReviewOptions,
+  writeRevenuePublicCandidateReviewOutput,
 } from "../server/revenue-public-candidate-review-cli";
 
 async function main() {
@@ -18,6 +19,7 @@ async function main() {
 
   const input = buildRevenuePublicCandidateReviewInput(options);
   const result = reviewRevenuePublicLeadCandidates(input);
+  writeRevenuePublicCandidateReviewOutput(options.outputPath, result);
   console.log(options.json ? JSON.stringify(result, null, 2) : formatRevenuePublicCandidateReviewText(result));
   process.exit(getRevenuePublicCandidateReviewExitCode(result));
 }

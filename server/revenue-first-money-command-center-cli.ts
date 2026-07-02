@@ -33,8 +33,10 @@ type CandidateApprovalBatch = {
   count: number;
   approvalStatus: "needs_robert_approval" | "ready_for_candidate_review";
   approvalDecisionId: string;
+  outputPath: string;
   approvalCommand: string;
   reviewCommand: string;
+  moneySprintRunPacketCommand: string;
   command: string;
   reason: string;
 };
@@ -114,6 +116,7 @@ function buildCandidateApprovalBatch(
   const niche = firstCandidate?.niche || "";
   const targetId = buildRevenuePublicCandidateApprovalTargetId(candidateIds);
   const snapshotHash = buildRevenuePublicCandidateSnapshotHash(candidates);
+  const outputPath = `revenue_workspace/money-sprint/public-candidates-${candidateIds.join("_")}.json`;
   const matchingApprovalDecision = approvalDecisions.find((decision) =>
     decision.targetType === "public_candidate"
     && decision.targetId === targetId
@@ -138,7 +141,12 @@ function buildCandidateApprovalBatch(
       `--area=${area}`,
       `--niche=${niche}`,
       "--offer-focus=websites",
+      `--output=${outputPath}`,
+      "--overwrite",
     ])
+    : "";
+  const moneySprintRunPacketCommand = reviewCommand
+    ? npmRunText("revenue:money-sprint-run-packet", [`--input=${outputPath}`])
     : "";
   const approvalStatus = matchingApprovalDecision ? "ready_for_candidate_review" : "needs_robert_approval";
   return {
@@ -150,8 +158,10 @@ function buildCandidateApprovalBatch(
     count: candidates.length,
     approvalStatus,
     approvalDecisionId: matchingApprovalDecision?.id || "",
+    outputPath,
     approvalCommand,
     reviewCommand,
+    moneySprintRunPacketCommand,
     command: reviewCommand || approvalCommand,
     reason: matchingApprovalDecision
       ? `${candidates.length} verified public candidate(s) in ${area} / ${niche} have a matching Robert approval decision and are ready for candidate review.`
@@ -374,7 +384,7 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
         "",
         "Candidate approval batches:",
         ...packet.candidateApprovalBatches.map((batch) =>
-          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}`,
+          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}${batch.moneySprintRunPacketCommand ? `; then ${batch.moneySprintRunPacketCommand}` : ""}`,
         ),
       ]
       : []),
