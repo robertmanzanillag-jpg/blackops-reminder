@@ -457,20 +457,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "ledger-entry-approval",
       gate: "ledger_entry",
       label: "Approve ledger entry after deposit is collected",
-      command: npmRunText("revenue:ledger-approval-decision", [
-        "--kind=website_sale",
-        "--client-name=REPLACE_WITH_CLIENT_NAME",
-        "--amount-usd=3500",
-        "--cash-collected-usd=1500",
-        "--estimated-internal-cost-usd=35",
-        "--notes=REPLACE_WITH_LEDGER_NOTES",
-        "--payment-evidence=REPLACE_WITH_PAYMENT_EVIDENCE",
-        "--decision=approved",
-        "--approved-action=Approve exact paid ledger entry after Robert verified payment evidence.",
-        "--confirmed-by-robert",
+      command: trustCenterActionText("/api/revenue-engine/ledger-entry-approval-pending-action", [
+        "real clientName",
+        "amountUsd",
+        "cashCollectedUsd",
+        "estimatedInternalCostUsd",
+        "real paymentEvidence",
+        "real ledger notes",
       ]),
       status: "blocked",
-      reason: "Runs only after money is actually collected and Robert has verified payment evidence; this records approval only and never records the ledger entry or charges clients.",
+      reason: "Runs only after money is actually collected and Robert has verified payment evidence; Trust Center records approval only and never records the ledger entry or charges clients.",
     });
   }
   if (!readiness.canBuildWebsites) {
@@ -478,19 +474,16 @@ function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadin
       id: "website-creation-approval",
       gate: "website_creation",
       label: "Approve paid website creation after deposit",
-      command: npmRunText("revenue:website-creation-approval-decision", [
-        "--outreach-draft-id=OUTREACH_ID",
-        "--decision=approved",
-        "--approved-action=Approve paid website creation handoff after client scope and deposit proof.",
-        "--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
-        "--robert-approved-build",
-        "--client-approved-scope",
-        "--deposit-paid",
-        "--public-data-verified",
-        "--confirmed-by-robert",
+      command: trustCenterActionText("/api/revenue-engine/website-creation-approval-pending-action", [
+        "real outreachDraftId",
+        "real scope/deposit/public-data notes",
+        "Robert-approved build flag",
+        "client-approved scope flag",
+        "deposit-paid flag",
+        "public-data verified flag",
       ]),
       status: "blocked",
-      reason: "Runs only after an approved outreach draft, client-approved scope, deposit proof, and public data verification; this command records approval only and never writes files or deploys.",
+      reason: "Runs only after an approved outreach draft, client-approved scope, deposit proof, and public data verification; Trust Center records approval only and never writes files or deploys.",
     });
   }
   return setupCommands;
@@ -1035,21 +1028,18 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       ? {
         id: "website-handoff",
         label: "Prepare paid website handoff",
-        command: npmRunText("revenue:website-creation-approval-decision", [
-          `--outreach-draft-id=${approvedDraft.id}`,
-          "--decision=approved",
-          "--approved-action=Approve paid website creation handoff after client scope and deposit proof.",
-          "--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
-          "--robert-approved-build",
-          "--client-approved-scope",
-          "--deposit-paid",
-          "--public-data-verified",
-          "--launch-target-days=7",
-          "--confirmed-by-robert",
+        command: trustCenterActionText("/api/revenue-engine/website-creation-approval-pending-action", [
+          `outreachDraftId=${approvedDraft.id}`,
+          "real scope/deposit/public-data notes",
+          "Robert-approved build flag",
+          "client-approved scope flag",
+          "deposit-paid flag",
+          "public-data verified flag",
+          "launchTargetDays=7",
         ]),
         status: readiness.canBuildWebsites ? "review" : "blocked",
         reason: readiness.canBuildWebsites
-          ? "Approved draft exists; record audited deposit/scope/public data approval before website handoff."
+          ? "Approved draft exists; queue Trust Center deposit/scope/public data approval before website handoff."
           : "Website handoff can be prepared only after deposit/scope/public data and publish gates are proven.",
       }
       : {

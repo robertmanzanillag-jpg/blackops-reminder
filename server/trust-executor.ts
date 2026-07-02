@@ -16,7 +16,15 @@ import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-mone
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
 import { buildRevenueContactPathApprovalDecisionFromCli } from "./revenue-contact-path-approval-decision-cli";
 import { buildRevenuePaymentPathApprovalDecisionFromCli } from "./revenue-payment-path-approval-decision-cli";
+import { buildRevenueLedgerApprovalDecisionFromCli } from "./revenue-ledger-approval-decision-cli";
+import { buildRevenueWebsiteCreationApprovalDecisionFromCli } from "./revenue-website-creation-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
+import {
+  revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
+  revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
+} from "./revenue-first-money-approval-pending-action";
 
 type JsonRecord = Record<string, any>;
 
@@ -43,23 +51,29 @@ function numberInput(input: JsonRecord, key: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function pendingActionPayloadInput(input: JsonRecord) {
+  const { requestedReview: _requestedReview, ...payload } = input;
+  return payload;
+}
+
 export function executeRevenueFirstMoneyContactPathApprovalFromPendingInput(input: JsonRecord, userId: string) {
   setRevenueUserDataScope(userId);
   if (stringInput(input, "requestedReview") !== "approve_first_money_contact_path") {
     throw new Error("Revenue contact path pending action no longer matches the first-money approval queue.");
   }
+  const payload = revenueContactPathApprovalPendingActionSchema.parse(pendingActionPayloadInput(input));
 
   const result = buildRevenueContactPathApprovalDecisionFromCli({
-    contactMode: stringInput(input, "contactMode") === "email_provider" ? "email_provider" : "manual",
-    fromEmail: stringInput(input, "fromEmail"),
-    manualContactApproved: booleanInput(input, "manualContactApproved"),
-    emailProviderConfigured: booleanInput(input, "emailProviderConfigured"),
+    contactMode: payload.contactMode,
+    fromEmail: payload.fromEmail,
+    manualContactApproved: payload.manualContactApproved,
+    emailProviderConfigured: payload.emailProviderConfigured,
     decision: "approved",
-    approvedAction: stringInput(input, "approvedAction") || "Approve exact manual contact path for first-money outreach.",
-    robertApprovedContactPath: booleanInput(input, "robertApprovedContactPath"),
-    contactPathVerified: booleanInput(input, "contactPathVerified"),
-    evidenceUrl: stringInput(input, "evidenceUrl"),
-    evidenceNote: stringInput(input, "evidenceNote"),
+    approvedAction: payload.approvedAction,
+    robertApprovedContactPath: payload.robertApprovedContactPath,
+    contactPathVerified: payload.contactPathVerified,
+    evidenceUrl: payload.evidenceUrl,
+    evidenceNote: payload.evidenceNote,
     confirmedByRobert: true,
     sendOutreach: false,
     json: false,
@@ -89,18 +103,19 @@ export function executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput(inpu
   if (stringInput(input, "requestedReview") !== "approve_first_money_payment_path") {
     throw new Error("Revenue payment path pending action no longer matches the first-money approval queue.");
   }
+  const payload = revenuePaymentPathApprovalPendingActionSchema.parse(pendingActionPayloadInput(input));
 
   const result = buildRevenuePaymentPathApprovalDecisionFromCli({
-    paymentLink: stringInput(input, "paymentLink"),
+    paymentLink: payload.paymentLink,
     decision: "approved",
-    approvedAction: stringInput(input, "approvedAction") || "Approve exact Stripe payment path for first-money deposits.",
-    robertApprovedPaymentPath: booleanInput(input, "robertApprovedPaymentPath"),
-    paymentSmokeVerified: booleanInput(input, "paymentSmokeVerified"),
-    depositConfirmedByRobert: booleanInput(input, "depositConfirmedByRobert"),
-    expectedDepositUsd: numberInput(input, "expectedDepositUsd"),
-    expectedPackage: stringInput(input, "expectedPackage"),
-    evidenceUrl: stringInput(input, "evidenceUrl"),
-    evidenceNote: stringInput(input, "evidenceNote"),
+    approvedAction: payload.approvedAction,
+    robertApprovedPaymentPath: payload.robertApprovedPaymentPath,
+    paymentSmokeVerified: payload.paymentSmokeVerified,
+    depositConfirmedByRobert: payload.depositConfirmedByRobert,
+    expectedDepositUsd: payload.expectedDepositUsd,
+    expectedPackage: payload.expectedPackage,
+    evidenceUrl: payload.evidenceUrl,
+    evidenceNote: payload.evidenceNote,
     confirmedByRobert: true,
     chargeClient: false,
     json: false,
@@ -122,6 +137,89 @@ export function executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput(inpu
       storesSecrets: false,
       recordsLedgerEntry: false,
       deploys: false,
+    },
+  };
+}
+
+export function executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  if (stringInput(input, "requestedReview") !== "approve_first_money_ledger_entry") {
+    throw new Error("Revenue ledger entry pending action no longer matches the first-money approval queue.");
+  }
+  const payload = revenueLedgerEntryApprovalPendingActionSchema.parse(pendingActionPayloadInput(input));
+
+  const result = buildRevenueLedgerApprovalDecisionFromCli({
+    kind: payload.kind,
+    clientName: payload.clientName,
+    amountUsd: payload.amountUsd,
+    cashCollectedUsd: payload.cashCollectedUsd,
+    estimatedInternalCostUsd: payload.estimatedInternalCostUsd,
+    notes: payload.notes,
+    paymentEvidence: payload.paymentEvidence,
+    decision: "approved",
+    approvedAction: payload.approvedAction,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue ledger entry approval blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      recordsLedgerEntry: false,
+      chargesClients: false,
+      sendsOutreach: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+      deploys: false,
+    },
+  };
+}
+
+export function executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  if (stringInput(input, "requestedReview") !== "approve_first_money_website_creation") {
+    throw new Error("Revenue website creation pending action no longer matches the first-money approval queue.");
+  }
+  const payload = revenueWebsiteCreationApprovalPendingActionSchema.parse(pendingActionPayloadInput(input));
+
+  const result = buildRevenueWebsiteCreationApprovalDecisionFromCli({
+    outreachDraftId: payload.outreachDraftId,
+    decision: "approved",
+    approvedAction: payload.approvedAction,
+    notes: payload.notes,
+    robertApprovedBuild: payload.robertApprovedBuild,
+    clientApprovedScope: payload.clientApprovedScope,
+    depositPaid: payload.depositPaid,
+    publicDataVerified: payload.publicDataVerified,
+    launchTargetDays: payload.launchTargetDays,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue website creation approval blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      writesFiles: false,
+      deploys: false,
+      publishesPreview: false,
+      chargesClients: false,
+      sendsOutreach: false,
+      editsEnvironment: false,
+      storesSecrets: false,
     },
   };
 }
@@ -539,6 +637,16 @@ export async function executeApprovedPendingAction(
 
       case "revenue.first_money_payment_path_approval": {
         result = executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_ledger_entry_approval": {
+        result = executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_website_creation_approval": {
+        result = executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput(input, action.userId);
         break;
       }
 

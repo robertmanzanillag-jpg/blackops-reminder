@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 function hasPlaceholderValue(value: string) {
-  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_)/i.test(value);
+  const trimmed = value.trim();
+  return /\b(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+|OUTREACH_ID)/i.test(trimmed)
+    || /^(CLIENT[\s_-]*NAME|PAYMENT[\s_-]*EVIDENCE|LEDGER[\s_-]*NOTES)$/i.test(trimmed);
 }
 
 function isUrl(value: string) {
@@ -79,5 +81,49 @@ export const revenuePaymentPathApprovalPendingActionSchema = z.object({
   }
   if (!(input.paymentSmokeVerified || input.depositConfirmedByRobert)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["paymentSmokeVerified"], message: "Payment smoke verification or Robert-confirmed deposit is required." });
+  }
+});
+
+export const revenueLedgerEntryApprovalPendingActionSchema = z.object({
+  kind: z.enum(["website_sale", "automation_sale", "bundle_sale", "retainer"]).default("website_sale"),
+  clientName: z.string().trim().min(2).max(180)
+    .refine((value) => !hasPlaceholderValue(value), "Client name must be real, not a placeholder."),
+  amountUsd: z.number().finite().min(1).max(1000000),
+  cashCollectedUsd: z.number().finite().min(1).max(1000000),
+  estimatedInternalCostUsd: z.number().finite().min(0).max(100000),
+  notes: z.string().trim().max(1000).default("")
+    .refine((value) => !value || !hasPlaceholderValue(value), "Notes must be real ledger/payment context, not placeholders."),
+  paymentEvidence: z.string().trim().min(8).max(1000)
+    .refine((value) => !hasPlaceholderValue(value), "Payment evidence must be real collected cash proof, not a placeholder."),
+  approvedAction: z.string().trim().min(8).max(500)
+    .default("Approve exact paid ledger entry after Robert verified payment evidence.")
+    .refine((value) => !hasPlaceholderValue(value), "Approved action must be real approval context, not a placeholder."),
+}).strict();
+
+export const revenueWebsiteCreationApprovalPendingActionSchema = z.object({
+  outreachDraftId: z.string().trim().min(2).max(180)
+    .refine((value) => !hasPlaceholderValue(value), "Outreach draft id must be real, not a placeholder."),
+  approvedAction: z.string().trim().min(8).max(500)
+    .default("Approve paid website creation handoff after scope, deposit, and public data review.")
+    .refine((value) => !hasPlaceholderValue(value), "Approved action must be real approval context, not a placeholder."),
+  notes: z.string().trim().min(8).max(1000)
+    .refine((value) => !hasPlaceholderValue(value), "Notes must be real proof/context, not a placeholder."),
+  robertApprovedBuild: z.boolean().default(false),
+  clientApprovedScope: z.boolean().default(false),
+  depositPaid: z.boolean().default(false),
+  publicDataVerified: z.boolean().default(false),
+  launchTargetDays: z.number().int().min(1).max(60).default(7),
+}).strict().superRefine((input, ctx) => {
+  if (!input.robertApprovedBuild) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["robertApprovedBuild"], message: "Robert build approval is required." });
+  }
+  if (!input.clientApprovedScope) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["clientApprovedScope"], message: "Client-approved scope is required." });
+  }
+  if (!input.depositPaid) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["depositPaid"], message: "Deposit proof is required." });
+  }
+  if (!input.publicDataVerified) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicDataVerified"], message: "Public data verification is required." });
   }
 });

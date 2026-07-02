@@ -158,14 +158,16 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.setupCommands.every((item) => item.status === "blocked"), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/ledger-entry-approval-pending-action")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("/api/revenue-engine/website-creation-approval-pending-action")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), false);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:ledger-approval-decision")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-creation-approval-decision")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:ledger-approval-decision")), false);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:website-creation-approval-decision")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real evidenceUrl")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("real HTTPS Stripe paymentLink")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_PAYMENT_EVIDENCE")), true);
-  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("real paymentEvidence")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("real scope/deposit/public-data notes")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--charge-client")), false);
   assert.equal(packet.readiness.canAutonomousSearchBusinesses, true);
@@ -204,28 +206,15 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.ok(websiteCreationApprovalCommand);
   assert.match(contactApprovalCommand.command, /contact-path-approval-pending-action/);
   assert.match(paymentApprovalCommand.command, /payment-path-approval-pending-action/);
+  assert.match(ledgerApprovalCommand.command, /ledger-entry-approval-pending-action/);
+  assert.match(websiteCreationApprovalCommand.command, /website-creation-approval-pending-action/);
   assert.doesNotMatch(contactApprovalCommand.command, /revenue:contact-path-approval-decision/);
   assert.doesNotMatch(paymentApprovalCommand.command, /revenue:payment-path-approval-decision/);
+  assert.doesNotMatch(ledgerApprovalCommand.command, /revenue:ledger-approval-decision/);
+  assert.doesNotMatch(websiteCreationApprovalCommand.command, /revenue:website-creation-approval-decision/);
+  assert.match(ledgerApprovalCommand.command, /real paymentEvidence/);
+  assert.match(websiteCreationApprovalCommand.command, /real scope\/deposit\/public-data notes/);
 
-  const baseEnv = {
-    ...process.env,
-    REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
-  };
-  const ledgerResult = spawnSync("sh", ["-c", ledgerApprovalCommand.command], {
-    cwd: process.cwd(),
-    env: baseEnv,
-    encoding: "utf8",
-  });
-  const websiteResult = spawnSync("sh", ["-c", websiteCreationApprovalCommand.command], {
-    cwd: process.cwd(),
-    env: baseEnv,
-    encoding: "utf8",
-  });
-
-  assert.equal(ledgerResult.status, 1, `${ledgerResult.stdout}\n${ledgerResult.stderr}`);
-  assert.match(`${ledgerResult.stdout}\n${ledgerResult.stderr}`, /placeholder/);
-  assert.equal(websiteResult.status, 1, `${websiteResult.stdout}\n${websiteResult.stderr}`);
-  assert.match(`${websiteResult.stdout}\n${websiteResult.stderr}`, /placeholder/);
   const persistedDecisions = existsSync(testApprovalDecisionsPath)
     ? JSON.parse(readFileSync(testApprovalDecisionsPath, "utf8"))
     : [];
@@ -279,7 +268,8 @@ test("first-money command center keeps ledger gate visible when payment path is 
   assert.equal(setupIds.includes("payment-path-approval"), false);
   assert.equal(setupIds.includes("payment-path-readiness"), false);
   assert.equal(setupIds.includes("ledger-entry-approval"), true);
-  assert.match(packet.setupCommands.find((item) => item.id === "ledger-entry-approval")?.command || "", /revenue:ledger-approval-decision/);
+  assert.match(packet.setupCommands.find((item) => item.id === "ledger-entry-approval")?.command || "", /\/api\/revenue-engine\/ledger-entry-approval-pending-action/);
+  assert.doesNotMatch(packet.setupCommands.find((item) => item.id === "ledger-entry-approval")?.command || "", /revenue:ledger-approval-decision/);
 });
 
 test("first-money activation checklist does not mark paid build ready from publish gates alone", () => {
@@ -1353,33 +1343,23 @@ test("first-money command center includes website handoff command for approved d
   assert.equal(packet.counts.approvedOutreachDrafts, 1);
   assert.equal(websiteCommand?.status, "blocked");
   assert.match(websiteCommand?.command || "", new RegExp(draft.id));
-  assert.match(websiteCommand?.command || "", /revenue:website-creation-approval-decision/);
-  assert.match(websiteCommand?.command || "", /--approved-action=Approve paid website creation handoff after client scope and deposit proof\./);
-  assert.match(websiteCommand?.command || "", /--notes=REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF/);
-  assert.match(websiteCommand?.command || "", /--launch-target-days=7/);
-  assert.match(websiteCommand?.command || "", /--confirmed-by-robert/);
+  assert.match(websiteCommand?.command || "", /\/api\/revenue-engine\/website-creation-approval-pending-action/);
+  assert.match(websiteCommand?.command || "", /real scope\/deposit\/public-data notes/);
+  assert.match(websiteCommand?.command || "", /launchTargetDays=7/);
+  assert.doesNotMatch(websiteCommand?.command || "", /revenue:website-creation-approval-decision/);
+  assert.doesNotMatch(websiteCommand?.command || "", /--confirmed-by-robert/);
   assert.doesNotMatch(websiteCommand?.command || "", /--approval-decision-id=/);
 });
 
-test("first-money website handoff command cannot persist placeholder website approval", () => {
+test("first-money website handoff queues Trust Center approval instead of direct placeholder approval", () => {
   createDraft("approved");
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
   const websiteCommand = packet.queue.find((item) => item.id === "website-handoff");
   assert.ok(websiteCommand);
 
-  const result = spawnSync("sh", ["-c", websiteCommand.command], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      REVENUE_ENGINE_LEADS_PATH: testLeadsPath,
-      REVENUE_ENGINE_OUTREACH_PATH: testOutreachPath,
-      REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
-    },
-    encoding: "utf8",
-  });
-
-  assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
-  assert.match(`${result.stdout}\n${result.stderr}`, /placeholder/);
+  assert.match(websiteCommand.command, /website-creation-approval-pending-action/);
+  assert.doesNotMatch(websiteCommand.command, /revenue:website-creation-approval-decision/);
+  assert.doesNotMatch(websiteCommand.command, /REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF/);
 });
 
 test("first-money command center script reads persisted outreach drafts", () => {

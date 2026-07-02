@@ -40,7 +40,9 @@ import { answerRevenueAutomationIntake, automationQuoteSchema, buildAutomationQu
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
 import {
   revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
 } from "./revenue-first-money-approval-pending-action";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
@@ -5072,6 +5074,156 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to queue revenue payment path approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/ledger-entry-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueLedgerEntryApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_ledger_entry_approval",
+        resourceType: "revenue_ledger_entry",
+        resourceId: `${input.kind}:${input.clientName}`,
+        title: `Approve first-money ledger entry: ${input.clientName}`,
+        description: [
+          "Approve the exact first-money ledger entry after Robert verifies collected cash evidence.",
+          "This pending action records approval only; it does not record the ledger entry, charge clients, send outreach, edit environment files, store secrets or deploy.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_ledger_entry",
+        },
+        proposedChanges: {
+          kind: input.kind,
+          clientName: input.clientName,
+          amountUsd: input.amountUsd,
+          cashCollectedUsd: input.cashCollectedUsd,
+          estimatedInternalCostUsd: input.estimatedInternalCostUsd,
+          paymentEvidence: input.paymentEvidence,
+          afterApproval: "Run revenue:ledger-record with the returned approvalDecisionId and exact typed ledger confirmation.",
+          safety: {
+            persistsApprovalDecision: true,
+            recordsLedgerEntry: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+            deploys: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "ledger_entry",
+          recordsLedgerEntry: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          recordsLedgerEntry: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+          deploys: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue ledger entry approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-creation-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueWebsiteCreationApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_website_creation_approval",
+        resourceType: "revenue_website_creation",
+        resourceId: input.outreachDraftId,
+        title: `Approve first-money website creation: ${input.outreachDraftId}`,
+        description: [
+          "Approve the exact first-money website creation handoff after Robert verifies scope, deposit, and public data evidence.",
+          "This pending action records approval only; it does not write files, deploy, publish previews, charge clients, send outreach, edit environment files or store secrets.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_website_creation",
+        },
+        proposedChanges: {
+          outreachDraftId: input.outreachDraftId,
+          launchTargetDays: input.launchTargetDays,
+          notes: input.notes,
+          afterApproval: "Run revenue:website-creation-packet with the returned approvalDecisionId; the packet still cannot write or deploy.",
+          safety: {
+            persistsApprovalDecision: true,
+            writesFiles: false,
+            deploys: false,
+            publishesPreview: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "website_creation",
+          writesFiles: false,
+          deploys: false,
+          publishesPreview: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          writesFiles: false,
+          deploys: false,
+          publishesPreview: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue website creation approval" });
     }
   });
 

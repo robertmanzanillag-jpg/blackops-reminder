@@ -206,7 +206,8 @@ test("dry run withholds paid website approval flags from generated packets", () 
   });
   const markdown = readFileSync(result.outputPath, "utf8");
 
-  assert.match(markdown, /revenue:website-creation-approval-decision/);
+  assert.match(markdown, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
+  assert.doesNotMatch(markdown, /revenue:website-creation-approval-decision/);
   assert.doesNotMatch(markdown, /--robert-approved-build/);
   assert.doesNotMatch(markdown, /--client-approved-scope/);
   assert.doesNotMatch(markdown, /--deposit-paid/);

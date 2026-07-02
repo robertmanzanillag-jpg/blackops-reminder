@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T20:12:15.760Z",
+  "generatedAt": "2026-07-02T20:26:07.494Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -141,18 +141,11 @@
   "totals": {
     "filesVisible": 494,
     "filesIndexed": 426,
-    "imports": 1603,
-    "routes": 464,
-    "symbols": 8330
+    "imports": 1606,
+    "routes": 468,
+    "symbols": 8341
   },
   "directories": {
-    "server": {
-      "files": 132,
-      "indexed": 128,
-      "kinds": {
-        "server": 132
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -222,6 +215,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 132,
+      "indexed": 128,
+      "kinds": {
+        "server": 132
       }
     },
     "server/replit_integrations": {
@@ -10636,7 +10636,9 @@
       ],
       "exports": [
         "revenueContactPathApprovalPendingActionSchema",
-        "revenuePaymentPathApprovalPendingActionSchema"
+        "revenueLedgerEntryApprovalPendingActionSchema",
+        "revenuePaymentPathApprovalPendingActionSchema",
+        "revenueWebsiteCreationApprovalPendingActionSchema"
       ],
       "symbols": [
         "hasPlaceholderValue",
@@ -10645,7 +10647,10 @@
         "revenueContactPathApprovalPendingActionSchema",
         "revenueEvidenceNoteSchema",
         "revenueEvidenceUrlSchema",
+        "revenueLedgerEntryApprovalPendingActionSchema",
         "revenuePaymentPathApprovalPendingActionSchema",
+        "revenueWebsiteCreationApprovalPendingActionSchema",
+        "trimmed",
         "url"
       ],
       "routes": []
@@ -12543,6 +12548,7 @@
         "/api/revenue-engine/lead-radar",
         "/api/revenue-engine/leads",
         "/api/revenue-engine/ledger",
+        "/api/revenue-engine/ledger-entry-approval-pending-action",
         "/api/revenue-engine/mockup",
         "/api/revenue-engine/mockup-preview",
         "/api/revenue-engine/mockup-previews/:slug",
@@ -12570,6 +12576,7 @@
         "/api/revenue-engine/sales-autopilot",
         "/api/revenue-engine/scout-dispatch",
         "/api/revenue-engine/scouting-mission",
+        "/api/revenue-engine/website-creation-approval-pending-action",
         "/api/revenue-engine/website-creation-packet",
         "/api/revenue-engine/website-publish-readiness-packet",
         "/api/revenue-engine/website-scaffold",
@@ -13279,10 +13286,13 @@
         "./radio-video-edit-agent",
         "./revenue-contact-path-approval-decision-cli",
         "./revenue-engine",
+        "./revenue-first-money-approval-pending-action",
         "./revenue-first-money-command-center-cli",
         "./revenue-first-money-route-guards",
+        "./revenue-ledger-approval-decision-cli",
         "./revenue-payment-path-approval-decision-cli",
         "./revenue-public-candidate-approval-decision-cli",
+        "./revenue-website-creation-approval-decision-cli",
         "./storage",
         "./trust-policy",
         "@shared/schema"
@@ -13292,8 +13302,10 @@
         "executeRevenueFirstMoneyCandidateApprovalFromPendingInput",
         "executeRevenueFirstMoneyCandidateReviewFromPendingInput",
         "executeRevenueFirstMoneyContactPathApprovalFromPendingInput",
+        "executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput",
         "executeRevenueFirstMoneyMoneySprintRunFromPendingInput",
-        "executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput"
+        "executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput",
+        "executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput"
       ],
       "symbols": [
         "JsonRecord",
@@ -13313,8 +13325,10 @@
         "executeRevenueFirstMoneyCandidateApprovalFromPendingInput",
         "executeRevenueFirstMoneyCandidateReviewFromPendingInput",
         "executeRevenueFirstMoneyContactPathApprovalFromPendingInput",
+        "executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput",
         "executeRevenueFirstMoneyMoneySprintRunFromPendingInput",
         "executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput",
+        "executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput",
         "existing",
         "existingArtifacts",
         "expectedApproval",
@@ -13327,6 +13341,8 @@
         "niche",
         "numberInput",
         "offerFocus",
+        "payload",
+        "pendingActionPayloadInput",
         "radioDriveVideoResult",
         "radioYoutubeResult",
         "requestedReview",
@@ -15200,6 +15216,8 @@
         "html",
         "leadResult",
         "ledgerInput",
+        "ledgerResult",
+        "ledgerRouteSource",
         "maliciousArea",
         "maliciousNiche",
         "missing",
@@ -15268,13 +15286,18 @@
         "updated",
         "validContact",
         "validInput",
+        "validLedger",
         "validPayment",
+        "validWebsiteCreation",
+        "websiteResult",
+        "websiteRouteSource",
         "wrong",
         "wrongSource",
         "wrongTarget"
       ],
       "routes": [
         "/api/revenue-engine/contact-path-approval-pending-action",
+        "/api/revenue-engine/ledger-entry-approval-pending-action",
         "/api/revenue-engine/payment-path-approval-pending-action",
         "/api/revenue-engine/plan",
         "/api/revenue-engine/public-lead-candidates/approval-decision",
@@ -15282,7 +15305,8 @@
         "/api/revenue-engine/public-lead-candidates/review-packet",
         "/api/revenue-engine/public-lead-candidates/review-packet-pending-action",
         "/api/revenue-engine/public-lead-candidates/run-money-sprint",
-        "/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action"
+        "/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action",
+        "/api/revenue-engine/website-creation-approval-pending-action"
       ]
     },
     {
@@ -15314,7 +15338,6 @@
         "firstApproval",
         "firstCandidateId",
         "ledgerApprovalCommand",
-        "ledgerResult",
         "manualCommand",
         "manualCommands",
         "originalEnv",
@@ -15346,8 +15369,7 @@
         "unverifiedCandidateId",
         "verificationCommand",
         "websiteCommand",
-        "websiteCreationApprovalCommand",
-        "websiteResult"
+        "websiteCreationApprovalCommand"
       ],
       "routes": []
     },

@@ -223,7 +223,11 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.safety.commercialGoLiveReady, false);
   assert.equal(packet.executionOrder.some((step) => step.includes("revenue:public-scout-execute")), true);
   assert.equal(packet.executionOrder.some((step) => step.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
+  assert.equal(packet.executionOrder.some((step) => step.includes("/api/revenue-engine/ledger-entry-approval-pending-action")), true);
+  assert.equal(packet.executionOrder.some((step) => step.includes("/api/revenue-engine/website-creation-approval-pending-action")), true);
   assert.equal(packet.executionOrder.some((step) => step.includes("revenue:contact-path-approval-decision")), false);
+  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:ledger-approval-decision")), false);
+  assert.equal(packet.executionOrder.some((step) => step.includes("revenue:website-creation-approval-decision")), false);
   assert.equal(packet.operatorSetupPacket.status, "blocked");
   assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "production-env");
   assert.equal(packet.operatorSetupPacket.safety.editsEnvironment, false);
@@ -233,7 +237,11 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-readiness-packet")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/contact-path-approval-pending-action")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/ledger-entry-approval-pending-action")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/website-creation-approval-pending-action")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-approval-decision")), false);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:ledger-approval-decision")), false);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:website-creation-approval-decision")), false);
   assert.equal(packet.requiredEnvironment.some((group) => group.names.includes("DATABASE_URL")), true);
   assert.equal(
     packet.requiredEnvironment.some((group) => group.names.includes("RESEND_API_KEY + REVENUE_ENGINE_FROM_EMAIL/RESEND_FROM_EMAIL")),
@@ -273,7 +281,7 @@ test("keeps first-sprint readiness distinct from commercial go-live", () => {
   assert.equal(packet.status, "ready_for_first_money_sprint");
   assert.equal(packet.readiness.ready, true);
   assert.equal(packet.operatorSetupPacket.status, "blocked");
-  assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "website-publish");
+  assert.equal(packet.operatorSetupPacket.nextExternalStep?.id, "ledger-entry");
   assert.equal(packet.readiness.canBuildWebsites, false);
   assert.equal(packet.safety.commercialGoLiveReady, false);
 });

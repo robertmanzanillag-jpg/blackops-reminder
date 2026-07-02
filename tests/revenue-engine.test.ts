@@ -102,10 +102,14 @@ import {
   executeRevenueFirstMoneyMoneySprintRunFromPendingInput,
   executeRevenueFirstMoneyContactPathApprovalFromPendingInput,
   executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput,
+  executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput,
+  executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput,
 } from "../server/trust-executor";
 import {
   revenueContactPathApprovalPendingActionSchema,
+  revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
+  revenueWebsiteCreationApprovalPendingActionSchema,
 } from "../server/revenue-first-money-approval-pending-action";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
@@ -2535,6 +2539,43 @@ test("routes wire first-money contact and payment approvals through Trust Center
   assert.match(trustPolicySource, /"revenue\.first_money_payment_path_approval": "critical"/);
 });
 
+test("routes wire first-money ledger and website creation approvals through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const ledgerRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/ledger-entry-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/website-creation-approval-pending-action"'),
+  );
+  const websiteRouteSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/website-creation-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(ledgerRouteSource, /revenueLedgerEntryApprovalPendingActionSchema/);
+  assert.match(ledgerRouteSource, /createPendingActionForApproval/);
+  assert.match(ledgerRouteSource, /actionType: "revenue\.first_money_ledger_entry_approval"/);
+  assert.match(ledgerRouteSource, /resourceType: "revenue_ledger_entry"/);
+  assert.match(ledgerRouteSource, /requestedReview: "approve_first_money_ledger_entry"/);
+  assert.match(ledgerRouteSource, /recordsLedgerEntry: false/);
+  assert.match(ledgerRouteSource, /chargesClients: false/);
+  assert.match(ledgerRouteSource, /sendsOutreach: false/);
+  assert.doesNotMatch(ledgerRouteSource, /buildRevenueLedgerApprovalDecisionFromCli/);
+
+  assert.match(websiteRouteSource, /revenueWebsiteCreationApprovalPendingActionSchema/);
+  assert.match(websiteRouteSource, /createPendingActionForApproval/);
+  assert.match(websiteRouteSource, /actionType: "revenue\.first_money_website_creation_approval"/);
+  assert.match(websiteRouteSource, /resourceType: "revenue_website_creation"/);
+  assert.match(websiteRouteSource, /requestedReview: "approve_first_money_website_creation"/);
+  assert.match(websiteRouteSource, /writesFiles: false/);
+  assert.match(websiteRouteSource, /deploys: false/);
+  assert.match(websiteRouteSource, /publishesPreview: false/);
+  assert.match(websiteRouteSource, /chargesClients: false/);
+  assert.doesNotMatch(websiteRouteSource, /buildRevenueWebsiteCreationApprovalDecisionFromCli/);
+
+  assert.match(trustPolicySource, /"revenue\.first_money_ledger_entry_approval": "critical"/);
+  assert.match(trustPolicySource, /"revenue\.first_money_website_creation_approval": "critical"/);
+});
+
 test("first-money contact and payment approval pending action schemas reject unreviewable payloads before queueing", () => {
   const validContact = revenueContactPathApprovalPendingActionSchema.parse({
     contactMode: "manual",
@@ -2606,6 +2647,65 @@ test("first-money contact and payment approval pending action schemas reject unr
   }).success, false);
 });
 
+test("first-money ledger and website approval pending action schemas reject unreviewable payloads before queueing", () => {
+  const validLedger = revenueLedgerEntryApprovalPendingActionSchema.parse({
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    notes: "Robert verified the deposit receipt.",
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  });
+  assert.equal(validLedger.kind, "website_sale");
+  assert.equal(validLedger.approvedAction, "Approve exact paid ledger entry after Robert verified payment evidence.");
+
+  assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse({
+    kind: "website_sale",
+    clientName: "REPLACE_WITH_CLIENT_NAME",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  }).success, false);
+  assert.equal(revenueLedgerEntryApprovalPendingActionSchema.safeParse({
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 0,
+    estimatedInternalCostUsd: 35,
+    paymentEvidence: "PAYMENT_EVIDENCE",
+  }).success, false);
+
+  const validWebsiteCreation = revenueWebsiteCreationApprovalPendingActionSchema.parse({
+    outreachDraftId: "draft-paid-build-cafe",
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+  });
+  assert.equal(validWebsiteCreation.launchTargetDays, 7);
+  assert.equal(validWebsiteCreation.approvedAction, "Approve paid website creation handoff after scope, deposit, and public data review.");
+
+  assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "OUTREACH_ID",
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+  }).success, false);
+  assert.equal(revenueWebsiteCreationApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    notes: "REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: false,
+    publicDataVerified: true,
+  }).success, false);
+});
+
 test("Trust Center executor records first-money contact and payment approvals only", () => {
   setRevenueUserDataScope("trust-executor-first-money-setup-test");
   resetRevenueApprovalDecisionsForTests();
@@ -2653,7 +2753,7 @@ test("Trust Center executor records first-money contact and payment approvals on
       evidenceUrl: "https://evidence.example.com/payment-path",
       evidenceNote: "Stripe payment path smoke tested by Robert.",
     }, "trust-executor-first-money-setup-test"),
-    /Revenue payment path approval blocked/,
+    /Payment link must be an HTTPS Stripe payment/,
   );
 
   const paymentResult = executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput({
@@ -2676,6 +2776,126 @@ test("Trust Center executor records first-money contact and payment approvals on
   assert.equal(paymentResult.safety.editsEnvironment, false);
   assert.equal(paymentResult.safety.storesSecrets, false);
   assert.equal(paymentResult.safety.deploys, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
+});
+
+test("Trust Center executor records first-money ledger and website creation approvals only", () => {
+  setRevenueUserDataScope("trust-executor-first-money-delivery-test");
+  resetRevenueLeadsForTests();
+  resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
+  resetRevenueLedgerForTests();
+
+  assert.throws(
+    () => executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+      requestedReview: "approve_first_money_ledger_entry",
+      kind: "website_sale",
+      clientName: "REPLACE_WITH_CLIENT_NAME",
+      amountUsd: 3500,
+      cashCollectedUsd: 1500,
+      estimatedInternalCostUsd: 35,
+      paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+    }, "trust-executor-first-money-delivery-test"),
+    /Client name must be real/,
+  );
+  assert.throws(
+    () => executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+      requestedReview: "approve_first_money_ledger_entry",
+      kind: "not_a_sale_kind",
+      clientName: "Paid Build Cafe",
+      amountUsd: 3500,
+      cashCollectedUsd: 1500,
+      estimatedInternalCostUsd: 35,
+      paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+    }, "trust-executor-first-money-delivery-test"),
+    /Invalid enum value|invalid/i,
+  );
+
+  const ledgerResult = executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput({
+    requestedReview: "approve_first_money_ledger_entry",
+    kind: "website_sale",
+    clientName: "Paid Build Cafe",
+    amountUsd: 3500,
+    cashCollectedUsd: 1500,
+    estimatedInternalCostUsd: 35,
+    notes: "Robert verified deposit receipt.",
+    paymentEvidence: "Stripe deposit receipt reviewed by Robert.",
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(ledgerResult.status, "recorded");
+  assert.equal(ledgerResult.decision?.targetType, "ledger_entry");
+  assert.equal(ledgerResult.safety.persistsApprovalDecision, true);
+  assert.equal(ledgerResult.safety.recordsLedgerEntry, false);
+  assert.equal(ledgerResult.safety.chargesClients, false);
+  assert.equal(ledgerResult.safety.sendsOutreach, false);
+  assert.equal(ledgerResult.safety.editsEnvironment, false);
+  assert.equal(ledgerResult.safety.storesSecrets, false);
+  assert.equal(ledgerResult.safety.deploys, false);
+  assert.equal(getRevenueEngineSnapshot().recentLedger.length, 0);
+
+  const leadResult = recordRevenueLead({
+    businessName: "Paid Build Cafe",
+    area: "Miami",
+    niche: "coffee shop",
+    websiteStatus: "no_website",
+    contactChannel: "email",
+    contactValue: "owner@paidbuild.example",
+    evidence: "Public listing has no website and visible menu/service photos.",
+    painPoint: "Needs online menu and catering lead capture.",
+    estimatedOfferUsd: 4700,
+    status: "mockup_ready",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@paidbuild.example",
+    contactName: "Owner",
+    businessName: "Paid Build Cafe",
+    sourceUrl: "https://example.com/paid-build-cafe",
+    businessSummary: "Paid Build Cafe has public evidence of no dedicated website.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 1200,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_creation",
+      outreachDraftId: draftResult.draft.id,
+      notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+      robertApprovedBuild: true,
+      clientApprovedScope: true,
+      depositPaid: true,
+      publicDataVerified: true,
+      launchTargetDays: 0,
+    }, "trust-executor-first-money-delivery-test"),
+    /Number must be greater than or equal to 1|launchTargetDays|invalid/i,
+  );
+
+  const websiteResult = executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput({
+    requestedReview: "approve_first_money_website_creation",
+    outreachDraftId: draftResult.draft.id,
+    notes: "Client scope, deposit proof, and public data reviewed by Robert.",
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    launchTargetDays: 7,
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(websiteResult.status, "recorded");
+  assert.equal(websiteResult.decision?.targetType, "delivery_workspace");
+  assert.equal(websiteResult.safety.persistsApprovalDecision, true);
+  assert.equal(websiteResult.safety.writesFiles, false);
+  assert.equal(websiteResult.safety.deploys, false);
+  assert.equal(websiteResult.safety.publishesPreview, false);
+  assert.equal(websiteResult.safety.chargesClients, false);
+  assert.equal(websiteResult.safety.sendsOutreach, false);
+  assert.equal(websiteResult.safety.editsEnvironment, false);
+  assert.equal(websiteResult.safety.storesSecrets, false);
   assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
 });
 

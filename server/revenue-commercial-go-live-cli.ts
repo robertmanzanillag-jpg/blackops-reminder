@@ -89,6 +89,8 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
     "Queue /api/revenue-engine/contact-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:contact-path-readiness-packet before contacting any business.",
     "Queue /api/revenue-engine/payment-path-approval-pending-action in Trust Center, execute it after Robert approval, then run revenue:payment-path-readiness-packet before exposing a deposit link.",
     "Only after payment/contact gates pass, draft outreach and proposals.",
+    "After a real deposit, queue /api/revenue-engine/ledger-entry-approval-pending-action in Trust Center, execute it after Robert approval, then record the ledger entry with exact typed confirmation.",
+    "Queue /api/revenue-engine/website-creation-approval-pending-action in Trust Center before preparing the paid website creation packet.",
     "Only after deposit, App QA, preview deploy and rollback evidence, publish client websites.",
   ];
   const rollbackNotes = [
@@ -133,6 +135,30 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
       ].join(" && "),
       evidence: "Use a Stripe/payment-link evidence URL and smoke/deposit note; do not paste API keys or customer payment details.",
       reason: "Deposits require an approved and verified payment path before any client is charged.",
+    },
+    {
+      id: "ledger-entry",
+      label: "Approve deposited ledger entry",
+      status: readiness.canBuildWebsites ? "ready" : "external",
+      owner: "Robert",
+      command: [
+        "Queue Trust Center action via /api/revenue-engine/ledger-entry-approval-pending-action with real clientName, amountUsd, cashCollectedUsd, estimatedInternalCostUsd, real paymentEvidence, and real ledger notes",
+        "npm run revenue:ledger-record -- --kind=website_sale --client-name=CLIENT_NAME --amount-usd=3500 --cash-collected-usd=1500 --estimated-internal-cost-usd=35 --notes='Payment verified' --approval-decision-id=APPROVAL_ID --confirm-ledger='RECORD website_sale CLIENT_NAME APPROVAL_ID'",
+      ].join(" && "),
+      evidence: "Use non-secret payment evidence proving collected cash; ledger record still requires exact typed confirmation.",
+      reason: "Cash should not enter the ledger from env flags or direct approval commands.",
+    },
+    {
+      id: "website-creation",
+      label: "Approve paid website creation",
+      status: readiness.canBuildWebsites ? "ready" : "external",
+      owner: "Robert",
+      command: [
+        "Queue Trust Center action via /api/revenue-engine/website-creation-approval-pending-action with real outreachDraftId, real scope/deposit/public-data notes, and all Robert/client/deposit/public-data flags",
+        "npm run revenue:website-creation-packet -- --outreach-draft-id=OUTREACH_ID --approval-decision-id=APPROVAL_ID --robert-approved-build --client-approved-scope --deposit-paid --public-data-verified --launch-target-days=7",
+      ].join(" && "),
+      evidence: "Approved/sent outreach draft, client-approved scope, deposit proof, and verified public business data.",
+      reason: "Website creation should be prepared only after an audited Trust Center approval and still cannot write files or deploy.",
     },
     {
       id: "website-publish",
