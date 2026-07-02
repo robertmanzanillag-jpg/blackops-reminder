@@ -2,14 +2,25 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
+  recordRevenueApprovalDecision,
   recordRevenuePublicScoutRun,
+  resetRevenueApprovalDecisionsForTests,
   resetRevenueLeadsForTests,
   resetRevenueOutreachForTests,
   resetRevenuePublicLeadCandidatesForTests,
+  setRevenueApprovalDecisionsPathForTests,
   setRevenueLeadsPathForTests,
   setRevenueOutreachPathForTests,
   setRevenuePublicLeadCandidatesPathForTests,
+  updateRevenuePublicLeadCandidateVerification,
 } from "../server/revenue-engine";
+import {
+  buildRevenuePublicCandidateApprovalDecisionFromCli,
+} from "../server/revenue-public-candidate-approval-decision-cli";
+import {
+  buildRevenuePublicCandidateApprovalTargetId,
+  buildRevenuePublicCandidateSnapshotHash,
+} from "../server/revenue-public-candidate-approval";
 import {
   buildRevenuePublicCandidateReviewInput,
   formatRevenuePublicCandidateReviewText,
@@ -21,15 +32,18 @@ import {
 const testPublicLeadCandidatesPath = "/tmp/revenue-public-candidate-review-cli-candidates-test.json";
 const testLeadsPath = "/tmp/revenue-public-candidate-review-cli-leads-test.json";
 const testOutreachPath = "/tmp/revenue-public-candidate-review-cli-outreach-test.json";
+const testApprovalDecisionsPath = "/tmp/revenue-public-candidate-review-cli-approval-decisions-test.json";
 
 setRevenuePublicLeadCandidatesPathForTests(testPublicLeadCandidatesPath);
 setRevenueLeadsPathForTests(testLeadsPath);
 setRevenueOutreachPathForTests(testOutreachPath);
+setRevenueApprovalDecisionsPathForTests(testApprovalDecisionsPath);
 
 test.afterEach(() => {
   resetRevenuePublicLeadCandidatesForTests();
   resetRevenueLeadsForTests();
   resetRevenueOutreachForTests();
+  resetRevenueApprovalDecisionsForTests();
 });
 
 test("parses public candidate review CLI options", () => {
@@ -50,6 +64,7 @@ test("parses public candidate review CLI options", () => {
   assert.deepEqual(parsed, {
     candidateIds: ["candidate-1", "candidate-2"],
     approvedByRobert: true,
+    approvalDecisionId: "",
     json: true,
     area: "Orlando",
     niche: "roofers",
@@ -61,6 +76,176 @@ test("parses public candidate review CLI options", () => {
     reviewerNote: "Robert approved preview batch",
   });
   assert.deepEqual(validateRevenuePublicCandidateReviewOptions(parsed), []);
+});
+
+function captureVerifiedReviewCandidate() {
+  const capture = recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    scoutRunId: "review-approval-decision",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Approval Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@approvalreviewcafe.biz",
+        sourceUrl: "https://public-directory.invalid/approval-review-cafe",
+        recipientEmail: "owner@approvalreviewcafe.biz",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+
+  return capture.recordedCandidates[0].candidate.id;
+}
+
+test("review input does not trust generic public candidate approval decisions", () => {
+  const decision = recordRevenueApprovalDecision({
+    targetId: "public-candidates:candidate-1",
+    targetType: "public_candidate",
+    decision: "approved",
+    approvedAction: "Approve verified public candidate review.",
+    maxSpendUsd: 0,
+    notes: "No external spend.",
+  }).decision;
+  const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
+    "--candidate-ids=candidate-1",
+    `--approval-decision-id=${decision.id}`,
+    "--area=Miami",
+    "--niche=coffee shop",
+  ]));
+
+  assert.equal(input.approvedByRobert, false);
+});
+
+test("review input does not trust generic decisions even when trusted fields are supplied", () => {
+  const candidateId = captureVerifiedReviewCandidate();
+  const targetId = buildRevenuePublicCandidateApprovalTargetId([candidateId]);
+  const decision = recordRevenueApprovalDecision({
+    targetId,
+    targetType: "public_candidate",
+    decision: "approved",
+    approvedAction: "Attempt to approve through generic endpoint.",
+    maxSpendUsd: 0,
+    notes: "Generic path should not be trusted.",
+    approvalSource: "public_candidate_approval_cli",
+    publicCandidateSnapshotHash: buildRevenuePublicCandidateSnapshotHash([
+      {
+        id: candidateId,
+        businessName: "Approval Review Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        contactChannel: "email",
+        contactValue: "owner@approvalreviewcafe.biz",
+        recipientEmail: "owner@approvalreviewcafe.biz",
+        sourceUrl: "https://public-directory.invalid/approval-review-cafe",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+      },
+    ]),
+  }).decision;
+  const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
+    `--candidate-ids=${candidateId}`,
+    `--approval-decision-id=${decision.id}`,
+  ]));
+
+  assert.equal(decision.approvalSource, "generic");
+  assert.equal(decision.publicCandidateSnapshotHash, "");
+  assert.equal(input.approvedByRobert, false);
+});
+
+test("builds review input from a CLI-recorded public candidate approval decision", () => {
+  const candidateId = captureVerifiedReviewCandidate();
+  const decision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve verified public candidate review.",
+    notes: "No external spend.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(decision);
+  const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
+    `--candidate-ids=${candidateId}`,
+    `--approval-decision-id=${decision.id}`,
+    "--area=Miami",
+    "--niche=coffee shop",
+  ]));
+
+  assert.equal(input.approvedByRobert, true);
+  assert.equal(input.maxPaidDataSpendUsd, 0);
+  assert.equal(input.writePreviewFiles, false);
+  assert.equal(input.requireRobertApprovalToContact, true);
+});
+
+test("review input rejects stale approval decisions after public candidate evidence changes", () => {
+  const candidateId = captureVerifiedReviewCandidate();
+  const decision = buildRevenuePublicCandidateApprovalDecisionFromCli({
+    candidateIds: [candidateId],
+    decision: "approved",
+    approvedAction: "Approve verified public candidate review.",
+    notes: "No external spend.",
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    confirmedByRobert: true,
+    json: false,
+  }).decision;
+  assert.ok(decision);
+
+  updateRevenuePublicLeadCandidateVerification({
+    candidateId,
+    contactChannel: "email",
+    contactValue: "changed@approvalreviewcafe.biz",
+    sourceUrl: "https://public-directory.invalid/approval-review-cafe-updated",
+    evidence: "Updated public listing has a different visible public owner email.",
+    notes: "Changed after approval.",
+    verifiedBy: "Robert",
+  });
+
+  const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
+    `--candidate-ids=${candidateId}`,
+    `--approval-decision-id=${decision.id}`,
+  ]));
+
+  assert.equal(input.approvedByRobert, false);
+});
+
+test("review input does not trust mismatched public candidate approval decisions", () => {
+  const decision = recordRevenueApprovalDecision({
+    targetId: "public-candidates:other-candidate",
+    targetType: "public_candidate",
+    decision: "approved",
+    approvedAction: "Approve a different candidate.",
+    maxSpendUsd: 0,
+    notes: "No external spend.",
+  }).decision;
+  const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
+    "--candidate-ids=candidate-1",
+    `--approval-decision-id=${decision.id}`,
+  ]));
+
+  assert.equal(input.approvedByRobert, false);
 });
 
 test("validates public candidate review CLI options", () => {

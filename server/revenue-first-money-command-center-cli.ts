@@ -109,16 +109,18 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
   const candidateReviewItem: CommandQueueItem | null = robertReviewReadyCandidates.length > 0 && firstReviewCandidate
     ? {
       id: "candidate-review",
-      label: "Ask Robert to approve verified public candidates",
-      command: npmRunText("revenue:public-candidate-review", [
+      label: "Record Robert approval for verified public candidates",
+      command: npmRunText("revenue:public-candidate-approval-decision", [
         `--candidate-ids=${reviewCandidateIds}`,
+        "--decision=approved",
+        "--approved-action=Approve first-money public candidate review.",
         `--area=${firstReviewCandidate.area}`,
         `--niche=${firstReviewCandidate.niche}`,
         "--offer-focus=websites",
-        "--approved-by-robert",
+        "--confirmed-by-robert",
       ]),
       status: "review",
-      reason: `${robertReviewReadyCandidates.length} verified public candidate(s) are ready for Robert approval before Money Sprint.`,
+      reason: `${robertReviewReadyCandidates.length} verified public candidate(s) need an auditable Robert approval decision before candidate review.`,
     }
     : null;
   const manualContactReviewItem: CommandQueueItem | null = manualContactPacket.manualContactCount > 0

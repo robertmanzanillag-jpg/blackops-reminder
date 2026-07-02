@@ -63,6 +63,7 @@ const approvalFlags = new Set([
   "--client-approved-scope",
   "--deposit-paid",
   "--public-data-verified",
+  "--confirmed-by-robert",
 ]);
 
 function redactApprovalFlags(command: string) {

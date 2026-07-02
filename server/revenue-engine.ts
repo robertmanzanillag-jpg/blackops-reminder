@@ -495,11 +495,13 @@ export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublic
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
-  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "manual"]),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "manual"]),
   decision: z.enum(["approved", "rejected", "needs_changes"]),
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli"]).default("generic"),
+  publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
 export type RevenueApprovalDecisionInput = z.infer<typeof revenueApprovalDecisionSchema>;
@@ -2383,9 +2385,16 @@ export function recordRevenueScoutingMission(input: RevenueScoutingMissionInput)
   };
 }
 
-export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInput) {
+function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInput, options: { allowTrustedPublicCandidateApproval: boolean }) {
   loadRevenueApprovalDecisions();
-  const parsed = revenueApprovalDecisionSchema.parse(input);
+  const rawParsed = revenueApprovalDecisionSchema.parse(input);
+  const parsed = options.allowTrustedPublicCandidateApproval
+    ? rawParsed
+    : {
+      ...rawParsed,
+      approvalSource: "generic" as const,
+      publicCandidateSnapshotHash: "",
+    };
   const snapshot = getRevenueEngineSnapshot();
   const spendBlocked = parsed.maxSpendUsd > 100 || (parsed.maxSpendUsd > 0 && snapshot.profitGuard.status !== "scale_carefully");
   const guardrail = {
@@ -2408,6 +2417,19 @@ export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInpu
     decision,
     snapshot: getRevenueEngineSnapshot(),
   };
+}
+
+export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInput) {
+  return recordRevenueApprovalDecisionInternal(input, { allowTrustedPublicCandidateApproval: false });
+}
+
+export function recordRevenueTrustedApprovalDecision(input: RevenueApprovalDecisionInput) {
+  return recordRevenueApprovalDecisionInternal(input, { allowTrustedPublicCandidateApproval: true });
+}
+
+export function listRevenueApprovalDecisions() {
+  loadRevenueApprovalDecisions();
+  return [...revenueApprovalDecisions];
 }
 
 function buildAutomationIntakeAnswerTemplate(questions: string[], missingAnswers: string[]) {

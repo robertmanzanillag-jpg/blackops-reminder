@@ -1,8 +1,18 @@
-import type { RevenueMoneySprintInput, RevenuePublicLeadCandidateReviewInput } from "./revenue-engine";
+import {
+  listRevenueApprovalDecisions,
+  listRevenuePublicLeadCandidates,
+  type RevenueMoneySprintInput,
+  type RevenuePublicLeadCandidateReviewInput,
+} from "./revenue-engine";
+import {
+  buildRevenuePublicCandidateApprovalTargetId,
+  buildRevenuePublicCandidateSnapshotHash,
+} from "./revenue-public-candidate-approval";
 
 export type RevenuePublicCandidateReviewCliOptions = {
   candidateIds: string[];
   approvedByRobert: boolean;
+  approvalDecisionId: string;
   json: boolean;
   area: string;
   niche: string;
@@ -32,6 +42,7 @@ export function parseRevenuePublicCandidateReviewArgs(argv: string[]): RevenuePu
   return {
     candidateIds,
     approvedByRobert: argv.includes("--approved-by-robert"),
+    approvalDecisionId: getValue("--approval-decision-id"),
     json: argv.includes("--json"),
     area: getValue("--area") || "Miami",
     niche: getValue("--niche") || "med spas",
@@ -42,6 +53,26 @@ export function parseRevenuePublicCandidateReviewArgs(argv: string[]): RevenuePu
     dailyContactLimit: numberValue("--daily-contact-limit", 0),
     reviewerNote: getValue("--note"),
   };
+}
+
+function hasMatchingPublicCandidateApprovalDecision(options: RevenuePublicCandidateReviewCliOptions) {
+  if (!options.approvalDecisionId) return false;
+  const expectedTargetId = buildRevenuePublicCandidateApprovalTargetId(options.candidateIds);
+  const allCandidates = listRevenuePublicLeadCandidates();
+  const selectedCandidates = options.candidateIds
+    .map((id) => allCandidates.find((candidate) => candidate.id === id))
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+  if (selectedCandidates.length !== options.candidateIds.length) return false;
+  const expectedSnapshotHash = buildRevenuePublicCandidateSnapshotHash(selectedCandidates);
+  return listRevenueApprovalDecisions().some((decision) =>
+    decision.id === options.approvalDecisionId
+    && decision.targetType === "public_candidate"
+    && decision.targetId === expectedTargetId
+    && decision.decision === "approved"
+    && decision.guardrail.status === "recorded"
+    && decision.approvalSource === "public_candidate_approval_cli"
+    && decision.publicCandidateSnapshotHash === expectedSnapshotHash,
+  );
 }
 
 export function validateRevenuePublicCandidateReviewOptions(options: RevenuePublicCandidateReviewCliOptions): string[] {
@@ -57,6 +88,7 @@ export function validateRevenuePublicCandidateReviewOptions(options: RevenuePubl
 }
 
 export function buildRevenuePublicCandidateReviewInput(options: RevenuePublicCandidateReviewCliOptions): RevenuePublicLeadCandidateReviewInput {
+  const approvedByRecordedDecision = hasMatchingPublicCandidateApprovalDecision(options);
   return {
     area: options.area,
     niche: options.niche,
@@ -69,7 +101,7 @@ export function buildRevenuePublicCandidateReviewInput(options: RevenuePublicCan
     requireRobertApprovalToContact: true,
     writePreviewFiles: false,
     candidateIds: options.candidateIds,
-    approvedByRobert: options.approvedByRobert,
+    approvedByRobert: options.approvedByRobert || approvedByRecordedDecision,
     reviewerNote: options.reviewerNote,
   };
 }

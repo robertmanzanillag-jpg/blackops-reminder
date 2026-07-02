@@ -159,11 +159,12 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.equal(packet.counts.verificationNeededPublicCandidates, 0);
   assert.equal(packet.counts.reviewablePublicCandidates, 1);
   assert.equal(reviewCommand?.status, "review");
-  assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
+  assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.match(reviewCommand?.command || "", /--area=Miami/);
   assert.match(reviewCommand?.command || "", /--niche=coffee shop/);
   assert.match(reviewCommand?.command || "", /--offer-focus=websites/);
-  assert.match(reviewCommand?.command || "", /--approved-by-robert/);
+  assert.match(reviewCommand?.command || "", /--decision=approved/);
+  assert.match(reviewCommand?.command || "", /--confirmed-by-robert/);
 });
 
 test("first-money command center routes verified manual-only candidates to Robert review", () => {
@@ -274,7 +275,7 @@ test("first-money command center keeps email-ready candidates ahead of manual-on
   assert.equal(packet.counts.reviewablePublicCandidates, 1);
   assert.equal(packet.counts.manualOnlyPublicCandidates, 1);
   assert.equal(packet.counts.verificationNeededPublicCandidates, 0);
-  assert.match(reviewCommand?.command || "", /revenue:public-candidate-review/);
+  assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.equal(manualCommand?.status, "review");
   assert.match(manualCommand?.command || "", /revenue:manual-contact-approval-packet/);
 });
