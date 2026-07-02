@@ -52,29 +52,93 @@ test("route scout covers Revenue Engine money flow clicks", () => {
 
   assert.ok(revenueRoute);
   assert.deepEqual(
-    ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"].every((click) => revenueRoute.expectedClicks.includes(click)),
+    [
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+    ].every((click) => revenueRoute.expectedClicks.includes(click)),
     true,
   );
-  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]);
+  assert.equal(revenueRoute.expectedClicks.includes("Aprobar batch"), false);
+  assert.equal(revenueRoute.expectedClicks.includes("Ejecutar interno"), false);
+  assert.deepEqual(revenueRoute.expectedControls, [
+    "First-money command center",
+    "Guardar candidato publico",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
+  ]);
 });
 
 test("visual click scout can detect missing expected Revenue Engine controls", () => {
   const body = [
     "Revenue Engine",
+    "First-money command center",
     "Guardar candidato publico",
     "Preview batch",
     "Money sprint",
     "Correr QA",
+    "Aprobar batch",
+    "Generar packet",
+    "Ejecutar interno",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
   ].join("\n");
 
   assert.deepEqual(
-    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"]),
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, [
+      "First-money command center",
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+      "Production DB and session",
+      "Approved contact path",
+      "Approved payment path",
+      "Paid website build gate",
+    ]),
     [],
   );
   assert.deepEqual(
     __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Missing button"]),
     ["Missing button"],
   );
+});
+
+test("visual route body evaluation fails when first-money controls are missing", () => {
+  const evaluation = __appQaAgentInternals.evaluateVisualRouteBody(
+    [
+      "Revenue Engine",
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+    ].join("\n"),
+    [
+      "First-money command center",
+      "Production DB and session",
+      "Approved contact path",
+      "Approved payment path",
+      "Paid website build gate",
+    ],
+  );
+
+  assert.equal(evaluation.status, "fail");
+  assert.deepEqual(evaluation.missingExpectedControls, [
+    "First-money command center",
+    "Production DB and session",
+    "Approved contact path",
+    "Approved payment path",
+    "Paid website build gate",
+  ]);
+  assert.equal(evaluation.notes.some((note) => note.includes("Controles esperados no visibles")), true);
 });
 
 test("improvement scout flags important production apps without health endpoints", () => {

@@ -221,7 +221,17 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
     path: "/revenue-engine",
     label: "Revenue Engine",
     expectedClicks: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
-    expectedControls: ["Guardar candidato publico", "Preview batch", "Money sprint", "Correr QA"],
+    expectedControls: [
+      "First-money command center",
+      "Guardar candidato publico",
+      "Preview batch",
+      "Money sprint",
+      "Correr QA",
+      "Production DB and session",
+      "Approved contact path",
+      "Approved payment path",
+      "Paid website build gate",
+    ],
     status: "pass",
     notes: [],
   },
@@ -871,6 +881,31 @@ function findMissingExpectedVisualControls(bodyText: string, expectedClicks: str
   return expectedClicks.filter((click) => !normalizedBody.includes(normalizeVisualText(click)));
 }
 
+function evaluateVisualRouteBody(bodyText: string, expectedControls: string[]) {
+  const notes: string[] = [];
+  let status: AppQaStatus = "pass";
+
+  if (isVisualAuthScreen(bodyText)) {
+    status = "fail";
+    notes.push("QA visual cayo en pantalla de login");
+  }
+  if (bodyText.length < 10) {
+    status = "fail";
+    notes.push("Pagina en blanco o casi vacia");
+  }
+  const missingExpectedClicks = findMissingExpectedVisualControls(bodyText, expectedControls);
+  if (missingExpectedClicks.length) {
+    status = "fail";
+    notes.push(`Controles esperados no visibles: ${missingExpectedClicks.join(", ")}`);
+  }
+
+  return {
+    status,
+    notes,
+    missingExpectedControls: missingExpectedClicks,
+  };
+}
+
 function isVisualAuthScreen(bodyText: string): boolean {
   const normalized = normalizeVisualText(bodyText);
   return normalized.includes("blackops ceo")
@@ -1216,22 +1251,14 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
           status = "fail";
           notes.push("No se pudo sembrar auth local para QA visual");
         }
-        if (isVisualAuthScreen(bodyText)) {
+        const bodyEvaluation = evaluateVisualRouteBody(bodyText, route.expectedControls || []);
+        if (bodyEvaluation.status === "fail") {
           status = "fail";
-          notes.push("QA visual cayo en pantalla de login");
-        }
-        if (bodyText.length < 10) {
-          status = "fail";
-          notes.push("Pagina en blanco o casi vacia");
+          notes.push(...bodyEvaluation.notes);
         }
         if (consoleErrors.length) {
           status = "fail";
           notes.push(`${consoleErrors.length} errores de consola`);
-        }
-        const missingExpectedClicks = findMissingExpectedVisualControls(bodyText, route.expectedControls || []);
-        if (missingExpectedClicks.length) {
-          status = "fail";
-          notes.push(`Controles esperados no visibles: ${missingExpectedClicks.join(", ")}`);
         }
 
         const links = page.locator('a[href^="/"]');
@@ -1836,6 +1863,7 @@ export const __appQaAgentInternals = {
   emptyBugPatrolReport,
   formatDailyDigest,
   formatTelegramReport,
+  evaluateVisualRouteBody,
   findMissingExpectedVisualControls,
   isBugPatrolCandidate,
   isLikelyGithubAppRepo,
