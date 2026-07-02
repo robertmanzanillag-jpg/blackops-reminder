@@ -233,6 +233,39 @@ test("first-money setup gate templates cannot persist placeholder approvals", ()
   assert.deepEqual(persistedDecisions, []);
 });
 
+test("first-money setup readiness templates cannot pass placeholder evidence", () => {
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const contactReadinessCommand = packet.setupCommands.find((item) => item.id === "contact-path-readiness");
+  const paymentReadinessCommand = packet.setupCommands.find((item) => item.id === "payment-path-readiness");
+  assert.ok(contactReadinessCommand);
+  assert.ok(paymentReadinessCommand);
+
+  const baseEnv = {
+    ...process.env,
+    REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
+  };
+  const contactResult = spawnSync("sh", ["-c", contactReadinessCommand.command], {
+    cwd: process.cwd(),
+    env: {
+      ...baseEnv,
+      REVENUE_ENGINE_MANUAL_CONTACT_APPROVED: "true",
+    },
+    encoding: "utf8",
+  });
+  const paymentResult = spawnSync("sh", ["-c", paymentReadinessCommand.command], {
+    cwd: process.cwd(),
+    env: baseEnv,
+    encoding: "utf8",
+  });
+
+  assert.equal(contactResult.status, 1, `${contactResult.stdout}\n${contactResult.stderr}`);
+  assert.match(contactResult.stderr, /--evidence-url must be real evidence/);
+  assert.match(contactResult.stderr, /--evidence-note must be real proof/);
+  assert.equal(paymentResult.status, 1, `${paymentResult.stdout}\n${paymentResult.stderr}`);
+  assert.match(paymentResult.stderr, /--evidence-url must be real evidence/);
+  assert.match(paymentResult.stderr, /--evidence-note must be real proof/);
+});
+
 test("first-money command center keeps ledger gate visible when payment path is ready", () => {
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
   process.env.SESSION_SECRET = "a-production-session-secret-32-chars";
