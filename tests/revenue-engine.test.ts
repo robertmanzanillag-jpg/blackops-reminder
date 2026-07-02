@@ -2439,8 +2439,11 @@ test("routes wire public candidate approval endpoint to trusted builder", () => 
   assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(routesSource, /batchId: z\.string\(\)/);
   assert.match(routesSource, /confirmationText: z\.string\(\)/);
+  assert.match(routesSource, /const expectedApproval = commandCenter\.candidateApprovalQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
   assert.match(routesSource, /input\.confirmationText === expectedApproval\.confirmationText/);
   assert.match(routesSource, /confirmedByRobert: true/);
+  assert.match(routesSource, /Approval payload must match a queued first-money command-center batch/);
+  assert.doesNotMatch(routesSource, /const expectedApproval = commandCenter\.nextCandidateApproval/);
   assert.doesNotMatch(routesSource, /confirmedByRobert: z\.literal\(true\)/);
   assert.match(
     routesSource,
@@ -3337,10 +3340,14 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /candidateApprovalQueue/);
   assert.match(source, /first-money-candidate-approval-queue/);
   assert.match(source, /first-money-candidate-approval-queue-/);
+  assert.match(source, /selectedPublicCandidateBatch/);
+  assert.match(source, /button-select-public-candidate-batch-/);
+  assert.match(source, /setSelectedPublicCandidateBatchId\(batch\.id\)/);
+  assert.match(source, /const approval = selectedPublicCandidateBatch/);
   assert.match(source, /batch\.confirmationText/);
   assert.match(source, /Contact and source details stay hidden/);
   assert.match(source, /contacto oculto hasta aprobacion/);
-  assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== firstMoneyCommandCenter\.nextCandidateApproval\.confirmationText/);
+  assert.match(source, /publicCandidateApprovalConfirmation\.trim\(\) !== selectedPublicCandidateBatch\.confirmationText/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/review-packet/);
   assert.match(source, /button-generate-public-candidate-review-packet/);
   assert.match(source, /input-public-candidate-review-confirmation/);

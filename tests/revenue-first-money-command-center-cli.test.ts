@@ -510,6 +510,7 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.candidateApprovalQueue[0].candidateNames[0], "Summary Privacy Cafe");
   assert.equal(summary.candidateApprovalQueue[1].candidateNames[0], "Summary Privacy Salon");
   assert.equal(summary.candidateApprovalQueue[1].totalEstimatedOfferUsd, 2400);
+  assert.equal(summary.candidateApprovalQueue[1].confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-2");
   assert.equal(summary.candidateApprovalQueue[1].candidateCards[0]?.contactHiddenUntilApproval, true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "contact_path" && item.status === "blocked"), true);
   assert.equal(summary.moneyUnblockers.some((item) => item.id === "payment_path" && item.blockedActions.includes("charge clients")), true);

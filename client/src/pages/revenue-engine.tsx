@@ -1626,6 +1626,7 @@ export default function RevenueEnginePage() {
   const [agentApprovalToContact, setAgentApprovalToContact] = useState(false);
   const [agentApprovalToSpend, setAgentApprovalToSpend] = useState(false);
   const [agentApprovalToBuild, setAgentApprovalToBuild] = useState(false);
+  const [selectedPublicCandidateBatchId, setSelectedPublicCandidateBatchId] = useState("");
   const [publicCandidateApprovalConfirmation, setPublicCandidateApprovalConfirmation] = useState("");
   const [publicCandidateReviewConfirmation, setPublicCandidateReviewConfirmation] = useState("");
   const [publicCandidateRunConfirmation, setPublicCandidateRunConfirmation] = useState("");
@@ -1647,6 +1648,14 @@ export default function RevenueEnginePage() {
       return response.json();
     },
   });
+
+  const selectedPublicCandidateBatch = useMemo(() => {
+    const queue = firstMoneyCommandCenter?.candidateApprovalQueue || [];
+    return queue.find((batch) => batch.id === selectedPublicCandidateBatchId)
+      || firstMoneyCommandCenter?.nextCandidateApproval
+      || queue[0]
+      || null;
+  }, [firstMoneyCommandCenter, selectedPublicCandidateBatchId]);
 
   const planMutation = useMutation<RevenuePlan>({
     mutationFn: async () => {
@@ -2141,7 +2150,7 @@ export default function RevenueEnginePage() {
 
   const publicCandidateApprovalMutation = useMutation<PublicCandidateApprovalDecisionResult>({
     mutationFn: async () => {
-      const approval = firstMoneyCommandCenter?.nextCandidateApproval;
+      const approval = selectedPublicCandidateBatch;
       const response = await fetch("/api/revenue-engine/public-lead-candidates/approval-decision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2164,6 +2173,7 @@ export default function RevenueEnginePage() {
     onSuccess: () => {
       refetchSnapshot();
       refetchFirstMoneyCommandCenter();
+      setSelectedPublicCandidateBatchId("");
       setPublicCandidateApprovalConfirmation("");
     },
   });
@@ -2705,22 +2715,22 @@ export default function RevenueEnginePage() {
               <p className="mt-2 text-xs leading-5 text-zinc-500">
                 {firstMoneyCommandCenter?.nextCommand.reason || "El command center decide usando gates de contacto, pago y build."}
               </p>
-              {firstMoneyCommandCenter?.nextCandidateApproval && (
+              {selectedPublicCandidateBatch && (
                 <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-wide text-amber-200">Aprobacion Robert pendiente</p>
                       <p className="mt-1 text-sm font-medium text-white">
-                        {firstMoneyCommandCenter.nextCandidateApproval.count} candidato(s) · {firstMoneyCommandCenter.nextCandidateApproval.area} · {firstMoneyCommandCenter.nextCandidateApproval.niche}
+                        {selectedPublicCandidateBatch.count} candidato(s) · {selectedPublicCandidateBatch.area} · {selectedPublicCandidateBatch.niche}
                       </p>
                       <p className="mt-1 text-xs leading-5 text-zinc-400">
-                        {firstMoneyCommandCenter.nextCandidateApproval.candidateNames.join(", ")}
+                        {selectedPublicCandidateBatch.candidateNames.join(", ")}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
                         Seguro: no importa leads, no contacta, no cobra, no crea previews.
                       </p>
                       <div className="mt-3 grid gap-2" data-testid="first-money-candidate-approval-cards">
-                        {firstMoneyCommandCenter.nextCandidateApproval.candidateCards.map((candidate) => (
+                        {selectedPublicCandidateBatch.candidateCards.map((candidate) => (
                           <div key={candidate.id} className="rounded-md border border-amber-500/20 bg-black px-3 py-2 text-xs">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <span className="font-medium text-white">{candidate.businessName}</span>
@@ -2736,19 +2746,19 @@ export default function RevenueEnginePage() {
                       <Input
                         value={publicCandidateApprovalConfirmation}
                         onChange={(event) => setPublicCandidateApprovalConfirmation(event.target.value)}
-                        placeholder={firstMoneyCommandCenter.nextCandidateApproval.confirmationText}
+                        placeholder={selectedPublicCandidateBatch.confirmationText}
                         className="mt-3 max-w-xl border-amber-500/20 bg-black text-xs"
                         data-testid="input-public-candidate-approval-confirmation"
                       />
                       <p className="mt-1 text-xs text-zinc-500">
-                        Escribe exactamente: {firstMoneyCommandCenter.nextCandidateApproval.confirmationText}
+                        Escribe exactamente: {selectedPublicCandidateBatch.confirmationText}
                       </p>
                     </div>
                     <Button
                       type="button"
                       disabled={
                         publicCandidateApprovalMutation.isPending
-                        || publicCandidateApprovalConfirmation.trim() !== firstMoneyCommandCenter.nextCandidateApproval.confirmationText
+                        || publicCandidateApprovalConfirmation.trim() !== selectedPublicCandidateBatch.confirmationText
                       }
                       onClick={() => publicCandidateApprovalMutation.mutate()}
                       className="bg-amber-500 text-black hover:bg-amber-400"
@@ -2780,7 +2790,14 @@ export default function RevenueEnginePage() {
                   </div>
                   <div className="mt-2 space-y-2">
                     {firstMoneyCommandCenter.candidateApprovalQueue.map((batch) => (
-                      <div key={batch.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs" data-testid={`first-money-candidate-approval-queue-${batch.id}`}>
+                      <div
+                        key={batch.id}
+                        className={cn(
+                          "rounded-md border bg-black px-3 py-2 text-xs",
+                          selectedPublicCandidateBatch?.id === batch.id ? "border-amber-500/40" : "border-zinc-800",
+                        )}
+                        data-testid={`first-money-candidate-approval-queue-${batch.id}`}
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-medium text-white">{batch.area} · {batch.niche}</span>
                           <span className="text-cyan-100">${batch.totalEstimatedOfferUsd.toLocaleString("en-US")}</span>
@@ -2788,6 +2805,19 @@ export default function RevenueEnginePage() {
                         <p className="mt-1 text-zinc-400">{batch.count} candidate(s): {batch.candidateNames.join(", ")}</p>
                         <p className="mt-1 break-words text-zinc-500">Confirm: {batch.confirmationText}</p>
                         <p className="mt-1 text-zinc-600">Contact and source details stay hidden until the guarded approval action runs.</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 h-7 border-cyan-500/20 text-xs text-cyan-100 hover:bg-cyan-500/10"
+                          onClick={() => {
+                            setSelectedPublicCandidateBatchId(batch.id);
+                            setPublicCandidateApprovalConfirmation("");
+                          }}
+                          data-testid={`button-select-public-candidate-batch-${batch.id}`}
+                        >
+                          Select batch
+                        </Button>
                       </div>
                     ))}
                   </div>

@@ -4936,7 +4936,7 @@ export async function registerRoutes(
     try {
       const input = revenuePublicCandidateApprovalDecisionSchema.parse(req.body);
       const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
-      const expectedApproval = commandCenter.nextCandidateApproval;
+      const expectedApproval = commandCenter.candidateApprovalQueue.find((batch) => batch.id === input.batchId);
       const matchesActiveBatch = Boolean(
         expectedApproval
         && input.batchId === expectedApproval.id
@@ -4951,7 +4951,7 @@ export async function registerRoutes(
       if (!matchesActiveBatch) {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["Approval payload must match the active first-money command-center batch and exact confirmation text."],
+          blockers: ["Approval payload must match a queued first-money command-center batch and exact confirmation text."],
           commandCenter,
         });
       }
