@@ -30,6 +30,18 @@ type CandidateApprovalBatch = {
   niche: string;
   candidateIds: string[];
   candidateNames: string[];
+  candidates: Array<{
+    id: string;
+    businessName: string;
+    websiteStatus: string;
+    contactChannel: string;
+    contactValue: string;
+    recipientEmail: string;
+    sourceUrl: string;
+    evidence: string;
+    painPoint: string;
+    estimatedOfferUsd: number;
+  }>;
   count: number;
   approvalStatus: "needs_robert_approval" | "ready_for_candidate_review";
   approvalDecisionId: string;
@@ -91,16 +103,23 @@ function npmRunText(script: string, args: string[] = []) {
   return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
 }
 
+function displayText(value: string | number) {
+  return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 type CandidateApprovalInput = {
   id: string;
   businessName: string;
   area: string;
   niche: string;
+  websiteStatus: string;
   contactChannel: string;
   contactValue: string;
   recipientEmail: string;
   sourceUrl: string;
   evidence: string;
+  painPoint: string;
+  estimatedOfferUsd: number;
   verificationStatus: string;
   publicEvidenceVerified: boolean;
 };
@@ -155,6 +174,18 @@ function buildCandidateApprovalBatch(
     niche,
     candidateIds,
     candidateNames: candidates.map((candidate) => candidate.businessName),
+    candidates: candidates.map((candidate) => ({
+      id: candidate.id,
+      businessName: candidate.businessName,
+      websiteStatus: candidate.websiteStatus,
+      contactChannel: candidate.contactChannel,
+      contactValue: candidate.contactValue,
+      recipientEmail: candidate.recipientEmail,
+      sourceUrl: candidate.sourceUrl,
+      evidence: candidate.evidence,
+      painPoint: candidate.painPoint,
+      estimatedOfferUsd: candidate.estimatedOfferUsd,
+    })),
     count: candidates.length,
     approvalStatus,
     approvalDecisionId: matchingApprovalDecision?.id || "",
@@ -362,8 +393,8 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
   return [
     `Revenue first-money command center: ${packet.status}`,
     `Mode: ${packet.mode}`,
-    `Next command: ${packet.nextCommand.command}`,
-    `Next reason: ${packet.nextCommand.reason}`,
+    `Next command: ${displayText(packet.nextCommand.command)}`,
+    `Next reason: ${displayText(packet.nextCommand.reason)}`,
     "",
     "Counts:",
     `- Public candidates: ${packet.counts.publicCandidates}`,
@@ -378,14 +409,25 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
     `- Approved outreach drafts: ${packet.counts.approvedOutreachDrafts}`,
     "",
     "Command queue:",
-    ...packet.queue.map((item) => `- [${item.status}] ${item.label}: ${item.command} (${item.reason})`),
+    ...packet.queue.map((item) => `- [${item.status}] ${displayText(item.label)}: ${displayText(item.command)} (${displayText(item.reason)})`),
     ...(packet.candidateApprovalBatches.length
       ? [
         "",
         "Candidate approval batches:",
-        ...packet.candidateApprovalBatches.map((batch) =>
-          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${batch.area} / ${batch.niche}: ${batch.command}${batch.moneySprintRunPacketCommand ? `; then ${batch.moneySprintRunPacketCommand}` : ""}`,
-        ),
+        ...packet.candidateApprovalBatches.flatMap((batch) => [
+          `- ${batch.id} [${batch.approvalStatus}]: ${batch.count} candidate(s) in ${displayText(batch.area)} / ${displayText(batch.niche)}: ${displayText(batch.command)}${batch.moneySprintRunPacketCommand ? `; then ${displayText(batch.moneySprintRunPacketCommand)}` : ""}`,
+          ...batch.candidates.flatMap((candidate, index) => [
+            `  ${index + 1}. ${displayText(candidate.businessName)} (${displayText(candidate.websiteStatus)})`,
+            `     Candidate: ${candidate.id}`,
+            `     Contact channel: ${displayText(candidate.contactChannel)}`,
+            `     Contact value: ${displayText(candidate.contactValue)}`,
+            `     Recipient email: ${displayText(candidate.recipientEmail || "none")}`,
+            `     Source: ${displayText(candidate.sourceUrl)}`,
+            `     Evidence: ${displayText(candidate.evidence)}`,
+            `     Pain point: ${displayText(candidate.painPoint)}`,
+            `     Estimated offer: $${candidate.estimatedOfferUsd}`,
+          ]),
+        ]),
       ]
       : []),
     "",

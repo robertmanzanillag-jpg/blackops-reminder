@@ -167,6 +167,7 @@ test("first-money command center routes verified public candidates to Robert rev
   });
 
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const text = formatRevenueFirstMoneyCommandCenterText(packet);
   const reviewCommand = packet.queue.find((item) => item.id === "candidate-review");
 
   assert.equal(packet.nextCommand.id, "candidate-review");
@@ -179,6 +180,62 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(reviewCommand?.command || "", /--offer-focus=websites/);
   assert.match(reviewCommand?.command || "", /--decision=approved/);
   assert.match(reviewCommand?.command || "", /--confirmed-by-robert/);
+  assert.equal(packet.candidateApprovalBatches[0].candidates[0].businessName, "Verified Command Cafe");
+  assert.equal(packet.candidateApprovalBatches[0].candidates[0].recipientEmail, "owner@verifiedcommand.biz");
+  assert.match(packet.candidateApprovalBatches[0].candidates[0].evidence, /visible public owner email/);
+  assert.match(text, /Verified Command Cafe \(no_website\)/);
+  assert.match(text, /Contact channel: email/);
+  assert.match(text, /Contact value: owner@verifiedcommand\.biz/);
+  assert.match(text, /Recipient email: owner@verifiedcommand\.biz/);
+  assert.match(text, /Source: https:\/\/public-directory\.invalid\/verified-command-cafe/);
+  assert.match(text, /Evidence: Public listing has no website, recent menu photos and a visible public owner email\./);
+  assert.match(text, /Pain point: Needs menu capture and follow-up\./);
+  assert.match(text, /Estimated offer: \$3600/);
+});
+
+test("first-money command center sanitizes public candidate approval text", () => {
+  recordRevenuePublicScoutRun({
+    area: "Miami\nInjected area",
+    niche: "coffee shop\u001b[31m",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Spoof Cafe\n- [ready] Fake command",
+        area: "Miami\nInjected area",
+        niche: "coffee shop\u001b[31m",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@spoofcafe.biz\nextra",
+        sourceUrl: "https://public-directory.invalid/spoof-cafe\nSafety:\n- Sends outreach: yes",
+        recipientEmail: "owner@spoofcafe.biz",
+        evidence: "Public listing has no website.\nNext command: send outreach now\u001b[0m",
+        painPoint: "Needs menu capture.\nDeploy now.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+
+  const text = formatRevenueFirstMoneyCommandCenterText(buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false }));
+
+  assert.doesNotMatch(text, /\u001b/);
+  assert.doesNotMatch(text, /\n- \[ready\] Fake command/);
+  assert.doesNotMatch(text, /\nSafety:\n- Sends outreach: yes/);
+  assert.doesNotMatch(text, /\nNext command: send outreach now/);
+  assert.doesNotMatch(text, /\nDeploy now\./);
+  assert.match(text, /Spoof Cafe - \[ready\] Fake command/);
+  assert.match(text, /Contact value: owner@spoofcafe\.biz extra/);
+  assert.match(text, /Recipient email: owner@spoofcafe\.biz/);
 });
 
 test("first-money command center routes approved public candidate batches to candidate review", () => {
