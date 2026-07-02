@@ -536,6 +536,7 @@ type FirstMoneyCommandCenter = {
   readiness: {
     ready: boolean;
     canSearchBusinesses: boolean;
+    canAutonomousSearchBusinesses: boolean;
     canRunGuardedPublicScoutCapture: boolean;
     canContactBusinesses: boolean;
     canCollectMoney: boolean;
@@ -3008,6 +3009,7 @@ export default function RevenueEnginePage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {[
                   { label: "Buscar", ready: firstMoneyCommandCenter?.readiness.canSearchBusinesses },
+                  { label: "Auto scout", ready: firstMoneyCommandCenter?.readiness.canAutonomousSearchBusinesses },
                   { label: "Scout", ready: firstMoneyCommandCenter?.readiness.canRunGuardedPublicScoutCapture },
                   { label: "Contactar", ready: firstMoneyCommandCenter?.readiness.canContactBusinesses },
                   { label: "Cobrar", ready: firstMoneyCommandCenter?.readiness.canCollectMoney },

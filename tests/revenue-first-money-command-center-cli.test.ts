@@ -166,7 +166,7 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_SCOPE_DEPOSIT_AND_PUBLIC_DATA_PROOF")), true);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
   assert.equal(packet.setupCommands.some((item) => item.command.includes("--charge-client")), false);
-  assert.equal(packet.readiness.canAutonomousSearchBusinesses, false);
+  assert.equal(packet.readiness.canAutonomousSearchBusinesses, true);
   assert.equal(packet.readiness.canRunGuardedPublicScoutCapture, true);
   assert.match(packet.nextCommand.reason, /No contact/);
   assert.match(packet.nextCommand.reason, /paid data/);
@@ -503,6 +503,8 @@ test("first-money command center summary omits candidate contact detail payloads
   const serialized = JSON.stringify(summary);
 
   assert.equal(summary.nextCommand.id, "candidate-review");
+  assert.equal(summary.readiness.canAutonomousSearchBusinesses, true);
+  assert.equal(summary.readiness.canRunGuardedPublicScoutCapture, true);
   assert.equal(summary.nextCandidateApproval?.candidateNames[0], "Summary Privacy Cafe");
   assert.equal(summary.nextCandidateApproval?.count, 1);
   assert.equal(summary.nextCandidateApproval?.candidateCards[0]?.businessName, "Summary Privacy Cafe");

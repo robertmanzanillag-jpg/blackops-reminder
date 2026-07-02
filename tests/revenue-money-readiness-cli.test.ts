@@ -200,7 +200,7 @@ test("reports dry-run research mode until production money blockers are configur
   assert.equal(report.status, "dry_run_research_only");
   assert.equal(report.canStartToday, true);
   assert.equal(report.canSearchBusinesses, true);
-  assert.equal(report.canAutonomousSearchBusinesses, false);
+  assert.equal(report.canAutonomousSearchBusinesses, true);
   assert.equal(report.canRunGuardedPublicScoutCapture, true);
   assert.equal(report.canContactBusinesses, false);
   assert.equal(report.canCollectMoney, false);
@@ -216,6 +216,7 @@ test("reports dry-run research mode until production money blockers are configur
   assert.ok(report.allowedToday.some((item) => item.includes("no preview publishing")));
   assert.match(report.checks.find((check) => check.id === "autonomous_business_search")?.detail || "", /Robert review only/);
   assert.match(report.checks.find((check) => check.id === "autonomous_business_search")?.detail || "", /does not run unrestricted scraping/);
+  assert.match(report.checks.find((check) => check.id === "autonomous_business_search")?.nextStep || "", /subagent_browser/);
   assert.equal(report.checks.find((check) => check.id === "production_persistence")?.status, "fail");
   assert.ok(report.blockedUntil.some((item) => item.includes("Postgres")));
 });
@@ -471,7 +472,7 @@ test("formats revenue money readiness text output", () => {
 
   assert.match(output, /Revenue money readiness:/);
   assert.match(output, /Can search businesses: yes/);
-  assert.match(output, /Can autonomously discover businesses: no/);
+  assert.match(output, /Can autonomously discover businesses: yes/);
   assert.match(output, /Can run guarded public scout capture: yes/);
   assert.match(output, /Blocked until:/);
   assert.match(output, /Remaining gaps:/);

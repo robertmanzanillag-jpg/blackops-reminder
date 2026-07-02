@@ -1045,6 +1045,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     readiness: {
       ready: packet.readiness.ready,
       canSearchBusinesses: packet.readiness.canSearchBusinesses,
+      canAutonomousSearchBusinesses: packet.readiness.canAutonomousSearchBusinesses,
       canRunGuardedPublicScoutCapture: packet.readiness.canRunGuardedPublicScoutCapture,
       canContactBusinesses: packet.readiness.canContactBusinesses,
       canCollectMoney: packet.readiness.canCollectMoney,

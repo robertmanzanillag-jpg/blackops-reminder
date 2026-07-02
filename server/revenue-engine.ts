@@ -7882,7 +7882,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
     headline,
     canStartToday: true,
     canSearchBusinesses: true,
-    canAutonomousSearchBusinesses: false,
+    canAutonomousSearchBusinesses: guardedAutonomousSearchReady,
     canRunGuardedPublicScoutCapture: guardedAutonomousSearchReady,
     canDraftOutreach: true,
     canCreateInternalMockups: true,
