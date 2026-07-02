@@ -26,7 +26,13 @@ test.afterEach(() => {
   resetRevenueApprovalDecisionsForTests();
 });
 
-function approvePaymentPath(input: { paymentLink: string; expectedDepositUsd: number; expectedPackage: string }) {
+function approvePaymentPath(input: {
+  paymentLink: string;
+  expectedDepositUsd: number;
+  expectedPackage: string;
+  evidenceUrl?: string;
+  evidenceNote?: string;
+}) {
   const paymentUrl = new URL(input.paymentLink);
   const snapshot = {
     paymentMethod: "payment_link" as const,
@@ -40,8 +46,8 @@ function approvePaymentPath(input: { paymentLink: string; expectedDepositUsd: nu
     paymentSmokeVerified: true,
     depositConfirmedByRobert: false,
     paymentLink: input.paymentLink,
-    evidenceUrl: "https://github.com/example/repo/actions/runs/123",
-    evidenceNote: "Stripe payment link smoke test passed",
+    evidenceUrl: input.evidenceUrl || "https://github.com/example/repo/actions/runs/123",
+    evidenceNote: input.evidenceNote || "Stripe payment link smoke test passed",
   };
   return recordRevenueTrustedApprovalDecision({
     targetId: buildRevenuePaymentPathApprovalTargetId(input.paymentLink),
@@ -167,6 +173,35 @@ test("payment path readiness packet builds safe handoff", () => {
   assert.equal(packet.safety.recordsLedgerEntry, false);
   assert.match(text, /Revenue payment path readiness packet: ready_for_payment_path_handoff/);
   assert.equal(getRevenuePaymentPathReadinessPacketExitCode(packet), 0);
+});
+
+test("payment path readiness packet blocks placeholder proof when builder is called directly", () => {
+  const approval = approvePaymentPath({
+    paymentLink: "https://buy.stripe.com/revenue-deposit",
+    expectedDepositUsd: 1500,
+    expectedPackage: "Website 3D Premium",
+    evidenceUrl: "https://example.com/REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+    evidenceNote: "REPLACE_WITH_PAYMENT_PROOF",
+  });
+  const packet = buildRevenuePaymentPathReadinessPacketFromCli({
+    paymentLink: "https://buy.stripe.com/revenue-deposit",
+    approvalDecisionId: approval.decision.id,
+    robertApprovedPaymentPath: true,
+    paymentSmokeVerified: true,
+    depositConfirmedByRobert: false,
+    expectedDepositUsd: 1500,
+    expectedPackage: "Website 3D Premium",
+    evidenceUrl: "https://example.com/REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+    evidenceNote: "REPLACE_WITH_PAYMENT_PROOF",
+    chargeClient: false,
+    json: false,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.gates[0].gate, "cli_options");
+  assert.match(packet.blockedReasons.join("; "), /--evidence-url must be real evidence/);
+  assert.match(packet.blockedReasons.join("; "), /--evidence-note must be real proof/);
+  assert.equal(getRevenuePaymentPathReadinessPacketExitCode(packet), 1);
 });
 
 test("payment path readiness packet rejects stale approval after deposit amount changes", () => {

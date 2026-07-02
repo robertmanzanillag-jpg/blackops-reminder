@@ -45,6 +45,8 @@ function approveContactPath(input: {
   fromEmail?: string;
   manualContactApproved?: boolean;
   emailProviderConfigured?: boolean;
+  evidenceUrl?: string;
+  evidenceNote?: string;
 }) {
   const snapshot = {
     contactMode: input.contactMode,
@@ -55,8 +57,8 @@ function approveContactPath(input: {
   const proof = {
     robertApprovedContactPath: true,
     contactPathVerified: true,
-    evidenceUrl: "https://github.com/example/repo/actions/runs/456",
-    evidenceNote: "Contact path verification passed",
+    evidenceUrl: input.evidenceUrl || "https://github.com/example/repo/actions/runs/456",
+    evidenceNote: input.evidenceNote || "Contact path verification passed",
   };
   return recordRevenueTrustedApprovalDecision({
     targetId: buildRevenueContactPathApprovalTargetId(snapshot),
@@ -165,6 +167,32 @@ test("contact path readiness packet builds safe manual handoff", () => {
   assert.equal(packet.safety.storesSecrets, false);
   assert.match(text, /Revenue contact path readiness packet: ready_for_contact_path_handoff/);
   assert.equal(getRevenueContactPathReadinessPacketExitCode(packet), 0);
+});
+
+test("contact path readiness packet blocks placeholder proof when builder is called directly", () => {
+  process.env.REVENUE_ENGINE_MANUAL_CONTACT_APPROVED = "true";
+  const approval = approveContactPath({
+    contactMode: "manual",
+    manualContactApproved: true,
+    evidenceUrl: "https://example.com/REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    evidenceNote: "REPLACE_WITH_CONTACT_PATH_PROOF",
+  });
+  const packet = buildRevenueContactPathReadinessPacketFromCli({
+    contactMode: "manual",
+    approvalDecisionId: approval.decision.id,
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://example.com/REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    evidenceNote: "REPLACE_WITH_CONTACT_PATH_PROOF",
+    sendOutreach: false,
+    json: false,
+  });
+
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.gates[0].gate, "cli_options");
+  assert.match(packet.blockedReasons.join("; "), /--evidence-url must be real evidence/);
+  assert.match(packet.blockedReasons.join("; "), /--evidence-note must be real proof/);
+  assert.equal(getRevenueContactPathReadinessPacketExitCode(packet), 1);
 });
 
 test("contact path readiness packet rejects stale approval after from email changes", () => {

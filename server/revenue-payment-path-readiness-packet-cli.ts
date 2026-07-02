@@ -48,7 +48,8 @@ export function validateRevenuePaymentPathReadinessPacketOptions(options: Revenu
 }
 
 export function buildRevenuePaymentPathReadinessPacketFromCli(options: RevenuePaymentPathReadinessPacketCliOptions) {
-  return buildRevenuePaymentPathReadinessPacket({
+  const validationErrors = validateRevenuePaymentPathReadinessPacketOptions(options);
+  const packet = buildRevenuePaymentPathReadinessPacket({
     paymentLink: options.paymentLink,
     approvalDecisionId: options.approvalDecisionId,
     robertApprovedPaymentPath: options.robertApprovedPaymentPath,
@@ -60,6 +61,21 @@ export function buildRevenuePaymentPathReadinessPacketFromCli(options: RevenuePa
     evidenceNote: options.evidenceNote,
     chargeClient: options.chargeClient,
   });
+
+  if (validationErrors.length === 0) return packet;
+
+  return {
+    ...packet,
+    status: "blocked" as const,
+    gates: [
+      { gate: "cli_options", passed: false, fix: validationErrors.join(" ") },
+      ...packet.gates,
+    ],
+    blockedReasons: [
+      ...validationErrors,
+      ...packet.blockedReasons,
+    ],
+  };
 }
 
 export function formatRevenuePaymentPathReadinessPacketText(packet: ReturnType<typeof buildRevenuePaymentPathReadinessPacketFromCli>) {

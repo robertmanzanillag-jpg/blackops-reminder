@@ -45,7 +45,8 @@ export function validateRevenueContactPathReadinessPacketOptions(options: Revenu
 }
 
 export function buildRevenueContactPathReadinessPacketFromCli(options: RevenueContactPathReadinessPacketCliOptions) {
-  return buildRevenueContactPathReadinessPacket({
+  const validationErrors = validateRevenueContactPathReadinessPacketOptions(options);
+  const packet = buildRevenueContactPathReadinessPacket({
     contactMode: options.contactMode,
     approvalDecisionId: options.approvalDecisionId,
     robertApprovedContactPath: options.robertApprovedContactPath,
@@ -54,6 +55,21 @@ export function buildRevenueContactPathReadinessPacketFromCli(options: RevenueCo
     evidenceNote: options.evidenceNote,
     sendOutreach: options.sendOutreach,
   });
+
+  if (validationErrors.length === 0) return packet;
+
+  return {
+    ...packet,
+    status: "blocked" as const,
+    gates: [
+      { gate: "cli_options", passed: false, fix: validationErrors.join(" ") },
+      ...packet.gates,
+    ],
+    blockedReasons: [
+      ...validationErrors,
+      ...packet.blockedReasons,
+    ],
+  };
 }
 
 export function formatRevenueContactPathReadinessPacketText(packet: ReturnType<typeof buildRevenueContactPathReadinessPacketFromCli>) {
