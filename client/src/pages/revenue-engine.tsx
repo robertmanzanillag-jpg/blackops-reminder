@@ -414,6 +414,42 @@ type RevenueSnapshot = {
   }>;
 };
 
+type FirstMoneyCommandCenter = {
+  status: string;
+  mode: string;
+  nextCommand: {
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  };
+  counts: {
+    publicCandidates: number;
+    reviewablePublicCandidates: number;
+    manualOnlyPublicCandidates: number;
+    leads: number;
+    outreachDrafts: number;
+    approvedOutreachDrafts: number;
+  };
+  readiness: {
+    ready: boolean;
+    canSearchBusinesses: boolean;
+    canRunGuardedPublicScoutCapture: boolean;
+    canContactBusinesses: boolean;
+    canCollectMoney: boolean;
+    canBuildWebsites: boolean;
+    blockedUntil: string[];
+    remainingGaps: string[];
+  };
+  safety: {
+    writesFiles: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+  };
+};
+
 type ClarificationGate = {
   status: "clear" | "needs_clarification";
   missing: string[];
@@ -1389,6 +1425,15 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const { data: firstMoneyCommandCenter } = useQuery<FirstMoneyCommandCenter>({
+    queryKey: ["revenue-engine", "first-money-command-center"],
+    queryFn: async () => {
+      const response = await fetch("/api/revenue-engine/first-money-command-center");
+      if (!response.ok) throw new Error("No se pudo cargar First Money Command Center");
+      return response.json();
+    },
+  });
+
   const planMutation = useMutation<RevenuePlan>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/plan", {
@@ -2338,6 +2383,76 @@ export default function RevenueEnginePage() {
                 {(snapshot?.operatorConsole.waitingOnRobert || ["aprobar mensaje antes de enviar"]).map((action) => (
                   <div key={action} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-100">
                     {action}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-cyan-500/20 bg-zinc-950/90">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[1.15fr_0.85fr_0.9fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Search className="h-4 w-4 text-cyan-200" />
+                <p className="text-sm font-medium text-white">First-money command center</p>
+                <Badge variant="outline" className={cn(statusTone(firstMoneyCommandCenter?.nextCommand.status || "review"), "shrink-0")}>
+                  {firstMoneyCommandCenter?.status || "loading"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-xl font-semibold leading-7 text-white">
+                {firstMoneyCommandCenter?.nextCommand.label || "Calculando el siguiente paso seguro."}
+              </p>
+              <p className="mt-2 break-words rounded-lg border border-cyan-500/15 bg-cyan-500/5 px-3 py-2 text-sm leading-6 text-cyan-100">
+                {firstMoneyCommandCenter?.nextCommand.command || "Cargando comando auditado."}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-zinc-500">
+                {firstMoneyCommandCenter?.nextCommand.reason || "El command center decide usando gates de contacto, pago y build."}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Gates de dinero</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { label: "Buscar", ready: firstMoneyCommandCenter?.readiness.canSearchBusinesses },
+                  { label: "Scout", ready: firstMoneyCommandCenter?.readiness.canRunGuardedPublicScoutCapture },
+                  { label: "Contactar", ready: firstMoneyCommandCenter?.readiness.canContactBusinesses },
+                  { label: "Cobrar", ready: firstMoneyCommandCenter?.readiness.canCollectMoney },
+                  { label: "Websites", ready: firstMoneyCommandCenter?.readiness.canBuildWebsites },
+                  { label: "Ready", ready: firstMoneyCommandCenter?.readiness.ready },
+                ].map((gate) => (
+                  <div
+                    key={gate.label}
+                    className={cn(
+                      "rounded-md border px-3 py-2",
+                      gate.ready ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-100" : "border-red-500/20 bg-red-500/5 text-red-100",
+                    )}
+                  >
+                    {gate.label}: {gate.ready ? "si" : "no"}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Pipeline ahora</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
+                  Public candidates {firstMoneyCommandCenter?.counts.publicCandidates ?? 0}
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
+                  Reviewables {firstMoneyCommandCenter?.counts.reviewablePublicCandidates ?? 0}
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
+                  Manual-only {firstMoneyCommandCenter?.counts.manualOnlyPublicCandidates ?? 0}
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
+                  Drafts {firstMoneyCommandCenter?.counts.outreachDrafts ?? 0}
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(firstMoneyCommandCenter?.readiness.blockedUntil || []).slice(0, 2).map((blocker) => (
+                  <div key={blocker} className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100">
+                    {blocker}
                   </div>
                 ))}
               </div>

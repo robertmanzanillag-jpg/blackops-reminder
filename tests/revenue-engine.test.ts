@@ -2320,6 +2320,17 @@ test("routes wire scout dispatch endpoint to schema and builder", () => {
   );
 });
 
+test("routes expose first-money command center endpoint", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueFirstMoneyCommandCenterSummary/);
+  assert.match(routesSource, /app\.get\("\/api\/revenue-engine\/first-money-command-center"/);
+  assert.match(
+    routesSource,
+    /res\.json\(buildRevenueFirstMoneyCommandCenterSummary\(\{ mode: "first-sprint", json: false \}\)\)/,
+  );
+});
+
 test("routes wire public scout run endpoint to schema and builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
 
@@ -3144,6 +3155,11 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /ledgerConfirmation/);
   assert.match(source, /ledgerConfirmedByRobert/);
   assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
+  assert.match(source, /First-money command center/);
+  assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(source, /canContactBusinesses/);
+  assert.match(source, /canCollectMoney/);
+  assert.match(source, /canBuildWebsites/);
   assert.doesNotMatch(source, /approvalToSend/);
 });
 

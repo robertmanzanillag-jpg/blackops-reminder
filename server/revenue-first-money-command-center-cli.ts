@@ -549,6 +549,34 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
   };
 }
 
+export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirstMoneyCommandCenterCliOptions) {
+  const packet = buildRevenueFirstMoneyCommandCenter(options);
+  return {
+    status: packet.status,
+    mode: packet.mode,
+    nextCommand: packet.nextCommand,
+    counts: {
+      publicCandidates: packet.counts.publicCandidates,
+      reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,
+      manualOnlyPublicCandidates: packet.counts.manualOnlyPublicCandidates,
+      leads: packet.counts.leads,
+      outreachDrafts: packet.counts.outreachDrafts,
+      approvedOutreachDrafts: packet.counts.approvedOutreachDrafts,
+    },
+    readiness: {
+      ready: packet.readiness.ready,
+      canSearchBusinesses: packet.readiness.canSearchBusinesses,
+      canRunGuardedPublicScoutCapture: packet.readiness.canRunGuardedPublicScoutCapture,
+      canContactBusinesses: packet.readiness.canContactBusinesses,
+      canCollectMoney: packet.readiness.canCollectMoney,
+      canBuildWebsites: packet.readiness.canBuildWebsites,
+      blockedUntil: packet.readiness.blockedUntil,
+      remainingGaps: packet.readiness.remainingGaps,
+    },
+    safety: packet.safety,
+  };
+}
+
 export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>) {
   return [
     `Revenue first-money command center: ${packet.status}`,

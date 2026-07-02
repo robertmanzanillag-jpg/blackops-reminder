@@ -21,6 +21,7 @@ import {
 } from "../server/revenue-payment-path-approval";
 import {
   buildRevenueFirstMoneyCommandCenter,
+  buildRevenueFirstMoneyCommandCenterSummary,
   formatRevenueFirstMoneyCommandCenterText,
   getRevenueFirstMoneyCommandCenterExitCode,
   parseRevenueFirstMoneyCommandCenterArgs,
@@ -397,6 +398,52 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(text, /Evidence: Public listing has no website, recent menu photos and a visible public owner email\./);
   assert.match(text, /Pain point: Needs menu capture and follow-up\./);
   assert.match(text, /Estimated offer: \$3600/);
+});
+
+test("first-money command center summary omits candidate contact detail payloads", () => {
+  recordRevenuePublicScoutRun({
+    area: "Miami",
+    niche: "coffee shop",
+    offerFocus: "websites",
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 2,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidates: [
+      {
+        businessName: "Summary Privacy Cafe",
+        area: "Miami",
+        niche: "coffee shop",
+        websiteStatus: "no_website",
+        contactChannel: "email",
+        contactValue: "owner@summaryprivacy.biz",
+        sourceUrl: "https://public-directory.invalid/summary-privacy-cafe",
+        recipientEmail: "owner@summaryprivacy.biz",
+        evidence: "Public listing has no website, recent menu photos and a visible public owner email.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "verified_public",
+        publicEvidenceVerified: true,
+        approvalToImport: false,
+      },
+    ],
+  });
+
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const serialized = JSON.stringify(summary);
+
+  assert.equal(summary.nextCommand.id, "candidate-review");
+  assert.equal(summary.counts.reviewablePublicCandidates, 1);
+  assert.equal("candidateApprovalBatches" in summary, false);
+  assert.equal("setupCommands" in summary, false);
+  assert.equal("queue" in summary, false);
+  assert.doesNotMatch(serialized, /owner@summaryprivacy\.biz/);
+  assert.doesNotMatch(serialized, /public-directory\.invalid\/summary-privacy-cafe/);
+  assert.doesNotMatch(serialized, /Public listing has no website/);
 });
 
 test("first-money command center sanitizes public candidate approval text", () => {
