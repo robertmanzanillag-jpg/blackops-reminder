@@ -120,7 +120,9 @@ export function validateRevenuePublicCandidateReviewOutputPath(outputPath: strin
     errors.push("--output must be inside revenue_workspace/money-sprint or the system temp directory.");
   }
   if (existsSync(resolved)) {
-    if (lstatSync(resolved).isSymbolicLink()) errors.push("--output cannot be a symlink.");
+    const outputStats = lstatSync(resolved);
+    if (outputStats.isSymbolicLink()) errors.push("--output cannot be a symlink.");
+    if (!outputStats.isFile()) errors.push("--output must be a regular file when it already exists.");
     if (!overwrite) errors.push("--output already exists; pass --overwrite to replace it.");
   }
   if (hasSymlinkAncestor(resolved)) {
@@ -181,6 +183,20 @@ export function buildRevenuePublicCandidateReviewInput(options: RevenuePublicCan
   };
 }
 
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function npmRunText(script: string, args: string[] = []) {
+  return ["npm", "run", script, "--", ...args].map(shellQuote).join(" ");
+}
+
+export function buildRevenuePublicCandidateReviewNextCliCommand(outputPath: string) {
+  return outputPath
+    ? npmRunText("revenue:money-sprint-run-packet", [`--input=${outputPath}`])
+    : "";
+}
+
 export function formatRevenuePublicCandidateReviewText(result: {
   status: string;
   approvedByRobert: boolean;
@@ -228,7 +244,8 @@ export function formatRevenuePublicCandidateReviewText(result: {
     paidDataSpendUsd: number;
     requiresRobertApproval: boolean;
   };
-}): string {
+}, options: { outputPath?: string } = {}): string {
+  const nextCliCommand = buildRevenuePublicCandidateReviewNextCliCommand(options.outputPath || "");
   return [
     `Revenue public candidate review: ${result.status}`,
     `Approved by Robert: ${result.approvedByRobert ? "yes" : "no"}`,
@@ -257,6 +274,7 @@ export function formatRevenuePublicCandidateReviewText(result: {
         "Money sprint run packet:",
         `- Status: ${result.moneySprintRunPacket.status}`,
         `- Human review action: ${result.nextApiAction}`,
+        nextCliCommand ? `- Next CLI command: ${nextCliCommand}` : "",
         `- Endpoint after approval: ${result.moneySprintRunPacket.method} ${result.moneySprintRunPacket.endpoint}`,
         `- Accepted leads: ${result.moneySprintRunPacket.expectedOutput.acceptedLeads}`,
         `- Mockups to prepare: ${result.moneySprintRunPacket.expectedOutput.mockupsToPrepare}`,
@@ -278,13 +296,13 @@ export function formatRevenuePublicCandidateReviewText(result: {
   ].join("\n");
 }
 
-export function writeRevenuePublicCandidateReviewOutput(outputPath: string, result: unknown) {
+export function writeRevenuePublicCandidateReviewOutput(outputPath: string, result: unknown, overwrite = false) {
   if (!outputPath) return null;
-  const validationErrors = validateRevenuePublicCandidateReviewOutputPath(outputPath, true);
+  const validationErrors = validateRevenuePublicCandidateReviewOutputPath(outputPath, overwrite);
   if (validationErrors.length) throw new Error(validationErrors.join("\n"));
   const resolved = path.resolve(outputPath);
   mkdirSync(path.dirname(resolved), { recursive: true });
-  writeFileSync(resolved, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  writeFileSync(resolved, `${JSON.stringify(result, null, 2)}\n`, { encoding: "utf8", flag: overwrite ? "w" : "wx" });
   return resolved;
 }
 

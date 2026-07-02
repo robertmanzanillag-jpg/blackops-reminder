@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import test from "node:test";
 import {
@@ -293,6 +293,50 @@ test("public candidate review output rejects symlink ancestors", () => {
   rmSync(targetPath, { recursive: true, force: true });
 });
 
+test("public candidate review output requires overwrite for existing packet files", () => {
+  const outputDir = "revenue_workspace/money-sprint";
+  const outputPath = `${outputDir}/revenue-public-candidate-review-existing-packet.json`;
+  mkdirSync(outputDir, { recursive: true });
+  rmSync(outputPath, { force: true });
+  writeFileSync(outputPath, "{\"original\":true}\n", "utf8");
+
+  assert.deepEqual(validateRevenuePublicCandidateReviewOptions({
+    ...parseRevenuePublicCandidateReviewArgs([
+      "--candidate-ids=candidate-1",
+      `--output=${outputPath}`,
+    ]),
+  }), ["--output already exists; pass --overwrite to replace it."]);
+  assert.throws(
+    () => writeRevenuePublicCandidateReviewOutput(outputPath, { ok: true }),
+    /--output already exists; pass --overwrite to replace it\./,
+  );
+
+  writeRevenuePublicCandidateReviewOutput(outputPath, { ok: true }, true);
+  assert.deepEqual(JSON.parse(readFileSync(outputPath, "utf8")), { ok: true });
+
+  rmSync(outputPath, { force: true });
+});
+
+test("public candidate review output rejects existing directories even with overwrite", () => {
+  const outputPath = "revenue_workspace/money-sprint/revenue-public-candidate-review-dir-output.json";
+  rmSync(outputPath, { recursive: true, force: true });
+  mkdirSync(outputPath, { recursive: true });
+
+  assert.deepEqual(validateRevenuePublicCandidateReviewOptions({
+    ...parseRevenuePublicCandidateReviewArgs([
+      "--candidate-ids=candidate-1",
+      `--output=${outputPath}`,
+      "--overwrite",
+    ]),
+  }), ["--output must be a regular file when it already exists."]);
+  assert.throws(
+    () => writeRevenuePublicCandidateReviewOutput(outputPath, { ok: true }, true),
+    /--output must be a regular file when it already exists\./,
+  );
+
+  rmSync(outputPath, { recursive: true, force: true });
+});
+
 test("builds review input with spend outreach and preview writes disabled", () => {
   const input = buildRevenuePublicCandidateReviewInput(parseRevenuePublicCandidateReviewArgs([
     "--candidate-ids=candidate-1",
@@ -370,7 +414,7 @@ test("formats public candidate review text with safety and batch", () => {
       paidDataSpendUsd: 0,
       requiresRobertApproval: true,
     },
-  });
+  }, { outputPath: "revenue_workspace/money-sprint/review.json" });
 
   assert.match(output, /Revenue public candidate review: ready_for_money_sprint_preview/);
   assert.match(output, /Approved by Robert: yes/);
@@ -380,6 +424,7 @@ test("formats public candidate review text with safety and batch", () => {
   assert.match(output, /Paid data spend: \$0/);
   assert.match(output, /Money sprint run packet:/);
   assert.match(output, /Human review action: human_review_money_sprint_packet/);
+  assert.match(output, /Next CLI command: 'npm' 'run' 'revenue:money-sprint-run-packet' '--' '--input=revenue_workspace\/money-sprint\/review\.json'/);
   assert.match(output, /Endpoint after approval: POST \/api\/revenue-engine\/money-sprint/);
   assert.match(output, /Packet sends outreach: no/);
   assert.match(output, /Requires approval before run: yes/);
@@ -454,6 +499,7 @@ test("public candidate review script prints human-reviewed money sprint packet",
   assert.match(result.stdout, /Revenue public candidate review: ready_for_money_sprint_preview/);
   assert.match(result.stdout, /Next API action: human_review_money_sprint_packet/);
   assert.match(result.stdout, /Money sprint run packet:/);
+  assert.match(result.stdout, new RegExp(`Next CLI command: 'npm' 'run' 'revenue:money-sprint-run-packet' '--' '--input=${outputPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
   assert.match(result.stdout, /Endpoint after approval: POST \/api\/revenue-engine\/money-sprint/);
   assert.match(result.stdout, /Packet paid spend: \$0/);
   assert.match(result.stdout, /Packet sends outreach: no/);

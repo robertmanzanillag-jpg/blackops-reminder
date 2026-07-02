@@ -19,8 +19,10 @@ async function main() {
 
   const input = buildRevenuePublicCandidateReviewInput(options);
   const result = reviewRevenuePublicLeadCandidates(input);
-  writeRevenuePublicCandidateReviewOutput(options.outputPath, result);
-  console.log(options.json ? JSON.stringify(result, null, 2) : formatRevenuePublicCandidateReviewText(result));
+  writeRevenuePublicCandidateReviewOutput(options.outputPath, result, options.overwrite);
+  console.log(options.json ? JSON.stringify(result, null, 2) : formatRevenuePublicCandidateReviewText(result, {
+    outputPath: options.outputPath,
+  }));
   process.exit(getRevenuePublicCandidateReviewExitCode(result));
 }
 
