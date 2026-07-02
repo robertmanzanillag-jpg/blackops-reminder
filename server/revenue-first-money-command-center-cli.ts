@@ -848,15 +848,7 @@ function buildCandidateApprovalBatch(
     && decision.approvalSource === "public_candidate_approval_cli"
     && decision.publicCandidateSnapshotHash === snapshotHash,
   );
-  const approvalCommand = npmRunText("revenue:public-candidate-approval-decision", [
-    `--candidate-ids=${candidateIds.join(",")}`,
-    "--decision=approved",
-    "--approved-action=Approve first-money public candidate review.",
-    `--area=${area}`,
-    `--niche=${niche}`,
-    "--offer-focus=websites",
-    "--confirmed-by-robert",
-  ]);
+  const approvalCommand = `Use the Revenue Engine Trust Center approval action for ${candidateIds.length} candidate(s) (${candidateIds.join(",")}) in ${area} / ${niche} with exact confirmation text: APPROVE PUBLIC CANDIDATES candidate-review-${batchIndex + 1}`;
   const reviewCommand = matchingApprovalDecision
     ? npmRunText("revenue:public-candidate-review", [
       `--candidate-ids=${candidateIds.join(",")}`,

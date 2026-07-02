@@ -2438,24 +2438,30 @@ test("routes expose first-money command center endpoint", () => {
   );
 });
 
-test("routes wire public candidate approval endpoint to trusted builder", () => {
+test("routes block direct public candidate approval endpoint", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-pending-action"'),
+  );
 
-  assert.match(routesSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
   assert.match(routesSource, /revenuePublicCandidateApprovalDecisionSchema/);
   assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(routesSource, /batchId: z\.string\(\)/);
   assert.match(routesSource, /confirmationText: z\.string\(\)/);
-  assert.match(routesSource, /const expectedApproval = commandCenter\.candidateApprovalQueue\.find\(\(batch\) => batch\.id === input\.batchId\)/);
-  assert.match(routesSource, /input\.confirmationText === expectedApproval\.confirmationText/);
-  assert.match(routesSource, /confirmedByRobert: true/);
-  assert.match(routesSource, /Approval payload must match a queued first-money command-center batch/);
-  assert.doesNotMatch(routesSource, /const expectedApproval = commandCenter\.nextCandidateApproval/);
+  assert.match(routeSource, /Direct public candidate approval is disabled/);
+  assert.match(routeSource, /nextEndpoint: "\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action"/);
+  assert.match(routeSource, /persistsApprovalDecision: false/);
+  assert.match(routeSource, /createsPendingAction: false/);
+  assert.match(routeSource, /importsLeads: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.match(routeSource, /exposesContactDetails: false/);
+  assert.doesNotMatch(routeSource, /buildRevenuePublicCandidateApprovalDecisionFromCli/);
+  assert.doesNotMatch(routeSource, /confirmedByRobert: true/);
+  assert.doesNotMatch(routeSource, /const expectedApproval = commandCenter\.candidateApprovalQueue/);
   assert.doesNotMatch(routesSource, /confirmedByRobert: z\.literal\(true\)/);
-  assert.match(
-    routesSource,
-    /const result = buildRevenuePublicCandidateApprovalDecisionFromCli\(\{[\s\S]{0,500}confirmedByRobert: true,[\s\S]{0,80}json: false,/,
-  );
 });
 
 test("routes wire public candidate approval pending action without executing approval", () => {
@@ -3724,12 +3730,12 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /ledgerConfirmation\.trim\(\) !== `RECORD/);
   assert.match(source, /First-money command center/);
   assert.match(source, /\/api\/revenue-engine\/first-money-command-center/);
-  assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-decision/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
+  assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(source, /nextCandidateApproval/);
   assert.match(source, /nextCandidateReview/);
-  assert.match(source, /button-approve-public-candidate-batch/);
   assert.match(source, /button-queue-public-candidate-approval/);
+  assert.doesNotMatch(source, /button-approve-public-candidate-batch/);
   assert.doesNotMatch(
     source.slice(
       source.indexOf("const publicCandidateApprovalPendingActionMutation"),

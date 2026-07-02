@@ -456,12 +456,10 @@ test("first-money command center routes verified public candidates to Robert rev
   assert.match(scoutCommand?.command || "", /--browser-executor=subagent_browser/);
   assert.match(scoutCommand?.reason || "", /Keep filling the pipeline in parallel/);
   assert.match(scoutCommand?.reason || "", /No contact, paid data, lead import, preview publish, or client charging/);
-  assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
-  assert.match(reviewCommand?.command || "", /--area=Miami/);
-  assert.match(reviewCommand?.command || "", /--niche=coffee shop/);
-  assert.match(reviewCommand?.command || "", /--offer-focus=websites/);
-  assert.match(reviewCommand?.command || "", /--decision=approved/);
-  assert.match(reviewCommand?.command || "", /--confirmed-by-robert/);
+  assert.match(reviewCommand?.command || "", /Revenue Engine Trust Center approval action/);
+  assert.match(reviewCommand?.command || "", /APPROVE PUBLIC CANDIDATES candidate-review-1/);
+  assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
+  assert.doesNotMatch(reviewCommand?.command || "", /--confirmed-by-robert/);
   assert.equal(packet.candidateApprovalBatches[0].candidates[0].businessName, "Verified Command Cafe");
   assert.equal(packet.candidateApprovalBatches[0].candidates[0].recipientEmail, "owner@verifiedcommand.biz");
   assert.equal(packet.candidateApprovalBatches[0].totalEstimatedOfferUsd, 3600);
@@ -568,6 +566,7 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.candidateApprovalQueue[1].totalEstimatedOfferUsd, 2400);
   assert.equal(summary.candidateApprovalQueue[1].confirmationText, "APPROVE PUBLIC CANDIDATES candidate-review-2");
   assert.equal(summary.candidateApprovalQueue[1].candidateCards[0]?.contactHiddenUntilApproval, true);
+  assert.doesNotMatch(JSON.stringify(summary), /revenue:public-candidate-approval-decision/);
   assert.equal(summary.safeSearchAction?.id, "public-scout");
   assert.equal(summary.safeSearchAction?.status, "ready");
   assert.match(summary.safeSearchAction?.command || "", /revenue:public-scout-schedule/);
@@ -961,7 +960,8 @@ test("first-money command center keeps email-ready candidates ahead of manual-on
   assert.equal(packet.counts.reviewablePublicCandidates, 1);
   assert.equal(packet.counts.manualOnlyPublicCandidates, 1);
   assert.equal(packet.counts.verificationNeededPublicCandidates, 0);
-  assert.match(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
+  assert.match(reviewCommand?.command || "", /Revenue Engine Trust Center approval action/);
+  assert.doesNotMatch(reviewCommand?.command || "", /revenue:public-candidate-approval-decision/);
   assert.equal(manualCommand?.status, "review");
   assert.match(manualCommand?.command || "", /revenue:manual-contact-approval-packet/);
   assert.equal(scoutCommand?.status, "ready");
@@ -1157,8 +1157,8 @@ test("first-money command center review command batches only matching area and n
   assert.equal(packet.counts.reviewablePublicCandidates, 2);
   assert.match(reviewCommand?.command || "", new RegExp(firstCandidateId));
   assert.doesNotMatch(reviewCommand?.command || "", new RegExp(secondCandidateId));
-  assert.match(reviewCommand?.command || "", /--area=Miami/);
-  assert.match(reviewCommand?.command || "", /--niche=coffee shop/);
+  assert.match(reviewCommand?.command || "", /Miami \/ coffee shop/);
+  assert.doesNotMatch(reviewCommand?.command || "", /--area=Miami/);
   assert.match(reviewCommand?.reason || "", /1 verified public candidate/);
   assert.match(reviewCommand?.reason || "", /1 additional verified candidate/);
   assert.equal(packet.candidateApprovalBatches.length, 2);
