@@ -143,12 +143,12 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
     : null;
   const publicScoutItem: CommandQueueItem = {
     id: "public-scout",
-    label: "Find businesses",
-    command: "npm run revenue:public-scout-schedule -- --area=Miami --niche=coffee_shop",
-    status: readiness.canSearchBusinesses ? "ready" : "blocked",
-    reason: readiness.canSearchBusinesses
-      ? "No captured candidates are waiting; start guarded public scouting."
-      : "Business search is not ready yet.",
+    label: "Capture public business candidates",
+    command: "npm run revenue:public-scout-schedule -- --area=Miami --niche=coffee_shop --browser-executor=subagent_browser --max-candidates-per-run=8",
+    status: readiness.canRunGuardedPublicScoutCapture ? "ready" : "blocked",
+    reason: readiness.canRunGuardedPublicScoutCapture
+      ? "No captured candidates are waiting; run guarded public scout capture only. No contact, paid data, lead import, preview publish, or client charging."
+      : "Guarded public scout capture is not ready yet.",
   };
   const candidateQueueItems = [
     candidateReviewItem || manualContactReviewItem || candidateVerificationItem || publicScoutItem,
@@ -228,6 +228,8 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       ready: readiness.ready,
       canStartToday: readiness.canStartToday,
       canSearchBusinesses: readiness.canSearchBusinesses,
+      canAutonomousSearchBusinesses: readiness.canAutonomousSearchBusinesses,
+      canRunGuardedPublicScoutCapture: readiness.canRunGuardedPublicScoutCapture,
       canContactBusinesses: readiness.canContactBusinesses,
       canCollectMoney: readiness.canCollectMoney,
       canBuildWebsites: readiness.canBuildWebsites,

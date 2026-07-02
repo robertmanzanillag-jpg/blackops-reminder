@@ -67,12 +67,20 @@ test("first-money command center starts with guarded public scouting", () => {
 
   assert.equal(packet.nextCommand.id, "public-scout");
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("revenue:public-scout-schedule")), true);
+  assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("--browser-executor=subagent_browser")), true);
+  assert.equal(packet.readiness.canAutonomousSearchBusinesses, false);
+  assert.equal(packet.readiness.canRunGuardedPublicScoutCapture, true);
+  assert.match(packet.nextCommand.reason, /No contact/);
+  assert.match(packet.nextCommand.reason, /paid data/);
+  assert.match(packet.nextCommand.reason, /lead import/);
+  assert.match(packet.nextCommand.reason, /preview publish/);
+  assert.match(packet.nextCommand.reason, /client charging/);
   assert.equal(packet.safety.sendsOutreach, false);
   assert.equal(packet.safety.chargesClients, false);
   assert.equal(packet.safety.deploys, false);
   assert.equal(getRevenueFirstMoneyCommandCenterExitCode(packet), 0);
   assert.match(text, /Revenue first-money command center:/);
-  assert.match(text, /Find businesses/);
+  assert.match(text, /Capture public business candidates/);
 });
 
 test("first-money command center prioritizes public contact verification for unverified candidates", () => {
