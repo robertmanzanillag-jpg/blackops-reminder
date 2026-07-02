@@ -24,6 +24,10 @@ type CommandQueueItem = {
   reason: string;
 };
 
+type SetupCommandItem = CommandQueueItem & {
+  gate: "contact_path" | "payment_path";
+};
+
 type CandidateApprovalBatch = {
   id: string;
   area: string;
@@ -105,6 +109,88 @@ function npmRunText(script: string, args: string[] = []) {
 
 function displayText(value: string | number) {
   return String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function buildSetupCommands(readiness: ReturnType<typeof buildRevenueMoneyReadinessReport>): SetupCommandItem[] {
+  const setupCommands: SetupCommandItem[] = [];
+  if (!readiness.canContactBusinesses) {
+    setupCommands.push(
+      {
+        id: "contact-path-approval",
+        gate: "contact_path",
+        label: "Approve contact path before outreach",
+        command: npmRunText("revenue:contact-path-approval-decision", [
+          "--contact-mode=manual",
+          "--decision=approved",
+          "--approved-action=Approve exact manual contact path for first-money outreach.",
+          "--manual-contact-approved",
+          "--robert-approved-contact-path",
+          "--contact-path-verified",
+          "--evidence-url=REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+          "--evidence-note=REPLACE_WITH_CONTACT_PATH_PROOF",
+          "--confirmed-by-robert",
+        ]),
+        status: "blocked",
+        reason: "Requires Robert-reviewed contact evidence outside tracked files; this command records approval only and never sends outreach.",
+      },
+      {
+        id: "contact-path-readiness",
+        gate: "contact_path",
+        label: "Verify contact path readiness",
+        command: npmRunText("revenue:contact-path-readiness-packet", [
+          "--contact-mode=manual",
+          "--approval-decision-id=CONTACT_PATH_APPROVAL_ID",
+          "--robert-approved-contact-path",
+          "--contact-path-verified",
+          "--evidence-url=REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+          "--evidence-note=REPLACE_WITH_CONTACT_PATH_PROOF",
+        ]),
+        status: "blocked",
+        reason: "Runs after the contact path approval decision and confirms outreach remains disabled until explicit send approval.",
+      },
+    );
+  }
+  if (!readiness.canCollectMoney) {
+    setupCommands.push(
+      {
+        id: "payment-path-approval",
+        gate: "payment_path",
+        label: "Approve payment path before charging",
+        command: npmRunText("revenue:payment-path-approval-decision", [
+          "--payment-link=REPLACE_WITH_STRIPE_PAYMENT_LINK",
+          "--decision=approved",
+          "--approved-action=Approve exact Stripe payment path for first-money deposits.",
+          "--robert-approved-payment-path",
+          "--payment-smoke-verified",
+          "--expected-deposit-usd=1500",
+          "--expected-package=First Money Website Deposit",
+          "--evidence-url=REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+          "--evidence-note=REPLACE_WITH_PAYMENT_PROOF",
+          "--confirmed-by-robert",
+        ]),
+        status: "blocked",
+        reason: "Requires a real HTTPS Stripe link and Robert-reviewed payment evidence; this command records approval only and never charges clients.",
+      },
+      {
+        id: "payment-path-readiness",
+        gate: "payment_path",
+        label: "Verify payment path readiness",
+        command: npmRunText("revenue:payment-path-readiness-packet", [
+          "--payment-link=REPLACE_WITH_STRIPE_PAYMENT_LINK",
+          "--approval-decision-id=PAYMENT_PATH_APPROVAL_ID",
+          "--robert-approved-payment-path",
+          "--payment-smoke-verified",
+          "--expected-deposit-usd=1500",
+          "--expected-package=First Money Website Deposit",
+          "--evidence-url=REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+          "--evidence-note=REPLACE_WITH_PAYMENT_PROOF",
+        ]),
+        status: "blocked",
+        reason: "Runs after the payment path approval decision and confirms the system still does not charge clients by itself.",
+      },
+    );
+  }
+  return setupCommands;
 }
 
 type CandidateApprovalInput = {
@@ -218,6 +304,7 @@ function buildCandidateApprovalBatches(candidates: CandidateApprovalInput[]) {
 
 export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCommandCenterCliOptions) {
   const readiness = buildRevenueMoneyReadinessReport({ mode: options.mode });
+  const setupCommands = buildSetupCommands(readiness);
   const snapshot = getRevenueEngineSnapshot();
   const allPublicCandidates = listRevenuePublicLeadCandidates();
   const publicCandidates = allPublicCandidates.filter((candidate) => !isDemoCandidate(candidate));
@@ -367,6 +454,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       approvedOutreachDrafts: outreachDrafts.filter((draft) => draft.status === "approved").length,
     },
     candidateApprovalBatches,
+    setupCommands,
     readiness: {
       ready: readiness.ready,
       canStartToday: readiness.canStartToday,
@@ -410,6 +498,15 @@ export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<type
     "",
     "Command queue:",
     ...packet.queue.map((item) => `- [${item.status}] ${displayText(item.label)}: ${displayText(item.command)} (${displayText(item.reason)})`),
+    ...(packet.setupCommands.length
+      ? [
+        "",
+        "Setup gates:",
+        ...packet.setupCommands.map((item) =>
+          `- [${item.status}] ${displayText(item.label)}: ${displayText(item.command)} (${displayText(item.reason)})`,
+        ),
+      ]
+      : []),
     ...(packet.candidateApprovalBatches.length
       ? [
         "",

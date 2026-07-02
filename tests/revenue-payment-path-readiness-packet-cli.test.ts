@@ -86,6 +86,16 @@ test("parses and validates payment path readiness packet CLI options", () => {
     "--evidence-url is required.",
     "--evidence-note is required.",
   ]);
+  assert.deepEqual(validateRevenuePaymentPathReadinessPacketOptions(parseRevenuePaymentPathReadinessPacketArgs([
+    "--payment-link=https://buy.stripe.com/revenue-deposit",
+    "--expected-deposit-usd=1500",
+    "--expected-package=Website 3D Premium",
+    "--evidence-url=https://example.com/REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+    "--evidence-note=REPLACE_WITH_PAYMENT_PROOF",
+  ])), [
+    "--evidence-url must be real evidence, not a placeholder.",
+    "--evidence-note must be real proof, not a placeholder.",
+  ]);
 });
 
 test("payment path readiness packet blocks missing approval and unsafe charge request", () => {

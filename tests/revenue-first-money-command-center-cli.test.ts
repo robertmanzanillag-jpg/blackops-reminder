@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   recordRevenueOutreachDraft,
@@ -74,6 +75,20 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(packet.nextCommand.id, "public-scout");
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("revenue:public-scout-schedule")), true);
   assert.equal(packet.queue.some((item) => item.id === "public-scout" && item.command.includes("--browser-executor=subagent_browser")), true);
+  assert.equal(packet.setupCommands.length, 4);
+  assert.deepEqual(packet.setupCommands.map((item) => item.id), [
+    "contact-path-approval",
+    "contact-path-readiness",
+    "payment-path-approval",
+    "payment-path-readiness",
+  ]);
+  assert.equal(packet.setupCommands.every((item) => item.status === "blocked"), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:contact-path-approval-decision")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("revenue:payment-path-approval-decision")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("REPLACE_WITH_STRIPE_PAYMENT_LINK")), true);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("--send-outreach")), false);
+  assert.equal(packet.setupCommands.some((item) => item.command.includes("--charge-client")), false);
   assert.equal(packet.readiness.canAutonomousSearchBusinesses, false);
   assert.equal(packet.readiness.canRunGuardedPublicScoutCapture, true);
   assert.match(packet.nextCommand.reason, /No contact/);
@@ -87,6 +102,43 @@ test("first-money command center starts with guarded public scouting", () => {
   assert.equal(getRevenueFirstMoneyCommandCenterExitCode(packet), 0);
   assert.match(text, /Revenue first-money command center:/);
   assert.match(text, /Capture public business candidates/);
+  assert.match(text, /Setup gates:/);
+  assert.match(text, /Approve contact path before outreach/);
+  assert.match(text, /Approve payment path before charging/);
+  assert.match(text, /never sends outreach/);
+  assert.match(text, /never charges clients/);
+});
+
+test("first-money setup gate templates cannot persist placeholder approvals", () => {
+  const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const contactApprovalCommand = packet.setupCommands.find((item) => item.id === "contact-path-approval");
+  const paymentApprovalCommand = packet.setupCommands.find((item) => item.id === "payment-path-approval");
+  assert.ok(contactApprovalCommand);
+  assert.ok(paymentApprovalCommand);
+
+  const baseEnv = {
+    ...process.env,
+    REVENUE_ENGINE_APPROVAL_DECISIONS_PATH: testApprovalDecisionsPath,
+  };
+  const contactResult = spawnSync("sh", ["-c", contactApprovalCommand.command], {
+    cwd: process.cwd(),
+    env: baseEnv,
+    encoding: "utf8",
+  });
+  const paymentResult = spawnSync("sh", ["-c", paymentApprovalCommand.command], {
+    cwd: process.cwd(),
+    env: baseEnv,
+    encoding: "utf8",
+  });
+
+  assert.equal(contactResult.status, 1, `${contactResult.stdout}\n${contactResult.stderr}`);
+  assert.match(`${contactResult.stdout}\n${contactResult.stderr}`, /placeholder/);
+  assert.equal(paymentResult.status, 1, `${paymentResult.stdout}\n${paymentResult.stderr}`);
+  assert.match(`${paymentResult.stdout}\n${paymentResult.stderr}`, /placeholder|Stripe payment/);
+  const persistedDecisions = existsSync(testApprovalDecisionsPath)
+    ? JSON.parse(readFileSync(testApprovalDecisionsPath, "utf8"))
+    : [];
+  assert.deepEqual(persistedDecisions, []);
 });
 
 test("first-money command center prioritizes public contact verification for unverified candidates", () => {

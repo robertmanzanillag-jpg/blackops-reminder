@@ -13,6 +13,10 @@ function getArgValue(argv: string[], name: string) {
   return arg ? arg.slice(prefix.length).trim() : "";
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_)/i.test(value);
+}
+
 export function parseRevenuePaymentPathReadinessPacketArgs(argv: string[]): RevenuePaymentPathReadinessPacketCliOptions {
   return {
     paymentLink: getArgValue(argv, "--payment-link"),
@@ -37,7 +41,9 @@ export function validateRevenuePaymentPathReadinessPacketOptions(options: Revenu
   }
   if (!options.expectedPackage) errors.push("--expected-package is required.");
   if (!options.evidenceUrl) errors.push("--evidence-url is required.");
+  else if (hasPlaceholderValue(options.evidenceUrl)) errors.push("--evidence-url must be real evidence, not a placeholder.");
   if (!options.evidenceNote) errors.push("--evidence-note is required.");
+  else if (hasPlaceholderValue(options.evidenceNote)) errors.push("--evidence-note must be real proof, not a placeholder.");
   return errors;
 }
 

@@ -58,6 +58,13 @@ test("parses and validates contact path approval decision options", () => {
     "--from-email must be a valid email when provided.",
     "--evidence-url must be a valid URL.",
   ]);
+  assert.deepEqual(validateRevenueContactPathApprovalDecisionOptions(parseRevenueContactPathApprovalDecisionArgs([
+    "--evidence-url=https://example.com/REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    "--evidence-note=REPLACE_WITH_CONTACT_PATH_PROOF",
+  ])), [
+    "--evidence-url must be real evidence, not a placeholder.",
+    "--evidence-note must be real proof, not a placeholder.",
+  ]);
 });
 
 test("records approved contact path decision without sending outreach or leaking email in target", () => {

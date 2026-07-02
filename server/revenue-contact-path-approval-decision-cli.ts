@@ -48,6 +48,10 @@ function parseUrl(value: string) {
   }
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_)/i.test(value);
+}
+
 export function parseRevenueContactPathApprovalDecisionArgs(argv: string[]): RevenueContactPathApprovalDecisionCliOptions {
   return {
     contactMode: parseContactMode(getArgValue(argv, "--contact-mode")),
@@ -74,8 +78,10 @@ export function validateRevenueContactPathApprovalDecisionOptions(options: Reven
   if (options.contactMode === "email_provider" && !options.fromEmail) errors.push("--from-email is required for email_provider contact mode.");
   if (options.fromEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(options.fromEmail)) errors.push("--from-email must be a valid email when provided.");
   if (!options.evidenceUrl) errors.push("--evidence-url is required.");
+  else if (hasPlaceholderValue(options.evidenceUrl)) errors.push("--evidence-url must be real evidence, not a placeholder.");
   else if (!parseUrl(options.evidenceUrl)) errors.push("--evidence-url must be a valid URL.");
   if (options.evidenceNote.trim().length < 8) errors.push("--evidence-note must describe the contact path proof.");
+  else if (hasPlaceholderValue(options.evidenceNote)) errors.push("--evidence-note must be real proof, not a placeholder.");
   return errors;
 }
 

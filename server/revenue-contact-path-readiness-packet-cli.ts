@@ -17,6 +17,10 @@ function parseContactMode(value: string): RevenueContactPathReadinessPacketInput
   return value === "email_provider" ? "email_provider" : "manual";
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_)/i.test(value);
+}
+
 export function parseRevenueContactPathReadinessPacketArgs(argv: string[]): RevenueContactPathReadinessPacketCliOptions {
   return {
     contactMode: parseContactMode(getArgValue(argv, "--contact-mode")),
@@ -34,7 +38,9 @@ export function validateRevenueContactPathReadinessPacketOptions(options: Revenu
   const errors: string[] = [];
   if (!["manual", "email_provider"].includes(options.contactMode)) errors.push("--contact-mode must be manual or email_provider.");
   if (!options.evidenceUrl) errors.push("--evidence-url is required.");
+  else if (hasPlaceholderValue(options.evidenceUrl)) errors.push("--evidence-url must be real evidence, not a placeholder.");
   if (!options.evidenceNote) errors.push("--evidence-note is required.");
+  else if (hasPlaceholderValue(options.evidenceNote)) errors.push("--evidence-note must be real proof, not a placeholder.");
   return errors;
 }
 

@@ -49,7 +49,12 @@ function parseUrl(value: string) {
   }
 }
 
+function hasPlaceholderValue(value: string) {
+  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_)/i.test(value);
+}
+
 function isAllowedPaymentLink(value: string) {
+  if (hasPlaceholderValue(value)) return false;
   const url = parseUrl(value);
   if (!url) return false;
   return url.protocol === "https:" && ["buy.stripe.com", "checkout.stripe.com", "invoice.stripe.com"].includes(url.hostname.toLowerCase());
@@ -84,8 +89,10 @@ export function validateRevenuePaymentPathApprovalDecisionOptions(options: Reven
   }
   if (options.expectedPackage.trim().length < 2) errors.push("--expected-package is required.");
   if (!options.evidenceUrl) errors.push("--evidence-url is required.");
+  else if (hasPlaceholderValue(options.evidenceUrl)) errors.push("--evidence-url must be real evidence, not a placeholder.");
   else if (!parseUrl(options.evidenceUrl)) errors.push("--evidence-url must be a valid URL.");
   if (options.evidenceNote.trim().length < 8) errors.push("--evidence-note must describe the payment smoke/deposit proof.");
+  else if (hasPlaceholderValue(options.evidenceNote)) errors.push("--evidence-note must be real proof, not a placeholder.");
   return errors;
 }
 

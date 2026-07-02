@@ -61,6 +61,16 @@ test("parses and validates payment path approval decision options", () => {
     "--payment-link must be an HTTPS Stripe payment, checkout, or invoice link.",
     "--evidence-url must be a valid URL.",
   ]);
+  assert.deepEqual(validateRevenuePaymentPathApprovalDecisionOptions(parseRevenuePaymentPathApprovalDecisionArgs([
+    "--payment-link=https://buy.stripe.com/revenue-deposit",
+    "--expected-deposit-usd=1500",
+    "--expected-package=Website 3D Premium",
+    "--evidence-url=https://example.com/REPLACE_WITH_PAYMENT_EVIDENCE_URL",
+    "--evidence-note=REPLACE_WITH_PAYMENT_PROOF",
+  ])), [
+    "--evidence-url must be real evidence, not a placeholder.",
+    "--evidence-note must be real proof, not a placeholder.",
+  ]);
 });
 
 test("records approved payment path decision without charging or editing env", () => {

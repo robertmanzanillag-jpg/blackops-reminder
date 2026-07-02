@@ -96,6 +96,13 @@ test("parses and validates contact path readiness packet CLI options", () => {
     "--evidence-url is required.",
     "--evidence-note is required.",
   ]);
+  assert.deepEqual(validateRevenueContactPathReadinessPacketOptions(parseRevenueContactPathReadinessPacketArgs([
+    "--evidence-url=https://example.com/REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    "--evidence-note=REPLACE_WITH_CONTACT_PATH_PROOF",
+  ])), [
+    "--evidence-url must be real evidence, not a placeholder.",
+    "--evidence-note must be real proof, not a placeholder.",
+  ]);
 });
 
 test("contact path readiness packet blocks missing approval and unsafe send request", () => {
