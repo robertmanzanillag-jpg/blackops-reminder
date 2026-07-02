@@ -357,18 +357,56 @@ test("first-money command center prioritizes public contact verification for unv
         publicEvidenceVerified: false,
         approvalToImport: false,
       },
+      {
+        businessName: "Spoof owner@captured.biz https://private.example/source",
+        area: "Miami 786-555-0199",
+        niche: "coffee shop https://directory.invalid/source",
+        websiteStatus: "no_website",
+        contactChannel: "unknown",
+        contactValue: "",
+        sourceUrl: "https://public-directory.invalid/spoof-captured-command-cafe",
+        recipientEmail: "",
+        evidence: "Public listing has no website and includes owner@captured.biz.",
+        painPoint: "Needs menu capture and follow-up.",
+        estimatedOfferUsd: 3600,
+        status: "research",
+        verificationStatus: "needs_review",
+        publicEvidenceVerified: false,
+        approvalToImport: false,
+      },
     ],
   });
 
   const packet = buildRevenueFirstMoneyCommandCenter({ mode: "first-sprint", json: false });
+  const summary = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
   const verificationCommand = packet.queue.find((item) => item.id === "candidate-verification");
+  const serializedSummary = JSON.stringify(summary);
 
   assert.equal(packet.nextCommand.id, "candidate-verification");
-  assert.equal(packet.counts.verificationNeededPublicCandidates, 1);
+  assert.equal(packet.counts.verificationNeededPublicCandidates, 2);
   assert.equal(packet.counts.reviewablePublicCandidates, 0);
   assert.equal(verificationCommand?.status, "review");
   assert.match(verificationCommand?.command || "", /revenue:public-contact-verification/);
   assert.doesNotMatch(verificationCommand?.command || "", /--approved-by-robert/);
+  assert.equal(packet.candidateVerificationQueue.length, 2);
+  assert.equal(packet.candidateVerificationQueue[0].businessName, "Captured Command Cafe");
+  assert.equal(packet.candidateVerificationQueue[1].businessName, "Spoof [contact] [source]");
+  assert.equal(packet.candidateVerificationQueue[1].area, "Miami [phone]");
+  assert.equal(packet.candidateVerificationQueue[1].niche, "coffee shop [source]");
+  assert.equal(packet.candidateVerificationQueue[0].safety.importsLeads, false);
+  assert.equal(packet.candidateVerificationQueue[0].safety.sendsOutreach, false);
+  assert.equal(summary.nextCandidateVerification?.businessName, "Captured Command Cafe");
+  assert.equal(summary.candidateVerificationQueue.length, 2);
+  assert.equal(summary.activationChecklist[0].id, "candidate_verification");
+  assert.equal(summary.activationChecklist[0].status, "ready_now");
+  assert.match(summary.activationChecklist[0].commandHint, /revenue:public-contact-verification/);
+  assert.equal(summary.counts.verificationNeededPublicCandidates, 2);
+  assert.doesNotMatch(serializedSummary, /public-directory\.invalid\/captured-command-cafe/);
+  assert.doesNotMatch(serializedSummary, /private\.example\/source/);
+  assert.doesNotMatch(serializedSummary, /directory\.invalid\/source/);
+  assert.doesNotMatch(serializedSummary, /owner@captured\.biz/);
+  assert.doesNotMatch(serializedSummary, /786-555-0199/);
+  assert.doesNotMatch(serializedSummary, /Public listing has no website/);
 });
 
 test("first-money command center routes verified public candidates to Robert review", () => {

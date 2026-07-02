@@ -60,7 +60,7 @@ type FirstMoneyHandoffPacket = {
 };
 
 type FirstMoneyActivationStep = {
-  id: "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
+  id: "candidate_verification" | "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
   label: string;
   status: "ready_now" | "needs_robert_approval" | "blocked_until_evidence" | "blocked_until_prior_step";
   owner: "agent" | "robert" | "external";
@@ -108,6 +108,28 @@ type CandidateApprovalBatch = {
   moneySprintRunPacketCommand: string;
   command: string;
   reason: string;
+};
+
+type CandidateVerificationQueueItem = {
+  id: string;
+  candidateId: string;
+  businessName: string;
+  area: string;
+  niche: string;
+  websiteStatus: string;
+  verificationStatus: string;
+  missing: string[];
+  readyForRobertReview: boolean;
+  command: string;
+  safety: {
+    readsPublicDataOnly: true;
+    persistsChanges: false;
+    importsLeads: false;
+    sendsOutreach: false;
+    chargesClients: false;
+    deploys: false;
+    paidDataSpendUsd: 0;
+  };
 };
 
 function redactCandidateApprovalBatchForSummary(batch: CandidateApprovalBatch | undefined) {
@@ -189,6 +211,50 @@ function redactCandidateRunBatchForSummary(batch: CandidateApprovalBatch | undef
       paidDataSpendUsd: 0,
     },
   };
+}
+
+function redactedVerificationMissing(candidate: {
+  verificationStatus: string;
+  publicEvidenceVerified: boolean;
+  contactChannel: string;
+  contactValue: string;
+  recipientEmail: string;
+}) {
+  return [
+    candidate.verificationStatus !== "verified_public" && "Verify public evidence from business-owned or public directory sources.",
+    !candidate.publicEvidenceVerified && "Confirm the public source still supports the website-status signal.",
+    candidate.contactChannel === "unknown" && "Find a public contact channel or keep the candidate blocked.",
+    candidate.contactValue.trim().length === 0 && "Add the public contact value or keep the candidate blocked.",
+    candidate.recipientEmail.trim().length === 0 && "Add a public recipient email only when one is visible; otherwise use manual-only review.",
+    candidate.recipientEmail.trim().length > 0 && !hasValidEmail(candidate.recipientEmail) && "Fix invalid public recipient email or move the candidate to manual-only review.",
+  ].filter((item): item is string => Boolean(item));
+}
+
+function redactCandidateVerificationQueueForSummary(candidates: CandidateApprovalInput[]): CandidateVerificationQueueItem[] {
+  return candidates.slice(0, 5).map((candidate, index) => {
+    const missing = redactedVerificationMissing(candidate);
+    return {
+      id: `candidate-verification-${index + 1}`,
+      candidateId: candidate.id,
+      businessName: approvalCardText(candidate.businessName),
+      area: approvalCardText(candidate.area),
+      niche: approvalCardText(candidate.niche),
+      websiteStatus: approvalCardText(candidate.websiteStatus),
+      verificationStatus: approvalCardText(candidate.verificationStatus),
+      missing,
+      readyForRobertReview: missing.length === 0,
+      command: "Use the guarded public-contact verification action; do not contact the business or import the lead.",
+      safety: {
+        readsPublicDataOnly: true,
+        persistsChanges: false,
+        importsLeads: false,
+        sendsOutreach: false,
+        chargesClients: false,
+        deploys: false,
+        paidDataSpendUsd: 0,
+      },
+    };
+  });
 }
 
 export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterCliOptions {
@@ -511,6 +577,7 @@ function buildFirstMoneyHandoffPacket(packet: ReturnType<typeof buildRevenueFirs
 function buildFirstMoneyActivationChecklist(
   packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>,
   moneyUnblockers: MoneyUnblockerItem[],
+  nextCandidateVerification: CandidateVerificationQueueItem | null,
   nextCandidateApproval: ReturnType<typeof redactCandidateApprovalBatchForSummary>,
   nextCandidateReview: ReturnType<typeof redactCandidateReviewBatchForSummary>,
   nextMoneySprintRun: ReturnType<typeof redactCandidateRunBatchForSummary>,
@@ -526,7 +593,23 @@ function buildFirstMoneyActivationChecklist(
   const publishStatus: FirstMoneyActivationStep["status"] = packet.readiness.canBuildWebsites
     ? "needs_robert_approval"
     : "blocked_until_prior_step";
-  const candidateStep: FirstMoneyActivationStep = nextCandidateApproval
+  const candidateStep: FirstMoneyActivationStep = nextCandidateVerification
+    ? {
+      id: "candidate_verification",
+      label: "Verify captured public candidate",
+      status: "ready_now",
+      owner: "agent",
+      action: `Verify public evidence and contact fields for ${nextCandidateVerification.businessName} before Robert approval.`,
+      proofRequired: [
+        "Only public business-owned or public directory evidence.",
+        "No business contact during verification.",
+        "No import until Robert approves the candidate card.",
+      ],
+      commandHint: packet.queue.find((item) => item.id === "candidate-verification")?.command || nextCandidateVerification.command,
+      unlocks: ["candidate approval cards", "manual-only review when no public email exists"],
+      safety: "Public verification only; does not import leads, send outreach, charge clients, write website files or deploy.",
+    }
+    : nextCandidateApproval
     ? {
       id: "candidate_approval",
       label: "Approve safe candidate batch",
@@ -955,6 +1038,7 @@ export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCo
       reviewableOutreachDrafts: reviewableDrafts.length,
       approvedOutreachDrafts: outreachDrafts.filter((draft) => draft.status === "approved").length,
     },
+    candidateVerificationQueue: redactCandidateVerificationQueueForSummary(verificationNeededCandidates),
     candidateApprovalBatches,
     setupCommands,
     readiness: {
@@ -1005,6 +1089,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     .map((batch) => redactCandidateRunBatchForSummary(batch))
     .filter((batch): batch is NonNullable<ReturnType<typeof redactCandidateRunBatchForSummary>> => Boolean(batch));
   const safeSearchAction = packet.queue.find((item) => item.id === "public-scout") || null;
+  const nextCandidateVerification = packet.candidateVerificationQueue[0] || null;
   const nextCommand = {
     ...packet.nextCommand,
     command: nextCandidateReview
@@ -1016,6 +1101,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
   const activationChecklist = buildFirstMoneyActivationChecklist(
     packet,
     moneyUnblockers,
+    nextCandidateVerification,
     nextCandidateApproval,
     nextCandidateReview,
     nextMoneySprintRun,
@@ -1025,6 +1111,8 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     mode: packet.mode,
     nextCommand,
     nextCandidateApproval,
+    nextCandidateVerification,
+    candidateVerificationQueue: packet.candidateVerificationQueue,
     candidateApprovalQueue,
     nextCandidateReview,
     candidateReviewQueue,
@@ -1036,6 +1124,7 @@ export function buildRevenueFirstMoneyCommandCenterSummary(options: RevenueFirst
     activationChecklist,
     counts: {
       publicCandidates: packet.counts.publicCandidates,
+      verificationNeededPublicCandidates: packet.counts.verificationNeededPublicCandidates,
       reviewablePublicCandidates: packet.counts.reviewablePublicCandidates,
       manualOnlyPublicCandidates: packet.counts.manualOnlyPublicCandidates,
       leads: packet.counts.leads,

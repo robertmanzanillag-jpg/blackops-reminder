@@ -469,6 +469,28 @@ type FirstMoneyCandidateReviewSummary = {
   };
 };
 
+type FirstMoneyCandidateVerificationSummary = {
+  id: string;
+  candidateId: string;
+  businessName: string;
+  area: string;
+  niche: string;
+  websiteStatus: string;
+  verificationStatus: string;
+  missing: string[];
+  readyForRobertReview: boolean;
+  command: string;
+  safety: {
+    readsPublicDataOnly: boolean;
+    persistsChanges: boolean;
+    importsLeads: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    paidDataSpendUsd: number;
+  };
+};
+
 type FirstMoneyCommandCenter = {
   status: string;
   mode: string;
@@ -479,6 +501,8 @@ type FirstMoneyCommandCenter = {
     status: "ready" | "blocked" | "review";
     reason: string;
   };
+  nextCandidateVerification: FirstMoneyCandidateVerificationSummary | null;
+  candidateVerificationQueue: FirstMoneyCandidateVerificationSummary[];
   nextCandidateApproval: FirstMoneyCandidateApprovalSummary | null;
   candidateApprovalQueue: FirstMoneyCandidateApprovalSummary[];
   nextCandidateReview: FirstMoneyCandidateReviewSummary | null;
@@ -515,7 +539,7 @@ type FirstMoneyCommandCenter = {
     safeToSendToRobert: boolean;
   };
   activationChecklist: Array<{
-    id: "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
+    id: "candidate_verification" | "candidate_approval" | "candidate_review" | "contact_path" | "payment_path" | "first_outreach" | "paid_build" | "publish";
     label: string;
     status: "ready_now" | "needs_robert_approval" | "blocked_until_evidence" | "blocked_until_prior_step";
     owner: "agent" | "robert" | "external";
@@ -527,6 +551,7 @@ type FirstMoneyCommandCenter = {
   }>;
   counts: {
     publicCandidates: number;
+    verificationNeededPublicCandidates: number;
     reviewablePublicCandidates: number;
     manualOnlyPublicCandidates: number;
     leads: number;
@@ -3035,6 +3060,9 @@ export default function RevenueEnginePage() {
                   Public candidates {firstMoneyCommandCenter?.counts.publicCandidates ?? 0}
                 </div>
                 <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
+                  Verificar {firstMoneyCommandCenter?.counts.verificationNeededPublicCandidates ?? 0}
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
                   Reviewables {firstMoneyCommandCenter?.counts.reviewablePublicCandidates ?? 0}
                 </div>
                 <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-zinc-200">
@@ -3044,6 +3072,29 @@ export default function RevenueEnginePage() {
                   Drafts {firstMoneyCommandCenter?.counts.outreachDrafts ?? 0}
                 </div>
               </div>
+              {!!firstMoneyCommandCenter?.candidateVerificationQueue?.length && (
+                <div className="mt-3 space-y-2" data-testid="first-money-candidate-verification-queue">
+                  {firstMoneyCommandCenter.candidateVerificationQueue.map((candidate) => (
+                    <div
+                      key={candidate.id}
+                      className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-5"
+                      data-testid={`first-money-candidate-verification-${candidate.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-white">{candidate.businessName}</p>
+                          <p className="text-zinc-400">{candidate.area} · {candidate.niche} · {candidate.websiteStatus}</p>
+                        </div>
+                        <Badge variant="outline" className="shrink-0 border-amber-500/30 text-amber-100">
+                          verify
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-zinc-300">{candidate.missing.slice(0, 2).join(" ") || "Ready for Robert review."}</p>
+                      <p className="mt-1 text-zinc-500">{candidate.command}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="mt-3 space-y-2" data-testid="first-money-unblockers">
                 {(firstMoneyCommandCenter?.moneyUnblockers || []).slice(0, 4).map((unblocker) => (
                   <div
