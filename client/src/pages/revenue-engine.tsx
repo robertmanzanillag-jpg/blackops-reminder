@@ -673,32 +673,25 @@ type PublicCandidateReviewPacketPendingActionResult = {
   };
 };
 
-type PublicCandidateMoneySprintRunResult = {
-  status: "ready_to_start" | "needs_lead_evidence" | "needs_spend_approval" | "blocked";
-  executed: boolean;
-  recordedLeads: Array<{ id: string; businessName: string; status: string; grade: string; score: number; deduped: boolean }>;
-  previews: Array<{ slug: string; businessName: string; fileWritten: boolean; decisionStatus: string }>;
-  outreachDrafts: Array<{ id: string; businessName: string; status: string; sendStatus: string; channel: string }>;
-  blockedSeeds: Array<{ businessName: string; reason: string }>;
-  operatingLimits: {
-    maxQualifiedLeadsToday: number;
-    maxMockupsToday: number;
-    maxContactsToday: number;
-    maxPaidDataSpendUsd: number;
-    externalContactMode: string;
+type PublicCandidateMoneySprintRunPendingActionResult = {
+  status: "queued" | "blocked";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
   };
-  approvalGates: string[];
-  nextActions: string[];
+  blockers?: string[];
+  commandCenter: FirstMoneyCommandCenter;
   safety: {
     persistsLeads: boolean;
-    writesPreviewFiles: boolean;
+    createsPendingAction: boolean;
     sendsOutreach: boolean;
     chargesClients: boolean;
+    writesPreviewFiles: boolean;
     deploys: boolean;
-    paidDataSpendUsd: number;
-    requiresRobertApproval: boolean;
   };
-  commandCenter: FirstMoneyCommandCenter;
 };
 
 type ClarificationGate = {
@@ -2286,10 +2279,10 @@ export default function RevenueEnginePage() {
     },
   });
 
-  const publicCandidateMoneySprintRunMutation = useMutation<PublicCandidateMoneySprintRunResult>({
+  const publicCandidateMoneySprintRunPendingActionMutation = useMutation<PublicCandidateMoneySprintRunPendingActionResult>({
     mutationFn: async () => {
       const run = selectedPublicCandidateRunBatch;
-      const response = await fetch("/api/revenue-engine/public-lead-candidates/run-money-sprint", {
+      const response = await fetch("/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2303,14 +2296,11 @@ export default function RevenueEnginePage() {
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo ejecutar Money Sprint interno");
+      if (!response.ok) throw new Error(data.error || data.blockers?.join("; ") || "No se pudo enviar Money Sprint interno a Trust Center");
       return data;
     },
     onSuccess: () => {
-      refetchSnapshot();
       refetchFirstMoneyCommandCenter();
-      setSelectedPublicCandidateReviewBatchId("");
-      setPublicCandidateRunConfirmation("");
     },
   });
 
@@ -3079,36 +3069,25 @@ export default function RevenueEnginePage() {
                         <Button
                           type="button"
                           disabled={
-                            publicCandidateMoneySprintRunMutation.isPending
+                            publicCandidateMoneySprintRunPendingActionMutation.isPending
                             || publicCandidateRunConfirmation.trim() !== selectedPublicCandidateRunBatch.confirmationText
                           }
-                          onClick={() => publicCandidateMoneySprintRunMutation.mutate()}
+                          onClick={() => publicCandidateMoneySprintRunPendingActionMutation.mutate()}
                           className="bg-sky-600 text-white hover:bg-sky-500"
-                          data-testid="button-run-public-candidate-money-sprint"
+                          data-testid="button-queue-public-candidate-money-sprint"
                         >
-                          {publicCandidateMoneySprintRunMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                          Ejecutar interno
+                          {publicCandidateMoneySprintRunPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                          Trust Center
                         </Button>
                       </div>
-                      {publicCandidateMoneySprintRunMutation.data && (
-                        <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
-                          <div className="rounded-md border border-sky-500/20 bg-black px-3 py-2 text-sky-100">
-                            Leads: {publicCandidateMoneySprintRunMutation.data.recordedLeads.length}
-                          </div>
-                          <div className="rounded-md border border-sky-500/20 bg-black px-3 py-2 text-sky-100">
-                            Previews: {publicCandidateMoneySprintRunMutation.data.previews.length}
-                          </div>
-                          <div className="rounded-md border border-sky-500/20 bg-black px-3 py-2 text-sky-100">
-                            Drafts: {publicCandidateMoneySprintRunMutation.data.outreachDrafts.length}
-                          </div>
-                          <p className="rounded-md border border-zinc-800 bg-black px-3 py-2 leading-5 text-zinc-400 md:col-span-3">
-                            {publicCandidateMoneySprintRunMutation.data.nextActions.join(" ")}
-                          </p>
+                      {publicCandidateMoneySprintRunPendingActionMutation.data?.pendingAction && (
+                        <div className="mt-3 rounded-md border border-sky-500/20 bg-black px-3 py-2 text-xs text-sky-100">
+                          Trust Center: {publicCandidateMoneySprintRunPendingActionMutation.data.pendingAction.title}
                         </div>
                       )}
-                      {publicCandidateMoneySprintRunMutation.error && (
+                      {publicCandidateMoneySprintRunPendingActionMutation.error && (
                         <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
-                          {publicCandidateMoneySprintRunMutation.error.message}
+                          {publicCandidateMoneySprintRunPendingActionMutation.error.message}
                         </p>
                       )}
                     </div>

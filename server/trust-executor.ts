@@ -6,7 +6,12 @@ import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updat
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
 import { executeMetricoolAutomationAction } from "./metricool-chat-actions";
 import { processDriveRadioVideoFile, processYoutubeRadioVideoLink, resumeRadioVideoEditWithDjName } from "./radio-video-edit-agent";
-import { reviewRevenuePublicLeadCandidates, setRevenueUserDataScope } from "./revenue-engine";
+import {
+  findRevenueMoneySprintArtifactsByBusinessNames,
+  reviewRevenuePublicLeadCandidates,
+  runRevenueMoneySprint,
+  setRevenueUserDataScope,
+} from "./revenue-engine";
 import { buildRevenueFirstMoneyCommandCenterSummary } from "./revenue-first-money-command-center-cli";
 import { buildRevenuePublicCandidateApprovalDecisionFromCli } from "./revenue-public-candidate-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
@@ -169,6 +174,106 @@ export function executeRevenueFirstMoneyCandidateReviewFromPendingInput(input: J
   };
 }
 
+export function executeRevenueFirstMoneyMoneySprintRunFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  const candidateIds = candidateIdsInput(input);
+  const approvalDecisionId = stringInput(input, "approvalDecisionId");
+  const runInput = {
+    batchId: stringInput(input, "batchId"),
+    candidateIds,
+    approvalDecisionId,
+    area: stringInput(input, "area"),
+    niche: stringInput(input, "niche"),
+    offerFocus: stringInput(input, "offerFocus"),
+    confirmationText: stringInput(input, "confirmationText"),
+  };
+  const requestedReview = stringInput(input, "requestedReview");
+  const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
+  const expectedRun = commandCenter.candidateRunQueue.find((batch) => batch.id === runInput.batchId);
+
+  if (
+    !expectedRun
+    || requestedReview !== "run_first_money_internal_money_sprint"
+    || !matchesRevenueFirstMoneyApprovedCandidateBatch(runInput, expectedRun)
+  ) {
+    throw new Error("Revenue Money Sprint pending action no longer matches the active first-money command-center queue.");
+  }
+
+  const review = reviewRevenuePublicLeadCandidates({
+    area: runInput.area,
+    niche: runInput.niche,
+    offerFocus: expectedRun.offerFocus,
+    dailyResearchTarget: 20,
+    dailyQualifiedLeadLimit: 5,
+    dailyMockupLimit: 2,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+    candidateIds,
+    approvedByRobert: true,
+    approvalDecisionId,
+    reviewerNote: "Robert approved this first-money internal Money Sprint run through Trust Center.",
+  });
+
+  if (review.status !== "ready_for_money_sprint_preview" || review.moneySprintRunPacket.status !== "ready_for_money_sprint_run") {
+    throw new Error("Revenue Money Sprint pending action is not ready for guarded internal execution.");
+  }
+
+  const existingArtifacts = findRevenueMoneySprintArtifactsByBusinessNames(expectedRun.candidateNames);
+  if (existingArtifacts.businessNames.length > 0) {
+    throw new Error(`Money Sprint already has internal artifacts for: ${existingArtifacts.businessNames.join(", ")}`);
+  }
+
+  const result = runRevenueMoneySprint({
+    ...review.moneySprintRunPacket.requestBody,
+    dailyContactLimit: 0,
+    maxPaidDataSpendUsd: 0,
+    requireRobertApprovalToContact: true,
+    writePreviewFiles: false,
+  });
+
+  return {
+    status: result.status,
+    executed: true,
+    recordedLeads: result.recordedLeads.map((item) => ({
+      id: item.lead.id,
+      businessName: item.lead.businessName,
+      status: item.lead.status,
+      grade: item.qualification.grade,
+      score: item.qualification.score,
+      deduped: item.deduped,
+    })),
+    previews: result.previews.map((preview) => ({
+      slug: preview.slug,
+      businessName: preview.mockup.input.businessName,
+      fileWritten: preview.fileWritten,
+      decisionStatus: preview.status,
+    })),
+    outreachDrafts: result.outreachDrafts.map((draft) => ({
+      id: draft.id,
+      businessName: draft.businessName,
+      status: draft.status,
+      sendStatus: draft.delivery.sendStatus,
+      channel: draft.channel,
+    })),
+    blockedSeeds: result.blockedSeeds,
+    operatingLimits: result.operatingLimits,
+    approvalGates: result.approvalGates,
+    nextActions: result.nextActions,
+    safety: {
+      persistsLeads: true,
+      writesPreviewFiles: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      deploys: false,
+      paidDataSpendUsd: 0,
+      requiresRobertApproval: true,
+    },
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+  };
+}
+
 export async function executeApprovedPendingAction(
   action: PendingAction,
   actorId: string
@@ -325,6 +430,11 @@ export async function executeApprovedPendingAction(
 
       case "revenue.first_money_candidate_review": {
         result = executeRevenueFirstMoneyCandidateReviewFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_sprint_run": {
+        result = executeRevenueFirstMoneyMoneySprintRunFromPendingInput(input, action.userId);
         break;
       }
 

@@ -5197,7 +5197,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint", async (req, res) => {
+  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action", async (req, res) => {
     try {
       const input = revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
       const commandCenter = buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false });
@@ -5215,7 +5215,7 @@ export async function registerRoutes(
       if (!matchesActiveBatch) {
         return res.status(400).json({
           status: "blocked",
-          blockers: ["Money sprint payload must match a queued approved first-money batch and exact run confirmation text."],
+          blockers: ["Pending Money Sprint payload must match a queued approved first-money batch and exact run confirmation text."],
           commandCenter,
         });
       }
@@ -5239,49 +5239,88 @@ export async function registerRoutes(
         });
       }
 
-      const result = runRevenueMoneySprint({
-        ...review.moneySprintRunPacket.requestBody,
-        dailyContactLimit: 0,
-        maxPaidDataSpendUsd: 0,
-        requireRobertApprovalToContact: true,
-        writePreviewFiles: false,
-      });
-      res.json({
-        status: result.status,
-        executed: true,
-        recordedLeads: result.recordedLeads.map((item) => ({
-          id: item.lead.id,
-          businessName: item.lead.businessName,
-          status: item.lead.status,
-          grade: item.qualification.grade,
-          score: item.qualification.score,
-          deduped: item.deduped,
-        })),
-        previews: result.previews.map((preview) => ({
-          slug: preview.slug,
-          businessName: preview.mockup.input.businessName,
-          fileWritten: preview.fileWritten,
-          decisionStatus: preview.status,
-        })),
-        outreachDrafts: result.outreachDrafts.map((draft) => ({
-          id: draft.id,
-          businessName: draft.businessName,
-          status: draft.status,
-          sendStatus: draft.delivery.sendStatus,
-          channel: draft.channel,
-        })),
-        blockedSeeds: result.blockedSeeds,
-        operatingLimits: result.operatingLimits,
-        approvalGates: result.approvalGates,
-        nextActions: result.nextActions,
-        safety: {
-          persistsLeads: true,
-          writesPreviewFiles: false,
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_sprint_run",
+        resourceType: "revenue_internal_money_sprint_batch",
+        resourceId: expectedRun.id,
+        title: `Run guarded internal Money Sprint: ${expectedRun.area} / ${expectedRun.niche}`,
+        description: [
+          `Create internal leads, mockup records and draft-only outreach for ${expectedRun.count} approved public candidate(s).`,
+          "This pending action does not send outreach, charge clients, write website files, write preview files or deploy.",
+          `Exact confirmation: ${expectedRun.confirmationText}`,
+        ].join(" "),
+        input: {
+          batchId: expectedRun.id,
+          candidateIds: expectedRun.candidateIds,
+          approvalDecisionId: expectedRun.approvalDecisionId,
+          area: expectedRun.area,
+          niche: expectedRun.niche,
+          offerFocus: expectedRun.offerFocus,
+          requestedReview: "run_first_money_internal_money_sprint",
+          confirmationText: expectedRun.confirmationText,
+        },
+        proposedChanges: {
+          runStatus: "pending_trust_center_review",
+          candidateNames: expectedRun.candidateNames,
+          totalEstimatedOfferUsd: expectedRun.totalEstimatedOfferUsd,
+          expectedOutput: review.moneySprintRunPacket.expectedOutput,
+          afterApproval: "Persist internal leads, mockup records and draft-only outreach for final human review.",
+          blockedActions: ["send outreach", "charge clients", "write website files", "write preview files", "deploy"],
+          safety: review.moneySprintRunPacket.safety,
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          batchId: expectedRun.id,
+          approvalDecisionId: expectedRun.approvalDecisionId,
+          importsLeads: true,
           sendsOutreach: false,
           chargesClients: false,
+          writesPreviewFiles: false,
           deploys: false,
-          paidDataSpendUsd: 0,
-          requiresRobertApproval: true,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(201).json({
+        status: "queued",
+        pendingAction,
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+        safety: {
+          persistsLeads: false,
+          createsPendingAction: true,
+          sendsOutreach: false,
+          chargesClients: false,
+          writesPreviewFiles: false,
+          deploys: false,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue public candidate Money Sprint pending action" });
+    }
+  });
+
+  app.post("/api/revenue-engine/public-lead-candidates/run-money-sprint", async (req, res) => {
+    try {
+      revenuePublicCandidateMoneySprintRunSchema.parse(req.body);
+      res.status(409).json({
+        status: "blocked",
+        blockers: ["Direct internal Money Sprint execution is disabled; queue the Trust Center pending action instead."],
+        nextEndpoint: "/api/revenue-engine/public-lead-candidates/run-money-sprint-pending-action",
+        safety: {
+          persistsLeads: false,
+          createsPendingAction: false,
+          sendsOutreach: false,
+          chargesClients: false,
+          writesPreviewFiles: false,
+          deploys: false,
         },
         commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
       });
