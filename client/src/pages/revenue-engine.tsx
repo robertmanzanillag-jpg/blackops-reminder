@@ -685,6 +685,29 @@ type PaymentPathApprovalPendingActionResult = {
   };
 };
 
+type WebsiteCreationApprovalPendingActionResult = {
+  status: "queued";
+  pendingAction?: {
+    id: string;
+    title: string;
+    status: string;
+    actionType: string;
+    resourceType: string;
+  };
+  commandCenter: FirstMoneyCommandCenter;
+  safety: {
+    createsPendingAction: boolean;
+    persistsApprovalDecision: boolean;
+    writesFiles: boolean;
+    deploys: boolean;
+    publishesPreview: boolean;
+    chargesClients: boolean;
+    sendsOutreach: boolean;
+    editsEnvironment: boolean;
+    storesSecrets: boolean;
+  };
+};
+
 type PublicCandidateReviewPacketPendingActionResult = {
   status: "queued" | "blocked";
   pendingAction?: {
@@ -1710,6 +1733,13 @@ export default function RevenueEnginePage() {
   const [paymentPathRobertApproved, setPaymentPathRobertApproved] = useState(false);
   const [paymentPathSmokeVerified, setPaymentPathSmokeVerified] = useState(false);
   const [paymentPathDepositConfirmed, setPaymentPathDepositConfirmed] = useState(false);
+  const [websiteCreationOutreachDraftId, setWebsiteCreationOutreachDraftId] = useState("");
+  const [websiteCreationNotes, setWebsiteCreationNotes] = useState("");
+  const [websiteCreationLaunchTargetDays, setWebsiteCreationLaunchTargetDays] = useState(7);
+  const [websiteCreationRobertApproved, setWebsiteCreationRobertApproved] = useState(false);
+  const [websiteCreationClientScopeApproved, setWebsiteCreationClientScopeApproved] = useState(false);
+  const [websiteCreationDepositPaid, setWebsiteCreationDepositPaid] = useState(false);
+  const [websiteCreationPublicDataVerified, setWebsiteCreationPublicDataVerified] = useState(false);
 
   const { data: snapshot, isLoading, isError, refetch: refetchSnapshot } = useQuery<RevenueSnapshot>({
     queryKey: ["revenue-engine"],
@@ -2288,6 +2318,31 @@ export default function RevenueEnginePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar payment path a Trust Center");
+      return data;
+    },
+    onSuccess: () => {
+      refetchFirstMoneyCommandCenter();
+    },
+  });
+
+  const websiteCreationApprovalPendingActionMutation = useMutation<WebsiteCreationApprovalPendingActionResult>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/website-creation-approval-pending-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outreachDraftId: websiteCreationOutreachDraftId,
+          approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review.",
+          notes: websiteCreationNotes,
+          robertApprovedBuild: websiteCreationRobertApproved,
+          clientApprovedScope: websiteCreationClientScopeApproved,
+          depositPaid: websiteCreationDepositPaid,
+          publicDataVerified: websiteCreationPublicDataVerified,
+          launchTargetDays: websiteCreationLaunchTargetDays,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(data.error) ? data.error.map((item: { message?: string }) => item.message).join("; ") : data.error || "No se pudo enviar website creation a Trust Center");
       return data;
     },
     onSuccess: () => {
@@ -3421,6 +3476,113 @@ export default function RevenueEnginePage() {
                 {paymentPathApprovalPendingActionMutation.error && (
                   <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
                     {paymentPathApprovalPendingActionMutation.error.message}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-2 text-xs leading-5 text-violet-100" data-testid="first-money-website-creation-approval-panel">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white">Website creation approval</p>
+                    <p className="mt-1 text-zinc-400">
+                      Queues Trust Center approval only. It does not write files, publish previews, deploy, charge clients, send outreach, edit env, or store secrets.
+                    </p>
+                    <div className="mt-2 grid gap-2 md:grid-cols-[1fr_120px]">
+                      <Input
+                        value={websiteCreationOutreachDraftId}
+                        onChange={(event) => setWebsiteCreationOutreachDraftId(event.target.value)}
+                        placeholder="outreach-draft-id"
+                        className="border-violet-500/20 bg-black text-xs"
+                        data-testid="input-website-creation-outreach-draft-id"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={websiteCreationLaunchTargetDays}
+                        onChange={(event) => setWebsiteCreationLaunchTargetDays(Number(event.target.value))}
+                        className="border-violet-500/20 bg-black text-xs"
+                        data-testid="input-website-creation-launch-target-days"
+                      />
+                    </div>
+                    <Textarea
+                      value={websiteCreationNotes}
+                      onChange={(event) => setWebsiteCreationNotes(event.target.value)}
+                      placeholder="Real scope, deposit, and public-data proof for this paid build"
+                      className="mt-2 min-h-[72px] border-violet-500/20 bg-black text-xs"
+                      data-testid="textarea-website-creation-notes"
+                    />
+                    <div className="mt-2 grid gap-2 text-zinc-300">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websiteCreationRobertApproved}
+                          onChange={(event) => setWebsiteCreationRobertApproved(event.target.checked)}
+                          className="h-4 w-4 accent-violet-500"
+                          data-testid="checkbox-website-creation-robert-approved"
+                        />
+                        Robert approved paid build
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websiteCreationClientScopeApproved}
+                          onChange={(event) => setWebsiteCreationClientScopeApproved(event.target.checked)}
+                          className="h-4 w-4 accent-violet-500"
+                          data-testid="checkbox-website-creation-client-scope-approved"
+                        />
+                        Client approved scope
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websiteCreationDepositPaid}
+                          onChange={(event) => setWebsiteCreationDepositPaid(event.target.checked)}
+                          className="h-4 w-4 accent-violet-500"
+                          data-testid="checkbox-website-creation-deposit-paid"
+                        />
+                        Deposit proof verified
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={websiteCreationPublicDataVerified}
+                          onChange={(event) => setWebsiteCreationPublicDataVerified(event.target.checked)}
+                          className="h-4 w-4 accent-violet-500"
+                          data-testid="checkbox-website-creation-public-data-verified"
+                        />
+                        Public business data verified
+                      </label>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      websiteCreationApprovalPendingActionMutation.isPending
+                      || !websiteCreationOutreachDraftId.trim()
+                      || !websiteCreationNotes.trim()
+                      || websiteCreationLaunchTargetDays < 1
+                      || websiteCreationLaunchTargetDays > 60
+                      || !websiteCreationRobertApproved
+                      || !websiteCreationClientScopeApproved
+                      || !websiteCreationDepositPaid
+                      || !websiteCreationPublicDataVerified
+                    }
+                    onClick={() => websiteCreationApprovalPendingActionMutation.mutate()}
+                    className="bg-violet-600 text-white hover:bg-violet-500"
+                    data-testid="button-queue-website-creation-approval"
+                  >
+                    {websiteCreationApprovalPendingActionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    Trust Center
+                  </Button>
+                </div>
+                {websiteCreationApprovalPendingActionMutation.data?.pendingAction && (
+                  <p className="mt-3 rounded-md border border-violet-500/20 bg-black px-3 py-2 text-xs text-violet-100">
+                    Trust Center: {websiteCreationApprovalPendingActionMutation.data.pendingAction.title}
+                  </p>
+                )}
+                {websiteCreationApprovalPendingActionMutation.error && (
+                  <p className="mt-3 rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs leading-5 text-red-100">
+                    {websiteCreationApprovalPendingActionMutation.error.message}
                   </p>
                 )}
               </div>

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-02T21:27:47.846Z
+Generated: 2026-07-02T21:33:46.012Z
 Repo: `/private/tmp/asistente-revenue-clean`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 494 | 426 | 1609 | 470 | 8373 |
+| 494 | 426 | 1609 | 470 | 8375 |
 
 ## Entrypoints
 - `client/src/App.tsx`

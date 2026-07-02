@@ -4316,20 +4316,39 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(source, /depositConfirmedByRobert: paymentPathDepositConfirmed/);
   assert.match(source, /button-queue-payment-path-approval/);
   assert.match(source, /first-money-payment-path-approval-panel/);
+  assert.match(source, /const websiteCreationApprovalPendingActionMutation/);
+  assert.match(source, /\/api\/revenue-engine\/website-creation-approval-pending-action/);
+  assert.match(source, /outreachDraftId: websiteCreationOutreachDraftId/);
+  assert.match(source, /notes: websiteCreationNotes/);
+  assert.match(source, /robertApprovedBuild: websiteCreationRobertApproved/);
+  assert.match(source, /clientApprovedScope: websiteCreationClientScopeApproved/);
+  assert.match(source, /depositPaid: websiteCreationDepositPaid/);
+  assert.match(source, /publicDataVerified: websiteCreationPublicDataVerified/);
+  assert.match(source, /launchTargetDays: websiteCreationLaunchTargetDays/);
+  assert.match(source, /button-queue-website-creation-approval/);
+  assert.match(source, /first-money-website-creation-approval-panel/);
   const contactPathMutationSource = source.slice(
     source.indexOf("const contactPathApprovalPendingActionMutation"),
-    source.indexOf("const publicCandidateApprovalPendingActionMutation"),
+    source.indexOf("const paymentPathApprovalPendingActionMutation"),
   );
   const paymentPathMutationSource = source.slice(
     source.indexOf("const paymentPathApprovalPendingActionMutation"),
+    source.indexOf("const websiteCreationApprovalPendingActionMutation"),
+  );
+  const websiteCreationMutationSource = source.slice(
+    source.indexOf("const websiteCreationApprovalPendingActionMutation"),
     source.indexOf("const publicCandidateApprovalPendingActionMutation"),
   );
   const contactPathPanelSource = source.slice(
     source.indexOf('data-testid="first-money-contact-path-approval-panel"'),
-    source.indexOf('data-testid="first-money-setup-action-queue"'),
+    source.indexOf('data-testid="first-money-payment-path-approval-panel"'),
   );
   const paymentPathPanelSource = source.slice(
     source.indexOf('data-testid="first-money-payment-path-approval-panel"'),
+    source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
+  );
+  const websiteCreationPanelSource = source.slice(
+    source.indexOf('data-testid="first-money-website-creation-approval-panel"'),
     source.indexOf('data-testid="first-money-setup-action-queue"'),
   );
   assert.match(contactPathMutationSource, /evidenceUrl: contactPathEvidenceUrl/);
@@ -4348,6 +4367,17 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
     paymentPathMutationSource,
     /outreach-send|payment-path-readiness-packet|ledger|decision: "approved"|sendConfirmation/,
   );
+  assert.match(websiteCreationMutationSource, /approvedAction: "Approve paid website creation handoff after scope, deposit, and public data review\."/);
+  assert.match(websiteCreationMutationSource, /outreachDraftId: websiteCreationOutreachDraftId/);
+  assert.match(websiteCreationMutationSource, /notes: websiteCreationNotes/);
+  assert.match(websiteCreationMutationSource, /robertApprovedBuild: websiteCreationRobertApproved/);
+  assert.match(websiteCreationMutationSource, /clientApprovedScope: websiteCreationClientScopeApproved/);
+  assert.match(websiteCreationMutationSource, /depositPaid: websiteCreationDepositPaid/);
+  assert.match(websiteCreationMutationSource, /publicDataVerified: websiteCreationPublicDataVerified/);
+  assert.doesNotMatch(
+    websiteCreationMutationSource,
+    /website-creation-packet|website-scaffold|outreach-send|ledger|decision: "approved"|sendConfirmation|deploy/,
+  );
   assert.match(contactPathPanelSource, /contactPathApprovalPendingActionMutation\.isPending/);
   assert.match(contactPathPanelSource, /!contactPathEvidenceUrl\.trim\(\)/);
   assert.match(contactPathPanelSource, /!contactPathEvidenceNote\.trim\(\)/);
@@ -4363,6 +4393,16 @@ test("Revenue Engine UI posts approvalDecisionId for outreach sends", () => {
   assert.match(paymentPathPanelSource, /!paymentPathRobertApproved/);
   assert.match(paymentPathPanelSource, /!\(paymentPathSmokeVerified \|\| paymentPathDepositConfirmed\)/);
   assert.match(paymentPathPanelSource, /paymentPathApprovalPendingActionMutation\.mutate\(\)/);
+  assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.isPending/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationOutreachDraftId\.trim\(\)/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationNotes\.trim\(\)/);
+  assert.match(websiteCreationPanelSource, /websiteCreationLaunchTargetDays < 1/);
+  assert.match(websiteCreationPanelSource, /websiteCreationLaunchTargetDays > 60/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationRobertApproved/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationClientScopeApproved/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationDepositPaid/);
+  assert.match(websiteCreationPanelSource, /!websiteCreationPublicDataVerified/);
+  assert.match(websiteCreationPanelSource, /websiteCreationApprovalPendingActionMutation\.mutate\(\)/);
   assert.match(source, /\/api\/revenue-engine\/public-lead-candidates\/approval-pending-action/);
   assert.doesNotMatch(source, /fetch\("\/api\/revenue-engine\/public-lead-candidates\/approval-decision"/);
   assert.match(source, /nextCandidateApproval/);
