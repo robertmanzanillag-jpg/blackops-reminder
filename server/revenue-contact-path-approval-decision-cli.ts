@@ -86,6 +86,7 @@ export function validateRevenueContactPathApprovalDecisionOptions(options: Reven
 }
 
 export function buildRevenueContactPathApprovalDecisionFromCli(options: RevenueContactPathApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenueContactPathApprovalDecisionOptions(options);
   const contactSnapshot = {
     contactMode: options.contactMode,
     fromEmail: options.fromEmail,
@@ -105,6 +106,7 @@ export function buildRevenueContactPathApprovalDecisionFromCli(options: RevenueC
     !options.contactPathVerified && "--contact-path-verified is required for approved contact paths.",
   ].filter((item): item is string => Boolean(item));
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a contact path decision.",
     options.sendOutreach && "--send-outreach is blocked; this command never contacts businesses.",
     ...(options.decision === "approved" ? approvalBlockers : []),

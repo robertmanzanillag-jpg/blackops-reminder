@@ -126,6 +126,31 @@ test("blocks approved contact path decision without Robert confirmation or verif
   assert.equal(listRevenueApprovalDecisions().length, 0);
 });
 
+test("blocks placeholder contact path approval when builder is called directly", () => {
+  const result = buildRevenueContactPathApprovalDecisionFromCli({
+    contactMode: "manual",
+    fromEmail: "",
+    manualContactApproved: true,
+    emailProviderConfigured: false,
+    decision: "approved",
+    approvedAction: "Approve contact path.",
+    robertApprovedContactPath: true,
+    contactPathVerified: true,
+    evidenceUrl: "https://example.com/REPLACE_WITH_CONTACT_PATH_EVIDENCE_URL",
+    evidenceNote: "REPLACE_WITH_CONTACT_PATH_PROOF",
+    confirmedByRobert: true,
+    sendOutreach: false,
+    json: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.decision, null);
+  assert.match(result.blockers.join("; "), /--evidence-url must be real evidence/);
+  assert.match(result.blockers.join("; "), /--evidence-note must be real proof/);
+  assert.equal(result.safety.persistsApprovalDecision, false);
+  assert.equal(listRevenueApprovalDecisions().length, 0);
+});
+
 test("contact path approval decision script persists safe decision", () => {
   const result = spawnSync(process.execPath, [
     "--import",

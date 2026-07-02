@@ -97,6 +97,7 @@ export function validateRevenuePaymentPathApprovalDecisionOptions(options: Reven
 }
 
 export function buildRevenuePaymentPathApprovalDecisionFromCli(options: RevenuePaymentPathApprovalDecisionCliOptions) {
+  const validationErrors = validateRevenuePaymentPathApprovalDecisionOptions(options);
   const paymentUrl = parseUrl(options.paymentLink);
   const paymentSnapshot = {
     paymentMethod: "payment_link" as const,
@@ -119,6 +120,7 @@ export function buildRevenuePaymentPathApprovalDecisionFromCli(options: RevenueP
     !(options.paymentSmokeVerified || options.depositConfirmedByRobert) && "--payment-smoke-verified or --deposit-confirmed-by-robert is required.",
   ].filter((item): item is string => Boolean(item));
   const blockers = [
+    ...validationErrors,
     !options.confirmedByRobert && "--confirmed-by-robert is required to record a payment path decision.",
     options.chargeClient && "--charge-client is blocked; this command never charges clients.",
     ...(options.decision === "approved" ? approvalBlockers : []),
