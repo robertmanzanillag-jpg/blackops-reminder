@@ -104,12 +104,14 @@ import {
   executeRevenueFirstMoneyPaymentPathApprovalFromPendingInput,
   executeRevenueFirstMoneyLedgerEntryApprovalFromPendingInput,
   executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput,
+  executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput,
 } from "../server/trust-executor";
 import {
   revenueContactPathApprovalPendingActionSchema,
   revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
   revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
 } from "../server/revenue-first-money-approval-pending-action";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
@@ -2576,6 +2578,28 @@ test("routes wire first-money ledger and website creation approvals through Trus
   assert.match(trustPolicySource, /"revenue\.first_money_website_creation_approval": "critical"/);
 });
 
+test("routes wire first-money website publish approval through Trust Center", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+  const trustPolicySource = readFileSync(path.join(process.cwd(), "server/trust-policy.ts"), "utf8");
+  const routeSource = routesSource.slice(
+    routesSource.indexOf('app.post("/api/revenue-engine/website-publish-approval-pending-action"'),
+    routesSource.indexOf('app.post("/api/revenue-engine/public-lead-candidates/approval-decision"'),
+  );
+
+  assert.match(routeSource, /revenueWebsitePublishApprovalPendingActionSchema/);
+  assert.match(routeSource, /createPendingActionForApproval/);
+  assert.match(routeSource, /actionType: "revenue\.first_money_website_publish_approval"/);
+  assert.match(routeSource, /resourceType: "revenue_website_publish"/);
+  assert.match(routeSource, /requestedReview: "approve_first_money_website_publish"/);
+  assert.match(routeSource, /writesFiles: false/);
+  assert.match(routeSource, /deploys: false/);
+  assert.match(routeSource, /publishesWebsite: false/);
+  assert.match(routeSource, /chargesClients: false/);
+  assert.match(routeSource, /sendsOutreach: false/);
+  assert.doesNotMatch(routeSource, /buildRevenueWebsitePublishApprovalDecisionFromCli/);
+  assert.match(trustPolicySource, /"revenue\.first_money_website_publish_approval": "critical"/);
+});
+
 test("first-money contact and payment approval pending action schemas reject unreviewable payloads before queueing", () => {
   const validContact = revenueContactPathApprovalPendingActionSchema.parse({
     contactMode: "manual",
@@ -2703,6 +2727,75 @@ test("first-money ledger and website approval pending action schemas reject unre
     clientApprovedScope: true,
     depositPaid: false,
     publicDataVerified: true,
+  }).success, false);
+
+  const validPublish = revenueWebsitePublishApprovalPendingActionSchema.parse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  });
+  assert.equal(validPublish.launchTargetDays, 7);
+  assert.equal(validPublish.approvedAction, "Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.");
+
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "CREATION_APPROVAL_ID",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "DEPLOY_PROVIDER",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "DEPLOY_PROVIDER",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: false,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "REPLACE_WITH_PREVIEW_URL",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+  }).success, false);
+  assert.equal(revenueWebsitePublishApprovalPendingActionSchema.safeParse({
+    outreachDraftId: "draft-paid-build-cafe",
+    websiteCreationApprovalDecisionId: "approval-create-paid-build-cafe",
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "file:///tmp/preview.html",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
   }).success, false);
 });
 
@@ -2897,6 +2990,72 @@ test("Trust Center executor records first-money ledger and website creation appr
   assert.equal(websiteResult.safety.editsEnvironment, false);
   assert.equal(websiteResult.safety.storesSecrets, false);
   assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 2);
+
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_publish",
+      outreachDraftId: draftResult.draft.id,
+      websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+      notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+      robertApprovedPublish: true,
+      previewDeployVerified: true,
+      appQaTargetPassed: true,
+      rollbackVerified: true,
+      deployProvider: "Replit",
+      previewDeployUrl: "REPLACE_WITH_PREVIEW_URL",
+      appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+      rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+      launchTargetDays: 7,
+    }, "trust-executor-first-money-delivery-test"),
+    /Evidence URL must be real evidence/,
+  );
+  assert.throws(
+    () => executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+      requestedReview: "approve_first_money_website_publish",
+      outreachDraftId: draftResult.draft.id,
+      websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+      notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+      robertApprovedPublish: true,
+      previewDeployVerified: true,
+      appQaTargetPassed: true,
+      rollbackVerified: true,
+      deployProvider: "Replit",
+      previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+      appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+      rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+      launchTargetDays: 7,
+      publishWebsite: true,
+    }, "trust-executor-first-money-delivery-test"),
+    /Unrecognized key|unrecognized_keys|publishWebsite/i,
+  );
+
+  const publishResult = executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput({
+    requestedReview: "approve_first_money_website_publish",
+    outreachDraftId: draftResult.draft.id,
+    websiteCreationApprovalDecisionId: websiteResult.decision?.id,
+    notes: "Preview, App QA, rollback, and Robert publish approval reviewed.",
+    robertApprovedPublish: true,
+    previewDeployVerified: true,
+    appQaTargetPassed: true,
+    rollbackVerified: true,
+    deployProvider: "Replit",
+    previewDeployUrl: "https://preview.example.com/paid-build-cafe",
+    appQaEvidenceUrl: "https://evidence.example.com/app-qa-paid-build-cafe",
+    rollbackPlanUrl: "https://evidence.example.com/rollback-paid-build-cafe",
+    launchTargetDays: 7,
+  }, "trust-executor-first-money-delivery-test");
+
+  assert.equal(publishResult.status, "recorded");
+  assert.equal(publishResult.decision?.targetType, "website_publish");
+  assert.equal(publishResult.safety.persistsApprovalDecision, true);
+  assert.equal(publishResult.safety.writesFiles, false);
+  assert.equal(publishResult.safety.deploys, false);
+  assert.equal(publishResult.safety.publishesWebsite, false);
+  assert.equal(publishResult.safety.chargesClients, false);
+  assert.equal(publishResult.safety.sendsOutreach, false);
+  assert.equal(publishResult.safety.editsEnvironment, false);
+  assert.equal(publishResult.safety.storesSecrets, false);
+  assert.equal(getRevenueEngineSnapshot().recentApprovalDecisions.length, 3);
 });
 
 test("Trust Center executor records first-money public candidate approval only", () => {

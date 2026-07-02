@@ -239,9 +239,11 @@ test("builds blocked go-live packet without secrets or side effects", () => {
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/ledger-entry-approval-pending-action")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/website-creation-approval-pending-action")), true);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("/api/revenue-engine/website-publish-approval-pending-action")), true);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:payment-path-approval-decision")), false);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:ledger-approval-decision")), false);
   assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:website-creation-approval-decision")), false);
+  assert.equal(packet.operatorSetupPacket.steps.some((step) => step.command.includes("revenue:website-publish-approval-decision")), false);
   assert.equal(packet.requiredEnvironment.some((group) => group.names.includes("DATABASE_URL")), true);
   assert.equal(
     packet.requiredEnvironment.some((group) => group.names.includes("RESEND_API_KEY + REVENUE_ENGINE_FROM_EMAIL/RESEND_FROM_EMAIL")),

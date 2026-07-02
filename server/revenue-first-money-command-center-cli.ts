@@ -792,7 +792,7 @@ function buildFirstMoneyActivationChecklist(
         "App QA pass with real base URL.",
         "Rollback note and Robert publish approval.",
       ],
-      commandHint: "Run website-publish approval and readiness packets after preview QA; ask Robert before any Replit deploy.",
+      commandHint: "Queue /api/revenue-engine/website-publish-approval-pending-action in Trust Center after preview QA, then run website-publish readiness; ask Robert before any Replit deploy.",
       unlocks: ["public client website"],
       safety: "Never deploys without explicit Robert approval after PR and QA summary.",
     },

@@ -571,6 +571,7 @@ test("first-money command center summary omits candidate contact detail payloads
   assert.equal(summary.activationChecklist[0].proofRequired.some((proof) => proof.includes("APPROVE PUBLIC CANDIDATES candidate-review-1")), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "contact_path" && step.status === "blocked_until_evidence"), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "payment_path" && step.commandHint.includes("/api/revenue-engine/payment-path-approval-pending-action")), true);
+  assert.equal(summary.activationChecklist.some((step) => step.id === "publish" && step.commandHint.includes("/api/revenue-engine/website-publish-approval-pending-action")), true);
   assert.equal(summary.activationChecklist.some((step) => step.id === "publish" && step.safety.includes("Never deploys")), true);
   assert.equal(summary.counts.reviewablePublicCandidates, 2);
   assert.equal("candidateApprovalBatches" in summary, false);

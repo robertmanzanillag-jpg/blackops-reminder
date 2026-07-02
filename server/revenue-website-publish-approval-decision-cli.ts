@@ -43,15 +43,17 @@ function npmRunText(script: string, args: string[] = []) {
 
 function isValidUrl(value: string) {
   try {
-    new URL(value);
-    return true;
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
 }
 
 function hasPlaceholderValue(value: string) {
-  return /\b(REPLACE_WITH|PLACEHOLDER|TODO|TBD|YOUR_|OUTREACH_ID|APPROVAL_ID)/i.test(value);
+  const trimmed = value.trim();
+  return /(?:^|[\s/=:?&_-])(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+|OUTREACH_ID|APPROVAL_ID|CREATION_APPROVAL_ID|DEPLOY_PROVIDER|PREVIEW_URL|APP_QA_URL|ROLLBACK_URL)(?:$|[\s/=:?&_-])/i.test(trimmed)
+    || /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?:_(?:ID|URL|URI|LINK|PROVIDER|TOKEN|KEY|SECRET|EVIDENCE|NOTES?|NAME))$/i.test(trimmed);
 }
 
 function buildScaffoldFilesHash(files: Array<{ path: string; purpose: string; content: string }>) {
@@ -106,13 +108,13 @@ export function validateRevenueWebsitePublishApprovalDecisionOptions(options: Re
   else if (hasPlaceholderValue(options.deployProvider)) errors.push("--deploy-provider must be real publish context, not a placeholder.");
   if (!options.previewDeployUrl) errors.push("--preview-deploy-url is required.");
   else if (hasPlaceholderValue(options.previewDeployUrl)) errors.push("--preview-deploy-url must be real evidence, not a placeholder.");
-  else if (!isValidUrl(options.previewDeployUrl)) errors.push("--preview-deploy-url must be a valid URL.");
+  else if (!isValidUrl(options.previewDeployUrl)) errors.push("--preview-deploy-url must be an HTTP(S) URL.");
   if (!options.appQaEvidenceUrl) errors.push("--app-qa-evidence-url is required.");
   else if (hasPlaceholderValue(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be real evidence, not a placeholder.");
-  else if (!isValidUrl(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be a valid URL.");
+  else if (!isValidUrl(options.appQaEvidenceUrl)) errors.push("--app-qa-evidence-url must be an HTTP(S) URL.");
   if (!options.rollbackPlanUrl) errors.push("--rollback-plan-url is required.");
   else if (hasPlaceholderValue(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be real evidence, not a placeholder.");
-  else if (!isValidUrl(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be a valid URL.");
+  else if (!isValidUrl(options.rollbackPlanUrl)) errors.push("--rollback-plan-url must be an HTTP(S) URL.");
   if (!Number.isInteger(options.launchTargetDays) || options.launchTargetDays < 1 || options.launchTargetDays > 60) {
     errors.push("--launch-target-days must be an integer from 1 to 60.");
   }

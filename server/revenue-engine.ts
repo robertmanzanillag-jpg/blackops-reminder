@@ -7848,7 +7848,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       label: "Build and publish client websites",
       status: canBuildWebsites ? "ok" as const : "fail" as const,
       detail: canBuildWebsites ? "Website deploy flag, App QA evidence, preview deploy, rollback proof and Robert publish approval are present." : "The app can create internal mockups/workspaces/scaffolds, but not publish client websites end-to-end yet.",
-      nextStep: "Run revenue:website-publish-approval-decision and revenue:website-publish-readiness-packet after preview deploy verification, App QA, rollback evidence and Robert publish approval.",
+      nextStep: "Queue /api/revenue-engine/website-publish-approval-pending-action in Trust Center after preview deploy verification, App QA, rollback evidence and Robert publish approval, then run revenue:website-publish-readiness-packet.",
     },
     {
       id: "production_launch",

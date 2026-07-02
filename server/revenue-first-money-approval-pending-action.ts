@@ -2,14 +2,15 @@ import { z } from "zod";
 
 function hasPlaceholderValue(value: string) {
   const trimmed = value.trim();
-  return /\b(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+|OUTREACH_ID)/i.test(trimmed)
-    || /^(CLIENT[\s_-]*NAME|PAYMENT[\s_-]*EVIDENCE|LEDGER[\s_-]*NOTES)$/i.test(trimmed);
+  return /(?:^|[\s/=:?&_-])(REPLACE[\s_-]*WITH|PLACEHOLDER|TODO|TBD|YOUR[\s_-]+|OUTREACH_ID|APPROVAL_ID|CREATION_APPROVAL_ID|DEPLOY_PROVIDER|PREVIEW_URL|APP_QA_URL|ROLLBACK_URL)(?:$|[\s/=:?&_-])/i.test(trimmed)
+    || /^(CLIENT[\s_-]*NAME|PAYMENT[\s_-]*EVIDENCE|LEDGER[\s_-]*NOTES)$/i.test(trimmed)
+    || /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?:_(?:ID|URL|URI|LINK|PROVIDER|TOKEN|KEY|SECRET|EVIDENCE|NOTES?|NAME))$/i.test(trimmed);
 }
 
-function isUrl(value: string) {
+function isHttpUrl(value: string) {
   try {
-    new URL(value);
-    return true;
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
@@ -27,7 +28,7 @@ function isAllowedStripePaymentLink(value: string) {
 
 const revenueEvidenceUrlSchema = z.string().trim().min(8).max(500)
   .refine((value) => !hasPlaceholderValue(value), "Evidence URL must be real evidence, not a placeholder.")
-  .refine(isUrl, "Evidence URL must be a valid URL.");
+  .refine(isHttpUrl, "Evidence URL must be an HTTP(S) URL.");
 
 const revenueEvidenceNoteSchema = z.string().trim().min(8).max(1000)
   .refine((value) => !hasPlaceholderValue(value), "Evidence note must be real proof, not a placeholder.");
@@ -125,5 +126,40 @@ export const revenueWebsiteCreationApprovalPendingActionSchema = z.object({
   }
   if (!input.publicDataVerified) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["publicDataVerified"], message: "Public data verification is required." });
+  }
+});
+
+export const revenueWebsitePublishApprovalPendingActionSchema = z.object({
+  outreachDraftId: z.string().trim().min(2).max(180)
+    .refine((value) => !hasPlaceholderValue(value), "Outreach draft id must be real, not a placeholder."),
+  websiteCreationApprovalDecisionId: z.string().trim().min(2).max(180)
+    .refine((value) => !hasPlaceholderValue(value), "Website creation approval decision id must be real, not a placeholder."),
+  approvedAction: z.string().trim().min(8).max(500)
+    .default("Approve exact website publish readiness handoff after preview, App QA, rollback, and Robert review.")
+    .refine((value) => !hasPlaceholderValue(value), "Approved action must be real approval context, not a placeholder."),
+  notes: z.string().trim().min(8).max(1000)
+    .refine((value) => !hasPlaceholderValue(value), "Notes must be real proof/context, not a placeholder."),
+  robertApprovedPublish: z.boolean().default(false),
+  previewDeployVerified: z.boolean().default(false),
+  appQaTargetPassed: z.boolean().default(false),
+  rollbackVerified: z.boolean().default(false),
+  deployProvider: z.string().trim().min(2).max(120)
+    .refine((value) => !hasPlaceholderValue(value), "Deploy provider must be real publish context, not a placeholder."),
+  previewDeployUrl: revenueEvidenceUrlSchema,
+  appQaEvidenceUrl: revenueEvidenceUrlSchema,
+  rollbackPlanUrl: revenueEvidenceUrlSchema,
+  launchTargetDays: z.number().int().min(1).max(60).default(7),
+}).strict().superRefine((input, ctx) => {
+  if (!input.robertApprovedPublish) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["robertApprovedPublish"], message: "Robert publish approval is required." });
+  }
+  if (!input.previewDeployVerified) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["previewDeployVerified"], message: "Preview deploy verification is required." });
+  }
+  if (!input.appQaTargetPassed) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["appQaTargetPassed"], message: "App QA pass evidence is required." });
+  }
+  if (!input.rollbackVerified) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rollbackVerified"], message: "Rollback verification is required." });
   }
 });

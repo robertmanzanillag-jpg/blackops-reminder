@@ -165,7 +165,10 @@ export function buildRevenueCommercialGoLivePacket(options: RevenueCommercialGoL
       label: "Approve publish pipeline",
       status: readiness.canBuildWebsites ? "ready" : "external",
       owner: "Robert",
-      command: "Run revenue:website-publish-approval-decision and revenue:website-publish-readiness-packet with preview deploy, App QA, rollback, and Robert publish evidence.",
+      command: [
+        "Queue Trust Center action via /api/revenue-engine/website-publish-approval-pending-action with real outreachDraftId, websiteCreationApprovalDecisionId, previewDeployUrl, appQaEvidenceUrl, rollbackPlanUrl, deployProvider, and Robert/App QA/rollback flags",
+        "npm run revenue:website-publish-readiness-packet -- --outreach-draft-id=OUTREACH_ID --website-creation-approval-decision-id=CREATION_APPROVAL_ID --publish-approval-decision-id=PUBLISH_APPROVAL_ID --robert-approved-publish --preview-deploy-verified --app-qa-target-passed --rollback-verified --deploy-provider=DEPLOY_PROVIDER --preview-deploy-url=PREVIEW_URL --app-qa-evidence-url=APP_QA_URL --rollback-plan-url=ROLLBACK_URL --launch-target-days=7",
+      ].join(" && "),
       evidence: "Preview URL, App QA evidence URL, rollback plan URL, and Robert publish approval. Replit deployment still needs explicit human approval.",
       reason: "Client websites can be scaffolded internally before this, but publishing/deploying needs QA and rollback proof.",
     },

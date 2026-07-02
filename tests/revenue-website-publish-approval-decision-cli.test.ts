@@ -134,9 +134,23 @@ test("parses and validates website publish approval decision options", () => {
     "--app-qa-evidence-url=also-not-a-url",
     "--rollback-plan-url=still-not-a-url",
   ])), [
-    "--preview-deploy-url must be a valid URL.",
-    "--app-qa-evidence-url must be a valid URL.",
-    "--rollback-plan-url must be a valid URL.",
+    "--preview-deploy-url must be an HTTP(S) URL.",
+    "--app-qa-evidence-url must be an HTTP(S) URL.",
+    "--rollback-plan-url must be an HTTP(S) URL.",
+  ]);
+  assert.deepEqual(validateRevenueWebsitePublishApprovalDecisionOptions(parseRevenueWebsitePublishApprovalDecisionArgs([
+    "--outreach-draft-id=outreach-123",
+    "--website-creation-approval-decision-id=CREATION_APPROVAL_ID",
+    "--deploy-provider=DEPLOY_PROVIDER",
+    "--preview-deploy-url=file:///tmp/preview.html",
+    "--app-qa-evidence-url=javascript:alert(1)",
+    "--rollback-plan-url=ftp://example.com/rollback.md",
+  ])), [
+    "--website-creation-approval-decision-id must be a real approval decision id, not a placeholder.",
+    "--deploy-provider must be real publish context, not a placeholder.",
+    "--preview-deploy-url must be an HTTP(S) URL.",
+    "--app-qa-evidence-url must be an HTTP(S) URL.",
+    "--rollback-plan-url must be an HTTP(S) URL.",
   ]);
   assert.deepEqual(validateRevenueWebsitePublishApprovalDecisionOptions(parseRevenueWebsitePublishApprovalDecisionArgs([
     "--outreach-draft-id=OUTREACH_ID",

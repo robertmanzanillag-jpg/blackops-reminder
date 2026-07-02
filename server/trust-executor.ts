@@ -18,12 +18,14 @@ import { buildRevenueContactPathApprovalDecisionFromCli } from "./revenue-contac
 import { buildRevenuePaymentPathApprovalDecisionFromCli } from "./revenue-payment-path-approval-decision-cli";
 import { buildRevenueLedgerApprovalDecisionFromCli } from "./revenue-ledger-approval-decision-cli";
 import { buildRevenueWebsiteCreationApprovalDecisionFromCli } from "./revenue-website-creation-approval-decision-cli";
+import { buildRevenueWebsitePublishApprovalDecisionFromCli } from "./revenue-website-publish-approval-decision-cli";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 import {
   revenueContactPathApprovalPendingActionSchema,
   revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
   revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
 } from "./revenue-first-money-approval-pending-action";
 
 type JsonRecord = Record<string, any>;
@@ -216,6 +218,53 @@ export function executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput(
       writesFiles: false,
       deploys: false,
       publishesPreview: false,
+      chargesClients: false,
+      sendsOutreach: false,
+      editsEnvironment: false,
+      storesSecrets: false,
+    },
+  };
+}
+
+export function executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput(input: JsonRecord, userId: string) {
+  setRevenueUserDataScope(userId);
+  if (stringInput(input, "requestedReview") !== "approve_first_money_website_publish") {
+    throw new Error("Revenue website publish pending action no longer matches the first-money approval queue.");
+  }
+  const payload = revenueWebsitePublishApprovalPendingActionSchema.parse(pendingActionPayloadInput(input));
+
+  const result = buildRevenueWebsitePublishApprovalDecisionFromCli({
+    outreachDraftId: payload.outreachDraftId,
+    websiteCreationApprovalDecisionId: payload.websiteCreationApprovalDecisionId,
+    decision: "approved",
+    approvedAction: payload.approvedAction,
+    notes: payload.notes,
+    robertApprovedPublish: payload.robertApprovedPublish,
+    previewDeployVerified: payload.previewDeployVerified,
+    appQaTargetPassed: payload.appQaTargetPassed,
+    rollbackVerified: payload.rollbackVerified,
+    deployProvider: payload.deployProvider,
+    previewDeployUrl: payload.previewDeployUrl,
+    appQaEvidenceUrl: payload.appQaEvidenceUrl,
+    rollbackPlanUrl: payload.rollbackPlanUrl,
+    launchTargetDays: payload.launchTargetDays,
+    confirmedByRobert: true,
+    json: false,
+  });
+
+  if (result.status !== "recorded") {
+    throw new Error(`Revenue website publish approval blocked: ${result.blockers.join("; ") || "unknown blocker"}`);
+  }
+
+  return {
+    ...result,
+    commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+    safety: {
+      ...result.safety,
+      createsPendingAction: false,
+      writesFiles: false,
+      deploys: false,
+      publishesWebsite: false,
       chargesClients: false,
       sendsOutreach: false,
       editsEnvironment: false,
@@ -647,6 +696,11 @@ export async function executeApprovedPendingAction(
 
       case "revenue.first_money_website_creation_approval": {
         result = executeRevenueFirstMoneyWebsiteCreationApprovalFromPendingInput(input, action.userId);
+        break;
+      }
+
+      case "revenue.first_money_website_publish_approval": {
+        result = executeRevenueFirstMoneyWebsitePublishApprovalFromPendingInput(input, action.userId);
         break;
       }
 

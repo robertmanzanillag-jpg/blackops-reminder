@@ -240,7 +240,10 @@ test("keeps website publishing blocked even when contact and payments are config
   assert.equal(report.canCollectMoney, true);
   assert.equal(report.canBuildWebsites, false);
   assert.equal(report.ready, false);
-  assert.equal(report.checks.find((check) => check.id === "website_build_pipeline")?.status, "fail");
+  const websiteBuildCheck = report.checks.find((check) => check.id === "website_build_pipeline");
+  assert.equal(websiteBuildCheck?.status, "fail");
+  assert.match(websiteBuildCheck?.nextStep || "", /\/api\/revenue-engine\/website-publish-approval-pending-action/);
+  assert.doesNotMatch(websiteBuildCheck?.nextStep || "", /revenue:website-publish-approval-decision/);
   assert.equal(report.checks.find((check) => check.id === "production_launch")?.status, "fail");
 });
 

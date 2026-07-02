@@ -43,6 +43,7 @@ import {
   revenueLedgerEntryApprovalPendingActionSchema,
   revenuePaymentPathApprovalPendingActionSchema,
   revenueWebsiteCreationApprovalPendingActionSchema,
+  revenueWebsitePublishApprovalPendingActionSchema,
 } from "./revenue-first-money-approval-pending-action";
 import { matchesRevenueFirstMoneyApprovedCandidateBatch, revenueCandidateIdsMatch } from "./revenue-first-money-route-guards";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
@@ -5224,6 +5225,85 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.errors });
       }
       res.status(500).json({ error: "Failed to queue revenue website creation approval" });
+    }
+  });
+
+  app.post("/api/revenue-engine/website-publish-approval-pending-action", async (req, res) => {
+    try {
+      const input = revenueWebsitePublishApprovalPendingActionSchema.parse(req.body);
+      const pendingAction = await createPendingActionForApproval({
+        userId: getCurrentUserId(req),
+        actorType: "assistant",
+        actorId: "revenue-engine",
+        origin: "web",
+        executionMode: "user_requested",
+        actionType: "revenue.first_money_website_publish_approval",
+        resourceType: "revenue_website_publish",
+        resourceId: input.outreachDraftId,
+        title: `Approve first-money website publish readiness: ${input.outreachDraftId}`,
+        description: [
+          "Approve the exact first-money website publish readiness handoff after Robert verifies preview deploy, App QA, rollback, and publish evidence.",
+          "This pending action records approval only; it does not write files, deploy, publish websites, charge clients, send outreach, edit environment files or store secrets.",
+        ].join(" "),
+        input: {
+          ...input,
+          requestedReview: "approve_first_money_website_publish",
+        },
+        proposedChanges: {
+          outreachDraftId: input.outreachDraftId,
+          websiteCreationApprovalDecisionId: input.websiteCreationApprovalDecisionId,
+          deployProvider: input.deployProvider,
+          previewDeployUrl: input.previewDeployUrl,
+          appQaEvidenceUrl: input.appQaEvidenceUrl,
+          rollbackPlanUrl: input.rollbackPlanUrl,
+          launchTargetDays: input.launchTargetDays,
+          afterApproval: "Run revenue:website-publish-readiness-packet with the returned publish approvalDecisionId; the packet still cannot deploy or publish.",
+          safety: {
+            persistsApprovalDecision: true,
+            writesFiles: false,
+            deploys: false,
+            publishesWebsite: false,
+            chargesClients: false,
+            sendsOutreach: false,
+            editsEnvironment: false,
+            storesSecrets: false,
+          },
+        },
+        metadata: {
+          source: "revenue-first-money-command-center",
+          gate: "website_publish",
+          writesFiles: false,
+          deploys: false,
+          publishesWebsite: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        scope: "ecommerce",
+      });
+
+      res.status(202).json({
+        status: "queued",
+        pendingAction,
+        safety: {
+          createsPendingAction: true,
+          persistsApprovalDecision: false,
+          writesFiles: false,
+          deploys: false,
+          publishesWebsite: false,
+          chargesClients: false,
+          sendsOutreach: false,
+          editsEnvironment: false,
+          storesSecrets: false,
+        },
+        commandCenter: buildRevenueFirstMoneyCommandCenterSummary({ mode: "first-sprint", json: false }),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to queue revenue website publish approval" });
     }
   });
 
