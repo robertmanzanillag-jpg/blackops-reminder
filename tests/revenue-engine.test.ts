@@ -117,6 +117,7 @@ function approveOutreachDraftForTests(draft: Parameters<typeof buildRevenueOutre
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
   });
 }
 
@@ -141,6 +142,7 @@ function approveWebsiteCreationForTests(
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+    websitePublishSnapshotHash: "",
   });
 }
 
@@ -156,6 +158,7 @@ function approveLedgerEntryForTests(input: RevenueLedgerApprovalSnapshot) {
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
     ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(input),
   });
 }
@@ -555,6 +558,7 @@ test("blocks ledger sale with wrong source rejected or stale approval decision",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "not-a-ledger-hash",
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
     ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
   });
   const rejected = recordRevenueTrustedApprovalDecision({
@@ -568,6 +572,7 @@ test("blocks ledger sale with wrong source rejected or stale approval decision",
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
     ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
   });
   const stale = approveLedgerEntryForTests(ledgerInput);
@@ -1217,6 +1222,7 @@ test("website creation packet rejects wrong or stale website approval decisions"
       publicDataVerified: true,
       launchTargetDays: 7,
     }),
+    websitePublishSnapshotHash: "",
   });
   const stale = approveWebsiteCreationForTests(draftResult.draft);
   draftResult.draft.delivery.sendStatus = "blocked";
@@ -2218,6 +2224,18 @@ test("routes wire website creation packet endpoint to schema and builder", () =>
   );
 });
 
+test("routes wire website publish readiness packet endpoint to schema and builder", () => {
+  const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
+
+  assert.match(routesSource, /buildRevenueWebsitePublishReadinessPacket/);
+  assert.match(routesSource, /revenueWebsitePublishReadinessPacketSchema/);
+  assert.match(routesSource, /app\.post\("\/api\/revenue-engine\/website-publish-readiness-packet"/);
+  assert.match(
+    routesSource,
+    /const input = revenueWebsitePublishReadinessPacketSchema\.parse\(req\.body\);[\s\S]{0,80}res\.json\(buildRevenueWebsitePublishReadinessPacket\(input\)\)/,
+  );
+});
+
 test("routes wire website scaffold endpoint to schema and builder", () => {
   const routesSource = readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
 
@@ -2846,6 +2864,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     publicCandidateSnapshotHash: "not-an-outreach-hash",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
   });
   const wrongTarget = recordRevenueTrustedApprovalDecision({
     targetId: buildRevenueOutreachApprovalTargetId("other-draft"),
@@ -2858,6 +2877,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
   });
   const rejected = recordRevenueTrustedApprovalDecision({
     targetId: buildRevenueOutreachApprovalTargetId(result.draft.id),
@@ -2870,6 +2890,7 @@ test("blocks outreach send with wrong approval source target decision or stale s
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(result.draft),
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
   });
   const stale = approveOutreachDraftForTests(result.draft);
   result.draft.delivery.sendStatus = "blocked";

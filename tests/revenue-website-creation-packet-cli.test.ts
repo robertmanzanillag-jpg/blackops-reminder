@@ -87,6 +87,7 @@ function approveWebsiteCreation(draft: ReturnType<typeof createApprovedOutreachD
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: buildRevenueWebsiteCreationSnapshotHash(draft, proof),
+    websitePublishSnapshotHash: "",
   });
 }
 

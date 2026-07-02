@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import {
@@ -10,6 +11,10 @@ import {
   buildRevenueWebsiteCreationApprovalTargetId,
   buildRevenueWebsiteCreationSnapshotHash,
 } from "./revenue-website-creation-approval";
+import {
+  buildRevenueWebsitePublishApprovalTargetId,
+  buildRevenueWebsitePublishSnapshotHash,
+} from "./revenue-website-publish-approval";
 import {
   buildRevenueLedgerApprovalSnapshotHash,
   buildRevenueLedgerApprovalTargetId,
@@ -405,6 +410,25 @@ export const revenueWebsiteCreationPacketSchema = z.object({
 
 export type RevenueWebsiteCreationPacketInput = z.infer<typeof revenueWebsiteCreationPacketSchema>;
 
+export const revenueWebsitePublishReadinessPacketSchema = z.object({
+  outreachDraftId: z.string().trim().min(1).max(180),
+  websiteCreationApprovalDecisionId: z.string().trim().min(1).max(200),
+  publishApprovalDecisionId: z.string().trim().max(200).optional().default(""),
+  robertApprovedPublish: revenueExplicitBooleanSchema.default(false),
+  previewDeployVerified: revenueExplicitBooleanSchema.default(false),
+  appQaTargetPassed: revenueExplicitBooleanSchema.default(false),
+  rollbackVerified: revenueExplicitBooleanSchema.default(false),
+  deployProvider: z.string().trim().min(2).max(80),
+  previewDeployUrl: z.string().trim().url().max(300),
+  appQaEvidenceUrl: z.string().trim().url().max(300),
+  rollbackPlanUrl: z.string().trim().url().max(300),
+  writeFiles: revenueExplicitBooleanSchema.default(false),
+  deployWebsite: revenueExplicitBooleanSchema.default(false),
+  launchTargetDays: z.coerce.number().int().min(1).max(60).default(7),
+});
+
+export type RevenueWebsitePublishReadinessPacketInput = z.infer<typeof revenueWebsitePublishReadinessPacketSchema>;
+
 export const revenuePublicLeadCandidateSchema = revenueMoneySprintSeedLeadSchema.extend({
   missionId: z.string().trim().max(160).optional().default(""),
   sourceTaskId: z.string().trim().max(160).optional().default(""),
@@ -509,15 +533,16 @@ export type RevenuePublicLeadCandidateReviewInput = z.infer<typeof revenuePublic
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
-  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "manual"]),
+  targetType: z.enum(["profit_guard", "outbox", "agent_run", "automation_opportunity", "delivery_workspace", "public_candidate", "ledger_entry", "website_publish", "manual"]),
   decision: z.enum(["approved", "rejected", "needs_changes"]),
   approvedAction: z.string().trim().min(2).max(500),
   maxSpendUsd: z.coerce.number().min(0).max(100).default(0),
   notes: z.string().trim().max(1000).optional().default(""),
-  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
+  approvalSource: z.enum(["generic", "public_candidate_approval_cli", "outreach_approval_cli", "website_creation_approval_cli", "website_publish_approval_cli", "ledger_entry_approval_cli"]).default("generic"),
   publicCandidateSnapshotHash: z.string().trim().max(128).optional().default(""),
   outreachDraftSnapshotHash: z.string().trim().max(128).optional().default(""),
   websiteCreationSnapshotHash: z.string().trim().max(128).optional().default(""),
+  websitePublishSnapshotHash: z.string().trim().max(128).optional().default(""),
   ledgerEntrySnapshotHash: z.string().trim().max(128).optional().default(""),
 });
 
@@ -2414,6 +2439,7 @@ function recordRevenueApprovalDecisionInternal(input: RevenueApprovalDecisionInp
       publicCandidateSnapshotHash: "",
       outreachDraftSnapshotHash: "",
       websiteCreationSnapshotHash: "",
+      websitePublishSnapshotHash: "",
       ledgerEntrySnapshotHash: "",
     };
   const snapshot = getRevenueEngineSnapshot();
@@ -4547,6 +4573,16 @@ function scaffoldFileName(value: string) {
   return slugifyRevenueValue(value).replace(/[^a-z0-9-]/g, "") || "client-website";
 }
 
+function buildRevenueWebsiteScaffoldFilesHash(files: Array<{ path: string; purpose: string; content: string }>) {
+  const payload = files.map((file) => ({
+    path: file.path,
+    purpose: file.purpose,
+    content: file.content,
+  }));
+
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
 export function buildRevenueWebsiteScaffold(input: RevenueWebsiteScaffoldInput) {
   return buildRevenueWebsiteScaffoldInternal(input, { allowInternalPreview: false });
 }
@@ -4817,6 +4853,116 @@ export function buildRevenueWebsiteCreationPacket(input: RevenueWebsiteCreationP
       requiresAppQaBeforeDeploy: true,
       requestedWriteFiles: parsed.writeFiles,
       requestedDeployWebsite: parsed.deployWebsite,
+    },
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+export function buildRevenueWebsitePublishReadinessPacket(input: RevenueWebsitePublishReadinessPacketInput) {
+  const parsed = revenueWebsitePublishReadinessPacketSchema.parse(input);
+  loadRevenueApprovalDecisions();
+  const creationPacket = buildRevenueWebsiteCreationPacket({
+    outreachDraftId: parsed.outreachDraftId,
+    approvalDecisionId: parsed.websiteCreationApprovalDecisionId,
+    robertApprovedBuild: true,
+    clientApprovedScope: true,
+    depositPaid: true,
+    publicDataVerified: true,
+    writeFiles: false,
+    deployWebsite: false,
+    launchTargetDays: parsed.launchTargetDays,
+  });
+  const publishProof = {
+    robertApprovedPublish: parsed.robertApprovedPublish,
+    previewDeployVerified: parsed.previewDeployVerified,
+    appQaTargetPassed: parsed.appQaTargetPassed,
+    rollbackVerified: parsed.rollbackVerified,
+    deployProvider: parsed.deployProvider,
+    previewDeployUrl: parsed.previewDeployUrl,
+    appQaEvidenceUrl: parsed.appQaEvidenceUrl,
+    rollbackPlanUrl: parsed.rollbackPlanUrl,
+  };
+  const publishSnapshot = creationPacket.draft && creationPacket.scaffold && creationPacket.scaffoldInput ? {
+    outreachDraftId: parsed.outreachDraftId,
+    websiteCreationApprovalDecisionId: parsed.websiteCreationApprovalDecisionId,
+    businessName: creationPacket.draft.businessName,
+    scaffoldSlug: creationPacket.scaffold.slug,
+    scaffoldFileCount: creationPacket.scaffold.fileCount,
+    scaffoldInput: creationPacket.scaffoldInput,
+    scaffoldFilesHash: buildRevenueWebsiteScaffoldFilesHash(creationPacket.scaffold.files),
+    packageName: creationPacket.scaffoldInput.packageName,
+    setupUsd: creationPacket.scaffoldInput.setupUsd,
+    monthlyRetainerUsd: creationPacket.scaffoldInput.monthlyRetainerUsd,
+  } : null;
+  const expectedTargetId = buildRevenueWebsitePublishApprovalTargetId(parsed.outreachDraftId);
+  const expectedSnapshotHash = publishSnapshot
+    ? buildRevenueWebsitePublishSnapshotHash(publishSnapshot, publishProof)
+    : "";
+  const publishApprovalDecision = parsed.publishApprovalDecisionId
+    ? revenueApprovalDecisions.find((item) => item.id === parsed.publishApprovalDecisionId)
+    : null;
+  const publishApprovalReady = Boolean(
+    publishSnapshot
+    && publishApprovalDecision
+    && publishApprovalDecision.targetType === "website_publish"
+    && publishApprovalDecision.targetId === expectedTargetId
+    && publishApprovalDecision.decision === "approved"
+    && publishApprovalDecision.guardrail.status === "recorded"
+    && publishApprovalDecision.approvalSource === "website_publish_approval_cli"
+    && publishApprovalDecision.websitePublishSnapshotHash === expectedSnapshotHash,
+  );
+  const unsafeActionRequested = parsed.writeFiles || parsed.deployWebsite;
+  const creationReady = creationPacket.status === "ready_for_website_creation_handoff";
+  const gates = [
+    { gate: "website_creation_handoff", passed: creationReady, fix: "Preparar un website creation packet aprobado para este draft exacto." },
+    { gate: "preview_deploy", passed: parsed.previewDeployVerified, fix: "Verificar preview deploy real antes de aprobar publicacion." },
+    { gate: "app_qa", passed: parsed.appQaTargetPassed, fix: "Adjuntar evidencia de App QA target passed." },
+    { gate: "rollback", passed: parsed.rollbackVerified, fix: "Verificar rollback/fallback antes de publicar." },
+    { gate: "robert_publish_approval", passed: parsed.robertApprovedPublish, fix: "Robert debe aprobar publicar este website exacto." },
+    { gate: "publish_approval_decision", passed: publishApprovalReady, fix: "Registrar y usar publishApprovalDecisionId valido para este preview/QA/rollback exacto." },
+    { gate: "safe_mode", passed: !unsafeActionRequested, fix: "Este packet no escribe archivos ni despliega; solo prepara el gate de publicacion." },
+  ];
+  const failedGates = gates.filter((gate) => !gate.passed);
+  const readyForPublishApproval = failedGates.length === 0;
+
+  return {
+    status: readyForPublishApproval ? "ready_for_publish_handoff" as const : "blocked" as const,
+    outreachDraftId: parsed.outreachDraftId,
+    websiteCreationApprovalDecisionId: parsed.websiteCreationApprovalDecisionId,
+    publishApprovalDecisionId: parsed.publishApprovalDecisionId,
+    creationPacket: {
+      status: creationPacket.status,
+      draft: creationPacket.draft,
+      scaffold: creationPacket.scaffold ? {
+        status: creationPacket.scaffold.status,
+        slug: creationPacket.scaffold.slug,
+        fileCount: creationPacket.scaffold.fileCount,
+        canWriteFiles: creationPacket.scaffold.canWriteFiles,
+        canDeploy: creationPacket.scaffold.canDeploy,
+      } : null,
+      blockedReasons: creationPacket.blockedReasons,
+    },
+    publishSnapshot,
+    gates,
+    blockedReasons: failedGates.map((gate) => gate.fix),
+    evidence: publishProof,
+    nextApiAction: readyForPublishApproval ? "/api/revenue-engine/delivery-workspaces/deliver" : "/api/revenue-engine/website-creation-packet",
+    nextAction: readyForPublishApproval
+      ? "Proceed through PR-first delivery/App QA approval; Replit deploy still requires Robert approval."
+      : "Resolve publish gates before any website deploy or public client handoff.",
+    safety: {
+      allowedAction: "prepare_website_publish_readiness_handoff",
+      blockedActions: ["write files", "deploy website", "publish website", "contact client", "charge client"],
+      writesFiles: false,
+      deploys: false,
+      publishesWebsite: false,
+      sendsOutreach: false,
+      chargesClients: false,
+      requestedWriteFiles: parsed.writeFiles,
+      requestedDeployWebsite: parsed.deployWebsite,
+      requiresAppQaBeforeDeploy: true,
+      requiresRollbackBeforePublish: true,
+      requiresRobertApprovalBeforePublish: true,
     },
     snapshot: getRevenueEngineSnapshot(),
   };
@@ -7323,7 +7469,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       label: "Build and publish client websites",
       status: canBuildWebsites ? "ok" as const : "fail" as const,
       detail: canBuildWebsites ? "Website deploy flag, App QA evidence, preview deploy, rollback proof and Robert publish approval are present." : "The app can create internal mockups/workspaces/scaffolds, but not publish client websites end-to-end yet.",
-      nextStep: "Add website deploy enablement, preview deploy verification, App QA target evidence, rollback verification and Robert publish approval.",
+      nextStep: "Run revenue:website-publish-approval-decision and revenue:website-publish-readiness-packet after preview deploy verification, App QA, rollback evidence and Robert publish approval.",
     },
     {
       id: "production_launch",
@@ -7369,6 +7515,7 @@ export function buildRevenueMoneyReadinessReport(input: RevenueMoneyReadinessInp
       "Public research from Google/Maps/Instagram/directories.",
       "Execute guarded public scout captures into Robert-review candidates with revenue:public-scout-execute.",
       "Generate internal mockups/previews and draft-only outreach.",
+      "Prepare audited website publish readiness packets after preview/App QA/rollback evidence; the packet still cannot deploy.",
       "Prepare proposals and ask Robert for approval before any contact or spend.",
     ],
     blockedUntil: blockingFailedChecks.map((check) => check.nextStep),

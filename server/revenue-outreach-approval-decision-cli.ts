@@ -93,6 +93,7 @@ export function buildRevenueOutreachApprovalDecisionFromCli(options: RevenueOutr
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: buildRevenueOutreachSnapshotHash(draft),
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
     ledgerEntrySnapshotHash: "",
   });
   const sendBody = options.decision === "approved"

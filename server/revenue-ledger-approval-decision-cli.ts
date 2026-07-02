@@ -133,6 +133,7 @@ export function buildRevenueLedgerApprovalDecisionFromCli(options: RevenueLedger
     publicCandidateSnapshotHash: "",
     outreachDraftSnapshotHash: "",
     websiteCreationSnapshotHash: "",
+    websitePublishSnapshotHash: "",
     ledgerEntrySnapshotHash: buildRevenueLedgerApprovalSnapshotHash(ledgerInput),
   });
   const nextApiBody = options.decision === "approved"

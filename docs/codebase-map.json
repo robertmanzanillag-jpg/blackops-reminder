@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-02T02:39:55.350Z",
+  "generatedAt": "2026-07-02T11:51:32.786Z",
   "repoRoot": "/private/tmp/asistente-revenue-clean",
   "packageName": "rest-express",
   "scripts": {
@@ -49,6 +49,8 @@
     "test:revenue-ledger-approval-decision-cli": "node --import tsx --test tests/revenue-ledger-approval-decision-cli.test.ts",
     "test:revenue-website-creation-approval-decision-cli": "node --import tsx --test tests/revenue-website-creation-approval-decision-cli.test.ts",
     "test:revenue-website-creation-packet-cli": "node --import tsx --test tests/revenue-website-creation-packet-cli.test.ts",
+    "test:revenue-website-publish-approval-decision-cli": "node --import tsx --test tests/revenue-website-publish-approval-decision-cli.test.ts",
+    "test:revenue-website-publish-readiness-packet-cli": "node --import tsx --test tests/revenue-website-publish-readiness-packet-cli.test.ts",
     "test:revenue-public-scout-extract-cli": "node --import tsx --test tests/revenue-public-scout-extract-cli.test.ts",
     "test:revenue-public-scout-execute-cli": "node --import tsx --test tests/revenue-public-scout-execute-cli.test.ts",
     "test:revenue-public-scout-schedule-cli": "node --import tsx --test tests/revenue-public-scout-schedule-cli.test.ts",
@@ -66,7 +68,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:revenue-engine && npm run test:revenue-money-readiness-cli && npm run test:revenue-commercial-go-live-cli && npm run test:revenue-first-money-command-center-cli && npm run test:revenue-first-money-dry-run-cli && npm run test:revenue-browser-scout-session-cli && npm run test:revenue-public-candidate-review-cli && npm run test:revenue-money-sprint-run-packet-cli && npm run test:revenue-outreach-approval-packet-cli && npm run test:revenue-outreach-approval-decision-cli && npm run test:revenue-manual-contact-approval-packet-cli && npm run test:revenue-ledger-approval-decision-cli && npm run test:revenue-website-creation-approval-decision-cli && npm run test:revenue-website-creation-packet-cli && npm run test:revenue-website-publish-approval-decision-cli && npm run test:revenue-website-publish-readiness-packet-cli && npm run test:revenue-public-scout-extract-cli && npm run test:revenue-public-scout-execute-cli && npm run test:revenue-public-scout-schedule-cli && npm run test:revenue-public-scout-run-cli && npm run test:revenue-public-contact-verification-cli && npm run test:revenue-public-candidate-verification-update-cli && npm run test:revenue-public-candidate-approval-decision-cli && npm run test:revenue-public-candidate-block-cli && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -93,6 +95,8 @@
     "revenue:ledger-approval-decision": "node --import tsx script/revenue-ledger-approval-decision.ts",
     "revenue:website-creation-approval-decision": "node --import tsx script/revenue-website-creation-approval-decision.ts",
     "revenue:website-creation-packet": "node --import tsx script/revenue-website-creation-packet.ts",
+    "revenue:website-publish-approval-decision": "node --import tsx script/revenue-website-publish-approval-decision.ts",
+    "revenue:website-publish-readiness-packet": "node --import tsx script/revenue-website-publish-readiness-packet.ts",
     "revenue:public-scout-extract": "node --import tsx script/revenue-public-scout-extract.ts",
     "revenue:public-scout-execute": "node --import tsx script/revenue-public-scout-execute.ts",
     "revenue:public-scout-schedule": "node --import tsx script/revenue-public-scout-schedule.ts",
@@ -123,32 +127,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 465,
-    "filesIndexed": 398,
-    "imports": 1505,
-    "routes": 443,
-    "symbols": 8392
+    "filesVisible": 472,
+    "filesIndexed": 405,
+    "imports": 1528,
+    "routes": 444,
+    "symbols": 8477
   },
   "directories": {
     "script": {
-      "files": 57,
-      "indexed": 55,
+      "files": 59,
+      "indexed": 57,
       "kinds": {
-        "script": 57
+        "script": 59
       }
     },
     "server": {
-      "files": 119,
-      "indexed": 116,
+      "files": 122,
+      "indexed": 119,
       "kinds": {
-        "server": 119
+        "server": 122
       }
     },
     "tests": {
-      "files": 79,
-      "indexed": 77,
+      "files": 81,
+      "indexed": 79,
       "kinds": {
-        "test": 79
+        "test": 81
       }
     },
     ".agents/skills": {
@@ -5483,6 +5487,36 @@
       "routes": []
     },
     {
+      "path": "script/revenue-website-publish-approval-decision.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-publish-approval-decision-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "result",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-website-publish-readiness-packet.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-website-publish-readiness-packet-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "options",
+        "packet",
+        "validationErrors"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/send-ceo-brief.ts",
       "kind": "script",
       "imports": [
@@ -10389,6 +10423,8 @@
         "./revenue-ledger-approval",
         "./revenue-outreach-approval",
         "./revenue-website-creation-approval",
+        "./revenue-website-publish-approval",
+        "node:crypto",
         "node:fs",
         "node:path",
         "zod"
@@ -10437,6 +10473,7 @@
         "RevenueScoutDispatchInput",
         "RevenueScoutingMissionInput",
         "RevenueWebsiteCreationPacketInput",
+        "RevenueWebsitePublishReadinessPacketInput",
         "RevenueWebsiteScaffoldInput",
         "answerRevenueAutomationIntake",
         "automationQuoteSchema",
@@ -10461,6 +10498,7 @@
         "buildRevenueScoutingMission",
         "buildRevenueUserDataPaths",
         "buildRevenueWebsiteCreationPacket",
+        "buildRevenueWebsitePublishReadinessPacket",
         "buildRevenueWebsiteScaffold",
         "closeRevenueAutomationOpportunity",
         "convertRevenueAutomationIntakeToOpportunity",
@@ -10542,6 +10580,7 @@
         "revenueScoutDispatchSchema",
         "revenueScoutingMissionSchema",
         "revenueWebsiteCreationPacketSchema",
+        "revenueWebsitePublishReadinessPacketSchema",
         "revenueWebsiteScaffoldSchema",
         "reviewRevenuePublicLeadCandidates",
         "runRevenueAutomationAgentCommand",
@@ -10653,7 +10692,9 @@
         "buildRevenueSystemReadiness",
         "buildRevenueUserDataPaths",
         "buildRevenueWebsiteCreationPacket",
+        "buildRevenueWebsitePublishReadinessPacket",
         "buildRevenueWebsiteScaffold",
+        "buildRevenueWebsiteScaffoldFilesHash",
         "buildRevenueWebsiteScaffoldInternal",
         "built",
         "canBuildWebsites",
@@ -10698,6 +10739,8 @@
         "countFor",
         "counts",
         "createDeliveryWorkspaceFromAutomationOpportunity",
+        "creationPacket",
+        "creationReady",
         "dailyAiCostUsd",
         "data",
         "databaseReady",
@@ -10924,6 +10967,7 @@
         "parsed",
         "parsedBatch",
         "paths",
+        "payload",
         "paymentLinkReady",
         "paymentReady",
         "paymentVerified",
@@ -10980,6 +11024,10 @@
         "publicCandidateVerificationEmailSchema",
         "publicCandidates",
         "publicEvidence",
+        "publishApprovalDecision",
+        "publishApprovalReady",
+        "publishProof",
+        "publishSnapshot",
         "qa",
         "qaGates",
         "qualification",
@@ -10996,6 +11044,7 @@
         "readyForApprovalCount",
         "readyForManualApproval",
         "readyForProviderSend",
+        "readyForPublishApproval",
         "readyForSendCount",
         "readyForWebsiteCreation",
         "readyToRun",
@@ -11090,6 +11139,7 @@
         "revenueSeedBatchValue",
         "revenueUsd",
         "revenueWebsiteCreationPacketSchema",
+        "revenueWebsitePublishReadinessPacketSchema",
         "revenueWebsiteScaffoldSchema",
         "review",
         "reviewPaused",
@@ -12008,6 +12058,92 @@
       "routes": []
     },
     {
+      "path": "server/revenue-website-publish-approval-decision-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine",
+        "./revenue-website-publish-approval",
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueWebsitePublishApprovalDecisionCliOptions",
+        "buildRevenueWebsitePublishApprovalDecisionFromCli",
+        "formatRevenueWebsitePublishApprovalDecisionText",
+        "getRevenueWebsitePublishApprovalDecisionExitCode",
+        "parseRevenueWebsitePublishApprovalDecisionArgs",
+        "validateRevenueWebsitePublishApprovalDecisionOptions"
+      ],
+      "symbols": [
+        "approvalBlockers",
+        "arg",
+        "blockers",
+        "buildRevenueWebsitePublishApprovalDecisionFromCli",
+        "buildScaffoldFilesHash",
+        "creationPacket",
+        "formatRevenueWebsitePublishApprovalDecisionText",
+        "getArgValue",
+        "getRevenueWebsitePublishApprovalDecisionExitCode",
+        "isValidUrl",
+        "nextCommand",
+        "npmRunText",
+        "parseRevenueWebsitePublishApprovalDecisionArgs",
+        "payload",
+        "prefix",
+        "proof",
+        "publishSnapshot",
+        "result",
+        "shellQuote",
+        "targetId",
+        "validateRevenueWebsitePublishApprovalDecisionOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-publish-approval.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueWebsitePublishApprovalProof",
+        "RevenueWebsitePublishApprovalSnapshot",
+        "buildRevenueWebsitePublishApprovalTargetId",
+        "buildRevenueWebsitePublishSnapshotHash"
+      ],
+      "symbols": [
+        "buildRevenueWebsitePublishApprovalTargetId",
+        "buildRevenueWebsitePublishSnapshotHash",
+        "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-website-publish-readiness-packet-cli.ts",
+      "kind": "server",
+      "imports": [
+        "./revenue-engine"
+      ],
+      "exports": [
+        "RevenueWebsitePublishReadinessPacketCliOptions",
+        "buildRevenueWebsitePublishReadinessPacketFromCli",
+        "formatRevenueWebsitePublishReadinessPacketText",
+        "getRevenueWebsitePublishReadinessPacketExitCode",
+        "parseRevenueWebsitePublishReadinessPacketArgs",
+        "validateRevenueWebsitePublishReadinessPacketOptions"
+      ],
+      "symbols": [
+        "arg",
+        "buildRevenueWebsitePublishReadinessPacketFromCli",
+        "formatRevenueWebsitePublishReadinessPacketText",
+        "getArgValue",
+        "getRevenueWebsitePublishReadinessPacketExitCode",
+        "parseRevenueWebsitePublishReadinessPacketArgs",
+        "prefix",
+        "validateRevenueWebsitePublishReadinessPacketOptions"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/routes.ts",
       "kind": "server",
       "imports": [
@@ -12700,6 +12836,7 @@
         "/api/revenue-engine/scout-dispatch",
         "/api/revenue-engine/scouting-mission",
         "/api/revenue-engine/website-creation-packet",
+        "/api/revenue-engine/website-publish-readiness-packet",
         "/api/revenue-engine/website-scaffold",
         "/api/shopify/install",
         "/api/shopify/oauth/callback",
@@ -15755,6 +15892,74 @@
       "routes": []
     },
     {
+      "path": "tests/revenue-website-publish-approval-decision-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval",
+        "../server/revenue-website-publish-approval-decision-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approveWebsiteCreation",
+        "createApprovedOutreachDraft",
+        "creationApproval",
+        "draft",
+        "leadResult",
+        "parsed",
+        "proof",
+        "result",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-website-publish-readiness-packet-cli.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-website-creation-approval",
+        "../server/revenue-website-publish-approval",
+        "../server/revenue-website-publish-readiness-packet-cli",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approveWebsiteCreation",
+        "approveWebsitePublish",
+        "baseEnv",
+        "blocked",
+        "createApprovedOutreachDraft",
+        "creationApproval",
+        "creationPacket",
+        "draft",
+        "leadResult",
+        "missingApproval",
+        "packet",
+        "parsed",
+        "proof",
+        "publishApproval",
+        "ready",
+        "scaffoldFilesHash",
+        "snapshot",
+        "testApprovalDecisionsPath",
+        "testLeadsPath",
+        "testOutreachPath",
+        "text",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/session-config.test.ts",
       "kind": "test",
       "imports": [
@@ -16106,6 +16311,8 @@
     "tests/revenue-public-scout-schedule-cli.test.ts",
     "tests/revenue-website-creation-approval-decision-cli.test.ts",
     "tests/revenue-website-creation-packet-cli.test.ts",
+    "tests/revenue-website-publish-approval-decision-cli.test.ts",
+    "tests/revenue-website-publish-readiness-packet-cli.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/telegram-chat-flow.test.ts",
