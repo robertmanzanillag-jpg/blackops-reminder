@@ -64,6 +64,8 @@
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
     "revenue:money-readiness": "node --import tsx script/revenue-engine-money-readiness.ts",
+    "revenue:first-money-command-center": "node --import tsx script/revenue-first-money-command-center.ts",
+    "test:revenue-first-money-command-center-cli": "node --import tsx --test tests/revenue-first-money-command-center-cli.test.ts",
     "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "metricool:plan": "node --import tsx script/metricool-plan.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",

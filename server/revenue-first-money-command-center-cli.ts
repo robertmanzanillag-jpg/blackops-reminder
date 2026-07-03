@@ -1,5 +1,12 @@
 import { getRevenueEngineSnapshot } from "./revenue-engine";
 
+export type RevenueFirstMoneyCommandCenterMode = "first-sprint" | "production-launch";
+
+export type RevenueFirstMoneyCommandCenterOptions = {
+  json: boolean;
+  mode: RevenueFirstMoneyCommandCenterMode;
+};
+
 type FirstMoneyCommandStatus = "ready" | "blocked" | "review";
 
 type FirstMoneyCommandQueueItem = {
@@ -20,11 +27,33 @@ const FIRST_MONEY_QUEUE_PRIORITY = [
   "readiness",
 ];
 
+const modes: RevenueFirstMoneyCommandCenterMode[] = ["first-sprint", "production-launch"];
+
 function sortFirstMoneyQueue(queue: FirstMoneyCommandQueueItem[]) {
   return queue.slice().sort((left, right) => FIRST_MONEY_QUEUE_PRIORITY.indexOf(left.id) - FIRST_MONEY_QUEUE_PRIORITY.indexOf(right.id));
 }
 
-export function buildRevenueFirstMoneyCommandCenter(options: { mode: "first-sprint" | "production-launch"; json: boolean }) {
+export function parseRevenueFirstMoneyCommandCenterArgs(argv: string[]): RevenueFirstMoneyCommandCenterOptions {
+  const getValue = (name: string) => {
+    const prefix = `${name}=`;
+    const arg = argv.find((value) => value.startsWith(prefix));
+    return arg ? arg.slice(prefix.length).trim() : "";
+  };
+
+  const mode = getValue("--mode") || "first-sprint";
+  return {
+    json: argv.includes("--json"),
+    mode: mode as RevenueFirstMoneyCommandCenterMode,
+  };
+}
+
+export function validateRevenueFirstMoneyCommandCenterOptions(options: RevenueFirstMoneyCommandCenterOptions): string[] {
+  return modes.includes(options.mode)
+    ? []
+    : [`--mode must be one of: ${modes.join(", ")}.`];
+}
+
+export function buildRevenueFirstMoneyCommandCenter(options: RevenueFirstMoneyCommandCenterOptions) {
   const snapshot = getRevenueEngineSnapshot();
   const publicLeadQueue = snapshot.publicLeadImportQueue;
   const websiteSalesPacketQueue = snapshot.websiteSalesPacketQueue;
@@ -168,4 +197,52 @@ export function buildRevenueFirstMoneyCommandCenter(options: { mode: "first-spri
       printsSecrets: false,
     },
   };
+}
+
+export function isRevenueFirstMoneyCommandCenterReadyForMode(packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>): boolean {
+  if (packet.mode === "first-sprint") {
+    return packet.status === "ready_for_first_money_work" && packet.readiness.canSearchBusinesses;
+  }
+
+  return packet.readiness.canBuildWebsites && packet.readiness.remainingGaps.length === 0;
+}
+
+export function formatRevenueFirstMoneyCommandCenterText(packet: ReturnType<typeof buildRevenueFirstMoneyCommandCenter>): string {
+  return [
+    "Revenue Engine First-Money Command Center",
+    `Mode: ${packet.mode}`,
+    `Status: ${packet.status}`,
+    "",
+    "Next command:",
+    `- ${packet.nextCommand.label} [${packet.nextCommand.status}]`,
+    `- ${packet.nextCommand.reason}`,
+    `- ${packet.nextCommand.command}`,
+    "",
+    "Pipeline counts:",
+    `- Public candidates: ${packet.counts.publicCandidates}`,
+    `- Import-ready candidates: ${packet.counts.importReadyCandidates}`,
+    `- Website sales packets: ${packet.counts.websiteSalesPackets}`,
+    `- Outreach drafts to review: ${packet.counts.reviewableOutreachDrafts}`,
+    `- Website closes: ${packet.counts.websiteClosures}`,
+    `- Website handoffs: ${packet.counts.websiteHandoffs}`,
+    "",
+    "Capabilities:",
+    `- Search businesses: ${packet.readiness.canSearchBusinesses ? "yes" : "no"}`,
+    `- Contact businesses: ${packet.readiness.canContactBusinesses ? "yes" : "no"}`,
+    `- Collect money: ${packet.readiness.canCollectMoney ? "yes" : "no"}`,
+    `- Build websites: ${packet.readiness.canBuildWebsites ? "yes" : "no"}`,
+    "",
+    "Queue:",
+    ...packet.queue.map((item) => `- [${item.status}] ${item.label}: ${item.reason}`),
+    "",
+    "Safety:",
+    `- Writes files: ${packet.safety.writesFiles ? "yes" : "no"}`,
+    `- Sends outreach: ${packet.safety.sendsOutreach ? "yes" : "no"}`,
+    `- Charges clients: ${packet.safety.chargesClients ? "yes" : "no"}`,
+    `- Deploys: ${packet.safety.deploys ? "yes" : "no"}`,
+    `- Prints secrets: ${packet.safety.printsSecrets ? "yes" : "no"}`,
+    "",
+    "Remaining gaps:",
+    ...(packet.readiness.remainingGaps.length ? packet.readiness.remainingGaps.map((item) => `- ${item}`) : ["- none"]),
+  ].join("\n");
 }
