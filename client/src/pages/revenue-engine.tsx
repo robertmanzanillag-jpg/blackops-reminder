@@ -1036,8 +1036,11 @@ type RevenueFirstMoneyCommandCenter = {
     reviewablePublicCandidates: number;
     importReadyCandidates: number;
     leads: number;
+    websiteSalesPackets: number;
     outreachDrafts: number;
     reviewableOutreachDrafts: number;
+    websiteClosures: number;
+    websiteHandoffs: number;
     approvedOutreachDrafts: number;
   };
   readiness: {
@@ -4119,7 +4122,7 @@ export default function RevenueEnginePage() {
             </div>
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Pipeline de dinero</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3">
                 <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
                   <p className="text-zinc-500">Candidatos</p>
                   <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.publicCandidates ?? 0}</p>
@@ -4133,8 +4136,16 @@ export default function RevenueEnginePage() {
                   <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.reviewableOutreachDrafts ?? 0}</p>
                 </div>
                 <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
-                  <p className="text-zinc-500">Websites</p>
-                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.approvedOutreachDrafts ?? 0}</p>
+                  <p className="text-zinc-500">Sales pkt</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteSalesPackets ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Cierres</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteClosures ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Builds</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteHandoffs ?? 0}</p>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
