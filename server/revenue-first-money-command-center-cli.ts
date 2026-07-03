@@ -12,10 +12,10 @@ type FirstMoneyCommandQueueItem = {
 
 const FIRST_MONEY_QUEUE_PRIORITY = [
   "candidate-review",
-  "website-sales-packet",
-  "outreach-review",
   "website-close",
   "website-handoff",
+  "website-sales-packet",
+  "outreach-review",
   "public-scout",
   "readiness",
 ];
