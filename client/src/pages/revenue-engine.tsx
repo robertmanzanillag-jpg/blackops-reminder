@@ -115,6 +115,14 @@ function hasDailyMoneyRunPlaceholders(value: string | undefined) {
   return /\bREPLACE_|"owner\/repo"|codex\/client-website-build/.test(value || "");
 }
 
+type WebsiteDeliveryBuildChecks = {
+  publicDataVerified?: boolean;
+  responsiveChecked?: boolean;
+  linksChecked?: boolean;
+  automationTested?: boolean;
+  rollbackPlanReady?: boolean;
+};
+
 type RevenueSnapshot = {
   metrics: {
     appsSold: number;
@@ -646,6 +654,7 @@ type RevenueSnapshot = {
         assets: string[];
         qaCommands: string[];
         publicOnly: boolean;
+        designSkillRoute?: string[];
         copyableBuildPack: string;
       };
       missing: string[];
@@ -962,6 +971,7 @@ type RevenueSnapshot = {
         assets: string[];
         qaCommands: string[];
         publicOnly: boolean;
+        designSkillRoute?: string[];
         copyableBuildPack: string;
       };
       acceptanceCriteria: string[];
@@ -2393,6 +2403,7 @@ export default function RevenueEnginePage() {
     repoFullName?: string;
     branchName?: string;
   }>>({});
+  const [websiteDeliveryBuildChecks, setWebsiteDeliveryBuildChecks] = useState<Record<string, WebsiteDeliveryBuildChecks>>({});
   const requestDepositPaymentConfirmation = (businessName: string, amountUsd: number) => {
     const value = window.prompt(
       `Referencia verificable de pago para ${businessName} (${money.format(amountUsd)}): Stripe payment id, Zelle/bank ref, invoice/receipt id.`,
@@ -2402,6 +2413,33 @@ export default function RevenueEnginePage() {
   const automationHasPaymentConfirmation = hasVerifiablePaymentEvidence(automationPaymentConfirmation);
   const automationCloseRequiresPaymentEvidence = automationCashCollectedUsd > 0 || automationLifecycleTarget === "sale" || automationLifecycleTarget === "delivery";
   const automationOpportunityRequiresPaymentEvidence = automationDepositPaid || ["sold", "in_delivery", "delivered"].includes(automationOpportunityStatus);
+
+  function buildWebsiteDeliveryWorkspaceRequest(
+    item: RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number],
+    repoFullName: string,
+    branchName: string,
+    buildChecks: WebsiteDeliveryBuildChecks,
+  ) {
+    return {
+      leadId: item.leadId,
+      outreachDraftId: item.outreachDraftId,
+      websiteOpportunityId: item.opportunityId,
+      mockupUrl: item.mockupUrl,
+      repoFullName,
+      branchName,
+      projectType: item.projectType,
+      depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
+      scopeApproved: true,
+      cashCollectedUsd: item.cashCollectedUsd,
+      publicDataVerified: Boolean(buildChecks.publicDataVerified),
+      visualQaPassed: Boolean(buildChecks.responsiveChecked),
+      technicalQaPassed: Boolean(buildChecks.linksChecked),
+      automationQaPassed: item.projectType === "website" ? true : Boolean(buildChecks.automationTested && buildChecks.rollbackPlanReady),
+      clientHandoffReady: false,
+      launchTargetDays: projectLaunchTargetDays,
+      notes: "Created from Revenue Engine website handoff queue.",
+    };
+  }
   const automationAgentPaymentBlocked = automationCloseRequiresPaymentEvidence && !automationHasPaymentConfirmation;
   const automationOpportunityPaymentBlocked = automationOpportunityRequiresPaymentEvidence && !automationHasPaymentConfirmation;
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
@@ -3089,30 +3127,13 @@ export default function RevenueEnginePage() {
   const websiteDeliveryHandoffMutation = useMutation<WebsiteDeliveryHandoffResult, Error, RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number]>({
     mutationFn: async (item) => {
       const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+      const buildChecks = websiteDeliveryBuildChecks[item.opportunityId] || {};
       const repoFullName = (repoInput.repoFullName || "").trim();
       const branchName = (repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
       const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadId: item.leadId,
-          outreachDraftId: item.outreachDraftId,
-          websiteOpportunityId: item.opportunityId,
-          mockupUrl: item.mockupUrl,
-          repoFullName,
-          branchName,
-          projectType: item.projectType,
-          depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
-          scopeApproved: true,
-          cashCollectedUsd: item.cashCollectedUsd,
-          publicDataVerified: reviewChecks.publicDataVerified,
-          visualQaPassed: reviewChecks.responsiveChecked,
-          technicalQaPassed: reviewChecks.linksChecked,
-          automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
-          clientHandoffReady: false,
-          launchTargetDays: projectLaunchTargetDays,
-          notes: "Created from Revenue Engine website handoff queue.",
-        }),
+        body: JSON.stringify(buildWebsiteDeliveryWorkspaceRequest(item, repoFullName, branchName, buildChecks)),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde lead");
@@ -4010,6 +4031,19 @@ export default function RevenueEnginePage() {
 
   function toggleReviewCheck(key: keyof typeof reviewChecks) {
     setReviewChecks((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function toggleWebsiteDeliveryBuildCheck(
+    opportunityId: string,
+    key: "publicDataVerified" | "responsiveChecked" | "linksChecked" | "automationTested" | "rollbackPlanReady",
+  ) {
+    setWebsiteDeliveryBuildChecks((current) => ({
+      ...current,
+      [opportunityId]: {
+        ...current[opportunityId],
+        [key]: !current[opportunityId]?.[key],
+      },
+    }));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -5920,6 +5954,21 @@ export default function RevenueEnginePage() {
                                 {missing}
                               </p>
                             ))}
+                          </div>
+                        )}
+                        {item.buildPack.designSkillRoute && item.buildPack.designSkillRoute.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3" data-testid={`panel-website-build-premium-design-route-${item.workspaceId}`}>
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-indigo-200">Premium design route</p>
+                                <p className="mt-1 text-xs leading-5 text-zinc-300">
+                                  {item.buildPack.designSkillRoute.join(" ")}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="shrink-0 border-indigo-500/30 bg-black text-indigo-100">
+                                design + 3D QA
+                              </Badge>
+                            </div>
                           </div>
                         )}
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -9370,10 +9419,21 @@ export default function RevenueEnginePage() {
                           snapshot?.websiteDeliveryHandoffQueue.items.map((item) => {
                             const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
                             const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+                            const buildChecks = websiteDeliveryBuildChecks[item.opportunityId] || {};
                             const repoFullName = repoInput.repoFullName || "";
                             const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
+                            const copyableWorkspaceRequest = JSON.stringify(
+                              buildWebsiteDeliveryWorkspaceRequest(item, repoFullName.trim(), branchName.trim(), buildChecks),
+                              null,
+                              2,
+                            );
                             const repoReady = isGithubRepoFullName(repoFullName);
                             const branchReady = isCodexBranchName(branchName);
+                            const publicEvidenceReady = Boolean(buildChecks.publicDataVerified);
+                            const responsiveReady = Boolean(buildChecks.responsiveChecked);
+                            const linksReady = Boolean(buildChecks.linksChecked);
+                            const automationReady = item.projectType === "website" || Boolean(buildChecks.automationTested && buildChecks.rollbackPlanReady);
+                            const preBuildChecksReady = publicEvidenceReady && responsiveReady && linksReady && automationReady;
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -9400,6 +9460,9 @@ export default function RevenueEnginePage() {
                                   </Badge>
                                   <Badge variant="outline" className={cn(branchReady ? statusTone("ready") : statusTone("blocked"))}>
                                     {branchReady ? "branch codex listo" : "branch codex requerido"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(preBuildChecksReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {preBuildChecksReady ? "evidencia build lista" : "evidencia build pendiente"}
                                   </Badge>
                                 </div>
                                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -9434,6 +9497,42 @@ export default function RevenueEnginePage() {
                                     data-testid={`input-website-handoff-branch-${item.opportunityId}`}
                                   />
                                 </div>
+                                <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3" data-testid={`panel-website-handoff-build-checks-${item.opportunityId}`}>
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs uppercase tracking-wide text-sky-200">Pre-build evidence gate</p>
+                                    <Badge variant="outline" className={cn(preBuildChecksReady ? statusTone("ready") : statusTone("blocked"), "shrink-0")}>
+                                      {preBuildChecksReady ? "ready" : "blocked"}
+                                    </Badge>
+                                  </div>
+                                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                    {[
+                                      ["publicDataVerified", "Data publica verificada"],
+                                      ["responsiveChecked", "Mockup responsive revisado"],
+                                      ["linksChecked", "Links/formularios verificados"],
+                                      ["automationTested", "Automation probada"],
+                                      ["rollbackPlanReady", "Rollback listo"],
+                                    ].filter(([key]) => item.projectType !== "website" || !["automationTested", "rollbackPlanReady"].includes(key)).map(([key, label]) => (
+                                      <label
+                                        key={`${item.opportunityId}-${key}`}
+                                        className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(buildChecks[key as keyof typeof buildChecks])}
+                                          onChange={() => toggleWebsiteDeliveryBuildCheck(item.opportunityId, key as "publicDataVerified" | "responsiveChecked" | "linksChecked" | "automationTested" | "rollbackPlanReady")}
+                                          className="h-4 w-4 rounded border-zinc-700 bg-black"
+                                          data-testid={`checkbox-website-handoff-${key}-${item.opportunityId}`}
+                                        />
+                                        {label}
+                                      </label>
+                                    ))}
+                                  </div>
+                                  {!preBuildChecksReady && (
+                                    <p className="mt-2 text-xs leading-5 text-sky-100/80">
+                                      Marca estos checks antes de crear el workspace para que el PR-first issue salga listo para build y no quede bloqueado por data publica o QA basico.
+                                    </p>
+                                  )}
+                                </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <Button
                                     type="button"
@@ -9451,7 +9550,7 @@ export default function RevenueEnginePage() {
                                     size="sm"
                                     variant="outline"
                                     className="border-sky-500/30 text-sky-100"
-                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceRequest)}
+                                    onClick={() => navigator.clipboard.writeText(copyableWorkspaceRequest)}
                                     data-testid={`button-copy-website-workspace-request-${item.opportunityId}`}
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
@@ -9474,13 +9573,13 @@ export default function RevenueEnginePage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady}
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady || !preBuildChecksReady}
                                     onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
                                     className="bg-sky-600 text-white hover:bg-sky-500"
                                     data-testid={`button-create-website-workspace-${item.leadId}`}
                                   >
                                     {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                    {depositCoversHandoff ? repoReady ? branchReady ? "Crear workspace" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
+                                    {depositCoversHandoff ? repoReady ? branchReady ? preBuildChecksReady ? "Crear workspace" : "Evidencia build pendiente" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
                                   </Button>
                                 </div>
                               </div>
@@ -9694,6 +9793,21 @@ export default function RevenueEnginePage() {
                                         {item}
                                       </div>
                                     ))}
+                                  </div>
+                                )}
+                                {workspace.codexBuildHandoff.buildPack.designSkillRoute && workspace.codexBuildHandoff.buildPack.designSkillRoute.length > 0 && (
+                                  <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3" data-testid={`panel-premium-design-route-${workspace.id}`}>
+                                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                      <div>
+                                        <p className="text-xs uppercase tracking-wide text-indigo-200">Premium design route</p>
+                                        <p className="mt-1 text-xs leading-5 text-zinc-300">
+                                          {workspace.codexBuildHandoff.buildPack.designSkillRoute.join(" ")}
+                                        </p>
+                                      </div>
+                                      <Badge variant="outline" className="shrink-0 border-indigo-500/30 bg-black text-indigo-100">
+                                        design + 3D QA
+                                      </Badge>
+                                    </div>
                                   </div>
                                 )}
                               </div>

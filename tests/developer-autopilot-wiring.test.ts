@@ -296,7 +296,12 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(engineSource, /falta aprobacion escrita de scope/);
   assert.match(uiSource, /repoFullName,/);
   assert.match(uiSource, /branchName,/);
-  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady\}/);
+  assert.match(uiSource, /const preBuildChecksReady = publicEvidenceReady && responsiveReady && linksReady && automationReady/);
+  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady \|\| !preBuildChecksReady\}/);
+  assert.match(uiSource, /panel-website-handoff-build-checks/);
+  assert.match(uiSource, /const copyableWorkspaceRequest = JSON\.stringify/);
+  assert.match(uiSource, /navigator\.clipboard\.writeText\(copyableWorkspaceRequest\)/);
+  assert.doesNotMatch(uiSource, /navigator\.clipboard\.writeText\(item\.copyableWorkspaceRequest\)/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });

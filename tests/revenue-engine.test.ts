@@ -1207,6 +1207,37 @@ test("Revenue Engine UI shows first-money command center lane", () => {
   assert.match(clientSource, /No se pudo cargar el command center/);
 });
 
+test("Revenue Engine UI exposes premium design route for website build handoffs", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(clientSource, /designSkillRoute\?: string\[\]/);
+  assert.match(clientSource, /panel-website-build-premium-design-route/);
+  assert.match(clientSource, /panel-premium-design-route/);
+  assert.match(clientSource, /Premium design route/);
+  assert.match(clientSource, /design \+ 3D QA/);
+  assert.match(clientSource, /workspace\.codexBuildHandoff\.buildPack\.designSkillRoute/);
+});
+
+test("Revenue Engine UI requires local pre-build evidence before sold website handoff workspace", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+  const handoffMutationStart = clientSource.indexOf("const websiteDeliveryHandoffMutation");
+  const handoffMutationEnd = clientSource.indexOf("const websiteOpportunityMutation", handoffMutationStart);
+  const soldWebsiteHandoffMutation = clientSource.slice(handoffMutationStart, handoffMutationEnd);
+
+  assert.match(clientSource, /websiteDeliveryBuildChecks/);
+  assert.match(clientSource, /buildWebsiteDeliveryWorkspaceRequest/);
+  assert.match(clientSource, /const copyableWorkspaceRequest = JSON\.stringify/);
+  assert.match(clientSource, /navigator\.clipboard\.writeText\(copyableWorkspaceRequest\)/);
+  assert.match(clientSource, /panel-website-handoff-build-checks/);
+  assert.match(clientSource, /Pre-build evidence gate/);
+  assert.match(clientSource, /publicDataVerified: Boolean\(buildChecks\.publicDataVerified\)/);
+  assert.match(clientSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady \|\| !preBuildChecksReady\}/);
+  assert.match(clientSource, /Evidencia build pendiente/);
+  assert.ok(handoffMutationStart > -1);
+  assert.match(soldWebsiteHandoffMutation, /buildWebsiteDeliveryWorkspaceRequest\(item, repoFullName, branchName, buildChecks\)/);
+  assert.doesNotMatch(soldWebsiteHandoffMutation, /publicDataVerified: reviewChecks\.publicDataVerified/);
+});
+
 test("public candidate approval keeps incomplete candidates blocked", () => {
   const candidate = recordRevenuePublicLeadCandidate({
     businessName: "Still Missing Contact Spa",

@@ -6,6 +6,10 @@ test("website build handoff requires Claude design skill and premium 3D QA", () 
   const source = readFileSync("server/revenue-engine.ts", "utf8");
   const developerAutopilotSource = readFileSync("server/developer-autopilot.ts", "utf8");
   const routesSource = readFileSync("server/routes.ts", "utf8");
+  const clientSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
+  const handoffMutationStart = clientSource.indexOf("const websiteDeliveryHandoffMutation");
+  const handoffMutationEnd = clientSource.indexOf("const websiteOpportunityMutation", handoffMutationStart);
+  const soldWebsiteHandoffMutation = clientSource.slice(handoffMutationStart, handoffMutationEnd);
 
   assert.match(source, /design\/creative guidance before coding/);
   assert.match(source, /\.claude\/skills\/design-creative\/SKILL\.md/);
@@ -22,4 +26,20 @@ test("website build handoff requires Claude design skill and premium 3D QA", () 
   assert.match(developerAutopilotSource, /designSkillContext: null/);
   assert.match(routesSource, /designSkillContext: workspace\.codexBuildHandoff\.designSkillContext/);
   assert.match(source, /Keep prices, deposits, payment references, operator notes, credentials and private client details out of public GitHub text/);
+  assert.match(clientSource, /designSkillRoute\?: string\[\]/);
+  assert.match(clientSource, /panel-website-build-premium-design-route/);
+  assert.match(clientSource, /panel-premium-design-route/);
+  assert.match(clientSource, /Premium design route/);
+  assert.match(clientSource, /design \+ 3D QA/);
+  assert.match(clientSource, /websiteDeliveryBuildChecks/);
+  assert.match(clientSource, /buildWebsiteDeliveryWorkspaceRequest/);
+  assert.match(clientSource, /const copyableWorkspaceRequest = JSON\.stringify/);
+  assert.match(clientSource, /navigator\.clipboard\.writeText\(copyableWorkspaceRequest\)/);
+  assert.match(clientSource, /panel-website-handoff-build-checks/);
+  assert.match(clientSource, /Pre-build evidence gate/);
+  assert.match(clientSource, /Evidencia build pendiente/);
+  assert.match(clientSource, /publicDataVerified: Boolean\(buildChecks\.publicDataVerified\)/);
+  assert.ok(handoffMutationStart > -1);
+  assert.match(soldWebsiteHandoffMutation, /buildWebsiteDeliveryWorkspaceRequest\(item, repoFullName, branchName, buildChecks\)/);
+  assert.doesNotMatch(soldWebsiteHandoffMutation, /publicDataVerified: reviewChecks\.publicDataVerified/);
 });
