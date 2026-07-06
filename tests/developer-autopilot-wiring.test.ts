@@ -380,8 +380,9 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/money-sprint\/public-candidates/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/website-opportunities/);
-  assert.match(safeRunEndpoints, /\/api\/revenue-engine\/website-delivery-workspace/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.doesNotMatch(safeRunEndpoints, /\/api\/revenue-engine\/website-delivery-workspace/);
+  assert.match(uiSource, /Crea el workspace desde la tarjeta de website vendido/);
   assert.match(uiSource, /hasDailyMoneyRunPlaceholders/);
   assert.match(uiSource, /REPLACE_/);
   assert.match(uiSource, /"owner\\\/repo"/);

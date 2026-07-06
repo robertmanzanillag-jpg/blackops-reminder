@@ -2,6 +2,7 @@ import { runRevenueScoutDispatch } from "./revenue-engine";
 
 export type RevenueScoutDispatchCliOptions = {
   json: boolean;
+  prepareOnly: boolean;
   area: string;
   niche: string;
   offerFocus: "websites" | "automations" | "both";
@@ -32,6 +33,7 @@ export function parseRevenueScoutDispatchArgs(argv: string[]): RevenueScoutDispa
   const offerFocus = readArgValue(argv, "--offer-focus") ?? "both";
   return {
     json: argv.includes("--json"),
+    prepareOnly: argv.includes("--prepare-only"),
     area: readArgValue(argv, "--area") ?? "Miami",
     niche: readArgValue(argv, "--niche") ?? "restaurants",
     offerFocus: offerFocus as RevenueScoutDispatchCliOptions["offerFocus"],
@@ -66,9 +68,15 @@ export function runRevenueScoutDispatchFromCliOptions(options: RevenueScoutDispa
   });
 }
 
-export function buildRevenueScoutDispatchCliPacket(result: ReturnType<typeof runRevenueScoutDispatchFromCliOptions>) {
+export function buildRevenueScoutDispatchCliPacket(
+  result: ReturnType<typeof runRevenueScoutDispatchFromCliOptions>,
+  options: Pick<RevenueScoutDispatchCliOptions, "prepareOnly"> = { prepareOnly: false },
+) {
+  const needsEvidenceRunner = result.dispatch.executionMode === "manual_evidence_required";
   return {
-    status: result.status,
+    status: needsEvidenceRunner && !options.prepareOnly ? "needs_evidence_runner" as const : result.status,
+    dispatchStatus: result.status,
+    prepareOnly: options.prepareOnly,
     reason: result.reason,
     sprint: {
       id: result.sprint.id,
@@ -108,7 +116,9 @@ export function buildRevenueScoutDispatchCliPacket(result: ReturnType<typeof run
       requiresRobertApprovalToContact: result.safety.requiresRobertApprovalToContact,
       downstreamCandidatePersistence: "Connector intake can persist review-only public candidates later; this dispatch command does not create candidates, leads, outreach, charges or deployments.",
     },
-    nextAction: result.nextAction,
+    nextAction: needsEvidenceRunner && !options.prepareOnly
+      ? "Dispatch brief prepared, but no businesses were discovered yet. Run a browser/public-search subagent or connector work order and POST verified results to /api/revenue-engine/public-scout-connector-intake."
+      : result.nextAction,
   };
 }
 
@@ -116,6 +126,8 @@ export function formatRevenueScoutDispatchText(packet: ReturnType<typeof buildRe
   return [
     "Revenue Engine Scout Dispatch",
     `Status: ${packet.status}`,
+    `Dispatch status: ${packet.dispatchStatus}`,
+    `Prepare only: ${packet.prepareOnly ? "yes" : "no"}`,
     `Reason: ${packet.reason}`,
     `Sprint: ${packet.sprint.id}`,
     `Market: ${packet.sprint.area} / ${packet.sprint.niche}`,
@@ -129,6 +141,8 @@ export function formatRevenueScoutDispatchText(packet: ReturnType<typeof buildRe
     `- Endpoint: ${packet.dispatch.connectorIntake.endpoint}`,
     `- Approval locked: ${packet.dispatch.connectorIntake.approvalLocked ? "yes" : "no"}`,
     `- Work orders: ${packet.dispatch.connectorIntake.workOrderCount}`,
+    `- Execution mode: ${packet.dispatch.executionMode}`,
+    `- Blocked until: ${packet.dispatch.blockedUntil}`,
     `- Downstream persistence: ${packet.safety.downstreamCandidatePersistence}`,
     "",
     "Safety:",

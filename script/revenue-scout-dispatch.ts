@@ -16,7 +16,7 @@ function main() {
   }
 
   const result = runRevenueScoutDispatchFromCliOptions(options);
-  const packet = buildRevenueScoutDispatchCliPacket(result);
+  const packet = buildRevenueScoutDispatchCliPacket(result, options);
   console.log(options.json ? JSON.stringify(packet, null, 2) : formatRevenueScoutDispatchText(packet));
   process.exit(packet.status === "dispatch_ready" && packet.safety.sendsOutreach === false && packet.safety.spendsMoney === false && packet.safety.deploys === false ? 0 : 1);
 }

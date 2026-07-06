@@ -26,6 +26,7 @@ function isolatedRevenueEnv(prefix: string) {
 test("parses Revenue scout dispatch CLI options", () => {
   assert.deepEqual(parseRevenueScoutDispatchArgs([]), {
     json: false,
+    prepareOnly: false,
     area: "Miami",
     niche: "restaurants",
     offerFocus: "both",
@@ -35,6 +36,7 @@ test("parses Revenue scout dispatch CLI options", () => {
   });
   assert.deepEqual(parseRevenueScoutDispatchArgs([
     "--json",
+    "--prepare-only",
     "--area",
     "Orlando",
     "--niche",
@@ -49,6 +51,7 @@ test("parses Revenue scout dispatch CLI options", () => {
     "3",
   ]), {
     json: true,
+    prepareOnly: true,
     area: "Orlando",
     niche: "roofers",
     offerFocus: "websites",
@@ -134,10 +137,13 @@ test("formats Revenue scout dispatch for operator assignment", () => {
       downstreamCandidatePersistence: "Connector intake can persist review-only public candidates later; this dispatch command does not create candidates, leads, outreach, charges or deployments.",
     },
     nextAction: "Assign briefs to subagents.",
+    dispatchStatus: "dispatch_ready",
+    prepareOnly: true,
   } as ReturnType<typeof buildRevenueScoutDispatchCliPacket>;
   const text = formatRevenueScoutDispatchText(packet);
 
   assert.match(text, /Revenue Engine Scout Dispatch/);
+  assert.match(text, /Prepare only: yes/);
   assert.match(text, /scout-a: 1 tasks \/ 2 slots/);
   assert.match(text, /Endpoint: \/api\/revenue-engine\/public-scout-connector-intake/);
   assert.match(text, /review-only public candidates later/);
@@ -145,7 +151,7 @@ test("formats Revenue scout dispatch for operator assignment", () => {
   assert.match(text, /Do not contact businesses/);
 });
 
-test("Revenue scout dispatch executable creates safe dispatch only", () => {
+test("Revenue scout dispatch executable blocks success until evidence runner is explicit", () => {
   const env = isolatedRevenueEnv(`revenue-scout-dispatch-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const run = spawnSync(process.execPath, [
     "--import",
@@ -164,9 +170,12 @@ test("Revenue scout dispatch executable creates safe dispatch only", () => {
     maxBuffer: 1024 * 1024 * 10,
   });
 
-  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.status, 1, run.stderr);
   assert.match(run.stdout, /Revenue Engine Scout Dispatch/);
-  assert.match(run.stdout, /Status: dispatch_ready/);
+  assert.match(run.stdout, /Status: needs_evidence_runner/);
+  assert.match(run.stdout, /Dispatch status: dispatch_ready/);
+  assert.match(run.stdout, /Prepare only: no/);
+  assert.match(run.stdout, /Blocked until: public evidence is pasted and verified/);
   assert.match(run.stdout, /Endpoint: \/api\/revenue-engine\/public-scout-connector-intake/);
   assert.match(run.stdout, /Persists scout run: yes/);
   assert.match(run.stdout, /Persists candidates: no/);
@@ -181,6 +190,34 @@ test("Revenue scout dispatch executable creates safe dispatch only", () => {
   assert.equal(existsSync(env.REVENUE_ENGINE_OUTREACH_PATH), false);
 });
 
+test("Revenue scout dispatch prepare-only executable creates safe dispatch packet", () => {
+  const env = isolatedRevenueEnv(`revenue-scout-dispatch-prepare-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const run = spawnSync(process.execPath, [
+    "--import",
+    "tsx",
+    "script/revenue-scout-dispatch.ts",
+    "--prepare-only",
+    "--area=Tampa",
+    "--niche=dentists",
+    "--offer-focus=websites",
+    "--target=8",
+    "--max-tasks=3",
+    "--slots-per-task=2",
+  ], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env,
+    maxBuffer: 1024 * 1024 * 10,
+  });
+
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /Status: dispatch_ready/);
+  assert.match(run.stdout, /Prepare only: yes/);
+  assert.match(run.stdout, /Persists candidates: no/);
+  assert.equal(existsSync(env.REVENUE_ENGINE_DAILY_SCOUT_SPRINTS_PATH), true);
+  assert.equal(existsSync(env.REVENUE_ENGINE_PUBLIC_LEAD_CANDIDATES_PATH), false);
+});
+
 test("Revenue scout dispatch JSON output is sanitized for subagent handoff", () => {
   const env = isolatedRevenueEnv(`revenue-scout-dispatch-json-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   const run = spawnSync(process.execPath, [
@@ -188,6 +225,7 @@ test("Revenue scout dispatch JSON output is sanitized for subagent handoff", () 
     "tsx",
     "script/revenue-scout-dispatch.ts",
     "--json",
+    "--prepare-only",
     "--area",
     "Tampa",
     "--niche",
@@ -210,6 +248,8 @@ test("Revenue scout dispatch JSON output is sanitized for subagent handoff", () 
   assert.equal(run.status, 0, run.stderr);
   const packet = JSON.parse(run.stdout);
   assert.equal(packet.status, "dispatch_ready");
+  assert.equal(packet.dispatchStatus, "dispatch_ready");
+  assert.equal(packet.prepareOnly, true);
   assert.equal(packet.sprint.area, "Tampa");
   assert.equal(packet.sprint.niche, "dentists");
   assert.equal(packet.dispatch.mode, "manual_subagent_dispatch");
@@ -222,6 +262,43 @@ test("Revenue scout dispatch JSON output is sanitized for subagent handoff", () 
   assert.equal("snapshot" in packet, false);
   assert.equal(JSON.stringify(packet).includes("recentLeads"), false);
   assert.match(packet.safety.downstreamCandidatePersistence, /review-only public candidates/);
+});
+
+test("Revenue scout dispatch JSON default reports evidence runner requirement", () => {
+  const env = isolatedRevenueEnv(`revenue-scout-dispatch-json-blocked-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const run = spawnSync(process.execPath, [
+    "--import",
+    "tsx",
+    "script/revenue-scout-dispatch.ts",
+    "--json",
+    "--area=Tampa",
+    "--niche=dentists",
+    "--offer-focus=websites",
+    "--target=8",
+    "--max-tasks=3",
+    "--slots-per-task=2",
+  ], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env,
+    maxBuffer: 1024 * 1024 * 10,
+  });
+
+  assert.equal(run.status, 1, run.stderr);
+  const packet = JSON.parse(run.stdout);
+  assert.equal(packet.status, "needs_evidence_runner");
+  assert.equal(packet.dispatchStatus, "dispatch_ready");
+  assert.equal(packet.prepareOnly, false);
+  assert.match(packet.nextAction, /no businesses were discovered yet/);
+  assert.equal(packet.safety.persistsCandidates, false);
+  assert.equal(packet.safety.persistsLeads, false);
+  assert.equal(packet.safety.sendsOutreach, false);
+  assert.equal(packet.safety.spendsMoney, false);
+  assert.equal(packet.safety.deploys, false);
+  assert.equal(existsSync(env.REVENUE_ENGINE_DAILY_SCOUT_SPRINTS_PATH), true);
+  assert.equal(existsSync(env.REVENUE_ENGINE_PUBLIC_LEAD_CANDIDATES_PATH), false);
+  assert.equal(existsSync(env.REVENUE_ENGINE_LEADS_PATH), false);
+  assert.equal(existsSync(env.REVENUE_ENGINE_OUTREACH_PATH), false);
 });
 
 test("package exposes Revenue scout dispatch CLI", () => {

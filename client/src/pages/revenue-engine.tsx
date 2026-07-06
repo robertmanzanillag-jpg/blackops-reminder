@@ -95,7 +95,6 @@ const DAILY_MONEY_SAFE_RUN_ENDPOINTS = new Set([
   "/api/revenue-engine/scout-dispatch",
   "/api/revenue-engine/money-sprint/public-candidates",
   "/api/revenue-engine/website-opportunities",
-  "/api/revenue-engine/website-delivery-workspace",
   "/api/revenue-engine/delivery-workspaces/github-handoff",
 ]);
 
@@ -2617,7 +2616,9 @@ export default function RevenueEnginePage() {
     : snapshot?.dailyMoneyCommand.status === "blocked"
       ? "Daily Money Command esta bloqueado por guardrails."
       : !dailyMoneyRunIsSafeEndpoint
-        ? "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
+        ? dailyMoneyRunPacket?.apiAction === "/api/revenue-engine/website-delivery-workspace"
+          ? "Crea el workspace desde la tarjeta de website vendido para marcar repo y checks pre-build."
+          : "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
         : dailyMoneyRunHasPlaceholders
           ? "El request todavia tiene placeholders."
           : !dailyMoneyRunRequest.ok
