@@ -9884,10 +9884,26 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
   const title = `[Revenue Website Build] ${input.clientName} - ${input.packageName}`;
   const buildPackSections = [
     "First viewport with business name, offer, credibility signal and primary CTA.",
+    "Premium visual direction using design/creative guidance before coding: brand signal, hierarchy, layout, color, type, imagery and conversion QA.",
+    "Optional premium 3D/motion enhancement only when it improves conversion and stays performant: Three.js or CSS depth, reduced-motion fallback, no blank canvas, no overlap and no layout shift.",
     "Services/menu/offer section grounded only in public business facts and approved scope.",
     "Contact or booking section with approved contact path, no automatic sending until Robert/client approval.",
     "Trust section using public evidence, mockup direction and clear next step.",
     "Footer with source-safe business identity and no private payment or operator details.",
+  ];
+  const internalDesignSkillContext = [
+    "Claude design skill context:",
+    "- Prompt Claude with design/UI/UX/branding/landing-page language so buildClaudeSkillContext selects .claude/skills/design-creative/SKILL.md.",
+    "- Apply design-creative before implementation: best direction, concrete spec, production checklist and missing assets.",
+    "- Use the selected design direction to build a premium agency-quality website, not a generic template.",
+    "- Include tasteful 3D/animation only when it improves conversion and passes mobile, performance and accessibility checks.",
+  ];
+  const publicDesignDirection = [
+    "Design direction gate:",
+    "- Run design/creative direction before implementation: hierarchy, brand fit, layout, color, type, imagery, CTA and visual QA.",
+    "- Build a premium agency-quality website, not a generic template.",
+    "- Treat 3D/animation as an optional conversion enhancement, not a default requirement.",
+    "- Include tasteful depth/animation only when it passes mobile, performance, accessibility, reduced-motion and content-overlap checks.",
   ];
   const buildPackAssets = [
     input.mockupUrl ? `Approved mockup: ${input.mockupUrl}` : "Approved mockup: pending in Revenue Engine workspace",
@@ -9900,6 +9916,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "npm run build",
     "Run relevant route/API tests for the touched app.",
     "Capture desktop and mobile verification notes before PR handoff.",
+    "Verify 3D/animation renders nonblank, stays responsive, honors reduced motion and does not cover CTA/content.",
   ];
   const copyableBuildPack = [
     `[Revenue Website Build] ${publicClientName} - ${publicPackageName} build pack`,
@@ -9920,6 +9937,7 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "Implementation rules:",
     "- Build on a codex/ branch and open a PR before merge.",
     "- Use only public facts, approved mockup direction, and workspace-approved scope.",
+    ...publicDesignDirection,
     "- Keep prices, deposits, payment references, operator notes, credentials and private client details out of public GitHub text.",
     "- Do not deploy, publish previews, send forms/messages, or merge without second review, App QA and explicit Robert deploy approval.",
     "",
@@ -9950,6 +9968,10 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "- Do not deploy to Replit or custom production without explicit Robert approval.",
     "- Do not expose secrets, credentials, private customer data, or non-public security details.",
     "- Run App QA after implementation and include rollback notes.",
+    "",
+    "Design Skill / Premium Experience",
+    ...internalDesignSkillContext,
+    "- Deliver a polished, high-end public website with responsive animation, strong first viewport, clear CTA, and tasteful 3D/depth where it helps the sale.",
     "",
     "Acceptance Criteria",
     "- Website experience matches the approved offer and public business facts.",
@@ -9982,6 +10004,10 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "- Do not include prices, payment references, deposit status, private notes, credentials, or customer-sensitive data in public GitHub text.",
     "- Run App QA after implementation and include rollback notes.",
     "",
+    "Design Skill / Premium Experience",
+    ...publicDesignDirection,
+    "- Deliver a polished, high-end public website with responsive animation, strong first viewport, clear CTA, and tasteful 3D/depth where it helps the sale.",
+    "",
     "Acceptance Criteria",
     "- Website experience matches the approved offer and public business facts.",
     "- Mobile and desktop layouts are checked.",
@@ -10002,6 +10028,9 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     "",
     "Build pack:",
     ...buildPackSections.map((section) => `- ${section}`),
+    "",
+    "Design skill route:",
+    ...publicDesignDirection.map((item) => `- ${item}`),
     "",
     "Public assets:",
     ...buildPackAssets.map((asset) => `- ${asset}`),
@@ -10034,11 +10063,13 @@ function buildRevenueCodexBuildHandoff(input: RevenueDeliveryWorkspaceInput) {
     releaseGateHeadSha,
     title,
     codexBrief,
+    designSkillContext: internalDesignSkillContext.join("\n"),
     publicBuildBrief,
     githubIssueTitle,
     copyableGithubIssueBody,
     buildPack: {
       sections: buildPackSections,
+      designSkillRoute: publicDesignDirection,
       assets: buildPackAssets,
       qaCommands: buildPackQaCommands,
       publicOnly: true,

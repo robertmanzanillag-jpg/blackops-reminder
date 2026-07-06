@@ -5345,6 +5345,7 @@ export async function registerRoutes(
         kind: "client_build",
         title: workspace.codexBuildHandoff.githubIssueTitle,
         description: workspace.codexBuildHandoff.copyableGithubIssueBody,
+        designSkillContext: workspace.codexBuildHandoff.designSkillContext,
         severity: "medium",
         evidence: [
           `Revenue workspace: ${workspace.id}`,

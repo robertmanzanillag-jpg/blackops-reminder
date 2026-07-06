@@ -17,6 +17,7 @@ export type DeveloperAutopilotRequest = {
   description: string;
   severity?: "critical" | "high" | "medium" | "low";
   evidence?: string[];
+  designSkillContext?: string | null;
   productionUrl?: string | null;
   replitRequested?: boolean;
 };
@@ -330,6 +331,7 @@ export function buildCodexPrFirstBrief(request: DeveloperAutopilotRequest): stri
     "Description:",
     request.description,
     "",
+    request.designSkillContext ? ["Design skill context:", request.designSkillContext, ""].join("\n") : "",
     request.productionUrl ? `Production URL: ${request.productionUrl}` : "Production URL: unknown",
     "",
     "Evidence:",
@@ -431,6 +433,7 @@ export function buildCodexGitHubIssueBody(request: DeveloperAutopilotRequest, re
         description: request.kind === "client_build"
           ? sanitizeClientBuildPublicText(redactSensitiveText(request.description))
           : redactSensitiveText(request.description),
+        designSkillContext: null,
         evidence: normalizeEvidence(request.evidence)
           .map(redactSensitiveText)
           .map((item) => request.kind === "client_build" ? sanitizeClientBuildPublicText(item) : item)
