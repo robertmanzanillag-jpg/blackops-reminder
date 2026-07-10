@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   TrendingUp,
+  Users,
   Wand2,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -632,6 +633,35 @@ type RevenueAgentRunResult = {
   snapshot: RevenueSnapshot;
 };
 
+type RevenueAgentSquadDispatch = {
+  status: "ready_for_parallel_dispatch";
+  runId: string;
+  coordinator: string;
+  maxParallelAgents: number;
+  agents: Array<{
+    id: string;
+    title: string;
+    owner: string;
+    scope: string;
+    mergeGate: string;
+    forbiddenActions: string[];
+    state: string;
+    branch: string;
+    worktree: string;
+    handoff: string;
+  }>;
+  parallelBatches: string[][];
+  mergeGate: string;
+  safety: {
+    paidDataSpendUsd: number;
+    sendsOutreach: boolean;
+    publishesMockups: boolean;
+    deploys: boolean;
+    requiresRobertApprovalFor: string[];
+  };
+  nextActions: string[];
+};
+
 type RevenueSalesAutopilotResult = {
   status: "ready" | "approval_required" | "blocked";
   guardrail: string;
@@ -1102,7 +1132,7 @@ export default function RevenueEnginePage() {
   const [leadRadarDailyResearchTarget, setLeadRadarDailyResearchTarget] = useState(120);
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
-  const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
+  const [approvalAction, setApprovalAction] = useState("[revenue:send-outreach] [revenue:deliver-workspace] Aprobar la accion del item seleccionado");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
   const [automationIndustry, setAutomationIndustry] = useState("restaurant");
@@ -1583,7 +1613,7 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
-          approvedByRobert: true,
+          approvedByRobert: false,
           notes: "Entrega aprobada desde Revenue Engine despues de QA.",
         }),
       });
@@ -1741,7 +1771,7 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draftId,
-          approvalToSend: true,
+          approvalToSend: false,
         }),
       });
       const data = await response.json();
@@ -1919,6 +1949,27 @@ export default function RevenueEnginePage() {
     },
   });
 
+  const agentSquadMutation = useMutation<RevenueAgentSquadDispatch>({
+    mutationFn: async () => {
+      const response = await fetch("/api/revenue-engine/agent-squad/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: agentBusinessName,
+          area: agentArea,
+          niche: agentNiche,
+          request: agentRequest,
+          projectType: agentProjectType,
+          maxParallelAgents: 6,
+          includeClaudeDesignLane: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo preparar el squad");
+      return data;
+    },
+  });
+
   const salesAutopilotMutation = useMutation<RevenueSalesAutopilotResult>({
     mutationFn: async () => {
       const response = await fetch("/api/revenue-engine/sales-autopilot", {
@@ -1972,6 +2023,7 @@ export default function RevenueEnginePage() {
   const outreachDraft = outreachDraftMutation.data;
   const improvementReview = improvementReviewMutation.data?.review;
   const agentRun = agentRunMutation.data;
+  const agentSquad = agentSquadMutation.data;
   const salesAutopilot = salesAutopilotMutation.data;
   const activeAgentRun: RevenueAgentRunResult | undefined = agentRun || (
     salesAutopilot
@@ -6367,11 +6419,51 @@ export default function RevenueEnginePage() {
                         {salesAutopilotMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
                         Sales autopilot
                       </Button>
+                      <Button
+                        type="button"
+                        disabled={agentSquadMutation.isPending}
+                        onClick={() => agentSquadMutation.mutate()}
+                        className="w-full bg-fuchsia-600 text-white hover:bg-fuchsia-500"
+                        data-testid="button-dispatch-agent-squad"
+                      >
+                        {agentSquadMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+                        Desplegar squad
+                      </Button>
                     </form>
                   </CardContent>
                 </Card>
 
                 <div className="space-y-4">
+                  {agentSquad && (
+                    <Card className="border-fuchsia-500/30 bg-fuchsia-950/20" data-testid="agent-squad-dispatch">
+                      <CardHeader>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <CardTitle className="text-base">Squad listo: {agentSquad.agents.length} agentes</CardTitle>
+                            <p className="mt-1 text-sm text-fuchsia-100/80">Coordinador: {agentSquad.coordinator} · {agentSquad.status}</p>
+                          </div>
+                          <Badge variant="outline" className="border-fuchsia-300/40 text-fuchsia-100">sin gasto ni contacto</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {agentSquad.agents.map((agent) => (
+                            <div key={agent.id} className="rounded-lg border border-fuchsia-500/20 bg-black p-3">
+                              <p className="font-semibold text-white">{agent.title}</p>
+                              <p className="mt-1 text-xs text-fuchsia-100/70">{agent.owner} · {agent.state}</p>
+                              <p className="mt-2 text-sm text-zinc-300">{agent.scope}</p>
+                              <p className="mt-2 text-xs text-zinc-500">Gate: {agent.mergeGate}</p>
+                              <p className="mt-1 break-all text-xs text-zinc-600">{agent.worktree}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-sm text-zinc-300">{agentSquad.mergeGate}</p>
+                        <div className="space-y-1 text-xs text-zinc-400">
+                          {agentSquad.nextActions.map((action) => <p key={action}>· {action}</p>)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {salesAutopilot && (
                     <Card className="border-sky-500/30 bg-sky-950/20">
                       <CardHeader>
