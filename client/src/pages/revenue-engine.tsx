@@ -1102,7 +1102,7 @@ export default function RevenueEnginePage() {
   const [leadRadarDailyResearchTarget, setLeadRadarDailyResearchTarget] = useState(120);
   const [leadRadarMockupLimit, setLeadRadarMockupLimit] = useState(8);
   const [leadRadarContactLimit, setLeadRadarContactLimit] = useState(10);
-  const [approvalAction, setApprovalAction] = useState("Aprobar siguiente draft interno sin gasto externo");
+  const [approvalAction, setApprovalAction] = useState("[revenue:send-outreach] [revenue:deliver-workspace] Aprobar la accion del item seleccionado");
   const [approvalNotes, setApprovalNotes] = useState("Decision manual de Robert para memoria del agente.");
   const [automationBusinessName, setAutomationBusinessName] = useState("Prospect Restaurant");
   const [automationIndustry, setAutomationIndustry] = useState("restaurant");
@@ -1583,7 +1583,7 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
-          approvedByRobert: true,
+          approvedByRobert: false,
           notes: "Entrega aprobada desde Revenue Engine despues de QA.",
         }),
       });
@@ -1741,7 +1741,7 @@ export default function RevenueEnginePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draftId,
-          approvalToSend: true,
+          approvalToSend: false,
         }),
       });
       const data = await response.json();

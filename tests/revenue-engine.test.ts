@@ -989,6 +989,15 @@ test("uses fallback Resend from email when Revenue Engine from email is a placeh
     return { id: "email_fallback_sender" };
   });
 
+  recordRevenueApprovalDecision({
+    targetId: result.draft.id,
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "[revenue:send-outreach] Send outreach email for this draft",
+    maxSpendUsd: 0,
+    notes: "Explicit test owner approval.",
+  });
+
   const sendResult = await sendRevenueOutreachDraft({
     draftId: result.draft.id,
     approvalToSend: true,
@@ -1036,6 +1045,15 @@ test("sends approved outreach with configured provider and updates matching lead
     monthlyRetainerUsd: 750,
     estimatedInternalMonthlyCostUsd: 54,
     notes: "",
+  });
+
+  recordRevenueApprovalDecision({
+    targetId: result.draft.id,
+    targetType: "outbox",
+    decision: "approved",
+    approvedAction: "[revenue:send-outreach] Send outreach email for this draft",
+    maxSpendUsd: 0,
+    notes: "Explicit test owner approval.",
   });
 
   const sendResult = await sendRevenueOutreachDraft({
@@ -1768,6 +1786,15 @@ test("delivers ready workspace and marks linked automation opportunity delivered
     technicalQaPassed: true,
     automationQaPassed: true,
     clientHandoffReady: true,
+  });
+
+  recordRevenueApprovalDecision({
+    targetId: created.workspace.id,
+    targetType: "delivery_workspace",
+    decision: "approved",
+    approvedAction: "[revenue:deliver-workspace] Deliver client handoff",
+    maxSpendUsd: 0,
+    notes: "Explicit test owner approval.",
   });
 
   const delivered = deliverRevenueDeliveryWorkspace({

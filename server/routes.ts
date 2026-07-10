@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { readFile as readNodeFile } from "fs/promises";
 import { spawn } from "child_process";
@@ -52,6 +52,19 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function requireRevenueOwner(req: Request, res: Response) {
+  try {
+    if (getCurrentUserId(req) !== getSystemUserId()) {
+      res.status(403).json({ error: "Revenue Engine approval actions are limited to the configured owner." });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    res.status(401).json({ error: error instanceof Error ? error.message : "Authentication required" });
+    return false;
+  }
 }
 
 export function buildClipperExternalCloseoutNextActionCopyPacket(nextAction: any): string {
@@ -5053,6 +5066,7 @@ export async function registerRoutes(
 
   app.post("/api/revenue-engine/delivery-workspaces/deliver", async (req, res) => {
     try {
+      if (!requireRevenueOwner(req, res)) return;
       const input = revenueDeliveryWorkspaceDeliverSchema.parse(req.body);
       res.json(deliverRevenueDeliveryWorkspace(input));
     } catch (error) {
@@ -5077,6 +5091,7 @@ export async function registerRoutes(
 
   app.post("/api/revenue-engine/approval-decisions", async (req, res) => {
     try {
+      if (!requireRevenueOwner(req, res)) return;
       const input = revenueApprovalDecisionSchema.parse(req.body);
       res.json(recordRevenueApprovalDecision(input));
     } catch (error) {
@@ -5113,6 +5128,7 @@ export async function registerRoutes(
 
   app.post("/api/revenue-engine/outreach-send", async (req, res) => {
     try {
+      if (!requireRevenueOwner(req, res)) return;
       const input = revenueOutreachSendSchema.parse(req.body);
       res.json(await sendRevenueOutreachDraft(input));
     } catch (error) {

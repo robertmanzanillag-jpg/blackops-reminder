@@ -2129,6 +2129,15 @@ export function recordRevenueApprovalDecision(input: RevenueApprovalDecisionInpu
   };
 }
 
+function hasApprovedRevenueAction(targetId: string, targetType: RevenueApprovalDecisionInput["targetType"], approvalToken: string) {
+  loadRevenueApprovalDecisions();
+  return revenueApprovalDecisions.some((decision) => {
+    if (decision.targetId !== targetId || decision.targetType !== targetType) return false;
+    if (decision.decision !== "approved" || decision.guardrail.status !== "recorded" || decision.maxSpendUsd !== 0) return false;
+    return decision.approvedAction.includes(approvalToken);
+  });
+}
+
 function buildAutomationIntakeAnswerTemplate(questions: string[], missingAnswers: string[]) {
   const base = questions.length
     ? questions
@@ -2751,7 +2760,11 @@ export function getRevenueEngineSnapshot() {
         action: opportunity.qaGates.find((gate) => !gate.passed)?.fix || opportunity.nextAction,
       })),
     ...revenueDeliveryWorkspaces
-      .filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections")
+      .filter((workspace) =>
+        workspace.status === "blocked"
+        || workspace.status === "needs_corrections"
+        || (workspace.status === "ready_to_deliver" && !hasApprovedRevenueAction(workspace.id, "delivery_workspace", "[revenue:deliver-workspace]")),
+      )
       .slice(-5)
       .map((workspace) => ({
         id: workspace.id,
@@ -4008,10 +4021,11 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
   const draft = revenueOutreachDrafts.find((item) => item.id === input.draftId);
   const provider = getRevenueEmailProviderStatus();
   const now = new Date().toISOString();
+  const serverApproval = draft ? hasApprovedRevenueAction(draft.id, "outbox", "[revenue:send-outreach]") : false;
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
-    { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
+    { gate: "human_approval", passed: serverApproval, fix: "Registrar una aprobacion de Robert para enviar este draft desde la approval queue." },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },
     { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.every((gate) => gate.passed)), fix: "Resolver gates de QA antes de contactar." },
@@ -4886,8 +4900,9 @@ export function deliverRevenueDeliveryWorkspace(input: RevenueDeliveryWorkspaceD
   }
 
   const workspace = revenueDeliveryWorkspaces[workspaceIndex];
+  const serverApproval = hasApprovedRevenueAction(workspace.id, "delivery_workspace", "[revenue:deliver-workspace]");
   const missing = [
-    !parsed.approvedByRobert && "aprobacion final de Robert",
+    !serverApproval && "aprobacion final de Robert en approval queue",
     workspace.status !== "ready_to_deliver" && `workspace no esta listo: ${workspace.status}`,
     !workspace.approvalSummary.canLaunch && "launch/handoff bloqueado",
     ...workspace.approvalSummary.requiredBeforeClient,
