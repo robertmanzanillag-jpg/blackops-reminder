@@ -9,6 +9,7 @@ import {
   buildRevenueUserDataPaths,
   buildImprovementReview,
   buildRevenueEnginePlan,
+  buildRevenueAgentSquadDispatch,
   buildRevenueLaunchReadiness,
   buildRevenueLeadRadar,
   buildRevenueMoneySprintPreview,
@@ -1090,6 +1091,25 @@ test("runs main revenue agent with subagent reviews and approvals", () => {
   assert.equal(result.run.subagentReviews.some((review) => review.agent === "qa-council" && review.verdict === "pass"), true);
   assert.equal(result.run.workOrder.some((step) => step.ownerAgent === "automation-architect"), true);
   assert.equal(result.snapshot.recentAgentRuns[0].businessName, "Black Room");
+});
+
+test("prepares parallel revenue agent squad with isolated scopes and gates", () => {
+  const result = buildRevenueAgentSquadDispatch({
+    businessName: "Glow Lab",
+    area: "Miami",
+    niche: "med spas",
+    request: "Research leads and prepare a premium 3D website with automation.",
+    projectType: "bundle",
+  });
+
+  assert.equal(result.status, "ready_for_parallel_dispatch");
+  assert.equal(result.agents.length, 6);
+  assert.equal(result.parallelBatches[0].includes("lead-scout"), true);
+  assert.equal(result.agents.some((agent) => agent.id === "product-design-claude" && agent.mergeGate.includes("Claude")), true);
+  assert.equal(result.safety.paidDataSpendUsd, 0);
+  assert.equal(result.safety.sendsOutreach, false);
+  assert.equal(result.safety.deploys, false);
+  assert.equal(new Set(result.agents.map((agent) => agent.worktree)).size, result.agents.length);
 });
 
 test("blocks revenue agent run when cost cap is broken", () => {

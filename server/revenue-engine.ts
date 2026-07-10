@@ -285,6 +285,18 @@ export const revenueAgentRunSchema = z.object({
 
 export type RevenueAgentRunInput = z.infer<typeof revenueAgentRunSchema>;
 
+export const revenueAgentSquadDispatchSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  request: z.string().trim().min(8).max(1600),
+  projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
+  maxParallelAgents: z.coerce.number().int().min(1).max(8).default(6),
+  includeClaudeDesignLane: z.coerce.boolean().default(true),
+});
+
+export type RevenueAgentSquadDispatchInput = z.infer<typeof revenueAgentSquadDispatchSchema>;
+
 export const revenueSalesAutopilotSchema = z.object({
   businessName: z.string().trim().min(2).max(160),
   area: z.string().trim().min(2).max(120),
@@ -3561,6 +3573,103 @@ function buildAgentWorkOrder(input: RevenueAgentRunInput) {
         : clarificationGate.status === "needs_clarification"
           ? `Playbook: preguntar primero cuando ${input.niche} en ${input.area} no tenga trigger, accion, datos o resultado claro.`
         : `Playbook: bloquear o pedir aprobacion cuando ${input.niche} en ${input.area} no tenga cash/aprobaciones/costo bajo control.`,
+  };
+}
+
+export function buildRevenueAgentSquadDispatch(input: RevenueAgentSquadDispatchInput) {
+  const parsed = revenueAgentSquadDispatchSchema.parse(input);
+  const runId = `squad-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  const slug = parsed.businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "revenue-work";
+  const candidates = [
+    {
+      id: "lead-scout",
+      title: "Public lead scout",
+      owner: "lead-scout",
+      scope: "Public research only: find businesses and capture source URLs, website gaps and visible contact paths.",
+      mergeGate: "Every candidate has public evidence, confidence and no outreach side effect.",
+      forbiddenActions: ["send outreach", "submit forms", "buy data", "log in"],
+    },
+    {
+      id: "business-researcher",
+      title: "Business evidence researcher",
+      owner: "business-researcher",
+      scope: "Verify public business identity, services, recent activity, website status and pain hypothesis.",
+      mergeGate: "Uncertain facts are marked; no invented contact, pricing or claims.",
+      forbiddenActions: ["invent facts", "import unverified leads", "contact business"],
+    },
+    parsed.includeClaudeDesignLane && {
+      id: "product-design-claude",
+      title: "Product Design + Claude direction",
+      owner: "product-design-claude",
+      scope: "Create the design brief, three visual routes and selected Claude/Product Design direction for the premium website.",
+      mergeGate: "Brief records product-design:get-context, Claude design skills, responsive intent and 3D asset plan.",
+      forbiddenActions: ["build client PR", "publish preview", "use private business data"],
+    },
+    {
+      id: "mockup-builder",
+      title: "Premium mockup builder",
+      owner: "mockup-builder",
+      scope: "Prepare internal website/mockup work from verified evidence and an approved design brief.",
+      mergeGate: "Mockup has CTA, proof, mobile behavior, 3D/motion plan and cost estimate.",
+      forbiddenActions: ["publish", "send preview", "start paid tools"],
+    },
+    {
+      id: "automation-architect",
+      title: "Automation architect",
+      owner: "automation-architect",
+      scope: "Define optional lead capture, booking and follow-up automation with fallback and monthly cost.",
+      mergeGate: "Workflow, data boundaries, rollback and margin are documented.",
+      forbiddenActions: ["connect external accounts", "send messages", "spend money"],
+    },
+    {
+      id: "qa-council",
+      title: "QA and merge council",
+      owner: "qa-council",
+      scope: "Review evidence, design, accessibility, mobile, links, cost, approvals and PR readiness.",
+      mergeGate: "Focused tests, App QA and cross-agent review pass before integration.",
+      forbiddenActions: ["merge to main", "deploy", "approve external contact"],
+    },
+  ].filter(Boolean) as Array<{
+    id: string;
+    title: string;
+    owner: string;
+    scope: string;
+    mergeGate: string;
+    forbiddenActions: string[];
+  }>;
+  const agents = candidates.slice(0, parsed.maxParallelAgents).map((candidate) => ({
+    ...candidate,
+    state: "ready" as const,
+    branch: `codex/squad/${slug}/${candidate.id}`,
+    worktree: `revenue_workspace/squads/${runId}/${candidate.id}`,
+    handoff: `revenue_workspace/squads/${runId}/${candidate.id}/handoff.md`,
+  }));
+
+  return {
+    status: "ready_for_parallel_dispatch" as const,
+    runId,
+    coordinator: "growth-director",
+    input: parsed,
+    maxParallelAgents: agents.length,
+    agents,
+    parallelBatches: [
+      agents.filter((agent) => ["lead-scout", "business-researcher"].includes(agent.id)).map((agent) => agent.id),
+      agents.filter((agent) => ["product-design-claude", "automation-architect"].includes(agent.id)).map((agent) => agent.id),
+      agents.filter((agent) => ["mockup-builder", "qa-council"].includes(agent.id)).map((agent) => agent.id),
+    ].filter((batch) => batch.length > 0),
+    mergeGate: "No agent merges directly. Coordinator collects handoffs, runs tests/App QA, then opens one PR for Robert review.",
+    safety: {
+      paidDataSpendUsd: 0,
+      sendsOutreach: false,
+      publishesMockups: false,
+      deploys: false,
+      requiresRobertApprovalFor: ["paid data", "external contact", "website PR build", "merge", "deployment"],
+    },
+    nextActions: [
+      "Dispatch public research and evidence lanes in parallel.",
+      "Wait for handoff artifacts before mockup/build lanes consume their output.",
+      "Run QA Council and App QA before creating the website PR.",
+    ],
   };
 }
 
