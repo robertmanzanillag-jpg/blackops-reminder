@@ -5825,6 +5825,15 @@ export async function registerRoutes(
 
     try {
       const html = await readNodeFile(previewPath, "utf8");
+      const contentSecurityPolicy = html.match(
+        /<meta http-equiv="Content-Security-Policy" content="([^"]+)" \/>/,
+      )?.[1];
+      if (!contentSecurityPolicy) {
+        return res.status(500).json({ error: "Mockup preview security policy missing" });
+      }
+      res.setHeader("Content-Security-Policy", contentSecurityPolicy);
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.type("html").send(html);
     } catch (error: any) {
       if (error?.code === "ENOENT") {

@@ -3364,7 +3364,7 @@ test("serves revenue mockup previews over the generated route", async () => {
   assert.ok(routeLayer, "mockup preview route should be registered");
   const handler = routeLayer.route.stack[0].handle;
   const invoke = async (slug: string) => {
-    const result = { statusCode: 200, contentType: "", body: "" };
+    const result = { statusCode: 200, contentType: "", body: "", headers: {} as Record<string, string> };
     const res = {
       status(code: number) {
         result.statusCode = code;
@@ -3376,6 +3376,10 @@ test("serves revenue mockup previews over the generated route", async () => {
       },
       type(value: string) {
         result.contentType = value;
+        return res;
+      },
+      setHeader(name: string, value: string) {
+        result.headers[name.toLowerCase()] = value;
         return res;
       },
       send(payload: unknown) {
@@ -3392,6 +3396,10 @@ test("serves revenue mockup previews over the generated route", async () => {
   assert.equal(response.contentType, "html");
   assert.match(response.body, /Route Ready Cafe/);
   assert.match(response.body, /QA gates before contact/);
+  assert.match(response.headers["content-security-policy"], /script-src 'self' 'sha256-/);
+  assert.match(response.headers["content-security-policy"], /frame-ancestors 'self'/);
+  assert.equal(response.headers["referrer-policy"], "no-referrer");
+  assert.equal(response.headers["x-content-type-options"], "nosniff");
 
   const invalid = await invoke("../bad");
   assert.equal(invalid.statusCode, 400);
