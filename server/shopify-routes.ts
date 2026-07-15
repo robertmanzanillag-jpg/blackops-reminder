@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getShopifyOAuthStatus } from "./shopify-oauth";
+import { getCurrentUserId, getSystemUserId } from "./user-context";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -11,6 +12,17 @@ function escapeHtml(value: unknown): string {
 }
 
 export function registerShopifyRoutes(app: Express): void {
+  app.use("/api/shopify", (req, res, next) => {
+    const userId = getCurrentUserId(req);
+    const shopifyOwnerUserId = getSystemUserId();
+    if (userId !== shopifyOwnerUserId) {
+      return res.status(403).json({
+        error: "Shopify connection management is limited to the configured single-user owner while the store token is shared.",
+      });
+    }
+    return next();
+  });
+
   app.get("/api/shopify/oauth/status", (_req, res) => {
     try {
       res.json(getShopifyOAuthStatus());

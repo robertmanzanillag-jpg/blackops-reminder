@@ -32,7 +32,6 @@ import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
-import { createShopifyAuthorizationUrl, exchangeShopifyAuthorizationCode, getShopifyOAuthStatus } from "./shopify-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
 import { deletePromoOutputVideo, getPromoVideoStatus, importPromoVideosFromSource, normalizePromoVideoOptions, runPromoVideoAutoDaily, runPromoVideoEdit, setPromoVideoSourceDir } from "./promo-video-agent";
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
@@ -970,114 +969,6 @@ export async function registerRoutes(
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to fetch Google Drive status" });
-    }
-  });
-
-  // GET Shopify OAuth status
-  app.get("/api/shopify/oauth/status", (_req, res) => {
-    try {
-      res.json(getShopifyOAuthStatus());
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to fetch Shopify OAuth status" });
-    }
-  });
-
-  // GET Shopify install entrypoint - used as the App URL in Shopify Dev Dashboard
-  app.get("/api/shopify/install", (req, res) => {
-    const { shop } = req.query;
-    if (!shop || typeof shop !== "string") {
-      return res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Shopify install incompleto</h1>
-          <p>Falta el parametro shop de Shopify.</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-
-    try {
-      res.redirect(createShopifyAuthorizationUrl({ shop, req, verifyInstallHmac: Boolean(req.query.hmac) }));
-    } catch (error: any) {
-      res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Shopify no está configurado</h1>
-          <p>${escapeHtml(error.message || "Agrega SHOPIFY_APP_CLIENT_ID y SHOPIFY_APP_CLIENT_SECRET.")}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-  });
-
-  // GET Shopify OAuth authorization URL - manual connect helper
-  app.get("/api/shopify/oauth/start", (req, res) => {
-    const shop = typeof req.query.shop === "string" ? req.query.shop : process.env.SHOPIFY_SHOP_DOMAIN;
-    if (!shop) {
-      return res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Shopify store requerido</h1>
-          <p>Abre esta ruta con ?shop=tu-tienda.myshopify.com o configura SHOPIFY_SHOP_DOMAIN.</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-
-    try {
-      res.redirect(createShopifyAuthorizationUrl({ shop, req }));
-    } catch (error: any) {
-      res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Shopify OAuth no está configurado</h1>
-          <p>${escapeHtml(error.message || "Agrega SHOPIFY_APP_CLIENT_ID y SHOPIFY_APP_CLIENT_SECRET.")}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-  });
-
-  // GET Shopify OAuth callback - stores Admin API token without displaying it
-  app.get("/api/shopify/oauth/callback", async (req, res) => {
-    const { code, state, shop, error, error_description: errorDescription } = req.query;
-
-    if (error) {
-      return res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Error conectando Shopify</h1>
-          <p>${escapeHtml(errorDescription || error)}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-
-    if (!code || typeof code !== "string" || !state || typeof state !== "string" || !shop || typeof shop !== "string") {
-      return res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Error conectando Shopify</h1>
-          <p>No se recibió el authorization code/state/shop de Shopify.</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
-    }
-
-    try {
-      const result = await exchangeShopifyAuthorizationCode({ code, state, shop, query: req.query });
-      res.send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1 style="color:#22c55e;">Shopify conectado</h1>
-          <p>El Admin API token quedó guardado para Dropshipping CEO sin mostrarlo en pantalla.</p>
-          <p style="color:#94a3b8;">Store: ${escapeHtml(result.shop)}</p>
-          <p style="color:#94a3b8;">Scopes: ${escapeHtml(result.scope || "guardados")}</p>
-          <p style="color:#94a3b8;">Env local: ${escapeHtml(result.envFilePath)}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Ir a Dropshipping CEO</a>
-        </body></html>
-      `);
-    } catch (callbackError: any) {
-      res.status(400).send(`
-        <html><body style="background:#000;color:#fff;font-family:sans-serif;padding:40px;">
-          <h1>Error conectando Shopify</h1>
-          <p>${escapeHtml(callbackError.message || "No se pudo guardar la conexión de Shopify.")}</p>
-          <a href="/dropshipping-ceo" style="color:#3b82f6;">Volver a Dropshipping CEO</a>
-        </body></html>
-      `);
     }
   });
 
@@ -7040,6 +6931,17 @@ export async function registerRoutes(
   });
 
   // ==================== MONITORED PROJECTS ====================
+
+  app.use(["/api/projects/github-overview", "/api/projects/import-github"], (req, res, next) => {
+    const userId = getCurrentUserId(req);
+    const githubProjectOwnerUserId = getSystemUserId();
+    if (userId !== githubProjectOwnerUserId) {
+      return res.status(403).json({
+        error: "GitHub project discovery is limited to the configured single-user owner while the GitHub connector is shared.",
+      });
+    }
+    return next();
+  });
 
   // GET all monitored projects
   app.get("/api/projects", async (req, res) => {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import test from "node:test";
+import express from "express";
+import { registerRoutes } from "../server/routes";
 
 test("project health alerts are scoped to the project owner", () => {
   const source = readFileSync("server/health-check.ts", "utf8");
@@ -104,6 +107,59 @@ test("developer code and GitHub tools are gated to the configured single-user ow
   assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const toolOwnerUserId = getSystemUserId\(\);/s, "developer tool guard should compare authenticated user to configured owner");
   assert.match(routesSource, /if \(userId !== toolOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "developer tools should reject non-owner users");
   assert.match(routesSource, /per-user repo and filesystem permissions/, "developer tool rejection should explain the missing permission model");
+  assert.match(routesSource, /app\.use\(\["\/api\/projects\/github-overview", "\/api\/projects\/import-github"\]/, "project routes backed by the shared GitHub connector should have an owner guard");
+  assert.match(routesSource, /const githubProjectOwnerUserId = getSystemUserId\(\);/, "shared GitHub project routes should resolve the configured owner");
+  assert.match(routesSource, /if \(userId !== githubProjectOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "shared GitHub project routes should reject non-owner users");
+});
+
+test("Shopify connection routes are gated to the configured single-user owner", () => {
+  const shopifyRoutesSource = readFileSync("server/shopify-routes.ts", "utf8");
+
+  assert.match(shopifyRoutesSource, /app\.use\("\/api\/shopify"/, "the first registered Shopify router should have an owner guard");
+  assert.match(shopifyRoutesSource, /const userId = getCurrentUserId\(req\);/, "Shopify guard should use the authenticated user");
+  assert.match(shopifyRoutesSource, /const shopifyOwnerUserId = getSystemUserId\(\);/, "Shopify guard should resolve the configured owner");
+  assert.match(shopifyRoutesSource, /if \(userId !== shopifyOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Shopify guard should reject non-owner users before OAuth token writes");
+  assert.match(shopifyRoutesSource, /store token is shared/, "Shopify rejection should explain the shared credential boundary");
+});
+
+test("shared GitHub and Shopify connector routes reject authenticated non-owners at runtime", async () => {
+  const previousDefaultUserId = process.env.DEFAULT_USER_ID;
+  const previousAllowDevFallback = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.DEFAULT_USER_ID = "connector-owner";
+  process.env.ALLOW_DEV_USER_FALLBACK = "true";
+
+  const app = express();
+  app.use(express.json());
+  const server = createServer(app);
+  await registerRoutes(server, app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const requests = [
+      ["GET", "/api/projects/github-overview"],
+      ["POST", "/api/projects/import-github"],
+      ["GET", "/api/shopify/install?shop=test.myshopify.com"],
+      ["GET", "/api/shopify/oauth/start?shop=test.myshopify.com"],
+      ["GET", "/api/shopify/oauth/callback?code=test&state=test&shop=test.myshopify.com"],
+    ] as const;
+
+    for (const [method, route] of requests) {
+      const response = await fetch(`${baseUrl}${route}`, {
+        method,
+        headers: { "content-type": "application/json", "x-user-id": "authenticated-non-owner" },
+      });
+      assert.equal(response.status, 403, `${method} ${route} should reject a non-owner`);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    if (previousDefaultUserId === undefined) delete process.env.DEFAULT_USER_ID;
+    else process.env.DEFAULT_USER_ID = previousDefaultUserId;
+    if (previousAllowDevFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previousAllowDevFallback;
+  }
 });
 
 test("Clippers API is gated to the configured single-user owner while local artifacts are shared", () => {
