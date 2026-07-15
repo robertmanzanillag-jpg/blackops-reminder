@@ -1215,8 +1215,14 @@ export function analyzeImprovementIdeas(apps: AppProject[], routes = LOCAL_ROUTE
   };
 }
 
-export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<AppQaSubAgentReport & { visualScans: AppQaVisualRouteScan[] }> {
-  const playwright = await loadPlaywright();
+type VisualClickScoutDependencies = {
+  loadPlaywright?: () => Promise<any | null>;
+};
+
+export async function runVisualClickScout(
+  routes = LOCAL_ROUTE_MAP,
+  dependencies: VisualClickScoutDependencies = {},
+): Promise<AppQaSubAgentReport & { visualScans: AppQaVisualRouteScan[] }> {
   const baseUrl = getVisualBaseUrl();
   const syntheticApp = { name: "Visual QA" } as AppProject;
   const visualScans: AppQaVisualRouteScan[] = [];
@@ -1243,6 +1249,8 @@ export async function runVisualClickScout(routes = LOCAL_ROUTE_MAP): Promise<App
       visualScans,
     };
   }
+
+  const playwright = await (dependencies.loadPlaywright ?? loadPlaywright)();
 
   if (!playwright?.chromium) {
     findings.push(createFinding(

@@ -573,8 +573,10 @@ test("github scout uses Developer Health URLs when repo homepage is empty", asyn
 test("visual click scout reports setup guidance when base URL is missing", async () => {
   const previousBaseUrl = process.env.APP_QA_BASE_URL;
   const previousPublicUrl = process.env.PUBLIC_APP_URL;
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
   delete process.env.APP_QA_BASE_URL;
   delete process.env.PUBLIC_APP_URL;
+  delete process.env.PUBLIC_BASE_URL;
 
   try {
     const report = await __appQaAgentInternals.runVisualClickScout();
@@ -582,8 +584,12 @@ test("visual click scout reports setup guidance when base URL is missing", async
     assert.equal(report.status, "fail");
     assert.equal(report.findings.some((finding) => finding.title === "APP_QA_BASE_URL no configurado"), true);
   } finally {
-    if (previousBaseUrl) process.env.APP_QA_BASE_URL = previousBaseUrl;
-    if (previousPublicUrl) process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
   }
 });
 
@@ -601,27 +607,21 @@ test("visual click scout reports setup guidance when Chromium cannot launch", as
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
 
   try {
-    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+    const report = await __appQaAgentInternals.runVisualClickScout(
+      [{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }],
+      { loadPlaywright: async () => ({ chromium: { launch: async () => { throw new Error("Expected launch failure"); } } }) },
+    );
 
     assert.equal(report.status, "fail");
     assert.equal(report.checked, 0);
     assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
   } finally {
-    if (previousBaseUrl) {
-      process.env.APP_QA_BASE_URL = previousBaseUrl;
-    } else {
-      delete process.env.APP_QA_BASE_URL;
-    }
-    if (previousPublicUrl) {
-      process.env.PUBLIC_APP_URL = previousPublicUrl;
-    } else {
-      delete process.env.PUBLIC_APP_URL;
-    }
-    if (previousExecutablePath) {
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
-    } else {
-      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    }
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousExecutablePath === undefined) delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    else process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
     await rm(tempDir, { recursive: true, force: true });
   }
 });
@@ -642,7 +642,10 @@ test("visual click scout uses PUBLIC_BASE_URL as Replit base URL fallback", asyn
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
 
   try {
-    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+    const report = await __appQaAgentInternals.runVisualClickScout(
+      [{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }],
+      { loadPlaywright: async () => ({ chromium: { launch: async () => { throw new Error("Expected launch failure"); } } }) },
+    );
 
     assert.equal(report.status, "fail");
     assert.equal(report.checked, 0);
@@ -650,26 +653,14 @@ test("visual click scout uses PUBLIC_BASE_URL as Replit base URL fallback", asyn
     assert.equal(report.findings[0]?.url, "https://robplanner.replit.app");
     assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
   } finally {
-    if (previousBaseUrl) {
-      process.env.APP_QA_BASE_URL = previousBaseUrl;
-    } else {
-      delete process.env.APP_QA_BASE_URL;
-    }
-    if (previousPublicAppUrl) {
-      process.env.PUBLIC_APP_URL = previousPublicAppUrl;
-    } else {
-      delete process.env.PUBLIC_APP_URL;
-    }
-    if (previousPublicBaseUrl) {
-      process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
-    } else {
-      delete process.env.PUBLIC_BASE_URL;
-    }
-    if (previousExecutablePath) {
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
-    } else {
-      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    }
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicAppUrl;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousExecutablePath === undefined) delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    else process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
     await rm(tempDir, { recursive: true, force: true });
   }
 });
