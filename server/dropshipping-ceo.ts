@@ -2312,7 +2312,7 @@ function liveSignalsForCandidate(input: Pick<DropshippingProductScoutCandidateIn
   const candidateKey = productSignalKey(input.candidateName);
   const signals = feed.signals.filter((signal) => {
     const signalKey = productSignalKey(signal.candidateName);
-    return signalKey === candidateKey || signalKey.includes(candidateKey) || candidateKey.includes(signalKey);
+    return signalKey === candidateKey;
   });
   return { ...feed, signals };
 }

@@ -290,6 +290,30 @@ test("product scout uses live product signals when connected", () => {
   assert.equal(candidate?.shippingDaysMax, 9);
 });
 
+test("live signals require an exact normalized candidate name", () => {
+  process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON = JSON.stringify({
+    signals: ["tiktok_search", "aliexpress_search", "google_trends"].map((source) => ({
+      candidateName: "rack",
+      source,
+      status: "verified",
+      confidence: "high",
+      signal: "Evidence for a different generic product name.",
+      evidenceScore: 30,
+    })),
+  });
+
+  const result = runDropshippingProductScoutBatch({
+    focusNiche: "kitchen_organization",
+    maxCandidates: 3,
+    budgetUsd: 0,
+  });
+
+  assert.equal(result.topCandidate?.candidateName, "Kitchen sink organizer rack");
+  assert.equal(result.topCandidate?.validation.liveValidation.status, "partial");
+  assert.equal(result.topCandidate?.validation.liveValidation.signals.length, 0);
+  assert.notEqual(result.topCandidate?.validation.status, "externally_validated");
+});
+
 test("live signal readiness stays partial without core proof and sanitizes warnings", () => {
   process.env.DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON = JSON.stringify({
     signals: [
