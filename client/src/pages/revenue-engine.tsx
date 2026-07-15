@@ -527,6 +527,7 @@ type RevenueSnapshot = {
       requiredDepositUsd: number;
       cashCollectedUsd: number;
       monthlyRetainerUsd: number;
+      estimatedInternalCostUsd: number;
       depositPaid: boolean;
       scopeApproved: boolean;
       paymentConfirmation: string;
@@ -1959,6 +1960,33 @@ type RevenueLedgerResult = {
   };
 };
 
+type RevenueStripeStatus = {
+  status: "ready" | "setup_required" | "blocked";
+  expectedAccountId: string;
+  verifiedAccountId?: string;
+  configured: boolean;
+  webhookConfigured?: boolean;
+  mode?: "test" | "live" | "unknown";
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+  readyForTestPayments?: boolean;
+  readyForLivePayments?: boolean;
+  reason?: string;
+};
+
+type RevenueStripeCheckoutResult = {
+  status: "created";
+  accountId: string;
+  mode: "test" | "live";
+  checkoutSessionId: string;
+  checkoutUrl: string;
+  expiresAt: string | null;
+  amountUsd: number;
+  contractTotalUsd: number;
+  dealId: string;
+  paymentStage: "deposit" | "balance" | "full";
+};
+
 type RevenueExpensePreflightResult = {
   status: "approved" | "blocked";
   concept: string;
@@ -2344,6 +2372,7 @@ export default function RevenueEnginePage() {
     paymentConfirmation?: string;
     notes?: string;
   }>>({});
+  const [stripeCheckoutLinks, setStripeCheckoutLinks] = useState<Record<string, string>>({});
   const [websiteDeliveryRepoInputs, setWebsiteDeliveryRepoInputs] = useState<Record<string, {
     repoFullName?: string;
     branchName?: string;
@@ -2491,6 +2520,17 @@ export default function RevenueEnginePage() {
       return response.json();
     },
   });
+  const { data: stripeStatus } = useQuery<RevenueStripeStatus>({
+    queryKey: ["revenue-engine", "stripe-status"],
+    queryFn: async () => {
+      const response = await fetch("/api/revenue-engine/stripe/status");
+      if (!response.ok) throw new Error("No se pudo verificar Stripe");
+      return response.json();
+    },
+  });
+  const stripeCheckoutReady = stripeStatus?.status === "ready"
+    && stripeStatus.webhookConfigured === true
+    && (stripeStatus.readyForTestPayments === true || stripeStatus.readyForLivePayments === true);
   const approvalQueue = snapshot?.approvalQueueItems || [];
   const selectedApprovalQueueItem = approvalQueue.find((item) => item.id === selectedApprovalTargetId) || null;
   const approvalActionForSubmit = selectedApprovalQueueItem?.action || approvalAction;
@@ -3154,6 +3194,45 @@ export default function RevenueEnginePage() {
         }
       }
       refetchSnapshot();
+    },
+  });
+
+  const stripeCheckoutMutation = useMutation<
+    RevenueStripeCheckoutResult,
+    Error,
+    {
+      opportunity: RevenueSnapshot["websiteClosureQueue"]["items"][number];
+      clientApprovedScope: true;
+    }
+  >({
+    mutationFn: async ({ opportunity, clientApprovedScope }) => {
+      const response = await fetch("/api/revenue-engine/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dealId: opportunity.id,
+          leadId: opportunity.sourceLeadId,
+          clientName: opportunity.businessName,
+          packageName: opportunity.projectType === "bundle"
+            ? "Website 3D Premium + Automation Sprint"
+            : "Website 3D Premium",
+          kind: opportunity.projectType === "bundle" ? "bundle_sale" : "website_sale",
+          paymentStage: "deposit",
+          amountUsd: opportunity.requiredDepositUsd,
+          contractTotalUsd: opportunity.setupUsd,
+          estimatedInternalCostUsd: opportunity.estimatedInternalCostUsd,
+          clientApprovedScope,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo crear el link Stripe");
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      setStripeCheckoutLinks((current) => ({
+        ...current,
+        [variables.opportunity.id]: data.checkoutUrl,
+      }));
     },
   });
 
@@ -6947,6 +7026,31 @@ export default function RevenueEnginePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="flex flex-col gap-3 border-b border-zinc-800 pb-3 md:flex-row md:items-center md:justify-between" data-testid="revenue-stripe-status">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-800 bg-black">
+                        <BadgeDollarSign className="h-4 w-4 text-emerald-300" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white">Stripe · Robert Websites</p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {stripeCheckoutReady
+                            ? `Cuenta ${stripeStatus?.verifiedAccountId} verificada; cobros y webhook listos.`
+                            : stripeStatus?.status === "ready"
+                              ? "Cuenta verificada; falta configurar el webhook antes de cobrar."
+                              : stripeStatus?.status === "blocked"
+                                ? stripeStatus.reason || "Stripe esta bloqueado por configuracion."
+                                : "Faltan los secrets de Stripe en el deployment."}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(stripeCheckoutReady ? statusTone("ready") : statusTone("needs_review"), "shrink-0")}
+                    >
+                      {stripeStatus?.mode === "live" ? "live" : stripeStatus?.mode === "test" ? "test" : "setup"}
+                    </Badge>
+                  </div>
                   {(snapshot?.websiteClosureQueue.items || []).length === 0 ? (
                     <div className="rounded-md border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-500">
                       Sin oportunidades website pendientes de scope/deposito.
@@ -6963,6 +7067,11 @@ export default function RevenueEnginePage() {
                         const closeHasPaymentConfirmation = hasVerifiablePaymentEvidence(closePaymentConfirmation);
                         const closeHasCash = closeCashCollectedUsd > 0;
                         const closeDepositCoversRequired = closeCashCollectedUsd >= opportunity.requiredDepositUsd;
+                        const stripeCheckoutUrl = stripeCheckoutLinks[opportunity.id] || "";
+                        const stripeCheckoutPending = stripeCheckoutMutation.isPending
+                          && stripeCheckoutMutation.variables?.opportunity.id === opportunity.id;
+                        const stripeCheckoutFailed = stripeCheckoutMutation.isError
+                          && stripeCheckoutMutation.variables?.opportunity.id === opportunity.id;
                         const shouldRecordDepositOutcome = closeDepositCoversRequired && (
                           !opportunity.depositPaid
                           || closeCashCollectedUsd !== opportunity.cashCollectedUsd
@@ -7081,6 +7190,7 @@ export default function RevenueEnginePage() {
                                 {closeHasCash && !closeDepositCoversRequired && <p>El monto capturado no cubre el deposito requerido.</p>}
                                 {!closeHasPaymentConfirmation && <p>Falta referencia verificable: Stripe/Zelle/bank ref, invoice, receipt o confirmation id.</p>}
                                 {shouldRecordDepositOutcome && <p>El cierre registrara primero el deposito manual en el outreach.</p>}
+                                {stripeCheckoutFailed && <p className="text-red-300">{stripeCheckoutMutation.error.message}</p>}
                               </div>
                             )}
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -7106,6 +7216,43 @@ export default function RevenueEnginePage() {
                                 <Copy className="mr-2 h-4 w-4" />
                                 Copy request
                               </Button>
+                              {!stripeCheckoutUrl ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!stripeCheckoutReady || !scopeApprovedForClose || opportunity.depositPaid || stripeCheckoutPending}
+                                  onClick={() => stripeCheckoutMutation.mutate({ opportunity, clientApprovedScope: true })}
+                                  className="border-emerald-700 text-emerald-100"
+                                  data-testid={`button-create-stripe-checkout-${opportunity.id}`}
+                                >
+                                  {stripeCheckoutPending
+                                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    : <BadgeDollarSign className="mr-2 h-4 w-4" />}
+                                  {stripeStatus?.mode === "test" ? "Crear link de prueba" : "Crear link Stripe"}
+                                </Button>
+                              ) : (
+                                <>
+                                  <a href={stripeCheckoutUrl} target="_blank" rel="noreferrer">
+                                    <Button type="button" size="sm" variant="outline" className="border-emerald-700 text-emerald-100">
+                                      <ExternalLink className="mr-2 h-4 w-4" />
+                                      Abrir cobro
+                                    </Button>
+                                  </a>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-9 w-9 border-zinc-700"
+                                    title="Copiar link de cobro"
+                                    aria-label="Copiar link de cobro"
+                                    onClick={() => navigator.clipboard.writeText(stripeCheckoutUrl)}
+                                    data-testid={`button-copy-stripe-checkout-${opportunity.id}`}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 type="button"
                                 size="sm"

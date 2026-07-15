@@ -8,6 +8,8 @@ import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type Rev
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
+export const ROBERT_WEBSITES_STRIPE_ACCOUNT_ID = "acct_1TtbdhPb55Pnake3";
+
 export const revenueEnginePlanSchema = z.object({
   area: z.string().trim().min(2).max(120),
   niche: z.string().trim().min(2).max(120),
@@ -671,7 +673,37 @@ export type RevenueAutomationOpportunityCloseInput = z.infer<typeof revenueAutom
 type RevenueLedgerEntry = RevenueLedgerEntryInput & {
   id: string;
   createdAt: string;
+  dealId?: string;
+  stripeAccountId?: string;
+  stripePaymentIds?: string[];
+  stripePaymentStatus?: "partially_paid" | "paid";
+  stripeLastPaymentAt?: string;
 };
+
+export const revenueStripePaymentSchema = z.object({
+  stripeAccountId: z.string().trim().min(1).max(100),
+  dealId: z.string().trim().min(1).max(200),
+  kind: z.enum(["website_sale", "automation_sale", "bundle_sale", "retainer"]),
+  clientName: z.string().trim().min(2).max(160),
+  contractTotalUsd: z.coerce.number().positive().max(1000000),
+  paymentAmountUsd: z.coerce.number().positive().max(1000000),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
+  externalPaymentId: z.string().trim().min(6).max(200).regex(/^[a-z0-9][a-z0-9_-]+$/i),
+  eventId: z.string().trim().min(6).max(200).regex(/^[a-z0-9][a-z0-9_-]+$/i),
+  paymentStage: z.enum(["deposit", "balance", "full"]),
+  occurredAt: z.string().datetime(),
+  notes: z.string().trim().max(500).optional().default(""),
+}).superRefine((value, ctx) => {
+  if (value.paymentAmountUsd > value.contractTotalUsd + 0.009) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paymentAmountUsd"],
+      message: "Stripe payment cannot exceed the contract total.",
+    });
+  }
+});
+
+export type RevenueStripePaymentInput = z.infer<typeof revenueStripePaymentSchema>;
 
 type RevenueLead = RevenueLeadInput & {
   id: string;
@@ -894,6 +926,7 @@ type RevenueWebsiteClosureQueue = {
     requiredDepositUsd: number;
     cashCollectedUsd: number;
     monthlyRetainerUsd: number;
+    estimatedInternalCostUsd: number;
     depositPaid: boolean;
     scopeApproved: boolean;
     paymentConfirmation: string;
@@ -1271,6 +1304,11 @@ const revenueAutomationIntakes: RevenueAutomationIntake[] = [];
 const persistedRevenueLedgerEntrySchema = revenueLedgerEntrySchema.extend({
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
+  dealId: z.string().trim().max(200).optional().default(""),
+  stripeAccountId: z.string().trim().max(100).optional().default(""),
+  stripePaymentIds: z.array(z.string().trim().min(1).max(200)).max(100).optional().default([]),
+  stripePaymentStatus: z.enum(["partially_paid", "paid"]).optional(),
+  stripeLastPaymentAt: z.string().trim().max(100).optional().default(""),
 });
 const persistedRevenueLeadSchema = revenueLeadSchema.extend({
   id: z.string().trim().min(1),
@@ -2747,6 +2785,31 @@ export async function prepareRevenueEngineState(userId: string) {
     revenueDurablePersistenceStatus = "error";
     revenueDurableScope = null;
     revenueDurablePersistenceError = error instanceof Error ? error.message : String(error);
+    throw error;
+  }
+}
+
+let revenueEngineScopeQueue = Promise.resolve();
+
+export async function acquireRevenueEngineScope(userId: string) {
+  let releaseQueuedScope: () => void = () => {};
+  const previousScope = revenueEngineScopeQueue;
+  revenueEngineScopeQueue = new Promise<void>((resolve) => {
+    releaseQueuedScope = resolve;
+  });
+  await previousScope;
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseQueuedScope();
+  };
+  try {
+    await prepareRevenueEngineState(userId);
+    return release;
+  } catch (error) {
+    release();
     throw error;
   }
 }
@@ -4963,6 +5026,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
       requiredDepositUsd: opportunity.requiredDepositUsd,
       cashCollectedUsd: opportunity.cashCollectedUsd,
       monthlyRetainerUsd: opportunity.monthlyRetainerUsd,
+      estimatedInternalCostUsd: opportunity.estimatedInternalCostUsd,
       depositPaid: opportunity.depositPaid,
       scopeApproved: opportunity.scopeApproved,
       paymentConfirmation: opportunity.paymentConfirmation,
@@ -9885,6 +9949,121 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
     draft,
     lead,
     websiteOpportunity,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
+function roundRevenueMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function revenueLedgerEntryMatchesDeal(entry: RevenueLedgerEntry, dealId: string) {
+  if (entry.dealId === dealId) return true;
+  const normalizedDealId = dealId.toLowerCase();
+  const acceptedTags = new Set([
+    `deal:${normalizedDealId}`,
+    `stripe deal:${normalizedDealId}`,
+    `website-opportunity:${normalizedDealId}`,
+    `automation opportunity:${normalizedDealId}`,
+    `website-lead:${normalizedDealId}`,
+  ]);
+  return entry.notes
+    .split("|")
+    .map((part) => part.trim().toLowerCase().replace(/^\[|\]$/g, ""))
+    .some((part) => acceptedTags.has(part));
+}
+
+function appendRevenueStripeEvidence(existingNotes: string, input: RevenueStripePaymentInput) {
+  const paymentEvidence = [
+    `Stripe payment id:${input.externalPaymentId}`,
+    `Stripe event:${input.eventId}`,
+    `Stripe stage:${input.paymentStage}`,
+    input.notes,
+  ].filter(Boolean).join(" | ").slice(0, 600);
+  if (!existingNotes.trim()) return paymentEvidence;
+  const existingBudget = Math.max(0, 1000 - paymentEvidence.length - 3);
+  return `${existingNotes.slice(0, existingBudget).trimEnd()} | ${paymentEvidence}`.slice(0, 1000);
+}
+
+export function recordRevenueStripePayment(input: RevenueStripePaymentInput) {
+  loadRevenueLedger();
+  const parsed = revenueStripePaymentSchema.parse(input);
+  if (parsed.stripeAccountId !== ROBERT_WEBSITES_STRIPE_ACCOUNT_ID) {
+    throw new Error(`Stripe account rejected: expected ${ROBERT_WEBSITES_STRIPE_ACCOUNT_ID}.`);
+  }
+
+  const duplicateEntry = revenueLedger.find((entry) =>
+    entry.stripePaymentIds?.includes(parsed.externalPaymentId),
+  );
+  if (duplicateEntry) {
+    return {
+      status: "duplicate" as const,
+      entry: duplicateEntry,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existingEntry = revenueLedger.find((entry) =>
+    isSaleEntry(entry) && revenueLedgerEntryMatchesDeal(entry, parsed.dealId),
+  );
+  if (existingEntry) {
+    if (existingEntry.stripeAccountId && existingEntry.stripeAccountId !== ROBERT_WEBSITES_STRIPE_ACCOUNT_ID) {
+      throw new Error("Stripe payment rejected: the deal is linked to a different Stripe account.");
+    }
+    if (existingEntry.kind !== parsed.kind) {
+      throw new Error("Stripe payment rejected: deal type does not match the existing ledger entry.");
+    }
+    if (Math.abs(existingEntry.amountUsd - parsed.contractTotalUsd) > 0.009) {
+      throw new Error("Stripe payment rejected: contract total does not match the existing ledger entry.");
+    }
+
+    const nextCashCollectedUsd = roundRevenueMoney(existingEntry.cashCollectedUsd + parsed.paymentAmountUsd);
+    if (nextCashCollectedUsd > existingEntry.amountUsd + 0.009) {
+      throw new Error("Stripe payment rejected: cumulative cash would exceed the contract total.");
+    }
+    if ((existingEntry.stripePaymentIds || []).length >= 100) {
+      throw new Error("Stripe payment rejected: ledger payment reference limit exceeded.");
+    }
+    existingEntry.cashCollectedUsd = nextCashCollectedUsd;
+    existingEntry.dealId = parsed.dealId;
+    existingEntry.stripeAccountId = parsed.stripeAccountId;
+    existingEntry.stripePaymentIds = [...(existingEntry.stripePaymentIds || []), parsed.externalPaymentId];
+    existingEntry.stripePaymentStatus = existingEntry.cashCollectedUsd + 0.009 >= existingEntry.amountUsd
+      ? "paid"
+      : "partially_paid";
+    existingEntry.stripeLastPaymentAt = parsed.occurredAt;
+    existingEntry.notes = appendRevenueStripeEvidence(existingEntry.notes, parsed);
+    persistRevenueLedger();
+    return {
+      status: "updated" as const,
+      entry: existingEntry,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const ledgerResult = recordRevenueLedgerEntry({
+    kind: parsed.kind,
+    clientName: parsed.clientName,
+    amountUsd: roundRevenueMoney(parsed.contractTotalUsd),
+    cashCollectedUsd: roundRevenueMoney(parsed.paymentAmountUsd),
+    estimatedInternalCostUsd: roundRevenueMoney(parsed.estimatedInternalCostUsd),
+    notes: appendRevenueStripeEvidence(`Stripe deal:${parsed.dealId}`, parsed),
+  });
+  if (!ledgerResult.entry) {
+    throw new Error(ledgerResult.guardrail.reason);
+  }
+
+  ledgerResult.entry.dealId = parsed.dealId;
+  ledgerResult.entry.stripeAccountId = parsed.stripeAccountId;
+  ledgerResult.entry.stripePaymentIds = [parsed.externalPaymentId];
+  ledgerResult.entry.stripePaymentStatus = parsed.paymentAmountUsd + 0.009 >= parsed.contractTotalUsd
+    ? "paid"
+    : "partially_paid";
+  ledgerResult.entry.stripeLastPaymentAt = parsed.occurredAt;
+  persistRevenueLedger();
+  return {
+    status: "recorded" as const,
+    entry: ledgerResult.entry,
     snapshot: getRevenueEngineSnapshot(),
   };
 }

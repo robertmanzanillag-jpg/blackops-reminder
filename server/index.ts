@@ -15,6 +15,7 @@ import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
+import { registerRevenueStripePublicRoutes } from "./revenue-stripe";
 
 const app = express();
 const httpServer = createServer(app);
@@ -67,6 +68,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
+
+registerRevenueStripePublicRoutes(app);
 
 app.get("/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt", (_req, res) => {
   res
