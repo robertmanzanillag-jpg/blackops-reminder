@@ -2486,27 +2486,27 @@ test("snapshot exposes launch readiness without blocking on email provider", () 
   assert.equal(snapshot.emailProvider.configured, false);
 });
 
-test("snapshot launch readiness starts only with production persistence ready", () => {
+test("snapshot launch readiness stays blocked while revenue state uses local files", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
 
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.systemReadiness.items.find((item) => item.id === "production_persistence")?.status, "ready");
-  assert.equal(snapshot.launchReadiness.status, "ready_to_start");
-  assert.equal(snapshot.launchReadiness.blocked, 0);
-  assert.equal(snapshot.launchReadiness.items.some((item) => item.id === "production_persistence"), false);
-  assert.equal(snapshot.launchReadiness.todayExecutionPack.status, "ready");
-  assert.equal(snapshot.moneyActivationPlan.status, "ready_for_first_sprint");
-  assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "production_database"), false);
+  assert.equal(snapshot.systemReadiness.items.find((item) => item.id === "production_persistence")?.status, "needs_data");
+  assert.equal(snapshot.launchReadiness.status, "blocked");
+  assert.equal(snapshot.launchReadiness.blocked > 0, true);
+  assert.equal(snapshot.launchReadiness.items.some((item) => item.id === "production_persistence"), true);
+  assert.equal(snapshot.launchReadiness.todayExecutionPack.status, "blocked");
+  assert.equal(snapshot.moneyActivationPlan.status, "dry_run_research_only");
+  assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "production_database"), true);
   assert.equal(snapshot.moneyActivationPlan.missingBeforeRealMoney.some((item) => item.id === "controlled_autonomy"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("outreach send"), true);
   assert.equal(snapshot.moneyActivationPlan.blockedUntilApproved.includes("cobrar cliente"), true);
-  assert.equal(snapshot.moneyActivationPlan.canCollectMoney, true);
+  assert.equal(snapshot.moneyActivationPlan.canCollectMoney, false);
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.area, "Miami");
   assert.equal(snapshot.moneyActivationPlan.firstSprintPlan.targetRows <= 10, true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.status, "blocked");
-  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "ready"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "robert_deploy_approval" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status, "blocked");
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
@@ -2655,6 +2655,23 @@ test("blocks ledger income cash without verifiable payment evidence", () => {
   assert.equal(bareStripePrefix.snapshot.metrics.cashCollectedUsd, 0);
 });
 
+test("blocks zero-cash income rows from being counted as sold revenue", () => {
+  const result = recordRevenueLedgerEntry({
+    kind: "website_sale",
+    clientName: "Unpaid Client",
+    amountUsd: 3500,
+    cashCollectedUsd: 0,
+    estimatedInternalCostUsd: 25,
+    notes: "Proposal accepted but no payment received",
+  });
+
+  assert.equal(result.entry, null);
+  assert.equal(result.guardrail.status, "blocked");
+  assert.match(result.guardrail.reason, /cashCollectedUsd mayor que 0/);
+  assert.equal(result.snapshot.metrics.appsSold, 0);
+  assert.equal(result.snapshot.metrics.revenueUsd, 0);
+});
+
 test("allows ledger income when a real payment reference appears in notes", () => {
   const result = recordRevenueLedgerEntry({
     kind: "automation_sale",
@@ -2743,15 +2760,15 @@ test("system readiness blocks production money mode without real database url", 
   assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /production DATABASE_URL missing/);
 });
 
-test("system readiness accepts a real database url for production persistence", () => {
+test("system readiness rejects a database url while revenue state remains local", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
 
   const snapshot = getRevenueEngineSnapshot();
   const persistenceItem = snapshot.systemReadiness.items.find((item) => item.id === "production_persistence");
 
-  assert.equal(persistenceItem?.status, "ready");
-  assert.match(persistenceItem?.evidence || "", /DATABASE_URL real/);
+  assert.equal(persistenceItem?.status, "needs_data");
+  assert.match(persistenceItem?.evidence || "", /archivos JSON locales/);
 });
 
 test("profit guard allows small scale only when cash covers spend", () => {

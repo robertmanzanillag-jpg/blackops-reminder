@@ -2795,9 +2795,9 @@ function buildRevenueSystemReadiness(input: {
       const databaseUrl = resolveDatabaseConnectionString();
       if (databaseUrl) {
         return {
-          status: "ready" as const,
-          evidence: "DATABASE_URL real configurado; server puede usar Postgres para entorno persistente.",
-          nextStep: "Mantener backups/rollback y no exponer credenciales.",
+          status: "needs_data" as const,
+          evidence: "DATABASE_URL real configurado, pero ledger, leads, outreach y delivery de Revenue Engine todavia usan archivos JSON locales.",
+          nextStep: "Migrar el estado money-critical de Revenue Engine a Postgres antes de ventas reales o deploy de produccion.",
         };
       }
       return {
@@ -9438,6 +9438,17 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
 export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
   loadRevenueLedger();
   const parsed = revenueLedgerEntrySchema.parse(input);
+  if (isRevenueIncomeEntry(parsed.kind) && parsed.amountUsd > 0 && parsed.cashCollectedUsd <= 0) {
+    const snapshotBefore = getRevenueEngineSnapshot();
+    return {
+      entry: null,
+      snapshot: snapshotBefore,
+      guardrail: {
+        status: "blocked" as const,
+        reason: "Ingreso bloqueado: una venta requiere cashCollectedUsd mayor que 0 y referencia/comprobante verificable de pago en notes.",
+      },
+    };
+  }
   if (isRevenueIncomeEntry(parsed.kind) && parsed.cashCollectedUsd > 0 && !hasRevenuePaymentEvidence(parsed.notes)) {
     const snapshotBefore = getRevenueEngineSnapshot();
     return {
