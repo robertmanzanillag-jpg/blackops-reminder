@@ -11344,83 +11344,46 @@ export function buildProposalEmail(input: ProposalEmailInput) {
   const depositUsd = Math.round(totalSetupUsd * 0.5);
   const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
   const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
-  const sourceLine = input.sourceUrl ? `Fuente revisada: ${input.sourceUrl}` : "Fuente revisada: informacion publica provista o detectada.";
-  const subject = `Cotizacion de prueba - ${input.businessName} website + automatizaciones`;
+  const summary = input.businessSummary.replace(/\s+/g, " ").trim();
+  const summarySnippet = summary.length > 360 ? `${summary.slice(0, 357).trimEnd()}...` : summary;
+  const genericContact = /^(owner|propietario|equipo|robert)$/i.test(input.contactName);
+  const greeting = genericContact ? "Hola," : `Hola ${input.contactName},`;
+  const scope = [
+    input.websitePriceUsd > 0
+      ? "- Website premium, rapido y responsive, con una ruta clara hacia consultas o reservas."
+      : null,
+    input.websitePriceUsd > 0
+      ? "- Concepto visual 3D alineado con la marca y llamadas a la accion medibles."
+      : null,
+    input.automationPriceUsd > 0
+      ? "- Seguimiento basico de leads con aprobacion humana antes de cualquier mensaje."
+      : null,
+    "- QA de mobile, formularios, enlaces y rollback antes de publicar.",
+  ].filter((line): line is string => Boolean(line));
+  const subject = `Idea para mejorar la experiencia digital de ${input.businessName}`;
   const body = [
-    `${input.contactName},`,
+    greeting,
     "",
-    `Te mando una cotizacion de prueba basada en la informacion publica revisada para ${input.businessName}.`,
-    sourceLine,
+    `Revise la experiencia digital publica de ${input.businessName} y vi una oportunidad concreta para facilitar que nuevos clientes entiendan los servicios y den el siguiente paso.`,
     "",
-    "Resumen del negocio actual:",
-    input.businessSummary
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
-      .join("\n"),
+    summarySnippet,
     "",
-    `Propuesta de mejora: ${input.businessName} 3D Revenue Website`,
+    `Prepare un concepto privado para ${input.businessName} con este alcance inicial:`,
+    ...scope,
     "",
-    "Objetivo:",
-    "Convertir el website en una experiencia premium que venda mas, capture leads, empuje productos/eventos/contenido y permita automatizar seguimiento sin subir el costo operativo.",
-    "",
-    "Lo que haria:",
-    "1. Homepage inmersiva con hero 3D/video, propuesta clara y CTA principal.",
-    "2. Motor de ofertas/eventos/productos con cards premium, filtros, tracking y conversion.",
-    "3. Media hub para videos, radio, galerias o casos con previews dinamicos.",
-    "4. Captura de leads con newsletter, formularios y opt-in para follow-up.",
-    "5. Dashboard interno simple con leads, clicks, ventas/interes y rendimiento semanal.",
-    "6. Automatizaciones con aprobacion antes de enviar mensajes o activar acciones sensibles.",
-    "7. QA antes de publicar: data, mobile, links, formularios, costo, margen y rollback.",
-    "",
-    "Automatizaciones recomendadas:",
-    "- Follow-up automatico para leads/newsletter.",
-    "- Recordatorios o campañas con aprobacion antes de enviar.",
-    "- Recuperacion de carrito o interesados.",
-    "- Reporte semanal de ventas/interes/leads.",
-    "- Pipeline para partners, clientes o colaboradores.",
-    "- QA operativo antes de publicar cambios importantes.",
-    "",
-    "Paquete recomendado:",
-    "Website 3D Premium + Automation Sprint",
-    "",
-    "Precio de prueba:",
-    `- Setup website premium: $${input.websitePriceUsd.toLocaleString("en-US")}`,
-    `- Automation Sprint: $${input.automationPriceUsd.toLocaleString("en-US")}`,
-    `- Total setup: $${totalSetupUsd.toLocaleString("en-US")}`,
+    "Inversion estimada:",
+    `- Proyecto inicial: $${totalSetupUsd.toLocaleString("en-US")}`,
     `- Deposito para comenzar: $${depositUsd.toLocaleString("en-US")}`,
-    `- Retainer mensual recomendado: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`,
+    input.monthlyRetainerUsd > 0
+      ? `- Soporte y optimizacion mensual opcional: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`
+      : null,
     "",
-    "Costo interno estimado:",
-    `- Herramientas/API/hosting al inicio: ~$${input.estimatedInternalMonthlyCostUsd.toLocaleString("en-US")}/mes`,
-    "- Cap interno inicial: menos de $100/mes",
-    `- Margen mensual estimado: ~${grossMarginPercent}% si el retainer queda en $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`,
+    "Antes de comenzar confirmariamos alcance, contenido y prioridades. El preview seguiria privado hasta recibir su aprobacion.",
     "",
-    "Timeline:",
-    "- Dia 1: discovery, assets, access, sitemap y tracking plan",
-    "- Dia 2-3: mockup premium y estructura 3D/dinamica",
-    "- Dia 4-5: build de paginas clave + oferta/media/productos",
-    "- Dia 6: automatizaciones y dashboard",
-    "- Dia 7: QA completo, mobile, links, rollback y entrega",
+    "¿Le gustaria que le comparta el preview y coordinemos una llamada breve de 15 minutos para revisarlo?",
     "",
-    "QA antes de entregar:",
-    "- Scope aprobado por cliente",
-    "- Deposito pagado",
-    "- Data publica verificada",
-    "- Mobile/desktop probado",
-    "- Links, forms, checkout y CTAs probados",
-    "- Automatizaciones probadas con datos de ejemplo",
-    "- Rollback/manual fallback listo",
-    "- Costo interno bajo $100/mes",
-    "- Margen rentable confirmado",
-    input.notes ? "" : null,
-    input.notes || null,
-    "",
-    "Decision:",
-    "Esta seria una oferta rentable para vender como demo: alta percepcion visual, automatizaciones claras y costo inicial controlado.",
-    "",
-    "- Revenue Engine",
+    "Robert",
+    "Robert Websites",
   ].filter((line): line is string => line !== null).join("\n");
 
   const hasRecipientEmail = input.recipientEmail.trim().length > 0;

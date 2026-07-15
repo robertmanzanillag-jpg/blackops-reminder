@@ -10,6 +10,7 @@ import {
   approveRevenuePublicLeadCandidate,
   buildAutomationQuote,
   buildDeliveryReview,
+  buildProposalEmail,
   buildRevenueUserDataPaths,
   buildRevenueDurableOwnerId,
   buildImprovementReview,
@@ -3426,6 +3427,29 @@ test("builds production plan only when commercial and cost gates pass", () => {
   assert.equal(plan.budget.insideCostCap, true);
   assert.equal(plan.phases.some((phase) => phase.ownerAgent === "qa-council"), true);
   assert.equal(plan.subagentCorrections.some((item) => item.agent === "cost-controller"), true);
+});
+
+test("builds concise client-facing outreach without exposing internal economics", () => {
+  const proposal = buildProposalEmail({
+    recipientEmail: "owner@example.com",
+    contactName: "Owner",
+    businessName: "Route Ready Cafe",
+    sourceUrl: "https://example.com/private-research-source",
+    businessSummary: "The public booking journey is difficult to follow and the current service pages do not offer one clear next step.",
+    websitePriceUsd: 1992,
+    automationPriceUsd: 933,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "INTERNAL ONLY: keep this out of client copy.",
+  });
+
+  assert.match(proposal.subject, /Route Ready Cafe/);
+  assert.match(proposal.body, /Robert Websites/);
+  assert.match(proposal.body, /\$2,925/);
+  assert.match(proposal.body, /\$1,463/);
+  assert.match(proposal.body, /15 minutos/);
+  assert.doesNotMatch(proposal.body, /Costo interno|Margen mensual|Cap interno|INTERNAL ONLY|private-research-source|Revenue Engine/i);
+  assert.equal(proposal.body.length < 1800, true);
 });
 
 test("records outreach draft without sending and moves matching lead to outreach", () => {
