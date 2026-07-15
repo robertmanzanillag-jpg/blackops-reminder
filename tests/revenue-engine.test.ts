@@ -103,6 +103,7 @@ import {
   sendRevenueOutreachDraft,
   setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
+  extractRevenueMockupContentSecurityPolicy,
 } from "../server/revenue-engine";
 import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection } from "../server/revenue-engine-state-store";
 import { registerRoutes } from "../server/routes";
@@ -3358,51 +3359,50 @@ test("serves revenue mockup previews over the generated route", async () => {
   app.use(express.json());
   const server = createHttpServer(app);
   await registerRoutes(server, app);
-  const routeLayer = (app as any)._router.stack.find((layer: any) =>
-    layer.route?.path === "/api/revenue-engine/mockup-previews/:slug" && layer.route.methods.get
-  );
-  assert.ok(routeLayer, "mockup preview route should be registered");
-  const handler = routeLayer.route.stack[0].handle;
-  const invoke = async (slug: string) => {
-    const result = { statusCode: 200, contentType: "", body: "", headers: {} as Record<string, string> };
-    const res = {
-      status(code: number) {
-        result.statusCode = code;
-        return res;
-      },
-      json(payload: unknown) {
-        result.body = JSON.stringify(payload);
-        return res;
-      },
-      type(value: string) {
-        result.contentType = value;
-        return res;
-      },
-      setHeader(name: string, value: string) {
-        result.headers[name.toLowerCase()] = value;
-        return res;
-      },
-      send(payload: unknown) {
-        result.body = String(payload);
-        return res;
-      },
-    };
-    await handler({ params: { slug } }, res);
-    return result;
-  };
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 
-  const response = await invoke(preview.slug);
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.contentType, "html");
-  assert.match(response.body, /Route Ready Cafe/);
-  assert.match(response.body, /QA gates before contact/);
-  assert.match(response.headers["content-security-policy"], /script-src 'self' 'sha256-/);
-  assert.match(response.headers["content-security-policy"], /frame-ancestors 'self'/);
-  assert.equal(response.headers["referrer-policy"], "no-referrer");
-  assert.equal(response.headers["x-content-type-options"], "nosniff");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const baseUrl = `http://127.0.0.1:${address.port}/api/revenue-engine/mockup-previews`;
 
-  const invalid = await invoke("../bad");
-  assert.equal(invalid.statusCode, 400);
+    const response = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-user-id": "preview-owner" } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /text\/html/);
+    const responseBody = await response.text();
+    assert.match(responseBody, /Route Ready Cafe/);
+    assert.match(responseBody, /QA gates before contact/);
+    assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'sha256-/);
+    assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'self'/);
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+
+    const invalid = await fetch(`${baseUrl}/%2E%2E%2Fbad`, { headers: { "x-user-id": "preview-owner" } });
+    assert.equal(invalid.status, 400);
+
+    const missing = await fetch(`${baseUrl}/missing-preview`, { headers: { "x-user-id": "preview-owner" } });
+    assert.equal(missing.status, 404);
+
+    const previewPath = getRevenueMockupPreviewPath(preview.slug);
+    const validHtml = readFileSync(previewPath, "utf8");
+    writeFileSync(previewPath, validHtml.replace(/<meta\s+http-equiv="Content-Security-Policy"[^>]*>/i, ""), "utf8");
+    try {
+      const insecure = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-user-id": "preview-owner" } });
+      assert.equal(insecure.status, 500);
+      assert.deepEqual(await insecure.json(), { error: "Mockup preview security policy missing" });
+    } finally {
+      writeFileSync(previewPath, validHtml, "utf8");
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("extracts a revenue preview CSP independent of meta attribute order", () => {
+  const policy = "default-src 'none'; frame-ancestors 'self'";
+  const html = `<meta content="${policy}" data-preview="secure" http-equiv="Content-Security-Policy">`;
+  assert.equal(extractRevenueMockupContentSecurityPolicy(html), policy);
+  assert.equal(extractRevenueMockupContentSecurityPolicy('<meta charset="utf-8">'), null);
 });
 
 test("builds production plan only when commercial and cost gates pass", () => {

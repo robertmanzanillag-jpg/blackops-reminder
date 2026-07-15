@@ -8734,6 +8734,21 @@ export function buildRevenueMockupPreview(input: RevenueMockupInput, options: { 
   };
 }
 
+export function extractRevenueMockupContentSecurityPolicy(html: string): string | null {
+  const metaTags = html.match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of metaTags) {
+    const attributes = new Map<string, string>();
+    const attributePattern = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+    for (const match of tag.matchAll(attributePattern)) {
+      attributes.set(match[1].toLowerCase(), match[2] ?? match[3] ?? match[4] ?? "");
+    }
+    if (attributes.get("http-equiv")?.toLowerCase() === "content-security-policy") {
+      return attributes.get("content") || null;
+    }
+  }
+  return null;
+}
+
 export function getRevenueMockupPreviewPath(slug: string) {
   if (!/^[a-z0-9-]{1,120}$/.test(slug)) {
     throw new Error("Invalid mockup preview slug.");
