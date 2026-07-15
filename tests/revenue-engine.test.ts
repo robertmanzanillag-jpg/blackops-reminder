@@ -3344,6 +3344,7 @@ test("escapes dynamic lead content in the revenue mockup preview", () => {
 });
 
 test("serves revenue mockup previews over the generated route", async () => {
+  await prepareRevenueEngineState("preview-owner");
   const preview = buildRevenueMockupPreview({
     businessName: "Route Ready Cafe",
     area: "Miami",
