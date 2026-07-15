@@ -3303,6 +3303,11 @@ test("writes a local revenue mockup preview without publishing externally", () =
   const html = readFileSync(previewPath, "utf8");
   assert.match(html, /No Site Cafe/);
   assert.match(html, /QA gates before contact/);
+  assert.match(html, /data-three-scene="revenue-preview"/);
+  assert.match(html, /import \* as THREE from 'three'/);
+  assert.match(html, /three@0\.180\.0\/build\/three\.module\.js/);
+  assert.match(html, /prefers-reduced-motion/);
+  assert.match(html, /scene-fallback/);
   assert.equal(preview.guardrails.some((item) => item.includes("No requiere hosting pagado")), true);
 });
 
