@@ -296,7 +296,12 @@ test("Revenue Engine exposes GitHub handoff route for sold website workspaces", 
   assert.match(engineSource, /falta aprobacion escrita de scope/);
   assert.match(uiSource, /repoFullName,/);
   assert.match(uiSource, /branchName,/);
-  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady\}/);
+  assert.match(uiSource, /const preBuildChecksReady = publicEvidenceReady && responsiveReady && linksReady && automationReady/);
+  assert.match(uiSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady \|\| !preBuildChecksReady\}/);
+  assert.match(uiSource, /panel-website-handoff-build-checks/);
+  assert.match(uiSource, /const copyableWorkspaceRequest = JSON\.stringify/);
+  assert.match(uiSource, /navigator\.clipboard\.writeText\(copyableWorkspaceRequest\)/);
+  assert.doesNotMatch(uiSource, /navigator\.clipboard\.writeText\(item\.copyableWorkspaceRequest\)/);
   assert.match(handoffMutation, /repoFullName: workspace\.input\.repoFullName/);
   assert.doesNotMatch(handoffMutation, /repoFullName: reviewRepoFullName \|\| workspace\.input\.repoFullName/);
 });
@@ -375,8 +380,9 @@ test("Revenue Engine exposes the daily money command panel", () => {
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/scout-dispatch/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/money-sprint\/public-candidates/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/website-opportunities/);
-  assert.match(safeRunEndpoints, /\/api\/revenue-engine\/website-delivery-workspace/);
   assert.match(safeRunEndpoints, /\/api\/revenue-engine\/delivery-workspaces\/github-handoff/);
+  assert.doesNotMatch(safeRunEndpoints, /\/api\/revenue-engine\/website-delivery-workspace/);
+  assert.match(uiSource, /Crea el workspace desde la tarjeta de website vendido/);
   assert.match(uiSource, /hasDailyMoneyRunPlaceholders/);
   assert.match(uiSource, /REPLACE_/);
   assert.match(uiSource, /"owner\\\/repo"/);

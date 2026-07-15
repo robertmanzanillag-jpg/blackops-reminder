@@ -78,7 +78,7 @@ test("route scout covers Revenue Engine money flow clicks", () => {
     expectedCriticalClicks.every((click) => revenueRoute.expectedClicks.includes(click)),
     true,
   );
-  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]);
+  assert.deepEqual(revenueRoute.expectedControls, ["First money command center", "Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]);
   assert.deepEqual(
     expectedCriticalClicks.every((click) =>
       [
@@ -122,6 +122,7 @@ test("visual control coverage checks Revenue Engine money-flow groups independen
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const salesOnlyBody = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -148,6 +149,7 @@ test("visual control coverage does not merge scenario controls across tabs", () 
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const baseBody = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -171,6 +173,7 @@ test("visual control coverage accepts a complete activated scenario snapshot", (
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const body = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -193,6 +196,7 @@ test("visual control coverage flags non-generic group controls without their req
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const partialSalesBody = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -202,6 +206,7 @@ test("visual control coverage flags non-generic group controls without their req
   ].join("\n");
   const partialReleaseBody = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -224,6 +229,7 @@ test("visual control coverage does not match short controls inside longer words"
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const body = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",
@@ -243,6 +249,7 @@ test("visual control coverage ignores generic scenario words until a strong mone
   const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
   const genericBody = [
     "Revenue Engine",
+    "First money command center",
     "Guardar candidato publico",
     "Guardar connector review-only",
     "Preview batch",

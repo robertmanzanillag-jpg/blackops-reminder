@@ -1158,6 +1158,86 @@ test("public candidate approval route rejects missing Robert approval without mu
   assert.equal(getRevenueEngineSnapshot().publicLeadImportQueue.blockedCount, 1);
 });
 
+test("first-money command center route returns read-only money queue contract", async () => {
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  const routeLayer = (app as any)._router.stack.find((layer: any) =>
+    layer.route?.path === "/api/revenue-engine/first-money-command-center" && layer.route.methods.get
+  );
+  assert.ok(routeLayer, "first-money command center route should be registered");
+  const handler = routeLayer.route.stack[0].handle;
+  const result = { statusCode: 200, body: null as any };
+  const res = {
+    status(code: number) {
+      result.statusCode = code;
+      return res;
+    },
+    json(payload: unknown) {
+      result.body = payload;
+      return res;
+    },
+  };
+
+  await handler({}, res);
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.mode, "first-sprint");
+  assert.equal(typeof result.body.nextCommand.command, "string");
+  assert.equal(Array.isArray(result.body.queue), true);
+  assert.equal(typeof result.body.counts.publicCandidates, "number");
+  assert.equal(result.body.safety.writesFiles, false);
+  assert.equal(result.body.safety.sendsOutreach, false);
+  assert.equal(result.body.safety.chargesClients, false);
+  assert.equal(result.body.safety.deploys, false);
+  assert.equal(result.body.safety.printsSecrets, false);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+
+test("Revenue Engine UI shows first-money command center lane", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(clientSource, /first-money-command-center/);
+  assert.match(clientSource, /\/api\/revenue-engine\/first-money-command-center/);
+  assert.match(clientSource, /First money command center/);
+  assert.match(clientSource, /buscar negocios/);
+  assert.match(clientSource, /no envia outreach/);
+  assert.match(clientSource, /isFirstMoneyCommandCenterError/);
+  assert.match(clientSource, /No se pudo cargar el command center/);
+});
+
+test("Revenue Engine UI exposes premium design route for website build handoffs", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+
+  assert.match(clientSource, /designSkillRoute\?: string\[\]/);
+  assert.match(clientSource, /panel-website-build-premium-design-route/);
+  assert.match(clientSource, /panel-premium-design-route/);
+  assert.match(clientSource, /Premium design route/);
+  assert.match(clientSource, /design \+ 3D QA/);
+  assert.match(clientSource, /workspace\.codexBuildHandoff\.buildPack\.designSkillRoute/);
+});
+
+test("Revenue Engine UI requires local pre-build evidence before sold website handoff workspace", () => {
+  const clientSource = readFileSync(path.join(process.cwd(), "client/src/pages/revenue-engine.tsx"), "utf8");
+  const handoffMutationStart = clientSource.indexOf("const websiteDeliveryHandoffMutation");
+  const handoffMutationEnd = clientSource.indexOf("const websiteOpportunityMutation", handoffMutationStart);
+  const soldWebsiteHandoffMutation = clientSource.slice(handoffMutationStart, handoffMutationEnd);
+
+  assert.match(clientSource, /websiteDeliveryBuildChecks/);
+  assert.match(clientSource, /buildWebsiteDeliveryWorkspaceRequest/);
+  assert.match(clientSource, /const copyableWorkspaceRequest = JSON\.stringify/);
+  assert.match(clientSource, /navigator\.clipboard\.writeText\(copyableWorkspaceRequest\)/);
+  assert.match(clientSource, /panel-website-handoff-build-checks/);
+  assert.match(clientSource, /Pre-build evidence gate/);
+  assert.match(clientSource, /publicDataVerified: Boolean\(buildChecks\.publicDataVerified\)/);
+  assert.match(clientSource, /disabled=\{websiteDeliveryHandoffMutation\.isPending \|\| !depositCoversHandoff \|\| !repoReady \|\| !branchReady \|\| !preBuildChecksReady\}/);
+  assert.match(clientSource, /Evidencia build pendiente/);
+  assert.ok(handoffMutationStart > -1);
+  assert.match(soldWebsiteHandoffMutation, /buildWebsiteDeliveryWorkspaceRequest\(item, repoFullName, branchName, buildChecks\)/);
+  assert.doesNotMatch(soldWebsiteHandoffMutation, /publicDataVerified: reviewChecks\.publicDataVerified/);
+});
+
 test("public candidate approval keeps incomplete candidates blocked", () => {
   const candidate = recordRevenuePublicLeadCandidate({
     businessName: "Still Missing Contact Spa",
@@ -4414,10 +4494,23 @@ test("creates website delivery workspace from money sprint lead mockup and outre
   assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Client said yes/);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.publicOnly, true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.sections.some((section) => section.includes("First viewport")), true);
+  assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.sections.some((section) => section.includes("design/creative guidance")), true);
+  assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.sections.some((section) => section.includes("Three.js")), true);
+  assert.match(handoff.workspace?.codexBuildHandoff.designSkillContext || "", /\.claude\/skills\/design-creative\/SKILL\.md/);
+  assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.designSkillRoute.some((item) => item.includes("Design direction gate")), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.assets.some((asset) => asset.includes(preview.previewUrl)), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.qaCommands.includes("npm run check"), true);
+  assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.qaCommands.some((command) => command.includes("reduced motion")), true);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack.includes("Copy"), false);
   assert.equal(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack.includes("Handoff Cafe"), true);
+  assert.match(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /Design direction gate/);
+  assert.match(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /premium agency-quality website/);
+  assert.match(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Design Skill \/ Premium Experience/);
+  assert.match(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Design direction gate/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /\.claude\/skills/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /Design skill route/);
+  assert.match(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /optional conversion enhancement/);
+  assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.copyableGithubIssueBody || "", /\.claude\/skills/);
   assert.match(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /Do not deploy/);
   assert.match(handoff.workspace?.codexBuildHandoff.buildPack.copyableBuildPack || "", /second review, App QA and explicit Robert deploy approval/);
   assert.doesNotMatch(handoff.workspace?.codexBuildHandoff.publicBuildBrief || "", /Commercial Context/);

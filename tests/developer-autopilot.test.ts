@@ -371,6 +371,11 @@ test("developer autopilot creates client build handoff from structured Revenue E
         "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
       ].join("\n"),
       severity: "medium",
+      designSkillContext: [
+        "Claude design skill context:",
+        "- Prompt Claude with design/UI/UX/branding/landing-page language so buildClaudeSkillContext selects .claude/skills/design-creative/SKILL.md.",
+        "- Apply design-creative before implementation.",
+      ].join("\n"),
       evidence: [
         "Revenue workspace: delivery-workspace-1",
         "Public source: https://example.com/handoff-cafe",
@@ -410,6 +415,8 @@ test("developer autopilot creates client build handoff from structured Revenue E
         assert.doesNotMatch(body, /\bpayment\b/i);
         assert.doesNotMatch(body, /\bpaid\b/i);
         assert.doesNotMatch(body, /Stripe pi_/i);
+        assert.doesNotMatch(body, /\.claude\/skills/);
+        assert.doesNotMatch(body, /Claude design skill context/);
         return { number: 41, html_url: "https://github.com/robert/handoff-cafe/issues/41" };
       },
       createIssueComment: async () => {
@@ -422,6 +429,8 @@ test("developer autopilot creates client build handoff from structured Revenue E
   assert.equal(created.repoFullName, "robert/handoff-cafe");
   assert.equal(created.issueUrl, "https://github.com/robert/handoff-cafe/issues/41");
   assert.match(created.codexBrief || "", /Type: client_build/);
+  assert.match(created.codexBrief || "", /Claude design skill context/);
+  assert.match(created.codexBrief || "", /\.claude\/skills\/design-creative\/SKILL\.md/);
 });
 
 test("developer autopilot keeps security precedence over client website build wording", () => {

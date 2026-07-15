@@ -95,7 +95,6 @@ const DAILY_MONEY_SAFE_RUN_ENDPOINTS = new Set([
   "/api/revenue-engine/scout-dispatch",
   "/api/revenue-engine/money-sprint/public-candidates",
   "/api/revenue-engine/website-opportunities",
-  "/api/revenue-engine/website-delivery-workspace",
   "/api/revenue-engine/delivery-workspaces/github-handoff",
 ]);
 
@@ -114,6 +113,14 @@ function parseDailyMoneyRunRequest(value: string | undefined) {
 function hasDailyMoneyRunPlaceholders(value: string | undefined) {
   return /\bREPLACE_|"owner\/repo"|codex\/client-website-build/.test(value || "");
 }
+
+type WebsiteDeliveryBuildChecks = {
+  publicDataVerified?: boolean;
+  responsiveChecked?: boolean;
+  linksChecked?: boolean;
+  automationTested?: boolean;
+  rollbackPlanReady?: boolean;
+};
 
 type RevenueSnapshot = {
   metrics: {
@@ -646,6 +653,7 @@ type RevenueSnapshot = {
         assets: string[];
         qaCommands: string[];
         publicOnly: boolean;
+        designSkillRoute?: string[];
         copyableBuildPack: string;
       };
       missing: string[];
@@ -962,6 +970,7 @@ type RevenueSnapshot = {
         assets: string[];
         qaCommands: string[];
         publicOnly: boolean;
+        designSkillRoute?: string[];
         copyableBuildPack: string;
       };
       acceptanceCriteria: string[];
@@ -1012,6 +1021,51 @@ type RevenueSnapshot = {
     delivery: string;
     includes: string[];
   }>;
+};
+
+type RevenueFirstMoneyCommandCenter = {
+  status: string;
+  mode: "first-sprint" | "production-launch";
+  nextCommand: {
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  };
+  queue: Array<{
+    id: string;
+    label: string;
+    command: string;
+    status: "ready" | "blocked" | "review";
+    reason: string;
+  }>;
+  counts: {
+    publicCandidates: number;
+    reviewablePublicCandidates: number;
+    importReadyCandidates: number;
+    leads: number;
+    websiteSalesPackets: number;
+    outreachDrafts: number;
+    reviewableOutreachDrafts: number;
+    websiteClosures: number;
+    websiteHandoffs: number;
+    approvedOutreachDrafts: number;
+  };
+  readiness: {
+    canSearchBusinesses: boolean;
+    canContactBusinesses: boolean;
+    canCollectMoney: boolean;
+    canBuildWebsites: boolean;
+    remainingGaps: string[];
+  };
+  safety: {
+    writesFiles: boolean;
+    sendsOutreach: boolean;
+    chargesClients: boolean;
+    deploys: boolean;
+    printsSecrets: boolean;
+  };
 };
 
 type ClarificationGate = {
@@ -2348,6 +2402,7 @@ export default function RevenueEnginePage() {
     repoFullName?: string;
     branchName?: string;
   }>>({});
+  const [websiteDeliveryBuildChecks, setWebsiteDeliveryBuildChecks] = useState<Record<string, WebsiteDeliveryBuildChecks>>({});
   const requestDepositPaymentConfirmation = (businessName: string, amountUsd: number) => {
     const value = window.prompt(
       `Referencia verificable de pago para ${businessName} (${money.format(amountUsd)}): Stripe payment id, Zelle/bank ref, invoice/receipt id.`,
@@ -2357,6 +2412,33 @@ export default function RevenueEnginePage() {
   const automationHasPaymentConfirmation = hasVerifiablePaymentEvidence(automationPaymentConfirmation);
   const automationCloseRequiresPaymentEvidence = automationCashCollectedUsd > 0 || automationLifecycleTarget === "sale" || automationLifecycleTarget === "delivery";
   const automationOpportunityRequiresPaymentEvidence = automationDepositPaid || ["sold", "in_delivery", "delivered"].includes(automationOpportunityStatus);
+
+  function buildWebsiteDeliveryWorkspaceRequest(
+    item: RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number],
+    repoFullName: string,
+    branchName: string,
+    buildChecks: WebsiteDeliveryBuildChecks,
+  ) {
+    return {
+      leadId: item.leadId,
+      outreachDraftId: item.outreachDraftId,
+      websiteOpportunityId: item.opportunityId,
+      mockupUrl: item.mockupUrl,
+      repoFullName,
+      branchName,
+      projectType: item.projectType,
+      depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
+      scopeApproved: true,
+      cashCollectedUsd: item.cashCollectedUsd,
+      publicDataVerified: Boolean(buildChecks.publicDataVerified),
+      visualQaPassed: Boolean(buildChecks.responsiveChecked),
+      technicalQaPassed: Boolean(buildChecks.linksChecked),
+      automationQaPassed: item.projectType === "website" ? true : Boolean(buildChecks.automationTested && buildChecks.rollbackPlanReady),
+      clientHandoffReady: false,
+      launchTargetDays: projectLaunchTargetDays,
+      notes: "Created from Revenue Engine website handoff queue.",
+    };
+  }
   const automationAgentPaymentBlocked = automationCloseRequiresPaymentEvidence && !automationHasPaymentConfirmation;
   const automationOpportunityPaymentBlocked = automationOpportunityRequiresPaymentEvidence && !automationHasPaymentConfirmation;
   const [reviewRepoFullName, setReviewRepoFullName] = useState("");
@@ -2491,6 +2573,14 @@ export default function RevenueEnginePage() {
       return response.json();
     },
   });
+  const { data: firstMoneyCommandCenter, isError: isFirstMoneyCommandCenterError } = useQuery<RevenueFirstMoneyCommandCenter>({
+    queryKey: ["revenue-engine", "first-money-command-center"],
+    queryFn: async () => {
+      const response = await fetch("/api/revenue-engine/first-money-command-center");
+      if (!response.ok) throw new Error("No se pudo cargar first-money command center");
+      return response.json();
+    },
+  });
   const approvalQueue = snapshot?.approvalQueueItems || [];
   const selectedApprovalQueueItem = approvalQueue.find((item) => item.id === selectedApprovalTargetId) || null;
   const approvalActionForSubmit = selectedApprovalQueueItem?.action || approvalAction;
@@ -2526,7 +2616,9 @@ export default function RevenueEnginePage() {
     : snapshot?.dailyMoneyCommand.status === "blocked"
       ? "Daily Money Command esta bloqueado por guardrails."
       : !dailyMoneyRunIsSafeEndpoint
-        ? "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
+        ? dailyMoneyRunPacket?.apiAction === "/api/revenue-engine/website-delivery-workspace"
+          ? "Crea el workspace desde la tarjeta de website vendido para marcar repo y checks pre-build."
+          : "Este paso requiere aprobacion/evidencia manual; copia el request y completalo fuera del boton seguro."
         : dailyMoneyRunHasPlaceholders
           ? "El request todavia tiene placeholders."
           : !dailyMoneyRunRequest.ok
@@ -3036,30 +3128,13 @@ export default function RevenueEnginePage() {
   const websiteDeliveryHandoffMutation = useMutation<WebsiteDeliveryHandoffResult, Error, RevenueSnapshot["websiteDeliveryHandoffQueue"]["items"][number]>({
     mutationFn: async (item) => {
       const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+      const buildChecks = websiteDeliveryBuildChecks[item.opportunityId] || {};
       const repoFullName = (repoInput.repoFullName || "").trim();
       const branchName = (repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`).trim();
       const response = await fetch("/api/revenue-engine/website-delivery-workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leadId: item.leadId,
-          outreachDraftId: item.outreachDraftId,
-          websiteOpportunityId: item.opportunityId,
-          mockupUrl: item.mockupUrl,
-          repoFullName,
-          branchName,
-          projectType: item.projectType,
-          depositPaid: item.cashCollectedUsd >= item.requiredDepositUsd,
-          scopeApproved: true,
-          cashCollectedUsd: item.cashCollectedUsd,
-          publicDataVerified: reviewChecks.publicDataVerified,
-          visualQaPassed: reviewChecks.responsiveChecked,
-          technicalQaPassed: reviewChecks.linksChecked,
-          automationQaPassed: reviewChecks.automationTested && reviewChecks.rollbackPlanReady,
-          clientHandoffReady: false,
-          launchTargetDays: projectLaunchTargetDays,
-          notes: "Created from Revenue Engine website handoff queue.",
-        }),
+        body: JSON.stringify(buildWebsiteDeliveryWorkspaceRequest(item, repoFullName, branchName, buildChecks)),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo crear workspace desde lead");
@@ -3959,6 +4034,19 @@ export default function RevenueEnginePage() {
     setReviewChecks((current) => ({ ...current, [key]: !current[key] }));
   }
 
+  function toggleWebsiteDeliveryBuildCheck(
+    opportunityId: string,
+    key: "publicDataVerified" | "responsiveChecked" | "linksChecked" | "automationTested" | "rollbackPlanReady",
+  ) {
+    setWebsiteDeliveryBuildChecks((current) => ({
+      ...current,
+      [opportunityId]: {
+        ...current[opportunityId],
+        [key]: !current[opportunityId]?.[key],
+      },
+    }));
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     planMutation.mutate();
@@ -4043,6 +4131,88 @@ export default function RevenueEnginePage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-emerald-500/20 bg-zinc-950/90" data-testid="first-money-command-center">
+          <CardContent className="grid gap-4 p-4 xl:grid-cols-[1.1fr_0.9fr_1fr]">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Search className="h-4 w-4 text-emerald-200" />
+                <p className="text-sm font-medium text-white">First money command center</p>
+                <Badge variant="outline" className={cn(statusTone(isFirstMoneyCommandCenterError ? "failed" : firstMoneyCommandCenter?.nextCommand.status || "review"), "shrink-0")}>
+                  {isFirstMoneyCommandCenterError ? "failed" : firstMoneyCommandCenter?.nextCommand.status || "loading"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-xl font-semibold leading-7 text-white">
+                {isFirstMoneyCommandCenterError ? "No se pudo cargar el command center." : firstMoneyCommandCenter?.nextCommand.label || "Calculando siguiente paso para generar dinero."}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">
+                {isFirstMoneyCommandCenterError ? "Revisa /api/revenue-engine/first-money-command-center antes de operar el siguiente paso de dinero." : firstMoneyCommandCenter?.nextCommand.reason || "El agente revisa si toca buscar negocios, revisar candidatos, preparar outreach o crear handoff de website."}
+              </p>
+              <p className="mt-3 rounded-lg border border-emerald-500/15 bg-emerald-500/5 px-3 py-2 font-mono text-xs leading-5 text-emerald-100">
+                {isFirstMoneyCommandCenterError ? "npm run revenue:first-money-command-center" : firstMoneyCommandCenter?.nextCommand.command || "npm run revenue:first-money-command-center"}
+              </p>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Pipeline de dinero</p>
+              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3">
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Candidatos</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.publicCandidates ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">A revisar</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.reviewablePublicCandidates ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Drafts</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.reviewableOutreachDrafts ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Sales pkt</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteSalesPackets ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Cierres</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteClosures ?? 0}</p>
+                </div>
+                <div className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                  <p className="text-zinc-500">Builds</p>
+                  <p className="mt-1 text-lg font-semibold text-white">{firstMoneyCommandCenter?.counts.websiteHandoffs ?? 0}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canSearchBusinesses ? statusTone("pass") : statusTone("blocked"))}>
+                  buscar negocios
+                </Badge>
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canContactBusinesses ? statusTone("pass") : statusTone("approval_required"))}>
+                  contacto
+                </Badge>
+                <Badge variant="outline" className={cn(firstMoneyCommandCenter?.readiness.canBuildWebsites ? statusTone("pass") : statusTone("approval_required"))}>
+                  websites
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Cola segura</p>
+              <div className="max-h-[188px] space-y-2 overflow-auto pr-1">
+                {(firstMoneyCommandCenter?.queue || []).map((item) => (
+                  <div key={item.id} className="rounded-md border border-zinc-800 bg-black px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                      <Badge variant="outline" className={cn(statusTone(item.status), "shrink-0")}>
+                        {item.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500">{item.reason}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-zinc-500">
+                Solo lectura: no escribe archivos, no envia outreach, no cobra clientes y no despliega.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -5785,6 +5955,21 @@ export default function RevenueEnginePage() {
                                 {missing}
                               </p>
                             ))}
+                          </div>
+                        )}
+                        {item.buildPack.designSkillRoute && item.buildPack.designSkillRoute.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3" data-testid={`panel-website-build-premium-design-route-${item.workspaceId}`}>
+                            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-indigo-200">Premium design route</p>
+                                <p className="mt-1 text-xs leading-5 text-zinc-300">
+                                  {item.buildPack.designSkillRoute.join(" ")}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="shrink-0 border-indigo-500/30 bg-black text-indigo-100">
+                                design + 3D QA
+                              </Badge>
+                            </div>
                           </div>
                         )}
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -9235,10 +9420,21 @@ export default function RevenueEnginePage() {
                           snapshot?.websiteDeliveryHandoffQueue.items.map((item) => {
                             const depositCoversHandoff = item.cashCollectedUsd >= item.requiredDepositUsd;
                             const repoInput = websiteDeliveryRepoInputs[item.opportunityId] || {};
+                            const buildChecks = websiteDeliveryBuildChecks[item.opportunityId] || {};
                             const repoFullName = repoInput.repoFullName || "";
                             const branchName = repoInput.branchName || item.suggestedBranchName || `codex/client-${slugifyClientBranchValue(item.businessName)}-website`;
+                            const copyableWorkspaceRequest = JSON.stringify(
+                              buildWebsiteDeliveryWorkspaceRequest(item, repoFullName.trim(), branchName.trim(), buildChecks),
+                              null,
+                              2,
+                            );
                             const repoReady = isGithubRepoFullName(repoFullName);
                             const branchReady = isCodexBranchName(branchName);
+                            const publicEvidenceReady = Boolean(buildChecks.publicDataVerified);
+                            const responsiveReady = Boolean(buildChecks.responsiveChecked);
+                            const linksReady = Boolean(buildChecks.linksChecked);
+                            const automationReady = item.projectType === "website" || Boolean(buildChecks.automationTested && buildChecks.rollbackPlanReady);
+                            const preBuildChecksReady = publicEvidenceReady && responsiveReady && linksReady && automationReady;
                             return (
                               <div key={item.leadId} className="rounded-lg border border-zinc-800 bg-black p-3">
                                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -9265,6 +9461,9 @@ export default function RevenueEnginePage() {
                                   </Badge>
                                   <Badge variant="outline" className={cn(branchReady ? statusTone("ready") : statusTone("blocked"))}>
                                     {branchReady ? "branch codex listo" : "branch codex requerido"}
+                                  </Badge>
+                                  <Badge variant="outline" className={cn(preBuildChecksReady ? statusTone("ready") : statusTone("blocked"))}>
+                                    {preBuildChecksReady ? "evidencia build lista" : "evidencia build pendiente"}
                                   </Badge>
                                 </div>
                                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -9299,6 +9498,42 @@ export default function RevenueEnginePage() {
                                     data-testid={`input-website-handoff-branch-${item.opportunityId}`}
                                   />
                                 </div>
+                                <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3" data-testid={`panel-website-handoff-build-checks-${item.opportunityId}`}>
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs uppercase tracking-wide text-sky-200">Pre-build evidence gate</p>
+                                    <Badge variant="outline" className={cn(preBuildChecksReady ? statusTone("ready") : statusTone("blocked"), "shrink-0")}>
+                                      {preBuildChecksReady ? "ready" : "blocked"}
+                                    </Badge>
+                                  </div>
+                                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                                    {[
+                                      ["publicDataVerified", "Data publica verificada"],
+                                      ["responsiveChecked", "Mockup responsive revisado"],
+                                      ["linksChecked", "Links/formularios verificados"],
+                                      ["automationTested", "Automation probada"],
+                                      ["rollbackPlanReady", "Rollback listo"],
+                                    ].filter(([key]) => item.projectType !== "website" || !["automationTested", "rollbackPlanReady"].includes(key)).map(([key, label]) => (
+                                      <label
+                                        key={`${item.opportunityId}-${key}`}
+                                        className="flex min-h-10 items-center gap-3 rounded-md border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(buildChecks[key as keyof typeof buildChecks])}
+                                          onChange={() => toggleWebsiteDeliveryBuildCheck(item.opportunityId, key as "publicDataVerified" | "responsiveChecked" | "linksChecked" | "automationTested" | "rollbackPlanReady")}
+                                          className="h-4 w-4 rounded border-zinc-700 bg-black"
+                                          data-testid={`checkbox-website-handoff-${key}-${item.opportunityId}`}
+                                        />
+                                        {label}
+                                      </label>
+                                    ))}
+                                  </div>
+                                  {!preBuildChecksReady && (
+                                    <p className="mt-2 text-xs leading-5 text-sky-100/80">
+                                      Marca estos checks antes de crear el workspace para que el PR-first issue salga listo para build y no quede bloqueado por data publica o QA basico.
+                                    </p>
+                                  )}
+                                </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <Button
                                     type="button"
@@ -9316,7 +9551,7 @@ export default function RevenueEnginePage() {
                                     size="sm"
                                     variant="outline"
                                     className="border-sky-500/30 text-sky-100"
-                                    onClick={() => navigator.clipboard.writeText(item.copyableWorkspaceRequest)}
+                                    onClick={() => navigator.clipboard.writeText(copyableWorkspaceRequest)}
                                     data-testid={`button-copy-website-workspace-request-${item.opportunityId}`}
                                   >
                                     <Copy className="mr-2 h-4 w-4" />
@@ -9339,13 +9574,13 @@ export default function RevenueEnginePage() {
                                   <Button
                                     type="button"
                                     size="sm"
-                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady}
+                                    disabled={websiteDeliveryHandoffMutation.isPending || !depositCoversHandoff || !repoReady || !branchReady || !preBuildChecksReady}
                                     onClick={() => websiteDeliveryHandoffMutation.mutate(item)}
                                     className="bg-sky-600 text-white hover:bg-sky-500"
                                     data-testid={`button-create-website-workspace-${item.leadId}`}
                                   >
                                     {websiteDeliveryHandoffMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="mr-2 h-4 w-4" />}
-                                    {depositCoversHandoff ? repoReady ? branchReady ? "Crear workspace" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
+                                    {depositCoversHandoff ? repoReady ? branchReady ? preBuildChecksReady ? "Crear workspace" : "Evidencia build pendiente" : "Branch codex requerido" : "Repo requerido" : "Deposito incompleto"}
                                   </Button>
                                 </div>
                               </div>
@@ -9559,6 +9794,21 @@ export default function RevenueEnginePage() {
                                         {item}
                                       </div>
                                     ))}
+                                  </div>
+                                )}
+                                {workspace.codexBuildHandoff.buildPack.designSkillRoute && workspace.codexBuildHandoff.buildPack.designSkillRoute.length > 0 && (
+                                  <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3" data-testid={`panel-premium-design-route-${workspace.id}`}>
+                                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                      <div>
+                                        <p className="text-xs uppercase tracking-wide text-indigo-200">Premium design route</p>
+                                        <p className="mt-1 text-xs leading-5 text-zinc-300">
+                                          {workspace.codexBuildHandoff.buildPack.designSkillRoute.join(" ")}
+                                        </p>
+                                      </div>
+                                      <Badge variant="outline" className="shrink-0 border-indigo-500/30 bg-black text-indigo-100">
+                                        design + 3D QA
+                                      </Badge>
+                                    </div>
                                   </div>
                                 )}
                               </div>
