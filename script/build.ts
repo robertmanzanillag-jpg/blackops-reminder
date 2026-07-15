@@ -6,16 +6,22 @@ import { spawn } from "child_process";
 function pipInstallEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    PIP_CONFIG_FILE: process.platform === "win32" ? "NUL" : "/dev/null",
     PIP_USER: "false",
     PYTHONNOUSERSITE: "1",
-    PIP_CONFIG_FILE: "/dev/null",
   };
 }
 
-function runCommand(command: string, args: string[], timeoutMs: number, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+function runCommand(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+  env: NodeJS.ProcessEnv = process.env,
+  stdio: "inherit" | "ignore" = "inherit",
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      stdio: "inherit",
+      stdio,
       env,
     });
     let didTimeout = false;
@@ -43,9 +49,26 @@ function runCommand(command: string, args: string[], timeoutMs: number, env: Nod
   });
 }
 
+async function canRunPythonPip(): Promise<boolean> {
+  try {
+    await runCommand("python3", [
+      "-c",
+      "import pip; import xml.parsers.expat",
+    ], 30 * 1000, pipInstallEnv(), "ignore");
+    return true;
+  } catch (error) {
+    console.warn(
+      "[build] skipping bundled yt-dlp: python3 cannot import pip/xml.parsers.expat in this environment.",
+      error instanceof Error ? error.message : error,
+    );
+    return false;
+  }
+}
+
 async function bundleFreshYtDlp() {
   const targetDir = "dist/yt-dlp-python";
   await mkdir(targetDir, { recursive: true });
+  if (!(await canRunPythonPip())) return;
   try {
     console.log("installing fresh yt-dlp for production...");
     await runCommand("python3", [
@@ -55,7 +78,8 @@ async function bundleFreshYtDlp() {
       "--upgrade",
       "--target",
       targetDir,
-      "yt-dlp",
+      "yt-dlp[default]",
+      "curl-cffi>=0.11",
     ], 3 * 60 * 1000, pipInstallEnv());
   } catch (error) {
     console.warn("[build] could not bundle fresh yt-dlp:", error instanceof Error ? error.message : error);

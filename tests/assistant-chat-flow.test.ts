@@ -193,7 +193,8 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(webAssistant, /getCachedCheapScoutResponse/);
   assert.match(webAssistant, /buildCompactCheapScoutPrompt/);
   assert.match(webAssistant, /setCachedCheapScoutResponse/);
-  assert.match(webAssistant, /getGeminiClient\(\)\.models\.generateContent/);
+  assert.match(webAssistant, /const geminiClient = await getGeminiClient\(\)/);
+  assert.match(webAssistant, /geminiClient\.models\.generateContent/);
   assert.match(webAssistant, /buildAiCostPolicyContext\("web"\)/);
   assert.match(webAssistant, /getOpenAiMaxCompletionTokens\(\)/);
   assert.match(webAssistant, /getAiConversationHistoryLimit\(\)/);
@@ -201,6 +202,30 @@ test("BlackOps chat enforces cheap-first AI cost policy", () => {
   assert.match(telegramAssistant, /getGeminiChatModel\(\{ hasImage: !!imageData \}\)/);
   assert.match(geminiClient, /gemini-2\.5-flash-lite/);
   assert.match(agentRules, /Target AI\/API spend below \$500\/month/);
+});
+
+test("Gemini SDK stays out of startup imports", () => {
+  const modules = [
+    "server/gemini-client.ts",
+    "server/telegram-chat.ts",
+    "server/replit_integrations/image/client.ts",
+    "server/replit_integrations/image/routes.ts",
+  ];
+
+  for (const modulePath of modules) {
+    const source = readFileSync(modulePath, "utf8");
+    assert.doesNotMatch(
+      source,
+      /^import\s+\{[^}]+\}\s+from\s+["']@google\/genai["']/m,
+      `${modulePath} should not load @google/genai during server startup`,
+    );
+  }
+
+  assert.match(
+    readFileSync("server/gemini-client.ts", "utf8"),
+    /await import\("@google\/genai"\)/,
+    "Gemini client should load the SDK lazily at request time",
+  );
 });
 
 test("AI router sends low-risk work to cheap scout and risky work to strong supervisor", () => {
@@ -368,17 +393,34 @@ test("assistant chats surface radio video status, errors, and cost", () => {
   assert.match(dashboardChat, /data\.radioYoutubeError/);
   assert.match(dashboardChat, /data\.radioDriveVideoError/);
   assert.match(dashboardChat, /data\.assistantStatus/);
+  assert.match(dashboardChat, /data\.radioYoutubeNeedsConfirmation/);
+  assert.match(dashboardChat, /data\.radioDriveVideoNeedsDjName/);
   assert.match(dashboardChat, /streamBuffer/);
   assert.match(dashboardChat, /data\.actionExecutionError/);
   assert.match(assistantPage, /data\.radioYoutubeError/);
   assert.match(assistantPage, /data\.radioDriveVideoError/);
   assert.match(assistantPage, /data\.assistantStatus/);
+  assert.match(assistantPage, /data\.radioYoutubeNeedsConfirmation/);
+  assert.match(assistantPage, /data\.radioDriveVideoNeedsDjName/);
   assert.match(assistantPage, /streamBuffer/);
   assert.match(assistantPage, /data\.actionExecutionError/);
   assert.match(webAssistant, /actionExecutionError/);
   assert.match(webAssistant, /RADIO_DRIVE_VIDEO_STATUS_MESSAGE/);
   assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
+  assert.match(webAssistant, /startAssistantStatusHeartbeat/);
+  assert.match(webAssistant, /Tiempo trabajando/);
   assert.match(webAssistant, /withRadioEditEstimatedCost/);
+});
+
+test("production health check responds before static fallback", () => {
+  const source = readFileSync("server/index.ts", "utf8");
+  const healthIndex = source.indexOf('app.get(["/health", "/api/health"]');
+  const staticIndex = source.indexOf("serveStatic(app)");
+
+  assert.ok(healthIndex > -1);
+  assert.ok(staticIndex > -1);
+  assert.ok(healthIndex < staticIndex);
+  assert.match(source, /status: "ok"/);
 });
 
 test("radio YouTube approval executor fails failed processor results", () => {

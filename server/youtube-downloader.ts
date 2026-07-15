@@ -16,6 +16,8 @@ type CookieSecretCandidate = {
   value: string;
 };
 
+const DEFAULT_MAX_YT_DLP_VARIANTS = 18;
+
 function hasConfiguredValue(value?: string | null): value is string {
   if (!value) return false;
   const normalized = value.trim();
@@ -27,26 +29,21 @@ function normalizeCookieFileContent(rawValue: string): string {
   return normalized.endsWith("\n") ? normalized : `${normalized}\n`;
 }
 
-function looksLikeValidCookieFile(rawValue: string): boolean {
+function looksLikeYoutubeCookieFile(rawValue: string): boolean {
   const normalized = normalizeCookieFileContent(rawValue);
-  if (!/Netscape HTTP Cookie File/i.test(normalized)) return false;
-  const dataLines = normalized.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
-  return dataLines.some((l) => {
-    const fields = l.split("\t");
-    if (fields.length < 6) return false;
-    const domain = fields[0].replace(/^\./, "");
-    return domain.endsWith("youtube.com") || domain.endsWith("google.com");
-  });
+  const hasCookieHeader = /Netscape HTTP Cookie File/i.test(normalized);
+  const hasCookieRows = /(?:^|\n)(?:#HttpOnly_)?\.?(?:youtube|google)\.com\t(?:TRUE|FALSE)\t/i.test(normalized);
+  return hasCookieHeader && hasCookieRows;
 }
 
 function normalizeDecodedCookieSecret(rawValue: string): string | null {
   const normalized = normalizeCookieFileContent(rawValue);
-  if (looksLikeValidCookieFile(normalized)) return normalized;
+  if (looksLikeYoutubeCookieFile(normalized)) return normalized;
 
   const headerIndex = normalized.search(/#\s*Netscape HTTP Cookie File/i);
   if (headerIndex > 0) {
     const sliced = normalizeCookieFileContent(normalized.slice(headerIndex));
-    if (looksLikeValidCookieFile(sliced)) return sliced;
+    if (looksLikeYoutubeCookieFile(sliced)) return sliced;
   }
 
   return null;
@@ -119,15 +116,8 @@ function configuredYoutubeCookieFileFromSecret(): string | null {
 
   for (const candidate of base64Candidates) {
     if (!hasConfiguredValue(candidate.value)) continue;
-    console.log(`[yt-dlp-cookies] trying base64 candidate "${candidate.label}" (joined length=${candidate.value.length})`);
     const decoded = decodeBase64CookieSecret(candidate.value);
-    if (decoded) {
-      const cookiePath = writeCookieSecretToTempFile(decoded);
-      const lines = decoded.split("\n").filter(Boolean).length;
-      console.log(`[yt-dlp-cookies] cookie file written from "${candidate.label}": ${decoded.length} bytes, ${lines} lines`);
-      return cookiePath;
-    }
-    console.warn(`[yt-dlp-cookies] "${candidate.label}": base64 decoded but content did not look like a valid cookie file (length=${candidate.value.length})`);
+    if (decoded) return writeCookieSecretToTempFile(decoded);
   }
 
   const rawCandidates = uniqueCookieCandidates([
@@ -137,14 +127,9 @@ function configuredYoutubeCookieFileFromSecret(): string | null {
   for (const candidate of rawCandidates) {
     if (!hasConfiguredValue(candidate.value)) continue;
     const normalized = normalizeDecodedCookieSecret(candidate.value);
-    if (normalized) {
-      const cookiePath = writeCookieSecretToTempFile(normalized);
-      console.log(`[yt-dlp-cookies] raw cookie file written from "${candidate.label}": ${normalized.length} bytes`);
-      return cookiePath;
-    }
+    if (normalized) return writeCookieSecretToTempFile(normalized);
   }
 
-  console.warn("[yt-dlp-cookies] no usable cookie secret found; yt-dlp will run without --cookies");
   return null;
 }
 
@@ -222,6 +207,21 @@ function configuredYoutubeClientVariants(): string[][] {
   ];
 }
 
+function configuredImpersonateTargets(): string[] {
+  const rawTargets = process.env.YT_DLP_IMPERSONATE_TARGETS?.trim();
+  if (/^(0|false|off|none|disabled)$/i.test(rawTargets || "")) return [];
+
+  return hasConfiguredValue(rawTargets)
+    ? rawTargets.split(/[,\s;]+/).map((target) => target.trim()).filter(Boolean)
+    : ["chrome"];
+}
+
+function configuredMaxYtDlpVariants(): number {
+  const parsed = Number.parseInt(process.env.YT_DLP_MAX_VARIANTS || "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.max(1, Math.min(parsed, 100));
+  return DEFAULT_MAX_YT_DLP_VARIANTS;
+}
+
 function formatVariants(mode: YtDlpDownloadMode): string[] {
   if (mode === "audio") return ["ba/bestaudio/best"];
 
@@ -240,49 +240,6 @@ function pythonEnvForPackageDir(packageDir: string): NodeJS.ProcessEnv {
   };
 }
 
-function configuredImpersonateTargets(): string[] {
-  const raw = process.env.YT_DLP_IMPERSONATE?.trim();
-  if (/^(0|false|off|none|disabled)$/i.test(raw || "")) return [];
-  if (hasConfiguredValue(raw)) return raw.split(/[,\s]+/).map((t) => t.trim()).filter(Boolean);
-  return ["chrome", "chrome-120"];
-}
-
-const NETWORK_TIMEOUT_FLAGS = [
-  "--socket-timeout", "30",
-  "--retries", "2",
-  "--fragment-retries", "2",
-  "--extractor-retries", "2",
-];
-
-function buildCommandArgs(params: {
-  argsPrefix: string[];
-  extraFlags: string[];
-  clientArgs: string[];
-  cookieArgs: string[];
-  format: string;
-  mode: YtDlpDownloadMode;
-  outputTemplate: string;
-  url: string;
-}): string[] {
-  return [
-    ...params.argsPrefix,
-    ...params.extraFlags,
-    ...params.clientArgs,
-    "--no-playlist",
-    ...NETWORK_TIMEOUT_FLAGS,
-    ...params.cookieArgs,
-    "-f",
-    params.format,
-    ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
-    "--restrict-filenames",
-    "-o",
-    params.outputTemplate,
-    params.url,
-  ];
-}
-
-const DEFAULT_MAX_VARIANTS = 18;
-
 export function buildYtDlpCommandSpecs(params: {
   url: string;
   outputTemplate: string;
@@ -290,15 +247,14 @@ export function buildYtDlpCommandSpecs(params: {
   explicitBinary?: string;
   cookieArgs?: string[];
   freshPythonPackageDir?: string | null;
-  curlCffiPackageDir?: string | null;
-  maxVariants?: number;
 }): YtDlpCommandSpec[] {
   const cookieArgVariants = configuredYoutubeCookieArgVariants(params.cookieArgs);
   const clientVariants = configuredYoutubeClientVariants();
   const formats = formatVariants(params.mode);
   const runtimeVariants = configuredJsRuntimeVariants();
-  const impersonateTargets = configuredImpersonateTargets();
-
+  const impersonateTargets = hasConfiguredValue(params.freshPythonPackageDir)
+    ? configuredImpersonateTargets()
+    : [];
   const binaries: Array<{ command: string; argsPrefix?: string[]; env?: NodeJS.ProcessEnv }> = [
     ...(hasConfiguredValue(params.freshPythonPackageDir)
       ? [{ command: "python3", argsPrefix: ["-m", "yt_dlp"], env: pythonEnvForPackageDir(params.freshPythonPackageDir) }]
@@ -309,71 +265,63 @@ export function buildYtDlpCommandSpecs(params: {
     { command: "python", argsPrefix: ["-m", "yt_dlp"] },
   ];
 
-  const binariesWithCurlCffi: Array<{ command: string; argsPrefix?: string[]; env?: NodeJS.ProcessEnv }> =
-    hasConfiguredValue(params.curlCffiPackageDir)
-      ? [
-          ...(params.explicitBinary?.trim()
-            ? [{ command: params.explicitBinary.trim(), env: pythonEnvForPackageDir(params.curlCffiPackageDir) }]
-            : []),
-          { command: "yt-dlp", env: pythonEnvForPackageDir(params.curlCffiPackageDir) },
-          { command: "python3", argsPrefix: ["-m", "yt_dlp"], env: pythonEnvForPackageDir(params.curlCffiPackageDir) },
-        ]
-      : [];
+  const buildArgs = (binary: typeof binaries[number], options: {
+    runtimeArgs?: string[];
+    clientArgs?: string[];
+    impersonateArgs?: string[];
+    cookieArgs: string[];
+    format: string;
+  }): YtDlpCommandSpec => ({
+    command: binary.command,
+    env: binary.env,
+    args: [
+      ...(binary.argsPrefix || []),
+      ...(options.runtimeArgs || []),
+      ...(options.clientArgs || []),
+      ...(options.impersonateArgs || []),
+      "--no-playlist",
+      ...options.cookieArgs,
+      "--socket-timeout",
+      "30",
+      "--retries",
+      "2",
+      "--fragment-retries",
+      "2",
+      "--extractor-retries",
+      "2",
+      "-f",
+      options.format,
+      ...(params.mode === "video" ? ["--merge-output-format", "mp4"] : []),
+      "--restrict-filenames",
+      "-o",
+      params.outputTemplate,
+      params.url,
+    ],
+  });
 
-  const canImpersonate =
-    impersonateTargets.length > 0 &&
-    binariesWithCurlCffi.length > 0 &&
-    (hasConfiguredValue(params.freshPythonPackageDir) || hasConfiguredValue(params.curlCffiPackageDir));
-
-  const impersonationSpecs: YtDlpCommandSpec[] = canImpersonate
-    ? binariesWithCurlCffi.flatMap((binary) =>
-        impersonateTargets.flatMap((target) =>
-          cookieArgVariants.flatMap((cookieArgs) =>
-            [formats[0]].map((format) => ({
-              command: binary.command,
-              env: binary.env,
-              args: buildCommandArgs({
-                argsPrefix: binary.argsPrefix || [],
-                extraFlags: ["--impersonate", target],
-                clientArgs: [],
-                cookieArgs,
-                format,
-                mode: params.mode,
-                outputTemplate: params.outputTemplate,
-                url: params.url,
-              }),
-            }))
-          )
-        )
-      )
-    : [];
-
-  const regularSpecs: YtDlpCommandSpec[] = binaries.flatMap((binary) =>
-    runtimeVariants.flatMap((runtimeArgs) =>
-      clientVariants.flatMap((clientArgs) =>
-        formats.flatMap((format) =>
-          cookieArgVariants.map((cookieArgs) => ({
-            command: binary.command,
-            env: binary.env,
-            args: buildCommandArgs({
-              argsPrefix: binary.argsPrefix || [],
-              extraFlags: runtimeArgs,
-              clientArgs,
-              cookieArgs,
-              format,
-              mode: params.mode,
-              outputTemplate: params.outputTemplate,
-              url: params.url,
-            }),
-          }))
-        )
-      )
+  const primaryFormat = formats[0];
+  const impersonateSpecs = binaries.flatMap((binary) =>
+    impersonateTargets.flatMap((target) =>
+      cookieArgVariants.map((cookieArgs) => buildArgs(binary, {
+        impersonateArgs: ["--impersonate", target],
+        cookieArgs,
+        format: primaryFormat,
+      }))
     )
   );
 
-  const limit = params.maxVariants ?? DEFAULT_MAX_VARIANTS;
-  const allSpecs = uniqueCommandSpecs([...impersonationSpecs, ...regularSpecs]);
-  return limit > 0 ? allSpecs.slice(0, limit) : allSpecs;
+  const fallbackSpecs = binaries.flatMap((binary) => runtimeVariants.flatMap((runtimeArgs) =>
+    clientVariants.flatMap((clientArgs) => formats.flatMap((format) =>
+      cookieArgVariants.map((cookieArgs) => buildArgs(binary, {
+        runtimeArgs,
+        clientArgs,
+        cookieArgs,
+        format,
+      }))
+    ))
+  ));
+
+  return uniqueCommandSpecs([...impersonateSpecs, ...fallbackSpecs]).slice(0, configuredMaxYtDlpVariants());
 }
 
 export function formatYtDlpFailureMessage(rawError: string, mediaLabel: "video" | "audio" = "video"): string {

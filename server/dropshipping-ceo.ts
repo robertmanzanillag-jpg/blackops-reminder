@@ -24,15 +24,9 @@ const REQUIRE_APPROVALS_FOR_EXTERNAL_ACTIONS = envFlag("DROPSHIPPING_REQUIRE_APP
 const REQUIRE_SAMPLE_BEFORE_SCALE = envFlag("DROPSHIPPING_REQUIRE_SAMPLE_BEFORE_SCALE", true);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
 const liveProductSignalSourceSchema = z.enum([
-  "tiktok_search",
   "tiktok_creative_center",
+  "tiktok_search",
   "aliexpress_search",
   "google_trends",
   "amazon_search",
@@ -65,6 +59,12 @@ const liveProductSignalSchema = z.object({
 
 type DropshippingLiveProductSignal = z.infer<typeof liveProductSignalSchema>;
 type DropshippingLiveProductSignalSource = z.infer<typeof liveProductSignalSourceSchema>;
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 2,
+});
 
 export const dropshippingProductResearchSchema = z.object({
   productName: z.string().trim().min(2).max(160),
@@ -1237,19 +1237,51 @@ const productScoutCandidatePersistedSchema: z.ZodType<DropshippingProductScoutCa
     confidence: z.enum(["low", "medium", "high"]),
     evidenceScore: z.number(),
     evidence: z.array(z.object({
-      source: z.enum(["tiktok_creative_center", "tiktok_search", "aliexpress_search", "google_trends", "shopify_trends", "manual"]),
+      source: liveProductSignalSourceSchema,
       label: z.string(),
       url: z.string(),
-      status: z.enum(["seed_reference", "needs_review", "verified"]),
+      status: z.enum(["seed_reference", "needs_review", "verified", "stale", "error"]),
       signal: z.string(),
     })),
     missingProof: z.array(z.string()),
+    liveValidation: z.object({
+      status: z.enum(["not_connected", "partial", "connected"]),
+      connectedSources: z.array(liveProductSignalSourceSchema),
+      verifiedSources: z.array(liveProductSignalSourceSchema),
+      liveScore: z.number(),
+      scoreBonus: z.number(),
+      scorePenalty: z.number(),
+      signals: z.array(liveProductSignalSchema),
+      blockers: z.array(z.string()),
+      updatedAt: z.string(),
+    }).default({
+      status: "not_connected",
+      connectedSources: [],
+      verifiedSources: [],
+      liveScore: 0,
+      scoreBonus: 0,
+      scorePenalty: 12,
+      signals: [],
+      blockers: ["Live product signal feed is not connected."],
+      updatedAt: "",
+    }),
   }).default({
     status: "needs_external_validation",
     confidence: "low",
     evidenceScore: 0,
     evidence: [],
     missingProof: ["validar videos reales en TikTok", "validar supplier real", "validar competidores/precio"],
+    liveValidation: {
+      status: "not_connected",
+      connectedSources: [],
+      verifiedSources: [],
+      liveScore: 0,
+      scoreBonus: 0,
+      scorePenalty: 12,
+      signals: [],
+      blockers: ["Live product signal feed is not connected."],
+      updatedAt: "",
+    },
   }),
   scorecard: z.object({
     total: z.number(),
@@ -2280,7 +2312,7 @@ function liveSignalsForCandidate(input: Pick<DropshippingProductScoutCandidateIn
   const candidateKey = productSignalKey(input.candidateName);
   const signals = feed.signals.filter((signal) => {
     const signalKey = productSignalKey(signal.candidateName);
-    return signalKey === candidateKey || signalKey.includes(candidateKey) || candidateKey.includes(signalKey);
+    return signalKey === candidateKey;
   });
   return { ...feed, signals };
 }
@@ -2306,6 +2338,7 @@ function buildScoutLiveValidation(input: DropshippingProductScoutCandidateInput)
     ...missingCore.map((source) => `Falta senal verificada de ${source}.`),
     ...feed.warnings,
   ];
+
   return {
     status: feed.status === "connected" && missingCore.length === 0 ? "connected" as const : feed.status === "not_connected" ? "not_connected" as const : "partial" as const,
     connectedSources,
@@ -2517,7 +2550,12 @@ export function createDropshippingProductScoutCandidate(input: DropshippingProdu
     researchInput,
     nextActions:
       status === "needs_tiktok_validation"
-        ? ["validar en TikTok/Creative Center", "buscar supplier backup", "crear hooks organicos"]
+        ? [
+          liveValidation.status === "not_connected" ? "conectar live signal feed antes de gastar" : "revisar fuentes live verificadas",
+          "validar en TikTok/Creative Center",
+          "buscar supplier backup",
+          "crear hooks organicos",
+        ]
         : status === "needs_supplier"
           ? ["buscar proveedor con rating/reviews mejores", "confirmar shipping y tracking", "no gastar todavia"]
           : status === "seed_candidate"
@@ -2600,7 +2638,7 @@ function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidat
       const shippingPenalty = candidate.shippingDaysMax > 21 ? 10 : candidate.shippingDaysMax > 18 ? 4 : 0;
       const qualityPenalty = candidate.qualityRisk === "medium" ? 4 : candidate.qualityRisk === "high" ? 30 : 0;
       const legalPenalty = candidate.legalRisk === "medium" ? 6 : candidate.legalRisk === "high" ? 40 : 0;
-      const sourceBonus = candidate.validation.evidence.some((item) => item.source === "tiktok_creative_center" || item.source === "tiktok_search") ? 6 : 0;
+      const sourceBonus = candidate.validation.evidence.some((item) => (item.source === "tiktok_creative_center" || item.source === "tiktok_search") && item.status === "verified") ? 6 : 0;
       const score = candidate.scorecard.total + candidate.validation.evidenceScore + sourceBonus - samplePenalty - shippingPenalty - qualityPenalty - legalPenalty;
       return {
         candidate,
@@ -2609,6 +2647,7 @@ function rankAutopilotCandidates(candidateList: DropshippingProductScoutCandidat
           `${candidate.scorecard.grade}${candidate.scorecard.total} product score`,
           `${candidate.economics.grossMarginPercent}% margin`,
           `${candidate.validation.confidence} confidence`,
+          `live ${candidate.validation.liveValidation.status} ${candidate.validation.liveValidation.liveScore}/100`,
           candidate.requiresSample ? "sample recommended before scale" : "no sample required for first organic prep",
         ].join(" / "),
       };
@@ -6381,7 +6420,7 @@ export function getDropshippingCeoSnapshot() {
       {
         id: "live_product_signals",
         label: "Live product signals",
-        status: liveSignalReadiness.status === "connected" ? "ready" as const : "needs_setup" as const,
+        status: liveSignalReadiness.status === "connected" ? "ready" as const : liveSignalReadiness.status === "partial" ? "needs_setup" as const : "needs_setup" as const,
         detail: liveSignalReadiness.configured
           ? `${liveSignalReadiness.verifiedSignals}/${liveSignalReadiness.totalSignals} senales verificadas desde ${liveSignalReadiness.sources.join(", ")}.`
           : "Conecta DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON o DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH para usar TikTok/AliExpress/Trends reales.",
@@ -6607,82 +6646,6 @@ export async function sendDropshippingDailyReport(userId: string, cadence: "morn
     message,
     reason: sent ? "Reporte enviado por Telegram." : "Telegram rechazo el envio.",
     snapshot: getDropshippingCeoSnapshot(),
-  };
-}
-
-export async function startDropshippingCeoAndNotify(userId: string): Promise<{
-  success: boolean;
-  operatingCycle: ReturnType<typeof runDropshippingDailyOperatingCycle>;
-  telegramSent: boolean;
-  telegramReason: string;
-  shopifyBlocker: string | null;
-  summary: string;
-}> {
-  const operatingCycle = runDropshippingDailyOperatingCycle({});
-  const snapshot = getDropshippingCeoSnapshot();
-  const shopifyMissing = !process.env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
-  const shopifyBlocker = shopifyMissing
-    ? "SHOPIFY_ADMIN_ACCESS_TOKEN no configurado — agrega este token en Replit Secrets para poder crear drafts de producto en Shopify. Ve a: Secrets → + Add secret → SHOPIFY_ADMIN_ACCESS_TOKEN → valor de tu Shopify Admin API token (write_products scope)."
-    : null;
-
-  const topProduct = snapshot.recentProducts[0];
-  const topCandidate = snapshot.recentProductScoutCandidates?.[0] as any;
-  const lines: string[] = [
-    "🚀 DROPSHIPPING CEO — INICIO DE CICLO",
-    `📅 ${new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`,
-    "",
-    `📊 Estado: ${snapshot.executiveSummary.headline}`,
-    `💡 Próxima acción: ${snapshot.executiveSummary.nextCommand}`,
-    "",
-    `💰 Métricas: Revenue ${money.format(snapshot.metrics.totalRevenueUsd)} / ${money.format(snapshot.strategy.targetMonthlyRevenueUsd)} meta`,
-    `   Gasto: ${money.format(snapshot.metrics.totalSpendUsd)} | Órdenes: ${snapshot.metrics.paidOrders}/${snapshot.metrics.orders}`,
-    `   Profit Guard: ${snapshot.profitGuard.status} — ${snapshot.profitGuard.reason}`,
-    "",
-  ];
-
-  if (topProduct) {
-    lines.push(`🛒 Producto principal: ${topProduct.productName} (${topProduct.status})`);
-    lines.push(`   Margen: ${money.format(topProduct.marginUsd)} | ${topProduct.niche}`);
-    lines.push("");
-  }
-
-  if (topCandidate) {
-    lines.push(`🔍 Scout candidato: ${topCandidate.candidateName || topCandidate.id}`);
-    lines.push(`   Demanda: ${topCandidate.demandSignal || "?"} | Precio objetivo: ${money.format(topCandidate.targetSellPriceUsd || 0)}`);
-    lines.push("");
-  }
-
-  lines.push(`📱 Posts sociales: ${snapshot.metrics.socialPosts} total / ${snapshot.metrics.publishedSocialPosts} publicados`);
-  lines.push(`📦 Shopify drafts: ${snapshot.metrics.shopifyDrafts}`);
-  lines.push(`✅ Aprobaciones pendientes: ${snapshot.metrics.approvalQueue}`);
-  lines.push("");
-
-  if (shopifyBlocker) {
-    lines.push("⚠️ BLOCKER — SHOPIFY ADMIN TOKEN:");
-    lines.push(shopifyBlocker);
-    lines.push("");
-  }
-
-  lines.push(`🖥️ Scheduler 24/7: ${process.env.REPLIT_DEPLOYMENT ? "Deployment activo" : "Dev — activa Reserved VM en Replit UI para reportes AM/PM automáticos"}`);
-
-  const message = lines.join("\n");
-
-  const telegramConfig = await storage.getTelegramConfig(userId);
-  let telegramSent = false;
-  let telegramReason = "Telegram no configurado para este usuario.";
-
-  if (TELEGRAM_BOT_TOKEN && telegramConfig?.enabled && telegramConfig.chatId) {
-    telegramSent = await sendTelegramPlainMessage(TELEGRAM_BOT_TOKEN, telegramConfig.chatId, message);
-    telegramReason = telegramSent ? "Resumen enviado por Telegram." : "Telegram rechazó el envío.";
-  }
-
-  return {
-    success: true,
-    operatingCycle,
-    telegramSent,
-    telegramReason,
-    shopifyBlocker,
-    summary: message,
   };
 }
 

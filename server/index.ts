@@ -14,6 +14,7 @@ import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./sessio
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
+import { initializeRevenueEnginePersistence } from "./revenue-engine";
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +22,10 @@ const httpServer = createServer(app);
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+app.get(["/health", "/api/health"], (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 async function getStartupMaintenanceUserIds(): Promise<string[]> {
   const configuredOwners = (await storage.getEnabledTelegramConfigs())
@@ -73,6 +78,15 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
   res
     .type("text/plain")
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "blackops-reminder",
+    checkedAt: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
 });
 
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
@@ -177,7 +191,7 @@ function renderDropshippingPublicLegalHtml(title: string, body: string[]): strin
     "<body>",
     `<h1>${escapedTitle}</h1>`,
     '<p class="meta">Draft operating policy for Dropshipping CEO. Last updated: June 18, 2026.</p>',
-    '<p class="notice">This policy is a starter template for a no-inventory dropshipping store. Store owner / contact: <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>. Final store name, legal entity, supplier terms, payment processor, and jurisdiction should be reviewed before public launch.</p>',
+    '<p class="notice">This policy is a starter template for a no-inventory dropshipping store. Final store name, legal entity, contact email, supplier terms, payment processor, and jurisdiction should be reviewed before public launch.</p>',
     ...body,
     "</body>",
     "</html>",
@@ -198,7 +212,7 @@ app.get("/dropshipping/legal/privacy", (_req, res) => {
     "<h2>Retention And Security</h2>",
     "<p>Order and support records should be retained only as long as needed for accounting, fraud prevention, legal compliance, customer support, and platform requirements. Tokens and secrets must not be exposed in public reports.</p>",
     "<h2>Customer Requests</h2>",
-    '<p>Customers can request access, correction, deletion, or opt-out support by contacting <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>.</p>',
+    "<p>Customers can request access, correction, deletion, or opt-out support through the store contact channel once configured.</p>",
   ]));
 });
 
@@ -268,11 +282,6 @@ if (sessionMiddleware) {
 } else {
   log("SESSION_SECRET not configured; local session auth is disabled", "auth");
 }
-
-// Public health-check — before requireAppUser so no session is needed
-app.get(["/health", "/api/health"], (_req, res) => {
-  res.json({ status: "ok" });
-});
 
 app.use(requireAppUser);
 
@@ -356,14 +365,15 @@ app.use((req, res, next) => {
 
 (async () => {
   registerLocalAuthRoutes(app);
+  await initializeRevenueEnginePersistence();
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after
@@ -401,15 +411,19 @@ app.use((req, res, next) => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
       });
 
-      setupTelegramWebhook().then(result => {
-        if (result.success) {
-          log(`Telegram webhook configured: ${result.message}`, "telegram");
-        } else {
-          log(`Telegram webhook setup skipped: ${result.message}`, "telegram");
-        }
-      }).catch(err => {
-        log(`Telegram webhook error: ${err.message}`, "telegram");
-      });
+      if (process.env.TELEGRAM_AUTO_SETUP_WEBHOOK === "true") {
+        setupTelegramWebhook().then(result => {
+          if (result.success) {
+            log(`Telegram webhook configured: ${result.message}`, "telegram");
+          } else {
+            log(`Telegram webhook setup failed: ${result.message}`, "telegram");
+          }
+        }).catch(err => {
+          log(`Telegram webhook error: ${err.message}`, "telegram");
+        });
+      } else {
+        log("Telegram webhook auto-setup skipped; run `npm run telegram:webhook -- setup --execute` when ready", "telegram");
+      }
     },
   );
 })();

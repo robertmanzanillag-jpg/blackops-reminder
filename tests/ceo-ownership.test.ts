@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import test from "node:test";
+import express from "express";
+import { registerRoutes } from "../server/routes";
 
 test("project health alerts are scoped to the project owner", () => {
   const source = readFileSync("server/health-check.ts", "utf8");
@@ -84,16 +87,17 @@ test("promo video local workspace routes are scoped to the authenticated owner",
   assert.match(scriptSource, /OUTPUT_DIR="\$\{PROMO_OUTPUT_DIR:-\$ROOT_DIR\/promo_video_edits\/03_listos_para_subir\}"/, "promo edit script should accept an owner-scoped output directory override");
 });
 
-test("Revenue Engine routes scope local JSON storage to the authenticated user", () => {
+test("Revenue Engine routes scope durable state to the authenticated user", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const revenueSource = readFileSync("server/revenue-engine.ts", "utf8");
 
   assert.match(routesSource, /app\.use\("\/api\/revenue-engine"/, "Revenue Engine should have a route-level owner scope");
-  assert.match(routesSource, /setRevenueUserDataScope\(getCurrentUserId\(req\)\)/, "Revenue Engine routes should scope data to the authenticated user");
+  assert.match(routesSource, /prepareRevenueEngineState\(getCurrentUserId\(req\)\)/, "Revenue Engine routes should hydrate data for the authenticated user");
   assert.match(routesSource, /let revenueEngineRouteQueue = Promise\.resolve\(\)/, "Revenue Engine routes should serialize access while module state is in-memory");
   assert.match(routesSource, /res\.once\("finish", release\)/, "Revenue Engine route queue should release after the response finishes");
   assert.doesNotMatch(routesSource, /Revenue Engine is limited to the configured single-user owner/, "Revenue Engine should not reject non-owner users now that local JSON is scoped");
   assert.match(revenueSource, /revenue_engine_data", "users", safeRevenueUserId\(userId\)/, "Revenue Engine JSON paths should include a sanitized user id");
+  assert.match(revenueSource, /createHash\("sha256"\)\.update\(canonical\)/, "Revenue Engine durable owner keys should avoid sanitized-path collisions");
 });
 
 test("developer code and GitHub tools are gated to the configured single-user owner", () => {
@@ -103,27 +107,149 @@ test("developer code and GitHub tools are gated to the configured single-user ow
   assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const toolOwnerUserId = getSystemUserId\(\);/s, "developer tool guard should compare authenticated user to configured owner");
   assert.match(routesSource, /if \(userId !== toolOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "developer tools should reject non-owner users");
   assert.match(routesSource, /per-user repo and filesystem permissions/, "developer tool rejection should explain the missing permission model");
+  assert.match(routesSource, /app\.use\(\["\/api\/projects\/github-overview", "\/api\/projects\/import-github"\]/, "project routes backed by the shared GitHub connector should have an owner guard");
+  assert.match(routesSource, /const githubProjectOwnerUserId = getSystemUserId\(\);/, "shared GitHub project routes should resolve the configured owner");
+  assert.match(routesSource, /if \(userId !== githubProjectOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "shared GitHub project routes should reject non-owner users");
+});
+
+test("Shopify connection routes are gated to the configured single-user owner", () => {
+  const shopifyRoutesSource = readFileSync("server/shopify-routes.ts", "utf8");
+
+  assert.match(shopifyRoutesSource, /app\.use\("\/api\/shopify"/, "the first registered Shopify router should have an owner guard");
+  assert.match(shopifyRoutesSource, /const userId = getCurrentUserId\(req\);/, "Shopify guard should use the authenticated user");
+  assert.match(shopifyRoutesSource, /const shopifyOwnerUserId = getSystemUserId\(\);/, "Shopify guard should resolve the configured owner");
+  assert.match(shopifyRoutesSource, /if \(userId !== shopifyOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Shopify guard should reject non-owner users before OAuth token writes");
+  assert.match(shopifyRoutesSource, /store token is shared/, "Shopify rejection should explain the shared credential boundary");
+});
+
+test("shared GitHub and Shopify connector routes reject authenticated non-owners at runtime", async () => {
+  const previousDefaultUserId = process.env.DEFAULT_USER_ID;
+  const previousAllowDevFallback = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.DEFAULT_USER_ID = "connector-owner";
+  process.env.ALLOW_DEV_USER_FALLBACK = "true";
+
+  const app = express();
+  app.use(express.json());
+  const server = createServer(app);
+  await registerRoutes(server, app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const requests = [
+      ["GET", "/api/projects/github-overview"],
+      ["POST", "/api/projects/import-github"],
+      ["GET", "/api/shopify/install?shop=test.myshopify.com"],
+      ["GET", "/api/shopify/oauth/start?shop=test.myshopify.com"],
+      ["GET", "/api/shopify/oauth/callback?code=test&state=test&shop=test.myshopify.com"],
+    ] as const;
+
+    for (const [method, route] of requests) {
+      const response = await fetch(`${baseUrl}${route}`, {
+        method,
+        headers: { "content-type": "application/json", "x-user-id": "authenticated-non-owner" },
+      });
+      assert.equal(response.status, 403, `${method} ${route} should reject a non-owner`);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    if (previousDefaultUserId === undefined) delete process.env.DEFAULT_USER_ID;
+    else process.env.DEFAULT_USER_ID = previousDefaultUserId;
+    if (previousAllowDevFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previousAllowDevFallback;
+  }
 });
 
 test("Clippers API is gated to the configured single-user owner while local artifacts are shared", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
 
   assert.match(routesSource, /app\.use\("\/api\/clippers"/, "Clippers API should have a shared route guard");
-  assert.doesNotMatch(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Clippers owner guard must not have an isPublicApiRequest bypass — OAuth callbacks are handled as authenticated owner requests");
+  assert.doesNotMatch(routesSource, /app\.use\("\/api\/clippers"[\s\S]*if \(isPublicApiRequest\(req\)\) return next\(\);/s, "Clippers OAuth callbacks should not bypass the owner guard while tokens are stored in a shared vault");
   assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const clipperOwnerUserId = getSystemUserId\(\);/s, "Clippers guard should compare authenticated user to configured owner");
   assert.match(routesSource, /if \(userId !== clipperOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Clippers API should reject non-owner users while artifacts are shared");
   assert.match(routesSource, /local workspace, token vault, and launch artifacts are shared/, "Clippers rejection should explain the shared local artifact limitation");
+});
+
+test("shared Google integrations are gated to the configured single-user owner", () => {
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(routesSource, /app\.use\(\["\/api\/calendar", "\/api\/google-drive"\]/, "shared Google APIs should have a route guard");
+  assert.match(routesSource, /if \(isPublicApiRequest\(req\)\) return next\(\);/, "Google OAuth callbacks should bypass the owner guard after public callback classification");
+  assert.match(routesSource, /const userId = getCurrentUserId\(req\);[\s\S]*const googleOwnerUserId = getSystemUserId\(\);/s, "Google guard should compare authenticated user to configured owner");
+  assert.match(routesSource, /if \(userId !== googleOwnerUserId\) \{[\s\S]*res\.status\(403\)/s, "Google APIs should reject non-owner users while connectors are shared");
+  assert.match(routesSource, /shared Google integrations are connected/, "Google rejection should explain the shared integration limitation");
+});
+
+test("Replit chat conversation routes are scoped to the authenticated owner", () => {
+  const routesSource = readFileSync("server/replit_integrations/chat/routes.ts", "utf8");
+  const storageSource = readFileSync("server/replit_integrations/chat/storage.ts", "utf8");
+
+  assert.match(routesSource, /getAllConversations\(getCurrentUserId\(req\)\)/, "conversation list should read only the authenticated owner's conversations");
+  assert.match(routesSource, /getConversation\(id, getCurrentUserId\(req\)\)/, "conversation detail should verify owner before returning messages");
+  assert.match(routesSource, /createConversation\(title \|\| "New Chat", getCurrentUserId\(req\)\)/, "conversation creation should write owner-scoped records");
+  assert.match(routesSource, /deleteConversation\(id, getCurrentUserId\(req\)\)/, "conversation delete should be owner-scoped");
+  assert.match(routesSource, /getConversation\(conversationId, getCurrentUserId\(req\)\)/, "message send should verify conversation owner before mutating history");
+  assert.match(storageSource, /ownerTitlePrefix\(userId: string\)/, "chat storage should have an owner marker for legacy conversation rows");
+  assert.match(storageSource, /conversation\.title\.startsWith\(ownerTitlePrefix\(userId\)\)/, "chat storage should reject records outside the owner marker");
+  assert.match(storageSource, /stripScopedConversationTitle/, "chat storage should hide the internal owner marker from clients");
 });
 
 test("Clippers OAuth callbacks and token vault records keep explicit owner metadata", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const clippersSource = readFileSync("server/clippers-agent.ts", "utf8");
 
-  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getCurrentUserId\(req\)\)/s, "Clippers OAuth callback should bind to the authenticated request owner");
+  assert.match(routesSource, /recordClipperOAuthCallback\(\{[\s\S]*\}, getCurrentUserId\(req\)\)/s, "Clippers OAuth callback should bind to the authenticated owner after the route guard");
   assert.match(clippersSource, /export interface ClipperOAuthConnection \{[\s\S]*ownerUserId: string;/s, "OAuth connection records should include owner metadata");
   assert.match(clippersSource, /export interface ClipperTokenSummary \{[\s\S]*ownerUserId: string;/s, "token vault summaries should include owner metadata");
   assert.match(clippersSource, /saveClipperTokenPayload\([\s\S]*ownerUserIdOrAccountId = getSystemUserId\(\)[\s\S]*accountId\?: string \| null/s, "token vault writes should accept an explicit owner and optional account");
   assert.match(clippersSource, /tryExchangeAndStoreClipperToken\([\s\S]*ownerUserId: string,[\s\S]*accountId\?: string \| null/s, "OAuth token exchange should carry owner metadata through storage");
+});
+
+test("public API classification keeps shared OAuth token writers behind owner auth", () => {
+  const userContextSource = readFileSync("server/user-context.ts", "utf8");
+
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/oauth\/callback/, "Shopify OAuth callback should require the owner session before writing the shared store token");
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/oauth\/start/, "Shopify OAuth start should require the owner session before creating a shared token flow");
+  assert.doesNotMatch(userContextSource, /\/api\/shopify\/install/, "Shopify install should require the owner session before creating a shared token flow");
+  assert.doesNotMatch(userContextSource, /clippers\/oauth/, "Clippers OAuth callbacks should require the owner session before writing shared publisher tokens");
+});
+
+test("local auth mutations reject cross-site and non-json requests", () => {
+  const localAuthSource = readFileSync("server/local-auth.ts", "utf8");
+
+  assert.match(localAuthSource, /function requireSameOriginAuthRequest/, "local auth should have a same-origin guard");
+  assert.match(localAuthSource, /sec-fetch-site/, "local auth should inspect browser fetch metadata");
+  assert.match(localAuthSource, /sameOriginMatchesRequestHost/, "local auth should compare Origin to the request host or configured public origin");
+  assert.match(localAuthSource, /function requireJsonAuthRequest/, "local auth should require JSON request bodies for credential submissions");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/register", requireSameOriginAuthRequest, requireJsonAuthRequest, localAuthRateLimit/, "registration should run origin and JSON guards before rate-limited auth");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/login", requireSameOriginAuthRequest, requireJsonAuthRequest, localAuthRateLimit/, "login should run origin and JSON guards before rate-limited auth");
+  assert.match(localAuthSource, /app\.post\("\/api\/auth\/logout", requireSameOriginAuthRequest/, "logout should reject cross-site requests");
+});
+
+test("global request parsers keep unauthenticated bodies small", () => {
+  const indexSource = readFileSync("server/index.ts", "utf8");
+
+  assert.doesNotMatch(indexSource, /limit:\s*['"]50mb['"]/, "global JSON parser should not accept 50MB unauthenticated bodies");
+  assert.match(indexSource, /limit:\s*['"]8mb['"]/, "global JSON parser should stay below the previous unauthenticated abuse ceiling");
+  assert.match(indexSource, /express\.urlencoded\(\{ extended: false, limit: "64kb", parameterLimit: 100 \}\)/, "urlencoded parser should have an explicit small limit");
+});
+
+test("assistant shared connector commands are owner-only", () => {
+  const assistantSource = readFileSync("server/assistant.ts", "utf8");
+  const routesSource = readFileSync("server/routes.ts", "utf8");
+
+  assert.match(assistantSource, /getCurrentUserId, getSystemUserId/, "assistant should compare the active user against the configured owner");
+  assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_IDS/, "assistant should allow Robert's explicitly approved production connector owner ids");
+  assert.match(assistantSource, /new Set\(\[DEFAULT_DEV_USER_ID, "robert"\]\)/, "approved production connector owners should include mock-user-123 and robert");
+  assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set\(\["robert"\]\)/, "approved production connector owners should include Robert's local auth username");
+  assert.match(assistantSource, /storage\.getUser\(userId\)/, "assistant owner check should resolve local auth users by username when the session stores an internal id");
+  assert.match(assistantSource, /writeOwnerOnlySharedConnectorBlock/, "assistant should emit a clear block message for non-owner shared connector commands");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*YouTube, Google Drive y clips de radio/s, "radio YouTube command execution should be owner-only");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Calendar/s, "calendar command execution should be owner-only");
+  assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Drive/s, "Drive command execution should be owner-only");
+  assert.match(routesSource, /Developer Autopilot GitHub handoffs are limited to the configured single-user owner/, "GitHub handoff route should be owner-only while GitHub connectors are shared");
 });
 
 test("public OAuth callback pages escape dynamic text and do not print tokens", () => {

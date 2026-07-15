@@ -23,13 +23,6 @@ const PUBLIC_API_PATHS = [
   "/api/google-drive/oauth/callback",
   "/api/canva/oauth/callback",
   "/api/zoho/callback",
-  // Shopify embedded app — install entrypoint, OAuth flow, and embedded iframe page
-  "/api/shopify/install",
-  "/api/shopify/oauth/start",
-  "/api/shopify/oauth/callback",
-  "/api/shopify/oauth/status",
-  "/api/shopify/embedded",
-  "/api/shopify/ceo-snapshot",
 ];
 
 const PUBLIC_API_PATTERNS: RegExp[] = [];

@@ -9,6 +9,7 @@ import {
   buildReadyForApprovalMessage,
   buildSubscriptionHandoffBrief,
   createDeveloperAutopilotHandoff,
+  createDeveloperAutopilotHandoffFromRequest,
   evaluateDeveloperReleaseGate,
   parseDeveloperAutopilotRequest,
   parseSubscriptionHandoffRequest,
@@ -68,6 +69,151 @@ test("release gate requires all App QA subagents to pass and still blocks Replit
   assert.equal(gate.secondReviewRequired, true);
   assert.deepEqual(gate.requiredReviewers, ["codex", "claude", "app_qa"]);
   assert.equal(gate.prUrl, "https://github.com/robert/asistente/pull/12");
+});
+
+test("release gate blocks when a required App QA target context is missing", () => {
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "abc123",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+      },
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /missing targetContext/);
+});
+
+test("release gate blocks when App QA target context does not match the PR head", () => {
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "old-sha",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      },
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-123",
+        clientName: "Client Site",
+        repoFullName: "robert/client-site",
+        prUrl: "https://github.com/robert/client-site/pull/2",
+        prHeadSha: "new-sha",
+        branchName: "codex/client-site",
+        routePath: "/revenue-engine",
+        expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+      },
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /prHeadSha/);
+});
+
+test("release gate passes required App QA target only with matching visual scan", () => {
+  const requiredTargetContext = {
+    kind: "revenue_delivery_workspace" as const,
+    workspaceId: "workspace-123",
+    clientName: "Client Site",
+    repoFullName: "robert/client-site",
+    prUrl: "https://github.com/robert/client-site/pull/2",
+    prHeadSha: "abc123",
+    branchName: "codex/client-site",
+    routePath: "/revenue-engine",
+    expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+  };
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: requiredTargetContext,
+      visualScans: [{
+        path: "/revenue-engine",
+        url: "http://127.0.0.1:5000/revenue-engine",
+        status: "pass",
+        title: "Revenue Engine",
+        consoleErrors: [],
+        clicked: ["Dashboard"],
+        notes: ["Visual OK"],
+      }],
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+        { id: "visual-click-scout", name: "Visual Click Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext,
+    },
+  );
+
+  assert.equal(gate.status, "pass");
+});
+
+test("release gate blocks required App QA target when visual scan was skipped", () => {
+  const requiredTargetContext = {
+    kind: "revenue_delivery_workspace" as const,
+    workspaceId: "workspace-123",
+    clientName: "Client Site",
+    repoFullName: "robert/client-site",
+    prUrl: "https://github.com/robert/client-site/pull/2",
+    prHeadSha: "abc123",
+    branchName: "codex/client-site",
+    routePath: "/revenue-engine",
+    expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
+  };
+  const gate = evaluateDeveloperReleaseGate(
+    {
+      failCount: 0,
+      warnCount: 0,
+      summary: "QA Agent no encontro bloqueos.",
+      targetContext: requiredTargetContext,
+      visualScans: [],
+      subAgents: [
+        { id: "route-scout", name: "Route Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
+        { id: "visual-click-scout", name: "Visual Click Scout", status: "pass", summary: "skipped", checked: 0, findings: [] },
+      ],
+    },
+    {
+      prUrl: "https://github.com/robert/client-site/pull/2",
+      requiredTargetContext,
+    },
+  );
+
+  assert.equal(gate.status, "blocked");
+  assert.match(gate.reasons.join(" "), /missing visualScans/);
 });
 
 test("release gate blocks send approval until a PR URL exists", () => {
@@ -130,6 +276,171 @@ test("developer autopilot detects developer bugs but ignores generic work reques
   assert.equal(request?.kind, "bug");
   assert.equal(request?.repoFullName, "robert/asistente");
   assert.equal(request?.replitRequested, false);
+});
+
+test("developer autopilot accepts sold client website build handoffs", async () => {
+  const request = parseDeveloperAutopilotRequest(
+    "construye el website vendido para Handoff Cafe en robert/handoff-cafe con el mockup aprobado",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "client_build");
+  assert.equal(request?.repoFullName, "robert/handoff-cafe");
+  assert.match(request?.title || "", /website vendido/);
+
+  const created = await createDeveloperAutopilotHandoff(
+    "user-1",
+    "construye el website vendido para Handoff Cafe en robert/handoff-cafe con el mockup aprobado",
+    "web_chat",
+    {
+      getAppProjects: async () => [],
+      listRepositories: async () => [{
+        full_name: "robert/handoff-cafe",
+        name: "handoff-cafe",
+        private: true,
+      }],
+      createIssue: async (owner, repo, title, body) => {
+        assert.equal(owner, "robert");
+        assert.equal(repo, "handoff-cafe");
+        assert.match(title, /\[Codex PR-first\]\[client-build\]/);
+        assert.match(body, /Type: client_build/);
+        assert.match(body, /approved scope, public business facts/);
+        assert.match(body, /Do not deploy to Replit/);
+        assert.match(body, /App QA/);
+        return { number: 31, html_url: "https://github.com/robert/handoff-cafe/issues/31" };
+      },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
+      },
+    },
+  );
+
+  assert.equal(created.status, "created");
+  assert.equal(created.handoffType, "developer_pr");
+  assert.equal(created.repoFullName, "robert/handoff-cafe");
+  assert.equal(created.issueNumber, 31);
+  assert.match(created.codexBrief || "", /Type: client_build/);
+});
+
+test("developer autopilot creates client build handoff from structured Revenue Engine request", async () => {
+  const safeTitle = buildCodexGitHubIssueTitle({
+    source: "manual",
+    repoFullName: "robert/handoff-cafe",
+    appName: "Handoff Cafe",
+    kind: "client_build",
+    title: "Paid deposit payment client build",
+    description: "Build the client website.",
+  }, {
+    full_name: "robert/handoff-cafe",
+    name: "handoff-cafe",
+    private: true,
+  });
+
+  assert.match(safeTitle, /\[Codex PR-first\]\[client-build\]/);
+  assert.doesNotMatch(safeTitle, /\bpaid\b/i);
+  assert.doesNotMatch(safeTitle, /\bdeposit\b/i);
+  assert.doesNotMatch(safeTitle, /\bpayment\b/i);
+
+  const created = await createDeveloperAutopilotHandoffFromRequest(
+    "user-1",
+    {
+      source: "manual",
+      repoFullName: "robert/handoff-cafe",
+      appName: "Handoff Cafe",
+      kind: "client_build",
+      title: "[Revenue Website Build] Handoff Cafe - Website 3D Premium",
+      description: [
+        "PR-first client build handoff from Revenue Engine.",
+        "",
+        "Sanitized build context:",
+        "- Client/workspace name: Handoff Cafe",
+        "- Revenue workspace: delivery-workspace-1",
+        "- Project type: website",
+        "- Package: Website 3D Premium - $4,200 / Deposit $2,100",
+        "- Target branch: codex/client-handoff-cafe-website",
+        "- Public source: https://example.com/handoff-cafe",
+        "- Mockup preview: /api/revenue-engine/mockup-previews/handoff-cafe",
+        "",
+        "Approved scope summary:",
+        "Build a mobile menu, catering inquiry CTA and follow-up capture from public business facts. Payment ref ACH-123 should stay private.",
+        "",
+        "Cash collected for deposit: $2,100",
+        "Setup: $3,500",
+        "",
+        "Public issue privacy rules:",
+        "- Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details.",
+      ].join("\n"),
+      severity: "medium",
+      evidence: [
+        "Revenue workspace: delivery-workspace-1",
+        "Public source: https://example.com/handoff-cafe",
+        "Mockup preview: /api/revenue-engine/mockup-previews/handoff-cafe",
+        "Stripe pi_secret_12345",
+        "deposit confirmation private",
+        "package deposit tier",
+        "Sensitive sale details and private client data intentionally withheld from GitHub issue.",
+      ],
+    },
+    {
+      getAppProjects: async () => [],
+      listRepositories: async () => [{
+        full_name: "robert/handoff-cafe",
+        name: "handoff-cafe",
+        private: true,
+      }],
+      createIssue: async (owner, repo, title, body) => {
+        assert.equal(owner, "robert");
+        assert.equal(repo, "handoff-cafe");
+        assert.match(title, /\[Codex PR-first\]\[client-build\]/);
+        assert.match(body, /Revenue workspace: delivery-workspace-1/);
+        assert.match(body, /Target branch: codex\/client-handoff-cafe-website/);
+        assert.match(body, /Public source: https:\/\/example\.com\/handoff-cafe/);
+        assert.match(body, /Mockup preview: \/api\/revenue-engine\/mockup-previews\/handoff-cafe/);
+        assert.match(body, /Build a mobile menu, catering inquiry CTA and follow-up capture/);
+        assert.match(body, /amount-redacted/);
+        assert.match(body, /transfer-ref-redacted/);
+        assert.match(body, /Do not include sale amounts, collection status, transfer IDs, or proof-of-funds details/);
+        assert.match(body, /Robert must approve Replit deployment explicitly/);
+        assert.doesNotMatch(body, /Setup: \$/);
+        assert.doesNotMatch(body, /Cash collected/);
+        assert.doesNotMatch(body, /\$2,100/);
+        assert.doesNotMatch(body, /\$4,200/);
+        assert.doesNotMatch(body, /ACH-123/);
+        assert.doesNotMatch(body, /\bdeposit\b/i);
+        assert.doesNotMatch(body, /\bpayment\b/i);
+        assert.doesNotMatch(body, /\bpaid\b/i);
+        assert.doesNotMatch(body, /Stripe pi_/i);
+        return { number: 41, html_url: "https://github.com/robert/handoff-cafe/issues/41" };
+      },
+      createIssueComment: async () => {
+        throw new Error("no PR was provided, so Codex should not be dispatched");
+      },
+    },
+  );
+
+  assert.equal(created.status, "created");
+  assert.equal(created.repoFullName, "robert/handoff-cafe");
+  assert.equal(created.issueUrl, "https://github.com/robert/handoff-cafe/issues/41");
+  assert.match(created.codexBrief || "", /Type: client_build/);
+});
+
+test("developer autopilot keeps security precedence over client website build wording", () => {
+  const request = parseDeveloperAutopilotRequest(
+    "implementa un fix de security para el website en robert/public-app: token=sk-secret1234567890",
+    "web_chat",
+  );
+
+  assert.equal(request?.kind, "security");
+  assert.equal(request?.severity, "high");
+
+  const body = buildCodexGitHubIssueBody(request!, {
+    full_name: "robert/public-app",
+    name: "public-app",
+    private: false,
+  });
+
+  assert.match(body, /Security details withheld/);
+  assert.doesNotMatch(body, /sk-secret/);
 });
 
 test("subscription handoff routes heavy manual work to ChatGPT/Codex Pro instead of API spend", async () => {
@@ -331,6 +642,26 @@ test("Codex dispatch comment keeps approval and no-API rules", () => {
   assert.match(comment, /Do not use BlackOps OpenAI API spend/);
   assert.match(comment, /Work only on this PR branch/);
   assert.match(comment, /Robert must approve merge\/deploy after QA/);
+
+  const clientBuildComment = buildCodexDispatchComment({
+    source: "manual",
+    repoFullName: "robert/handoff-cafe",
+    pullRequestNumber: 41,
+    kind: "client_build",
+    title: "Client build",
+    description: "Build package after deposit payment ref ACH-123 and $2,100 collection. Zelle ref scoped-deposit-123.",
+    severity: "medium",
+  });
+
+  assert.match(clientBuildComment, /commercial-term-redacted/);
+  assert.match(clientBuildComment, /transfer-ref-redacted/);
+  assert.match(clientBuildComment, /amount-redacted/);
+  assert.doesNotMatch(clientBuildComment, /\bdeposit\b/i);
+  assert.doesNotMatch(clientBuildComment, /\bpayment\b/i);
+  assert.doesNotMatch(clientBuildComment, /ACH-123/);
+  assert.doesNotMatch(clientBuildComment, /scoped/i);
+  assert.doesNotMatch(clientBuildComment, /Zelle/i);
+  assert.doesNotMatch(clientBuildComment, /\$2,100/);
 });
 
 test("public security handoff redacts sensitive issue details", () => {
