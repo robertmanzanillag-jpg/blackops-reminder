@@ -84,16 +84,17 @@ test("promo video local workspace routes are scoped to the authenticated owner",
   assert.match(scriptSource, /OUTPUT_DIR="\$\{PROMO_OUTPUT_DIR:-\$ROOT_DIR\/promo_video_edits\/03_listos_para_subir\}"/, "promo edit script should accept an owner-scoped output directory override");
 });
 
-test("Revenue Engine routes scope local JSON storage to the authenticated user", () => {
+test("Revenue Engine routes scope durable state to the authenticated user", () => {
   const routesSource = readFileSync("server/routes.ts", "utf8");
   const revenueSource = readFileSync("server/revenue-engine.ts", "utf8");
 
   assert.match(routesSource, /app\.use\("\/api\/revenue-engine"/, "Revenue Engine should have a route-level owner scope");
-  assert.match(routesSource, /setRevenueUserDataScope\(getCurrentUserId\(req\)\)/, "Revenue Engine routes should scope data to the authenticated user");
+  assert.match(routesSource, /prepareRevenueEngineState\(getCurrentUserId\(req\)\)/, "Revenue Engine routes should hydrate data for the authenticated user");
   assert.match(routesSource, /let revenueEngineRouteQueue = Promise\.resolve\(\)/, "Revenue Engine routes should serialize access while module state is in-memory");
   assert.match(routesSource, /res\.once\("finish", release\)/, "Revenue Engine route queue should release after the response finishes");
   assert.doesNotMatch(routesSource, /Revenue Engine is limited to the configured single-user owner/, "Revenue Engine should not reject non-owner users now that local JSON is scoped");
   assert.match(revenueSource, /revenue_engine_data", "users", safeRevenueUserId\(userId\)/, "Revenue Engine JSON paths should include a sanitized user id");
+  assert.match(revenueSource, /createHash\("sha256"\)\.update\(canonical\)/, "Revenue Engine durable owner keys should avoid sanitized-path collisions");
 });
 
 test("developer code and GitHub tools are gated to the configured single-user owner", () => {

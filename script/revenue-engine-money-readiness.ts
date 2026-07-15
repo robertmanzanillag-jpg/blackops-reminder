@@ -1,13 +1,14 @@
 import "../server/env-loader";
-import { getRevenueEngineSnapshot } from "../server/revenue-engine";
+import { getRevenueEngineSnapshot, initializeRevenueEnginePersistence, prepareRevenueEngineState } from "../server/revenue-engine";
 import {
   buildRevenueMoneyReadinessReport,
   formatRevenueMoneyReadinessText,
+  hydrateRevenueMoneyReadinessSnapshot,
   parseRevenueMoneyReadinessArgs,
   validateRevenueMoneyReadinessOptions,
 } from "../server/revenue-engine-money-readiness-cli";
 
-function main() {
+async function main() {
   const options = parseRevenueMoneyReadinessArgs(process.argv.slice(2));
   const errors = validateRevenueMoneyReadinessOptions(options);
   if (errors.length > 0) {
@@ -15,9 +16,17 @@ function main() {
     process.exit(1);
   }
 
-  const report = buildRevenueMoneyReadinessReport(getRevenueEngineSnapshot(), options);
+  const snapshot = await hydrateRevenueMoneyReadinessSnapshot(options, {
+    initializePersistence: initializeRevenueEnginePersistence,
+    prepareState: prepareRevenueEngineState,
+    getSnapshot: getRevenueEngineSnapshot,
+  });
+  const report = buildRevenueMoneyReadinessReport(snapshot, options);
   console.log(options.json ? JSON.stringify(report, null, 2) : formatRevenueMoneyReadinessText(report));
-  process.exit(report.ready ? 0 : 1);
+  process.exitCode = report.ready ? 0 : 1;
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});

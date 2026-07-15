@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildRevenueMoneyReadinessReport,
   formatRevenueMoneyReadinessText,
+  hydrateRevenueMoneyReadinessSnapshot,
   parseRevenueMoneyReadinessArgs,
   validateRevenueMoneyReadinessOptions,
 } from "../server/revenue-engine-money-readiness-cli";
@@ -78,8 +79,40 @@ function snapshotFixture(overrides: Partial<Parameters<typeof buildRevenueMoneyR
 }
 
 test("parses Revenue Engine money readiness CLI options", () => {
-  assert.deepEqual(parseRevenueMoneyReadinessArgs([]), { json: false, mode: "research" });
-  assert.deepEqual(parseRevenueMoneyReadinessArgs(["--json", "--mode=first-sprint"]), { json: true, mode: "first-sprint" });
+  assert.deepEqual(parseRevenueMoneyReadinessArgs([]), { json: false, mode: "research", userId: "" });
+  assert.deepEqual(parseRevenueMoneyReadinessArgs(["--json", "--mode=first-sprint", "--user-id=owner-a"]), { json: true, mode: "first-sprint", userId: "owner-a" });
+});
+
+test("hydrates durable state for the requested owner before reading the real snapshot", async () => {
+  const calls: string[] = [];
+  const snapshot = { marker: "hydrated" };
+  const result = await hydrateRevenueMoneyReadinessSnapshot(
+    { json: true, mode: "first-sprint", userId: "owner-a" },
+    {
+      async initializePersistence() { calls.push("initialize"); },
+      async prepareState(userId) { calls.push(`prepare:${userId}`); },
+      getSnapshot() { calls.push("snapshot"); return snapshot; },
+    },
+    { DATABASE_URL: "postgres://configured" },
+  );
+
+  assert.equal(result, snapshot);
+  assert.deepEqual(calls, ["initialize", "prepare:owner-a", "snapshot"]);
+});
+
+test("requires an explicit durable owner when DATABASE_URL is configured", async () => {
+  await assert.rejects(
+    hydrateRevenueMoneyReadinessSnapshot(
+      { json: false, mode: "research", userId: "" },
+      {
+        async initializePersistence() {},
+        async prepareState() {},
+        getSnapshot() { return snapshotFixture(); },
+      },
+      { DATABASE_URL: "postgres://configured" },
+    ),
+    /--user-id or DEFAULT_USER_ID/,
+  );
 });
 
 test("validates Revenue Engine money readiness mode", () => {

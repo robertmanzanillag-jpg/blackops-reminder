@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import {
   buildAutomationQuote,
   buildDeliveryReview,
   buildRevenueUserDataPaths,
+  buildRevenueDurableOwnerId,
   buildImprovementReview,
   buildRevenueEnginePlan,
   buildRevenueLaunchReadiness,
@@ -25,10 +26,14 @@ import {
   createDeliveryWorkspaceFromAutomationOpportunity,
   createWebsiteDeliveryWorkspaceFromLead,
   deliverRevenueDeliveryWorkspace,
+  enableRevenueEngineDurablePersistenceForTests,
   getRevenueDeliveryWorkspaceById,
+  getRevenueEngineDurablePersistenceStatus,
   getRevenueEngineSnapshot,
   getRevenueMockupPreviewPath,
   getRevenueWebsiteWorkspaceSaleGate,
+  flushRevenueEnginePersistence,
+  prepareRevenueEngineState,
   preflightRevenueExpense,
   previewRevenueMoneySprintSeeds,
   recordRevenueAgentRun,
@@ -93,10 +98,12 @@ import {
   setRevenuePublicLeadCandidatesPathForTests,
   setRevenueScoutingMissionsPathForTests,
   setRevenueOutreachSenderForTests,
+  setRevenueEngineStateStoreForTests,
   sendRevenueOutreachDraft,
   setRevenueUserDataScope,
   updateRevenueDeliveryWorkspaceQa,
 } from "../server/revenue-engine";
+import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection } from "../server/revenue-engine-state-store";
 import { registerRoutes } from "../server/routes";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
@@ -121,6 +128,35 @@ const originalDatabaseUrl = process.env.DATABASE_URL;
 const originalNodeEnv = process.env.NODE_ENV;
 const originalSessionSecret = process.env.SESSION_SECRET;
 const testDatabaseUrl = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
+
+function createRevenueMemoryStateAdapter(beforeUpsert?: (input: { ownerUserId: string; kind: string; expectedRevision?: number }) => Promise<void>) {
+  const rows = new Map<string, RevenueEngineStateCollection>();
+  const adapter: RevenueEngineStateAdapter = {
+    async initialize() {},
+    async loadCollections(ownerUserId) {
+      return [...rows.values()].filter((row) => row.ownerUserId === ownerUserId);
+    },
+    async upsertCollection(input) {
+      await beforeUpsert?.(input);
+      const key = `${input.ownerUserId}:${input.kind}`;
+      const current = rows.get(key);
+      if ((!current && input.expectedRevision !== undefined)
+        || (current && input.expectedRevision !== current.revision)) {
+        throw new Error(`state conflict for ${key}`);
+      }
+      const row: RevenueEngineStateCollection = {
+        ownerUserId: input.ownerUserId,
+        kind: input.kind,
+        data: input.data,
+        revision: (current?.revision || 0) + 1,
+        updatedAt: input.updatedAt,
+      };
+      rows.set(key, row);
+      return row;
+    },
+  };
+  return { rows, adapter };
+}
 
 test.beforeEach(() => {
   delete process.env.DATABASE_URL;
@@ -162,18 +198,181 @@ test.beforeEach(() => {
 test("scopes Revenue Engine JSON paths by authenticated user", () => {
   const paths = buildRevenueUserDataPaths("user@example.com/with spaces");
 
-  assert.match(paths.baseDir, /revenue_engine_data\/users\/user_example_com_with_spaces$/);
-  assert.match(paths.ledgerPath, /revenue_engine_data\/users\/user_example_com_with_spaces\/ledger\.json$/);
+  assert.match(paths.baseDir, /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}$/);
+  assert.match(paths.ledgerPath, /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}\/ledger\.json$/);
 
   setRevenueUserDataScope("owner-a");
   const scopedSnapshot = getRevenueEngineSnapshot();
-  assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a\/ledger\.json$/);
-  assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a\/leads\.json$/);
-  assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a\/outreach\.json$/);
-  assert.match(scopedSnapshot.persistence.publicLeadCandidatesPath, /revenue_engine_data\/users\/owner-a\/public_lead_candidates\.json$/);
+  assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/ledger\.json$/);
+  assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/leads\.json$/);
+  assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/outreach\.json$/);
+  assert.match(scopedSnapshot.persistence.publicLeadCandidatesPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/public_lead_candidates\.json$/);
+  assert.notEqual(buildRevenueDurableOwnerId("a/b"), buildRevenueDurableOwnerId("a_b"));
+  assert.notEqual(
+    buildRevenueDurableOwnerId(`${"same-prefix".repeat(20)}-a`),
+    buildRevenueDurableOwnerId(`${"same-prefix".repeat(20)}-b`),
+  );
+});
+
+test("hydrates and flushes Revenue Engine collections through durable storage", async () => {
+  const memory = createRevenueMemoryStateAdapter();
+  setRevenueEngineStateStoreForTests(createRevenueEngineStateStore(memory.adapter));
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  await prepareRevenueEngineState("durable-owner");
+  const readySnapshot = getRevenueEngineSnapshot();
+  assert.equal(readySnapshot.persistence.mode, "postgres");
+  assert.equal(readySnapshot.persistence.durableStatus, "ready");
+  assert.equal(readySnapshot.systemReadiness.items.find((item) => item.id === "production_persistence")?.status, "ready");
+
+  recordRevenueLead({
+    businessName: "Durable Lead",
+    area: "Miami",
+    niche: "med spa",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@durable.example",
+    evidence: "Public website has a broken booking path and a verified owner email.",
+    painPoint: "Needs a reliable booking funnel and lead follow-up.",
+    estimatedOfferUsd: 3500,
+    status: "research",
+  });
+  await flushRevenueEnginePersistence();
+
+  const storedLeads = memory.rows.get(`${buildRevenueDurableOwnerId("durable-owner")}:leads`)?.data as Array<{ businessName: string }>;
+  assert.equal(storedLeads.some((lead) => lead.businessName === "Durable Lead"), true);
+});
+
+test("Revenue Engine API waits for durable flush before returning success", async () => {
+  let releaseWrite!: () => void;
+  let markWriteStarted!: () => void;
+  const writeStarted = new Promise<void>((resolve) => { markWriteStarted = resolve; });
+  const writeBarrier = new Promise<void>((resolve) => { releaseWrite = resolve; });
+  let memory: ReturnType<typeof createRevenueMemoryStateAdapter>;
+  memory = createRevenueMemoryStateAdapter(async (input) => {
+    const key = `${input.ownerUserId}:${input.kind}`;
+    if (input.kind === "leads" && memory.rows.has(key)) {
+      markWriteStarted();
+      await writeBarrier;
+    }
+  });
+  setRevenueEngineStateStoreForTests(createRevenueEngineStateStore(memory.adapter));
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    let responseSettled = false;
+    const responsePromise = fetch(`http://127.0.0.1:${address.port}/api/revenue-engine/leads`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user-id": "flush-owner" },
+      body: JSON.stringify({
+        businessName: "Flush Protected Lead",
+        area: "Miami",
+        niche: "med spa",
+        websiteStatus: "weak_website",
+        contactChannel: "email",
+        contactValue: "owner@flush.example",
+        evidence: "Public site has a broken booking flow and a verified contact email.",
+        painPoint: "Needs a reliable booking funnel.",
+        estimatedOfferUsd: 3500,
+        status: "research",
+      }),
+    }).then((response) => {
+      responseSettled = true;
+      return response;
+    });
+
+    await writeStarted;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(responseSettled, false);
+    releaseWrite();
+    const response = await responsePromise;
+    assert.equal(response.status, 200);
+    const body = await response.json() as { lead?: { businessName?: string } };
+    assert.equal(body.lead?.businessName, "Flush Protected Lead");
+  } finally {
+    releaseWrite();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("Revenue Engine API does not return success when durable flush fails", async () => {
+  let memory: ReturnType<typeof createRevenueMemoryStateAdapter>;
+  memory = createRevenueMemoryStateAdapter(async (input) => {
+    const key = `${input.ownerUserId}:${input.kind}`;
+    if (input.kind === "leads" && memory.rows.has(key)) {
+      throw new Error("durable database unavailable");
+    }
+  });
+  setRevenueEngineStateStoreForTests(createRevenueEngineStateStore(memory.adapter));
+  process.env.DATABASE_URL = testDatabaseUrl;
+
+  const app = express();
+  app.use(express.json());
+  const server = createHttpServer(app);
+  await registerRoutes(server, app);
+  app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    res.status(503).json({ error: error.message });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/revenue-engine/leads`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user-id": "flush-failure-owner" },
+      body: JSON.stringify({
+        businessName: "Rejected Durable Lead",
+        area: "Miami",
+        niche: "med spa",
+        websiteStatus: "weak_website",
+        contactChannel: "email",
+        contactValue: "owner@rejected.example",
+        evidence: "Public site has a broken booking flow and a verified contact email.",
+        painPoint: "Needs a reliable booking funnel.",
+        estimatedOfferUsd: 3500,
+        status: "research",
+      }),
+    });
+    assert.equal(response.status, 503);
+    const body = await response.json() as { error?: string; lead?: unknown };
+    assert.match(body.error || "", /durable write failed/);
+    assert.equal(body.lead, undefined);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("durable bootstrap refuses to seed Postgres from invalid local state", async () => {
+  const memory = createRevenueMemoryStateAdapter();
+  setRevenueEngineStateStoreForTests(createRevenueEngineStateStore(memory.adapter));
+  process.env.DATABASE_URL = testDatabaseUrl;
+  const userId = `invalid-local-owner-${Date.now()}`;
+  const paths = buildRevenueUserDataPaths(userId);
+  mkdirSync(paths.baseDir, { recursive: true });
+  writeFileSync(paths.leadsPath, "{not-valid-json", "utf8");
+
+  try {
+    await assert.rejects(prepareRevenueEngineState(userId), /local migration blocked/);
+    const durable = getRevenueEngineDurablePersistenceStatus();
+    assert.equal(durable.status, "error");
+    assert.match(durable.error || "", /Expected property name|Unexpected token/);
+    assert.equal(memory.rows.has(`${buildRevenueDurableOwnerId(userId)}:leads`), false);
+  } finally {
+    rmSync(paths.baseDir, { recursive: true, force: true });
+  }
 });
 
 test.afterEach(() => {
+  setRevenueEngineStateStoreForTests(null);
   if (originalResendApiKey === undefined) delete process.env.RESEND_API_KEY;
   else process.env.RESEND_API_KEY = originalResendApiKey;
   if (originalRevenueEngineFromEmail === undefined) delete process.env.REVENUE_ENGINE_FROM_EMAIL;
@@ -831,6 +1030,7 @@ test("money sprint preview blocks unfilled scout batch templates", () => {
 
 test("daily money command prioritizes verified public candidates before more searching", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   recordRevenuePublicLeadCandidateBatch({
     source: "google_maps",
@@ -2509,21 +2709,21 @@ test("snapshot launch readiness stays blocked while revenue state uses local fil
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "production_database" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.requiredEvidence.some((item) => item.id === "robert_deploy_approval" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.status, "blocked");
-  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "blocked"), true);
   assert.equal(snapshot.moneyActivationPlan.productionLaunchChecklist.productionSetupPacket.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "blocked"), true);
-  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: only with Robert approval/);
-  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: only after Robert confirms/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can contact businesses: no/);
+  assert.match(snapshot.moneyActivationPlan.copyableBrief, /Can collect money: no/);
 });
 
-test("production setup packet is ready only with database and session secret", () => {
+test("production setup packet stays blocked until durable hydration succeeds", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = testDatabaseUrl;
   process.env.SESSION_SECRET = "revenue-engine-production-session-secret";
 
   const packet = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist.productionSetupPacket;
 
-  assert.equal(packet.status, "ready");
-  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(packet.status, "blocked");
+  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "blocked"), true);
   assert.equal(packet.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "ready"), true);
   assert.match(packet.copyableSetupPacket, /Revenue Engine production setup packet/);
   assert.match(packet.copyableSetupPacket, /npm run ceo:doctor -- --json/);
@@ -2538,7 +2738,7 @@ test("production setup packet blocks weak session secret", () => {
   const packet = getRevenueEngineSnapshot().moneyActivationPlan.productionLaunchChecklist.productionSetupPacket;
 
   assert.equal(packet.status, "blocked");
-  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "ready"), true);
+  assert.equal(packet.requiredEnv.some((item) => item.key === "DATABASE_URL" && item.status === "blocked"), true);
   assert.equal(packet.requiredEnv.some((item) => item.key === "SESSION_SECRET" && item.status === "blocked"), true);
   assert.match(packet.copyableSetupPacket, /SESSION_SECRET no detectado como secret real/);
   assert.match(packet.copyableSetupPacket, /npm run ceo:doctor -- --json/);
@@ -2760,7 +2960,7 @@ test("system readiness blocks production money mode without real database url", 
   assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /production DATABASE_URL missing/);
 });
 
-test("system readiness rejects a database url while revenue state remains local", () => {
+test("system readiness rejects a database url until durable state is hydrated", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = "postgres://ceo_user:real-pass@db.internal:5432/blackops";
 
@@ -2768,7 +2968,7 @@ test("system readiness rejects a database url while revenue state remains local"
   const persistenceItem = snapshot.systemReadiness.items.find((item) => item.id === "production_persistence");
 
   assert.equal(persistenceItem?.status, "needs_data");
-  assert.match(persistenceItem?.evidence || "", /archivos JSON locales/);
+  assert.match(persistenceItem?.evidence || "", /falta hidratar y verificar Postgres durable/);
 });
 
 test("profit guard allows small scale only when cash covers spend", () => {
@@ -3693,6 +3893,7 @@ test("money sprint creates scout queue previews leads and draft-only outreach", 
 
 test("website delivery handoff queue requires a sold website opportunity", async () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const readyLead = recordRevenueLead({
     businessName: "Older Ready Cafe",
@@ -3915,6 +4116,7 @@ test("website closure request packet does not auto-approve missing scope", () =>
 
 test("website closure queue keeps older money-ready opportunities visible", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const oldReady = createApprovedWebsiteDraftForTest({
     businessName: "Older Closure Cafe",
@@ -4074,6 +4276,7 @@ test("website delivery handoff uses sold opportunity draft when outreach draft i
 
 test("website sales packet queue keeps older ready packages visible", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const older = createApprovedWebsiteDraftForTest({
     businessName: "Older Sales Packet Cafe",
@@ -4106,6 +4309,7 @@ test("website sales packet queue keeps older ready packages visible", () => {
 
 test("public scout evidence reaches PR-first website delivery handoff", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const publicEvidence = recordRevenuePublicScoutEvidence({
     area: "Miami",
@@ -4225,6 +4429,7 @@ test("public scout evidence reaches PR-first website delivery handoff", () => {
 
 test("creates website delivery workspace from money sprint lead mockup and outreach context", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const sprint = runRevenueMoneySprint({
     area: "Miami",
@@ -4696,6 +4901,7 @@ test("website build queue excludes direct workspaces without sold opportunity ch
 
 test("daily money command prioritizes open PR-first website builds before more delivery collection", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const { lead: buildLead, draft: buildDraft } = createApprovedWebsiteDraftForTest({
     businessName: "Build Queue Cafe",
@@ -5311,6 +5517,7 @@ test("public delivery workspace QA update cannot assert PR release gates", () =>
 test("trusted release gate persists PR App QA review and deploy approval for website delivery", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const created = createSoldWebsiteWorkspaceForTest({
     businessName: "Trusted Release Cafe",
@@ -5434,6 +5641,7 @@ test("trusted release gate requires App QA target workspace notes", () => {
 test("production launch checklist requires one coherent release-gated sold workspace", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const reviewed = createSoldWebsiteWorkspaceForTest({
     businessName: "Reviewed Only Cafe",
@@ -5534,6 +5742,7 @@ test("trusted release gate blocks anchored evidence without fresh PR status chec
 test("trusted release gate blocks direct website workspace without sold opportunity chain", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const created = recordRevenueDeliveryWorkspace({
     workspaceName: "Direct release website",
@@ -5579,6 +5788,7 @@ test("trusted release gate blocks direct website workspace without sold opportun
 test("production launch checklist ignores direct workspace release fields without sold opportunity chain", () => {
   process.env.NODE_ENV = "production";
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   recordRevenueDeliveryWorkspace({
     workspaceName: "Injected release website",
@@ -6759,6 +6969,7 @@ test("records reply and call outcomes on approved outreach drafts", () => {
 
 test("records deposit outreach outcome without double-counting ledger cash", () => {
   process.env.DATABASE_URL = testDatabaseUrl;
+  enableRevenueEngineDurablePersistenceForTests();
 
   const leadResult = recordRevenueLead({
     businessName: "Deposit Ready Cafe",

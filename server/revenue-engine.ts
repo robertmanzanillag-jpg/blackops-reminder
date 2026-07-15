@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { resolveDatabaseConnectionString } from "./database-url";
+import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection, type RevenueEngineStateStore } from "./revenue-engine-state-store";
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
@@ -1634,6 +1635,51 @@ let revenueAutomationIntakesLoaded = false;
 let revenueAutomationIntakesPersistenceError: string | null = null;
 let revenueAutomationIntakesPathOverride: string | null = null;
 let revenueUserDataScope: string | null = null;
+let revenueUserIdScope: string | null = null;
+let revenueDurableScope: string | null = null;
+let revenueDurablePersistenceStatus: "disabled" | "initializing" | "ready" | "error" = "disabled";
+let revenueDurablePersistenceError: string | null = null;
+let revenueEngineStateStore = createRevenueEngineStateStore();
+
+export function setRevenueEngineStateStoreForTests(store: RevenueEngineStateStore | null) {
+  revenueEngineStateStore = store || createRevenueEngineStateStore();
+  revenueDurableScope = null;
+  revenueDurablePersistenceStatus = "disabled";
+  revenueDurablePersistenceError = null;
+}
+
+export function enableRevenueEngineDurablePersistenceForTests(userId = "owner-a") {
+  const rows = new Map<string, RevenueEngineStateCollection>();
+  const adapter: RevenueEngineStateAdapter = {
+    async initialize() {},
+    async loadCollections(ownerUserId) {
+      return [...rows.values()].filter((row) => row.ownerUserId === ownerUserId);
+    },
+    async upsertCollection(input) {
+      const key = `${input.ownerUserId}:${input.kind}`;
+      const current = rows.get(key);
+      if ((!current && input.expectedRevision !== undefined)
+        || (current && input.expectedRevision !== current.revision)) {
+        throw new Error(`state conflict for ${key}`);
+      }
+      const row: RevenueEngineStateCollection = {
+        ownerUserId: input.ownerUserId,
+        kind: input.kind,
+        data: input.data,
+        revision: (current?.revision || 0) + 1,
+        updatedAt: input.updatedAt,
+      };
+      rows.set(key, row);
+      return row;
+    },
+  };
+  revenueEngineStateStore = createRevenueEngineStateStore(adapter);
+  revenueUserIdScope = buildRevenueDurableOwnerId(userId);
+  revenueDurableScope = revenueUserIdScope;
+  revenueDurablePersistenceStatus = "ready";
+  revenueDurablePersistenceError = null;
+  return rows;
+}
 
 const REVENUE_ENGINE_DATA_FILES = {
   ledger: "ledger.json",
@@ -1652,8 +1698,21 @@ const REVENUE_ENGINE_DATA_FILES = {
 } as const;
 
 function safeRevenueUserId(userId: string) {
+  const canonical = userId.trim();
+  const readable = canonical.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "unknown-user";
+  const suffix = createHash("sha256").update(canonical || "unknown-user").digest("hex").slice(0, 12);
+  return `${readable}-${suffix}`;
+}
+
+function legacyRevenueUserId(userId: string) {
   const safe = userId.trim().replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 96);
   return safe || "unknown-user";
+}
+
+export function buildRevenueDurableOwnerId(userId: string) {
+  const canonical = userId.trim();
+  if (!canonical) throw new Error("Revenue Engine owner user id is required");
+  return `rev_${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
 export function buildRevenueUserDataPaths(userId: string) {
@@ -1674,6 +1733,13 @@ export function buildRevenueUserDataPaths(userId: string) {
     approvalDecisionsPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.approvalDecisions),
     automationIntakesPath: path.join(baseDir, REVENUE_ENGINE_DATA_FILES.automationIntakes),
   };
+}
+
+function migrateLegacyRevenueUserData(userId: string, targetBaseDir: string) {
+  const legacyBaseDir = path.join(process.cwd(), "revenue_engine_data", "users", legacyRevenueUserId(userId));
+  if (legacyBaseDir === targetBaseDir || fs.existsSync(targetBaseDir) || !fs.existsSync(legacyBaseDir)) return;
+  fs.mkdirSync(path.dirname(targetBaseDir), { recursive: true });
+  fs.cpSync(legacyBaseDir, targetBaseDir, { recursive: true, errorOnExist: false });
 }
 
 function clearRevenueEngineMemory() {
@@ -1708,10 +1774,47 @@ function markRevenueEngineDataUnloaded() {
   revenueAutomationIntakesLoaded = false;
 }
 
+function clearRevenueEnginePersistenceErrors() {
+  revenueLedgerPersistenceError = null;
+  revenueLeadsPersistenceError = null;
+  revenueOutreachPersistenceError = null;
+  revenueAgentRunsPersistenceError = null;
+  revenueAutomationOpportunitiesPersistenceError = null;
+  revenueWebsiteOpportunitiesPersistenceError = null;
+  revenueImprovementReviewsPersistenceError = null;
+  revenueScoutingMissionsPersistenceError = null;
+  revenueDailyScoutSprintsPersistenceError = null;
+  revenuePublicLeadCandidatesPersistenceError = null;
+  revenueDeliveryWorkspacesPersistenceError = null;
+  revenueApprovalDecisionsPersistenceError = null;
+  revenueAutomationIntakesPersistenceError = null;
+}
+
+function revenueEnginePersistenceErrors() {
+  return [
+    revenueLedgerPersistenceError,
+    revenueLeadsPersistenceError,
+    revenueOutreachPersistenceError,
+    revenueAgentRunsPersistenceError,
+    revenueAutomationOpportunitiesPersistenceError,
+    revenueWebsiteOpportunitiesPersistenceError,
+    revenueImprovementReviewsPersistenceError,
+    revenueScoutingMissionsPersistenceError,
+    revenueDailyScoutSprintsPersistenceError,
+    revenuePublicLeadCandidatesPersistenceError,
+    revenueDeliveryWorkspacesPersistenceError,
+    revenueApprovalDecisionsPersistenceError,
+    revenueAutomationIntakesPersistenceError,
+  ].filter((error): error is string => Boolean(error));
+}
+
 export function setRevenueUserDataScope(userId: string) {
   const paths = buildRevenueUserDataPaths(userId);
   if (revenueUserDataScope === paths.baseDir) return paths;
+  migrateLegacyRevenueUserData(userId, paths.baseDir);
   revenueUserDataScope = paths.baseDir;
+  revenueUserIdScope = buildRevenueDurableOwnerId(userId);
+  revenueDurableScope = null;
   revenueLedgerPathOverride = paths.ledgerPath;
   revenueLeadsPathOverride = paths.leadsPath;
   revenueOutreachPathOverride = paths.outreachPath;
@@ -1726,6 +1829,7 @@ export function setRevenueUserDataScope(userId: string) {
   revenueApprovalDecisionsPathOverride = paths.approvalDecisionsPath;
   revenueAutomationIntakesPathOverride = paths.automationIntakesPath;
   clearRevenueEngineMemory();
+  clearRevenueEnginePersistenceErrors();
   markRevenueEngineDataUnloaded();
   return paths;
 }
@@ -2257,6 +2361,7 @@ function persistRevenueLedger() {
     fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
     fs.writeFileSync(ledgerPath, `${JSON.stringify(revenueLedger, null, 2)}\n`, "utf8");
     revenueLedgerPersistenceError = null;
+    queueRevenueDurableCollection("ledger", revenueLedger);
   } catch (error) {
     revenueLedgerPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el ledger local.";
     throw error;
@@ -2269,6 +2374,7 @@ function persistRevenueLeads() {
     fs.mkdirSync(path.dirname(leadsPath), { recursive: true });
     fs.writeFileSync(leadsPath, `${JSON.stringify(revenueLeads, null, 2)}\n`, "utf8");
     revenueLeadsPersistenceError = null;
+    queueRevenueDurableCollection("leads", revenueLeads);
   } catch (error) {
     revenueLeadsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el archivo local de leads.";
     throw error;
@@ -2281,6 +2387,7 @@ function persistRevenueOutreach() {
     fs.mkdirSync(path.dirname(outreachPath), { recursive: true });
     fs.writeFileSync(outreachPath, `${JSON.stringify(revenueOutreachDrafts, null, 2)}\n`, "utf8");
     revenueOutreachPersistenceError = null;
+    queueRevenueDurableCollection("outreach", revenueOutreachDrafts);
   } catch (error) {
     revenueOutreachPersistenceError = error instanceof Error ? error.message : "No se pudo guardar el outbox local.";
     throw error;
@@ -2293,6 +2400,7 @@ function persistRevenueAgentRuns() {
     fs.mkdirSync(path.dirname(agentRunsPath), { recursive: true });
     fs.writeFileSync(agentRunsPath, `${JSON.stringify(revenueAgentRuns, null, 2)}\n`, "utf8");
     revenueAgentRunsPersistenceError = null;
+    queueRevenueDurableCollection("agentRuns", revenueAgentRuns);
   } catch (error) {
     revenueAgentRunsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar la corrida de agente.";
     throw error;
@@ -2305,6 +2413,7 @@ function persistRevenueAutomationOpportunities() {
     fs.mkdirSync(path.dirname(opportunitiesPath), { recursive: true });
     fs.writeFileSync(opportunitiesPath, `${JSON.stringify(revenueAutomationOpportunities, null, 2)}\n`, "utf8");
     revenueAutomationOpportunitiesPersistenceError = null;
+    queueRevenueDurableCollection("automationOpportunities", revenueAutomationOpportunities);
   } catch (error) {
     revenueAutomationOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar oportunidad de automatizacion.";
     throw error;
@@ -2317,6 +2426,7 @@ function persistRevenueWebsiteOpportunities() {
     fs.mkdirSync(path.dirname(opportunitiesPath), { recursive: true });
     fs.writeFileSync(opportunitiesPath, `${JSON.stringify(revenueWebsiteOpportunities, null, 2)}\n`, "utf8");
     revenueWebsiteOpportunitiesPersistenceError = null;
+    queueRevenueDurableCollection("websiteOpportunities", revenueWebsiteOpportunities);
   } catch (error) {
     revenueWebsiteOpportunitiesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar website opportunity.";
     throw error;
@@ -2329,6 +2439,7 @@ function persistRevenueImprovementReviews() {
     fs.mkdirSync(path.dirname(reviewsPath), { recursive: true });
     fs.writeFileSync(reviewsPath, `${JSON.stringify(revenueImprovementReviews, null, 2)}\n`, "utf8");
     revenueImprovementReviewsPersistenceError = null;
+    queueRevenueDurableCollection("improvementReviews", revenueImprovementReviews);
   } catch (error) {
     revenueImprovementReviewsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar review de mejora.";
     throw error;
@@ -2341,6 +2452,7 @@ function persistRevenueScoutingMissions() {
     fs.mkdirSync(path.dirname(missionsPath), { recursive: true });
     fs.writeFileSync(missionsPath, `${JSON.stringify(revenueScoutingMissions, null, 2)}\n`, "utf8");
     revenueScoutingMissionsPersistenceError = null;
+    queueRevenueDurableCollection("scoutingMissions", revenueScoutingMissions);
   } catch (error) {
     revenueScoutingMissionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar mision de scouting.";
     throw error;
@@ -2353,6 +2465,7 @@ function persistRevenueDailyScoutSprints() {
     fs.mkdirSync(path.dirname(sprintsPath), { recursive: true });
     fs.writeFileSync(sprintsPath, `${JSON.stringify(revenueDailyScoutSprints, null, 2)}\n`, "utf8");
     revenueDailyScoutSprintsPersistenceError = null;
+    queueRevenueDurableCollection("dailyScoutSprints", revenueDailyScoutSprints);
   } catch (error) {
     revenueDailyScoutSprintsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar daily scout sprint.";
     throw error;
@@ -2365,6 +2478,7 @@ function persistRevenuePublicLeadCandidates() {
     fs.mkdirSync(path.dirname(candidatesPath), { recursive: true });
     fs.writeFileSync(candidatesPath, `${JSON.stringify(revenuePublicLeadCandidates, null, 2)}\n`, "utf8");
     revenuePublicLeadCandidatesPersistenceError = null;
+    queueRevenueDurableCollection("publicLeadCandidates", revenuePublicLeadCandidates);
   } catch (error) {
     revenuePublicLeadCandidatesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar candidatos publicos.";
     throw error;
@@ -2377,6 +2491,7 @@ function persistRevenueDeliveryWorkspaces() {
     fs.mkdirSync(path.dirname(workspacesPath), { recursive: true });
     fs.writeFileSync(workspacesPath, `${JSON.stringify(revenueDeliveryWorkspaces, null, 2)}\n`, "utf8");
     revenueDeliveryWorkspacesPersistenceError = null;
+    queueRevenueDurableCollection("deliveryWorkspaces", revenueDeliveryWorkspaces);
   } catch (error) {
     revenueDeliveryWorkspacesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar delivery workspace.";
     throw error;
@@ -2389,6 +2504,7 @@ function persistRevenueApprovalDecisions() {
     fs.mkdirSync(path.dirname(decisionsPath), { recursive: true });
     fs.writeFileSync(decisionsPath, `${JSON.stringify(revenueApprovalDecisions, null, 2)}\n`, "utf8");
     revenueApprovalDecisionsPersistenceError = null;
+    queueRevenueDurableCollection("approvalDecisions", revenueApprovalDecisions);
   } catch (error) {
     revenueApprovalDecisionsPersistenceError = error instanceof Error ? error.message : "No se pudo guardar approval decision.";
     throw error;
@@ -2401,10 +2517,258 @@ function persistRevenueAutomationIntakes() {
     fs.mkdirSync(path.dirname(intakesPath), { recursive: true });
     fs.writeFileSync(intakesPath, `${JSON.stringify(revenueAutomationIntakes, null, 2)}\n`, "utf8");
     revenueAutomationIntakesPersistenceError = null;
+    queueRevenueDurableCollection("automationIntakes", revenueAutomationIntakes);
   } catch (error) {
     revenueAutomationIntakesPersistenceError = error instanceof Error ? error.message : "No se pudo guardar automation intake.";
     throw error;
   }
+}
+
+const revenueDurableCollectionKinds = [
+  "ledger",
+  "leads",
+  "outreach",
+  "agentRuns",
+  "automationOpportunities",
+  "websiteOpportunities",
+  "improvementReviews",
+  "scoutingMissions",
+  "dailyScoutSprints",
+  "publicLeadCandidates",
+  "deliveryWorkspaces",
+  "approvalDecisions",
+  "automationIntakes",
+] as const;
+
+type RevenueDurableCollectionKind = typeof revenueDurableCollectionKinds[number];
+
+function revenueDurableCollectionData(kind: RevenueDurableCollectionKind): unknown[] {
+  switch (kind) {
+    case "ledger": return revenueLedger;
+    case "leads": return revenueLeads;
+    case "outreach": return revenueOutreachDrafts;
+    case "agentRuns": return revenueAgentRuns;
+    case "automationOpportunities": return revenueAutomationOpportunities;
+    case "websiteOpportunities": return revenueWebsiteOpportunities;
+    case "improvementReviews": return revenueImprovementReviews;
+    case "scoutingMissions": return revenueScoutingMissions;
+    case "dailyScoutSprints": return revenueDailyScoutSprints;
+    case "publicLeadCandidates": return revenuePublicLeadCandidates;
+    case "deliveryWorkspaces": return revenueDeliveryWorkspaces;
+    case "approvalDecisions": return revenueApprovalDecisions;
+    case "automationIntakes": return revenueAutomationIntakes;
+  }
+}
+
+function cloneRevenueDurableData(data: unknown[]): unknown[] {
+  return JSON.parse(JSON.stringify(data)) as unknown[];
+}
+
+function queueRevenueDurableCollection(kind: RevenueDurableCollectionKind, data: unknown[]) {
+  if (revenueDurablePersistenceStatus !== "ready" || !revenueUserIdScope || revenueDurableScope !== revenueUserIdScope) return;
+  void revenueEngineStateStore.upsertCollection({
+    ownerUserId: revenueUserIdScope,
+    kind,
+    data: cloneRevenueDurableData(data),
+  }).catch((error: unknown) => {
+    revenueDurablePersistenceStatus = "error";
+    revenueDurablePersistenceError = error instanceof Error ? error.message : String(error);
+  });
+}
+
+function loadAllRevenueEngineCollections() {
+  loadRevenueLedger();
+  loadRevenueLeads();
+  loadRevenueOutreach();
+  loadRevenueAgentRuns();
+  loadRevenueAutomationOpportunities();
+  loadRevenueWebsiteOpportunities();
+  loadRevenueImprovementReviews();
+  loadRevenueScoutingMissions();
+  loadRevenueDailyScoutSprints();
+  loadRevenuePublicLeadCandidates();
+  loadRevenueDeliveryWorkspaces();
+  loadRevenueApprovalDecisions();
+  loadRevenueAutomationIntakes();
+}
+
+function applyRevenueDurableCollection(kind: RevenueDurableCollectionKind, data: unknown) {
+  switch (kind) {
+    case "ledger": {
+      const parsed = z.array(persistedRevenueLedgerEntrySchema).parse(data);
+      revenueLedger.splice(0, revenueLedger.length, ...parsed);
+      revenueLedgerLoaded = true;
+      return;
+    }
+    case "leads": {
+      const parsed = z.array(persistedRevenueLeadSchema).parse(data);
+      revenueLeads.splice(0, revenueLeads.length, ...parsed);
+      revenueLeadsLoaded = true;
+      return;
+    }
+    case "outreach": {
+      const parsed = z.array(persistedRevenueOutreachDraftSchema).parse(data) as RevenueOutreachDraft[];
+      revenueOutreachDrafts.splice(0, revenueOutreachDrafts.length, ...parsed);
+      revenueOutreachLoaded = true;
+      return;
+    }
+    case "agentRuns": {
+      const parsed = z.array(persistedRevenueAgentRunSchema).parse(data) as RevenueAgentRun[];
+      revenueAgentRuns.splice(0, revenueAgentRuns.length, ...parsed);
+      revenueAgentRunsLoaded = true;
+      return;
+    }
+    case "automationOpportunities": {
+      const parsed = z.array(persistedRevenueAutomationOpportunitySchema).parse(data) as RevenueAutomationOpportunity[];
+      revenueAutomationOpportunities.splice(0, revenueAutomationOpportunities.length, ...parsed);
+      revenueAutomationOpportunitiesLoaded = true;
+      return;
+    }
+    case "websiteOpportunities": {
+      const parsed = z.array(persistedRevenueWebsiteOpportunitySchema).parse(data) as RevenueWebsiteOpportunity[];
+      revenueWebsiteOpportunities.splice(0, revenueWebsiteOpportunities.length, ...parsed);
+      revenueWebsiteOpportunitiesLoaded = true;
+      return;
+    }
+    case "improvementReviews": {
+      const parsed = z.array(persistedRevenueImprovementReviewSchema).parse(data) as RevenueImprovementReview[];
+      revenueImprovementReviews.splice(0, revenueImprovementReviews.length, ...parsed);
+      revenueImprovementReviewsLoaded = true;
+      return;
+    }
+    case "scoutingMissions": {
+      const parsed = z.array(persistedRevenueScoutingMissionSchema).parse(data) as RevenueScoutingMission[];
+      revenueScoutingMissions.splice(0, revenueScoutingMissions.length, ...parsed);
+      revenueScoutingMissionsLoaded = true;
+      return;
+    }
+    case "dailyScoutSprints": {
+      const parsed = z.array(persistedRevenueDailyScoutSprintSchema).parse(data);
+      revenueDailyScoutSprints.splice(0, revenueDailyScoutSprints.length, ...parsed);
+      revenueDailyScoutSprintsLoaded = true;
+      return;
+    }
+    case "publicLeadCandidates": {
+      const parsed = z.array(persistedRevenuePublicLeadCandidateSchema).parse(data) as RevenuePublicLeadCandidate[];
+      revenuePublicLeadCandidates.splice(0, revenuePublicLeadCandidates.length, ...parsed);
+      revenuePublicLeadCandidatesLoaded = true;
+      return;
+    }
+    case "deliveryWorkspaces": {
+      const parsed = z.array(persistedRevenueDeliveryWorkspaceSchema).parse(data) as RevenueDeliveryWorkspace[];
+      const workspaces = parsed.map((workspace) => ({
+        ...buildRevenueDeliveryWorkspace(workspace.input),
+        id: workspace.id,
+        createdAt: workspace.createdAt,
+        updatedAt: workspace.updatedAt,
+      }));
+      revenueDeliveryWorkspaces.splice(0, revenueDeliveryWorkspaces.length, ...workspaces);
+      revenueDeliveryWorkspacesLoaded = true;
+      return;
+    }
+    case "approvalDecisions": {
+      const parsed = z.array(persistedRevenueApprovalDecisionSchema).parse(data);
+      revenueApprovalDecisions.splice(0, revenueApprovalDecisions.length, ...parsed);
+      revenueApprovalDecisionsLoaded = true;
+      return;
+    }
+    case "automationIntakes": {
+      const parsed = z.array(persistedRevenueAutomationIntakeSchema).parse(data) as RevenueAutomationIntake[];
+      revenueAutomationIntakes.splice(0, revenueAutomationIntakes.length, ...parsed);
+      revenueAutomationIntakesLoaded = true;
+    }
+  }
+}
+
+export async function initializeRevenueEnginePersistence() {
+  const databaseUrl = resolveDatabaseConnectionString();
+  if (!databaseUrl) {
+    revenueDurablePersistenceStatus = "disabled";
+    revenueDurablePersistenceError = null;
+    return { status: "disabled" as const };
+  }
+
+  revenueDurablePersistenceStatus = "initializing";
+  try {
+    await revenueEngineStateStore.initialize();
+    revenueDurablePersistenceError = null;
+    return { status: "initialized" as const };
+  } catch (error) {
+    revenueDurablePersistenceStatus = "error";
+    revenueDurablePersistenceError = error instanceof Error ? error.message : String(error);
+    throw error;
+  }
+}
+
+export async function prepareRevenueEngineState(userId: string) {
+  setRevenueUserDataScope(userId);
+  const databaseUrl = resolveDatabaseConnectionString();
+  if (!databaseUrl) {
+    revenueDurablePersistenceStatus = "disabled";
+    revenueDurablePersistenceError = null;
+    loadAllRevenueEngineCollections();
+    return { status: "local_file" as const };
+  }
+  if (revenueDurablePersistenceStatus === "ready" && revenueDurableScope === revenueUserIdScope) {
+    return { status: "ready" as const, ownerUserId: revenueUserIdScope };
+  }
+
+  revenueDurablePersistenceStatus = "initializing";
+  revenueDurablePersistenceError = null;
+  try {
+    const ownerUserId = revenueUserIdScope || buildRevenueDurableOwnerId(userId);
+    const rows = await revenueEngineStateStore.loadCollections(ownerUserId);
+    const rowsByKind = new Map(rows.map((row) => [row.kind, row.data]));
+    const missingKinds = revenueDurableCollectionKinds.filter((kind) => !rowsByKind.has(kind));
+    if (missingKinds.length > 0) {
+      loadAllRevenueEngineCollections();
+      const localErrors = revenueEnginePersistenceErrors();
+      if (localErrors.length > 0) {
+        throw new Error(`Revenue Engine local migration blocked: ${localErrors.join("; ")}`);
+      }
+    }
+
+    for (const kind of revenueDurableCollectionKinds) {
+      if (rowsByKind.has(kind)) {
+        applyRevenueDurableCollection(kind, rowsByKind.get(kind));
+      } else {
+        await revenueEngineStateStore.upsertCollection({
+          ownerUserId,
+          kind,
+          data: cloneRevenueDurableData(revenueDurableCollectionData(kind)),
+        });
+      }
+    }
+    await revenueEngineStateStore.flush();
+    revenueDurableScope = ownerUserId;
+    revenueDurablePersistenceStatus = "ready";
+    return { status: "ready" as const, ownerUserId };
+  } catch (error) {
+    revenueDurablePersistenceStatus = "error";
+    revenueDurableScope = null;
+    revenueDurablePersistenceError = error instanceof Error ? error.message : String(error);
+    throw error;
+  }
+}
+
+export async function flushRevenueEnginePersistence() {
+  if (revenueDurablePersistenceStatus === "disabled") return;
+  try {
+    await revenueEngineStateStore.flush();
+  } catch (error) {
+    revenueDurablePersistenceStatus = "error";
+    revenueDurableScope = null;
+    revenueDurablePersistenceError = error instanceof Error ? error.message : String(error);
+    throw error;
+  }
+}
+
+export function getRevenueEngineDurablePersistenceStatus() {
+  return {
+    status: revenueDurablePersistenceStatus,
+    ownerUserId: revenueDurableScope,
+    error: revenueDurablePersistenceError,
+  };
 }
 
 const agentRoster = [
@@ -2794,10 +3158,20 @@ function buildRevenueSystemReadiness(input: {
     try {
       const databaseUrl = resolveDatabaseConnectionString();
       if (databaseUrl) {
+        const durableStatus = getRevenueEngineDurablePersistenceStatus();
+        if (durableStatus.status === "ready" && durableStatus.ownerUserId) {
+          return {
+            status: "ready" as const,
+            evidence: `Postgres durable activo para ${durableStatus.ownerUserId}; todas las colecciones de Revenue Engine se hidratan y confirman antes de responder.`,
+            nextStep: "Mantener backups, monitorear errores de flush y no exponer credenciales.",
+          };
+        }
         return {
           status: "needs_data" as const,
-          evidence: "DATABASE_URL real configurado, pero ledger, leads, outreach y delivery de Revenue Engine todavia usan archivos JSON locales.",
-          nextStep: "Migrar el estado money-critical de Revenue Engine a Postgres antes de ventas reales o deploy de produccion.",
+          evidence: durableStatus.error
+            ? `DATABASE_URL configurado, pero Postgres durable fallo: ${durableStatus.error}`
+            : "DATABASE_URL configurado; falta hidratar y verificar Postgres durable para el usuario actual.",
+          nextStep: "Completar la hidratacion Postgres y un flush exitoso antes de ventas reales o deploy de produccion.",
         };
       }
       return {
@@ -6839,7 +7213,9 @@ export function getRevenueEngineSnapshot() {
     recentApprovalDecisions: revenueApprovalDecisions.slice(-10).reverse(),
     recentAutomationIntakes: revenueAutomationIntakes.slice(-10).reverse(),
     persistence: {
-      mode: "local_file",
+      mode: revenueDurablePersistenceStatus === "ready" ? "postgres" : "local_file",
+      durableStatus: revenueDurablePersistenceStatus,
+      durableOwnerUserId: revenueDurableScope,
       path: getRevenueLedgerPath(),
       leadsPath: getRevenueLeadsPath(),
       outreachPath: getRevenueOutreachPath(),
@@ -6853,7 +7229,7 @@ export function getRevenueEngineSnapshot() {
       deliveryWorkspacesPath: getRevenueDeliveryWorkspacesPath(),
       approvalDecisionsPath: getRevenueApprovalDecisionsPath(),
       automationIntakesPath: getRevenueAutomationIntakesPath(),
-      status: revenueLedgerPersistenceError ? "warning" : "ok",
+      status: revenueLedgerPersistenceError || revenueDurablePersistenceStatus === "error" ? "warning" : "ok",
       leadsStatus: revenueLeadsPersistenceError ? "warning" : "ok",
       outreachStatus: revenueOutreachPersistenceError ? "warning" : "ok",
       agentRunsStatus: revenueAgentRunsPersistenceError ? "warning" : "ok",
@@ -6879,7 +7255,8 @@ export function getRevenueEngineSnapshot() {
         revenuePublicLeadCandidatesPersistenceError ||
         revenueDeliveryWorkspacesPersistenceError ||
         revenueApprovalDecisionsPersistenceError ||
-        revenueAutomationIntakesPersistenceError,
+        revenueAutomationIntakesPersistenceError ||
+        revenueDurablePersistenceError,
     },
     automationQuoteDefaults: {
       minimumSetupUsd: 1500,

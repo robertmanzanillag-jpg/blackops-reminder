@@ -3,6 +3,7 @@ export type RevenueMoneyReadinessMode = "research" | "first-sprint" | "money-mod
 export type RevenueMoneyReadinessCliOptions = {
   json: boolean;
   mode: RevenueMoneyReadinessMode;
+  userId?: string;
 };
 
 type RevenueMoneyReadinessCheck = {
@@ -87,7 +88,28 @@ export function parseRevenueMoneyReadinessArgs(argv: string[]): RevenueMoneyRead
   return {
     json: argv.includes("--json"),
     mode: mode as RevenueMoneyReadinessMode,
+    userId: getValue("--user-id"),
   };
+}
+
+export async function hydrateRevenueMoneyReadinessSnapshot<T>(
+  options: RevenueMoneyReadinessCliOptions,
+  dependencies: {
+    initializePersistence: () => Promise<unknown>;
+    prepareState: (userId: string) => Promise<unknown>;
+    getSnapshot: () => T;
+  },
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): Promise<T> {
+  if (env.DATABASE_URL) {
+    const userId = options.userId || env.DEFAULT_USER_ID?.trim() || "";
+    if (!userId) {
+      throw new Error("--user-id or DEFAULT_USER_ID is required to verify Revenue Engine durable persistence.");
+    }
+    await dependencies.initializePersistence();
+    await dependencies.prepareState(userId);
+  }
+  return dependencies.getSnapshot();
 }
 
 export function validateRevenueMoneyReadinessOptions(options: RevenueMoneyReadinessCliOptions): string[] {

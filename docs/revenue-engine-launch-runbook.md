@@ -23,6 +23,10 @@ El sistema esta listo para empezar a moverse cuando `/revenue-engine` muestre el
 - Money mode completo: `npm run revenue:money-readiness -- --mode=money-mode`
 - Launch/deploy: `npm run revenue:money-readiness -- --mode=production-launch`
 
+When `DATABASE_URL` is configured, the command hydrates durable state for
+`DEFAULT_USER_ID`. Use `--user-id=<authenticated-owner-id>` to verify a different
+owner explicitly; never use a sanitized folder name as the durable owner id.
+
 La unica pieza permitida como pendiente por ahora es:
 
 - Correo de negocio/API (`RESEND_API_KEY`, `REVENUE_ENGINE_FROM_EMAIL`, DNS/SPF/DKIM/DMARC).
