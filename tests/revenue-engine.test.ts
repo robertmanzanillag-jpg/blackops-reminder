@@ -3435,7 +3435,7 @@ test("builds concise client-facing outreach without exposing internal economics"
     contactName: "Owner",
     businessName: "Route Ready Cafe",
     sourceUrl: "https://example.com/private-research-source",
-    businessSummary: "The public booking journey is difficult to follow and the current service pages do not offer one clear next step.",
+    businessSummary: "INTERNAL ONLY margin 93%. Source https://private.example/research. Estimated internal cost $54/month. The public booking journey is difficult to follow.",
     websitePriceUsd: 1992,
     automationPriceUsd: 933,
     monthlyRetainerUsd: 750,
@@ -3448,7 +3448,7 @@ test("builds concise client-facing outreach without exposing internal economics"
   assert.match(proposal.body, /\$2,925/);
   assert.match(proposal.body, /\$1,463/);
   assert.match(proposal.body, /15 minutos/);
-  assert.doesNotMatch(proposal.body, /Costo interno|Margen mensual|Cap interno|INTERNAL ONLY|private-research-source|Revenue Engine/i);
+  assert.doesNotMatch(proposal.body, /Costo interno|Margen mensual|Cap interno|INTERNAL ONLY|private-research-source|private\.example|93%|\$54|Revenue Engine/i);
   assert.equal(proposal.body.length < 1800, true);
 });
 

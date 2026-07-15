@@ -11344,8 +11344,6 @@ export function buildProposalEmail(input: ProposalEmailInput) {
   const depositUsd = Math.round(totalSetupUsd * 0.5);
   const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
   const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
-  const summary = input.businessSummary.replace(/\s+/g, " ").trim();
-  const summarySnippet = summary.length > 360 ? `${summary.slice(0, 357).trimEnd()}...` : summary;
   const genericContact = /^(owner|propietario|equipo|robert)$/i.test(input.contactName);
   const greeting = genericContact ? "Hola," : `Hola ${input.contactName},`;
   const scope = [
@@ -11366,7 +11364,7 @@ export function buildProposalEmail(input: ProposalEmailInput) {
     "",
     `Revise la experiencia digital publica de ${input.businessName} y vi una oportunidad concreta para facilitar que nuevos clientes entiendan los servicios y den el siguiente paso.`,
     "",
-    summarySnippet,
+    "La oportunidad principal es presentar la oferta, la confianza y el siguiente paso en un recorrido mas claro para consultas, compras o reservas.",
     "",
     `Prepare un concepto privado para ${input.businessName} con este alcance inicial:`,
     ...scope,
