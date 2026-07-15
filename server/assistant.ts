@@ -1693,7 +1693,8 @@ export function registerAssistantRoutes(app: Express): void {
             estimatedApiCostUsd: previewCostUsd,
             modelRoute,
           })}\n\n`);
-          const result = await getGeminiClient().models.generateContent({
+          const geminiClient = await getGeminiClient();
+          const result = await geminiClient.models.generateContent({
             model: geminiModel,
             contents: [{ role: "user", parts: [{ text: cheapPrompt }] }],
           });
@@ -1743,10 +1744,10 @@ export function registerAssistantRoutes(app: Express): void {
         const stream = await getOpenAIClient().chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,
           messages: openAiMessages,
-          stream: true,
+          stream: true as const,
           max_completion_tokens: maxCompletionTokens,
           stream_options: { include_usage: true },
-        } as any) as unknown as AsyncIterable<any>;
+        });
 
         let openAiUsage: any = null;
         for await (const chunk of stream) {

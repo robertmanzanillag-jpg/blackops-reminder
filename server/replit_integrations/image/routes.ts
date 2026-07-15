@@ -1,5 +1,4 @@
 import type { Express, Request, Response } from "express";
-import { Modality } from "@google/genai";
 import { getGeminiClient } from "./client";
 
 export function registerImageRoutes(app: Express): void {
@@ -11,7 +10,11 @@ export function registerImageRoutes(app: Express): void {
         return res.status(400).json({ error: "Prompt is required" });
       }
 
-      const response = await getGeminiClient().models.generateContent({
+      const [{ Modality }, geminiClient] = await Promise.all([
+        import("@google/genai"),
+        getGeminiClient(),
+      ]);
+      const response = await geminiClient.models.generateContent({
         model: "gemini-2.5-flash-image",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {

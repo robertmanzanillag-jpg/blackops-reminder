@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -483,6 +483,8 @@ export const appProjects = pgTable("app_projects", {
   githubRepo: text("github_repo"),
   deploymentProvider: text("deployment_provider"),
   deploymentId: text("deployment_id"),
+  testCommand: text("test_command"),
+  buildCommand: text("build_command"),
   sentryProjectId: text("sentry_project_id"),
   stripeAccountId: text("stripe_account_id"),
   stripeWebhookEndpointId: text("stripe_webhook_endpoint_id"),
@@ -1003,6 +1005,20 @@ export const insertAutomationRunSchema = createInsertSchema(automationRuns).omit
 
 export type AutomationRun = typeof automationRuns.$inferSelect;
 export type InsertAutomationRun = z.infer<typeof insertAutomationRunSchema>;
+
+// ==================== REVENUE ENGINE STATE ====================
+
+export const revenueEngineState = pgTable("revenue_engine_state", {
+  ownerUserId: varchar("owner_user_id").notNull(),
+  kind: text("kind").notNull(),
+  data: jsonb("data").notNull().$type<unknown>(),
+  revision: integer("revision").notNull().default(1),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.ownerUserId, table.kind] }),
+]);
+
+export type RevenueEngineState = typeof revenueEngineState.$inferSelect;
 
 // ==================== DJ MESSAGE TEMPLATES ====================
 

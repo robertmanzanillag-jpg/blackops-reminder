@@ -14,6 +14,7 @@ import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./sessio
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
+import { initializeRevenueEnginePersistence } from "./revenue-engine";
 
 const app = express();
 const httpServer = createServer(app);
@@ -77,6 +78,15 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
   res
     .type("text/plain")
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "blackops-reminder",
+    checkedAt: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
 });
 
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
@@ -355,14 +365,15 @@ app.use((req, res, next) => {
 
 (async () => {
   registerLocalAuthRoutes(app);
+  await initializeRevenueEnginePersistence();
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after

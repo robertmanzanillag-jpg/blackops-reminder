@@ -85,7 +85,8 @@ export function registerChatRoutes(app: Express): void {
       res.setHeader("Connection", "keep-alive");
 
       // Stream response from Gemini
-      const stream = await getGeminiClient().models.generateContentStream({
+      const geminiClient = await getGeminiClient();
+      const stream = await geminiClient.models.generateContentStream({
         model: "gemini-2.5-flash",
         contents: chatMessages,
       });

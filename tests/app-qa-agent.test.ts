@@ -21,6 +21,8 @@ function appProject(overrides: Partial<AppProject> = {}): AppProject {
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
+    testCommand: "npm run check",
+    buildCommand: "npm run build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -47,11 +49,224 @@ test("route scout keeps a map of pages and expected clicks", () => {
   );
 });
 
+test("route scout covers Revenue Engine money flow clicks", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine");
+  const expectedCriticalClicks = [
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Copy packet",
+    "Crear oportunidad",
+    "Copy close",
+    "Registrar deposito y vender",
+    "Reply",
+    "Deposit",
+    "Crear workspace",
+    "Copy brief",
+    "Guardar workspace",
+    "Create issue",
+    "Revalidar con checks marcados",
+    "Run App QA",
+    "Registrar release gate",
+    "Entregar aprobado",
+    "Correr QA",
+  ];
+
+  assert.ok(revenueRoute);
+  assert.deepEqual(
+    expectedCriticalClicks.every((click) => revenueRoute.expectedClicks.includes(click)),
+    true,
+  );
+  assert.deepEqual(revenueRoute.expectedControls, ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]);
+  assert.deepEqual(
+    expectedCriticalClicks.every((click) =>
+      [
+        ...(revenueRoute.expectedControls || []),
+        ...(revenueRoute.expectedControlGroups || []).flatMap((group) => group.controls),
+      ].includes(click)
+    ),
+    true,
+  );
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Run App QA")), true);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Registrar release gate")), true);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.name === "website_release_gate" && group.controls.includes("Entregar aprobado")), true);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.activationControls?.includes("Reply")), false);
+  assert.deepEqual(revenueRoute.expectedControlGroups?.some((group) => group.activationControls?.includes("Deposit")), false);
+  assert.deepEqual(revenueRoute.visualTextTabs?.includes("Leads"), true);
+  assert.deepEqual(revenueRoute.visualTextTabs?.includes("QA entrega"), true);
+  assert.match(revenueRoute.notes.join(" "), /grouped scenario controls/);
+});
+
+test("visual click scout can detect missing expected Revenue Engine controls", () => {
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+  ].join("\n");
+
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Guardar connector review-only", "Preview batch", "Money sprint", "Correr QA"]),
+    [],
+  );
+  assert.deepEqual(
+    __appQaAgentInternals.findMissingExpectedVisualControls(body, ["Guardar candidato publico", "Missing button"]),
+    ["Missing button"],
+  );
+});
+
+test("visual control coverage checks Revenue Engine money-flow groups independently", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const salesOnlyBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Crear oportunidad",
+    "Copy packet",
+  ].join("\n");
+  const partialReleaseBody = [
+    salesOnlyBody,
+    "Registrar release gate",
+  ].join("\n");
+
+  const salesNotes = __appQaAgentInternals.evaluateExpectedVisualControls(salesOnlyBody, revenueRoute);
+  const releaseNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialReleaseBody, revenueRoute);
+
+  assert.deepEqual(salesNotes, []);
+  assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(releaseNotes.join("\n").includes("Entregar aprobado"), true);
+  assert.equal(releaseNotes.join("\n").includes("Run App QA"), true);
+});
+
+test("visual control coverage does not merge scenario controls across tabs", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const baseBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+  ].join("\n");
+  const notes = __appQaAgentInternals.evaluateExpectedVisualControlSnapshots(
+    [
+      { label: "QA entrega", bodyText: [baseBody, "Registrar release gate"].join("\n") },
+      { label: "Outbox", bodyText: [baseBody, "Entregar aprobado", "Create issue", "Revalidar con checks marcados"].join("\n") },
+    ],
+    revenueRoute,
+  );
+
+  assert.equal(notes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(notes.join("\n").includes("Entregar aprobado"), true);
+  assert.equal(notes.join("\n").includes("Run App QA"), true);
+});
+
+test("visual control coverage accepts a complete activated scenario snapshot", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Registrar release gate",
+    "Run App QA",
+    "Entregar aprobado",
+    "Create issue",
+    "Revalidar con checks marcados",
+  ].join("\n");
+
+  assert.deepEqual(
+    __appQaAgentInternals.evaluateExpectedVisualControlSnapshots([{ label: "QA entrega", bodyText: body }], revenueRoute),
+    [],
+  );
+});
+
+test("visual control coverage flags non-generic group controls without their required pair", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const partialSalesBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Copy packet",
+  ].join("\n");
+  const partialReleaseBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Create issue",
+  ].join("\n");
+
+  const salesNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialSalesBody, revenueRoute);
+  const releaseNotes = __appQaAgentInternals.evaluateExpectedVisualControls(partialReleaseBody, revenueRoute);
+
+  assert.equal(salesNotes.some((note) => note.includes("website_sales_packet")), true);
+  assert.equal(salesNotes.join("\n").includes("Crear oportunidad"), true);
+  assert.equal(releaseNotes.some((note) => note.includes("website_release_gate")), true);
+  assert.equal(releaseNotes.join("\n").includes("Registrar release gate"), true);
+  assert.equal(releaseNotes.join("\n").includes("Run App QA"), true);
+});
+
+test("visual control coverage does not match short controls inside longer words", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const body = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Copy close",
+    "Registrar deposito y vender",
+    "Reply",
+  ].join("\n");
+  const notes = __appQaAgentInternals.evaluateExpectedVisualControls(body, revenueRoute);
+
+  assert.equal(notes.some((note) => note.includes("website_closure")), true);
+  assert.equal(notes.join("\n").includes("Deposit"), true);
+});
+
+test("visual control coverage ignores generic scenario words until a strong money-flow control appears", () => {
+  const revenueRoute = __appQaAgentInternals.LOCAL_ROUTE_MAP.find((route) => route.path === "/revenue-engine")!;
+  const genericBody = [
+    "Revenue Engine",
+    "Guardar candidato publico",
+    "Guardar connector review-only",
+    "Preview batch",
+    "Money sprint",
+    "Correr QA",
+    "Reply",
+    "Deposit",
+  ].join("\n");
+
+  assert.deepEqual(__appQaAgentInternals.evaluateExpectedVisualControls(genericBody, revenueRoute), []);
+});
+
 test("improvement scout flags important production apps without health endpoints", () => {
   const report = analyzeImprovementIdeas([appProject({ healthUrl: null })]);
 
   assert.equal(report.findings.some((finding) => finding.title === "Agregar health endpoint"), true);
   assert.equal(report.findings.some((finding) => finding.sourceAgent === "improvement-scout"), true);
+});
+
+test("improvement scout flags production apps without release commands", () => {
+  const report = analyzeImprovementIdeas([appProject({ testCommand: null, buildCommand: null })]);
+
+  assert.equal(report.findings.some((finding) => finding.title === "Agregar comandos de test/build"), true);
+  assert.equal(report.findings.some((finding) => finding.area === "Release metadata"), true);
 });
 
 test("error scout turns failed checks and incidents into actionable findings", () => {
@@ -315,11 +530,53 @@ test("github scout finds new app repos that are not yet in Developer Health", as
   assert.equal(report.findings.some((finding) => finding.title === "Repo app sin URL publica en GitHub"), true);
 });
 
+test("github scout uses Developer Health URLs when repo homepage is empty", async () => {
+  const app = appProject({
+    name: "Kong Nightlife",
+    slug: "kong-nightlife",
+    publicUrl: "https://kong.example",
+    healthUrl: "https://kong.example/api/health",
+    repoOwner: "robert",
+    repoName: "kong-nightlife",
+    githubRepo: "robert/kong-nightlife",
+  });
+  const repo = {
+    id: 43,
+    name: "kong-nightlife",
+    full_name: "robert/kong-nightlife",
+    description: "Nightlife app",
+    private: true,
+    archived: false,
+    disabled: false,
+    fork: false,
+    html_url: "https://github.com/robert/kong-nightlife",
+    homepage: null,
+    default_branch: "main",
+    updated_at: "2026-06-18T12:00:00.000Z",
+    pushed_at: "2026-06-18T12:00:00.000Z",
+    open_issues_count: 0,
+    language: "TypeScript",
+  } as any;
+
+  const report = await __appQaAgentInternals.analyzeGithubAppRepos([app], [repo], async () => ({
+    ok: true,
+    statusCode: 200,
+    responseTimeMs: 50,
+  }));
+
+  assert.equal(report.githubApps[0].connectedToInventory, true);
+  assert.equal(report.githubApps[0].checkedUrl, "https://kong.example");
+  assert.equal(report.githubApps[0].status, "pass");
+  assert.equal(report.findings.some((finding) => finding.title === "Repo app sin URL publica en GitHub"), false);
+});
+
 test("visual click scout reports setup guidance when base URL is missing", async () => {
   const previousBaseUrl = process.env.APP_QA_BASE_URL;
   const previousPublicUrl = process.env.PUBLIC_APP_URL;
+  const previousPublicBaseUrl = process.env.PUBLIC_BASE_URL;
   delete process.env.APP_QA_BASE_URL;
   delete process.env.PUBLIC_APP_URL;
+  delete process.env.PUBLIC_BASE_URL;
 
   try {
     const report = await __appQaAgentInternals.runVisualClickScout();
@@ -327,8 +584,12 @@ test("visual click scout reports setup guidance when base URL is missing", async
     assert.equal(report.status, "fail");
     assert.equal(report.findings.some((finding) => finding.title === "APP_QA_BASE_URL no configurado"), true);
   } finally {
-    if (previousBaseUrl) process.env.APP_QA_BASE_URL = previousBaseUrl;
-    if (previousPublicUrl) process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
   }
 });
 
@@ -346,27 +607,21 @@ test("visual click scout reports setup guidance when Chromium cannot launch", as
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
 
   try {
-    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+    const report = await __appQaAgentInternals.runVisualClickScout(
+      [{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }],
+      { loadPlaywright: async () => ({ chromium: { launch: async () => { throw new Error("Expected launch failure"); } } }) },
+    );
 
     assert.equal(report.status, "fail");
     assert.equal(report.checked, 0);
     assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
   } finally {
-    if (previousBaseUrl) {
-      process.env.APP_QA_BASE_URL = previousBaseUrl;
-    } else {
-      delete process.env.APP_QA_BASE_URL;
-    }
-    if (previousPublicUrl) {
-      process.env.PUBLIC_APP_URL = previousPublicUrl;
-    } else {
-      delete process.env.PUBLIC_APP_URL;
-    }
-    if (previousExecutablePath) {
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
-    } else {
-      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    }
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicUrl;
+    if (previousExecutablePath === undefined) delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    else process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
     await rm(tempDir, { recursive: true, force: true });
   }
 });
@@ -387,7 +642,10 @@ test("visual click scout uses PUBLIC_BASE_URL as Replit base URL fallback", asyn
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = fakeChromiumPath;
 
   try {
-    const report = await __appQaAgentInternals.runVisualClickScout([{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }]);
+    const report = await __appQaAgentInternals.runVisualClickScout(
+      [{ path: "/app-qa-agent", label: "App QA Agent", expectedClicks: [], status: "pass", notes: [] }],
+      { loadPlaywright: async () => ({ chromium: { launch: async () => { throw new Error("Expected launch failure"); } } }) },
+    );
 
     assert.equal(report.status, "fail");
     assert.equal(report.checked, 0);
@@ -395,26 +653,14 @@ test("visual click scout uses PUBLIC_BASE_URL as Replit base URL fallback", asyn
     assert.equal(report.findings[0]?.url, "https://robplanner.replit.app");
     assert.equal(report.findings.some((finding) => finding.title === "Chromium no disponible"), true);
   } finally {
-    if (previousBaseUrl) {
-      process.env.APP_QA_BASE_URL = previousBaseUrl;
-    } else {
-      delete process.env.APP_QA_BASE_URL;
-    }
-    if (previousPublicAppUrl) {
-      process.env.PUBLIC_APP_URL = previousPublicAppUrl;
-    } else {
-      delete process.env.PUBLIC_APP_URL;
-    }
-    if (previousPublicBaseUrl) {
-      process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
-    } else {
-      delete process.env.PUBLIC_BASE_URL;
-    }
-    if (previousExecutablePath) {
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
-    } else {
-      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    }
+    if (previousBaseUrl === undefined) delete process.env.APP_QA_BASE_URL;
+    else process.env.APP_QA_BASE_URL = previousBaseUrl;
+    if (previousPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = previousPublicAppUrl;
+    if (previousPublicBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousPublicBaseUrl;
+    if (previousExecutablePath === undefined) delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    else process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = previousExecutablePath;
     await rm(tempDir, { recursive: true, force: true });
   }
 });
@@ -487,12 +733,24 @@ test("visual click scout stays in low-cost daily mode during lightweight scans",
       allowDailyDigest: true,
       now: new Date("2026-06-19T00:00:00.000Z"),
     });
+    const runRevenueTarget = __appQaAgentInternals.shouldRunVisualScout({
+      userId: "user-visual-low-cost-target",
+      notify: false,
+      allowDailyDigest: false,
+      targetContext: {
+        kind: "revenue_delivery_workspace",
+        workspaceId: "workspace-target",
+        routePath: "/revenue-engine",
+      },
+      now: new Date("2026-06-18T12:00:00.000Z"),
+    });
 
     assert.equal(runNow, false);
     assert.equal(runManual, true);
     assert.equal(runMorningDeep, true);
     assert.equal(skipMorningRepeat, false);
     assert.equal(runEveningDeep, true);
+    assert.equal(runRevenueTarget, true);
   } finally {
     if (previousMode) {
       process.env.APP_QA_VISUAL_MODE = previousMode;
@@ -519,6 +777,23 @@ test("storage unavailable result blocks release without throwing", () => {
   assert.ok(result.failCount >= 1);
   assert.equal(result.subAgents.some((agent) => agent.id === "api-scout" && agent.status === "fail"), true);
   assert.match(result.summary, /bloqueo release/);
+});
+
+test("storage unavailable result preserves App QA target context", () => {
+  const result = __appQaAgentInternals.buildAppQaStorageUnavailableResult(
+    new Error("connect ECONNREFUSED 127.0.0.1:5432"),
+    new Date("2026-06-19T07:30:00.000Z"),
+    {
+      kind: "revenue_delivery_workspace",
+      workspaceId: "workspace-target",
+      clientName: "Target Cafe",
+      routePath: "/revenue-engine",
+    },
+  );
+
+  assert.equal(result.targetContext?.kind, "revenue_delivery_workspace");
+  assert.equal(result.targetContext?.workspaceId, "workspace-target");
+  assert.equal(result.targetContext?.routePath, "/revenue-engine");
 });
 
 test("storage unavailable result keeps useful AggregateError details", () => {
