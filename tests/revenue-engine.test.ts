@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import path from "node:path";
@@ -3304,11 +3305,41 @@ test("writes a local revenue mockup preview without publishing externally", () =
   assert.match(html, /No Site Cafe/);
   assert.match(html, /QA gates before contact/);
   assert.match(html, /data-three-scene="revenue-preview"/);
-  assert.match(html, /import \* as THREE from 'three'/);
-  assert.match(html, /three@0\.180\.0\/build\/three\.module\.js/);
+  assert.match(html, /import \* as THREE from '\/api\/revenue-engine\/assets\/three\.module\.js'/);
+  assert.doesNotMatch(html, /cdn\.jsdelivr\.net/);
+  assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /script-src 'self' 'sha256-/);
+  const moduleScript = html.match(/<script type="module">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(moduleScript);
+  const moduleHash = createHash("sha256").update(moduleScript).digest("base64");
+  assert.match(html, new RegExp(`script-src 'self' 'sha256-${moduleHash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
   assert.match(html, /prefers-reduced-motion/);
   assert.match(html, /scene-fallback/);
+  assert.match(html, /A clearer guest journey/);
+  assert.doesNotMatch(html, /patient journey|Premium care|next appointment/);
+  assert.equal((html.match(/<section\b/g) || []).length, (html.match(/<\/section>/g) || []).length);
   assert.equal(preview.guardrails.some((item) => item.includes("No requiere hosting pagado")), true);
+});
+
+test("escapes dynamic lead content in the revenue mockup preview", () => {
+  const preview = buildRevenueMockupPreview({
+    businessName: '<script>alert("name")</script>',
+    area: '<img src=x onerror=alert("area")>',
+    niche: "local services",
+    websiteStatus: "weak_website",
+    evidence: "Public source has enough verified evidence.",
+    painPoint: '<script>alert("pain")</script>',
+    primaryOffer: '<img src=x onerror=alert("offer")>',
+    estimatedOfferUsd: 2400,
+    includeAutomation: true,
+  });
+
+  const html = readFileSync(getRevenueMockupPreviewPath(preview.slug), "utf8");
+  assert.doesNotMatch(html, /<script>alert\("name"\)<\/script>/);
+  assert.doesNotMatch(html, /<img src=x onerror=alert\("area"\)>/);
+  assert.doesNotMatch(html, /<script>alert\("pain"\)<\/script>/);
+  assert.match(html, /&lt;script&gt;alert\(&quot;name&quot;\)&lt;\/script&gt;/);
+  assert.match(html, /&lt;img src=x onerror=alert\(&quot;area&quot;\)&gt;/);
 });
 
 test("serves revenue mockup previews over the generated route", async () => {

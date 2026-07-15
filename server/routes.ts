@@ -5834,6 +5834,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/revenue-engine/assets/three.module.js", async (_req, res) => {
+    try {
+      const modulePath = `${process.cwd()}/node_modules/three/build/three.module.js`;
+      const source = await readNodeFile(modulePath, "utf8");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.type("text/javascript").send(source);
+    } catch {
+      res.status(503).json({ error: "3D preview asset unavailable" });
+    }
+  });
+
   app.post("/api/revenue-engine/mockup-template-pack", async (req, res) => {
     try {
       const input = revenueMockupTemplatePackSchema.parse(req.body);

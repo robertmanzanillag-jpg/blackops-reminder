@@ -8567,7 +8567,59 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     </li>
   `).join("");
   const automations = mockup.automations.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  const threeModuleUrl = "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+  const niche = mockup.input.niche.toLowerCase();
+  const isMedical = includesAny(niche, ["medical", "med spa", "clinic", "health", "dental", "aesthetic"]);
+  const isFood = includesAny(niche, ["restaurant", "cafe", "coffee", "bar", "bakery", "food"]);
+  const experienceCopy = isMedical
+    ? {
+        kicker: "A clearer patient journey",
+        headline: "From first impression to the next appointment.",
+        story: "Premium care deserves a calm digital experience.",
+        action: "Book",
+        actionDetail: "A direct, measurable appointment path.",
+        conversion: "Ready for a more confident booking journey?",
+      }
+    : isFood
+      ? {
+          kicker: "A clearer guest journey",
+          headline: "From first impression to the next order or reservation.",
+          story: "A memorable venue deserves a focused digital experience.",
+          action: "Order",
+          actionDetail: "A direct path to reservations, orders, or inquiries.",
+          conversion: "Ready for a more confident guest journey?",
+        }
+      : {
+          kicker: "A clearer customer journey",
+          headline: "From first impression to the next inquiry.",
+          story: "A strong local business deserves a focused digital experience.",
+          action: "Connect",
+          actionDetail: "A direct, measurable inquiry path.",
+          conversion: "Ready for a more confident customer journey?",
+        };
+  const threeModuleUrl = "/api/revenue-engine/assets/three.module.js";
+  const threeScript = [
+    `import * as THREE from '${threeModuleUrl}';`,
+    "const canvas=document.querySelector('[data-three-scene=\"revenue-preview\"]');",
+    "const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;",
+    "try{",
+    "const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});",
+    "renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;",
+    "const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(36,1,.1,100);camera.position.set(0,0,8.4);",
+    "const group=new THREE.Group();scene.add(group);",
+    `const accent=new THREE.Color('${accent}');const mint=new THREE.Color('#2dd4bf');`,
+    "const core=new THREE.Mesh(new THREE.TorusKnotGeometry(1.48,.38,180,28),new THREE.MeshPhysicalMaterial({color:accent,metalness:.2,roughness:.2,clearcoat:1,clearcoatRoughness:.12,transmission:.08}));group.add(core);",
+    "const halo=new THREE.Mesh(new THREE.TorusGeometry(2.28,.035,16,180),new THREE.MeshBasicMaterial({color:mint,transparent:true,opacity:.8}));halo.rotation.x=1.08;group.add(halo);",
+    "const haloTwo=new THREE.Mesh(new THREE.TorusGeometry(1.94,.018,12,160),new THREE.MeshBasicMaterial({color:0xf3f0e9,transparent:true,opacity:.42}));haloTwo.rotation.set(.28,.8,.3);group.add(haloTwo);",
+    "const panelGeometry=new THREE.BoxGeometry(.74,1.62,.08);[-1,0,1].forEach((n)=>{const panel=new THREE.Mesh(panelGeometry,new THREE.MeshPhysicalMaterial({color:n===0?mint:0xf3f0e9,transparent:true,opacity:n===0?.8:.44,roughness:.25,metalness:.05}));panel.position.set(2.55+n*.78,n*.42,-.6+Math.abs(n)*.3);panel.rotation.set(.1+n*.08,-.45+n*.12,n*.08);group.add(panel);});",
+    "const points=[];for(let i=0;i<120;i+=1){const a=i*.618;const r=2.8+(i%7)*.08;points.push(Math.cos(a)*r,Math.sin(a*1.7)*1.9,Math.sin(a)*r*.5)}const particles=new THREE.BufferGeometry();particles.setAttribute('position',new THREE.Float32BufferAttribute(points,3));group.add(new THREE.Points(particles,new THREE.PointsMaterial({color:0xf3f0e9,size:.025,transparent:true,opacity:.55})));",
+    "scene.add(new THREE.HemisphereLight(0xf3f0e9,0x0b1118,2.4));const key=new THREE.DirectionalLight(accent,5);key.position.set(4,5,6);scene.add(key);const rim=new THREE.PointLight(mint,45,18);rim.position.set(-4,-1,4);scene.add(rim);",
+    "const pointer={x:0,y:0};if(!reduceMotion){window.addEventListener('pointermove',(event)=>{pointer.x=(event.clientX/window.innerWidth-.5)*.5;pointer.y=(event.clientY/window.innerHeight-.5)*.35},{passive:true})}",
+    "function resize(){const ratio=Math.min(window.devicePixelRatio||1,1.75);const width=Math.max(1,Math.floor(canvas.clientWidth*ratio));const height=Math.max(1,Math.floor(canvas.clientHeight*ratio));if(canvas.width!==width||canvas.height!==height){renderer.setSize(width,height,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix()}}",
+    "function frame(time=0){resize();const t=time*.001;group.position.x=window.innerWidth<860?1.15:2.45;group.position.y=window.innerWidth<860?-.65:.05;group.rotation.x+=(pointer.y-group.rotation.x)*.035;group.rotation.y+=(pointer.x+t*.035-group.rotation.y)*.035;core.rotation.z=t*.11;halo.rotation.z=-t*.07;haloTwo.rotation.z=t*.05;renderer.render(scene,camera);if(!reduceMotion)requestAnimationFrame(frame)}",
+    "document.body.classList.add('three-ready');frame();",
+    "}catch(error){console.warn('3D preview fallback active',error)}",
+  ].join("\n");
+  const scriptHash = createHash("sha256").update(threeScript).digest("base64");
 
   return [
     "<!doctype html>",
@@ -8576,8 +8628,8 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     '<meta name="theme-color" content="#090d12" />',
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-${scriptHash}'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" />`,
     `<title>${escapeHtml(mockup.input.businessName)} Revenue Mockup</title>`,
-    '<script type="importmap">{"imports":{"three":"' + threeModuleUrl + '"}}</script>',
     "<style>",
     ":root{color-scheme:dark;--accent:" + accent + ";--mint:#2dd4bf;--ink:#090d12;--paper:#f3f0e9;--muted:#aab4bf;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
     "*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--ink);color:#f8fafc}button,a{font:inherit}main{min-height:100vh;overflow:hidden}",
@@ -8613,25 +8665,25 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     "</div>",
     "</section>",
     '<section class="services" id="services">',
-    '<p class="section-kicker">A clearer patient journey</p>',
-    '<h2>From first impression to the next appointment.</h2>',
+    `<p class="section-kicker">${experienceCopy.kicker}</p>`,
+    `<h2>${experienceCopy.headline}</h2>`,
     `<div class="service-grid">${sections}</div>`,
     '</section>',
     '<section class="story" id="story">',
     '<div>',
     '<p class="section-kicker">Concept direction</p>',
-    '<h2>Premium care deserves a calm digital experience.</h2>',
+    `<h2>${experienceCopy.story}</h2>`,
     `<p class="signal">${escapeHtml(mockup.salesAngle.problem)}</p>`,
     `<p>${escapeHtml(mockup.salesAngle.pitch)} This concept uses only public evidence and avoids unverified performance or medical claims.</p>`,
     "</div>",
     '<div class="path">',
     '<div><strong>Discover</strong><span>Focused services and clear next steps.</span></div>',
     '<div><strong>Decide</strong><span>Useful context without unnecessary friction.</span></div>',
-    '<div><strong>Book</strong><span>A direct, measurable appointment path.</span></div>',
+    `<div><strong>${experienceCopy.action}</strong><span>${experienceCopy.actionDetail}</span></div>`,
     "</div>",
     "</section>",
     '<section class="conversion">',
-    '<h2>Ready for a more confident booking journey?</h2>',
+    `<h2>${experienceCopy.conversion}</h2>`,
     `<a class="btn" href="#internal">${escapeHtml(mockup.copy.primaryCta)}</a>`,
     "</section>",
     '<section class="internal" id="internal">',
@@ -8643,28 +8695,7 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     `<ul class="qa">${qa}</ul>`,
     "</section>",
     "</main>",
-    '<script type="module">',
-    "import * as THREE from 'three';",
-    "const canvas=document.querySelector('[data-three-scene=\"revenue-preview\"]');",
-    "const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;",
-    "try{",
-    "const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'high-performance'});",
-    "renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;",
-    "const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(36,1,.1,100);camera.position.set(0,0,8.4);",
-    "const group=new THREE.Group();scene.add(group);",
-    `const accent=new THREE.Color('${accent}');const mint=new THREE.Color('#2dd4bf');`,
-    "const core=new THREE.Mesh(new THREE.TorusKnotGeometry(1.48,.38,180,28),new THREE.MeshPhysicalMaterial({color:accent,metalness:.2,roughness:.2,clearcoat:1,clearcoatRoughness:.12,transmission:.08}));group.add(core);",
-    "const halo=new THREE.Mesh(new THREE.TorusGeometry(2.28,.035,16,180),new THREE.MeshBasicMaterial({color:mint,transparent:true,opacity:.8}));halo.rotation.x=1.08;group.add(halo);",
-    "const haloTwo=new THREE.Mesh(new THREE.TorusGeometry(1.94,.018,12,160),new THREE.MeshBasicMaterial({color:0xf3f0e9,transparent:true,opacity:.42}));haloTwo.rotation.set(.28,.8,.3);group.add(haloTwo);",
-    "const panelGeometry=new THREE.BoxGeometry(.74,1.62,.08);[-1,0,1].forEach((n)=>{const panel=new THREE.Mesh(panelGeometry,new THREE.MeshPhysicalMaterial({color:n===0?mint:0xf3f0e9,transparent:true,opacity:n===0?.8:.44,roughness:.25,metalness:.05}));panel.position.set(2.55+n*.78,n*.42,-.6+Math.abs(n)*.3);panel.rotation.set(.1+n*.08,-.45+n*.12,n*.08);group.add(panel);});",
-    "const points=[];for(let i=0;i<120;i+=1){const a=i*.618;const r=2.8+(i%7)*.08;points.push(Math.cos(a)*r,Math.sin(a*1.7)*1.9,Math.sin(a)*r*.5)}const particles=new THREE.BufferGeometry();particles.setAttribute('position',new THREE.Float32BufferAttribute(points,3));group.add(new THREE.Points(particles,new THREE.PointsMaterial({color:0xf3f0e9,size:.025,transparent:true,opacity:.55})));",
-    "scene.add(new THREE.HemisphereLight(0xf3f0e9,0x0b1118,2.4));const key=new THREE.DirectionalLight(accent,5);key.position.set(4,5,6);scene.add(key);const rim=new THREE.PointLight(mint,45,18);rim.position.set(-4,-1,4);scene.add(rim);",
-    "const pointer={x:0,y:0};if(!reduceMotion){window.addEventListener('pointermove',(event)=>{pointer.x=(event.clientX/window.innerWidth-.5)*.5;pointer.y=(event.clientY/window.innerHeight-.5)*.35},{passive:true})}",
-    "function resize(){const ratio=Math.min(window.devicePixelRatio||1,1.75);const width=Math.max(1,Math.floor(canvas.clientWidth*ratio));const height=Math.max(1,Math.floor(canvas.clientHeight*ratio));if(canvas.width!==width||canvas.height!==height){renderer.setSize(width,height,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix()}}",
-    "function frame(time=0){resize();const t=time*.001;group.position.x=window.innerWidth<860?1.15:2.45;group.position.y=window.innerWidth<860?-.65:.05;group.rotation.x+=(pointer.y-group.rotation.x)*.035;group.rotation.y+=(pointer.x+t*.035-group.rotation.y)*.035;core.rotation.z=t*.11;halo.rotation.z=-t*.07;haloTwo.rotation.z=t*.05;renderer.render(scene,camera);if(!reduceMotion)requestAnimationFrame(frame)}",
-    "document.body.classList.add('three-ready');frame();",
-    "}catch(error){console.warn('3D preview fallback active',error)}",
-    "</script>",
+    `<script type="module">${threeScript}</script>`,
     "</body>",
     "</html>",
   ].join("\n");
