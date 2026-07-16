@@ -5695,7 +5695,11 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
   const draft = opportunity
     ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null
     : null;
-  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
+  const stripeDepositCashUsd = stripeLedgerEntry?.cashCollectedUsd || 0;
+  const manualDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const recordedDepositCashUsd = Math.max(manualDepositCashUsd, stripeDepositCashUsd, opportunity?.cashCollectedUsd || 0);
+  const hasVerifiedDeposit = Boolean(draft?.delivery.outcome === "deposit_collected" || stripeLedgerEntry);
   const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(opportunity, draft);
   const blockers = [
     !opportunity && "sourceOpportunityId vendido requerido",
@@ -5705,9 +5709,9 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
     opportunity && workspace.input.sourceLeadId !== opportunity.sourceLeadId && "sourceLeadId no coincide con oportunidad vendida",
     opportunity && workspace.input.sourceOutreachDraftId !== opportunity.sourceOutreachDraftId && "sourceOutreachDraftId no coincide con oportunidad vendida",
     !draft && "draft de venta no encontrado",
-    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en draft",
-    draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito manual insuficiente",
-    opportunity && recordedDepositCashUsd !== opportunity.cashCollectedUsd && "cash de oportunidad no coincide con deposito manual",
+    draft && !hasVerifiedDeposit && "deposito no registrado en draft ni Stripe",
+    draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito insuficiente",
+    opportunity && Math.abs(recordedDepositCashUsd - opportunity.cashCollectedUsd) > 0.009 && "cash de oportunidad no coincide con deposito verificado",
     paymentEvidenceBlocker,
   ].filter(Boolean) as string[];
   return { passed: blockers.length === 0, blockers };
@@ -5732,8 +5736,8 @@ export function getRevenueWebsiteWorkspaceSaleGate(workspaceId: string) {
     passed: gate.passed,
     blockers: gate.blockers,
     reason: gate.passed
-      ? "Workspace respaldado por oportunidad vendida y deposito manual."
-      : `Workspace website requiere oportunidad vendida y deposito manual: ${gate.blockers.join("; ")}.`,
+      ? "Workspace respaldado por oportunidad vendida y deposito verificado."
+      : `Workspace website requiere oportunidad vendida y deposito verificado: ${gate.blockers.join("; ")}.`,
   };
 }
 

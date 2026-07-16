@@ -4168,6 +4168,28 @@ test("Stripe-paid website opportunity can close without duplicate ledger revenue
   assert.equal(closeResult.entry?.stripePaymentIds?.[0], "pi_stripe_ready_deposit_123");
   assert.equal(closeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
   assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunityResult.opportunity!.id,
+    projectType: "website",
+    repoFullName: "robert/stripe-ready-cafe",
+    branchName: "codex/client-stripe-ready-cafe-website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  assert.equal(handoff.status, "created");
+  assert.ok(handoff.workspace);
+  const saleGate = getRevenueWebsiteWorkspaceSaleGate(handoff.workspace.id);
+  assert.equal(saleGate.status, "pass");
+  assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
 });
 
 test("website opportunity close requires recorded manual deposit outcome", () => {
