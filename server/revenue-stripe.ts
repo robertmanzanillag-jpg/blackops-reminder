@@ -429,6 +429,9 @@ export async function processRevenueStripeWebhook(rawBody: Buffer, signatureHead
   const metadata = metadataFromStripeObject(paidObject.object);
   if (metadata.account_segment !== ROBERT_WEBSITES_SEGMENT
     || metadata.stripe_account_id !== ROBERT_WEBSITES_STRIPE_ACCOUNT_ID) {
+    if (!metadata.account_segment && !metadata.stripe_account_id && !metadata.revenue_user_id && !metadata.deal_id) {
+      return { status: "ignored" as const, eventId: event.id, eventType: event.type };
+    }
     throw new RevenueStripeError("Stripe webhook rejected: Robert Websites metadata is missing.", 409);
   }
   if (stringValue(paidObject.object.currency).toLowerCase() !== "usd") {

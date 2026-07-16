@@ -53,6 +53,7 @@ import {
   recordRevenuePublicLeadCandidate,
   recordRevenuePublicLeadCandidateBatch,
   recordRevenuePublicScoutEvidence,
+  recordRevenueStripePayment,
   recordRevenueVerifiedScoutConnectorResults,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
@@ -72,6 +73,7 @@ import {
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
+  ROBERT_WEBSITES_STRIPE_ACCOUNT_ID,
   submitRevenueDailyScoutSprintEvidence,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
@@ -4110,6 +4112,62 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(dailyWorkspaceRequest.repoFullName, "REPLACE_WITH_APPROVED_OWNER_REPO");
   assert.doesNotMatch(closeResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_SOLD_LEAD_ID/);
   assert.equal(closeResult.snapshot.metrics.appsSold, 1);
+});
+
+test("Stripe-paid website opportunity can close without duplicate ledger revenue", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Stripe Ready Cafe",
+    contactEmail: "owner@stripeready.example",
+    sourceUrl: "https://instagram.com/stripereadycafe",
+    mockupSlug: "stripe-ready-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "website",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  const scopedOnlyResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: false,
+    scopeApproved: true,
+    cashCollectedUsd: 0,
+    notes: "Scope approved; waiting on Stripe deposit.",
+  });
+  assert.equal(scopedOnlyResult.status, "blocked");
+  assert.equal(scopedOnlyResult.opportunity?.status, "scope_approved");
+
+  const stripeResult = recordRevenueStripePayment({
+    stripeAccountId: ROBERT_WEBSITES_STRIPE_ACCOUNT_ID,
+    dealId: opportunityResult.opportunity!.id,
+    kind: "website_sale",
+    clientName: "Stripe Ready Cafe",
+    contractTotalUsd: opportunityResult.opportunity!.setupUsd,
+    paymentAmountUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunityResult.opportunity!.estimatedInternalCostUsd,
+    externalPaymentId: "pi_stripe_ready_deposit_123",
+    eventId: "evt_stripe_ready_deposit_123",
+    paymentStage: "deposit",
+    occurredAt: new Date().toISOString(),
+    notes: `Lead:${lead.id}`,
+  });
+  assert.equal(stripeResult.status, "recorded");
+  assert.equal(stripeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(stripeResult.snapshot.recentWebsiteOpportunities[0].depositPaid, true);
+  assert.equal(stripeResult.snapshot.recentWebsiteOpportunities[0].paymentConfirmation, "Stripe payment id:pi_stripe_ready_deposit_123");
+
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+  });
+
+  assert.equal(closeResult.status, "sold");
+  assert.equal(closeResult.opportunity?.status, "sold");
+  assert.equal(closeResult.entry?.stripePaymentIds?.[0], "pi_stripe_ready_deposit_123");
+  assert.equal(closeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
 });
 
 test("website opportunity close requires recorded manual deposit outcome", () => {

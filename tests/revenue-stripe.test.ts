@@ -331,3 +331,34 @@ test("processes a paid Checkout webhook idempotently into the owner ledger", asy
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].stripeAccountId, ROBERT_WEBSITES_STRIPE_ACCOUNT_ID);
 });
+
+test("ignores same-account paid Stripe events without Revenue Engine metadata", async () => {
+  setRevenueStripeFetchForTests(async (input) => {
+    assert.equal(input, "https://api.stripe.com/v1/account");
+    return jsonResponse({ id: ROBERT_WEBSITES_STRIPE_ACCOUNT_ID, charges_enabled: true });
+  });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const event = {
+    id: "evt_unrelated_invoice_paid_123456",
+    type: "invoice.paid",
+    account: ROBERT_WEBSITES_STRIPE_ACCOUNT_ID,
+    created: timestamp,
+    livemode: false,
+    data: {
+      object: {
+        id: "in_unrelated_paid_123456",
+        payment_intent: "pi_unrelated_paid_123456",
+        amount_paid: 9900,
+        currency: "usd",
+        metadata: {},
+      },
+    },
+  };
+  const rawBody = Buffer.from(JSON.stringify(event));
+  const signature = stripeSignature(rawBody, process.env.REVENUE_STRIPE_WEBHOOK_SECRET!, timestamp);
+
+  const result = await processRevenueStripeWebhook(rawBody, signature);
+
+  assert.equal(result.status, "ignored");
+  assert.equal(existsSync(buildRevenueUserDataPaths(webhookOwnerId).ledgerPath), false);
+});

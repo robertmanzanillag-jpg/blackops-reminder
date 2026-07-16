@@ -4316,10 +4316,11 @@ function revenueWebsitePaymentEvidenceBlocker(opportunity: RevenueWebsiteOpportu
     return "oportunidad vendida sin referencia/comprobante verificable de pago";
   }
   if (!draft) return "draft de venta no encontrado";
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
   const recordedDepositPaymentConfirmation = draft.delivery.outcome === "deposit_collected"
     ? draft.delivery.outcomePaymentConfirmation || ""
     : "";
-  if (!hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation)) {
+  if (!hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation) && !stripePaymentConfirmationFromEntry(stripeLedgerEntry)) {
     return "deposito manual sin referencia/comprobante verificable en draft";
   }
   return "";
@@ -4512,7 +4513,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     persistRevenueLeads();
   }
 
-  const existingLedgerEntry = revenueLedger.find((entry) =>
+  const existingLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(websiteOpportunity) || revenueLedger.find((entry) =>
     entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
   );
   if (depositPaid && websiteOpportunity.scopeApproved && cashCollectedUsd > 0 && !existingLedgerEntry) {
@@ -4904,6 +4905,57 @@ function isClosedRevenueWebsiteOpportunity(
   return opportunity?.status === "sold" || opportunity?.status === "delivered";
 }
 
+function findRevenueStripeLedgerEntryForWebsiteOpportunity(
+  opportunity: RevenueWebsiteOpportunity | null | undefined,
+) {
+  if (!opportunity) return null;
+  return revenueLedger.find((entry) =>
+    isSaleEntry(entry)
+    && entry.stripeAccountId === ROBERT_WEBSITES_STRIPE_ACCOUNT_ID
+    && (entry.stripePaymentIds || []).length > 0
+    && (
+      revenueLedgerEntryMatchesDeal(entry, opportunity.id)
+      || entry.notes.split("|").map((part) => part.trim()).some((part) =>
+        part === `website-opportunity:${opportunity.id}`
+        || part === `[website-opportunity:${opportunity.id}]`
+      )
+    )
+  ) || null;
+}
+
+function stripePaymentConfirmationFromEntry(entry: RevenueLedgerEntry | null) {
+  return entry?.stripePaymentIds?.[0] ? `Stripe payment id:${entry.stripePaymentIds[0]}` : "";
+}
+
+function syncRevenueWebsiteOpportunityFromStripePayment(
+  input: RevenueStripePaymentInput,
+  entry: RevenueLedgerEntry,
+) {
+  if (input.kind !== "website_sale" && input.kind !== "bundle_sale") return null;
+  loadRevenueWebsiteOpportunities();
+  const opportunity = revenueWebsiteOpportunities.find((item) => item.id === input.dealId) || null;
+  if (!opportunity || opportunity.status === "delivered") return null;
+
+  const nextCashCollectedUsd = Math.max(opportunity.cashCollectedUsd, entry.cashCollectedUsd);
+  opportunity.cashCollectedUsd = roundRevenueMoney(nextCashCollectedUsd);
+  opportunity.depositPaid = opportunity.depositPaid || (
+    opportunity.requiredDepositUsd > 0
+    && opportunity.cashCollectedUsd + 0.009 >= opportunity.requiredDepositUsd
+  );
+  opportunity.paymentConfirmation = opportunity.paymentConfirmation
+    || stripePaymentConfirmationFromEntry(entry);
+  if (opportunity.depositPaid && opportunity.scopeApproved && opportunity.status !== "sold") {
+    opportunity.status = "scope_approved";
+    opportunity.nextAction = "Stripe deposito registrado; cerrar oportunidad para habilitar delivery QA-gated.";
+  } else if (opportunity.depositPaid && opportunity.status !== "sold") {
+    opportunity.status = "quoted";
+    opportunity.nextAction = "Stripe deposito registrado; falta aprobar scope antes de convertir a delivery.";
+  }
+  opportunity.updatedAt = new Date().toISOString();
+  persistRevenueWebsiteOpportunities();
+  return opportunity;
+}
+
 function syncRevenueWebsiteOpportunityFromDepositOutcome(
   lead: RevenueLead | null,
   draft: RevenueOutreachDraft,
@@ -5088,10 +5140,18 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const lead = opportunity ? revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null : null;
   const draft = opportunity ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null : null;
   const requiredDepositUsd = opportunity?.requiredDepositUsd || 0;
-  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
-  const recordedDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
+  const stripeDepositCashUsd = stripeLedgerEntry?.cashCollectedUsd || 0;
+  const manualDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const recordedDepositCashUsd = Math.max(manualDepositCashUsd, stripeDepositCashUsd, opportunity?.cashCollectedUsd || 0);
+  const manualDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
+  const stripeDepositPaymentConfirmation = stripePaymentConfirmationFromEntry(stripeLedgerEntry);
+  const recordedDepositPaymentConfirmation = manualDepositPaymentConfirmation || stripeDepositPaymentConfirmation || opportunity?.paymentConfirmation || "";
   const depositOutcomeCoversRequired = recordedDepositCashUsd >= requiredDepositUsd && requiredDepositUsd > 0;
   const recordedDepositPaymentConfirmed = hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation);
+  const hasRecordedDepositOutcome = Boolean(
+    draft?.delivery.outcome === "deposit_collected" || stripeLedgerEntry || opportunity?.depositPaid,
+  );
   const paymentConfirmed = hasRevenuePaymentEvidence(parsed.paymentConfirmation);
   const blockers = [
     !opportunity && "oportunidad no encontrada",
@@ -5099,14 +5159,14 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
     opportunity?.status === "delivered" && "oportunidad ya entregada",
     !lead && "lead no encontrado",
     !draft && "draft no encontrado",
-    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
-    draft && draft.delivery.outcome === "deposit_collected" && !depositOutcomeCoversRequired && `deposito manual insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
-    depositOutcomeCoversRequired && !recordedDepositPaymentConfirmed && "deposito manual sin referencia/comprobante de pago verificable",
+    draft && !hasRecordedDepositOutcome && "deposito manual no registrado en outreach outcome ni Stripe",
+    hasRecordedDepositOutcome && !depositOutcomeCoversRequired && `deposito insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
+    depositOutcomeCoversRequired && !recordedDepositPaymentConfirmed && "deposito sin referencia/comprobante de pago verificable",
     !parsed.scopeApproved && "scope no aprobado",
     !parsed.depositPaid && "deposito no marcado",
     parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
-    depositOutcomeCoversRequired && parsed.cashCollectedUsd !== recordedDepositCashUsd && `cashCollectedUsd debe coincidir con el deposito manual registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
-    !paymentConfirmed && "falta referencia/comprobante verificable de pago/deposito",
+    depositOutcomeCoversRequired && Math.abs(parsed.cashCollectedUsd - recordedDepositCashUsd) > 0.009 && `cashCollectedUsd debe coincidir con el deposito registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
+    !paymentConfirmed && !(stripeLedgerEntry && recordedDepositPaymentConfirmed) && "falta referencia/comprobante verificable de pago/deposito",
   ].filter(Boolean) as string[];
 
   if (!opportunity || blockers.length > 0) {
@@ -5117,8 +5177,8 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
       opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, recordedDepositCashUsd);
       opportunity.depositPaid = nextDepositPaid;
       opportunity.scopeApproved = nextScopeApproved;
-      opportunity.paymentConfirmation = depositOutcomeCoversRequired && paymentConfirmed
-        ? parsed.paymentConfirmation || opportunity.paymentConfirmation
+      opportunity.paymentConfirmation = depositOutcomeCoversRequired && (paymentConfirmed || recordedDepositPaymentConfirmed)
+        ? parsed.paymentConfirmation || recordedDepositPaymentConfirmation || opportunity.paymentConfirmation
         : opportunity.paymentConfirmation;
       opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
       opportunity.updatedAt = new Date().toISOString();
@@ -5139,7 +5199,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   opportunity.cashCollectedUsd = recordedDepositCashUsd;
   opportunity.depositPaid = true;
   opportunity.scopeApproved = true;
-  opportunity.paymentConfirmation = parsed.paymentConfirmation;
+  opportunity.paymentConfirmation = parsed.paymentConfirmation || recordedDepositPaymentConfirmation;
   opportunity.nextAction = "Oportunidad vendida. Crear delivery workspace desde Website handoff queue; no desplegar sin PR/App QA/aprobacion.";
   opportunity.updatedAt = now;
   persistRevenueWebsiteOpportunities();
@@ -5152,7 +5212,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
 
   const ledgerTag = `website-lead:${opportunity.sourceLeadId}`;
   const legacyLedgerTag = `[${ledgerTag}]`;
-  const existingEntry = revenueLedger.find((entry) =>
+  const existingEntry = stripeLedgerEntry || revenueLedger.find((entry) =>
     entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
   );
   const entry = existingEntry || recordRevenueLedgerEntry({
@@ -10286,6 +10346,7 @@ export function recordRevenueStripePayment(input: RevenueStripePaymentInput) {
       : "partially_paid";
     existingEntry.stripeLastPaymentAt = parsed.occurredAt;
     existingEntry.notes = appendRevenueStripeEvidence(existingEntry.notes, parsed);
+    syncRevenueWebsiteOpportunityFromStripePayment(parsed, existingEntry);
     persistRevenueLedger();
     return {
       status: "updated" as const,
@@ -10313,6 +10374,7 @@ export function recordRevenueStripePayment(input: RevenueStripePaymentInput) {
     ? "paid"
     : "partially_paid";
   ledgerResult.entry.stripeLastPaymentAt = parsed.occurredAt;
+  syncRevenueWebsiteOpportunityFromStripePayment(parsed, ledgerResult.entry);
   persistRevenueLedger();
   return {
     status: "recorded" as const,
