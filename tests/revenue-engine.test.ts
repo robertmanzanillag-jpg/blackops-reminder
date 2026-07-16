@@ -4190,6 +4190,13 @@ test("Stripe-paid website opportunity can close without duplicate ledger revenue
   const saleGate = getRevenueWebsiteWorkspaceSaleGate(handoff.workspace.id);
   assert.equal(saleGate.status, "pass");
   assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
+
+  setRevenueLedgerPathForTests(testLedgerPath);
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
+  setRevenueOutreachPathForTests(testOutreachPath);
+  setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+  const reloadedSaleGate = getRevenueWebsiteWorkspaceSaleGate(handoff.workspace.id);
+  assert.equal(reloadedSaleGate.status, "pass");
 });
 
 test("website opportunity close requires recorded manual deposit outcome", () => {

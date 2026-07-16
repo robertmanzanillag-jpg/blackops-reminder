@@ -5721,6 +5721,7 @@ export function getRevenueWebsiteWorkspaceSaleGate(workspaceId: string) {
   loadRevenueDeliveryWorkspaces();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === workspaceId) || null;
   if (!workspace) {
     return {
@@ -11617,6 +11618,7 @@ export function recordRevenueDeliveryReleaseGate(
   loadRevenueDeliveryWorkspaces();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === parsed.workspaceId) || null;
 
@@ -11683,6 +11685,7 @@ export function deliverRevenueDeliveryWorkspace(
   loadRevenueAutomationOpportunities();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const parsed = revenueDeliveryWorkspaceDeliverSchema.parse(input);
   const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
 
