@@ -1083,6 +1083,14 @@ type RevenueDailyMoneyCommand = {
     copyableApiRequest: string;
     copyableRunPacket: string;
   };
+  learning: {
+    status: RevenueOutcomeMemory["status"];
+    totalOutcomes: number;
+    segmentsTracked: number;
+    focusSegment: string;
+    summary: string;
+    nextExperiment: string;
+  };
   copyableOperatorBrief: string;
   safety: {
     sendsOutreach: false;
@@ -1172,6 +1180,43 @@ type RevenueImprovementReview = ReturnType<typeof buildImprovementReview> & {
   decisionStatus: ReturnType<typeof buildImprovementReview>["decision"]["status"];
   learningSummary: string;
 };
+
+type RevenueOutcomeMemorySegment = {
+  key: string;
+  area: string;
+  niche: string;
+  offerFocus: "websites" | "automations" | "both";
+  outcomes: number;
+  contacted: number;
+  replies: number;
+  callsBooked: number;
+  depositsCollected: number;
+  lost: number;
+  cashCollectedUsd: number;
+  replyRatePercent: number;
+  callRatePercent: number;
+  closeRatePercent: number;
+  confidence: "low" | "medium" | "high";
+  signal: "winning" | "promising" | "needs_change" | "collect_data";
+  learning: string;
+  nextExperiment: string;
+};
+
+type RevenueOutcomeMemory = {
+  status: "empty" | "needs_data" | "learning";
+  totalOutcomes: number;
+  segmentsTracked: number;
+  segments: RevenueOutcomeMemorySegment[];
+  bestSegment: RevenueOutcomeMemorySegment | null;
+  segmentsNeedingChange: RevenueOutcomeMemorySegment[];
+  learningSummary: string;
+  nextExperiment: string;
+};
+
+type RevenueOutcomeMemoryAccumulator = Omit<
+  RevenueOutcomeMemorySegment,
+  "replyRatePercent" | "callRatePercent" | "closeRatePercent" | "confidence" | "signal" | "learning" | "nextExperiment"
+>;
 
 type RevenueScoutingMission = ReturnType<typeof buildRevenueScoutingMission> & {
   id: string;
@@ -2996,10 +3041,166 @@ function buildRevenueProfitGuard({
   };
 }
 
+function normalizeRevenueLearningDimension(value: string | undefined, fallback: string) {
+  const normalized = value?.trim().replace(/\s+/g, " ");
+  return normalized || fallback;
+}
+
+function revenueLearningOfferFocus(draft: RevenueOutreachDraft): RevenueOutcomeMemorySegment["offerFocus"] {
+  const includesWebsite = draft.websitePriceUsd > 0;
+  const includesAutomation = draft.automationPriceUsd > 0;
+  if (includesWebsite && includesAutomation) return "both";
+  if (includesAutomation) return "automations";
+  return "websites";
+}
+
+function revenueLearningRate(numerator: number, denominator: number) {
+  if (denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+function buildRevenueOutcomeMemory(): RevenueOutcomeMemory {
+  const segmentsByKey = new Map<string, RevenueOutcomeMemoryAccumulator>();
+
+  for (const draft of revenueOutreachDrafts) {
+    const outcome = draft.delivery.outcome;
+    if (!outcome) continue;
+
+    const lead = draft.leadId
+      ? revenueLeads.find((item) => item.id === draft.leadId)
+      : revenueLeads.find((item) => item.businessName.toLowerCase() === draft.businessName.toLowerCase());
+    const area = normalizeRevenueLearningDimension(lead?.area, "Unclassified area");
+    const niche = normalizeRevenueLearningDimension(lead?.niche, "Unclassified niche");
+    const offerFocus = revenueLearningOfferFocus(draft);
+    const key = `${area.toLowerCase()}::${niche.toLowerCase()}::${offerFocus}`;
+    const segment = segmentsByKey.get(key) || {
+      key,
+      area,
+      niche,
+      offerFocus,
+      outcomes: 0,
+      contacted: 0,
+      replies: 0,
+      callsBooked: 0,
+      depositsCollected: 0,
+      lost: 0,
+      cashCollectedUsd: 0,
+    };
+
+    segment.outcomes += 1;
+    segment.contacted += 1;
+    if (outcome === "reply") {
+      segment.replies += 1;
+    }
+    if (outcome === "call_booked") {
+      segment.callsBooked += 1;
+    }
+    if (outcome === "deposit_collected") {
+      segment.depositsCollected += 1;
+    }
+    if (outcome === "lost") {
+      segment.lost += 1;
+    }
+    segment.cashCollectedUsd += Math.max(0, Number(draft.delivery.outcomeCashCollectedUsd) || 0);
+    segmentsByKey.set(key, segment);
+  }
+
+  const segments = [...segmentsByKey.values()].map((segment): RevenueOutcomeMemorySegment => {
+    const replyRatePercent = revenueLearningRate(segment.replies, segment.contacted);
+    const callRatePercent = revenueLearningRate(segment.callsBooked, segment.contacted);
+    const closeRatePercent = revenueLearningRate(segment.depositsCollected, segment.contacted);
+    const confidence = segment.outcomes >= 10 ? "high" as const : segment.outcomes >= 3 ? "medium" as const : "low" as const;
+    const signal = segment.depositsCollected > 0 && segment.outcomes >= 3
+      ? "winning" as const
+      : (segment.contacted >= 5 && replyRatePercent < 20) || (segment.lost >= 3 && segment.replies === 0)
+        ? "needs_change" as const
+        : segment.depositsCollected > 0 || segment.replies > 0 || segment.callsBooked > 0
+          ? "promising" as const
+          : "collect_data" as const;
+    const label = `${segment.area} / ${segment.niche} / ${segment.offerFocus}`;
+    const learning = signal === "winning"
+      ? `${label} produjo ${segment.depositsCollected} deposito(s) verificables con ${closeRatePercent}% close rate.`
+      : signal === "promising"
+        ? segment.depositsCollected > 0
+          ? `${label} produjo un deposito verificable, pero solo tiene ${segment.outcomes} outcome(s); validar antes de declararlo ganador.`
+          : `${label} genera conversacion (${replyRatePercent}% replies, ${callRatePercent}% calls) pero todavia necesita cierre verificable.`
+        : signal === "needs_change"
+          ? `${label} tiene ${segment.contacted} contactos, ${replyRatePercent}% replies y ${segment.lost} perdidos; no repetir el mismo enfoque.`
+          : `${label} tiene solo ${segment.outcomes} outcome(s); falta evidencia antes de cambiar el playbook.`;
+    const nextExperiment = signal === "winning"
+      ? `Repetir ${label} en un lote pequeno y cambiar solo una variable de copy para confirmar el patron.`
+      : signal === "promising"
+        ? segment.depositsCollected > 0
+          ? `Repetir ${label} hasta reunir al menos 3 outcomes sin cambiar precio ni oferta.`
+          : `Mantener el opener de ${label} y probar una CTA de llamada/deposito mas clara.`
+        : signal === "needs_change"
+          ? `Pausar el copy actual solo en ${label}; probar 3-5 drafts con una propuesta de valor distinta.`
+          : `Registrar al menos 3 outcomes reales en ${label} antes de ajustar oferta o precio.`;
+
+    return {
+      ...segment,
+      replyRatePercent,
+      callRatePercent,
+      closeRatePercent,
+      confidence,
+      signal,
+      learning,
+      nextExperiment,
+    };
+  });
+
+  const signalWeight: Record<RevenueOutcomeMemorySegment["signal"], number> = {
+    winning: 4,
+    promising: 3,
+    collect_data: 2,
+    needs_change: 1,
+  };
+  segments.sort((left, right) =>
+    signalWeight[right.signal] - signalWeight[left.signal]
+    || right.depositsCollected - left.depositsCollected
+    || right.callsBooked - left.callsBooked
+    || right.replies - left.replies
+    || right.outcomes - left.outcomes
+    || left.key.localeCompare(right.key)
+  );
+
+  const totalOutcomes = segments.reduce((total, segment) => total + segment.outcomes, 0);
+  const bestSegment = segments.find((segment) => segment.signal === "winning" || segment.signal === "promising") || null;
+  const segmentsNeedingChange = segments.filter((segment) => segment.signal === "needs_change");
+  const repairSegment = segmentsNeedingChange[0] || null;
+  const learningSummary = bestSegment
+    ? `Mejor senal real: ${bestSegment.learning}`
+    : repairSegment
+      ? `Cambio requerido y aislado: ${repairSegment.learning}`
+      : totalOutcomes > 0
+        ? `${totalOutcomes} outcome(s) reales guardados; todavia no hay suficiente evidencia para declarar un patron ganador.`
+        : "Sin outcomes reales todavia; no cambiar precios, nichos ni playbook por intuicion.";
+  const nextExperiment = bestSegment?.nextExperiment
+    || repairSegment?.nextExperiment
+    || segments[0]?.nextExperiment
+    || "Registrar replies, calls, depositos y perdidos por area/nicho/oferta.";
+
+  return {
+    status: totalOutcomes === 0
+      ? "empty"
+      : segments.some((segment) => segment.confidence !== "low")
+        ? "learning"
+        : "needs_data",
+    totalOutcomes,
+    segmentsTracked: segments.length,
+    segments,
+    bestSegment,
+    segmentsNeedingChange,
+    learningSummary,
+    nextExperiment,
+  };
+}
+
 function buildRevenueNextBatchPlan(input: {
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
   latestReview?: RevenueImprovementReview;
   approvalQueue: number;
+  outcomeMemory: RevenueOutcomeMemory;
 }) {
   const latestReview = input.latestReview;
   const hasRevenueProof = input.profitGuard.cashCollectedUsd > 0 && input.profitGuard.profitUsd >= 0;
@@ -3028,6 +3229,13 @@ function buildRevenueNextBatchPlan(input: {
       : status === "iterate_small_batch"
         ? 10
         : 0;
+  const focusSegment = input.outcomeMemory.bestSegment;
+  const segmentToRepair = input.outcomeMemory.segmentsNeedingChange[0] || null;
+  const learningAction = focusSegment
+    ? `priorizar ${focusSegment.area} / ${focusSegment.niche} / ${focusSegment.offerFocus}`
+    : segmentToRepair
+      ? `probar copy/oferta nueva solo en ${segmentToRepair.area} / ${segmentToRepair.niche}`
+      : "registrar outcomes reales por area/nicho/oferta";
 
   return {
     status,
@@ -3045,16 +3253,29 @@ function buildRevenueNextBatchPlan(input: {
       status === "collect_first" && "cobrar deposito antes de gastar",
       status === "pause" && "resolver bloqueos QA/costo antes de contactar",
       input.approvalQueue > 0 && "limpiar approval queue",
+      segmentToRepair && `no repetir el mismo enfoque en ${segmentToRepair.area} / ${segmentToRepair.niche} sin cambiar una variable`,
       "aprobar mensaje antes de enviar",
       "guardar resultado y objecion despues del batch",
     ].filter(Boolean) as string[],
     allowedActions:
       status === "collect_first"
-        ? ["research publico gratis", "mockup/draft interno", "pedir deposito"]
+        ? ["research publico gratis", "mockup/draft interno", "pedir deposito", learningAction]
         : status === "pause"
-          ? ["corregir QA", "bajar costo", "revisar oferta"]
-          : ["contactar batch aprobado", "guardar metricas", "crear review semanal"],
+          ? ["corregir QA", "bajar costo", "revisar oferta", learningAction]
+          : ["contactar batch aprobado", "guardar metricas", "crear review semanal", learningAction],
     latestReviewId: latestReview?.id || "",
+    focusSegment: focusSegment
+      ? {
+          key: focusSegment.key,
+          area: focusSegment.area,
+          niche: focusSegment.niche,
+          offerFocus: focusSegment.offerFocus,
+          signal: focusSegment.signal,
+        }
+      : null,
+    segmentsNeedingChange: input.outcomeMemory.segmentsNeedingChange.map((segment) => segment.key),
+    learningSummary: input.outcomeMemory.learningSummary,
+    nextExperiment: input.outcomeMemory.nextExperiment,
   };
 }
 
@@ -6089,6 +6310,7 @@ function buildRevenueDailyMoneyCommand(input: {
   websiteClosureQueue: RevenueWebsiteClosureQueue;
   cashCollectedUsd: number;
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  outcomeMemory: RevenueOutcomeMemory;
 }): RevenueDailyMoneyCommand {
   const buildHandoffsOpen = input.websiteBuildHandoffQueue.openCount;
   const funnel = {
@@ -6100,6 +6322,16 @@ function buildRevenueDailyMoneyCommand(input: {
     deliveryHandoffsReady: input.websiteDeliveryHandoffQueue.readyCount,
     buildHandoffsOpen,
     cashCollectedUsd: input.cashCollectedUsd,
+  };
+  const learning: RevenueDailyMoneyCommand["learning"] = {
+    status: input.outcomeMemory.status,
+    totalOutcomes: input.outcomeMemory.totalOutcomes,
+    segmentsTracked: input.outcomeMemory.segmentsTracked,
+    focusSegment: input.outcomeMemory.bestSegment
+      ? `${input.outcomeMemory.bestSegment.area} / ${input.outcomeMemory.bestSegment.niche} / ${input.outcomeMemory.bestSegment.offerFocus}`
+      : "",
+    summary: input.outcomeMemory.learningSummary,
+    nextExperiment: input.outcomeMemory.nextExperiment,
   };
   const status: RevenueDailyMoneyCommand["status"] =
     input.profitGuard.status === "pause_spend"
@@ -6174,16 +6406,21 @@ function buildRevenueDailyMoneyCommand(input: {
   const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
     ? baseSteps.map((step) => ({ ...step, status: "blocked" as const }))
     : baseSteps;
+  const learnedScoutTarget = input.outcomeMemory.bestSegment;
   const searchDispatchRequest = {
-    area: input.businessScoutQueue.area,
-    niche: input.businessScoutQueue.niche,
-    offerFocus: input.businessScoutQueue.offerFocus,
-    targetLeadCount: input.businessScoutQueue.dailyResearchTarget,
+    area: learnedScoutTarget?.area || input.businessScoutQueue.area,
+    niche: learnedScoutTarget?.niche || input.businessScoutQueue.niche,
+    offerFocus: learnedScoutTarget?.offerFocus || input.businessScoutQueue.offerFocus,
+    targetLeadCount: learnedScoutTarget?.confidence === "low"
+      ? Math.min(10, input.businessScoutQueue.dailyResearchTarget)
+      : input.businessScoutQueue.dailyResearchTarget,
     maxTasks: Math.min(Math.max(input.businessScoutQueue.tasks.length, 1), 5),
     resultSlotsPerTask: 2,
     maxPaidDataSpendUsd: 0,
     requireRobertApprovalToContact: true,
-    notes: "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
+    notes: learnedScoutTarget
+      ? `Outcome-memory experiment for ${learnedScoutTarget.area} / ${learnedScoutTarget.niche} / ${learnedScoutTarget.offerFocus}; public research only and connector results stay needs_review.`
+      : "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
   };
   const topPublicLeadImportItem = input.publicLeadImportQueue.items[0] || null;
   const topWebsiteSalesPacket = input.websiteSalesPacketQueue.items[0] || null;
@@ -6348,6 +6585,13 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
     "- Payment totals: tracked internally; do not paste amounts into public PR/client handoff text.",
     "",
+    "Outcome learning:",
+    `- Status: ${learning.status}`,
+    `- Real outcomes: ${learning.totalOutcomes} across ${learning.segmentsTracked} segment(s)`,
+    `- Focus: ${learning.focusSegment || "collect more verified outcomes"}`,
+    `- Learning: ${learning.summary}`,
+    `- Next experiment: ${learning.nextExperiment}`,
+    "",
     "Next run packet:",
     copyableRunPacket,
     input.websiteBuildHandoffQueue.items[0] ? "" : null,
@@ -6374,6 +6618,7 @@ function buildRevenueDailyMoneyCommand(input: {
     funnel,
     steps,
     runPacket,
+    learning,
     copyableOperatorBrief,
     safety: {
       sendsOutreach: false,
@@ -7077,8 +7322,14 @@ export function getRevenueEngineSnapshot() {
   const pendingDeliveryApprovals = revenueDeliveryWorkspaces.filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections").length;
   const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingWebsiteOpportunityApprovals + pendingDeliveryApprovals;
   const profitGuard = buildRevenueProfitGuard({ cashCollectedUsd, estimatedSpendUsd, profitUsd, approvalQueue });
+  const outcomeMemory = buildRevenueOutcomeMemory();
   const latestImprovementReview = revenueImprovementReviews.at(-1);
-  const nextBatchPlan = buildRevenueNextBatchPlan({ profitGuard, latestReview: latestImprovementReview, approvalQueue });
+  const nextBatchPlan = buildRevenueNextBatchPlan({
+    profitGuard,
+    latestReview: latestImprovementReview,
+    approvalQueue,
+    outcomeMemory,
+  });
   const executiveSummary = buildRevenueExecutiveSummary({
     appsSold,
     automationsSold,
@@ -7207,6 +7458,7 @@ export function getRevenueEngineSnapshot() {
     websiteClosureQueue,
     cashCollectedUsd,
     profitGuard,
+    outcomeMemory,
   });
   const { launchReadiness, dailyMoneyCommand } = applyRevenueProductionPersistenceGate({
     launchReadiness: baseLaunchReadiness,
@@ -7251,6 +7503,7 @@ export function getRevenueEngineSnapshot() {
     websiteDeliveryHandoffQueue,
     websiteBuildHandoffQueue,
     profitGuard,
+    outcomeMemory,
     nextBatchPlan,
     approvalQueueItems,
     costPolicy: {

@@ -8905,6 +8905,98 @@ test("next batch plan scales only when cash and latest review prove demand", () 
   assert.equal(snapshot.nextBatchPlan.allowedActions.includes("contactar batch aprobado"), true);
 });
 
+test("learns from real outreach outcomes by area without poisoning other segments", () => {
+  const addOutcome = (input: {
+    businessName: string;
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations";
+    outcome: "lost" | "deposit_collected";
+  }) => {
+    const slug = input.businessName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const leadResult = recordRevenueLead({
+      businessName: input.businessName,
+      area: input.area,
+      niche: input.niche,
+      websiteStatus: input.offerFocus === "websites" ? "no_website" : "has_website",
+      contactChannel: "instagram",
+      contactValue: `@${slug}`,
+      evidence: `Public Instagram profile for ${input.businessName} with current business activity and a visible contact path.`,
+      painPoint: input.offerFocus === "websites"
+        ? "Needs a clear conversion website."
+        : "Needs lead follow-up automation.",
+      estimatedOfferUsd: 1200,
+      status: "qualified",
+    });
+    const draftResult = recordRevenueOutreachDraft({
+      leadId: leadResult.lead.id,
+      channel: "instagram",
+      approvalStatus: "approved",
+      recipientEmail: "",
+      contactName: "Owner",
+      businessName: input.businessName,
+      sourceUrl: `https://instagram.com/${slug}`,
+      businessSummary: `${input.businessName} is an active ${input.niche} business in ${input.area} with a specific public conversion opportunity.`,
+      websitePriceUsd: input.offerFocus === "websites" ? 1200 : 0,
+      automationPriceUsd: input.offerFocus === "automations" ? 1200 : 0,
+      monthlyRetainerUsd: 250,
+      estimatedInternalMonthlyCostUsd: 20,
+      notes: "Segmented learning fixture; no message sent.",
+    });
+    const outcomeResult = recordRevenueOutreachOutcome({
+      draftId: draftResult.draft.id,
+      outcome: input.outcome,
+      outcomeRecordedByRobert: true,
+      cashCollectedUsd: input.outcome === "deposit_collected" ? 600 : 0,
+      paymentConfirmation: input.outcome === "deposit_collected" ? "Stripe pi_outcome123456" : "",
+      notes: input.outcome === "lost" ? "Owner declined this version of the offer." : "Verified deposit after manual conversation.",
+    });
+    assert.equal(outcomeResult.status, "recorded");
+  };
+
+  for (let index = 1; index <= 5; index += 1) {
+    addOutcome({
+      businessName: `Miami Med Spa Loss ${index}`,
+      area: "Miami",
+      niche: "med spas",
+      offerFocus: "websites",
+      outcome: "lost",
+    });
+  }
+  addOutcome({
+    businessName: "Orlando Plumbing Winner",
+    area: "Orlando",
+    niche: "plumbers",
+    offerFocus: "automations",
+    outcome: "deposit_collected",
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+  const losingSegment = snapshot.outcomeMemory.segments.find((segment) => segment.area === "Miami");
+  const winningSegment = snapshot.outcomeMemory.segments.find((segment) => segment.area === "Orlando");
+
+  assert.equal(snapshot.outcomeMemory.totalOutcomes, 6);
+  assert.equal(snapshot.outcomeMemory.segmentsTracked, 2);
+  assert.equal(losingSegment?.signal, "needs_change");
+  assert.equal(losingSegment?.lost, 5);
+  assert.equal(winningSegment?.signal, "promising");
+  assert.equal(winningSegment?.depositsCollected, 1);
+  assert.equal(winningSegment?.replies, 0);
+  assert.equal(winningSegment?.callsBooked, 0);
+  assert.equal(snapshot.nextBatchPlan.focusSegment?.area, "Orlando");
+  assert.equal(snapshot.nextBatchPlan.segmentsNeedingChange.includes("miami::med spas::websites"), true);
+  assert.notEqual(snapshot.nextBatchPlan.status, "pause");
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /Outcome learning:/);
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /Orlando \/ plumbers \/ automations/);
+  assert.match(snapshot.dailyMoneyCommand.learning.nextExperiment, /Repetir Orlando \/ plumbers \/ automations/);
+  assert.doesNotMatch(snapshot.dailyMoneyCommand.copyableOperatorBrief, /\$600|cobrado/i);
+  const learnedScoutRequest = JSON.parse(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest);
+  assert.equal(learnedScoutRequest.area, "Orlando");
+  assert.equal(learnedScoutRequest.niche, "plumbers");
+  assert.equal(learnedScoutRequest.offerFocus, "automations");
+  assert.equal(learnedScoutRequest.targetLeadCount, 10);
+});
+
 test("records and persists improvement reviews as revenue playbook memory", () => {
   const first = recordRevenueImprovementReview({
     campaignName: "Learning batch",
