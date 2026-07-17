@@ -52,6 +52,7 @@ export function registerRevenueStripeRoutes(app: Express) {
   });
 
   app.post("/api/stripe/revenue-webhook", async (req, res) => {
+    let activeEventId = "";
     const webhookSecret = process.env.REVENUE_STRIPE_WEBHOOK_SECRET?.trim() || "";
     const expectedAccountId = process.env.REVENUE_STRIPE_ACCOUNT_ID?.trim() || "";
     const signature = req.header("stripe-signature") || "";
@@ -63,6 +64,7 @@ export function registerRevenueStripeRoutes(app: Express) {
 
     try {
       const event = verifyRevenueStripeWebhook(rawBody, signature, webhookSecret);
+      activeEventId = event.id;
       assertRevenueStripeAccount(event, expectedAccountId);
       if (process.env.NODE_ENV === "production" && !event.livemode && process.env.REVENUE_STRIPE_ALLOW_TEST_EVENTS !== "true") {
         return res.status(400).json({ received: false, error: "test_event_blocked_in_production" });
@@ -74,6 +76,10 @@ export function registerRevenueStripeRoutes(app: Express) {
       const userId = await resolveRevenueOwnerUserId(payment.ownerUserId);
       const existing = await storage.getRevenueStripeEvent(event.id);
       if (existing?.status === "notified") return res.json({ received: true, duplicate: true, notified: true });
+      const processingAgeMs = existing?.receivedAt ? Date.now() - existing.receivedAt.getTime() : 0;
+      if (existing?.status === "processing" && processingAgeMs < 5 * 60 * 1000) {
+        return res.status(202).json({ received: true, duplicate: true, processing: true });
+      }
 
       if (!existing) {
         const claimed = await storage.createRevenueStripeEvent({
@@ -124,6 +130,12 @@ export function registerRevenueStripeRoutes(app: Express) {
       }
       return res.json({ received: true, dealRecorded, closeStatus, notified, channels });
     } catch (error) {
+      if (activeEventId) {
+        await storage.updateRevenueStripeEvent(activeEventId, {
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : String(error),
+        }).catch(() => undefined);
+      }
       console.error("Revenue Stripe webhook failed:", error instanceof Error ? error.message : error);
       return res.status(400).json({ received: false, error: "invalid_revenue_stripe_event" });
     }

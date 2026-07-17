@@ -4,7 +4,6 @@ const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300;
 const SUPPORTED_PAYMENT_EVENTS = new Set([
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
-  "payment_intent.succeeded",
 ]);
 
 export type RevenueStripeEventPayload = {
@@ -89,7 +88,10 @@ export function assertRevenueStripeAccount(event: RevenueStripeEventPayload, exp
   }
   const objectMetadata = (event.data.object.metadata || {}) as Record<string, unknown>;
   const declaredAccount = cleanString(event.account) || cleanString(objectMetadata.stripeAccountId);
-  if (declaredAccount && declaredAccount !== expectedAccountId) {
+  if (!declaredAccount) {
+    throw new Error("Stripe event is missing its Robert Websites account binding");
+  }
+  if (declaredAccount !== expectedAccountId) {
     throw new Error("Stripe event belongs to a different account");
   }
 }
@@ -98,12 +100,10 @@ export function extractRevenueStripePayment(event: RevenueStripeEventPayload): R
   if (!SUPPORTED_PAYMENT_EVENTS.has(event.type)) return null;
   const object = event.data.object;
   const metadata = (object.metadata || {}) as Record<string, unknown>;
-  const isCheckout = event.type.startsWith("checkout.session.");
   const paymentStatus = cleanString(object.payment_status);
-  const intentStatus = cleanString(object.status);
-  if ((isCheckout && paymentStatus !== "paid") || (!isCheckout && intentStatus !== "succeeded")) return null;
+  if (paymentStatus !== "paid") return null;
 
-  const amountCents = Number(isCheckout ? object.amount_total : object.amount_received ?? object.amount);
+  const amountCents = Number(object.amount_total);
   const objectId = cleanString(object.id);
   const currency = cleanString(object.currency).toUpperCase();
   if (!objectId || !Number.isSafeInteger(amountCents) || amountCents <= 0 || !/^[A-Z]{3}$/.test(currency)) {
@@ -119,7 +119,7 @@ export function extractRevenueStripePayment(event: RevenueStripeEventPayload): R
     eventId: event.id,
     eventType: event.type,
     objectId,
-    paymentIntentId: cleanString(typeof paymentIntent === "object" && paymentIntent ? (paymentIntent as Record<string, unknown>).id : paymentIntent) || (isCheckout ? "" : objectId),
+    paymentIntentId: cleanString(typeof paymentIntent === "object" && paymentIntent ? (paymentIntent as Record<string, unknown>).id : paymentIntent),
     amountCents,
     currency,
     clientName,

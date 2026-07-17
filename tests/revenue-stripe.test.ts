@@ -59,6 +59,21 @@ test("rejects tampered payloads and events from another Stripe account", () => {
   );
   const event = verifyRevenueStripeWebhook(signed.payload, signed.header, secret, timestamp);
   assert.throws(() => assertRevenueStripeAccount(event, "acct_kogn"), /different account/);
+
+  const unbound = signedPayload({
+    account: undefined,
+    data: {
+      object: {
+        id: "cs_unbound",
+        payment_status: "paid",
+        amount_total: 10000,
+        currency: "usd",
+        metadata: {},
+      },
+    },
+  });
+  const unboundEvent = verifyRevenueStripeWebhook(unbound.payload, unbound.header, secret, timestamp);
+  assert.throws(() => assertRevenueStripeAccount(unboundEvent, "acct_robertwebsites"), /missing.*account binding/);
 });
 
 test("formats the exact amount in the owner notification", () => {
@@ -84,4 +99,8 @@ test("ignores unpaid or unrelated Stripe events", () => {
   const unrelated = signedPayload({ type: "customer.created" });
   const unrelatedEvent = verifyRevenueStripeWebhook(unrelated.payload, unrelated.header, secret, timestamp);
   assert.equal(extractRevenueStripePayment(unrelatedEvent), null);
+
+  const paymentIntent = signedPayload({ type: "payment_intent.succeeded" });
+  const paymentIntentEvent = verifyRevenueStripeWebhook(paymentIntent.payload, paymentIntent.header, secret, timestamp);
+  assert.equal(extractRevenueStripePayment(paymentIntentEvent), null);
 });
