@@ -20,6 +20,7 @@ const PUBLIC_API_PATHS = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/telegram/webhook",
+  "/api/stripe/revenue-webhook",
   "/api/google-drive/oauth/callback",
   "/api/canva/oauth/callback",
   "/api/zoho/callback",

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, jsonb, serial, integer, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -217,6 +217,29 @@ export const telegramProcessedUpdates = pgTable("telegram_processed_updates", {
 });
 
 export type TelegramProcessedUpdate = typeof telegramProcessedUpdates.$inferSelect;
+
+// Durable idempotency and delivery state for Robert Websites Stripe events.
+export const revenueStripeEvents = pgTable("revenue_stripe_events", {
+  eventId: text("event_id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  eventType: text("event_type").notNull(),
+  objectId: text("object_id").notNull(),
+  paymentIntentId: text("payment_intent_id"),
+  opportunityId: text("opportunity_id"),
+  ownerUserId: varchar("owner_user_id").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  currency: text("currency").notNull(),
+  status: text("status").notNull().default("processing"),
+  errorMessage: text("error_message"),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+  notifiedAt: timestamp("notified_at"),
+}, (table) => [
+  uniqueIndex("revenue_stripe_payment_intent_unique").on(table.paymentIntentId),
+]);
+
+export type RevenueStripeEvent = typeof revenueStripeEvents.$inferSelect;
+export type InsertRevenueStripeEvent = typeof revenueStripeEvents.$inferInsert;
 
 // ==================== FINANCE MODULE ====================
 

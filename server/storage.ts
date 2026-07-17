@@ -1,4 +1,5 @@
 import { type User, type InsertUser, type Task, type InsertTask, type WeeklySummary, type InsertWeeklySummary, type MonthlyGoal, type InsertMonthlyGoal, type YearlyGoal, type InsertYearlyGoal, type WeeklyTask, type InsertWeeklyTask, type PushSubscription, type InsertPushSubscription, type TelegramConfig, type InsertTelegramConfig, type Investment, type InsertInvestment, type Transaction, type InsertTransaction, type WatchlistItem, type InsertWatchlistItem, type PriceAlert, type InsertPriceAlert, type UserProfileData, type InsertUserProfileData, type MonitoredProject, type InsertMonitoredProject, type HealthCheckLog, type InsertHealthCheckLog, type Incident, type InsertIncident, type AppProject, type InsertAppProject, type AppHealthCheck, type InsertAppHealthCheck, type AppIncident, type InsertAppIncident, type AppErrorEvent, type InsertAppErrorEvent, type AppDailyReport, type InsertAppDailyReport, type PortfolioHistory, type InsertPortfolioHistory, type DjContact, type InsertDjContact, type RadioTemplateAsset, type InsertRadioTemplateAsset, type CanvaOAuthToken, type InsertCanvaOAuthToken, type GoogleDriveOAuthToken, type InsertGoogleDriveOAuthToken, type AgentAction, type InsertAgentAction, type AuditLog, type InsertAuditLog, type PendingAction, type InsertPendingAction, type PendingActionEvent, type InsertPendingActionEvent, type AssistantPermission, type InsertAssistantPermission, type AutomationDefinition, type InsertAutomationDefinition, type AutomationRun, type InsertAutomationRun, type DjMessageTemplate, type InsertDjMessageTemplate, type ScheduledReminder, type InsertScheduledReminder } from "@shared/schema";
+import { revenueStripeEvents as revenueStripeEventsTable, type RevenueStripeEvent, type InsertRevenueStripeEvent } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { tasks as tasksTable, users as usersTable, weeklySummaries as weeklySummariesTable, monthlyGoals as monthlyGoalsTable, yearlyGoals as yearlyGoalsTable, weeklyTasks as weeklyTasksTable, pushSubscriptions as pushSubscriptionsTable, appRateLimitBuckets as appRateLimitBucketsTable, telegramConfig as telegramConfigTable, telegramProcessedUpdates as telegramProcessedUpdatesTable, investments as investmentsTable, transactions as transactionsTable, watchlist as watchlistTable, priceAlerts as priceAlertsTable, userProfileData as userProfileDataTable, monitoredProjects as monitoredProjectsTable, healthCheckLogs as healthCheckLogsTable, incidents as incidentsTable, appProjects as appProjectsTable, appHealthChecks as appHealthChecksTable, appIncidents as appIncidentsTable, appErrorEvents as appErrorEventsTable, appDailyReports as appDailyReportsTable, portfolioHistory as portfolioHistoryTable, djContacts as djContactsTable, radioTemplateAssets as radioTemplateAssetsTable, canvaOAuthTokens as canvaOAuthTokensTable, googleDriveOAuthTokens as googleDriveOAuthTokensTable, agentActions as agentActionsTable, auditLogs as auditLogsTable, pendingActions as pendingActionsTable, pendingActionEvents as pendingActionEventsTable, assistantPermissions as assistantPermissionsTable, automationDefinitions as automationDefinitionsTable, automationRuns as automationRunsTable, djMessageTemplates as djMessageTemplatesTable, scheduledReminders as scheduledRemindersTable, portfolioConfig as portfolioConfigTable } from "@shared/schema";
@@ -66,6 +67,9 @@ export interface IStorage {
   updateTelegramConfig(userId: string, enabled: boolean): Promise<TelegramConfig | undefined>;
   deleteTelegramConfig(userId: string): Promise<void>;
   recordTelegramProcessedUpdate(updateId: number): Promise<boolean>;
+  getRevenueStripeEvent(eventId: string): Promise<RevenueStripeEvent | undefined>;
+  createRevenueStripeEvent(event: InsertRevenueStripeEvent): Promise<boolean>;
+  updateRevenueStripeEvent(eventId: string, updates: Partial<Pick<RevenueStripeEvent, "status" | "errorMessage" | "processedAt" | "notifiedAt">>): Promise<void>;
 
   // Investment operations
   getInvestments(userId: string): Promise<Investment[]>;
@@ -803,6 +807,31 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoNothing()
       .returning({ updateId: telegramProcessedUpdatesTable.updateId });
     return inserted.length > 0;
+  }
+
+  async getRevenueStripeEvent(eventId: string): Promise<RevenueStripeEvent | undefined> {
+    const [event] = await db
+      .select()
+      .from(revenueStripeEventsTable)
+      .where(eq(revenueStripeEventsTable.eventId, eventId))
+      .limit(1);
+    return event;
+  }
+
+  async createRevenueStripeEvent(event: InsertRevenueStripeEvent): Promise<boolean> {
+    const inserted = await db
+      .insert(revenueStripeEventsTable)
+      .values(event)
+      .onConflictDoNothing()
+      .returning({ eventId: revenueStripeEventsTable.eventId });
+    return inserted.length > 0;
+  }
+
+  async updateRevenueStripeEvent(
+    eventId: string,
+    updates: Partial<Pick<RevenueStripeEvent, "status" | "errorMessage" | "processedAt" | "notifiedAt">>,
+  ): Promise<void> {
+    await db.update(revenueStripeEventsTable).set(updates).where(eq(revenueStripeEventsTable.eventId, eventId));
   }
 
   // ==================== INVESTMENTS ====================

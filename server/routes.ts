@@ -30,6 +30,7 @@ import { ensureDefaultAutomations, recordManualAutomationRun } from "./automatio
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
+import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
@@ -827,6 +828,7 @@ export async function registerRoutes(
   });
 
   registerTelegramRoutes(app);
+  registerRevenueStripeRoutes(app);
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {
