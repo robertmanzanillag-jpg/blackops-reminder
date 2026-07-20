@@ -143,6 +143,14 @@ export const revenueOutreachApproveSchema = z.object({
 
 export type RevenueOutreachApproveInput = z.infer<typeof revenueOutreachApproveSchema>;
 
+export const revenueOutreachUpdateSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  subject: z.string().trim().min(3).max(240),
+  body: z.string().trim().min(20).max(12000),
+});
+
+export type RevenueOutreachUpdateInput = z.infer<typeof revenueOutreachUpdateSchema>;
+
 export const revenueOutreachOutcomeSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
   outcome: z.enum(["contacted", "reply", "call_booked", "deposit_collected", "lost"]),
@@ -9691,6 +9699,52 @@ export function approveRevenueOutreachDraft(input: RevenueOutreachApproveInput) 
       sendsOutreach: false,
       spendsMoney: false,
       writesPreviewFiles: false,
+      createsLedger: false,
+      createsDelivery: false,
+    },
+  };
+}
+
+export function updateRevenueOutreachDraft(input: RevenueOutreachUpdateInput) {
+  loadRevenueOutreach();
+  const parsed = revenueOutreachUpdateSchema.parse(input);
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId) || null;
+  const gates = [
+    { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
+    { gate: "not_sent", passed: draft?.delivery.sendStatus !== "sent", fix: "Un correo enviado no puede editarse; crea un follow-up nuevo." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!draft || failedGate) {
+    return {
+      status: "blocked" as const,
+      reason: failedGate?.fix || "No se pudo actualizar el draft.",
+      gates,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  draft.subject = parsed.subject;
+  draft.body = parsed.body;
+  draft.status = "draft";
+  draft.approvalStatus = "draft";
+  draft.qaGates = draft.qaGates.map((gate) => gate.gate === "approval"
+    ? { ...gate, passed: false, fix: "Robert debe volver a aprobar el mensaje después de cualquier corrección." }
+    : gate);
+  draft.updatedAt = new Date().toISOString();
+  draft.nextAction = "Revisar el mensaje corregido y aprobarlo antes de enviar.";
+  persistRevenueOutreach();
+
+  return {
+    status: "updated" as const,
+    reason: "Corrección guardada. El correo volvió a draft y necesita una nueva aprobación.",
+    gates,
+    draft,
+    snapshot: getRevenueEngineSnapshot(),
+    safety: {
+      sendsOutreach: false,
+      spendsMoney: false,
       createsLedger: false,
       createsDelivery: false,
     },

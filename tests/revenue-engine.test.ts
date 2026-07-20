@@ -107,6 +107,7 @@ import {
   extractRevenueMockupContentSecurityPolicy,
 } from "../server/revenue-engine";
 import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection } from "../server/revenue-engine-state-store";
+import { updateRevenueOutreachDraft } from "../server/revenue-engine";
 import { registerRoutes } from "../server/routes";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
@@ -3540,6 +3541,48 @@ test("approves outreach draft for manual queue without sending or side effects",
   assert.equal(result.snapshot.recentLeads[0].status, statusBeforeApproval);
   assert.equal(result.snapshot.recentLedger.length, 0);
   assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("editing an outreach draft saves copy and requires Robert to approve it again", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Editable Spa",
+    area: "Miami",
+    niche: "med spa",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@editablespa.example",
+    evidence: "Public business page lists an owner email and current services but has no clear booking path.",
+    painPoint: "Needs a clearer offer and booking conversion path.",
+    estimatedOfferUsd: 1500,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@editablespa.example",
+    contactName: "Owner",
+    businessName: "Editable Spa",
+    sourceUrl: "https://example.com/editable-spa",
+    businessSummary: "Editable Spa has a verified public email and a clear website conversion opportunity.",
+    websitePriceUsd: 1500,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  });
+
+  const result = updateRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    subject: "Una idea sencilla para llenar más citas",
+    body: "Hola, revisé su presencia digital y preparé una propuesta concreta para convertir más visitas en citas verificables.",
+  });
+
+  assert.equal(result.status, "updated");
+  assert.equal(result.draft?.subject, "Una idea sencilla para llenar más citas");
+  assert.equal(result.draft?.status, "draft");
+  assert.equal(result.draft?.approvalStatus, "draft");
+  assert.equal(result.draft?.qaGates.find((gate) => gate.gate === "approval")?.passed, false);
+  assert.equal(result.safety.sendsOutreach, false);
 });
 
 test("daily money command blocks real contact queue until production persistence is ready", () => {

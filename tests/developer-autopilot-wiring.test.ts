@@ -618,6 +618,23 @@ test("Revenue Engine exposes manual outreach outcome recording", () => {
   assert.match(uiSource, /button-record-manual-outreach-lost-/);
 });
 
+test("simplified Revenue Engine preserves approval, outcome, and advanced-console paths", () => {
+  const appSource = readFileSync("client/src/App.tsx", "utf8");
+  const uiSource = readFileSync("client/src/pages/revenue-engine-simple.tsx", "utf8");
+
+  assert.match(appSource, /path="\/revenue-engine\/advanced"/);
+  assert.match(appSource, /@\/pages\/revenue-engine-simple/);
+  assert.match(appSource, /@\/pages\/revenue-engine/);
+  assert.match(uiSource, /\/api\/revenue-engine\/outreach-drafts\/approve/);
+  assert.match(uiSource, /\/api\/revenue-engine\/outreach-drafts\/update/);
+  assert.match(uiSource, /\/api\/revenue-engine\/outreach-send/);
+  assert.match(uiSource, /outcomeMutation\.mutate\("reply"\)/);
+  assert.match(uiSource, /outcomeMutation\.mutate\("call_booked"\)/);
+  assert.match(uiSource, /outcomeMutation\.mutate\("deposit_collected"\)/);
+  assert.match(uiSource, /outcomeMutation\.mutate\("lost"\)/);
+  assert.match(uiSource, /paymentConfirmation/);
+});
+
 test("Revenue Engine approval decisions require explicit queue target selection", () => {
   const uiSource = readFileSync("client/src/pages/revenue-engine.tsx", "utf8");
 
