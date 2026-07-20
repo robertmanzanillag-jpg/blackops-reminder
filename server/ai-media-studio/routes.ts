@@ -1,5 +1,6 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import { Router } from "express";
+import { z } from "zod";
 import {
   AI_MEDIA_STUDIO_API_BASE,
   createGenerationRequestSchema,
@@ -22,6 +23,24 @@ import {
   type ProviderResource,
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
+import {
+  analyticsSummarySchema,
+  attributionSchema,
+  automationPolicySchema,
+  createPublishingJobRequestSchema,
+  cursorPageRequestSchema,
+  publishingJobListRequestSchema,
+  publishingJobListResponseSchema,
+  publishingJobSchema,
+  publishingPreviewSchema,
+  socialPlatformSchema,
+  sourceItemSchema,
+  paginatedResponseSchema,
+  type AnalyticsSummary as PublicAnalyticsSummary,
+  type Attribution,
+  type PublishingJob,
+  type SourceItem,
+} from "../../shared/ai-media-studio-operations";
 import { getCurrentUserId } from "../user-context";
 import type { CoreCatalogRepositories } from "./core/runtime";
 import {
@@ -38,6 +57,7 @@ import {
   type TenantScope,
 } from "./core/resource-domain";
 import type { MediaGenerationJob } from "./domain";
+import { AnalyticsValidationError, type AnalyticsSummary as DomainAnalyticsSummary } from "./analytics/domain";
 import { InMemoryMediaJobQueue, InMemoryMediaJobRepository } from "./in-memory";
 import type { MediaJobQueue, MediaJobRepository, VideoProvider } from "./ports";
 import { FakeVideoProvider } from "./providers/fake-video-provider";
@@ -56,6 +76,17 @@ import {
   selectMediaJobRepository,
   type MediaStudioPersistenceStatus,
 } from "./persistence/runtime";
+import {
+  createOperationsRuntime,
+  type OperationsRuntime,
+  type OperationsRuntimeDependencies,
+} from "./operations-runtime";
+import {
+  PublishingInvariantError,
+  type PublicPublication,
+} from "./publishing/domain";
+import type { CanonicalSourceItem } from "./sources/contracts";
+import { SourceCursorError } from "./sources/source-pagination";
 
 export interface AiMediaStudioDependencies {
   repository?: MediaJobRepository;
@@ -72,12 +103,14 @@ export interface AiMediaStudioDependencies {
   createDurableCoreRepositories?: () => CoreCatalogRepositories;
   workspaceId?: string;
   seedCoreDefaults?: boolean;
+  operations?: OperationsRuntimeDependencies;
 }
 export interface AiMediaStudioRuntime {
   service: AiMediaStudioService;
   core: CoreCatalogRuntime;
   router: Router;
   persistence: MediaStudioPersistenceStatus;
+  operations: OperationsRuntime;
 }
 
 function toPublicJob(job: MediaGenerationJob): MediaJob {
@@ -148,6 +181,164 @@ function requireCapability(status: MediaStudioPersistenceStatus, label: string) 
   };
 }
 
+const idSchema = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
+const digestActionSchema = z.object({ previewDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }).strict();
+const publishingPreviewRequestSchema = createPublishingJobRequestSchema
+  .innerType()
+  .omit({ previewDigest: true })
+  .strict()
+  .superRefine(({ timezone, schedule }, context) => {
+    if (timezone !== schedule.timezone) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "timezone must match the publishing schedule", path: ["timezone"] });
+    }
+  });
+const rejectActionSchema = digestActionSchema.extend({ reason: z.string().trim().min(1).max(1_000) }).strict();
+const emptyActionSchema = z.object({}).strict().default({});
+const windowQuerySchema = z.object({
+  platform: socialPlatformSchema.optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+}).strict().superRefine((value, context) => {
+  if ((value.from === undefined) !== (value.to === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: "from and to must be supplied together" });
+  if (value.from && value.to && Date.parse(value.from) >= Date.parse(value.to)) context.addIssue({ code: z.ZodIssueCode.custom, message: "from must be before to", path: ["to"] });
+});
+const attributionQuerySchema = cursorPageRequestSchema.extend({
+  platform: socialPlatformSchema.optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  dimension: z.enum(["avatar", "hook", "cta", "posting_time", "category"]),
+}).strict().superRefine((value, context) => {
+  if ((value.from === undefined) !== (value.to === undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: "from and to must be supplied together" });
+  if (value.from && value.to && Date.parse(value.from) >= Date.parse(value.to)) context.addIssue({ code: z.ZodIssueCode.custom, message: "from must be before to", path: ["to"] });
+});
+const sourcesQuerySchema = cursorPageRequestSchema.extend({
+  status: sourceItemSchema.shape.status.optional(),
+  rightsStatus: sourceItemSchema.shape.rightsStatus.optional(),
+}).strict();
+const jobResponseSchema = z.object({ job: publishingJobSchema }).strict();
+const attributionResponseSchema = paginatedResponseSchema(attributionSchema);
+const sourcesResponseSchema = paginatedResponseSchema(sourceItemSchema);
+const connectionSchema = z.object({
+  platform: socialPlatformSchema,
+  status: z.enum(["ready", "attention", "not_connected"]),
+  accountLabel: z.string().max(200).nullable(),
+  capabilities: z.array(z.string().max(100)).max(20),
+  checkedAt: z.string().datetime({ offset: true }).nullable(),
+  message: z.string().max(500),
+}).strict();
+const connectionsResponseSchema = z.object({ connections: z.array(connectionSchema).max(4) }).strict();
+
+function publicPublishingStatus(state: PublicPublication["state"] | "rejected"): PublishingJob["status"] {
+  const map: Record<string, PublishingJob["status"]> = {
+    pending_approval: "pending_approval", approved: "queued", queued: "queued", scheduled: "scheduled",
+    leased: "publishing", submitted: "publishing", retry_wait: "failed", published: "published",
+    cancelled: "cancelled", rejected: "cancelled", dead_letter: "dead_letter",
+  };
+  return map[state] ?? "failed";
+}
+
+function toPublishingJob(publication: PublicPublication): PublishingJob {
+  const evidence = (publication.rejection ?? publication.approval) as unknown as Record<string, unknown> | undefined;
+  const decision = evidence?.decision === "rejected" ? "rejected" : evidence?.decision === "approved" ? "approved" : undefined;
+  const actorId = decision === "approved" ? evidence?.approvedByUserId : evidence?.rejectedByUserId;
+  const decidedAt = decision === "approved" ? evidence?.approvedAt : evidence?.rejectedAt;
+  const approval = decision && typeof actorId === "string" && typeof decidedAt === "string" && typeof evidence?.previewDigest === "string"
+    ? { decision, actorId, decidedAt, previewDigest: evidence.previewDigest, reason: typeof evidence.note === "string" ? evidence.note : typeof evidence.reason === "string" ? evidence.reason : null }
+    : null;
+  const scheduledFor = publication.preview.scheduledFor ?? null;
+  return publishingJobSchema.parse({
+    id: publication.id,
+    mediaAssetId: publication.preview.assetId,
+    platform: publication.preview.platform,
+    mode: scheduledFor ? "scheduled" : "manual",
+    status: publicPublishingStatus(publication.state),
+    preview: {
+      digest: publication.preview.digest,
+      mediaAssetId: publication.preview.assetId,
+      platform: publication.preview.platform,
+      caption: publication.preview.caption,
+      hashtags: [...publication.preview.hashtags],
+      title: publication.preview.title ?? null,
+      scheduledFor,
+      timezone: publication.preview.timezone ?? null,
+      generatedAt: publication.createdAt,
+    },
+    approval,
+    scheduledFor,
+    dueAt: scheduledFor,
+    attempts: publication.attempt,
+    maxAttempts: 4,
+    failureCode: publication.lastError ? "publishing_failed" : null,
+    createdAt: publication.createdAt,
+    updatedAt: publication.updatedAt,
+  });
+}
+
+function analyticsWindow(from: string | undefined, to: string | undefined): { start: string; end: string; currency: "USD" } {
+  const end = to ?? new Date().toISOString();
+  const start = from ?? new Date(Date.parse(end) - 30 * 24 * 60 * 60 * 1_000).toISOString();
+  return { start, end, currency: "USD" };
+}
+
+function toAnalyticsSummary(summary: DomainAnalyticsSummary, platform: PublishingJob["platform"] | undefined): PublicAnalyticsSummary {
+  const engagements = summary.metrics.likes + summary.metrics.comments + summary.metrics.shares + summary.metrics.clicks;
+  return analyticsSummarySchema.parse({
+    window: { from: summary.window.start, to: summary.window.end },
+    platform: platform ?? null,
+    publicationCount: summary.publicationCount,
+    metrics: {
+      ...summary.metrics,
+      ctr: summary.metrics.impressions === 0 ? null : summary.metrics.ctr,
+      retentionRate: summary.metrics.views === 0 ? null : summary.metrics.retentionRate,
+    },
+    engagementRate: summary.metrics.views === 0 ? null : Math.min(1, engagements / summary.metrics.views),
+    averageWatchTimeMs: summary.metrics.views === 0 ? null : Math.round(summary.metrics.watchTimeMs / summary.metrics.views),
+    costPerVideoUsd: summary.costPerVideo,
+    costPerViewUsd: summary.costPerView,
+    currency: "USD",
+  });
+}
+
+function toAttribution(summary: DomainAnalyticsSummary): Attribution[] {
+  return summary.publications.map(({ publication }) => attributionSchema.parse({
+    publicationId: publication.id,
+    sourceItemId: null,
+    scriptId: null,
+    influencerId: null,
+    campaignKey: null,
+    dimensions: {
+      avatarId: publication.dimensions.avatar ?? null,
+      hook: publication.dimensions.hook ?? null,
+      cta: publication.dimensions.cta ?? null,
+      postingTime: publication.dimensions.postingTime ?? null,
+      category: publication.dimensions.category ?? null,
+    },
+    attributedAt: publication.publishedAt ?? publication.createdAt,
+    model: Object.values(publication.dimensions).some(Boolean) ? "direct" : "unattributed",
+  }));
+}
+
+function sourceType(adapterKey: string): SourceItem["sourceType"] {
+  if (adapterKey === "manual" || adapterKey === "upload" || adapterKey === "owned_library") return adapterKey;
+  return "feed";
+}
+
+function toSourceItem(source: CanonicalSourceItem): SourceItem {
+  return sourceItemSchema.parse({
+    id: source.id,
+    sourceType: sourceType(source.adapterKey),
+    canonicalUrl: source.canonicalUrl ?? null,
+    title: source.title ?? null,
+    content: source.content ?? null,
+    contentHash: source.contentHash,
+    rightsStatus: source.rightsStatus,
+    moderationStatus: source.moderationStatus,
+    status: source.status,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  });
+}
+
 export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependencies = {}): AiMediaStudioRuntime {
   const runtimeEnvironment = dependencies.runtimeEnvironment ?? process.env.NODE_ENV;
   const databaseUrl = dependencies.databaseUrl ?? process.env.DATABASE_URL;
@@ -165,6 +356,11 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     createDurableRepositories: dependencies.createDurableCoreRepositories,
     workspaceId: dependencies.workspaceId,
     seedDefaults: dependencies.seedCoreDefaults,
+  });
+  const operations = createOperationsRuntime({
+    ...dependencies.operations,
+    runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
+    databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
   const repository = persistence.repository;
   const queue = dependencies.queue ?? new InMemoryMediaJobQueue();
@@ -184,17 +380,19 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   router.use((_req, res, next) => {
     res.setHeader("X-AI-Media-Studio-Persistence", persistence.status.mode);
     res.setHeader("X-AI-Media-Studio-Catalog", core.status.mode);
+    res.setHeader("X-AI-Media-Studio-Operations", operations.status.mode);
     next();
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/runtime`, (req, res) => {
     getCurrentUserId(req);
-    const available = persistence.status.available && core.status.available;
-    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status });
+    const available = persistence.status.available && core.status.available && operations.status.available;
+    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status });
   });
 
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");
   const requireCatalog = requireCapability(core.status, "AI Media Studio catalog");
+  const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -349,6 +547,145 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(scriptService.generate(generateScriptVariantsRequestSchema.parse(req.body)));
   }));
 
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, asyncRoute(async (req, res) => {
+    const input = publishingJobListRequestSchema.parse(req.query);
+    const values = (await operations.publishing.list(await tenant(req))).map(toPublishingJob)
+      .filter((job) => input.platform === undefined || job.platform === input.platform)
+      .filter((job) => input.status === undefined || job.status === input.status);
+    const page = paginate(values, input.cursor, input.limit);
+    res.json(publishingJobListResponseSchema.parse({ items: page.values, nextCursor: page.nextCursor, hasMore: page.hasMore }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/preview`, requireOperations, requireCatalog, asyncRoute(async (req, res) => {
+    const input = publishingPreviewRequestSchema.parse(req.body);
+    if (input.schedule.mode === "automatic") {
+      const error = new Error("Automatic publishing is disabled") as Error & { statusCode: number };
+      error.statusCode = 403;
+      throw error;
+    }
+    const scope = await tenant(req);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, input.mediaAssetId);
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    if (asset.status !== "ready" || !asset.checksumSha256) throw new CoreDomainValidationError("Publishing requires a ready canonical media asset with an immutable checksum");
+    const preview = operations.publishing.createPreview({
+      assetId: asset.id,
+      assetDigest: `sha256:${asset.checksumSha256}`,
+      caption: input.caption,
+      ...(input.title ? { title: input.title } : {}),
+      hashtags: input.hashtags,
+      platform: input.platform,
+      ...(input.schedule.scheduledFor ? { scheduledFor: input.schedule.scheduledFor } : {}),
+      ...(input.timezone ? { timezone: input.timezone } : {}),
+    });
+    res.json(z.object({ preview: publishingPreviewSchema }).strict().parse({ preview: {
+      digest: preview.digest, mediaAssetId: preview.assetId, platform: preview.platform,
+      caption: preview.caption, hashtags: [...preview.hashtags], title: preview.title ?? null,
+      scheduledFor: preview.scheduledFor ?? null, timezone: preview.timezone ?? null,
+      generatedAt: operations.policy().evaluatedAt,
+    } }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, requireCatalog, asyncRoute(async (req, res) => {
+    const input = createPublishingJobRequestSchema.parse(req.body);
+    if (input.schedule.mode === "automatic") {
+      const error = new Error("Automatic publishing is disabled") as Error & { statusCode: number };
+      error.statusCode = 403;
+      throw error;
+    }
+    const scope = await tenant(req);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, input.mediaAssetId);
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    if (asset.status !== "ready" || !asset.checksumSha256) throw new CoreDomainValidationError("Publishing requires a ready canonical media asset with an immutable checksum");
+    const previewInput = {
+      assetId: asset.id,
+      assetDigest: `sha256:${asset.checksumSha256}`,
+      caption: input.caption,
+      ...(input.title ? { title: input.title } : {}),
+      hashtags: input.hashtags,
+      platform: input.platform,
+      ...(input.schedule.scheduledFor ? { scheduledFor: input.schedule.scheduledFor } : {}),
+      ...(input.timezone ? { timezone: input.timezone } : {}),
+    };
+    if (operations.publishing.createPreview(previewInput).digest !== input.previewDigest) {
+      throw new PublishingInvariantError("Client preview digest does not match the server-computed immutable preview");
+    }
+    const publication = await operations.publishing.createDraft(scope, previewInput, input.idempotencyKey);
+    res.status(201).json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/approve`, requireOperations, asyncRoute(async (req, res) => {
+    const id = idSchema.parse(req.params.id);
+    const input = digestActionSchema.parse(req.body);
+    const scope = await tenant(req);
+    const actorId = scope.ownerUserId;
+    const existing = await operations.publishing.get(scope, id);
+    if (!existing) throw new CoreDomainNotFoundError("Publishing job not found");
+    const publication = existing.preview.scheduledFor && existing.preview.timezone
+      ? await operations.publishing.approveScheduled(scope, id, {
+          approvedByUserId: actorId,
+          previewDigest: input.previewDigest,
+          scheduledFor: existing.preview.scheduledFor,
+          timezone: existing.preview.timezone,
+        })
+      : await operations.publishing.approve(scope, id, { approvedByUserId: actorId, previewDigest: input.previewDigest });
+    res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/reject`, requireOperations, asyncRoute(async (req, res) => {
+    const id = idSchema.parse(req.params.id);
+    const input = rejectActionSchema.parse(req.body);
+    const scope = await tenant(req);
+    const publication = await operations.publishing.reject(scope, id, {
+      rejectedByUserId: scope.ownerUserId, previewDigest: input.previewDigest, reason: input.reason,
+    });
+    res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/cancel`, requireOperations, asyncRoute(async (req, res) => {
+    emptyActionSchema.parse(req.body);
+    const publication = await operations.publishing.cancel(await tenant(req), idSchema.parse(req.params.id));
+    res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/retry`, requireOperations, asyncRoute(async (req, res) => {
+    emptyActionSchema.parse(req.body);
+    const publication = await operations.publishing.retry(await tenant(req), idSchema.parse(req.params.id));
+    res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/publishing/connections`, requireOperations, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    res.json(connectionsResponseSchema.parse({ connections: await operations.connections(scope) }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/analytics/summary`, requireOperations, asyncRoute(async (req, res) => {
+    const input = windowQuerySchema.parse(req.query);
+    const summary = await operations.analytics.summarize(await tenant(req), analyticsWindow(input.from, input.to), input.platform ? { platform: input.platform } : {});
+    res.json(z.object({ summary: analyticsSummarySchema }).strict().parse({ summary: toAnalyticsSummary(summary, input.platform) }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/analytics/attribution`, requireOperations, asyncRoute(async (req, res) => {
+    const input = attributionQuerySchema.parse(req.query);
+    const summary = await operations.analytics.summarize(await tenant(req), analyticsWindow(input.from, input.to), input.platform ? { platform: input.platform } : {});
+    const page = paginate(toAttribution(summary).map((item) => ({ id: item.publicationId, item })), input.cursor, input.limit);
+    res.json(attributionResponseSchema.parse({ items: page.values.map((value) => value.item), nextCursor: page.nextCursor, hasMore: page.hasMore }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources`, requireOperations, asyncRoute(async (req, res) => {
+    const input = sourcesQuerySchema.parse(req.query);
+    const page = await operations.sources.listPage(await tenant(req), input);
+    res.json(sourcesResponseSchema.parse({
+      items: page.items.map(toSourceItem),
+      nextCursor: page.nextCursor,
+      hasMore: page.hasMore,
+    }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/automation/policy`, requireOperations, asyncRoute(async (req, res) => {
+    getCurrentUserId(req);
+    res.json(z.object({ policy: automationPolicySchema }).strict().parse({ policy: operations.policy() }));
+  }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, requireJobs, asyncRoute(async (req, res) => {
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.getJob(getCurrentUserId(req), req.params.id)) }));
   }));
@@ -374,7 +711,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof MediaStudioError || error instanceof MediaStudioPersistenceUnavailableError) { res.status(error.statusCode).json({ error: error.message }); return; }
-    if (error instanceof CoreDomainValidationError) { res.status(400).json({ error: error.message, code: error.code }); return; }
+    if (error instanceof CoreDomainValidationError || error instanceof AnalyticsValidationError) { res.status(400).json({ error: error.message, code: "code" in error ? error.code : "ANALYTICS_VALIDATION" }); return; }
+    if (error instanceof SourceCursorError) { res.status(400).json({ error: "Invalid source cursor", code: "SOURCE_CURSOR_INVALID" }); return; }
     if (error instanceof CoreDomainNotFoundError) { res.status(404).json({ error: "Not found", code: error.code }); return; }
     if (error instanceof InfluencerSlugConflictError) { res.status(409).json({ error: "An influencer with this name already exists", code: error.code }); return; }
     if (error && typeof error === "object" && "issues" in error) { res.status(400).json({ error: "Invalid request", issues: (error as { issues: unknown }).issues }); return; }
@@ -398,7 +736,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     console.error("[AiMediaStudio] Request failed", error instanceof Error ? error.message : "Unknown error");
     res.status(500).json({ error: "AI Media Studio request failed" });
   });
-  return { service, core, router, persistence: persistence.status };
+  return { service, core, operations, router, persistence: persistence.status };
 }
 
 export function registerAiMediaStudioRoutes(app: Express, dependencies: AiMediaStudioDependencies = {}): AiMediaStudioRuntime {

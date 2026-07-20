@@ -12,3 +12,4 @@ export * from "./persistence";
 export * from "./workers";
 export * from "./workers/video-provider-adapter";
 export * from "./workers/video-render-runtime";
+export * from "./operations-runtime";

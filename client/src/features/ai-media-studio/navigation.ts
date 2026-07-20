@@ -1,4 +1,4 @@
-import { Activity, Bot, Clapperboard, Gauge, Library, ListVideo, Users, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, Bot, Clapperboard, Gauge, Library, ListVideo, Send, Users, Workflow, type LucideIcon } from "lucide-react";
 
 export type StudioNavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -8,6 +8,9 @@ export const studioNavigation: StudioNavItem[] = [
   { href: "#media-library", label: "Media library", icon: Library },
   { href: "#create", label: "Create video", icon: Clapperboard },
   { href: "#jobs", label: "Generation jobs", icon: ListVideo },
+  { href: "#publishing", label: "Publishing", icon: Send },
+  { href: "#analytics", label: "Analytics", icon: BarChart3 },
+  { href: "#automation", label: "Automation", icon: Workflow },
   { href: "#providers", label: "Provider health", icon: Bot },
   { href: "#activity", label: "Recent activity", icon: Activity },
 ];

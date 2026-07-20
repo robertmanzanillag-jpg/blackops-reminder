@@ -6,7 +6,7 @@ This matrix maps the original AI Media Studio brief to repository evidence. Stat
 - **Partial**: a contract, schema, adapter, or UI exists, but an operational path or release gate is still missing.
 - **Missing**: no implementation evidence exists yet.
 
-PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-media-studio-core`; PR2 must be reviewed as the delta from PR #67, not as a replacement for its base.
+PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. PR3 lives on `codex/ai-media-studio-operations`, stacked on PR2. Neither the PR2 nor PR3 migration has been applied.
 
 ## Platform foundation
 
@@ -16,7 +16,7 @@ PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-med
 | Provider-neutral business logic | Proved | `ports.ts`, `service.ts`, fake and HeyGen adapters; requests contain internal refs, not provider IDs | Contract tests required for every new provider |
 | Replace HeyGen without changing use cases/UI | Proved | `VideoProvider` port and provider-neutral DTOs | Add a second production adapter before claiming operational portability |
 | Independently deployable media platform | Partial | Domain is isolated but still shares the Express/React application deployment | Define service extraction trigger, ownership and data/API boundary before separate deployment |
-| Enterprise-ready production operation | Missing | Architecture and schema anticipate it, but migration, distributed queue, object storage, SLOs and load evidence are absent | Complete PR2/PR3 gates below |
+| Enterprise-ready production operation | Missing | Architecture, schemas and worker/outbox code anticipate it, but migrations, object storage, live SLOs, provider operation and load evidence are absent | Complete PR2/PR3 gates below |
 
 ## Dashboard
 
@@ -28,7 +28,7 @@ PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-med
 | Average generation time | Proved | API computes completed-job duration; UI renders it | Define percentile/SLO metrics for scale |
 | Estimated cost | Proved | Per-job/shared cost fields and dashboard aggregate | Add provider billing reconciliation and budget alerts |
 | Provider status | Proved | Provider health contract and dashboard UI | Add active polling/alerting and provider-specific SLOs |
-| Current queue and rendering jobs | Proved | Queue snapshot/status cards and jobs list | Replace process-local worker queue before multi-worker operation |
+| Current queue and rendering jobs | Proved | Queue snapshot/status cards, jobs list and durable render-claim adapter | Prove multi-worker operation and restart recovery in staging |
 | Recent activity | Proved | Dashboard activity response and UI | Back it with durable audit/history after migration |
 
 ## AI influencers
@@ -54,7 +54,7 @@ PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-med
 | Alternative versions and different angles | Proved | Stable-ID 1–5 variants; UI generates and selects three | Add experiment identity and performance attribution |
 | Named angles such as Hidden Gem and Worth the Hype | Proved | Deterministic default angle catalog | Make catalog configurable by brand/country |
 | Strong-model script generation | Missing | Existing AI router is only a web-chat classifier; deterministic mode is the only enabled path | Dedicated media feature flag, budget reservation, evals, fallback and approval evidence |
-| Automatic generation directly from live Kong data | Missing | Snapshot contract exists; intake is manual | Source adapters, dedupe, outbox consumer and approval policy |
+| Automatic generation directly from live Kong data | Partial | Bounded source-adapter contract, content-hash dedupe, tenant repositories and fake adapter exist | Live Kong/platform adapters, OAuth or trusted ingestion, outbox consumers and operational approval policy |
 
 ## Video generation and providers
 
@@ -83,29 +83,29 @@ PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-med
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| TikTok, Instagram, Facebook and YouTube Shorts | Missing | Publishing tables are provider-neutral; no Studio platform adapters | OAuth/permission review, adapters and sandbox evidence per platform |
-| Manual publishing | Missing | `pending_approval` storage invariant exists | Approval UI, immutable preview and explicit execute action |
-| Scheduled publishing | Missing | Publishing schedule columns exist | Durable scheduler, timezone policy and missed-run recovery |
+| TikTok, Instagram, Facebook and YouTube Shorts | Partial | Provider-neutral contracts/ports, connection-readiness DTOs and fake adapter cover all four platforms | Real OAuth/permission review, adapters, ingestion and sandbox evidence per platform |
+| Manual publishing | Partial | Server-generated immutable preview, explicit approval/rejection evidence, authenticated routes, repository/service, client API and UI are integrated | Configured real provider execution and sandbox evidence; Robert approval before external posting |
+| Scheduled publishing | Partial | Authenticated routes, timezone-bound schedule, due claim, bounded retry/dead-letter and reconciliation code exist | Deploy an approved worker and prove missed-run/restart behavior against live PostgreSQL |
 | Automatic publishing | Missing | Explicitly disabled | Separate Robert approval, policy engine, spend/risk review and kill switch |
-| Publishing queue management | Partial | Durable publishing/outbox models exist | Operational worker/API/UI, retry/dead-letter and reconciliation |
+| Publishing queue management | Partial | Authenticated routes, durable publishing/outbox repositories, UI, scheduler, fencing, retry/dead-letter and reconciliation code exist | Deployed worker, live PostgreSQL contention/restart and real connector evidence |
 
 ## Analytics
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Views, likes, shares, comments and CTR | Partial | Analytics tables can store snapshots/events | Platform ingestion adapters and normalized metric definitions |
-| Retention and watch time | Partial | Analytics model is extensible | Time-series ingestion, retention curve schema and UI |
-| Best avatar, hook, CTA, posting time and category | Missing | No attribution/aggregation engine | Stable creative IDs, experiment joins and ranking queries |
-| Cost per video | Partial | Estimated/actual job cost fields exist | Provider invoice reconciliation |
-| Cost per view | Missing | Cost and view domains are not joined | Durable attribution query with currency/time-window policy |
+| Views, likes, shares, comments and CTR | Partial | Normalized metric contracts, tenant repositories, summary service, fake ingestion and UI exist | Real platform ingestion adapters and metric-definition validation |
+| Retention and watch time | Partial | Normalized watch-time/retention snapshots and summary UI exist | Real time-series ingestion and retention-curve validation |
+| Best avatar, hook, CTA, posting time and category | Partial | Attribution records, dimensions, filtered queries and UI rankings exist | Validate durable joins and performance ranking against real publication metrics |
+| Cost per video | Partial | Generation cost joins and normalized USD summary are implemented | Provider invoice/billing reconciliation and currency policy evidence |
+| Cost per view | Partial | Summary calculates nullable cost-per-view from cost and normalized views | Real ingestion, invoice reconciliation and attribution-window validation |
 
 ## Automation
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Trigger on new event, restaurant, hotel, promotion, deal or travel package | Missing | Source intake/outbox schema and snapshot contract exist | Domain event producers/consumers with dedupe and tenant isolation |
+| Trigger on new event, restaurant, hotel, promotion, deal or travel package | Partial | Category-aware source snapshots, stable content hashing, tenant dedupe repositories and fake adapter exist | Live domain event producers/consumers, OAuth/trusted ingestion and operational scheduling |
 | Analyze data and generate ideas/scripts/titles/captions/hashtags | Partial | Deterministic snapshot-to-variants flow works manually | Automatic consumer, quality rules and approval state |
-| Automatically render, download, store and queue publishing | Missing | Individual contracts/tables exist; no safe end-to-end automation | Durable orchestration, budget/rights/moderation gates and recovery tests |
+| Automatically render, download, store and queue publishing | Partial | Orchestration enforces rights, moderation, immutable approvals, budget evidence and kill switch; CAS/outbox persistence exists | Consumers, owned-storage path, real connectors and live end-to-end crash recovery |
 | No-manual-work mode | Missing | Deliberately disabled | Production policy, emergency stop and Robert-approved autonomy level |
 
 ## Queue and scale
@@ -114,27 +114,28 @@ PR #67 is the clean, mergeable foundation. PR2 is stacked on it in `codex/ai-med
 | --- | --- | --- | --- |
 | Pending, rendering, completed, failed and cancelled states | Proved | Shared/domain state machine plus durable worker projection tests | Prove deployed worker recovery in staging |
 | Retry | Proved | Bounded retry path with retry-specific idempotency | Provider sandbox and restart evidence |
-| Durable jobs, webhook dedupe and outbox | Partial | Drizzle repository, webhook receipts and transactional outbox are wired with `DATABASE_URL` | Migration, staging restart/recovery and outbox worker evidence |
-| Thousands of jobs and parallel rendering | Partial | Durable lease/fencing repository enforces global, provider and tenant quotas | Deploy workers, add backpressure/observability and run load tests |
-| 10,000+ videos/day | Missing | Architectural target only | Capacity model, burst test, quotas, SLOs and cost envelope |
-| Multiple countries and languages | Partial | Language is modeled; country/policy execution is not | Locale, timezone, residency, rights and provider-routing policies |
-| Cloud rendering and horizontal workers | Partial | Provider adapters and a no-side-effect durable worker factory exist with atomic lease claims | Deploy loop, autoscaling, observability and disaster recovery |
+| Durable jobs, webhook dedupe and outbox | Partial | Drizzle repositories, webhook receipts, CAS emissions, scoped `SKIP LOCKED` outbox claims, monotonic fencing and retry/DLQ code exist | Apply both migrations, then prove live restart/recovery and contention |
+| Thousands of jobs and parallel rendering | Partial | Durable leases plus provider/tenant quotas and a bounded no-autostart worker loop exist | Deploy workers, add telemetry/backpressure/autoscaling and run real load tests |
+| 10,000+ videos/day | Missing | A deterministic 10k fake-provider rehearsal exists only; it is explicitly not capacity proof | Burst/load test, provider quota evidence, SLO telemetry, cost envelope and disaster recovery |
+| Multiple countries and languages | Partial | Admission policy evaluates language, country and timezone with tenant/provider quotas and daily budgets | Residency, rights, provider routing and operational locale tests |
+| Cloud rendering and horizontal workers | Partial | Provider ports, durable atomic claims, fencing, graceful drain and reconciliation cadence exist in code | Deploy loop, prove SIGTERM/restart behavior, autoscaling, observability and DR |
 
 ## Database, design, quality and release safety
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Models for influencers, scripts, videos, providers, publishing, analytics, assets and history | Proved | Central re-export of 18 Drizzle tables and DB-independent schema tests | Apply reviewed migration before production |
+| Models for influencers, scripts, videos, providers, publishing, analytics, assets, sources, orchestration, outbox and history | Proved | Central Drizzle table inventory and DB-independent schema/migration tests | Apply PR2 then PR3 reviewed migrations before production |
 | Production persistence selection | Proved | Drizzle selected with `DATABASE_URL`; production without DB returns `503`; memory limited to dev/test | Staging database/restart evidence |
-| Database migration applied | Missing | Reviewed forward/rollback SQL is checked in and statically tested; no migration or `db:push` has run | Backup, staging apply, restart/recovery and rollback rehearsal; hard deploy gate |
+| Database migration applied | Missing | PR2 and PR3 forward/rollback SQL are checked in and statically tested; neither migration nor `db:push` has run | Backup, ordered staging apply, restart/recovery and rollback rehearsal; hard deploy gate |
 | Dark, modern, minimal Kong UI | Proved | Studio shell, dashboard, workbench, jobs and responsive styles | Visual regression evidence remains required for later UI changes |
 | Natural movement, eye contact, speech, lighting and realism | Missing | Provider quality goals are documented only | Provider scorecard, sample set, human review and minimum thresholds |
 | Consistent branding and high-quality vertical output | Partial | Brand-neutral vertical workbench and `9:16` contract exist | Brand kit enforcement and rendered sample QA |
 | Secrets and provider IDs isolated | Proved | Secret refs/env usage, provider boundary and public DTO tests | Vault rotation runbook for production |
-| Deployment readiness | Missing | PR #67 is mergeable; PR2 checker and static App QA pass, and reviewed migration/rollback artifacts exist | Staging apply, live environment QA, backup/rollback evidence and Robert approval |
+| Deployment readiness | Missing | PR3 code passed final independent checker and static App QA with 212 focused tests; both migrations remain unapplied | GitHub review, ordered staging apply, live QA, restart/load evidence, backup/rollback and Robert approval |
 
 ## Release interpretation
 
 - **PR #67**: clean and mergeable foundation; it is not production deployment approval.
 - **PR2 — `codex/ai-media-studio-core`**: stacked core work for durable data, media ownership and operational APIs. Review only its delta after PR #67 is merged/rebased.
-- **PR3**: publishing, analytics feedback, source automation and distributed scale. Paid rendering or posting remains separately approval-gated.
+- **PR3 — `codex/ai-media-studio-operations`**: stacked integration branch for publishing, analytics, source automation, orchestration and worker operations. Code/test evidence is not live-operation evidence.
+- Automatic publishing, external posting, deployment, and increased spend remain separately gated by Robert's explicit approval.

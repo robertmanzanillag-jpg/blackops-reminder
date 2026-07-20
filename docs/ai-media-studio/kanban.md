@@ -8,7 +8,7 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | --- | --- | --- | --- |
 | Foundation | PR #67, `codex/ai-media-studio` | Clean / mergeable | Provider-neutral vertical slice accepted as the base; no deployment implied |
 | PR2 core | `codex/ai-media-studio-core` | Stacked on PR #67 | Durable core, owned media and operational APIs; review the PR2 delta after base merge/rebase |
-| PR3 operations | Branch after PR2 | Backlog | Publishing, analytics feedback, autonomous sources and distributed scale |
+| PR3 operations | `codex/ai-media-studio-operations`, stacked on PR2 | Ready for GitHub review | Publishing/analytics/intake/orchestration contracts, repositories, UI and worker operations passed checker/static App QA; no live operation implied |
 
 ## PR2 — durable core and owned media
 
@@ -26,6 +26,8 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | AMS-210 PR2 contract/integration suite | Test owner | Partial | 123 focused domain/UI/auth/migration/HTTP/map tests, focused TypeScript and client/server bundles pass; staging restart remains blocked by AMS-201 |
 | AMS-211 PR2 checker review | Independent checker | Done | Final delta review against PR #67 reported no P0-P3 findings |
 | AMS-212 PR2 App QA | App QA | Done (static) | Route, link/click, API, errors, accessibility, responsive and improvement scouts passed; no live browser target was available |
+
+Both PR2 and PR3 migrations remain unapplied. No `db:push`, live PostgreSQL validation, staging restart, or rollback rehearsal has occurred.
 
 ### PR2 integration order
 
@@ -54,22 +56,30 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 
 | Card | Owner | State | Acceptance |
 | --- | --- | --- | --- |
-| AMS-301 Publishing connector ports | Publishing owner | Backlog | TikTok, Instagram, Facebook and YouTube Shorts adapters pass provider contract tests |
-| AMS-302 Manual/scheduled publishing | Publishing + approvals | Backlog | Immutable preview, explicit approval, timezone-safe scheduler and reconciliation |
+| AMS-301 Publishing connector ports | Publishing owner | Partial (code) | Provider-neutral port and fake provider exist; real TikTok, Instagram, Facebook and YouTube Shorts OAuth/adapters and sandbox proof are missing |
+| AMS-302 Manual/scheduled publishing | Publishing + approvals | Done (code) | Server preview, future-only atomic scheduling, immutable approval/rejection, routes, repositories, scheduler/reconcile, client API and UI passed checker/static App QA; live provider execution remains pending |
 | AMS-303 Automatic publishing policy | Trust/safety owner | Blocked | Robert approves autonomy; budget/rights/moderation gates and kill switch proven |
-| AMS-304 Analytics ingestion | Analytics owner | Backlog | Normalized engagement/retention metrics with idempotent platform collection |
-| AMS-305 Creative attribution | Analytics owner | Backlog | Rank avatar/hook/CTA/time/category and calculate cost per video/view from durable joins |
-| AMS-306 Kong source adapters | Automation owner | Backlog | Event/restaurant/hotel/promotion/deal/travel triggers emit deduped snapshots |
-| AMS-307 Automated content pipeline | Orchestration owner | Backlog | Idea -> script -> approval -> render -> ingest -> publish queue recovers after crash |
-| AMS-308 Distributed workers | Platform owner | Backlog | Leases, quotas, backpressure, autoscaling and dead-letter operations pass load tests |
-| AMS-309 Multi-country/language policy | Policy owner | Backlog | Locale, timezone, residency, rights and provider routing tested |
-| AMS-310 10,000/day capacity gate | Performance owner | Backlog | Burst/load report, SLOs, provider quotas, cost envelope and disaster recovery approved |
+| AMS-304 Analytics ingestion | Analytics owner | Partial (code) | Normalized metric contracts, repositories and fake ingestion exist; real platform collection is missing |
+| AMS-305 Creative attribution | Analytics owner | Partial (code/UI) | Avatar/hook/CTA/time/category attribution and cost summaries exist; real data validation and billing reconciliation are missing |
+| AMS-306 Kong source adapters | Automation owner | Partial (code) | Bounded snapshot, content-hash dedupe, repositories and fake adapter exist; live Kong/platform ingestion and OAuth are missing |
+| AMS-307 Automated content pipeline | Orchestration owner | Partial (code) | Guarded state machine, idempotent CAS persistence and transactional outbox emissions exist; no autonomous consumer or end-to-end live recovery |
+| AMS-308 Distributed workers | Platform owner | Partial (code) | No-autostart loop, durable/in-memory outbox, fencing, retry/DLQ, health snapshot and render quotas exist; no deployment, autoscaling or real load proof |
+| AMS-309 Multi-country/language policy | Policy owner | Partial (code) | Admission evaluates provider/tenant limits, language, country, timezone and daily budget; residency/rights/provider-routing operations remain missing |
+| AMS-310 10,000/day capacity gate | Performance owner | Blocked on real environment | Deterministic 10k fake-provider rehearsal exists and is not capacity proof; burst/load, SLO telemetry, provider quotas, cost envelope and DR remain required |
+
+### PR3 current integration evidence
+
+- Shared contracts, domain services, in-memory/Drizzle repositories, fake adapters, operations UI/client modules, migration SQL, orchestration/outbox, and worker utilities exist in the branch workspace.
+- The operations HTTP routes/composition are integrated. The final checker reported no P0-P3 findings and static App QA reported no warnings; no live browser target was available.
+- The authoritative local run passed 203 non-HTTP and 9 HTTP AI Media Studio tests (212 total), focused TypeScript, client/server bundles, codebase-map validation, and diff hygiene.
+- No live PostgreSQL, OAuth, provider ingestion, external publishing, staging restart, real load, or production deployment evidence exists.
 
 ### PR3 merge gates
 
-- PR2 durable runtime and migration are already proven in staging.
+- PR2 and PR3 migration order is reviewed and both migrations must be proven in staging; currently neither is applied.
 - Every publishing platform passes OAuth/permission and sandbox review.
 - Paid rendering/posting has a cost estimate and Robert's explicit approval.
 - Rights, consent, moderation and emergency-stop tests pass.
 - Analytics definitions and attribution windows are documented and reproducible.
 - Load, recovery, checker and App QA evidence pass before any production deployment request.
+- Automatic publishing, external posting, deployment, and additional spend remain blocked without Robert's explicit approval.

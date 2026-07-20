@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -12,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Durable, provider-neutral storage for AI Media Studio.
@@ -400,17 +402,30 @@ export const aiMediaPublishingJobs = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ...tenantColumns(),
-    videoId: uuid("video_id").notNull().references(() => aiMediaVideos.id, { onDelete: "cascade" }),
+    videoId: uuid("video_id").references(() => aiMediaVideos.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id").references(() => aiMediaMediaAssets.id, { onDelete: "set null" }),
     providerAccountId: uuid("provider_account_id").references(() => aiMediaProviderAccounts.id, { onDelete: "set null" }),
     platform: text("platform").notNull(),
+    mode: text("mode").notNull().default("manual"),
     idempotencyKey: text("idempotency_key").notNull(),
     status: text("status").notNull().default("pending_approval"),
     approvalStatus: text("approval_status").notNull().default("required"),
+    previewDigest: text("preview_digest"),
+    approvalEvidence: jsonb("approval_evidence").$type<Record<string, unknown>>(),
     scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    fencingToken: integer("fencing_token").notNull().default(0),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
     request: jsonb("request").$type<Record<string, unknown>>().notNull().default({}),
+    failureCode: text("failure_code"),
     errorMessage: text("error_message"),
+    deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
+    reconcileAfter: timestamp("reconcile_after", { withTimezone: true }),
+    reconciliationStatus: text("reconciliation_status").notNull().default("not_required"),
     ...auditColumns(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
@@ -420,7 +435,27 @@ export const aiMediaPublishingJobs = pgTable(
       table.workspaceId,
       table.idempotencyKey,
     ),
-    dispatchIdx: index("ai_media_publishing_jobs_dispatch_idx").on(table.status, table.approvalStatus, table.scheduledFor),
+    dispatchIdx: index("ai_media_publishing_jobs_dispatch_idx").on(
+      table.status,
+      table.approvalStatus,
+      table.availableAt,
+      table.dueAt,
+      table.leaseExpiresAt,
+    ),
+    ownerWorkspaceAssetIdx: index("ai_media_publishing_jobs_owner_workspace_asset_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.mediaAssetId,
+    ),
+    deadLetterIdx: index("ai_media_publishing_jobs_dead_letter_idx").on(table.deadLetterAt),
+    reconcileIdx: index("ai_media_publishing_jobs_reconcile_idx").on(
+      table.reconciliationStatus,
+      table.reconcileAfter,
+    ),
+    mediaReferenceCheck: check(
+      "ai_media_publishing_jobs_media_reference_ck",
+      sql`${table.videoId} IS NOT NULL OR ${table.mediaAssetId} IS NOT NULL`,
+    ),
   }),
 );
 
@@ -430,7 +465,8 @@ export const aiMediaPublications = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     ...tenantColumns(),
     publishingJobId: uuid("publishing_job_id").notNull().references(() => aiMediaPublishingJobs.id, { onDelete: "cascade" }),
-    videoId: uuid("video_id").notNull().references(() => aiMediaVideos.id, { onDelete: "cascade" }),
+    videoId: uuid("video_id").references(() => aiMediaVideos.id, { onDelete: "cascade" }),
+    mediaAssetId: uuid("media_asset_id").references(() => aiMediaMediaAssets.id, { onDelete: "set null" }),
     platform: text("platform").notNull(),
     externalPublicationId: text("external_publication_id").notNull(),
     status: text("status").notNull().default("published"),
@@ -441,6 +477,8 @@ export const aiMediaPublications = pgTable(
   },
   (table) => ({
     platformExternalUnique: uniqueIndex("ai_media_publications_platform_external_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
       table.platform,
       table.externalPublicationId,
     ),
@@ -448,6 +486,15 @@ export const aiMediaPublications = pgTable(
       table.ownerUserId,
       table.workspaceId,
       table.publishedAt,
+    ),
+    ownerWorkspaceMediaAssetIdx: index("ai_media_publications_owner_workspace_media_asset_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.mediaAssetId,
+    ),
+    mediaReferenceCheck: check(
+      "ai_media_publications_media_reference_ck",
+      sql`${table.videoId} IS NOT NULL OR ${table.mediaAssetId} IS NOT NULL`,
     ),
   }),
 );
@@ -458,6 +505,9 @@ export const aiMediaAnalyticsSnapshots = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     ...tenantColumns(),
     publicationId: uuid("publication_id").notNull().references(() => aiMediaPublications.id, { onDelete: "cascade" }),
+    platform: text("platform"),
+    periodStart: timestamp("period_start", { withTimezone: true }),
+    periodEnd: timestamp("period_end", { withTimezone: true }),
     capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
     views: bigint("views", { mode: "number" }).notNull().default(0),
     impressions: bigint("impressions", { mode: "number" }).notNull().default(0),
@@ -470,6 +520,8 @@ export const aiMediaAnalyticsSnapshots = pgTable(
   },
   (table) => ({
     publicationCapturedUnique: uniqueIndex("ai_media_analytics_snapshots_publication_captured_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
       table.publicationId,
       table.capturedAt,
     ),
@@ -477,6 +529,17 @@ export const aiMediaAnalyticsSnapshots = pgTable(
       table.ownerUserId,
       table.workspaceId,
       table.capturedAt,
+    ),
+    ownerWorkspacePlatformCapturedIdx: index("ai_media_analytics_snapshots_owner_workspace_platform_captured_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.platform,
+      table.capturedAt,
+    ),
+    publicationPeriodIdx: index("ai_media_analytics_snapshots_publication_period_idx").on(
+      table.publicationId,
+      table.periodStart,
+      table.periodEnd,
     ),
   }),
 );
@@ -496,7 +559,12 @@ export const aiMediaAnalyticsEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    sourceExternalUnique: uniqueIndex("ai_media_analytics_events_source_external_uq").on(table.source, table.externalEventId),
+    sourceExternalUnique: uniqueIndex("ai_media_analytics_events_source_external_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.source,
+      table.externalEventId,
+    ),
     ownerWorkspaceOccurredIdx: index("ai_media_analytics_events_owner_workspace_occurred_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -577,7 +645,11 @@ export const aiMediaSourceItems = pgTable(
     canonicalUrl: text("canonical_url"),
     title: text("title"),
     content: text("content"),
+    contentHash: text("content_hash"),
     rightsStatus: text("rights_status").notNull().default("unknown"),
+    moderationStatus: text("moderation_status").notNull().default("pending"),
+    moderationEvidence: jsonb("moderation_evidence").$type<Record<string, unknown>>().notNull().default({}),
+    automationEvidence: jsonb("automation_evidence").$type<Record<string, unknown>>().notNull().default({}),
     status: text("status").notNull().default("discovered"),
     sourcePublishedAt: timestamp("source_published_at", { withTimezone: true }),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
@@ -595,6 +667,64 @@ export const aiMediaSourceItems = pgTable(
       table.workspaceId,
       table.status,
     ),
+    ownerWorkspaceContentHashIdx: index("ai_media_source_items_owner_workspace_content_hash_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.contentHash,
+    ),
+    ownerWorkspaceModerationIdx: index("ai_media_source_items_owner_workspace_moderation_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.moderationStatus,
+      table.updatedAt,
+    ),
+  }),
+);
+
+export const aiMediaOrchestrationRuns = pgTable(
+  "ai_media_orchestration_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    sourceItemId: uuid("source_item_id").references(() => aiMediaSourceItems.id, { onDelete: "set null" }),
+    runType: text("run_type").notNull(),
+    mode: text("mode").notNull().default("manual"),
+    status: text("status").notNull().default("queued"),
+    stateVersion: integer("state_version").notNull().default(0),
+    runPayload: jsonb("run_payload").$type<Record<string, unknown>>().notNull().default({}),
+    idempotencyKey: text("idempotency_key").notNull(),
+    policyEvidence: jsonb("policy_evidence").$type<Record<string, unknown>>().notNull().default({}),
+    automationEvidence: jsonb("automation_evidence").$type<Record<string, unknown>>().notNull().default({}),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    fencingToken: integer("fencing_token").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
+    failureCode: text("failure_code"),
+    ...auditColumns(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => ({
+    ownerWorkspaceIdempotencyUnique: uniqueIndex("ai_media_orchestration_runs_owner_workspace_idempotency_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    queueIdx: index("ai_media_orchestration_runs_queue_idx").on(
+      table.status,
+      table.availableAt,
+      table.dueAt,
+      table.leaseExpiresAt,
+    ),
+    ownerWorkspaceSourceUnique: uniqueIndex("ai_media_orchestration_runs_owner_workspace_source_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.sourceItemId,
+    ).where(sql`${table.sourceItemId} IS NOT NULL`),
+    deadLetterIdx: index("ai_media_orchestration_runs_dead_letter_idx").on(table.deadLetterAt),
   }),
 );
 
@@ -612,6 +742,10 @@ export const aiMediaOutbox = pgTable(
     attempts: integer("attempts").notNull().default(0),
     availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    fencingToken: integer("fencing_token").notNull().default(0),
+    deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     lastError: text("last_error"),
     ...auditColumns(),
@@ -622,7 +756,19 @@ export const aiMediaOutbox = pgTable(
       table.workspaceId,
       table.idempotencyKey,
     ),
-    dispatchIdx: index("ai_media_outbox_dispatch_idx").on(table.status, table.availableAt, table.createdAt),
+    dispatchIdx: index("ai_media_outbox_dispatch_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt,
+      table.createdAt,
+    ),
+    ownerWorkspaceLeaseIdx: index("ai_media_outbox_owner_workspace_lease_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.leaseOwner,
+      table.leaseExpiresAt,
+    ),
+    deadLetterIdx: index("ai_media_outbox_dead_letter_idx").on(table.deadLetterAt),
     aggregateIdx: index("ai_media_outbox_aggregate_idx").on(table.aggregateType, table.aggregateId, table.createdAt),
   }),
 );
@@ -645,6 +791,7 @@ export const aiMediaStudioTables = {
   generationHistory: aiMediaGenerationHistory,
   costLedger: aiMediaCostLedger,
   sourceItems: aiMediaSourceItems,
+  orchestrationRuns: aiMediaOrchestrationRuns,
   outbox: aiMediaOutbox,
 } as const;
 
@@ -666,3 +813,7 @@ export type AiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferSelect;
 export type NewAiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferInsert;
 export type AiMediaOutboxRow = typeof aiMediaOutbox.$inferSelect;
 export type NewAiMediaOutboxRow = typeof aiMediaOutbox.$inferInsert;
+export type AiMediaPublishingJobRow = typeof aiMediaPublishingJobs.$inferSelect;
+export type NewAiMediaPublishingJobRow = typeof aiMediaPublishingJobs.$inferInsert;
+export type AiMediaOrchestrationRunRow = typeof aiMediaOrchestrationRuns.$inferSelect;
+export type NewAiMediaOrchestrationRunRow = typeof aiMediaOrchestrationRuns.$inferInsert;

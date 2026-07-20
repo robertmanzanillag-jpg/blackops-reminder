@@ -1,0 +1,98 @@
+import { randomUUID } from "node:crypto";
+import type { TenantScope } from "../core/resource-domain";
+import {
+  MAX_SOURCE_SNAPSHOT_ITEMS,
+  type CanonicalSourceItem,
+  type SourceCategory,
+  type SourcePage,
+  type SourcePageRequest,
+  type SourceRepository,
+} from "./contracts";
+import { boundedSourcePageLimit, decodeSourceCursor, encodeSourceCursor, sourceListFilter } from "./source-pagination";
+
+function tenantKey(scope: TenantScope): string {
+  return `${scope.ownerUserId}\u0000${scope.workspaceId}`;
+}
+
+function clone(item: CanonicalSourceItem): CanonicalSourceItem {
+  return { ...item, payload: structuredClone(item.payload) };
+}
+
+export class InMemorySourceRepository implements SourceRepository {
+  private readonly tenants = new Map<string, Map<string, CanonicalSourceItem>>();
+  private readonly identities = new Map<string, Map<string, string>>();
+
+  async upsertByContentHash(
+    scope: TenantScope,
+    input: Omit<CanonicalSourceItem, "id" | "ownerUserId" | "workspaceId" | "createdAt" | "updatedAt">,
+  ): Promise<{ item: CanonicalSourceItem; created: boolean }> {
+    const key = tenantKey(scope);
+    const byId = this.tenants.get(key) ?? new Map<string, CanonicalSourceItem>();
+    const byIdentity = this.identities.get(key) ?? new Map<string, string>();
+    this.tenants.set(key, byId);
+    this.identities.set(key, byIdentity);
+    const identity = `${input.category}\u0000${input.adapterKey}\u0000${input.providerExternalId}`;
+    const existingId = byIdentity.get(identity);
+    const existing = existingId ? byId.get(existingId) : undefined;
+    const now = new Date().toISOString();
+    if (existing) {
+      if (existing.contentHash === input.contentHash) return { item: clone(existing), created: false };
+      const updated: CanonicalSourceItem = {
+        ...existing,
+        ...input,
+        payload: structuredClone(input.payload),
+        updatedAt: now,
+      };
+      byId.set(existing.id, updated);
+      return { item: clone(updated), created: false };
+    }
+    const item: CanonicalSourceItem = {
+      ...input,
+      id: randomUUID(),
+      ownerUserId: scope.ownerUserId,
+      workspaceId: scope.workspaceId,
+      payload: structuredClone(input.payload),
+      createdAt: now,
+      updatedAt: now,
+    };
+    byId.set(item.id, item);
+    byIdentity.set(identity, item.id);
+    return { item: clone(item), created: true };
+  }
+
+  async get(scope: TenantScope, id: string): Promise<CanonicalSourceItem | undefined> {
+    const found = this.tenants.get(tenantKey(scope))?.get(id);
+    return found ? clone(found) : undefined;
+  }
+
+  async list(scope: TenantScope, options: { limit?: number; category?: SourceCategory } = {}): Promise<CanonicalSourceItem[]> {
+    const limit = Math.min(Math.max(options.limit ?? 25, 1), MAX_SOURCE_SNAPSHOT_ITEMS);
+    return [...(this.tenants.get(tenantKey(scope))?.values() ?? [])]
+      .filter((item) => !options.category || item.category === options.category)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+      .slice(0, limit)
+      .map(clone);
+  }
+
+  async listPage(scope: TenantScope, request: SourcePageRequest = {}): Promise<SourcePage> {
+    const limit = boundedSourcePageLimit(request.limit);
+    const filter = sourceListFilter(request);
+    const cursor = decodeSourceCursor(scope, filter, request.cursor);
+    const rows = [...(this.tenants.get(tenantKey(scope))?.values() ?? [])]
+      .filter((item) => !filter.category || item.category === filter.category)
+      .filter((item) => !filter.status || item.status === filter.status)
+      .filter((item) => !filter.rightsStatus || item.rightsStatus === filter.rightsStatus)
+      .filter((item) => !cursor
+        || Date.parse(item.createdAt) > cursor.createdAt.getTime()
+        || (Date.parse(item.createdAt) === cursor.createdAt.getTime() && item.id > cursor.id))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+      .slice(0, limit + 1);
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit).map(clone);
+    return {
+      items,
+      nextCursor: hasMore && items.length > 0 ? encodeSourceCursor(scope, filter, items.at(-1)!) : null,
+      hasMore,
+    };
+  }
+}
