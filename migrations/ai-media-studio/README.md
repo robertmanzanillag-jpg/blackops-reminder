@@ -1,9 +1,11 @@
 # AI Media Studio reviewed migration runbook
 
-These reviewed SQL files cover only the incremental schema delta from the PR1
-AI Media Studio tables to PR2. They do not create the PR1 tables and they have
-not been applied to any database. Do not substitute `drizzle-kit push` or
-`npm run db:push` for the reviewed SQL and release sequence below.
+These SQL files cover the incremental PR2, PR3, and PR4 schema deltas after the
+PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 passed its
+local independent checker/static App QA gate. They do not create the PR1
+tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
+`npm run db:push` for the reviewed SQL and release sequence below. Apply the
+deltas strictly in PR2 -> PR3 -> PR4 order.
 
 ## Required release sequence
 
@@ -57,3 +59,30 @@ shapes only. It intentionally retains the new table, columns, evidence, and
 rows for recovery and audit. The rollback aborts if PR3 data cannot satisfy the
 narrower PR2 analytics uniqueness rules; resolve those collisions explicitly,
 then retry from a fresh backup.
+
+## PR4 owned-assets release
+
+`20260720_pr4_assets_forward.sql` is the additive PR4 delta and has not been
+applied to any database. It adds the private provider-artifact ingest queue, an
+owned output-asset link on render jobs, tenant/render ingest idempotency, queue
+and completed-unlinked indexes, lease/fencing/retry/dead-letter fields, and
+active tenant/kind/checksum uniqueness for canonical assets. The checked-in SQL
+and DB-independent tests are not live PostgreSQL or storage evidence.
+
+Apply PR4 only after PR2 and PR3 have passed their staging gates. Repeat the
+verified backup and drain, obtain checker approval, apply the checked-in PR4
+forward SQL, then prove:
+
+1. Existing asset checksums contain no duplicate active tenant/workspace/kind rows.
+2. Ingest claims, fenced completion/failure, lease recovery, dead letters and completed-unlinked scans behave under live PostgreSQL contention and restart.
+3. Canonical asset and render-output linkage remains tenant scoped and idempotent after recovery.
+4. A production bounded reader, object-storage adapter and short-lived signer pass sandbox tests without exposing provider URLs, storage keys or signed URLs in public DTOs/logs.
+5. Full checker and App QA gates pass, followed by Robert's explicit approval before any Replit/production deployment.
+
+The PR4 rollback is intentionally data preserving. It first restores a non-unique
+tenant/workspace/kind/checksum lookup index and removes only the PR4 active-row
+checksum uniqueness rule. It retains the ingest table, private artifact inputs,
+owned object metadata, queue/fencing/error evidence, render-output link, foreign
+key, indexes and all rows for recovery. Roll application code back first with
+render/ingest workers drained; if multiple deltas must be rolled back, use PR4
+before PR3 before PR2 after exports and a fresh verified backup.

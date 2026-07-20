@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WorkerLoop } from "../server/ai-media-studio/workers/worker-loop";
-import { parseWorkerCliArgs, runWorkerCli } from "../script/ai-media-studio-worker";
+import { loadWorkerLoop, parseWorkerCliArgs, runWorkerCli } from "../script/ai-media-studio-worker";
 
 test("runOnce bounds concurrency and reconciliation has an independent cadence", async () => {
   let now = 1_000;
@@ -73,9 +73,11 @@ test("idle loop waits before polling again", async () => {
   assert.deepEqual(sleeps, [25]);
 });
 
-test("CLI is dry and run-once by default; loops need config and an abort signal", async () => {
+test("CLI is dry and run-once by default; every live mode needs config", async () => {
   assert.deepEqual(parseWorkerCliArgs([]), { mode: "run-once", dryRun: true, configPath: undefined });
-  assert.throws(() => parseWorkerCliArgs(["--loop"]), /explicit --config/);
+  assert.deepEqual(parseWorkerCliArgs(["--loop"]), { mode: "loop", dryRun: true, configPath: undefined });
+  assert.throws(() => parseWorkerCliArgs(["--live"]), /Live workers require explicit --config/);
+  assert.throws(() => parseWorkerCliArgs(["--loop", "--live"]), /Live workers require explicit --config/);
   const output: string[] = [];
   let created = 0;
   await runWorkerCli([], {
@@ -84,8 +86,46 @@ test("CLI is dry and run-once by default; loops need config and an abort signal"
   });
   assert.equal(created, 0);
   assert.match(output[0] ?? "", /\"dryRun\":true/);
+});
+
+test("live worker uses the explicitly composed loop and loops require an abort signal", async () => {
+  let calls = 0;
+  const loop = new WorkerLoop({
+    concurrency: 1,
+    idleBackoffMs: 1,
+    reconciliationIntervalMs: 1,
+    runOne: async () => { calls += 1; return "worked"; },
+  });
+  await runWorkerCli(["--live", "--config", "worker.mjs"], {
+    createLoop: async (options) => {
+      assert.equal(options.configPath, "worker.mjs");
+      return loop;
+    },
+    write: () => undefined,
+  });
+  assert.equal(calls, 1);
   await assert.rejects(runWorkerCli(["--loop", "--config", "worker.json", "--live"], {
     createLoop: () => new WorkerLoop({ concurrency: 1, idleBackoffMs: 1, reconciliationIntervalMs: 1, runOne: async () => "idle" }),
     write: () => undefined,
   }), /AbortSignal/);
+});
+
+test("worker composition loader accepts only a local module returning WorkerLoop", async () => {
+  const loop = new WorkerLoop({
+    concurrency: 1,
+    idleBackoffMs: 1,
+    reconciliationIntervalMs: 1,
+    runOne: async () => "idle",
+  });
+  let imported = "";
+  assert.equal(await loadWorkerLoop("configs/worker.mjs", async (specifier) => {
+    imported = specifier;
+    return { createWorkerLoop: async () => loop };
+  }), loop);
+  assert.match(imported, /^file:/);
+  assert.match(imported, /configs\/worker\.mjs$/);
+
+  await assert.rejects(loadWorkerLoop("https://example.com/worker.mjs"), /local filesystem path/);
+  await assert.rejects(loadWorkerLoop("worker.mjs", async () => ({})), /export createWorkerLoop/);
+  await assert.rejects(loadWorkerLoop("worker.mjs", async () => ({ createWorkerLoop: () => ({ runOnce() {} }) })), /return a WorkerLoop/);
 });

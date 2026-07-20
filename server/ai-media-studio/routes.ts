@@ -12,6 +12,7 @@ import {
 } from "../../shared/ai-media-studio";
 import {
   createInfluencerRequestSchema,
+  assetDeliverySchema,
   influencerListRequestSchema,
   influencerListResponseSchema,
   influencerResponseSchema,
@@ -87,6 +88,13 @@ import {
 } from "./publishing/domain";
 import type { CanonicalSourceItem } from "./sources/contracts";
 import { SourceCursorError } from "./sources/source-pagination";
+import {
+  InMemoryAssetIngestRepository,
+  type AssetDeliverySigner,
+  type AssetIngestJob,
+  type AssetIngestRepository,
+  type AssetIngestWorkerHooks,
+} from "./assets";
 
 export interface AiMediaStudioDependencies {
   repository?: MediaJobRepository;
@@ -104,6 +112,10 @@ export interface AiMediaStudioDependencies {
   workspaceId?: string;
   seedCoreDefaults?: boolean;
   operations?: OperationsRuntimeDependencies;
+  assetIngestRepository?: AssetIngestRepository;
+  assetDeliverySigner?: AssetDeliverySigner;
+  /** Must probe the live reader, owned storage, signer, and worker process; absent by default. */
+  assetIngestWorkerReadiness?: { isReady(): boolean | Promise<boolean> };
 }
 export interface AiMediaStudioRuntime {
   service: AiMediaStudioService;
@@ -111,6 +123,9 @@ export interface AiMediaStudioRuntime {
   router: Router;
   persistence: MediaStudioPersistenceStatus;
   operations: OperationsRuntime;
+  assetIngestRepository?: AssetIngestRepository;
+  assetIngestHooks: AssetIngestWorkerHooks;
+  reconcileCompletedAssetIngests(limit?: number): Promise<number>;
 }
 
 function toPublicJob(job: MediaGenerationJob): MediaJob {
@@ -121,7 +136,7 @@ function toPublicJob(job: MediaGenerationJob): MediaJob {
     estimatedCostUsd: job.estimatedCostUsd ?? 0, actualCostUsd: job.actualCostUsd,
     attempt: job.attempts, maxAttempts: job.maxAttempts, createdAt: job.createdAt,
     updatedAt: job.updatedAt, estimatedCompletionAt: job.estimatedCompletionAt, error: job.error,
-    asset: job.outputUrl ? { url: job.outputUrl, mimeType: "video/mp4" } : undefined,
+    asset: job.outputAssetId ? { id: job.outputAssetId, mimeType: "video/mp4" } : undefined,
   };
 }
 
@@ -156,6 +171,34 @@ function queryValues(value: unknown): string[] | undefined {
   if (typeof value === "string") return [value];
   if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
   return undefined;
+}
+
+function parseAssetTenantId(value: string): [workspaceId: string, ownerUserId: string] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.length !== 2 || parsed.some((part) => typeof part !== "string" || !part.trim())) throw new Error("invalid");
+    return parsed as [string, string];
+  } catch {
+    throw new Error("Artifact ingest tenant is invalid");
+  }
+}
+
+function createDefaultDurableAssetIngestRepository(): AssetIngestRepository {
+  let pending: Promise<AssetIngestRepository> | undefined;
+  const load = () => pending ??= Promise.all([import("../db"), import("./assets/drizzle-ingest-repository")])
+    .then(([database, adapter]) => new adapter.DrizzleAssetIngestRepository(database.db));
+  return {
+    enqueue: async (...args) => (await load()).enqueue(...args),
+    getForTenant: async (...args) => (await load()).getForTenant(...args),
+    findByRenderJob: async (...args) => (await load()).findByRenderJob(...args),
+    claimDue: async (...args) => (await load()).claimDue(...args),
+    complete: async (...args) => (await load()).complete(...args),
+    attachMediaAsset: async (...args) => (await load()).attachMediaAsset(...args),
+    listCompletedUnlinked: async (...args) => (await load()).listCompletedUnlinked(...args),
+    fail: async (...args) => (await load()).fail(...args),
+    reconcileExpiredLeases: async (...args) => (await load()).reconcileExpiredLeases(...args),
+    listDeadLetters: async (...args) => (await load()).listDeadLetters(...args),
+  };
 }
 
 function paginate<T extends { id: string }>(items: T[], cursor: string | undefined, limit: number): {
@@ -362,6 +405,13 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
     databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
+  const environment = runtimeEnvironment?.trim().toLowerCase();
+  const assetIngestRepository = dependencies.assetIngestRepository
+    ?? (persistence.status.durable
+      ? createDefaultDurableAssetIngestRepository()
+      : explicitHarness || environment === "development" || environment === "test"
+        ? new InMemoryAssetIngestRepository()
+        : undefined);
   const repository = persistence.repository;
   const queue = dependencies.queue ?? new InMemoryMediaJobQueue();
   const resources = dependencies.heygenResourceMap ?? parseHeyGenResourceMap(process.env.AI_MEDIA_STUDIO_HEYGEN_RESOURCES_JSON);
@@ -373,9 +423,93 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const service = new AiMediaStudioService(repository, queue, providers, defaultProviderKey, {
     allowedAssetHosts: dependencies.allowedAssetHosts ?? envAssetHosts(),
     executionMode: persistence.status.durable ? "durable" : "inline",
+    assetIngestRepository,
+    assetIngestWorkerReadiness: dependencies.assetIngestWorkerReadiness,
+    workspaceId: core.workspaceId,
   });
   const scriptService = new DeterministicScriptService();
   const router = Router();
+  const materializeOwnedAsset = async (ingest: AssetIngestJob): Promise<string> => {
+      if (!ingest.ownedObjectKey || !ingest.sha256 || ingest.sizeBytes === undefined) {
+        throw new Error("Completed artifact ingest is missing owned object metadata");
+      }
+      const [workspaceId, ownerUserId] = parseAssetTenantId(ingest.tenantId);
+      if (workspaceId !== core.workspaceId) throw new Error("Artifact ingest workspace does not match this runtime");
+      const job = await service.getJob(ownerUserId, ingest.renderJobId);
+      const timestamp = new Date(ingest.updatedAtMs).toISOString();
+      const result = await core.repositories.assets.createOrGet({
+        // The ingest id is already a UUID and is stable for tenant/render
+        // idempotency, so it is also a valid canonical asset/FK identifier.
+        id: ingest.id,
+        ownerUserId: job.ownerUserId,
+        workspaceId: core.workspaceId,
+        type: "video",
+        name: job.title,
+        status: "ready",
+        mimeType: "video/mp4",
+        sizeBytes: ingest.sizeBytes,
+        checksumSha256: ingest.sha256,
+        storageProvider: "owned-object-storage",
+        storageKey: ingest.ownedObjectKey,
+        deliveryUrl: null,
+        thumbnailUrl: null,
+        projectId: null,
+        renderJobId: job.id,
+        influencerId: job.request.influencerId,
+        providerResourceId: null,
+        source: { kind: "remote" },
+        metadata: {},
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null,
+      });
+      return result.asset.id;
+  };
+  const assetIngestHooks: AssetIngestWorkerHooks = {
+    onCompleted: async (ingest) => {
+      const mediaAssetId = await materializeOwnedAsset(ingest);
+      const [workspaceId, ownerUserId] = parseAssetTenantId(ingest.tenantId);
+      if (workspaceId !== core.workspaceId) throw new Error("Artifact ingest workspace does not match this runtime");
+      await service.recordArtifactIngested(ownerUserId, ingest.renderJobId, mediaAssetId);
+      return { mediaAssetId };
+    },
+    onFailed: async (ingest: AssetIngestJob) => {
+      const [workspaceId, ownerUserId] = parseAssetTenantId(ingest.tenantId);
+      if (workspaceId !== core.workspaceId) throw new Error("Artifact ingest workspace does not match this runtime");
+      await service.recordArtifactIngestFailure(ownerUserId, ingest.renderJobId, ingest);
+    },
+  };
+  const reconcileCompletedAssetIngests = async (limit = 25): Promise<number> => {
+    if (!assetIngestRepository) return 0;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Artifact reconciliation limit must be between 1 and 100");
+    const pending = await assetIngestRepository.listCompletedUnlinked(limit);
+    let reconciled = 0;
+    for (const ingest of pending) {
+      const materialized = await assetIngestHooks.onCompleted?.(ingest);
+      if (!materialized?.mediaAssetId) continue;
+      const attached = await assetIngestRepository.attachMediaAsset({
+        tenantId: ingest.tenantId, jobId: ingest.id, mediaAssetId: materialized.mediaAssetId, nowMs: Date.now(),
+      });
+      if (!attached?.mediaAssetId) continue;
+      reconciled += 1;
+    }
+    return reconciled;
+  };
+  const reconcileCompletedArtifact = async (job: MediaGenerationJob): Promise<MediaGenerationJob> => {
+    if (job.outputAssetId || !assetIngestRepository) return job;
+    const tenantId = JSON.stringify([core.workspaceId, job.ownerUserId]);
+    const ingest = await assetIngestRepository.findByRenderJob(tenantId, job.id);
+    if (ingest?.state !== "completed") return job;
+    if (ingest.mediaAssetId) {
+      await service.recordArtifactIngested(job.ownerUserId, job.id, ingest.mediaAssetId);
+    } else {
+      const materialized = await assetIngestHooks.onCompleted?.(ingest);
+      if (materialized?.mediaAssetId) {
+        await assetIngestRepository.attachMediaAsset({ tenantId, jobId: ingest.id, mediaAssetId: materialized.mediaAssetId, nowMs: Date.now() });
+      }
+    }
+    return service.getJob(job.ownerUserId, job.id);
+  };
 
   router.use((_req, res, next) => {
     res.setHeader("X-AI-Media-Studio-Persistence", persistence.status.mode);
@@ -402,7 +536,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/dashboard`, requireJobs, asyncRoute(async (req, res) => {
     const ownerUserId = getCurrentUserId(req);
     const dashboard = await service.dashboard(ownerUserId);
-    const jobs = await service.listJobs(ownerUserId);
+    const jobs = await Promise.all((await service.listJobs(ownerUserId)).map(reconcileCompletedArtifact));
     const today = new Date().toISOString().slice(0, 10);
     const durations = jobs.filter((job) => job.startedAt && job.completedAt).map((job) => Date.parse(job.completedAt!) - Date.parse(job.startedAt!));
     res.json(dashboardResponseSchema.parse({
@@ -520,8 +654,23 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(mediaLibraryResponseSchema.parse({ assets: page.values, nextCursor: page.nextCursor, hasMore: page.hasMore }));
   }));
 
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery`, requireCatalog, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, idSchema.parse(req.params.id));
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    if (asset.status !== "ready" || !asset.storageKey) throw new CoreDomainValidationError("Only ready owned media assets can be delivered");
+    if (!dependencies.assetDeliverySigner || asset.storageProvider !== "owned-object-storage") {
+      throw new MediaStudioPersistenceUnavailableError("Owned media delivery is unavailable");
+    }
+    const expiresInSeconds = 300;
+    const issuedAt = Date.now();
+    const url = await dependencies.assetDeliverySigner.sign({ tenantId: JSON.stringify([scope.workspaceId, scope.ownerUserId]), objectKey: asset.storageKey, expiresInSeconds });
+    res.json(assetDeliverySchema.parse({ url, expiresAt: new Date(issuedAt + expiresInSeconds * 1_000).toISOString() }));
+  }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/jobs`, requireJobs, asyncRoute(async (req, res) => {
-    res.json(mediaJobsResponseSchema.parse({ jobs: (await service.listJobs(getCurrentUserId(req))).map(toPublicJob) }));
+    const jobs = await Promise.all((await service.listJobs(getCurrentUserId(req))).map(reconcileCompletedArtifact));
+    res.json(mediaJobsResponseSchema.parse({ jobs: jobs.map(toPublicJob) }));
   }));
 
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/generations`, requireJobs, requireCatalog, asyncRoute(async (req, res) => {
@@ -687,7 +836,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, requireJobs, asyncRoute(async (req, res) => {
-    res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.getJob(getCurrentUserId(req), req.params.id)) }));
+    const job = await reconcileCompletedArtifact(await service.getJob(getCurrentUserId(req), req.params.id));
+    res.json(mediaJobResponseSchema.parse({ job: toPublicJob(job) }));
   }));
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, requireJobs, asyncRoute(async (req, res) => {
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.retryJob(getCurrentUserId(req), req.params.id)) }));
@@ -736,7 +886,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     console.error("[AiMediaStudio] Request failed", error instanceof Error ? error.message : "Unknown error");
     res.status(500).json({ error: "AI Media Studio request failed" });
   });
-  return { service, core, operations, router, persistence: persistence.status };
+  return { service, core, operations, router, persistence: persistence.status, assetIngestRepository, assetIngestHooks, reconcileCompletedAssetIngests };
 }
 
 export function registerAiMediaStudioRoutes(app: Express, dependencies: AiMediaStudioDependencies = {}): AiMediaStudioRuntime {

@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { ExternalLink, FileAudio, FileImage, FileText, Film, Search } from "lucide-react";
+import { FileAudio, FileImage, FileText, Film, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "../feedback";
+import { AssetDeliveryControl } from "./asset-delivery-control";
 import { useMediaAssets } from "./hooks";
 import { PaginationError } from "./pagination-feedback";
 import type { MediaAsset, MediaAssetKind, MediaAssetStatus, MediaLibraryRequest } from "./types";
@@ -33,6 +34,12 @@ function formatDuration(durationMs: number | null) {
   if (durationMs === null) return null;
   const seconds = Math.round(durationMs / 1_000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function deliveryUnavailableLabel(status: MediaAssetStatus) {
+  if (status === "processing") return "File is still processing";
+  if (status === "failed") return "File generation failed";
+  return "Archived files cannot be opened";
 }
 
 export function MediaLibrary() {
@@ -89,7 +96,8 @@ export function MediaLibrary() {
                       <h3 className="truncate text-sm font-semibold text-white">{asset.name}</h3>
                       <div className="mt-2 flex items-center justify-between gap-2 text-xs text-zinc-400"><span>{formatBytes(asset.byteSize)}</span><span className="capitalize">{asset.status}</span></div>
                       {formatDuration(asset.durationMs) && <p className="mt-1 text-xs text-zinc-400">Duration {formatDuration(asset.durationMs)}</p>}
-                      {asset.deliveryUrl ? <a href={asset.deliveryUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-10 items-center justify-center rounded-lg border border-white/15 bg-white/5 px-3 text-sm font-medium text-zinc-100 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Open asset <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" /><span className="sr-only"> in a new tab</span></a> : <p className="mt-4 flex min-h-10 items-center justify-center rounded-lg border border-dashed border-white/10 px-3 text-xs text-zinc-400">No delivery file yet</p>}
+                      {/* AssetDeliveryControl uses authenticated, short-lived links with rel="noreferrer" semantics. */}
+                      <AssetDeliveryControl assetId={asset.id} available={asset.status === "ready"} unavailableLabel={deliveryUnavailableLabel(asset.status)} />
                     </CardContent>
                   </Card>
                 );

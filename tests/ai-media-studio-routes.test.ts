@@ -8,9 +8,39 @@ import { generateScriptVariantsResponseSchema } from "../shared/ai-media-studio-
 import { createAiMediaStudioRuntime } from "../server/ai-media-studio/routes";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
+import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets";
+import type { VideoProvider } from "../server/ai-media-studio/ports";
 
 process.env.NODE_ENV = "production";
 process.env.ALLOW_DEV_USER_FALLBACK = "false";
+
+class LiveRuntimeProvider implements VideoProvider {
+  readonly key = "live-runtime";
+  async status() { return { key: this.key, configured: true, healthy: true, mode: "live" as const }; }
+  async submit() { return { providerJobId: "live-runtime-job", status: "rendering" as const }; }
+  async cancel() {}
+  parseWebhook(): never { throw new Error("not used"); }
+}
+
+test("runtime wiring does not infer live ingest-worker readiness from repository presence", async () => {
+  const provider = new LiveRuntimeProvider();
+  const input = {
+    influencerId: "influencer-a", script: "A live readiness probe.", voiceId: "voice-a",
+    language: "en-US", aspectRatio: "9:16" as const, idempotencyKey: "live-runtime-readiness-001",
+  };
+  const base = {
+    repository: new InMemoryMediaJobRepository(), providers: [provider], defaultProviderKey: provider.key,
+    assetIngestRepository: new InMemoryAssetIngestRepository(), runtimeEnvironment: "test",
+  };
+  const blocked = createAiMediaStudioRuntime(base);
+  await assert.rejects(blocked.service.createGeneration("user-a", input), /ingest worker is not ready/i);
+  const allowed = createAiMediaStudioRuntime({
+    ...base,
+    repository: new InMemoryMediaJobRepository(),
+    assetIngestWorkerReadiness: { isReady: async () => true },
+  });
+  assert.equal((await allowed.service.createGeneration("user-a", input)).status, "rendering");
+});
 
 function signature(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
@@ -81,8 +111,10 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
   });
   assert.equal(validWebhook.status, 202);
   const detail = mediaJobResponseSchema.parse(await (await fetch(`${baseUrl}/api/ai-media-studio/jobs/${created.jobId}`, { headers: { "x-test-user": "user-a" } })).json());
-  assert.equal(detail.job.status, "completed");
-  assert.equal(detail.job.asset?.url, "https://cdn.example.com/render.mp4");
+  assert.equal(detail.job.status, "rendering");
+  assert.equal(detail.job.stage, "artifact_ingest_queued");
+  assert.equal(detail.job.asset, undefined);
+  assert.doesNotMatch(JSON.stringify(detail), /cdn\.example\.com|render\.mp4/);
   assert.equal((await fetch(`${baseUrl}/api/ai-media-studio/jobs/${created.jobId}/cancel`, { method: "POST", headers: { "x-test-user": "user-a" } })).status, 409);
 
   const unknownBody = JSON.stringify({ event_type: "avatar_video.success", event_data: { video_id: "unknown" } });

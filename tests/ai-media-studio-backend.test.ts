@@ -8,13 +8,25 @@ import { createHeyGenResourceResolver, HeyGenVideoProvider, parseHeyGenResourceM
 import { AiMediaStudioService } from "../server/ai-media-studio/service";
 import { DeterministicScriptService } from "../server/ai-media-studio/script-service";
 import { verifyHeyGenWebhook } from "../server/ai-media-studio/webhook-security";
+import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets";
+import type { VideoProvider } from "../server/ai-media-studio/ports";
+
+class LiveTestVideoProvider implements VideoProvider {
+  readonly key = "live-test";
+  async status() { return { key: this.key, configured: true, healthy: true, mode: "live" as const }; }
+  async submit() { return { providerJobId: "live-provider-job", status: "rendering" as const }; }
+  async cancel() {}
+  parseWebhook(): never { throw new Error("not used in readiness tests"); }
+}
 
 function createHarness() {
   const repository = new InMemoryMediaJobRepository();
   const queue = new InMemoryMediaJobQueue();
+  const assetIngestRepository = new InMemoryAssetIngestRepository();
   const service = new AiMediaStudioService(repository, queue, [new FakeVideoProvider({ autoComplete: false })], "fake", {
     influencerNames: new Map([["emily-food", "Emily"]]),
     allowedAssetHosts: new Set(["cdn.example.com"]),
+    assetIngestRepository,
   });
   const request = {
     influencerId: "emily-food",
@@ -24,7 +36,7 @@ function createHarness() {
     aspectRatio: "9:16" as const,
     idempotencyKey: "generation-test-0001",
   };
-  return { repository, queue, service, request };
+  return { repository, queue, assetIngestRepository, service, request };
 }
 
 test("creates a provider-neutral vertical job and isolates it by authenticated owner", async () => {
@@ -40,6 +52,34 @@ test("creates a provider-neutral vertical job and isolates it by authenticated o
   await assert.rejects(() => service.getJob("user-b", job.id), /not found/i);
 });
 
+test("live generation fails closed unless explicit ingest-worker readiness and its repository are supplied", async () => {
+  const request = createHarness().request;
+  const provider = new LiveTestVideoProvider();
+  const repository = new InMemoryMediaJobRepository();
+  const ingestRepository = new InMemoryAssetIngestRepository();
+  const blocked = new AiMediaStudioService(repository, new InMemoryMediaJobQueue(), [provider], provider.key, {
+    assetIngestRepository: ingestRepository,
+  });
+  await assert.rejects(
+    blocked.createGeneration("user-a", request),
+    (error: unknown) => error instanceof Error && error.message === "Owned artifact ingest worker is not ready"
+      && "statusCode" in error && error.statusCode === 503,
+  );
+  assert.deepEqual(await repository.list("user-a"), []);
+
+  const readinessWithoutQueue = new AiMediaStudioService(
+    new InMemoryMediaJobRepository(), new InMemoryMediaJobQueue(), [provider], provider.key,
+    { assetIngestWorkerReadiness: { isReady: () => true } },
+  );
+  await assert.rejects(readinessWithoutQueue.createGeneration("user-a", request), /ingest worker is not ready/i);
+
+  const allowed = new AiMediaStudioService(
+    new InMemoryMediaJobRepository(), new InMemoryMediaJobQueue(), [provider], provider.key,
+    { assetIngestRepository: ingestRepository, assetIngestWorkerReadiness: { isReady: async () => true } },
+  );
+  assert.equal((await allowed.createGeneration("user-a", request)).status, "rendering");
+});
+
 test("deduplicates generation creation per owner without accepting tenant input", async () => {
   const { service, request } = createHarness();
   const parsed = createGenerationRequestSchema.parse({ ...request, ownerUserId: "attacker" });
@@ -52,17 +92,19 @@ test("deduplicates generation creation per owner without accepting tenant input"
   assert.notEqual(otherOwner.id, first.id);
 });
 
-test("default fake provider completes deterministically for the local preview", async () => {
+test("provider completion without an artifact source fails closed", async () => {
   const repository = new InMemoryMediaJobRepository();
   const service = new AiMediaStudioService(repository, new InMemoryMediaJobQueue(), [new FakeVideoProvider()], "fake");
   const job = await service.createGeneration("user-a", createHarness().request);
-  assert.equal(job.status, "completed");
+  assert.equal(job.status, "failed");
+  assert.equal(job.stage, "artifact_source_missing");
+  assert.match(job.error ?? "", /without an artifact source/i);
   assert.equal(job.progress, 100);
   assert.equal(job.outputUrl, undefined);
 });
 
-test("deduplicates signed provider events and ignores out-of-order state regressions", async () => {
-  const { service, request } = createHarness();
+test("deduplicates signed provider events, ensures one owned ingest and ignores state regressions", async () => {
+  const { service, request, assetIngestRepository } = createHarness();
   const job = await service.createGeneration("user-a", request);
   const completedAt = "2026-07-20T15:05:00.000Z";
   const completed = {
@@ -85,9 +127,29 @@ test("deduplicates signed provider events and ignores out-of-order state regress
   });
 
   const finalJob = await service.getJob("user-a", job.id);
-  assert.equal(finalJob.status, "completed");
+  assert.equal(finalJob.status, "rendering");
+  assert.equal(finalJob.stage, "artifact_ingest_queued");
   assert.equal(finalJob.outputUrl, "https://cdn.example.com/video.mp4");
+  const ingest = await assetIngestRepository.findByRenderJob(JSON.stringify(["personal", "user-a"]), job.id);
+  assert.equal(ingest?.state, "queued");
+  assert.match(ingest?.id ?? "", /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+  assert.equal(ingest?.sourceUrl, "https://cdn.example.com/video.mp4");
   assert.equal(finalJob.lastProviderEventAt, completedAt);
+  assert.equal(finalJob.completedAt, undefined);
+});
+
+test("completed webhook without a provider artifact fails with a safe explicit state", async () => {
+  const { service, request } = createHarness();
+  const job = await service.createGeneration("user-a", request);
+  await service.ingestWebhook("fake", {
+    event_id: "completed-without-source", occurred_at: "2026-07-20T15:05:00.000Z",
+    data: { provider_job_id: job.providerJobId, status: "completed" },
+  });
+  const failed = await service.getJob("user-a", job.id);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.stage, "artifact_source_missing");
+  assert.equal(failed.outputAssetId, undefined);
+  assert.match(failed.error ?? "", /without an artifact source/i);
 });
 
 test("failed is terminal until an explicit retry and cannot return to rendering by webhook", async () => {
@@ -105,6 +167,7 @@ test("parks an early webhook until its provider job becomes available", async ()
   }
   const service = new AiMediaStudioService(repository, new InMemoryMediaJobQueue(), [new FixedProvider({ autoComplete: false })], "fake", {
     allowedAssetHosts: new Set(["cdn.example.com"]),
+    assetIngestRepository: new InMemoryAssetIngestRepository(),
   });
   const request = createHarness().request;
   const result = await service.ingestWebhook("fake", {
@@ -115,7 +178,8 @@ test("parks an early webhook until its provider job becomes available", async ()
   assert.deepEqual(result, { accepted: true, orphaned: true });
 
   const job = await service.createGeneration("user-a", request);
-  assert.equal(job.status, "completed");
+  assert.equal(job.status, "rendering");
+  assert.equal(job.stage, "artifact_ingest_queued");
   assert.equal(job.outputUrl, "https://cdn.example.com/early.mp4");
 });
 

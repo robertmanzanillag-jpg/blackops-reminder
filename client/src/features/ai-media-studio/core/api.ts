@@ -1,5 +1,6 @@
 import type {
   CreateInfluencerRequest,
+  AssetDelivery,
   Influencer,
   InfluencerListRequest,
   MediaAsset,
@@ -93,6 +94,8 @@ export const mediaStudioCoreApi = {
       cursor: filters.cursor,
       limit: filters.limit,
     })}`),
+  createAssetDelivery: (id: string) =>
+    requestJson<AssetDelivery>(`/media-assets/${encodeURIComponent(id)}/delivery`, { method: "POST" }),
 };
 
 export type CoreApiBoundary = typeof mediaStudioCoreApi;

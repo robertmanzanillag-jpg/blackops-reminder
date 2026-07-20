@@ -177,14 +177,16 @@ test("durable explicit retry is reset due and advances the provider attempt with
   });
 });
 
-test("inline remains the default and preserves the existing preview behavior", async () => {
+test("inline remains the default but fails closed when a provider omits the owned artifact source", async () => {
   const repository = new InMemoryMediaJobRepository();
   const queue = new CountingQueue();
   const provider = new CountingProvider();
   const service = new AiMediaStudioService(repository, queue, [provider], "fake");
 
   const job = await service.createGeneration("owner-inline", { ...request, idempotencyKey: "inline-regression-0001" });
-  assert.equal(job.status, "completed");
+  assert.equal(job.status, "failed");
+  assert.equal(job.stage, "artifact_source_missing");
+  assert.equal(job.outputAssetId, undefined);
   assert.equal(provider.submissions, 1);
   assert.equal(queue.enqueues, 1);
   assert.equal(queue.dequeues, 1);

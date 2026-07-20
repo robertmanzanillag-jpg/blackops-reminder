@@ -32,7 +32,10 @@ function repositories(): CoreCatalogRepositories {
   };
 }
 
-async function startRuntime(coreRepositories?: CoreCatalogRepositories) {
+async function startRuntime(
+  coreRepositories?: CoreCatalogRepositories,
+  assetDeliverySigner?: { sign(input: { tenantId: string; objectKey: string; expiresInSeconds: number }): Promise<string> },
+) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -47,6 +50,7 @@ async function startRuntime(coreRepositories?: CoreCatalogRepositories) {
     coreRepositories,
     seedCoreDefaults: false,
     runtimeEnvironment: "production",
+    assetDeliverySigner,
   } : {
     runtimeEnvironment: "production",
     databaseUrl: "",
@@ -62,6 +66,43 @@ async function startRuntime(coreRepositories?: CoreCatalogRepositories) {
     close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }
+
+test("asset delivery is authenticated, tenant/status gated and signed on demand", async (t) => {
+  const coreRepositories = repositories();
+  const timestamp = "2026-07-20T12:00:00.000Z";
+  await coreRepositories.assets.createOrGet({
+    id: "asset-owned-delivery", ownerUserId: "user-a", workspaceId: "personal", type: "video",
+    name: "Owned render", status: "ready", mimeType: "video/mp4", sizeBytes: 1024,
+    checksumSha256: "b".repeat(64), storageProvider: "owned-object-storage",
+    storageKey: "ai-media-studio/user-a/renders/render-1.mp4", deliveryUrl: "https://legacy.example/bearer",
+    thumbnailUrl: null, projectId: null, renderJobId: "render-1", influencerId: null,
+    providerResourceId: null, source: { kind: "remote", originalUrl: "https://provider.example/private.mp4" },
+    metadata: { width: 1080, height: 1920 }, createdAt: timestamp, updatedAt: timestamp, deletedAt: null,
+  });
+  const calls: Array<{ tenantId: string; objectKey: string; expiresInSeconds: number }> = [];
+  const harness = await startRuntime(coreRepositories, { sign: async (input) => {
+    calls.push(input);
+    return "https://delivery.example/signed-owned-render?token=test-only";
+  } });
+  t.after(harness.close);
+
+  assert.equal((await fetch(`${harness.baseUrl}/api/ai-media-studio/media-assets/asset-owned-delivery/delivery`, { method: "POST" })).status, 401);
+  assert.equal((await fetch(`${harness.baseUrl}/api/ai-media-studio/media-assets/asset-owned-delivery/delivery`, {
+    method: "POST", headers: { "x-test-user": "user-b" },
+  })).status, 404);
+  const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/media-assets/asset-owned-delivery/delivery`, {
+    method: "POST", headers: { "x-test-user": "user-a" },
+  });
+  assert.equal(response.status, 200);
+  const delivery = await response.json() as { url: string; expiresAt: string };
+  assert.equal(delivery.url, "https://delivery.example/signed-owned-render?token=test-only");
+  assert.ok(Date.parse(delivery.expiresAt) > Date.now());
+  assert.deepEqual(calls, [{
+    tenantId: JSON.stringify(["personal", "user-a"]),
+    objectKey: "ai-media-studio/user-a/renders/render-1.mp4",
+    expiresInSeconds: 300,
+  }]);
+});
 
 async function seedResources(coreRepositories: CoreCatalogRepositories) {
   const scope = { ownerUserId: "user-a", workspaceId: "personal" };
@@ -209,7 +250,7 @@ test("media asset responses redact storage and source internals", async (t) => {
     storageProvider: "private-object-store",
     storageKey: "media-assets/secret-storage-object",
     deliveryUrl: "https://delivery.kong.example/reusable-preview.mp4",
-    thumbnailUrl: "https://delivery.kong.example/reusable-preview.jpg",
+    thumbnailUrl: "https://provider.example/reusable-preview.jpg?token=thumbnail-secret",
     projectId: "project-safe-1",
     renderJobId: "render-internal-1",
     influencerId: "influencer-safe-1",
@@ -256,11 +297,11 @@ test("media asset responses redact storage and source internals", async (t) => {
   const library = mediaLibraryResponseSchema.parse(JSON.parse(raw));
   assert.equal(library.assets[0]?.id, "asset-safe-1");
   assert.equal(library.assets[0]?.status, "ready");
-  assert.equal(library.assets[0]?.deliveryUrl, "https://delivery.kong.example/reusable-preview.mp4");
-  assert.equal(library.assets[0]?.thumbnailUrl, "https://delivery.kong.example/reusable-preview.jpg");
+  assert.equal(library.assets[0]?.deliveryUrl, null);
+  assert.equal(library.assets[0]?.thumbnailUrl, null);
   assert.equal(library.assets[0]?.projectId, "project-safe-1");
   assert.equal(library.assets[0]?.influencerId, "influencer-safe-1");
-  assert.doesNotMatch(raw, /secret-storage-object|private-object-store|provider\.example|ownerUserId|workspaceId|storageKey|render-internal|provider-resource-internal|deletedAt/);
+  assert.doesNotMatch(raw, /delivery\.kong\.example\/reusable-preview\.mp4|thumbnail-secret|secret-storage-object|private-object-store|provider\.example|ownerUserId|workspaceId|storageKey|render-internal|provider-resource-internal|deletedAt/);
 
   for (const status of ["processing", "failed", "archived"] as const) {
     const filteredResponse = await fetch(

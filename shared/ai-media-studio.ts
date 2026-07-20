@@ -27,10 +27,8 @@ export const mediaJobSchema = z.object({
   estimatedCompletionAt: z.string().datetime().optional(),
   error: z.string().trim().max(1_000).optional(),
   asset: z.object({
-    id: z.string().trim().min(1).max(128).optional(),
-    url: z.string().url().optional(),
-    thumbnailUrl: z.string().url().optional(),
-    mimeType: z.string().trim().max(120).optional(),
+    id: z.string().trim().min(1).max(128),
+    mimeType: z.literal("video/mp4"),
   }).optional(),
 });
 

@@ -258,6 +258,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           retryCount: job.retryCount,
           maxAttempts: job.maxAttempts,
           outputUrl: job.outputUrl ?? null,
+          outputMediaAssetId: job.outputAssetId ?? null,
           errorMessage: job.error ?? null,
           // Queue fencing/recovery metadata shares this JSON document. Domain
           // projection updates must never erase it.

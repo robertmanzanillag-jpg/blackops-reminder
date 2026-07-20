@@ -275,6 +275,42 @@ export interface DrizzleMediaAssetRepositoryOptions {
   storageProvider?: string;
 }
 
+const OWNED_OBJECT_STORAGE_PROVIDER = "owned-object-storage";
+const CONFIGURED_STORAGE_PROVIDERS = new Set(["internal", "private-object-store"]);
+
+function configuredStorageProvider(value: string | undefined): string {
+  const provider = value?.trim() || "internal";
+  if (!CONFIGURED_STORAGE_PROVIDERS.has(provider)) {
+    throw new Error("Media asset repository storageProvider is not allowlisted");
+  }
+  return provider;
+}
+
+function isSafeOwnedObjectKey(storageKey: string, checksumSha256: string): boolean {
+  if (!storageKey || storageKey.length > 1_024 || /[\0-\x1f\x7f\\]/u.test(storageKey) || storageKey.includes("://")) return false;
+  if (storageKey.split("/").some((part) => part === "." || part === "..")) return false;
+  return storageKey.endsWith(`/sha256/${checksumSha256}.mp4`);
+}
+
+function storageProviderForCandidate(candidate: MediaAsset, configuredProvider: string): string {
+  if (candidate.storageProvider !== OWNED_OBJECT_STORAGE_PROVIDER) return configuredProvider;
+  const checksum = candidate.checksumSha256;
+  const validOwnedArtifact = candidate.type === "video"
+    && candidate.status === "ready"
+    && candidate.mimeType === "video/mp4"
+    && Number.isSafeInteger(candidate.sizeBytes) && Number(candidate.sizeBytes) > 0
+    && typeof checksum === "string" && /^[a-f0-9]{64}$/u.test(checksum)
+    && candidate.renderJobId !== null
+    && candidate.deliveryUrl === null
+    && candidate.deletedAt === null
+    && candidate.source.kind === "remote"
+    && candidate.source.originalUrl === undefined
+    && candidate.source.finalUrl === undefined
+    && isSafeOwnedObjectKey(candidate.storageKey, checksum ?? "");
+  if (!validOwnedArtifact) throw new Error("Owned object storage is restricted to completed content-addressed MP4 artifacts");
+  return OWNED_OBJECT_STORAGE_PROVIDER;
+}
+
 export interface MediaAssetPage {
   assets: MediaAsset[];
   nextCursor: string | null;
@@ -289,13 +325,14 @@ export class DrizzleMediaAssetRepository implements MediaAssetRepository {
     options: DrizzleMediaAssetRepositoryOptions = {},
   ) {
     this.workspaceId = options.workspaceId?.trim() || "personal";
-    this.storageProvider = options.storageProvider?.trim() || "internal";
+    this.storageProvider = configuredStorageProvider(options.storageProvider);
   }
 
   async createOrGet(candidate: MediaAsset): Promise<{ asset: MediaAsset; created: boolean }> {
     if (candidate.workspaceId !== this.workspaceId) {
       throw new Error("Media asset workspace does not match repository scope");
     }
+    const storageProvider = storageProviderForCandidate(candidate, this.storageProvider);
     const checksumSha256 = candidate.checksumSha256;
     return this.db.transaction(async (tx) => {
       if (checksumSha256 !== null) {
@@ -308,7 +345,36 @@ export class DrizzleMediaAssetRepository implements MediaAssetRepository {
           eq(aiMediaMediaAssets.checksum, checksumSha256),
           isNull(aiMediaMediaAssets.deletedAt),
         )).limit(1);
-        if (existing) return { asset: mapMediaAssetRow(existing), created: false };
+        if (existing) {
+          if (storageProvider !== OWNED_OBJECT_STORAGE_PROVIDER) {
+            return { asset: mapMediaAssetRow(existing), created: false };
+          }
+          if (existing.status !== "ready" || existing.mimeType !== "video/mp4"
+            || (existing.byteSize !== null && existing.byteSize !== candidate.sizeBytes)) {
+            throw new Error("Legacy checksum row is not safe to promote for owned MP4 delivery");
+          }
+          if (existing.storageProvider === OWNED_OBJECT_STORAGE_PROVIDER) {
+            if (existing.storageKey !== candidate.storageKey) {
+              throw new Error("Owned media checksum is already bound to a different content-addressed key");
+            }
+            return { asset: mapMediaAssetRow(existing), created: false };
+          }
+          const [promoted] = await tx.update(aiMediaMediaAssets).set({
+            storageProvider: OWNED_OBJECT_STORAGE_PROVIDER,
+            storageKey: candidate.storageKey,
+            publicUrl: null,
+            updatedAt: new Date(candidate.updatedAt),
+          }).where(and(
+            eq(aiMediaMediaAssets.id, existing.id),
+            eq(aiMediaMediaAssets.ownerUserId, candidate.ownerUserId),
+            eq(aiMediaMediaAssets.workspaceId, this.workspaceId),
+            eq(aiMediaMediaAssets.kind, candidate.type),
+            eq(aiMediaMediaAssets.checksum, checksumSha256),
+            isNull(aiMediaMediaAssets.deletedAt),
+          )).returning();
+          if (!promoted) throw new Error("Owned media checksum promotion lost its tenant-scoped candidate");
+          return { asset: mapMediaAssetRow(promoted), created: false };
+        }
       }
 
       const [created] = await tx.insert(aiMediaMediaAssets).values({
@@ -322,7 +388,7 @@ export class DrizzleMediaAssetRepository implements MediaAssetRepository {
         kind: candidate.type,
         name: candidate.name,
         status: candidate.status,
-        storageProvider: this.storageProvider,
+        storageProvider,
         storageKey: candidate.storageKey,
         publicUrl: candidate.deliveryUrl,
         thumbnailUrl: candidate.thumbnailUrl,

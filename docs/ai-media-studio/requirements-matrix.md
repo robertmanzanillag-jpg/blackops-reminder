@@ -6,7 +6,7 @@ This matrix maps the original AI Media Studio brief to repository evidence. Stat
 - **Partial**: a contract, schema, adapter, or UI exists, but an operational path or release gate is still missing.
 - **Missing**: no implementation evidence exists yet.
 
-PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. PR3 lives on `codex/ai-media-studio-operations`, stacked on PR2. Neither the PR2 nor PR3 migration has been applied.
+PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 lives on `codex/ai-media-studio-operations`, and PR4 lives on `codex/ai-media-studio-quality`. Each is stacked on the preceding delivery. None of the PR2, PR3, or PR4 migrations has been applied.
 
 ## Platform foundation
 
@@ -16,7 +16,7 @@ PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. 
 | Provider-neutral business logic | Proved | `ports.ts`, `service.ts`, fake and HeyGen adapters; requests contain internal refs, not provider IDs | Contract tests required for every new provider |
 | Replace HeyGen without changing use cases/UI | Proved | `VideoProvider` port and provider-neutral DTOs | Add a second production adapter before claiming operational portability |
 | Independently deployable media platform | Partial | Domain is isolated but still shares the Express/React application deployment | Define service extraction trigger, ownership and data/API boundary before separate deployment |
-| Enterprise-ready production operation | Missing | Architecture, schemas and worker/outbox code anticipate it, but migrations, object storage, live SLOs, provider operation and load evidence are absent | Complete PR2/PR3 gates below |
+| Enterprise-ready production operation | Missing | Architecture, schemas and render/ingest/outbox code anticipate it, but migrations, production object storage, live SLOs, provider operation and load evidence are absent | Complete PR2/PR3/PR4 gates below |
 
 ## Dashboard
 
@@ -66,18 +66,18 @@ PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. 
 | Receive signed provider webhook | Proved | Narrow public route, raw-body HMAC, replay/event dedupe and tests | Provider sandbox callback evidence |
 | HeyGen v3 adapter | Partial | v3 submit/status/parser/resource resolver exist and are deny-by-default | Sandbox generation, webhook and billing evidence with approved spend |
 | Tavus, Captions, open-source and future adapters | Missing | Port supports them, implementations do not exist | Provider contract suite must pass per adapter |
-| Download MP4 automatically | Missing | Completed jobs may retain an allowlisted remote URL | Streaming ingest with timeout, redirect, size, MIME and checksum enforcement |
-| Save video and metadata | Partial | Media-asset tables and job output metadata exist | Object-storage adapter, durable ingest transaction and recovery tests |
-| Reusable provider-independent asset URL | Missing | No owned object-storage delivery path | Signed internal URLs and retention/lifecycle policy |
+| Download MP4 automatically | Partial | A no-autostart ingest worker contract streams provider output through exact-host/HTTPS/redirect/address/byte/chunk/MIME/MP4/checksum controls and redacts the source URL | Production bounded network reader, approved provider download and deployed worker evidence |
+| Save video and metadata | Partial | Tenant content-addressed storage contract/fake, durable fenced ingest repository, canonical checksum-deduplicated asset linkage, retry/DLQ and completed-unlinked reconciliation are covered in code/tests | Production object-storage adapter, staging migration, restart/recovery and transaction/contention evidence |
+| Reusable provider-independent asset URL | Partial | Authenticated tenant/status-gated delivery route signs an owned storage key for five minutes and public DTOs redact provider/storage internals | Production signer/object store, retention/lifecycle policy and live delivery evidence |
 
 ## Media library
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Reusable videos and scripts | Partial | Tenant-scoped library API/UI, search and cursor pagination are integrated | Owned delivery, script versioning and staging persistence proof |
+| Reusable videos and scripts | Partial | Tenant-scoped library API/UI, search/cursor pagination and on-demand owned-video delivery contract are integrated | Production storage/signer, script versioning and staging persistence proof |
 | Voices and avatars | Partial | Canonical resources drive options and influencer validation without provider IDs | Catalog sync, previews, rights and availability operations |
-| B-roll, images, music, logos, subtitles and thumbnails | Partial | Nine typed classes are exposed through the redacted library API/UI | Upload/ingest, transformations and owned delivery URLs |
-| Asset provenance, checksum and metadata | Partial | Schema/architecture include these concepts | Enforced ingest pipeline and integrity tests |
+| B-roll, images, music, logos, subtitles and thumbnails | Partial | Nine typed classes are exposed through the redacted library API/UI; PR4 owned ingest is video/MP4 only | Upload/ingest, transformations and owned delivery for every non-video class |
+| Asset provenance, checksum and metadata | Partial | Owned render ingest computes SHA-256/size, creates or reuses a canonical same-tenant video asset, links the render and keeps provider URLs private | Production reader/storage proof, richer provenance policy and staging integrity evidence |
 
 ## Publishing
 
@@ -105,7 +105,7 @@ PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. 
 | --- | --- | --- | --- |
 | Trigger on new event, restaurant, hotel, promotion, deal or travel package | Partial | Category-aware source snapshots, stable content hashing, tenant dedupe repositories and fake adapter exist | Live domain event producers/consumers, OAuth/trusted ingestion and operational scheduling |
 | Analyze data and generate ideas/scripts/titles/captions/hashtags | Partial | Deterministic snapshot-to-variants flow works manually | Automatic consumer, quality rules and approval state |
-| Automatically render, download, store and queue publishing | Partial | Orchestration enforces rights, moderation, immutable approvals, budget evidence and kill switch; CAS/outbox persistence exists | Consumers, owned-storage path, real connectors and live end-to-end crash recovery |
+| Automatically render, download, store and queue publishing | Partial | Orchestration gates and CAS/outbox persist; PR4 adds a guarded owned-render ingest/linkage contract with retry, dead-letter and reconciliation | Consumers, production reader/object storage/signer, real connectors and live end-to-end crash recovery |
 | No-manual-work mode | Missing | Deliberately disabled | Production policy, emergency stop and Robert-approved autonomy level |
 
 ## Queue and scale
@@ -114,7 +114,7 @@ PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. 
 | --- | --- | --- | --- |
 | Pending, rendering, completed, failed and cancelled states | Proved | Shared/domain state machine plus durable worker projection tests | Prove deployed worker recovery in staging |
 | Retry | Proved | Bounded retry path with retry-specific idempotency | Provider sandbox and restart evidence |
-| Durable jobs, webhook dedupe and outbox | Partial | Drizzle repositories, webhook receipts, CAS emissions, scoped `SKIP LOCKED` outbox claims, monotonic fencing and retry/DLQ code exist | Apply both migrations, then prove live restart/recovery and contention |
+| Durable jobs, webhook dedupe and outbox | Partial | Drizzle render/ingest/outbox repositories, webhook receipts, CAS emissions, `SKIP LOCKED` claims, fencing, retry/DLQ and completed-unlinked reconciliation code exist | Apply all three migrations, then prove live restart/recovery and contention |
 | Thousands of jobs and parallel rendering | Partial | Durable leases plus provider/tenant quotas and a bounded no-autostart worker loop exist | Deploy workers, add telemetry/backpressure/autoscaling and run real load tests |
 | 10,000+ videos/day | Missing | A deterministic 10k fake-provider rehearsal exists only; it is explicitly not capacity proof | Burst/load test, provider quota evidence, SLO telemetry, cost envelope and disaster recovery |
 | Multiple countries and languages | Partial | Admission policy evaluates language, country and timezone with tenant/provider quotas and daily budgets | Residency, rights, provider routing and operational locale tests |
@@ -124,18 +124,19 @@ PR #67 is the foundation. PR2 is stacked on it in `codex/ai-media-studio-core`. 
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Models for influencers, scripts, videos, providers, publishing, analytics, assets, sources, orchestration, outbox and history | Proved | Central Drizzle table inventory and DB-independent schema/migration tests | Apply PR2 then PR3 reviewed migrations before production |
+| Models for influencers, scripts, videos, providers, publishing, analytics, assets, asset ingest, sources, orchestration, outbox and history | Proved | Central Drizzle table inventory and DB-independent schema/migration tests | Apply PR2 then PR3 then PR4 reviewed migrations before production |
 | Production persistence selection | Proved | Drizzle selected with `DATABASE_URL`; production without DB returns `503`; memory limited to dev/test | Staging database/restart evidence |
-| Database migration applied | Missing | PR2 and PR3 forward/rollback SQL are checked in and statically tested; neither migration nor `db:push` has run | Backup, ordered staging apply, restart/recovery and rollback rehearsal; hard deploy gate |
+| Database migration applied | Missing | PR2, PR3 and PR4 forward/rollback SQL are checked in and statically tested; no migration or `db:push` has run | Backup, ordered staging apply, restart/recovery and rollback rehearsal; hard deploy gate |
 | Dark, modern, minimal Kong UI | Proved | Studio shell, dashboard, workbench, jobs and responsive styles | Visual regression evidence remains required for later UI changes |
 | Natural movement, eye contact, speech, lighting and realism | Missing | Provider quality goals are documented only | Provider scorecard, sample set, human review and minimum thresholds |
 | Consistent branding and high-quality vertical output | Partial | Brand-neutral vertical workbench and `9:16` contract exist | Brand kit enforcement and rendered sample QA |
 | Secrets and provider IDs isolated | Proved | Secret refs/env usage, provider boundary and public DTO tests | Vault rotation runbook for production |
-| Deployment readiness | Missing | PR3 code passed final independent checker and static App QA with 212 focused tests; both migrations remain unapplied | GitHub review, ordered staging apply, live QA, restart/load evidence, backup/rollback and Robert approval |
+| Deployment readiness | Missing | PR #71 and PR4 passed independent checker/static App QA; PR4 adds code/test evidence for owned asset ingest/delivery only, while all three migrations remain unapplied | GitHub review, ordered staging apply, live QA, restart/load/storage evidence, backup/rollback and Robert approval |
 
 ## Release interpretation
 
 - **PR #67**: clean and mergeable foundation; it is not production deployment approval.
-- **PR2 — `codex/ai-media-studio-core`**: stacked core work for durable data, media ownership and operational APIs. Review only its delta after PR #67 is merged/rebased.
-- **PR3 — `codex/ai-media-studio-operations`**: stacked integration branch for publishing, analytics, source automation, orchestration and worker operations. Code/test evidence is not live-operation evidence.
+- **PR #70 — `codex/ai-media-studio-core`**: stacked core work for durable data, media ownership and operational APIs. Review only its delta after PR #67 is merged/rebased.
+- **PR #71 — `codex/ai-media-studio-operations`**: stacked integration branch for publishing, analytics, source automation, orchestration and worker operations. Code/test evidence is not live-operation evidence.
+- **PR4 — `codex/ai-media-studio-quality`**: stacked owned-render ingest/delivery slice. Its reader, object store and signer are contracts/fakes; no real provider artifact, production storage, deployment or capacity has been proven.
 - Automatic publishing, external posting, deployment, and increased spend remain separately gated by Robert's explicit approval.

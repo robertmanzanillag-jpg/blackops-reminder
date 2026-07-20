@@ -22,6 +22,7 @@ export function mapRenderJobRow(row: AiMediaRenderJobRow): MediaGenerationJob {
     providerName: row.providerKey ?? undefined,
     providerJobId: row.providerJobId ?? undefined,
     outputUrl: row.outputUrl ?? undefined,
+    outputAssetId: row.outputMediaAssetId ?? undefined,
     error: row.errorMessage ?? undefined,
     attempts: row.attempts,
     retryCount: row.retryCount,

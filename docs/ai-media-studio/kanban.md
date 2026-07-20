@@ -7,8 +7,9 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | Delivery | Branch / PR | State | Meaning |
 | --- | --- | --- | --- |
 | Foundation | PR #67, `codex/ai-media-studio` | Clean / mergeable | Provider-neutral vertical slice accepted as the base; no deployment implied |
-| PR2 core | `codex/ai-media-studio-core` | Stacked on PR #67 | Durable core, owned media and operational APIs; review the PR2 delta after base merge/rebase |
-| PR3 operations | `codex/ai-media-studio-operations`, stacked on PR2 | Ready for GitHub review | Publishing/analytics/intake/orchestration contracts, repositories, UI and worker operations passed checker/static App QA; no live operation implied |
+| PR2 core | PR #70, `codex/ai-media-studio-core` | Stacked on PR #67 | Durable core, owned media and operational APIs; review the PR2 delta after base merge/rebase |
+| PR3 operations | PR #71, `codex/ai-media-studio-operations`, stacked on PR #70 | Ready for GitHub review | Publishing/analytics/intake/orchestration contracts, repositories, UI and worker operations passed checker/static App QA; no live operation implied |
+| PR4 owned assets | `codex/ai-media-studio-quality`, stacked on PR #71 | Ready for GitHub review | Owned render ingest/delivery passed independent checker and static App QA; production reader/storage/signer, live migration and deployment remain absent |
 
 ## PR2 — durable core and owned media
 
@@ -17,8 +18,8 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | AMS-201 Migration artifact and rollback | Data owner | Partial | Forward/rollback SQL and static tests passed independent review; backup, staging apply and rollback rehearsal remain unapplied. No production `db:push` |
 | AMS-202 Durable runtime verification | Backend runtime owner | Partial | Runtime selects Drizzle with `DATABASE_URL`, returns `503` without it in production, and isolates dev/test memory; staging restart proof remains gated by AMS-201 |
 | AMS-203 Outbox worker and durable queue | Queue owner | Done (code) | Lease fencing, bounded retry, dead-letter, recovery, quotas, cancel/submit races and idempotency tests pass; no worker loop has been deployed |
-| AMS-204 Object-storage ingest | Asset owner | Ready | Stream allowlisted HTTPS MP4 into owned storage with redirect/size/MIME/checksum controls and recovery |
-| AMS-205 Media library API | Backend media owner | Partial | Tenant-scoped asset listing, lifecycle state, relations, filters, pagination and redacted stable DTOs are integrated; detail and owned delivery URLs remain pending |
+| AMS-204 Object-storage ingest | Asset owner | Partial (PR4 code) | PR4 adds bounded ingest, tenant content-addressed storage contract/fake, retry/DLQ/fencing and reconciliation; production reader/object storage and live operation remain pending |
+| AMS-205 Media library API | Backend media owner | Partial (PR4 code) | Tenant-scoped listing and redacted DTOs plus authenticated short-lived owned-video delivery are integrated; production signer/storage and live delivery remain pending |
 | AMS-206 Influencer CRUD and rights | Backend identity owner | Partial | Full provider-neutral CRUD, archive lifecycle and tenant tests are integrated; consent/provenance hard gate remains pending |
 | AMS-207 Media library/influencer UI | Frontend owner | Done | Loading/empty/error/populated states, pagination/retry, async archive feedback and accessible field errors passed App QA |
 | AMS-208 Dashboard durable metrics | Backend + frontend | Pending | Counts/activity/cost derive from durable records and remain correct after restart |
@@ -27,7 +28,7 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | AMS-211 PR2 checker review | Independent checker | Done | Final delta review against PR #67 reported no P0-P3 findings |
 | AMS-212 PR2 App QA | App QA | Done (static) | Route, link/click, API, errors, accessibility, responsive and improvement scouts passed; no live browser target was available |
 
-Both PR2 and PR3 migrations remain unapplied. No `db:push`, live PostgreSQL validation, staging restart, or rollback rehearsal has occurred.
+The PR2, PR3, and PR4 migrations remain unapplied. No `db:push`, live PostgreSQL validation, staging restart, or rollback rehearsal has occurred.
 
 ### PR2 integration order
 
@@ -76,10 +77,39 @@ Both PR2 and PR3 migrations remain unapplied. No `db:push`, live PostgreSQL vali
 
 ### PR3 merge gates
 
-- PR2 and PR3 migration order is reviewed and both migrations must be proven in staging; currently neither is applied.
+- PR2 and PR3 migration order is reviewed for this slice; PR4 follows them. All three migrations must be proven in staging and none is applied.
 - Every publishing platform passes OAuth/permission and sandbox review.
 - Paid rendering/posting has a cost estimate and Robert's explicit approval.
 - Rights, consent, moderation and emergency-stop tests pass.
 - Analytics definitions and attribution windows are documented and reproducible.
 - Load, recovery, checker and App QA evidence pass before any production deployment request.
 - Automatic publishing, external posting, deployment, and additional spend remain blocked without Robert's explicit approval.
+
+## PR4 — owned render ingest and delivery
+
+| Card | Owner | State | Acceptance |
+| --- | --- | --- | --- |
+| AMS-401 Ingest/storage contracts | Asset owner | Done (code) | Exact-host HTTPS/address/redirect and byte/chunk contracts, tenant temporary upload and content-addressed commit exist with fakes; production reader/object storage are missing |
+| AMS-402 Durable ingest queue | Data/queue owner | Done (code) | Tenant/render idempotency, `SKIP LOCKED` claim, lease fencing, bounded retry, dead-letter and lease recovery have DB-independent SQL-shape tests; no live PostgreSQL proof |
+| AMS-403 Canonical asset linkage | Runtime owner | Done (code) | Completed ingest materializes/reuses one checksum-addressed tenant video asset, links ingest/render, and reconciles bounded completed-unlinked work; migration remains unapplied |
+| AMS-404 Authenticated delivery | API/UI owner | Done (code) | Tenant/ready-status-gated POST route signs for five minutes, clients request on demand, and public DTOs redact provider/storage URLs; signer and storage are fake/injected only |
+| AMS-405 PR4 migration | Data owner | Partial | Additive forward/data-preserving rollback SQL and static tests exist; backup, ordered staging apply after PR2/PR3 and rollback rehearsal remain pending |
+| AMS-406 Production asset adapters | Platform owner | Blocked on environment/approval | Implement and configure a real bounded reader, owned object store and signer, then prove provider sandbox ingest/delivery without leaking signed URLs |
+| AMS-407 PR4 checker review | Independent checker | Done | Final PR #71 delta review found no P0-P3 issues after tenant isolation, SSRF/size defenses, fencing, reconciliation, redaction and migration checks |
+| AMS-408 PR4 App QA | App QA | Done (static) | Route/link/click/API/loading/error/accessibility review passed after thumbnail redaction and per-instance ARIA ID fixes; live delivery QA still requires staging |
+
+### PR4 current integration evidence
+
+- Provider completion queues one private ingest input and does not expose or mark the render completed until canonical owned-asset linkage succeeds.
+- Code/tests cover the bounded worker, content-addressed fake storage, durable repository SQL shape, retry/dead-letter/fencing, completed-unlinked repair, redacted DTOs, authenticated short-lived delivery, client failure states and PR4 SQL shape.
+- The authoritative local run passed 255 AI Media Studio tests, global TypeScript, client/server isolated bundles, codebase-map validation and diff hygiene. Independent checker and static App QA found no remaining P0-P3 issues or warnings.
+- The runtime starts no ingest loop. No real provider artifact was downloaded, no production object store/signer was called, and no external post, migration, deployment or capacity run occurred.
+
+### PR4 merge gates
+
+- Review only the PR4 delta from PR #71; preserve the stacked PR #67 -> PR #70 -> PR #71 -> PR4 order.
+- Production reader tests prove DNS pinning, every redirect, exact host/HTTPS/port enforcement, timeouts, byte/chunk bounds, MP4/MIME/checksum validation and sanitized errors.
+- Production object storage proves tenant isolation, atomic content-addressed commit/idempotency, lifecycle/retention and recovery from partial upload.
+- Production signer proves authenticated short-TTL delivery without persisting or logging signed URLs.
+- PR2, PR3, then PR4 SQL passes backup/staging/restart/recovery/rollback gates; none is currently applied.
+- Independent checker and App QA report no warnings or failures. Replit/production deployment still requires Robert's explicit approval.
