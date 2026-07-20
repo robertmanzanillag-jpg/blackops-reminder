@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "shared/ai-media-studio.ts",
+    "shared/ai-media-studio-scripts.ts",
+    "server/ai-media-studio/**/*.ts",
+    "client/src/features/ai-media-studio/**/*.ts",
+    "client/src/features/ai-media-studio/**/*.tsx",
+    "client/src/pages/ai-media-studio.tsx",
+    "tests/ai-media-studio-backend.test.ts",
+    "tests/ai-media-studio-scripts-contract.test.ts"
+  ]
+}

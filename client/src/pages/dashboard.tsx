@@ -5,6 +5,7 @@ import {
   Bot,
   Building2,
   Calendar as CalendarIcon,
+  Clapperboard,
   LayoutGrid,
   Radio,
   Wrench,
@@ -302,6 +303,16 @@ export default function Dashboard() {
                 >
                   <Building2 className="mr-2 h-4 w-4" />
                   Ver agentes
+                </Button>
+              </Link>
+              <Link href="/ai-media-studio">
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-full border-white/10 px-5 text-zinc-200 hover:bg-zinc-900 hover:text-white"
+                  data-testid="button-open-ai-media-studio"
+                >
+                  <Clapperboard className="mr-2 h-4 w-4" />
+                  Media Studio
                 </Button>
               </Link>
               <Button
