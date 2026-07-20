@@ -292,7 +292,9 @@ export function scoreBlackRoomFormats(
   const totalScore = aggregates.reduce((sum, item) => sum + Math.max(0.01, item.score), 0);
   const equalWeight = 1 / aggregates.length;
   const weights = aggregates.map((item) => exploration * equalWeight + (1 - exploration) * (Math.max(0.01, item.score) / totalScore));
-  const allocations = distributeSlots(weights, target);
+  const allocations = target >= aggregates.length
+    ? distributeSlots(weights, target - aggregates.length).map((allocation) => allocation + 1)
+    : distributeSlots(weights, target);
 
   return aggregates.map((item, index) => ({
     ...item,

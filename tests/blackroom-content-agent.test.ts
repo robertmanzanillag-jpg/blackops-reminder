@@ -55,7 +55,8 @@ test("keeps long-form exploration while allocating more slots to a proven durati
   }
   const scores = scoreBlackRoomFormats(records, 10, 0.2);
   assert.equal(scores.reduce((sum, score) => sum + score.allocation, 0), 10);
-  assert.ok(scores.find((score) => score.durationSeconds === 300)!.allocation > scores.find((score) => score.durationSeconds === 15)!.allocation);
+  assert.ok(scores.find((score) => score.durationSeconds === 300)!.score > scores.find((score) => score.durationSeconds === 15)!.score);
+  assert.ok(scores.find((score) => score.durationSeconds === 300)!.allocation > 1);
   assert.ok(scores.every((score) => score.allocation >= 1));
 });
 
@@ -70,6 +71,30 @@ test("tolerates partial Metricool metrics without poisoning allocations", () => 
   const scores = scoreBlackRoomFormats(partial, 8, 0.25);
   assert.equal(scores.reduce((sum, score) => sum + score.allocation, 0), 8);
   assert.ok(scores.every((score) => Number.isFinite(score.score)));
+});
+
+test("never abandons a long-form variant in a ten-post experiment", () => {
+  const records: BlackRoomPerformanceRecord[] = [];
+  for (const durationSeconds of [15, 30, 60, 120, 300, 600] as const) {
+    for (let index = 0; index < 12; index += 1) {
+      records.push({
+        clipId: `extreme-${durationSeconds}-${index}`,
+        durationSeconds,
+        platform: "tiktok",
+        views: 1000,
+        likes: durationSeconds === 15 ? 500 : 0,
+        comments: 0,
+        shares: 0,
+        averageWatchSeconds: durationSeconds === 15 ? 15 : 1,
+        completionRate: durationSeconds === 15 ? 1 : 0,
+        publishedAt: "2026-07-01T00:00:00Z",
+      });
+    }
+  }
+  const scores = scoreBlackRoomFormats(records, 10, 0.15);
+  assert.equal(scores.reduce((sum, score) => sum + score.allocation, 0), 10);
+  assert.ok(scores.every((score) => score.allocation >= 1));
+  assert.ok(scores.find((score) => score.durationSeconds === 15)!.allocation > 1);
 });
 
 test("builds maximum-quality yt-dlp jobs without playlist expansion", () => {
