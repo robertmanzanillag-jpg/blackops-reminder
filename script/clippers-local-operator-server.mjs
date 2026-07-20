@@ -1951,7 +1951,7 @@ function buildSourceDropMetricoolRefreshPlan(status) {
     blockedRows: validation.blockedRows || 0,
     blockers,
     steps: [
-      "Validate every current-batch replacement row has a real local MP4, exact TikTok video URL, creator/source, owned_or_permissioned rights status, evidence link, and concrete notes.",
+      "Validate every current-batch replacement row has a real local MP4, exact TikTok, Twitch, or YouTube source URL, creator/source, owned_or_permissioned rights status, evidence link, and concrete notes.",
       "Import source-drop files through the existing server/clippers-agent.ts importClipperSourceDropFiles flow.",
       "Regenerate Metricool operator handoff, current batch upload pack, and session packet.",
       "Keep Metricool in approval_required mode; do not publish automatically.",
@@ -2484,7 +2484,7 @@ function buildMetricoolOperatorChecklist(rows, status) {
         ? "Complete Real clip intake before opening Metricool or saving scheduled proof."
         : null,
       blockers.includes("real_clip_intake_not_ready")
-        ? "Use the Real clip intake pack to add exact TikTok URLs, rights proof, and local source files."
+        ? "Use the Real clip intake pack to add exact TikTok, Twitch, or YouTube source URLs, rights proof, and local source files."
         : blockers.includes("schedule_needs_roll_forward")
         ? "Click Roll forward schedule before opening Metricool."
         : "Open the Upload pack and schedule the earliest deadline rows first.",
@@ -3686,7 +3686,7 @@ function buildRealClipIntakePack(status) {
         targetSourceDropFile: `source-drop/${category}/${targetFileName}`,
         manifestFile: `source-drop/${category}/source-drop-manifest.csv`,
         targetFileName,
-        exactVideoOrPostUrl: "<paste exact TikTok/creator video URL; not search/explore>",
+        exactVideoOrPostUrl: "<paste exact TikTok, Twitch clip, or YouTube video URL; not search/explore/channel>",
         creatorOrRightsHolder: "<paste creator/source name>",
         rightsStatus: "review_required",
         evidenceType: "<creator_permission|licensed_asset|owned_source|official_policy_allowlist|recreate_plan_approved>",
@@ -3917,10 +3917,48 @@ function hasStarterPlaceholder(value) {
   return !textValue || /<[^>]+>|placeholder|paste|todo|tbd|example|replace this starter/i.test(textValue);
 }
 
-function isExactTikTokVideoUrl(value) {
+function isExactYouTubeVideoOrShortUrl(value) {
+  const raw = String(value || "").trim();
+  if (hasStarterPlaceholder(raw) || !/^https:\/\//i.test(raw)) return false;
+  try {
+    const parsed = new URL(raw);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    const videoId = /^[A-Za-z0-9_-]{11}$/;
+    if (hostName === "youtu.be") {
+      return !parsed.search && !parsed.hash && videoId.test(parsed.pathname.replace(/^\//, "").replace(/\/$/, ""));
+    }
+    if (!["youtube.com", "m.youtube.com"].includes(hostName) || parsed.hash) return false;
+    const shortsMatch = parsed.pathname.match(/^\/shorts\/([A-Za-z0-9_-]{11})\/?$/);
+    if (shortsMatch) return !parsed.search;
+    if (parsed.pathname !== "/watch") return false;
+    const keys = [...parsed.searchParams.keys()];
+    return keys.length === 1 && keys[0] === "v" && videoId.test(parsed.searchParams.get("v") || "");
+  } catch {
+    return false;
+  }
+}
+
+function isExactTwitchClipUrl(value) {
+  const raw = String(value || "").trim();
+  if (hasStarterPlaceholder(raw) || !/^https:\/\//i.test(raw)) return false;
+  try {
+    const parsed = new URL(raw);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (parsed.search || parsed.hash) return false;
+    if (hostName === "clips.twitch.tv") return /^\/[A-Za-z0-9_-]{4,120}\/?$/.test(parsed.pathname);
+    if (["twitch.tv", "m.twitch.tv"].includes(hostName)) {
+      return /^\/[A-Za-z0-9_]{3,25}\/clip\/[A-Za-z0-9_-]{4,120}\/?$/.test(parsed.pathname);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function isExactSourceVideoOrPostUrl(value) {
   const raw = String(value || "").trim();
   if (hasStarterPlaceholder(raw)) return false;
-  return isTikTokVideoUrl(raw);
+  return isTikTokVideoUrl(raw) || isExactYouTubeVideoOrShortUrl(raw) || isExactTwitchClipUrl(raw);
 }
 
 function concreteIntakeNotes(value) {
@@ -4079,7 +4117,7 @@ async function buildRealClipIntakeValidation(status) {
       manifest.locationStatus === "ready" ? null : manifest.locationStatus,
       manifest.exists ? null : "manifest_missing",
       record ? null : "manifest_row_missing",
-      record && isExactTikTokVideoUrl(url) ? null : "exact_tiktok_video_url_missing",
+      record && isExactSourceVideoOrPostUrl(url) ? null : "exact_source_video_or_post_url_missing",
       record && !hasStarterPlaceholder(source) ? null : "creator_or_source_missing",
       record && rightsStatus === "owned_or_permissioned" ? null : "rights_status_not_owned_or_permissioned",
       record && evidenceStatus.ok ? null : evidenceStatus.status,
@@ -4099,7 +4137,7 @@ async function buildRealClipIntakeValidation(status) {
       fileStatus: fileStatus.status,
       fileBytes: fileStatus.bytes,
       manifestRowFound: Boolean(record),
-      exactUrlOk: Boolean(record && isExactTikTokVideoUrl(url)),
+      exactUrlOk: Boolean(record && isExactSourceVideoOrPostUrl(url)),
       rightsStatus: rightsStatus || "missing",
       evidenceLinkPresent: Boolean(record && evidenceStatus.ok),
       evidenceStatus: evidenceStatus.status,
@@ -4154,7 +4192,7 @@ function buildRealClipIntakeValidationMarkdown(validation) {
     "## Guardrails",
     "",
     "- Ready means ready for source-drop import review, not ready to publish.",
-    "- Exact TikTok video URL, rights status, evidence link, notes, and local MP4 must all be real.",
+    "- Exact TikTok, Twitch clip, or YouTube video URL, rights status, evidence link, notes, and local MP4 must all be real.",
     "- Keep Metricool approval_required and realPublishEnabled=false.",
     "",
   ].join("\n");
@@ -4256,8 +4294,8 @@ function validateRealClipIntakeRecordInput(status, input = {}) {
   if (!intakeRow) {
     return { ok: false, statusCode: 404, error: "real_clip_intake_row_not_found", metricoolQueueItemId };
   }
-  if (!isExactTikTokVideoUrl(exactVideoOrPostUrl)) {
-    return { ok: false, statusCode: 400, error: "exact_tiktok_video_url_required", metricoolQueueItemId };
+  if (!isExactSourceVideoOrPostUrl(exactVideoOrPostUrl)) {
+    return { ok: false, statusCode: 400, error: "exact_source_video_or_post_url_required", metricoolQueueItemId };
   }
   if (hasStarterPlaceholder(creatorOrRightsHolder) || secretTextPattern.test(creatorOrRightsHolder) || secretQueryParamPattern.test(creatorOrRightsHolder)) {
     return { ok: false, statusCode: 400, error: "creator_or_rights_holder_required", metricoolQueueItemId };
@@ -4735,7 +4773,7 @@ async function initializeRealClipSourceDropWorkspace() {
         `Target source file: ${row.targetSourceDropFile}`,
         "",
         "Required real evidence:",
-        "- Exact TikTok URL:",
+        "- Exact source URL:",
         "- Creator / rights holder:",
         "- Permission type: creator_permission | licensed_asset | owned_source | official_policy_allowlist | recreate_plan_approved",
         "- Proof reference URL or non-secret summary:",
@@ -4770,7 +4808,7 @@ async function initializeRealClipSourceDropWorkspace() {
     evidenceReadmeUrl: workspaceUrlForFilePath(evidenceReadmePath),
     evidenceTemplates,
     realClipIntakeValidation: refreshedStatus.realClipIntakeValidation || null,
-    nextAction: "Replace starter manifest placeholders with exact TikTok URLs, creator/source, real evidence links, and put the matching MP4 files in source-drop before running import.",
+    nextAction: "Replace starter manifest placeholders with exact TikTok, Twitch clip, or YouTube video URLs, creator/source, real evidence links, and put the matching MP4 files in source-drop before running import.",
     guardrails: pack.guardrails,
   };
 }
@@ -4793,7 +4831,7 @@ function buildRealClipCloseoutWorkPacket(status) {
     evidenceLinkRequired: evidenceTemplateUrl(row.queueItemId),
     nextAction: row.status === "ready_for_source_drop_import"
       ? "Ready for source-drop import review; run guarded import + Metricool refresh next."
-      : "Add real MP4, exact TikTok URL, creator/source, approved rights status, completed proof evidence, and concrete notes.",
+      : "Add real MP4, exact source URL, creator/source, approved rights status, completed proof evidence, and concrete notes.",
   }));
   return {
     status: validation.status === "ready_for_source_drop_import" ? "ready_for_source_drop_import_review" : "needs_real_clip_closeout",
@@ -4988,7 +5026,7 @@ function sourceHuntSearchTerms(category) {
 
 function sourceHuntRejectRules(category) {
   const common = [
-    "Reject search/explore/hashtag pages; intake requires an exact TikTok /@creator/video/<id> URL.",
+    "Reject search/explore/hashtag/channel pages; intake requires an exact TikTok post, Twitch clip, or YouTube video/Short URL.",
     "Reject repost pages, unclear creator/source, watermarked reuploads, and copied audio with unclear rights.",
     "Reject anything without a permission path, owned source, licensed source, official policy allowlist, or recreate-only plan.",
   ];
@@ -5020,7 +5058,7 @@ function buildRealClipSourceHuntPack(status) {
   const rows = (validation.rows || []).map((row) => {
     const terms = sourceHuntSearchTerms(row.category);
     const primaryTerm = terms[0] || "viral creator clip";
-    const exactUrlMissing = row.blockers?.includes("exact_tiktok_video_url_missing") === true;
+    const exactUrlMissing = row.blockers?.includes("exact_source_video_or_post_url_missing") === true;
     const proofMissing = row.blockers?.some((blocker) => [
       "creator_or_source_missing",
       "rights_status_not_owned_or_permissioned",
@@ -5048,7 +5086,7 @@ function buildRealClipSourceHuntPack(status) {
       rejectRules: sourceHuntRejectRules(row.category),
       nextAction: row.status === "ready_for_source_drop_import"
         ? "Already ready for source-drop import review; do not schedule until batch is regenerated."
-        : "Find an exact TikTok video URL from the original creator, secure proof, place the MP4 in source-drop, then record the batch intake row.",
+        : "Find an exact TikTok post, Twitch clip, or YouTube video URL from the original creator, secure proof, place the MP4 in source-drop, then record the batch intake row.",
     };
   });
   const csvRows = rows.map((row) => ({
@@ -5060,7 +5098,7 @@ function buildRealClipSourceHuntPack(status) {
     search_terms: row.searchTerms.join(" | "),
     tiktok_search_url: row.tiktokSearchUrl,
     google_tiktok_search_url: row.googleTikTokSearchUrl,
-    exact_video_or_post_url: "<paste exact TikTok video URL after finding source>",
+    exact_video_or_post_url: "<paste exact TikTok, Twitch clip, or YouTube video URL after finding source>",
     creator_or_rights_holder: "<paste creator or rights holder>",
     evidence_link: row.evidenceTemplate,
     source_file_required: row.sourceFileRequired,
@@ -5219,7 +5257,7 @@ function realClipAcquisitionStage(row = {}, crmRow = {}) {
   const blockers = new Set(row.blockers || []);
   const permissionStatus = String(crmRow.permissionStatus || "");
   if (row.status === "ready_for_source_drop_import") return "ready_for_source_drop_import";
-  if (blockers.has("exact_tiktok_video_url_missing")) return "needs_exact_video_url";
+  if (blockers.has("exact_source_video_or_post_url_missing")) return "needs_exact_video_url";
   if (blockers.has("creator_or_source_missing")) return "needs_creator_source";
   if (blockers.has("rights_status_not_owned_or_permissioned") || blockers.has("evidence_link_missing")) return "needs_rights_evidence";
   if ([...blockers].some((blocker) => String(blocker).startsWith("evidence_file_"))) return "needs_valid_evidence_file";
@@ -5235,7 +5273,7 @@ function realClipAcquisitionStage(row = {}, crmRow = {}) {
 function realClipAcquisitionNextAction(stage) {
   return {
     ready_for_source_drop_import: "Run source-drop Metricool refresh review; do not schedule until the regenerated batch is produced.",
-    needs_exact_video_url: "Use Source Hunt to find a real exact TikTok /@creator/video/<id> URL; reject search/explore/hashtag pages.",
+    needs_exact_video_url: "Use Source Hunt to find an exact TikTok post, Twitch clip, or YouTube video/Short URL; reject search/explore/hashtag/channel pages.",
     needs_creator_source: "Identify the original creator or rights holder before requesting permission.",
     waiting_permission_response: "Follow up with the creator; do not move to source-drop until permission proof is captured.",
     needs_rights_evidence: "Use Permission CRM to record outreach, create local evidence, or choose recreate_only with owned assets.",
@@ -5288,7 +5326,7 @@ async function buildRealClipAcquisitionWorkbench(status) {
         "operator_notes",
       ], [{
         metricool_queue_item_id: queueItemId,
-        exact_video_or_post_url: crmRow.exactVideoOrPostUrl || "<exact TikTok video URL>",
+        exact_video_or_post_url: crmRow.exactVideoOrPostUrl || "<exact TikTok, Twitch clip, or YouTube video URL>",
         creator_or_rights_holder: crmRow.creatorOrRightsHolder || "<creator or rights holder>",
         evidence_link: crmRow.evidenceLink || evidenceTemplateUrl(queueItemId),
         operator_notes: "Concrete 20+ char note describing permission/source and why this row is safe.",
@@ -5559,8 +5597,8 @@ async function validateRealClipPermissionCrmInput(status, input = {}) {
   if (!allowedPermissionStatuses.has(permissionStatus)) {
     return { ok: false, statusCode: 400, error: "invalid_permission_status", metricoolQueueItemId };
   }
-  if (exactVideoOrPostUrl && !isExactTikTokVideoUrl(exactVideoOrPostUrl)) {
-    return { ok: false, statusCode: 400, error: "exact_tiktok_video_url_required_when_present", metricoolQueueItemId };
+  if (exactVideoOrPostUrl && !isExactSourceVideoOrPostUrl(exactVideoOrPostUrl)) {
+    return { ok: false, statusCode: 400, error: "exact_source_video_or_post_url_required_when_present", metricoolQueueItemId };
   }
   const needsIdentifiedCreator = !["not_requested"].includes(permissionStatus) || outreachStatus !== "not_sent";
   if (needsIdentifiedCreator && (hasStarterPlaceholder(creatorOrRightsHolder) || secretTextPattern.test(creatorOrRightsHolder) || secretQueryParamPattern.test(creatorOrRightsHolder))) {
@@ -5609,8 +5647,8 @@ async function recordRealClipExactSourceCandidate(input = {}, { skipLock = false
   const metricoolQueueItemId = String(input.metricoolQueueItemId || "").trim();
   const exactVideoOrPostUrl = String(input.exactVideoOrPostUrl || "").trim();
   const creatorOrRightsHolder = String(input.creatorOrRightsHolder || "").trim();
-  if (!isExactTikTokVideoUrl(exactVideoOrPostUrl)) {
-    return { ok: false, statusCode: 400, error: "exact_tiktok_video_url_required", metricoolQueueItemId };
+  if (!isExactSourceVideoOrPostUrl(exactVideoOrPostUrl)) {
+    return { ok: false, statusCode: 400, error: "exact_source_video_or_post_url_required", metricoolQueueItemId };
   }
   if (hasStarterPlaceholder(creatorOrRightsHolder) || secretTextPattern.test(creatorOrRightsHolder) || secretQueryParamPattern.test(creatorOrRightsHolder)) {
     return { ok: false, statusCode: 400, error: "creator_or_rights_holder_required", metricoolQueueItemId };
@@ -5670,8 +5708,8 @@ async function recordRealClipExactSourceCandidateBatch(rawCsv, { skipLock = fals
       return { ok: false, statusCode: 400, error: "duplicate_metricool_queue_item_id", metricoolQueueItemId: queueId, rows: normalizedRows.length };
     }
     seenQueueIds.add(queueId);
-    if (!isExactTikTokVideoUrl(row.exactVideoOrPostUrl)) {
-      return { ok: false, statusCode: 400, error: "exact_tiktok_video_url_required", metricoolQueueItemId: queueId, rows: normalizedRows.length };
+    if (!isExactSourceVideoOrPostUrl(row.exactVideoOrPostUrl)) {
+      return { ok: false, statusCode: 400, error: "exact_source_video_or_post_url_required", metricoolQueueItemId: queueId, rows: normalizedRows.length };
     }
     const creator = String(row.creatorOrRightsHolder || "").trim();
     if (hasStarterPlaceholder(creator) || secretTextPattern.test(creator) || secretQueryParamPattern.test(creator)) {
@@ -5900,8 +5938,8 @@ async function createRealClipPermissionEvidenceFile(input = {}) {
   if (!intakeRow) {
     return { ok: false, statusCode: 404, error: "real_clip_intake_row_not_found", metricoolQueueItemId };
   }
-  if (!isExactTikTokVideoUrl(exactVideoOrPostUrl)) {
-    return { ok: false, statusCode: 400, error: "exact_tiktok_video_url_required", metricoolQueueItemId };
+  if (!isExactSourceVideoOrPostUrl(exactVideoOrPostUrl)) {
+    return { ok: false, statusCode: 400, error: "exact_source_video_or_post_url_required", metricoolQueueItemId };
   }
   if (hasStarterPlaceholder(creatorOrRightsHolder) || secretTextPattern.test(creatorOrRightsHolder) || secretQueryParamPattern.test(creatorOrRightsHolder)) {
     return { ok: false, statusCode: 400, error: "creator_or_rights_holder_required", metricoolQueueItemId };
@@ -5924,7 +5962,7 @@ async function createRealClipPermissionEvidenceFile(input = {}) {
     `Real clip permission evidence for queue ${metricoolQueueItemId}`,
     `Category: ${intakeRow.category}`,
     `Account: ${intakeRow.accountName}`,
-    `Exact TikTok URL: ${exactVideoOrPostUrl}`,
+    `Exact source URL: ${exactVideoOrPostUrl}`,
     `Creator or rights holder: ${creatorOrRightsHolder}`,
     `Permission type: ${permissionType}`,
     `Captured at: ${new Date().toISOString()}`,
@@ -5973,7 +6011,7 @@ function realClipPermissionCrmBatchTemplateCsv(status) {
     "operator_notes",
   ], validationRows.map((row) => ({
     metricool_queue_item_id: safeCsvText(row.queueItemId),
-    exact_video_or_post_url: safeCsvText("<paste exact TikTok video URL after finding source>"),
+    exact_video_or_post_url: safeCsvText("<paste exact TikTok, Twitch clip, or YouTube video URL after finding source>"),
     creator_or_rights_holder: safeCsvText("<paste creator or rights holder>"),
     outreach_channel: safeCsvText("tiktok_dm"),
     outreach_status: safeCsvText("sent"),
@@ -6198,7 +6236,7 @@ function buildTikTokLaunchAuthorizationCenter(status) {
         : "real_clip_permissions_and_files_required",
       nextAction: status.realClipIntakeValidation?.status === "ready_for_source_drop_import"
         ? "Run source-drop import and regenerate the Metricool batch before scheduling."
-        : "Attach exact TikTok URLs, local source files, rights proof, and concrete notes for this account's rows.",
+        : "Attach exact source URLs, local source files, rights proof, and concrete notes for this account's rows.",
     }));
   const permissionRows = (status.realClipIntakeValidation?.rows || [])
     .filter((row) => ["sports", "memes"].includes(row.category))
@@ -6211,14 +6249,14 @@ function buildTikTokLaunchAuthorizationCenter(status) {
       targetFileName: row.targetFileName,
       status: row.status,
       missingSourceFile: row.blockers.includes("missing_source_file"),
-      missingExactUrl: row.blockers.includes("exact_tiktok_video_url_missing"),
+      missingExactUrl: row.blockers.includes("exact_source_video_or_post_url_missing"),
       missingCreatorOrSource: row.blockers.includes("creator_or_source_missing"),
       missingRightsProof: row.blockers.includes("evidence_link_missing") || row.blockers.includes("rights_status_not_owned_or_permissioned"),
       rightsStatus: row.rightsStatus,
       blockers: row.blockers,
       nextAction: row.status === "ready_for_source_drop_import"
         ? "Ready for source-drop import review; do not schedule until the batch is regenerated from this approved source."
-        : "Find/attach a real MP4, exact TikTok video URL, creator/source, rights_status=owned_or_permissioned, evidence link, and concrete notes.",
+        : "Find/attach a real MP4, exact source video URL, creator/source, rights_status=owned_or_permissioned, evidence link, and concrete notes.",
     }));
   const blockers = [
     accountRows.length >= 2 ? null : "missing_metricool_tiktok_accounts",
@@ -6415,14 +6453,14 @@ function renderTikTokLaunchAuthorizationPage(status) {
 async function buildRealClipPermissionRequestPackets(status) {
   const workbench = await buildRealClipAcquisitionWorkbench(status);
   const rows = (workbench.rows || []).map((row) => {
-    const hasExactUrl = isExactTikTokVideoUrl(row.exactVideoOrPostUrl);
+    const hasExactUrl = isExactSourceVideoOrPostUrl(row.exactVideoOrPostUrl);
     const hasCreator = row.creatorOrRightsHolder && !hasStarterPlaceholder(row.creatorOrRightsHolder);
     const sendable = hasExactUrl && hasCreator;
     const account = row.accountName || row.brand || "our TikTok page";
-    const exactUrl = row.exactVideoOrPostUrl || "<exact TikTok video URL>";
+    const exactUrl = row.exactVideoOrPostUrl || "<exact source video URL>";
     const creator = row.creatorOrRightsHolder || "<creator>";
     const message = [
-      `Hi ${creator}, I run ${account} and would like permission to feature this exact TikTok video: ${exactUrl}.`,
+      `Hi ${creator}, I run ${account} and would like permission to feature this exact source video: ${exactUrl}.`,
       "We will not post it unless you approve in writing.",
       "If approved, please reply with any credit, caption, tag, duration, or usage requirements.",
       "If you do not want the original reposted, we can skip it or make a recreate-only version with our own assets.",
@@ -6462,11 +6500,11 @@ async function buildRealClipPermissionRequestPackets(status) {
     blockedRows: rows.length - sendableRows,
     summary: sendableRows
       ? `${sendableRows}/${rows.length} permission request(s) are sendable.`
-      : "No permission request is sendable yet because rows still need exact TikTok URLs and creator/rightsholder.",
+      : "No permission request is sendable yet because rows still need exact source URLs and creator/rightsholder.",
     nextAction: rows.find((row) => !row.sendable)?.nextAction || "Send permission requests and record CRM outreach.",
     rows,
     guardrails: [
-      "Do not send a permission request without an exact TikTok video URL and identified creator/rightsholder.",
+      "Do not send a permission request without an exact source video URL and identified creator/rightsholder.",
       "A sent request is not approval.",
       "Only written approval, owned source proof, license, official policy, or approved recreate plan can unlock intake.",
       "Never store passwords, cookies, tokens, or private sensitive screenshots as evidence.",
@@ -6622,7 +6660,7 @@ async function renderRealClipExactSourceCandidateInboxPage(status) {
 <body>
 <main>
   <h1>Exact Source Candidate Inbox</h1>
-  <p>Pega URLs exactas de TikTok y creator/rightsholder por fila. Esto solo guarda leads en CRM; no aprueba derechos, no crea MP4 y no desbloquea Metricool.</p>
+  <p>Pega URLs exactas de TikTok, clips de Twitch o videos/Shorts de YouTube y el creator/rightsholder por fila. Esto solo guarda leads en CRM; no aprueba derechos, no crea MP4 y no desbloquea Metricool.</p>
   <div class="actions">
     ${link("/clippers", "Dashboard")}
     ${link("/api/clippers/real-clip-exact-source-candidate-batch-template.csv", "Batch template")}
@@ -6632,7 +6670,7 @@ async function renderRealClipExactSourceCandidateInboxPage(status) {
   </div>
   <div class="card">
     <div class="label">Guardrail</div>
-    <p class="small">Accepted URL format: exact TikTok video/post URL. Search, hashtag, explore, and copied placeholder URLs are rejected.</p>
+    <p class="small">Formatos aceptados: post exacto de TikTok, clip exacto de Twitch o video/Short exacto de YouTube. Se rechazan busquedas, hashtags, explore, canales y placeholders.</p>
   </div>
   <div class="card">
     <div class="label">Batch import</div>
@@ -6650,7 +6688,7 @@ async function renderRealClipExactSourceCandidateInboxPage(status) {
     <form method="post" action="/api/clippers/real-clip-exact-source-candidate/record">
       <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
       <input type="hidden" name="metricoolQueueItemId" value="${escapeHtml(row.queueItemId)}" />
-      <input name="exactVideoOrPostUrl" placeholder="https://www.tiktok.com/@creator/video/1234567890123456789" value="${escapeHtml(row.exactVideoOrPostUrl || "")}" />
+      <input name="exactVideoOrPostUrl" placeholder="https://clips.twitch.tv/ExactClipSlug" value="${escapeHtml(row.exactVideoOrPostUrl || "")}" />
       <input name="creatorOrRightsHolder" placeholder="@creator or rights holder" value="${escapeHtml(row.creatorOrRightsHolder || "")}" />
       <button type="submit">Record exact source candidate</button>
     </form>
@@ -6850,7 +6888,7 @@ function buildNextBestAction(status) {
     return {
       stage: "real_clip_intake_required",
       title: "Replace placeholders with real clips before Metricool",
-      detail: realClipValidation.summary || realClipGap.summary || "The current MP4s are generated placeholders, not real viral clips. Add exact TikTok URLs, rights proof, and local source files before scheduling.",
+      detail: realClipValidation.summary || realClipGap.summary || "The current MP4s are generated placeholders, not real viral clips. Add exact source URLs, rights proof, and local source files before scheduling.",
       queueItemId: status.operatorSummary?.deadlineQueueItemId || "",
       brand: status.operatorSummary?.deadlineMetricoolBrandName || "",
       accountName: status.operatorSummary?.deadlineAccountName || "",
@@ -8601,7 +8639,7 @@ function buildGoalReadinessAudit(status) {
           : `${readyRealClips}/${requiredRealClips} real clips passed; generated placeholders never count as real clips.`,
         nextAction: realClipIntakeReady
           ? "Regenerate the Metricool batch from the validated real source files."
-          : status.realClipIntakeValidation?.nextAction || "Add exact TikTok URLs, rights proof, and local MP4 source files.",
+          : status.realClipIntakeValidation?.nextAction || "Add exact source URLs, rights proof, and local MP4 source files.",
       },
       {
         id: "evidence_integrity",
@@ -9411,7 +9449,7 @@ function renderHome(status) {
   </div>
   <div class="card">
     <div class="label">Exact source candidates</div>
-    <p><strong>candidate_inbox</strong> · Save exact TikTok URL + creator without approving rights.</p>
+    <p><strong>candidate_inbox</strong> · Save exact TikTok, Twitch clip, or YouTube video URL + creator without approving rights.</p>
     <p class="small">Use this after Source Hunt to populate Permission Request Packets. ${link("/api/clippers/real-clip-exact-source-candidate.html", "Open candidate inbox")}</p>
   </div>
   <div class="card">

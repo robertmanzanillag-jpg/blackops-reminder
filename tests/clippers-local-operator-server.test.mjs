@@ -752,7 +752,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(realClipIntakeManifest, /^category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes/m);
       assert.match(realClipIntakeManifest, /sports-real-7129d59b5f5e\.mp4/);
       assert.match(realClipIntakeManifest, /memes-real-53467d8f7dad\.mp4/);
-      assert.match(realClipIntakeManifest, /<paste exact TikTok\/creator video URL; not search\/explore>/);
+      assert.match(realClipIntakeManifest, /<paste exact TikTok, Twitch clip, or YouTube video URL; not search\/explore\/channel>/);
       assert.match(realClipIntakeManifest, /review_required/);
       assert.doesNotMatch(realClipIntakeManifest, /\/Users\/|app\.metricool\.com\/planner|published_post_url|views_24h/);
 
@@ -765,7 +765,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.equal(realClipIntakeValidation.rows[0].status, "blocked");
       assert.ok(realClipIntakeValidation.rows[0].blockers.includes("missing_source_file"));
       assert.ok(realClipIntakeValidation.rows[0].blockers.includes("manifest_row_missing"));
-      assert.ok(realClipIntakeValidation.rows[0].blockers.includes("exact_tiktok_video_url_missing"));
+      assert.ok(realClipIntakeValidation.rows[0].blockers.includes("exact_source_video_or_post_url_missing"));
       assert.doesNotMatch(JSON.stringify(realClipIntakeValidation), /\/Users\/|metricool_approval_url|published_post_url|views_24h/);
 
       const realClipIntakeValidationHtmlResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.html`);
@@ -2851,7 +2851,7 @@ test("Clippers real clip intake record endpoint writes manifest proof without fa
         }),
       });
       assert.equal(badResponse.status, 400);
-      assert.equal((await badResponse.json()).error, "exact_tiktok_video_url_required");
+      assert.equal((await badResponse.json()).error, "exact_source_video_or_post_url_required");
       assert.doesNotMatch(await readFile(manifestPath, "utf8"), /sports-real-7129d59b5f5e/);
 
       const traversalProofResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record`, {
@@ -2969,7 +2969,7 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     assert.equal(invalidResponse.status, 400);
     const invalid = await invalidResponse.json();
     assert.equal(invalid.error, "real_clip_intake_batch_invalid");
-    assert.equal(invalid.errors[0].error, "exact_tiktok_video_url_required");
+    assert.equal(invalid.errors[0].error, "exact_source_video_or_post_url_required");
     assert.doesNotMatch(await readFile(sportsManifestPath, "utf8"), /7129d59b5f5e|sports-real/);
 
     const validResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record-batch`, {
@@ -3082,7 +3082,7 @@ test("Clippers real clip source hunt pack exposes search rows without approving 
     const csv = await csvResponse.text();
     assert.match(csv, /^order,metricool_queue_item_id,category,account_name,target_source_drop_file,search_terms,tiktok_search_url/m);
     assert.match(csv, /7129d59b5f5e/);
-    assert.match(csv, /Reject search\/explore\/hashtag pages/);
+    assert.match(csv, /Reject search\/explore\/hashtag\/channel pages/);
 
     const htmlResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-source-hunt.html`);
     assert.equal(htmlResponse.status, 200);
@@ -3286,7 +3286,7 @@ test("Clippers real clip permission CRM batch records rows atomically without un
   });
 });
 
-test("Clippers exact source candidate batch records TikTok leads without unlocking", async () => {
+test("Clippers exact source candidate batch records TikTok, Twitch, and YouTube leads without unlocking", async () => {
   const port = "5569";
   await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
     const templateResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-exact-source-candidate-batch-template.csv`);
@@ -3308,8 +3308,28 @@ test("Clippers exact source candidate batch records TikTok leads without unlocki
     });
     assert.equal(invalidResponse.status, 400);
     const invalid = await invalidResponse.json();
-    assert.equal(invalid.error, "exact_tiktok_video_url_required");
+    assert.equal(invalid.error, "exact_source_video_or_post_url_required");
     assert.equal(invalid.metricoolQueueItemId, "7129d59b5f5e");
+
+    for (const invalidSourceUrl of [
+      "https://www.youtube.com/results?search_query=streamer+clips",
+      "https://www.youtube.com/@streamer",
+      "https://www.twitch.tv/streamer",
+      "https://clips.twitch.tv/ExactClipSlug?filter=clips",
+    ]) {
+      const rejectedResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-exact-source-candidate/record-batch`, {
+        method: "POST",
+        body: new URLSearchParams({
+          csrfToken,
+          exactSourceCandidateBatch: [
+            "metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder",
+            `7129d59b5f5e,${invalidSourceUrl},@streamer`,
+          ].join("\n"),
+        }),
+      });
+      assert.equal(rejectedResponse.status, 400);
+      assert.equal((await rejectedResponse.json()).error, "exact_source_video_or_post_url_required");
+    }
 
     let crmResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-crm.json`);
     let crm = await crmResponse.json();
@@ -3321,8 +3341,11 @@ test("Clippers exact source candidate batch records TikTok leads without unlocki
         csrfToken,
         exactSourceCandidateBatch: [
           "metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder",
-          "7129d59b5f5e,https://www.tiktok.com/@sportscreator/video/1234567890123456789,@sportscreator",
-          "53467d8f7dad,https://www.tiktok.com/@memecreator/video/2234567890123456789,@memecreator",
+          "7129d59b5f5e,https://clips.twitch.tv/ExactClipSlug,@twitchcreator",
+          "53467d8f7dad,https://www.twitch.tv/memecreator/clip/AnotherExactSlug,@memecreator",
+          "cf33ed488e40,https://www.youtube.com/watch?v=abcdefghijk,@youtubecreator",
+          "ef11cfd492f0,https://youtu.be/zyxwvutsrqp,@youtubecreator",
+          "7e4ee21ac269,https://www.youtube.com/shorts/qwertyuiopa,@shortscreator",
         ].join("\n"),
       }),
     });
@@ -3334,7 +3357,7 @@ test("Clippers exact source candidate batch records TikTok leads without unlocki
 
     crmResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-crm.json`);
     crm = await crmResponse.json();
-    assert.equal(crm.recordedRows, 2);
+    assert.equal(crm.recordedRows, 5);
     assert.equal(crm.approvedRows, 0);
     assert.equal(crm.rows.find((row) => row.queueItemId === "7129d59b5f5e").permissionStatus, "not_requested");
 
@@ -3470,7 +3493,7 @@ test("Clippers real clip intake initializes source-drop manifests without unlock
     assert.match(sportsManifest, /owner note path: \/clippers-workspace\/source-drop\/sports\/legacy-proof\.md/);
     assert.doesNotMatch(sportsManifest, /\/Users\/|\/var\/folders/);
     assert.match(memesManifest, /memes-real-53467d8f7dad\.mp4/);
-    assert.match(sportsManifest, /<paste exact TikTok\/creator video URL; not search\/explore>/);
+    assert.match(sportsManifest, /<paste exact TikTok, Twitch clip, or YouTube video URL; not search\/explore\/channel>/);
     assert.match(sportsManifest, /review_required/);
 
     const secondResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/initialize-source-drop`, {
@@ -3914,7 +3937,7 @@ test("Clippers real clip intake validation rejects loose URLs generic notes inva
     const row = validation.rows.find((candidate) => candidate.queueItemId === "7129d59b5f5e");
     assert.equal(row.status, "blocked");
     assert.ok(row.blockers.includes("source_file_not_mp4_like"));
-    assert.ok(row.blockers.includes("exact_tiktok_video_url_missing"));
+    assert.ok(row.blockers.includes("exact_source_video_or_post_url_missing"));
     assert.ok(row.blockers.includes("rights_status_not_owned_or_permissioned"));
     assert.ok(row.blockers.includes("operator_notes_not_concrete"));
     assert.equal(row.exactUrlOk, false);
