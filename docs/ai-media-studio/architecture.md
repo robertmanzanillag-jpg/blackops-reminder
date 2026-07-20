@@ -2,7 +2,7 @@
 
 ## Delivery stack
 
-PR #67 (`codex/ai-media-studio`) is the clean, mergeable provider-neutral foundation. PR2 is intentionally stacked in `codex/ai-media-studio-core`; it must be reviewed as a delta from PR #67 after that base merges or is rebased. PR3 follows only after the durable core and migration gates pass. Mergeability is not deployment authorization.
+PR #67 (`codex/ai-media-studio`) is the provider-neutral foundation. PR2 is intentionally stacked in `codex/ai-media-studio-core` and must be reviewed as a delta from that base. PR3 lives on `codex/ai-media-studio-operations`, stacked on PR2. This stacking is a code-review strategy, not evidence that either the PR2 or PR3 migration has been applied and not deployment authorization.
 
 ## Boundary
 
@@ -30,6 +30,8 @@ Scripts are capped at 5,000 characters to match the verified HeyGen v3 input lim
 
 Dashboard returns `{ summary, providers, queue, recentActivity }`. Options returns `{ influencers, voices, languages }`. The source of truth is `shared/ai-media-studio.ts`.
 
+PR3 adds `shared/ai-media-studio-operations.ts` for provider-neutral publishing previews/jobs, approval evidence, connections, analytics summaries/attribution, source intake, and read-only automation policy. The operations UI, client adapter, and authenticated Studio routes are wired through the existing single router. The server computes previews from tenant-owned ready assets; create rejects a stale or forged digest. No HTTP handler submits to a publishing provider.
+
 Script generation accepts a bounded Kong source snapshot through `POST /api/ai-media-studio/scripts/generate`. Its provider-neutral contract lives in `shared/ai-media-studio-scripts.ts` and supports events, restaurants, hotels, nightclubs, deals, travel packages, beach clubs, and experiences. Deterministic grounded variants are the only enabled PR 1 mode. The existing AI router classifies web-chat work but is not a media execution or cost-reservation API, so it is not reused here. A future strong-model path requires a dedicated feature flag and media cost gate; it may not silently trigger rendering or publishing.
 
 ### Application to providers
@@ -43,6 +45,24 @@ The first HeyGen adapter targets its v3 API (`POST /v3/videos` and `GET /v3/vide
 The durable render repository stores the job ID, owner/tenant, provider, request, attempt and availability state in the existing render-job aggregate. Workers claim with atomic leases and fencing tokens, bounded exponential retry with jitter, an independent lease-recovery budget, dead-letter handling, and concurrency limits per provider and tenant.
 
 With `DATABASE_URL`, generation uses durable execution mode: HTTP persists a due job and returns without provider submission, while the separately invoked worker performs the claim and submission. The factory intentionally starts no loop or network listener. Migration, deployed worker operation, observability, restart recovery and horizontal load evidence remain required before automated source ingestion is enabled.
+
+PR3 adds a reusable no-autostart `WorkerLoop`: bounded concurrent `runOnce`, idle backoff, a separate reconciliation cadence, and AbortSignal-based drain for SIGTERM-friendly composition. Its CLI defaults to dry-run/run-once; continuous operation requires explicit configuration. No loop has been deployed.
+
+The operations policy evaluates total/provider/tenant concurrency, language, country, timezone, and prospective daily spend. Durable admission/reservation must remain atomic at composition time; the pure policy function alone is not a distributed quota service.
+
+The outbox port has an in-memory reference and a tenant/workspace-scoped Drizzle adapter. PostgreSQL claims use `FOR UPDATE SKIP LOCKED`; the monotonic fencing token, active lease, retry budget, and dead-letter state protect ack/nack and recovery. Transport dispatch carries the stable message ID for provider idempotency. No live PostgreSQL contention or crash-recovery run has been performed.
+
+Queue-health/SLO snapshots are deterministic calculations over supplied measurements. They do not create telemetry or alerts by themselves.
+
+### Publishing, analytics, intake, and orchestration
+
+Publishing drafts support manual and scheduled modes. The canonical preview digest binds media, caption, platform, title/hashtags, schedule, and timezone; approval or rejection evidence must match that immutable digest. Scheduler and reconciliation services can claim due work, retry bounded failures, and dead-letter exhausted jobs through fake/provider-neutral ports. Automatic mode stays disabled. Real TikTok, Instagram, Facebook, and YouTube Shorts OAuth/connectors are missing, so no platform post is possible from this slice.
+
+Analytics accepts normalized snapshots for views, impressions, likes, comments, shares, clicks, watch time, CTR, and retention. Tenant-scoped repositories calculate summaries, direct/last-touch attribution dimensions, and USD cost-per-video/view from durable joins. The fake ingestion adapter proves the port shape only; platform collectors, billing reconciliation, and real attribution validation are missing.
+
+Source intake accepts bounded provider-neutral snapshots, computes canonical content hashes, and deduplicates within tenant/workspace. Fake adapters cover the contract. Live Kong/platform feeds, OAuth, polling/webhooks, and production ingestion are not implemented.
+
+The source orchestrator applies idempotent state transitions with rights, moderation, immutable approval, budget reservation, and kill-switch evidence. The Drizzle repository uses state/version compare-and-swap and writes emissions to the transactional outbox. This proves guarded state-machine and repository behavior in code; no autonomous end-to-end consumer is running.
 
 ### Provider webhook
 
@@ -63,24 +83,24 @@ Adapters may keep finer internal stages such as submitting, downloading, or retr
 
 ## Persistence and automation roadmap
 
-This PR includes Drizzle models and durable repository adapters for providers, influencers, scripts, generations, jobs, provider events, media assets, generation history, and leased render work. The tables are re-exported from the central schema, and the composition root selects Drizzle whenever `DATABASE_URL` is configured. In-memory persistence is restricted to development/test; production without a database fails closed with `503`. Reviewed forward and data-preserving rollback SQL are checked in under `migrations/ai-media-studio/`, but neither migration nor `db:push` has run, so backup, staging application, restart/recovery, and rollback rehearsal remain hard deployment gates. Later additive slices introduce publishing jobs and analytics. Binary assets live in object storage; records keep internal URI, checksum, MIME type, size, duration/dimensions, provenance, rights, and timestamps.
+The schema and repositories cover the PR2 core plus PR3 source intake, orchestration, publishing, analytics, cost, and outbox worker fields. In-memory implementations remain development/test references; production is designed to fail closed without configured persistence. Both reviewed forward/rollback migration pairs are checked in under `migrations/ai-media-studio/`, but neither migration has been applied and `db:push` has not run. Backup, staging application in order, restart/recovery, rollback rehearsal, and live App QA remain hard deployment gates. Binary assets still require a real object-storage integration.
 
-PR2 introduces its first checked-in, operator-run migration artifact instead of relying on `drizzle-kit push`. The code and SQL have not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply the reviewed SQL to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
+PR2 and PR3 each have checked-in, operator-run migration artifacts instead of relying on `drizzle-kit push`. The SQL has not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply PR2 then PR3 to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
 
 The first source pilot should be a Radio Calendar event because the repository already has calendar and radio boundaries. A source event creates ideas/drafts first; it does not render or publish until budget, quality, rights, and approval policies pass. Automatic publishing remains disabled until dedicated connector and App QA gates exist.
 
-## PR2 integration seams
+## PR3 integration seams
 
-- `server/ai-media-studio/routes.ts` remains the single HTTP adapter/composition root for Studio-specific routes. Makers expose ports/services first; the Lead wires them only after their contracts stabilize.
+- `server/ai-media-studio/routes.ts` remains the single HTTP adapter/composition root and now mounts PR3 operations routes; no second router mount is allowed.
 - `server/routes.ts` keeps exactly one `registerAiMediaStudioRoutes(app)` call. New core endpoints belong in the Studio router, not the global route file.
-- Runtime selection remains fail-closed: Drizzle with `DATABASE_URL`, memory only in development/test, and `503` in production without a database. PR2 adds durable queue and owned-asset adapters behind equally explicit configuration.
-- `client/src/pages/ai-media-studio.tsx` composes stable feature sections; feature makers own the components and shared DTO consumption.
-- `client/src/features/ai-media-studio/navigation.ts` gains Influencers and Media Library only when their sections exist. `client/src/App.tsx` retains one `/ai-media-studio` route, and the Dashboard retains the existing inbound link.
-- Migration SQL and its data-preserving rollback are generated and independently reviewed. They remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal before any deployment request.
+- Runtime selection remains fail-closed: Drizzle with `DATABASE_URL`, memory only in development/test, and unavailable outside those modes without a database. The operations runtime imports durable repositories lazily and does not open a pool at module import.
+- `client/src/pages/ai-media-studio.tsx` and navigation compose Publishing, Analytics, and Automation surfaces through the shared operations DTOs. UI integration does not enable posting.
+- PR3 worker/outbox modules are explicit composition dependencies and never autostart from import.
+- PR2 must be applied before PR3 in staging. Both remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal.
 
 ## Scale, security, and cost
 
-Ten thousand videos per day is an architectural target, not a PR 1 capability. Readiness requires durable queues, horizontal workers, backpressure, provider quotas, idempotency, reconciliation, object storage, observability, cost controls, and per-country policy enforcement.
+Ten thousand videos per day remains an architectural target. PR3 includes a deterministic 10,000-job fake-provider rehearsal to exercise arithmetic assumptions; it is not a load test, benchmark, provider-quota proof, or capacity claim. Readiness still requires live PostgreSQL contention, horizontal workers, backpressure, real provider quotas, object storage, observability, cost controls, failure injection, restart testing, and country-specific policy evidence.
 
 - Secrets are environment/vault references and are never returned or logged.
 - Avatar and voice records require provenance, consent, and usage rights.

@@ -7,6 +7,7 @@ import { DashboardOverview } from "@/features/ai-media-studio/dashboard-overview
 import { ErrorPanel, LoadingPanel } from "@/features/ai-media-studio/feedback";
 import { useStudioDashboard } from "@/features/ai-media-studio/hooks";
 import { JobList } from "@/features/ai-media-studio/job-list";
+import { OperationsWorkspace } from "@/features/ai-media-studio/operations";
 import { StudioShell } from "@/features/ai-media-studio/studio-shell";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +83,10 @@ export default function AiMediaStudioPage() {
         <h2 id="jobs-heading" className="sr-only">Generation jobs</h2>
         <JobList />
       </section>
+
+      <div className="mt-14">
+        <OperationsWorkspace />
+      </div>
     </StudioShell>
   );
 }

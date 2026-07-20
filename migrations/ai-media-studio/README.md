@@ -1,4 +1,4 @@
-# AI Media Studio PR2 migration runbook
+# AI Media Studio reviewed migration runbook
 
 These reviewed SQL files cover only the incremental schema delta from the PR1
 AI Media Studio tables to PR2. They do not create the PR1 tables and they have
@@ -38,3 +38,22 @@ After either direction, restart the service and prove queue/restart recovery.
 Keeping the new columns is intentional: removing them is destructive and is not
 part of the routine rollback. A later column purge would require its own backup,
 retention approval, reviewed SQL, and recovery rehearsal.
+
+## PR3 operations release
+
+`20260720_pr3_operations_forward.sql` is the additive PR3 delta and has not
+been applied to any database. It adds publishing evidence and recoverable queue
+state, tenant-safe analytics indexes, source moderation/automation evidence,
+and orchestration runs. Never substitute `drizzle-kit push` or `npm run db:push`.
+
+After PR2 is deployed, repeat the hard gates above: verified backup, drained
+writers/workers, staging application, tenant and lease/fencing checks, restart
+recovery, full App QA, and Robert's explicit approval before Replit/production.
+Confirm that automatic publishing remains disabled by policy and that approval
+evidence references the exact immutable preview digest before queue dispatch.
+
+The data-preserving PR3 rollback restores the PR2 dispatch and analytics index
+shapes only. It intentionally retains the new table, columns, evidence, and
+rows for recovery and audit. The rollback aborts if PR3 data cannot satisfy the
+narrower PR2 analytics uniqueness rules; resolve those collisions explicitly,
+then retry from a fresh backup.
