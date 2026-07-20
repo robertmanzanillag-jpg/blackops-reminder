@@ -11,7 +11,12 @@ import {
   recordBlackRoomSourceUsage,
   retryBlackRoomJob,
   startBlackRoomAgent,
+  readBlackRoomQueue,
+  writeBlackRoomQueue,
 } from "../server/blackroom-daily-queue";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 test("rotates 90-minute posting windows across the full day", () => {
   const overnight = buildRotatingSlots({ dayIndex: 0 });
@@ -21,13 +26,16 @@ test("rotates 90-minute posting windows across the full day", () => {
   assert.deepEqual(late.map((slot) => slot.localTime), ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00", "20:30", "22:00", "23:30"]);
 });
 
-test("records source videos once and tracks the 15/30/60 experiment", () => {
+test("records source videos once and tracks short and long-form experiments", () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-1", dj: "DJ A", format: "vertical", language: "en", durationSeconds: 15, segmentStartSeconds: 10, segmentEndSeconds: 25 }, now);
   recordBlackRoomSourceUsage(state, { videoId: "yt-002", jobId: "job-1", dj: "DJ A", format: "horizontal", language: "es", durationSeconds: 30, segmentStartSeconds: 50, segmentEndSeconds: 80 }, now);
   recordBlackRoomSourceUsage(state, { videoId: "yt-003", jobId: "job-1", dj: "DJ B", format: "vertical", language: "en", durationSeconds: 60, segmentStartSeconds: 100, segmentEndSeconds: 160 }, now);
-  assert.deepEqual(state.sourceHistory.map((item) => item.durationSeconds), [15, 30, 60]);
+  recordBlackRoomSourceUsage(state, { videoId: "yt-004", jobId: "job-1", dj: "DJ B", format: "horizontal", language: "es", durationSeconds: 120, segmentStartSeconds: 200, segmentEndSeconds: 320 }, now);
+  recordBlackRoomSourceUsage(state, { videoId: "yt-005", jobId: "job-1", dj: "DJ C", format: "vertical", language: "en", durationSeconds: 300, segmentStartSeconds: 300, segmentEndSeconds: 600 }, now);
+  recordBlackRoomSourceUsage(state, { videoId: "yt-006", jobId: "job-1", dj: "DJ C", format: "horizontal", language: "es", durationSeconds: 600, segmentStartSeconds: 600, segmentEndSeconds: 1200 }, now);
+  assert.deepEqual(state.sourceHistory.map((item) => item.durationSeconds), [15, 30, 60, 120, 300, 600]);
   assert.throws(() => recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-2", dj: "DJ C", format: "vertical", language: "es", durationSeconds: 15, segmentStartSeconds: 0, segmentEndSeconds: 15 }, now), /already used/);
 });
 
@@ -40,6 +48,7 @@ test("keeps a one-week persistent scheduling buffer", () => {
   assert.equal(state.jobs[0].requirements.posts, 10);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
+  assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
 });
 
 test("recovers an interrupted job after its lease expires", () => {
@@ -79,4 +88,18 @@ test("starts weeks of work and pause prevents new claims", () => {
   pauseBlackRoomAgent(state, now);
   assert.equal(state.enabled, false);
   assert.equal(claimNextBlackRoomJob(state, now), null);
+});
+
+test("migrates existing queued jobs into the long-form experiment", async () => {
+  const now = new Date("2026-07-20T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.jobs[0].requirements.durationsSeconds = [15, 30, 60];
+  state.jobs[0].requirements.minimumClipsPerDuration = 2;
+  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-queue-"));
+  const queuePath = path.join(directory, "queue.json");
+  await writeBlackRoomQueue(state, queuePath);
+  const migrated = await readBlackRoomQueue(queuePath, now);
+  assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
+  assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
 });

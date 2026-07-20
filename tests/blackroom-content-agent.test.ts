@@ -17,7 +17,7 @@ const video = (id: string, views: number): BlackRoomYoutubeVideo => ({
   title: `Video ${id}`,
   description: "BlackRoom",
   publishedAt: "2026-07-01T00:00:00Z",
-  durationSeconds: 600,
+  durationSeconds: 1800,
   viewCount: views,
   likeCount: 10,
   commentCount: 2,
@@ -35,26 +35,27 @@ test("sanitizes BlackRoom volume to the requested 5-10 daily range", () => {
   assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1" }).deleteLocalAfterConfirmedUpload, true);
 });
 
-test("keeps exploration while allocating more slots to a proven duration", () => {
+test("keeps long-form exploration while allocating more slots to a proven duration", () => {
   const records: BlackRoomPerformanceRecord[] = [];
-  for (const durationSeconds of [15, 30, 60] as const) {
+  for (const durationSeconds of [15, 30, 60, 120, 300, 600] as const) {
     for (let index = 0; index < 12; index += 1) {
       records.push({
         clipId: `${durationSeconds}-${index}`,
         durationSeconds,
         platform: "instagram",
         views: 1000,
-        likes: durationSeconds === 30 ? 100 : 10,
+        likes: durationSeconds === 300 ? 100 : 10,
         comments: 0,
         shares: 0,
-        completionRate: durationSeconds === 30 ? 0.9 : 0.25,
+        averageWatchSeconds: durationSeconds === 300 ? 150 : Math.min(durationSeconds, 12),
+        completionRate: durationSeconds === 300 ? 0.5 : 0.25,
         publishedAt: "2026-07-01T00:00:00Z",
       });
     }
   }
   const scores = scoreBlackRoomFormats(records, 10, 0.2);
   assert.equal(scores.reduce((sum, score) => sum + score.allocation, 0), 10);
-  assert.ok(scores.find((score) => score.durationSeconds === 30)!.allocation > scores.find((score) => score.durationSeconds === 15)!.allocation);
+  assert.ok(scores.find((score) => score.durationSeconds === 300)!.allocation > scores.find((score) => score.durationSeconds === 15)!.allocation);
   assert.ok(scores.every((score) => score.allocation >= 1));
 });
 
@@ -92,7 +93,7 @@ test("creates an approval-only daily Metricool experiment plan", () => {
   assert.equal(plan.localCleanup.trigger, "metricool_upload_confirmed");
   assert.equal(plan.localCleanup.keepFailedUploadsForRetry, true);
   assert.ok(plan.metricoolDrafts.every((draft) => draft.status === "approval_required"));
-  assert.deepEqual(new Set(plan.metricoolDrafts.map((draft) => draft.durationSeconds)), new Set([15, 30, 60]));
+  assert.deepEqual(new Set(plan.metricoolDrafts.map((draft) => draft.durationSeconds)), new Set([15, 30, 60, 120, 300, 600]));
   assert.equal(plan.renderJobs.length, 8);
 });
 
@@ -124,7 +125,21 @@ test("builds paired vertical and horizontal ffmpeg edit jobs", () => {
   assert.ok(jobs.every((job) => job.command.command === "ffmpeg"));
   assert.ok(jobs.some((job) => job.videoFormat === "vertical" && job.command.args.some((arg) => arg.includes("crop=1080:1920"))));
   assert.ok(jobs.some((job) => job.videoFormat === "horizontal" && job.command.args.some((arg) => arg.includes("pad=1920:1080"))));
-  assert.ok(jobs.every((job) => job.startSeconds + job.durationSeconds <= 600));
+  assert.ok(jobs.every((job) => job.startSeconds + job.durationSeconds <= 1800));
+  assert.ok(jobs.every((job) => job.command.args.includes("-maxrate") && job.command.args.includes("5M")));
+  assert.ok(jobs.every((job) => job.command.args.includes("128k")));
+});
+
+test("does not assign a long-form draft to a source that is too short", () => {
+  const sourceVideos = videos(10).map((item, index) => ({ ...item, durationSeconds: index === 9 ? 900 : 90 }));
+  const plan = buildBlackRoomAutopilotPlan({
+    config: { channelId: "UC1", dailyPostTarget: 10 },
+    videos: sourceVideos,
+    performance: [],
+    startAt: new Date("2026-07-20T12:00:00Z"),
+  });
+  assert.ok(plan.metricoolDrafts.every((draft) => sourceVideos.find((item) => item.id === draft.sourceVideoId)!.durationSeconds >= draft.durationSeconds));
+  assert.equal(new Set(plan.metricoolDrafts.map((draft) => draft.sourceVideoId)).size, plan.metricoolDrafts.length);
 });
 
 test("uses controlled random order without repeating source videos", () => {
