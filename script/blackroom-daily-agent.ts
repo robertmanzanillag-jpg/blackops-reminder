@@ -11,6 +11,8 @@ import {
   startBlackRoomAgent,
   summarizeBlackRoomQueue,
   writeBlackRoomQueue,
+  BLACKROOM_DURATION_VARIANTS,
+  type BlackRoomExperimentDuration,
 } from "../server/blackroom-daily-queue";
 
 type Command = "sync" | "start" | "pause" | "claim" | "complete" | "retry" | "record-source" | "status";
@@ -57,13 +59,16 @@ async function main(): Promise<void> {
     job = retryBlackRoomJob(state, jobId, argument("--error") || "Metricool o Chrome no disponible");
   } else if (selectedCommand === "record-source") {
     const durationSeconds = Number(argument("--duration"));
+    if (!BLACKROOM_DURATION_VARIANTS.includes(durationSeconds as BlackRoomExperimentDuration)) {
+      throw new Error("--duration must be 15, 30, 60, 120, 300, or 600");
+    }
     job = recordBlackRoomSourceUsage(state, {
       videoId: argument("--video") || "",
       jobId: argument("--job") || "",
       dj: argument("--dj") || "unknown",
       format: argument("--format") === "horizontal" ? "horizontal" : "vertical",
       language: argument("--language") === "es" ? "es" : "en",
-      durationSeconds: durationSeconds === 15 || durationSeconds === 30 ? durationSeconds : 60,
+      durationSeconds: durationSeconds as BlackRoomExperimentDuration,
       segmentStartSeconds: Number(argument("--start-second") || 0),
       segmentEndSeconds: Number(argument("--end-second") || durationSeconds || 60),
     });

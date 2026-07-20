@@ -1,11 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const BLACKROOM_QUEUE_VERSION = 1;
+export const BLACKROOM_QUEUE_VERSION = 2;
 export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.json";
 export const BLACKROOM_DEFAULT_BUFFER_DAYS = 7;
 export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 10;
 export const BLACKROOM_DEFAULT_INTERVAL_MINUTES = 90;
+export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
+export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
 
 export type BlackRoomDailyJobStatus = "queued" | "processing" | "retry" | "scheduled" | "completed";
 
@@ -46,7 +48,7 @@ export interface BlackRoomSourceUsage {
   dj: string;
   format: "vertical" | "horizontal";
   language: "en" | "es";
-  durationSeconds: 15 | 30 | 60;
+  durationSeconds: BlackRoomExperimentDuration;
   segmentStartSeconds: number;
   segmentEndSeconds: number;
   recordedAt: string;
@@ -151,8 +153,8 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
       postsPerDj: 2,
       languages: ["en", "es"],
       formats: ["vertical", "horizontal"],
-      durationsSeconds: [15, 30, 60],
-      minimumClipsPerDuration: 2,
+      durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
+      minimumClipsPerDuration: 1,
       neverRepeatSourceVideo: true,
       neverReuseOverlappingSegment: true,
       optimizeDurationFromPerformance: true,
@@ -173,7 +175,9 @@ export function recordBlackRoomSourceUsage(
   if (state.sourceHistory.some((item) => item.videoId === videoId)) {
     throw new Error(`BlackRoom source video already used: ${videoId}`);
   }
-  if (![15, 30, 60].includes(usage.durationSeconds)) throw new Error("durationSeconds must be 15, 30, or 60");
+  if (!BLACKROOM_DURATION_VARIANTS.includes(usage.durationSeconds)) {
+    throw new Error("durationSeconds must be 15, 30, 60, 120, 300, or 600");
+  }
   const recorded: BlackRoomSourceUsage = { ...usage, videoId, recordedAt: iso(now) };
   state.sourceHistory.push(recorded);
   state.updatedAt = iso(now);
@@ -280,9 +284,10 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
     postsPerDay: state.postsPerDay,
     usedSourceVideos: state.sourceHistory.length,
     durationSamples: {
-      15: state.sourceHistory.filter((item) => item.durationSeconds === 15).length,
-      30: state.sourceHistory.filter((item) => item.durationSeconds === 30).length,
-      60: state.sourceHistory.filter((item) => item.durationSeconds === 60).length,
+      ...Object.fromEntries(BLACKROOM_DURATION_VARIANTS.map((duration) => [
+        duration,
+        state.sourceHistory.filter((item) => item.durationSeconds === duration).length,
+      ])),
     },
     totals,
     nextJob: state.jobs.find((job) => ["queued", "retry", "processing"].includes(job.status)) || null,
@@ -292,10 +297,21 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
 export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = new Date()): Promise<BlackRoomQueueState> {
   try {
     const parsed = JSON.parse(await readFile(filePath, "utf8"));
+    const jobs = Array.isArray(parsed.jobs) ? parsed.jobs.map((job: BlackRoomDailyJob) => ({
+      ...job,
+      requirements: ["queued", "retry"].includes(job.status)
+        ? {
+          ...job.requirements,
+          durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
+          minimumClipsPerDuration: 1,
+        }
+        : job.requirements,
+    })) : [];
     return {
       ...createBlackRoomQueueState(now),
       ...parsed,
-      jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
+      version: BLACKROOM_QUEUE_VERSION,
+      jobs,
       sourceHistory: Array.isArray(parsed.sourceHistory) ? parsed.sourceHistory : [],
     };
   } catch (error: any) {

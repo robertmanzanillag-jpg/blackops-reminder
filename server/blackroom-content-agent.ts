@@ -1,6 +1,6 @@
 import { buildYtDlpCommandSpecs, type YtDlpCommandSpec } from "./youtube-downloader.ts";
 
-export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60] as const;
+export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export const BLACKROOM_SOURCE_DIRECTORY = "clippers_workspace/blackroom/sources";
 export const BLACKROOM_RENDER_DIRECTORY = "clippers_workspace/blackroom/rendered";
 
@@ -42,6 +42,8 @@ export interface BlackRoomPerformanceRecord {
   shares: number;
   averageWatchSeconds?: number;
   completionRate?: number;
+  profileVisits?: number;
+  followersGained?: number;
   publishedAt: string;
 }
 
@@ -51,6 +53,8 @@ export interface BlackRoomFormatScore {
   score: number;
   averageRetention: number;
   averageEngagement: number;
+  averageWatchSeconds: number;
+  averageGrowthRate: number;
   allocation: number;
   reason: string;
 }
@@ -238,6 +242,18 @@ function recordEngagement(record: BlackRoomPerformanceRecord): number {
   return (asCount(record.likes) + asCount(record.comments) * 2 + asCount(record.shares) * 3) / views;
 }
 
+function recordAverageWatchSeconds(record: BlackRoomPerformanceRecord): number {
+  if (Number.isFinite(Number(record.averageWatchSeconds))) return asCount(record.averageWatchSeconds);
+  if (Number.isFinite(Number(record.completionRate))) return asCount(record.durationSeconds) * recordRetention(record);
+  return 0;
+}
+
+function recordGrowthRate(record: BlackRoomPerformanceRecord): number {
+  const views = asCount(record.views);
+  if (!views) return 0;
+  return (asCount(record.profileVisits) + asCount(record.followersGained) * 5) / views;
+}
+
 function distributeSlots(weights: number[], total: number): number[] {
   const raw = weights.map((weight) => weight * total);
   const slots = raw.map(Math.floor);
@@ -259,26 +275,38 @@ export function scoreBlackRoomFormats(
     const matches = records.filter((record) => Number(record?.durationSeconds) === durationSeconds && asCount(record?.views) >= 0);
     const averageRetention = matches.length ? matches.reduce((sum, record) => sum + recordRetention(record), 0) / matches.length : 0;
     const averageEngagement = matches.length ? matches.reduce((sum, record) => sum + recordEngagement(record), 0) / matches.length : 0;
+    const averageWatchSeconds = matches.length ? matches.reduce((sum, record) => sum + recordAverageWatchSeconds(record), 0) / matches.length : 0;
+    const averageGrowthRate = matches.length ? matches.reduce((sum, record) => sum + recordGrowthRate(record), 0) / matches.length : 0;
     const confidence = Math.min(1, matches.length / 12);
-    const observedScore = averageRetention * 0.72 + Math.min(1, averageEngagement * 20) * 0.28;
+    // Completion alone unfairly favors short clips. Watch time uses a logarithmic
+    // curve so long videos receive credit for sustained viewing without dominating.
+    const watchTimeScore = Math.min(1, Math.log2(1 + averageWatchSeconds) / Math.log2(121));
+    const observedScore = averageRetention * 0.4
+      + watchTimeScore * 0.35
+      + Math.min(1, averageEngagement * 20) * 0.15
+      + Math.min(1, averageGrowthRate * 50) * 0.1;
     const priorScore = 0.45;
     const score = observedScore * confidence + priorScore * (1 - confidence);
-    return { durationSeconds, samples: matches.length, score, averageRetention, averageEngagement };
+    return { durationSeconds, samples: matches.length, score, averageRetention, averageEngagement, averageWatchSeconds, averageGrowthRate };
   });
   const totalScore = aggregates.reduce((sum, item) => sum + Math.max(0.01, item.score), 0);
   const equalWeight = 1 / aggregates.length;
   const weights = aggregates.map((item) => exploration * equalWeight + (1 - exploration) * (Math.max(0.01, item.score) / totalScore));
-  const allocations = distributeSlots(weights, target);
+  const allocations = target >= aggregates.length
+    ? distributeSlots(weights, target - aggregates.length).map((allocation) => allocation + 1)
+    : distributeSlots(weights, target);
 
   return aggregates.map((item, index) => ({
     ...item,
     score: Number(item.score.toFixed(4)),
     averageRetention: Number(item.averageRetention.toFixed(4)),
     averageEngagement: Number(item.averageEngagement.toFixed(4)),
+    averageWatchSeconds: Number(item.averageWatchSeconds.toFixed(2)),
+    averageGrowthRate: Number(item.averageGrowthRate.toFixed(4)),
     allocation: allocations[index],
     reason: item.samples < 6
       ? "Exploración: todavía faltan muestras para decidir un ganador."
-      : `Optimización: retención ${(item.averageRetention * 100).toFixed(1)}% y engagement ${(item.averageEngagement * 100).toFixed(2)}%.`,
+      : `Optimización: ${item.averageWatchSeconds.toFixed(1)}s vistos, retención ${(item.averageRetention * 100).toFixed(1)}%, engagement ${(item.averageEngagement * 100).toFixed(2)}% y crecimiento ${(item.averageGrowthRate * 100).toFixed(2)}%.`,
   }));
 }
 
@@ -309,9 +337,10 @@ export function buildBlackRoomMetricoolDrafts(input: {
     `${input.selectionSeed || "blackroom-controlled-random"}|${input.startAt.toISOString().slice(0, 10)}`,
   );
   const drafts: BlackRoomMetricoolDraft[] = [];
-  durations.slice(0, randomizedVideos.length).forEach((durationSeconds, slot) => {
+  const remainingVideos = [...randomizedVideos];
+  const addDraft = (durationSeconds: BlackRoomDuration, video: BlackRoomYoutubeVideo) => {
+    const slot = drafts.length;
     const videoFormat: BlackRoomVideoFormat = slot % 2 === 0 ? "vertical" : "horizontal";
-    const video = randomizedVideos[slot];
     const platform = input.platforms[slot % input.platforms.length];
     const scheduledAt = new Date(input.startAt.getTime() + slot * 90 * 60 * 1000);
     drafts.push({
@@ -324,7 +353,19 @@ export function buildBlackRoomMetricoolDrafts(input: {
       status: "approval_required",
       experimentKey: `duration:${durationSeconds}|format:${videoFormat}|platform:${platform}|selection:controlled-random`,
     });
+  };
+  durations.forEach((durationSeconds) => {
+    const compatibleIndex = remainingVideos.findIndex((video) => video.durationSeconds >= durationSeconds);
+    if (compatibleIndex < 0) return;
+    const [video] = remainingVideos.splice(compatibleIndex, 1);
+    addDraft(durationSeconds, video);
   });
+  const rankedDurations = [...input.scores].sort((left, right) => right.score - left.score || left.durationSeconds - right.durationSeconds);
+  while (drafts.length < durations.length && remainingVideos.length) {
+    const video = remainingVideos.shift()!;
+    const fallback = rankedDurations.find((score) => score.durationSeconds <= video.durationSeconds);
+    if (fallback) addDraft(fallback.durationSeconds, video);
+  }
   return drafts;
 }
 
@@ -379,8 +420,10 @@ export function buildBlackRoomRenderJobs(input: {
           "-c:v", "libx264",
           "-preset", "medium",
           "-crf", "20",
+          "-maxrate", "5M",
+          "-bufsize", "10M",
           "-c:a", "aac",
-          "-b:a", "192k",
+          "-b:a", "128k",
           "-movflags", "+faststart",
           outputPath,
         ],
