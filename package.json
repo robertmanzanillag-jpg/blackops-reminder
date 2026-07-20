@@ -46,6 +46,7 @@
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
+    "test:revenue-stripe": "node --import tsx --test tests/revenue-stripe.test.ts",
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
     "test:revenue-public-scout-connector": "node --import tsx --test tests/revenue-engine-public-scout-connector.test.ts",
     "test:revenue-money-readiness-cli": "node --import tsx --test tests/revenue-engine-money-readiness-cli.test.ts",

@@ -8,6 +8,8 @@ import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type Rev
 
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
+export const ROBERT_WEBSITES_STRIPE_ACCOUNT_ID = "acct_1TtbdhPb55Pnake3";
+
 export const revenueEnginePlanSchema = z.object({
   area: z.string().trim().min(2).max(120),
   niche: z.string().trim().min(2).max(120),
@@ -671,7 +673,37 @@ export type RevenueAutomationOpportunityCloseInput = z.infer<typeof revenueAutom
 type RevenueLedgerEntry = RevenueLedgerEntryInput & {
   id: string;
   createdAt: string;
+  dealId?: string;
+  stripeAccountId?: string;
+  stripePaymentIds?: string[];
+  stripePaymentStatus?: "partially_paid" | "paid";
+  stripeLastPaymentAt?: string;
 };
+
+export const revenueStripePaymentSchema = z.object({
+  stripeAccountId: z.string().trim().min(1).max(100),
+  dealId: z.string().trim().min(1).max(200),
+  kind: z.enum(["website_sale", "automation_sale", "bundle_sale", "retainer"]),
+  clientName: z.string().trim().min(2).max(160),
+  contractTotalUsd: z.coerce.number().positive().max(1000000),
+  paymentAmountUsd: z.coerce.number().positive().max(1000000),
+  estimatedInternalCostUsd: z.coerce.number().min(0).max(100000).default(0),
+  externalPaymentId: z.string().trim().min(6).max(200).regex(/^[a-z0-9][a-z0-9_-]+$/i),
+  eventId: z.string().trim().min(6).max(200).regex(/^[a-z0-9][a-z0-9_-]+$/i),
+  paymentStage: z.enum(["deposit", "balance", "full"]),
+  occurredAt: z.string().datetime(),
+  notes: z.string().trim().max(500).optional().default(""),
+}).superRefine((value, ctx) => {
+  if (value.paymentAmountUsd > value.contractTotalUsd + 0.009) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paymentAmountUsd"],
+      message: "Stripe payment cannot exceed the contract total.",
+    });
+  }
+});
+
+export type RevenueStripePaymentInput = z.infer<typeof revenueStripePaymentSchema>;
 
 type RevenueLead = RevenueLeadInput & {
   id: string;
@@ -894,6 +926,7 @@ type RevenueWebsiteClosureQueue = {
     requiredDepositUsd: number;
     cashCollectedUsd: number;
     monthlyRetainerUsd: number;
+    estimatedInternalCostUsd: number;
     depositPaid: boolean;
     scopeApproved: boolean;
     paymentConfirmation: string;
@@ -1050,6 +1083,14 @@ type RevenueDailyMoneyCommand = {
     copyableApiRequest: string;
     copyableRunPacket: string;
   };
+  learning: {
+    status: RevenueOutcomeMemory["status"];
+    totalOutcomes: number;
+    segmentsTracked: number;
+    focusSegment: string;
+    summary: string;
+    nextExperiment: string;
+  };
   copyableOperatorBrief: string;
   safety: {
     sendsOutreach: false;
@@ -1139,6 +1180,43 @@ type RevenueImprovementReview = ReturnType<typeof buildImprovementReview> & {
   decisionStatus: ReturnType<typeof buildImprovementReview>["decision"]["status"];
   learningSummary: string;
 };
+
+type RevenueOutcomeMemorySegment = {
+  key: string;
+  area: string;
+  niche: string;
+  offerFocus: "websites" | "automations" | "both";
+  outcomes: number;
+  contacted: number;
+  replies: number;
+  callsBooked: number;
+  depositsCollected: number;
+  lost: number;
+  cashCollectedUsd: number;
+  replyRatePercent: number;
+  callRatePercent: number;
+  closeRatePercent: number;
+  confidence: "low" | "medium" | "high";
+  signal: "winning" | "promising" | "needs_change" | "collect_data";
+  learning: string;
+  nextExperiment: string;
+};
+
+type RevenueOutcomeMemory = {
+  status: "empty" | "needs_data" | "learning";
+  totalOutcomes: number;
+  segmentsTracked: number;
+  segments: RevenueOutcomeMemorySegment[];
+  bestSegment: RevenueOutcomeMemorySegment | null;
+  segmentsNeedingChange: RevenueOutcomeMemorySegment[];
+  learningSummary: string;
+  nextExperiment: string;
+};
+
+type RevenueOutcomeMemoryAccumulator = Omit<
+  RevenueOutcomeMemorySegment,
+  "replyRatePercent" | "callRatePercent" | "closeRatePercent" | "confidence" | "signal" | "learning" | "nextExperiment"
+>;
 
 type RevenueScoutingMission = ReturnType<typeof buildRevenueScoutingMission> & {
   id: string;
@@ -1271,6 +1349,11 @@ const revenueAutomationIntakes: RevenueAutomationIntake[] = [];
 const persistedRevenueLedgerEntrySchema = revenueLedgerEntrySchema.extend({
   id: z.string().trim().min(1),
   createdAt: z.string().trim().min(1),
+  dealId: z.string().trim().max(200).optional().default(""),
+  stripeAccountId: z.string().trim().max(100).optional().default(""),
+  stripePaymentIds: z.array(z.string().trim().min(1).max(200)).max(100).optional().default([]),
+  stripePaymentStatus: z.enum(["partially_paid", "paid"]).optional(),
+  stripeLastPaymentAt: z.string().trim().max(100).optional().default(""),
 });
 const persistedRevenueLeadSchema = revenueLeadSchema.extend({
   id: z.string().trim().min(1),
@@ -2751,6 +2834,31 @@ export async function prepareRevenueEngineState(userId: string) {
   }
 }
 
+let revenueEngineScopeQueue = Promise.resolve();
+
+export async function acquireRevenueEngineScope(userId: string) {
+  let releaseQueuedScope: () => void = () => {};
+  const previousScope = revenueEngineScopeQueue;
+  revenueEngineScopeQueue = new Promise<void>((resolve) => {
+    releaseQueuedScope = resolve;
+  });
+  await previousScope;
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseQueuedScope();
+  };
+  try {
+    await prepareRevenueEngineState(userId);
+    return release;
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
 export async function flushRevenueEnginePersistence() {
   if (revenueDurablePersistenceStatus === "disabled") return;
   try {
@@ -2933,10 +3041,166 @@ function buildRevenueProfitGuard({
   };
 }
 
+function normalizeRevenueLearningDimension(value: string | undefined, fallback: string) {
+  const normalized = value?.trim().replace(/\s+/g, " ");
+  return normalized || fallback;
+}
+
+function revenueLearningOfferFocus(draft: RevenueOutreachDraft): RevenueOutcomeMemorySegment["offerFocus"] {
+  const includesWebsite = draft.websitePriceUsd > 0;
+  const includesAutomation = draft.automationPriceUsd > 0;
+  if (includesWebsite && includesAutomation) return "both";
+  if (includesAutomation) return "automations";
+  return "websites";
+}
+
+function revenueLearningRate(numerator: number, denominator: number) {
+  if (denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+function buildRevenueOutcomeMemory(): RevenueOutcomeMemory {
+  const segmentsByKey = new Map<string, RevenueOutcomeMemoryAccumulator>();
+
+  for (const draft of revenueOutreachDrafts) {
+    const outcome = draft.delivery.outcome;
+    if (!outcome) continue;
+
+    const lead = draft.leadId
+      ? revenueLeads.find((item) => item.id === draft.leadId)
+      : revenueLeads.find((item) => item.businessName.toLowerCase() === draft.businessName.toLowerCase());
+    const area = normalizeRevenueLearningDimension(lead?.area, "Unclassified area");
+    const niche = normalizeRevenueLearningDimension(lead?.niche, "Unclassified niche");
+    const offerFocus = revenueLearningOfferFocus(draft);
+    const key = `${area.toLowerCase()}::${niche.toLowerCase()}::${offerFocus}`;
+    const segment = segmentsByKey.get(key) || {
+      key,
+      area,
+      niche,
+      offerFocus,
+      outcomes: 0,
+      contacted: 0,
+      replies: 0,
+      callsBooked: 0,
+      depositsCollected: 0,
+      lost: 0,
+      cashCollectedUsd: 0,
+    };
+
+    segment.outcomes += 1;
+    segment.contacted += 1;
+    if (outcome === "reply") {
+      segment.replies += 1;
+    }
+    if (outcome === "call_booked") {
+      segment.callsBooked += 1;
+    }
+    if (outcome === "deposit_collected") {
+      segment.depositsCollected += 1;
+    }
+    if (outcome === "lost") {
+      segment.lost += 1;
+    }
+    segment.cashCollectedUsd += Math.max(0, Number(draft.delivery.outcomeCashCollectedUsd) || 0);
+    segmentsByKey.set(key, segment);
+  }
+
+  const segments = [...segmentsByKey.values()].map((segment): RevenueOutcomeMemorySegment => {
+    const replyRatePercent = revenueLearningRate(segment.replies, segment.contacted);
+    const callRatePercent = revenueLearningRate(segment.callsBooked, segment.contacted);
+    const closeRatePercent = revenueLearningRate(segment.depositsCollected, segment.contacted);
+    const confidence = segment.outcomes >= 10 ? "high" as const : segment.outcomes >= 3 ? "medium" as const : "low" as const;
+    const signal = segment.depositsCollected > 0 && segment.outcomes >= 3
+      ? "winning" as const
+      : (segment.contacted >= 5 && replyRatePercent < 20) || (segment.lost >= 3 && segment.replies === 0)
+        ? "needs_change" as const
+        : segment.depositsCollected > 0 || segment.replies > 0 || segment.callsBooked > 0
+          ? "promising" as const
+          : "collect_data" as const;
+    const label = `${segment.area} / ${segment.niche} / ${segment.offerFocus}`;
+    const learning = signal === "winning"
+      ? `${label} produjo ${segment.depositsCollected} deposito(s) verificables con ${closeRatePercent}% close rate.`
+      : signal === "promising"
+        ? segment.depositsCollected > 0
+          ? `${label} produjo un deposito verificable, pero solo tiene ${segment.outcomes} outcome(s); validar antes de declararlo ganador.`
+          : `${label} genera conversacion (${replyRatePercent}% replies, ${callRatePercent}% calls) pero todavia necesita cierre verificable.`
+        : signal === "needs_change"
+          ? `${label} tiene ${segment.contacted} contactos, ${replyRatePercent}% replies y ${segment.lost} perdidos; no repetir el mismo enfoque.`
+          : `${label} tiene solo ${segment.outcomes} outcome(s); falta evidencia antes de cambiar el playbook.`;
+    const nextExperiment = signal === "winning"
+      ? `Repetir ${label} en un lote pequeno y cambiar solo una variable de copy para confirmar el patron.`
+      : signal === "promising"
+        ? segment.depositsCollected > 0
+          ? `Repetir ${label} hasta reunir al menos 3 outcomes sin cambiar precio ni oferta.`
+          : `Mantener el opener de ${label} y probar una CTA de llamada/deposito mas clara.`
+        : signal === "needs_change"
+          ? `Pausar el copy actual solo en ${label}; probar 3-5 drafts con una propuesta de valor distinta.`
+          : `Registrar al menos 3 outcomes reales en ${label} antes de ajustar oferta o precio.`;
+
+    return {
+      ...segment,
+      replyRatePercent,
+      callRatePercent,
+      closeRatePercent,
+      confidence,
+      signal,
+      learning,
+      nextExperiment,
+    };
+  });
+
+  const signalWeight: Record<RevenueOutcomeMemorySegment["signal"], number> = {
+    winning: 4,
+    promising: 3,
+    collect_data: 2,
+    needs_change: 1,
+  };
+  segments.sort((left, right) =>
+    signalWeight[right.signal] - signalWeight[left.signal]
+    || right.depositsCollected - left.depositsCollected
+    || right.callsBooked - left.callsBooked
+    || right.replies - left.replies
+    || right.outcomes - left.outcomes
+    || left.key.localeCompare(right.key)
+  );
+
+  const totalOutcomes = segments.reduce((total, segment) => total + segment.outcomes, 0);
+  const bestSegment = segments.find((segment) => segment.signal === "winning" || segment.signal === "promising") || null;
+  const segmentsNeedingChange = segments.filter((segment) => segment.signal === "needs_change");
+  const repairSegment = segmentsNeedingChange[0] || null;
+  const learningSummary = bestSegment
+    ? `Mejor senal real: ${bestSegment.learning}`
+    : repairSegment
+      ? `Cambio requerido y aislado: ${repairSegment.learning}`
+      : totalOutcomes > 0
+        ? `${totalOutcomes} outcome(s) reales guardados; todavia no hay suficiente evidencia para declarar un patron ganador.`
+        : "Sin outcomes reales todavia; no cambiar precios, nichos ni playbook por intuicion.";
+  const nextExperiment = bestSegment?.nextExperiment
+    || repairSegment?.nextExperiment
+    || segments[0]?.nextExperiment
+    || "Registrar replies, calls, depositos y perdidos por area/nicho/oferta.";
+
+  return {
+    status: totalOutcomes === 0
+      ? "empty"
+      : segments.some((segment) => segment.confidence !== "low")
+        ? "learning"
+        : "needs_data",
+    totalOutcomes,
+    segmentsTracked: segments.length,
+    segments,
+    bestSegment,
+    segmentsNeedingChange,
+    learningSummary,
+    nextExperiment,
+  };
+}
+
 function buildRevenueNextBatchPlan(input: {
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
   latestReview?: RevenueImprovementReview;
   approvalQueue: number;
+  outcomeMemory: RevenueOutcomeMemory;
 }) {
   const latestReview = input.latestReview;
   const hasRevenueProof = input.profitGuard.cashCollectedUsd > 0 && input.profitGuard.profitUsd >= 0;
@@ -2965,6 +3229,13 @@ function buildRevenueNextBatchPlan(input: {
       : status === "iterate_small_batch"
         ? 10
         : 0;
+  const focusSegment = input.outcomeMemory.bestSegment;
+  const segmentToRepair = input.outcomeMemory.segmentsNeedingChange[0] || null;
+  const learningAction = focusSegment
+    ? `priorizar ${focusSegment.area} / ${focusSegment.niche} / ${focusSegment.offerFocus}`
+    : segmentToRepair
+      ? `probar copy/oferta nueva solo en ${segmentToRepair.area} / ${segmentToRepair.niche}`
+      : "registrar outcomes reales por area/nicho/oferta";
 
   return {
     status,
@@ -2982,16 +3253,29 @@ function buildRevenueNextBatchPlan(input: {
       status === "collect_first" && "cobrar deposito antes de gastar",
       status === "pause" && "resolver bloqueos QA/costo antes de contactar",
       input.approvalQueue > 0 && "limpiar approval queue",
+      segmentToRepair && `no repetir el mismo enfoque en ${segmentToRepair.area} / ${segmentToRepair.niche} sin cambiar una variable`,
       "aprobar mensaje antes de enviar",
       "guardar resultado y objecion despues del batch",
     ].filter(Boolean) as string[],
     allowedActions:
       status === "collect_first"
-        ? ["research publico gratis", "mockup/draft interno", "pedir deposito"]
+        ? ["research publico gratis", "mockup/draft interno", "pedir deposito", learningAction]
         : status === "pause"
-          ? ["corregir QA", "bajar costo", "revisar oferta"]
-          : ["contactar batch aprobado", "guardar metricas", "crear review semanal"],
+          ? ["corregir QA", "bajar costo", "revisar oferta", learningAction]
+          : ["contactar batch aprobado", "guardar metricas", "crear review semanal", learningAction],
     latestReviewId: latestReview?.id || "",
+    focusSegment: focusSegment
+      ? {
+          key: focusSegment.key,
+          area: focusSegment.area,
+          niche: focusSegment.niche,
+          offerFocus: focusSegment.offerFocus,
+          signal: focusSegment.signal,
+        }
+      : null,
+    segmentsNeedingChange: input.outcomeMemory.segmentsNeedingChange.map((segment) => segment.key),
+    learningSummary: input.outcomeMemory.learningSummary,
+    nextExperiment: input.outcomeMemory.nextExperiment,
   };
 }
 
@@ -4032,10 +4316,11 @@ function revenueWebsitePaymentEvidenceBlocker(opportunity: RevenueWebsiteOpportu
     return "oportunidad vendida sin referencia/comprobante verificable de pago";
   }
   if (!draft) return "draft de venta no encontrado";
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
   const recordedDepositPaymentConfirmation = draft.delivery.outcome === "deposit_collected"
     ? draft.delivery.outcomePaymentConfirmation || ""
     : "";
-  if (!hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation)) {
+  if (!hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation) && !stripePaymentConfirmationFromEntry(stripeLedgerEntry)) {
     return "deposito manual sin referencia/comprobante verificable en draft";
   }
   return "";
@@ -4228,7 +4513,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     persistRevenueLeads();
   }
 
-  const existingLedgerEntry = revenueLedger.find((entry) =>
+  const existingLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(websiteOpportunity) || revenueLedger.find((entry) =>
     entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
   );
   if (depositPaid && websiteOpportunity.scopeApproved && cashCollectedUsd > 0 && !existingLedgerEntry) {
@@ -4620,6 +4905,57 @@ function isClosedRevenueWebsiteOpportunity(
   return opportunity?.status === "sold" || opportunity?.status === "delivered";
 }
 
+function findRevenueStripeLedgerEntryForWebsiteOpportunity(
+  opportunity: RevenueWebsiteOpportunity | null | undefined,
+) {
+  if (!opportunity) return null;
+  return revenueLedger.find((entry) =>
+    isSaleEntry(entry)
+    && entry.stripeAccountId === ROBERT_WEBSITES_STRIPE_ACCOUNT_ID
+    && (entry.stripePaymentIds || []).length > 0
+    && (
+      revenueLedgerEntryMatchesDeal(entry, opportunity.id)
+      || entry.notes.split("|").map((part) => part.trim()).some((part) =>
+        part === `website-opportunity:${opportunity.id}`
+        || part === `[website-opportunity:${opportunity.id}]`
+      )
+    )
+  ) || null;
+}
+
+function stripePaymentConfirmationFromEntry(entry: RevenueLedgerEntry | null) {
+  return entry?.stripePaymentIds?.[0] ? `Stripe payment id:${entry.stripePaymentIds[0]}` : "";
+}
+
+function syncRevenueWebsiteOpportunityFromStripePayment(
+  input: RevenueStripePaymentInput,
+  entry: RevenueLedgerEntry,
+) {
+  if (input.kind !== "website_sale" && input.kind !== "bundle_sale") return null;
+  loadRevenueWebsiteOpportunities();
+  const opportunity = revenueWebsiteOpportunities.find((item) => item.id === input.dealId) || null;
+  if (!opportunity || opportunity.status === "delivered") return null;
+
+  const nextCashCollectedUsd = Math.max(opportunity.cashCollectedUsd, entry.cashCollectedUsd);
+  opportunity.cashCollectedUsd = roundRevenueMoney(nextCashCollectedUsd);
+  opportunity.depositPaid = opportunity.depositPaid || (
+    opportunity.requiredDepositUsd > 0
+    && opportunity.cashCollectedUsd + 0.009 >= opportunity.requiredDepositUsd
+  );
+  opportunity.paymentConfirmation = opportunity.paymentConfirmation
+    || stripePaymentConfirmationFromEntry(entry);
+  if (opportunity.depositPaid && opportunity.scopeApproved && opportunity.status !== "sold") {
+    opportunity.status = "scope_approved";
+    opportunity.nextAction = "Stripe deposito registrado; cerrar oportunidad para habilitar delivery QA-gated.";
+  } else if (opportunity.depositPaid && opportunity.status !== "sold") {
+    opportunity.status = "quoted";
+    opportunity.nextAction = "Stripe deposito registrado; falta aprobar scope antes de convertir a delivery.";
+  }
+  opportunity.updatedAt = new Date().toISOString();
+  persistRevenueWebsiteOpportunities();
+  return opportunity;
+}
+
 function syncRevenueWebsiteOpportunityFromDepositOutcome(
   lead: RevenueLead | null,
   draft: RevenueOutreachDraft,
@@ -4804,10 +5140,18 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   const lead = opportunity ? revenueLeads.find((item) => item.id === opportunity.sourceLeadId) || null : null;
   const draft = opportunity ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null : null;
   const requiredDepositUsd = opportunity?.requiredDepositUsd || 0;
-  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
-  const recordedDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
+  const stripeDepositCashUsd = stripeLedgerEntry?.cashCollectedUsd || 0;
+  const manualDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const recordedDepositCashUsd = Math.max(manualDepositCashUsd, stripeDepositCashUsd, opportunity?.cashCollectedUsd || 0);
+  const manualDepositPaymentConfirmation = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomePaymentConfirmation || "" : "";
+  const stripeDepositPaymentConfirmation = stripePaymentConfirmationFromEntry(stripeLedgerEntry);
+  const recordedDepositPaymentConfirmation = manualDepositPaymentConfirmation || stripeDepositPaymentConfirmation || opportunity?.paymentConfirmation || "";
   const depositOutcomeCoversRequired = recordedDepositCashUsd >= requiredDepositUsd && requiredDepositUsd > 0;
   const recordedDepositPaymentConfirmed = hasRevenuePaymentEvidence(recordedDepositPaymentConfirmation);
+  const hasRecordedDepositOutcome = Boolean(
+    draft?.delivery.outcome === "deposit_collected" || stripeLedgerEntry || opportunity?.depositPaid,
+  );
   const paymentConfirmed = hasRevenuePaymentEvidence(parsed.paymentConfirmation);
   const blockers = [
     !opportunity && "oportunidad no encontrada",
@@ -4815,14 +5159,14 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
     opportunity?.status === "delivered" && "oportunidad ya entregada",
     !lead && "lead no encontrado",
     !draft && "draft no encontrado",
-    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en outreach outcome",
-    draft && draft.delivery.outcome === "deposit_collected" && !depositOutcomeCoversRequired && `deposito manual insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
-    depositOutcomeCoversRequired && !recordedDepositPaymentConfirmed && "deposito manual sin referencia/comprobante de pago verificable",
+    draft && !hasRecordedDepositOutcome && "deposito manual no registrado en outreach outcome ni Stripe",
+    hasRecordedDepositOutcome && !depositOutcomeCoversRequired && `deposito insuficiente: falta cobrar $${Math.max(0, requiredDepositUsd - recordedDepositCashUsd).toLocaleString("en-US")}`,
+    depositOutcomeCoversRequired && !recordedDepositPaymentConfirmed && "deposito sin referencia/comprobante de pago verificable",
     !parsed.scopeApproved && "scope no aprobado",
     !parsed.depositPaid && "deposito no marcado",
     parsed.cashCollectedUsd < requiredDepositUsd && `deposito incompleto: falta cobrar $${Math.max(0, requiredDepositUsd - parsed.cashCollectedUsd).toLocaleString("en-US")}`,
-    depositOutcomeCoversRequired && parsed.cashCollectedUsd !== recordedDepositCashUsd && `cashCollectedUsd debe coincidir con el deposito manual registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
-    !paymentConfirmed && "falta referencia/comprobante verificable de pago/deposito",
+    depositOutcomeCoversRequired && Math.abs(parsed.cashCollectedUsd - recordedDepositCashUsd) > 0.009 && `cashCollectedUsd debe coincidir con el deposito registrado: $${recordedDepositCashUsd.toLocaleString("en-US")}`,
+    !paymentConfirmed && !(stripeLedgerEntry && recordedDepositPaymentConfirmed) && "falta referencia/comprobante verificable de pago/deposito",
   ].filter(Boolean) as string[];
 
   if (!opportunity || blockers.length > 0) {
@@ -4833,8 +5177,8 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
       opportunity.cashCollectedUsd = Math.max(opportunity.cashCollectedUsd, recordedDepositCashUsd);
       opportunity.depositPaid = nextDepositPaid;
       opportunity.scopeApproved = nextScopeApproved;
-      opportunity.paymentConfirmation = depositOutcomeCoversRequired && paymentConfirmed
-        ? parsed.paymentConfirmation || opportunity.paymentConfirmation
+      opportunity.paymentConfirmation = depositOutcomeCoversRequired && (paymentConfirmed || recordedDepositPaymentConfirmed)
+        ? parsed.paymentConfirmation || recordedDepositPaymentConfirmation || opportunity.paymentConfirmation
         : opportunity.paymentConfirmation;
       opportunity.nextAction = `No convertir a delivery todavia: ${blockers.join("; ")}.`;
       opportunity.updatedAt = new Date().toISOString();
@@ -4855,7 +5199,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
   opportunity.cashCollectedUsd = recordedDepositCashUsd;
   opportunity.depositPaid = true;
   opportunity.scopeApproved = true;
-  opportunity.paymentConfirmation = parsed.paymentConfirmation;
+  opportunity.paymentConfirmation = parsed.paymentConfirmation || recordedDepositPaymentConfirmation;
   opportunity.nextAction = "Oportunidad vendida. Crear delivery workspace desde Website handoff queue; no desplegar sin PR/App QA/aprobacion.";
   opportunity.updatedAt = now;
   persistRevenueWebsiteOpportunities();
@@ -4868,7 +5212,7 @@ export function closeRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunityC
 
   const ledgerTag = `website-lead:${opportunity.sourceLeadId}`;
   const legacyLedgerTag = `[${ledgerTag}]`;
-  const existingEntry = revenueLedger.find((entry) =>
+  const existingEntry = stripeLedgerEntry || revenueLedger.find((entry) =>
     entry.notes.split("|").map((part) => part.trim()).some((part) => part === ledgerTag || part === legacyLedgerTag)
   );
   const entry = existingEntry || recordRevenueLedgerEntry({
@@ -4963,6 +5307,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
       requiredDepositUsd: opportunity.requiredDepositUsd,
       cashCollectedUsd: opportunity.cashCollectedUsd,
       monthlyRetainerUsd: opportunity.monthlyRetainerUsd,
+      estimatedInternalCostUsd: opportunity.estimatedInternalCostUsd,
       depositPaid: opportunity.depositPaid,
       scopeApproved: opportunity.scopeApproved,
       paymentConfirmation: opportunity.paymentConfirmation,
@@ -5350,7 +5695,11 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
   const draft = opportunity
     ? revenueOutreachDrafts.find((item) => item.id === opportunity.sourceOutreachDraftId) || null
     : null;
-  const recordedDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const stripeLedgerEntry = findRevenueStripeLedgerEntryForWebsiteOpportunity(opportunity);
+  const stripeDepositCashUsd = stripeLedgerEntry?.cashCollectedUsd || 0;
+  const manualDepositCashUsd = draft?.delivery.outcome === "deposit_collected" ? draft.delivery.outcomeCashCollectedUsd || 0 : 0;
+  const recordedDepositCashUsd = Math.max(manualDepositCashUsd, stripeDepositCashUsd, opportunity?.cashCollectedUsd || 0);
+  const hasVerifiedDeposit = Boolean(draft?.delivery.outcome === "deposit_collected" || stripeLedgerEntry);
   const paymentEvidenceBlocker = revenueWebsitePaymentEvidenceBlocker(opportunity, draft);
   const blockers = [
     !opportunity && "sourceOpportunityId vendido requerido",
@@ -5360,9 +5709,9 @@ function revenueWebsiteWorkspaceSaleGate(workspace: RevenueDeliveryWorkspace) {
     opportunity && workspace.input.sourceLeadId !== opportunity.sourceLeadId && "sourceLeadId no coincide con oportunidad vendida",
     opportunity && workspace.input.sourceOutreachDraftId !== opportunity.sourceOutreachDraftId && "sourceOutreachDraftId no coincide con oportunidad vendida",
     !draft && "draft de venta no encontrado",
-    draft && draft.delivery.outcome !== "deposit_collected" && "deposito manual no registrado en draft",
-    draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito manual insuficiente",
-    opportunity && recordedDepositCashUsd !== opportunity.cashCollectedUsd && "cash de oportunidad no coincide con deposito manual",
+    draft && !hasVerifiedDeposit && "deposito no registrado en draft ni Stripe",
+    draft && recordedDepositCashUsd < (opportunity?.requiredDepositUsd || 0) && "deposito insuficiente",
+    opportunity && Math.abs(recordedDepositCashUsd - opportunity.cashCollectedUsd) > 0.009 && "cash de oportunidad no coincide con deposito verificado",
     paymentEvidenceBlocker,
   ].filter(Boolean) as string[];
   return { passed: blockers.length === 0, blockers };
@@ -5372,6 +5721,7 @@ export function getRevenueWebsiteWorkspaceSaleGate(workspaceId: string) {
   loadRevenueDeliveryWorkspaces();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === workspaceId) || null;
   if (!workspace) {
     return {
@@ -5387,8 +5737,8 @@ export function getRevenueWebsiteWorkspaceSaleGate(workspaceId: string) {
     passed: gate.passed,
     blockers: gate.blockers,
     reason: gate.passed
-      ? "Workspace respaldado por oportunidad vendida y deposito manual."
-      : `Workspace website requiere oportunidad vendida y deposito manual: ${gate.blockers.join("; ")}.`,
+      ? "Workspace respaldado por oportunidad vendida y deposito verificado."
+      : `Workspace website requiere oportunidad vendida y deposito verificado: ${gate.blockers.join("; ")}.`,
   };
 }
 
@@ -6025,6 +6375,7 @@ function buildRevenueDailyMoneyCommand(input: {
   websiteClosureQueue: RevenueWebsiteClosureQueue;
   cashCollectedUsd: number;
   profitGuard: ReturnType<typeof buildRevenueProfitGuard>;
+  outcomeMemory: RevenueOutcomeMemory;
 }): RevenueDailyMoneyCommand {
   const buildHandoffsOpen = input.websiteBuildHandoffQueue.openCount;
   const funnel = {
@@ -6036,6 +6387,16 @@ function buildRevenueDailyMoneyCommand(input: {
     deliveryHandoffsReady: input.websiteDeliveryHandoffQueue.readyCount,
     buildHandoffsOpen,
     cashCollectedUsd: input.cashCollectedUsd,
+  };
+  const learning: RevenueDailyMoneyCommand["learning"] = {
+    status: input.outcomeMemory.status,
+    totalOutcomes: input.outcomeMemory.totalOutcomes,
+    segmentsTracked: input.outcomeMemory.segmentsTracked,
+    focusSegment: input.outcomeMemory.bestSegment
+      ? `${input.outcomeMemory.bestSegment.area} / ${input.outcomeMemory.bestSegment.niche} / ${input.outcomeMemory.bestSegment.offerFocus}`
+      : "",
+    summary: input.outcomeMemory.learningSummary,
+    nextExperiment: input.outcomeMemory.nextExperiment,
   };
   const status: RevenueDailyMoneyCommand["status"] =
     input.profitGuard.status === "pause_spend"
@@ -6110,16 +6471,21 @@ function buildRevenueDailyMoneyCommand(input: {
   const steps: RevenueDailyMoneyCommand["steps"] = status === "blocked"
     ? baseSteps.map((step) => ({ ...step, status: "blocked" as const }))
     : baseSteps;
+  const learnedScoutTarget = input.outcomeMemory.bestSegment;
   const searchDispatchRequest = {
-    area: input.businessScoutQueue.area,
-    niche: input.businessScoutQueue.niche,
-    offerFocus: input.businessScoutQueue.offerFocus,
-    targetLeadCount: input.businessScoutQueue.dailyResearchTarget,
+    area: learnedScoutTarget?.area || input.businessScoutQueue.area,
+    niche: learnedScoutTarget?.niche || input.businessScoutQueue.niche,
+    offerFocus: learnedScoutTarget?.offerFocus || input.businessScoutQueue.offerFocus,
+    targetLeadCount: learnedScoutTarget?.confidence === "low"
+      ? Math.min(10, input.businessScoutQueue.dailyResearchTarget)
+      : input.businessScoutQueue.dailyResearchTarget,
     maxTasks: Math.min(Math.max(input.businessScoutQueue.tasks.length, 1), 5),
     resultSlotsPerTask: 2,
     maxPaidDataSpendUsd: 0,
     requireRobertApprovalToContact: true,
-    notes: "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
+    notes: learnedScoutTarget
+      ? `Outcome-memory experiment for ${learnedScoutTarget.area} / ${learnedScoutTarget.niche} / ${learnedScoutTarget.offerFocus}; public research only and connector results stay needs_review.`
+      : "Daily money command scout dispatch: public research only; connector results stay needs_review until Robert verifies and approves import.",
   };
   const topPublicLeadImportItem = input.publicLeadImportQueue.items[0] || null;
   const topWebsiteSalesPacket = input.websiteSalesPacketQueue.items[0] || null;
@@ -6284,6 +6650,13 @@ function buildRevenueDailyMoneyCommand(input: {
     `- Website builds needing PR-first handoff: ${funnel.buildHandoffsOpen}`,
     "- Payment totals: tracked internally; do not paste amounts into public PR/client handoff text.",
     "",
+    "Outcome learning:",
+    `- Status: ${learning.status}`,
+    `- Real outcomes: ${learning.totalOutcomes} across ${learning.segmentsTracked} segment(s)`,
+    `- Focus: ${learning.focusSegment || "collect more verified outcomes"}`,
+    `- Learning: ${learning.summary}`,
+    `- Next experiment: ${learning.nextExperiment}`,
+    "",
     "Next run packet:",
     copyableRunPacket,
     input.websiteBuildHandoffQueue.items[0] ? "" : null,
@@ -6310,6 +6683,7 @@ function buildRevenueDailyMoneyCommand(input: {
     funnel,
     steps,
     runPacket,
+    learning,
     copyableOperatorBrief,
     safety: {
       sendsOutreach: false,
@@ -7013,8 +7387,14 @@ export function getRevenueEngineSnapshot() {
   const pendingDeliveryApprovals = revenueDeliveryWorkspaces.filter((workspace) => workspace.status === "blocked" || workspace.status === "needs_corrections").length;
   const approvalQueue = (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd ? 1 : 0) + pendingOutreachApprovals + pendingAgentApprovals + pendingAutomationApprovals + pendingWebsiteOpportunityApprovals + pendingDeliveryApprovals;
   const profitGuard = buildRevenueProfitGuard({ cashCollectedUsd, estimatedSpendUsd, profitUsd, approvalQueue });
+  const outcomeMemory = buildRevenueOutcomeMemory();
   const latestImprovementReview = revenueImprovementReviews.at(-1);
-  const nextBatchPlan = buildRevenueNextBatchPlan({ profitGuard, latestReview: latestImprovementReview, approvalQueue });
+  const nextBatchPlan = buildRevenueNextBatchPlan({
+    profitGuard,
+    latestReview: latestImprovementReview,
+    approvalQueue,
+    outcomeMemory,
+  });
   const executiveSummary = buildRevenueExecutiveSummary({
     appsSold,
     automationsSold,
@@ -7143,6 +7523,7 @@ export function getRevenueEngineSnapshot() {
     websiteClosureQueue,
     cashCollectedUsd,
     profitGuard,
+    outcomeMemory,
   });
   const { launchReadiness, dailyMoneyCommand } = applyRevenueProductionPersistenceGate({
     launchReadiness: baseLaunchReadiness,
@@ -7187,6 +7568,7 @@ export function getRevenueEngineSnapshot() {
     websiteDeliveryHandoffQueue,
     websiteBuildHandoffQueue,
     profitGuard,
+    outcomeMemory,
     nextBatchPlan,
     approvalQueueItems,
     costPolicy: {
@@ -9889,6 +10271,123 @@ export function recordRevenueOutreachOutcome(input: RevenueOutreachOutcomeInput)
   };
 }
 
+function roundRevenueMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function revenueLedgerEntryMatchesDeal(entry: RevenueLedgerEntry, dealId: string) {
+  if (entry.dealId === dealId) return true;
+  const normalizedDealId = dealId.toLowerCase();
+  const acceptedTags = new Set([
+    `deal:${normalizedDealId}`,
+    `stripe deal:${normalizedDealId}`,
+    `website-opportunity:${normalizedDealId}`,
+    `automation opportunity:${normalizedDealId}`,
+    `website-lead:${normalizedDealId}`,
+  ]);
+  return entry.notes
+    .split("|")
+    .map((part) => part.trim().toLowerCase().replace(/^\[|\]$/g, ""))
+    .some((part) => acceptedTags.has(part));
+}
+
+function appendRevenueStripeEvidence(existingNotes: string, input: RevenueStripePaymentInput) {
+  const paymentEvidence = [
+    `Stripe payment id:${input.externalPaymentId}`,
+    `Stripe event:${input.eventId}`,
+    `Stripe stage:${input.paymentStage}`,
+    input.notes,
+  ].filter(Boolean).join(" | ").slice(0, 600);
+  if (!existingNotes.trim()) return paymentEvidence;
+  const existingBudget = Math.max(0, 1000 - paymentEvidence.length - 3);
+  return `${existingNotes.slice(0, existingBudget).trimEnd()} | ${paymentEvidence}`.slice(0, 1000);
+}
+
+export function recordRevenueStripePayment(input: RevenueStripePaymentInput) {
+  loadRevenueLedger();
+  const parsed = revenueStripePaymentSchema.parse(input);
+  if (parsed.stripeAccountId !== ROBERT_WEBSITES_STRIPE_ACCOUNT_ID) {
+    throw new Error(`Stripe account rejected: expected ${ROBERT_WEBSITES_STRIPE_ACCOUNT_ID}.`);
+  }
+
+  const duplicateEntry = revenueLedger.find((entry) =>
+    entry.stripePaymentIds?.includes(parsed.externalPaymentId),
+  );
+  if (duplicateEntry) {
+    return {
+      status: "duplicate" as const,
+      entry: duplicateEntry,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const existingEntry = revenueLedger.find((entry) =>
+    isSaleEntry(entry) && revenueLedgerEntryMatchesDeal(entry, parsed.dealId),
+  );
+  if (existingEntry) {
+    if (existingEntry.stripeAccountId && existingEntry.stripeAccountId !== ROBERT_WEBSITES_STRIPE_ACCOUNT_ID) {
+      throw new Error("Stripe payment rejected: the deal is linked to a different Stripe account.");
+    }
+    if (existingEntry.kind !== parsed.kind) {
+      throw new Error("Stripe payment rejected: deal type does not match the existing ledger entry.");
+    }
+    if (Math.abs(existingEntry.amountUsd - parsed.contractTotalUsd) > 0.009) {
+      throw new Error("Stripe payment rejected: contract total does not match the existing ledger entry.");
+    }
+
+    const nextCashCollectedUsd = roundRevenueMoney(existingEntry.cashCollectedUsd + parsed.paymentAmountUsd);
+    if (nextCashCollectedUsd > existingEntry.amountUsd + 0.009) {
+      throw new Error("Stripe payment rejected: cumulative cash would exceed the contract total.");
+    }
+    if ((existingEntry.stripePaymentIds || []).length >= 100) {
+      throw new Error("Stripe payment rejected: ledger payment reference limit exceeded.");
+    }
+    existingEntry.cashCollectedUsd = nextCashCollectedUsd;
+    existingEntry.dealId = parsed.dealId;
+    existingEntry.stripeAccountId = parsed.stripeAccountId;
+    existingEntry.stripePaymentIds = [...(existingEntry.stripePaymentIds || []), parsed.externalPaymentId];
+    existingEntry.stripePaymentStatus = existingEntry.cashCollectedUsd + 0.009 >= existingEntry.amountUsd
+      ? "paid"
+      : "partially_paid";
+    existingEntry.stripeLastPaymentAt = parsed.occurredAt;
+    existingEntry.notes = appendRevenueStripeEvidence(existingEntry.notes, parsed);
+    syncRevenueWebsiteOpportunityFromStripePayment(parsed, existingEntry);
+    persistRevenueLedger();
+    return {
+      status: "updated" as const,
+      entry: existingEntry,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  const ledgerResult = recordRevenueLedgerEntry({
+    kind: parsed.kind,
+    clientName: parsed.clientName,
+    amountUsd: roundRevenueMoney(parsed.contractTotalUsd),
+    cashCollectedUsd: roundRevenueMoney(parsed.paymentAmountUsd),
+    estimatedInternalCostUsd: roundRevenueMoney(parsed.estimatedInternalCostUsd),
+    notes: appendRevenueStripeEvidence(`Stripe deal:${parsed.dealId}`, parsed),
+  });
+  if (!ledgerResult.entry) {
+    throw new Error(ledgerResult.guardrail.reason);
+  }
+
+  ledgerResult.entry.dealId = parsed.dealId;
+  ledgerResult.entry.stripeAccountId = parsed.stripeAccountId;
+  ledgerResult.entry.stripePaymentIds = [parsed.externalPaymentId];
+  ledgerResult.entry.stripePaymentStatus = parsed.paymentAmountUsd + 0.009 >= parsed.contractTotalUsd
+    ? "paid"
+    : "partially_paid";
+  ledgerResult.entry.stripeLastPaymentAt = parsed.occurredAt;
+  syncRevenueWebsiteOpportunityFromStripePayment(parsed, ledgerResult.entry);
+  persistRevenueLedger();
+  return {
+    status: "recorded" as const,
+    entry: ledgerResult.entry,
+    snapshot: getRevenueEngineSnapshot(),
+  };
+}
+
 export function recordRevenueLedgerEntry(input: RevenueLedgerEntryInput) {
   loadRevenueLedger();
   const parsed = revenueLedgerEntrySchema.parse(input);
@@ -11119,6 +11618,7 @@ export function recordRevenueDeliveryReleaseGate(
   loadRevenueDeliveryWorkspaces();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const parsed = revenueDeliveryWorkspaceUpdateSchema.parse(input);
   const workspace = revenueDeliveryWorkspaces.find((item) => item.id === parsed.workspaceId) || null;
 
@@ -11185,6 +11685,7 @@ export function deliverRevenueDeliveryWorkspace(
   loadRevenueAutomationOpportunities();
   loadRevenueWebsiteOpportunities();
   loadRevenueOutreach();
+  loadRevenueLedger();
   const parsed = revenueDeliveryWorkspaceDeliverSchema.parse(input);
   const workspaceIndex = revenueDeliveryWorkspaces.findIndex((item) => item.id === parsed.workspaceId);
 

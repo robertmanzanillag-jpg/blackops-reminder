@@ -147,6 +147,10 @@ Antes de produccion:
 - Ejecutar `npm run ceo:db-check -- --json` y confirmar que `databaseUrlConfigured` esta listo.
 - Ejecutar `npm run ceo:doctor -- --json` antes de pedir deploy para validar secrets y readiness general.
 - Opcional para envio API: `RESEND_API_KEY` y `REVENUE_ENGINE_FROM_EMAIL`.
+- Configurar `REVENUE_STRIPE_ACCOUNT_ID=acct_1TtbdhPb55Pnake3`; el servidor rechaza cualquier otra cuenta, incluida KongApp.
+- Configurar `REVENUE_STRIPE_SECRET_KEY` desde la cuenta Robert Websites y `REVENUE_STRIPE_WEBHOOK_SECRET` para `https://robertwebsites.com/api/revenue-engine/stripe/webhook`.
+- Configurar `REVENUE_ENGINE_PUBLIC_BASE_URL=https://robertwebsites.com` y ejecutar `npm run test:revenue-stripe`.
+- Suscribir el webhook a `checkout.session.completed`, `checkout.session.async_payment_succeeded` e `invoice.paid`.
 - Mantener `credentials/`, `secrets/` y `revenue_engine_data/` fuera de git.
 - Repetir App QA contra la URL objetivo; cualquier warning/failure bloquea deploy.
 - Replit/custom deployment requiere aprobacion explicita de Robert despues del resumen PR/QA/riesgos/rollback.

@@ -79,6 +79,14 @@ CEO_BACKUP_SECRETS_ENCRYPTED=false
 # RESEND_API_KEY=re_replace-with-resend-api-key
 # REVENUE_ENGINE_FROM_EMAIL="Revenue Engine <sales@your-domain.example>"
 
+# Revenue Engine payments / Robert Websites Stripe account only
+# The account id is public configuration. API and webhook secrets belong in Replit Secrets, never git.
+REVENUE_STRIPE_ACCOUNT_ID=acct_1TtbdhPb55Pnake3
+REVENUE_ENGINE_PUBLIC_BASE_URL=https://robertwebsites.com
+# REVENUE_STRIPE_SECRET_KEY=sk_test_replace-with-key-from-robert-websites-account
+# REVENUE_STRIPE_WEBHOOK_SECRET=whsec_replace-after-creating-webhook
+# Webhook URL: https://robertwebsites.com/api/revenue-engine/stripe/webhook
+
 # Dropshipping CEO / Shopify
 # V1 can operate in research/draft mode without these.
 # Set these when Shopify is ready for product/order/report integrations.

@@ -53,6 +53,7 @@ import {
   recordRevenuePublicLeadCandidate,
   recordRevenuePublicLeadCandidateBatch,
   recordRevenuePublicScoutEvidence,
+  recordRevenueStripePayment,
   recordRevenueVerifiedScoutConnectorResults,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
@@ -72,6 +73,7 @@ import {
   runRevenueMoneySprintFromPublicCandidates,
   runRevenueAutomationAgentCommand,
   runRevenueMoneySprint,
+  ROBERT_WEBSITES_STRIPE_ACCOUNT_ID,
   submitRevenueDailyScoutSprintEvidence,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
@@ -4110,6 +4112,91 @@ test("website delivery handoff queue requires a sold website opportunity", async
   assert.equal(dailyWorkspaceRequest.repoFullName, "REPLACE_WITH_APPROVED_OWNER_REPO");
   assert.doesNotMatch(closeResult.snapshot.dailyMoneyCommand.runPacket.copyableApiRequest, /REPLACE_WITH_SOLD_LEAD_ID/);
   assert.equal(closeResult.snapshot.metrics.appsSold, 1);
+});
+
+test("Stripe-paid website opportunity can close without duplicate ledger revenue", () => {
+  const { lead, draft } = createApprovedWebsiteDraftForTest({
+    businessName: "Stripe Ready Cafe",
+    contactEmail: "owner@stripeready.example",
+    sourceUrl: "https://instagram.com/stripereadycafe",
+    mockupSlug: "stripe-ready-cafe",
+  });
+  const opportunityResult = recordRevenueWebsiteOpportunity({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    projectType: "website",
+  });
+  assert.equal(opportunityResult.status, "quoted");
+  const scopedOnlyResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: false,
+    scopeApproved: true,
+    cashCollectedUsd: 0,
+    notes: "Scope approved; waiting on Stripe deposit.",
+  });
+  assert.equal(scopedOnlyResult.status, "blocked");
+  assert.equal(scopedOnlyResult.opportunity?.status, "scope_approved");
+
+  const stripeResult = recordRevenueStripePayment({
+    stripeAccountId: ROBERT_WEBSITES_STRIPE_ACCOUNT_ID,
+    dealId: opportunityResult.opportunity!.id,
+    kind: "website_sale",
+    clientName: "Stripe Ready Cafe",
+    contractTotalUsd: opportunityResult.opportunity!.setupUsd,
+    paymentAmountUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    estimatedInternalCostUsd: opportunityResult.opportunity!.estimatedInternalCostUsd,
+    externalPaymentId: "pi_stripe_ready_deposit_123",
+    eventId: "evt_stripe_ready_deposit_123",
+    paymentStage: "deposit",
+    occurredAt: new Date().toISOString(),
+    notes: `Lead:${lead.id}`,
+  });
+  assert.equal(stripeResult.status, "recorded");
+  assert.equal(stripeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(stripeResult.snapshot.recentWebsiteOpportunities[0].depositPaid, true);
+  assert.equal(stripeResult.snapshot.recentWebsiteOpportunities[0].paymentConfirmation, "Stripe payment id:pi_stripe_ready_deposit_123");
+
+  const closeResult = closeRevenueWebsiteOpportunity({
+    opportunityId: opportunityResult.opportunity!.id,
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+  });
+
+  assert.equal(closeResult.status, "sold");
+  assert.equal(closeResult.opportunity?.status, "sold");
+  assert.equal(closeResult.entry?.stripePaymentIds?.[0], "pi_stripe_ready_deposit_123");
+  assert.equal(closeResult.snapshot.metrics.cashCollectedUsd, opportunityResult.opportunity!.requiredDepositUsd);
+  assert.equal(closeResult.snapshot.websiteDeliveryHandoffQueue.readyCount, 1);
+
+  const handoff = createWebsiteDeliveryWorkspaceFromLead({
+    leadId: lead.id,
+    outreachDraftId: draft.id,
+    websiteOpportunityId: opportunityResult.opportunity!.id,
+    projectType: "website",
+    repoFullName: "robert/stripe-ready-cafe",
+    branchName: "codex/client-stripe-ready-cafe-website",
+    depositPaid: true,
+    scopeApproved: true,
+    cashCollectedUsd: opportunityResult.opportunity!.requiredDepositUsd,
+    publicDataVerified: true,
+    visualQaPassed: true,
+    technicalQaPassed: true,
+    automationQaPassed: true,
+    clientHandoffReady: true,
+  });
+  assert.equal(handoff.status, "created");
+  assert.ok(handoff.workspace);
+  const saleGate = getRevenueWebsiteWorkspaceSaleGate(handoff.workspace.id);
+  assert.equal(saleGate.status, "pass");
+  assert.equal(handoff.snapshot.websiteBuildHandoffQueue.openCount, 1);
+
+  setRevenueLedgerPathForTests(testLedgerPath);
+  setRevenueWebsiteOpportunitiesPathForTests(testWebsiteOpportunitiesPath);
+  setRevenueOutreachPathForTests(testOutreachPath);
+  setRevenueDeliveryWorkspacesPathForTests(testDeliveryWorkspacesPath);
+  const reloadedSaleGate = getRevenueWebsiteWorkspaceSaleGate(handoff.workspace.id);
+  assert.equal(reloadedSaleGate.status, "pass");
 });
 
 test("website opportunity close requires recorded manual deposit outcome", () => {
@@ -8910,6 +8997,98 @@ test("next batch plan scales only when cash and latest review prove demand", () 
   assert.equal(snapshot.nextBatchPlan.maxLeads, 25);
   assert.equal(snapshot.nextBatchPlan.maxSpendUsd <= snapshot.profitGuard.canSpendUsd, true);
   assert.equal(snapshot.nextBatchPlan.allowedActions.includes("contactar batch aprobado"), true);
+});
+
+test("learns from real outreach outcomes by area without poisoning other segments", () => {
+  const addOutcome = (input: {
+    businessName: string;
+    area: string;
+    niche: string;
+    offerFocus: "websites" | "automations";
+    outcome: "lost" | "deposit_collected";
+  }) => {
+    const slug = input.businessName.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const leadResult = recordRevenueLead({
+      businessName: input.businessName,
+      area: input.area,
+      niche: input.niche,
+      websiteStatus: input.offerFocus === "websites" ? "no_website" : "has_website",
+      contactChannel: "instagram",
+      contactValue: `@${slug}`,
+      evidence: `Public Instagram profile for ${input.businessName} with current business activity and a visible contact path.`,
+      painPoint: input.offerFocus === "websites"
+        ? "Needs a clear conversion website."
+        : "Needs lead follow-up automation.",
+      estimatedOfferUsd: 1200,
+      status: "qualified",
+    });
+    const draftResult = recordRevenueOutreachDraft({
+      leadId: leadResult.lead.id,
+      channel: "instagram",
+      approvalStatus: "approved",
+      recipientEmail: "",
+      contactName: "Owner",
+      businessName: input.businessName,
+      sourceUrl: `https://instagram.com/${slug}`,
+      businessSummary: `${input.businessName} is an active ${input.niche} business in ${input.area} with a specific public conversion opportunity.`,
+      websitePriceUsd: input.offerFocus === "websites" ? 1200 : 0,
+      automationPriceUsd: input.offerFocus === "automations" ? 1200 : 0,
+      monthlyRetainerUsd: 250,
+      estimatedInternalMonthlyCostUsd: 20,
+      notes: "Segmented learning fixture; no message sent.",
+    });
+    const outcomeResult = recordRevenueOutreachOutcome({
+      draftId: draftResult.draft.id,
+      outcome: input.outcome,
+      outcomeRecordedByRobert: true,
+      cashCollectedUsd: input.outcome === "deposit_collected" ? 600 : 0,
+      paymentConfirmation: input.outcome === "deposit_collected" ? "Stripe pi_outcome123456" : "",
+      notes: input.outcome === "lost" ? "Owner declined this version of the offer." : "Verified deposit after manual conversation.",
+    });
+    assert.equal(outcomeResult.status, "recorded");
+  };
+
+  for (let index = 1; index <= 5; index += 1) {
+    addOutcome({
+      businessName: `Miami Med Spa Loss ${index}`,
+      area: "Miami",
+      niche: "med spas",
+      offerFocus: "websites",
+      outcome: "lost",
+    });
+  }
+  addOutcome({
+    businessName: "Orlando Plumbing Winner",
+    area: "Orlando",
+    niche: "plumbers",
+    offerFocus: "automations",
+    outcome: "deposit_collected",
+  });
+
+  const snapshot = getRevenueEngineSnapshot();
+  const losingSegment = snapshot.outcomeMemory.segments.find((segment) => segment.area === "Miami");
+  const winningSegment = snapshot.outcomeMemory.segments.find((segment) => segment.area === "Orlando");
+
+  assert.equal(snapshot.outcomeMemory.totalOutcomes, 6);
+  assert.equal(snapshot.outcomeMemory.segmentsTracked, 2);
+  assert.equal(losingSegment?.signal, "needs_change");
+  assert.equal(losingSegment?.lost, 5);
+  assert.equal(winningSegment?.signal, "promising");
+  assert.equal(winningSegment?.depositsCollected, 1);
+  assert.equal(winningSegment?.replies, 0);
+  assert.equal(winningSegment?.callsBooked, 0);
+  assert.equal(snapshot.nextBatchPlan.focusSegment?.area, "Orlando");
+  assert.equal(snapshot.nextBatchPlan.segmentsNeedingChange.includes("miami::med spas::websites"), true);
+  assert.notEqual(snapshot.nextBatchPlan.status, "pause");
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /Outcome learning:/);
+  assert.match(snapshot.dailyMoneyCommand.copyableOperatorBrief, /Orlando \/ plumbers \/ automations/);
+  assert.match(snapshot.dailyMoneyCommand.learning.nextExperiment, /Repetir Orlando \/ plumbers \/ automations/);
+  assert.doesNotMatch(snapshot.dailyMoneyCommand.copyableOperatorBrief, /\$600|cobrado/i);
+  const learnedScoutRequest = JSON.parse(snapshot.dailyMoneyCommand.runPacket.copyableApiRequest);
+  assert.equal(learnedScoutRequest.area, "Orlando");
+  assert.equal(learnedScoutRequest.niche, "plumbers");
+  assert.equal(learnedScoutRequest.offerFocus, "automations");
+  assert.equal(learnedScoutRequest.targetLeadCount, 10);
 });
 
 test("records and persists improvement reviews as revenue playbook memory", () => {
