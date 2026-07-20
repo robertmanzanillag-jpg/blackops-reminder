@@ -98,12 +98,98 @@ const json = (res, statusCode, body) => {
   res.end(JSON.stringify(body, null, 2));
 };
 
+const clipperPageTitles = new Map([
+  ["Clippers Source Hunt", ["Descubrir", "Buscar videos virales"]],
+  ["Clippers Exact Source Candidate Inbox", ["Descubrir", "Guardar candidato"]],
+  ["Clippers Permission CRM", ["Permisos", "Gestionar permisos"]],
+  ["Clippers Permission Outreach", ["Permisos", "Pedir permisos"]],
+  ["Clippers Permission Request Packets", ["Permisos", "Mensajes para pedir permiso"]],
+  ["Clippers Real Clip Acquisition", ["Preparar", "Preparar clips"]],
+  ["Clippers Real Clip Intake", ["Preparar", "Cargar archivos reales"]],
+  ["Clippers Real Clip Intake Validation", ["Preparar", "Validar clips"]],
+  ["Clippers Source-drop Import", ["Preparar", "Enviar clips a Metricool"]],
+  ["Clippers TikTok Batch Now", ["Metricool", "Programar en Metricool"]],
+  ["Clippers TikTok Public Metrics Now", ["Optimizar", "Registrar resultados"]],
+  ["TikTok Launch Authorization", ["Metricool", "Revisar autorizacion de TikTok"]],
+  ["Clippers Metricool Now", ["Metricool", "Proxima accion en Metricool"]],
+  ["Streamer Growth CEO", ["Optimizar", "Control de crecimiento a 10K"]],
+  ["Clippers Go-Live Gap Resolver", ["Preparar", "Resolver bloqueos"]],
+]);
+
+const clipperPageGuides = new Map([
+  ["Clippers Source Hunt", "Encuentra videos exactos de creadores originales. Aqui solo investigas; el permiso y el archivo se confirman en los pasos siguientes."],
+  ["Clippers Exact Source Candidate Inbox", "Guarda la URL exacta del video y su creador. Esto crea un candidato, pero todavia no autoriza su uso."],
+  ["Clippers Permission CRM", "Registra el contacto con cada creador y la evidencia de su respuesta. Nada pasa a Metricool sin prueba valida."],
+  ["Clippers Permission Outreach", "Prepara y controla las solicitudes de permiso. Esta pantalla no envia mensajes ni aprueba clips por si sola."],
+  ["Clippers Permission Request Packets", "Revisa los mensajes preparados para cada creador antes de enviarlos y guardar la respuesta en Permisos."],
+  ["Clippers Real Clip Acquisition", "Mira que le falta a cada candidato y completa URL, permiso, evidencia y archivo en el orden correcto."],
+  ["Clippers Real Clip Intake", "Carga los MP4 reales aprobados para reemplazar los videos de prueba. No se publica nada desde esta pantalla."],
+  ["Clippers Real Clip Intake Validation", "Comprueba que cada clip tenga archivo, URL exacta, creador y permiso antes de enviarlo a Metricool."],
+  ["Clippers Source-drop Import", "Envia a la cola de Metricool solo los clips reales que superaron todas las validaciones."],
+  ["Clippers TikTok Batch Now", "Programa en Metricool los clips aprobados y guarda la evidencia de la programacion."],
+  ["Clippers TikTok Public Metrics Now", "Registra las vistas y resultados reales despues de publicar para que el sistema pueda mejorar."],
+]);
+
+function polishClipperOperatorPage(body) {
+  if (!String(body).includes("<!doctype html") || String(body).includes('class="topbar"')) return body;
+  const title = String(body).match(/<title>([^<]+)<\/title>/i)?.[1] || "Clippers";
+  const [stage, pageTitle] = clipperPageTitles.get(title) || ["Operacion", title.replace(/^Clippers\s*/i, "") || "Clippers"];
+  const pageGuide = clipperPageGuides.get(title);
+  const sharedStyles = `<style data-clippers-shared-ui>
+    :root{color-scheme:dark;--bg:#0b100e;--surface:#111814;--surface-2:#16201b;--line:#29372f;--muted:#9eaca4;--text:#f4f7f5;--green:#52d98b;--amber:#f3bd62;--blue:#77bdfb}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;margin:0!important;background:var(--bg)!important;color:var(--text)!important}
+    main{max-width:1120px!important;margin:0 auto!important;padding:0 24px 64px!important}
+    .operator-nav{min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);margin-bottom:34px}
+    .operator-brand{font-size:18px;font-weight:800;color:#fff!important;text-decoration:none}
+    .operator-nav-links{display:flex;align-items:center;gap:8px}.operator-nav-links a{color:#dce7e1!important;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:12px}
+    .operator-stage{font-size:11px;text-transform:uppercase;color:var(--green);font-weight:800;letter-spacing:.08em;margin-bottom:7px}
+    main>h1{font-size:30px!important;line-height:1.15!important;margin:0 0 9px!important;letter-spacing:0!important}
+    main>h1+p{max-width:760px;color:var(--muted)!important;margin-bottom:24px!important}
+    h2{font-size:18px!important;line-height:1.3;letter-spacing:0!important}p,li{color:#c9d2cd!important;line-height:1.55}a{color:#a8d7ff!important}
+    .grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:0!important;margin:18px 0 28px!important;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+    .grid>.card{border:0!important;border-left:1px solid var(--line)!important;padding:18px 16px!important;margin:0!important;background:transparent!important;border-radius:0!important}.grid>.card:first-child{border-left:0!important;padding-left:0!important}
+    .card,.row,.clip,.row-card{border:0!important;border-top:1px solid var(--line)!important;background:transparent!important;border-radius:0!important;padding:22px 0!important;margin:0!important;box-shadow:none!important}
+    .card .card,.card .row,.row .card{margin-top:18px!important;padding-top:18px!important}
+    .value,.card>strong{font-size:20px!important;font-weight:800!important;color:#fff!important;margin-top:5px!important;overflow-wrap:break-word}
+    .label,.eyebrow{font-size:11px!important;text-transform:uppercase!important;color:var(--muted)!important;font-weight:800!important;letter-spacing:.07em!important}
+    .actions{display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin:16px 0 26px!important}.actions form{margin:0!important}
+    .actions a,.actions button,button{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:40px!important;border:1px solid var(--line)!important;border-radius:6px!important;padding:9px 12px!important;text-decoration:none!important;background:var(--surface-2)!important;color:#e8efeb!important;font:inherit!important;font-weight:700!important;cursor:pointer}.actions a:hover,.actions button:hover,button:hover{border-color:#52635a!important;background:#1b2921!important}button:disabled{opacity:.45!important;cursor:not-allowed!important}
+    form{max-width:780px}input,select,textarea{width:100%!important;box-sizing:border-box!important;background:#0d1410!important;color:#eef7f1!important;border:1px solid #3a4c42!important;border-radius:6px!important;padding:10px!important;margin:6px 0!important;font:inherit!important}textarea{min-height:96px;resize:vertical}
+    table{width:100%!important;border-collapse:collapse!important;margin-top:12px!important;font-size:13px!important;display:block!important;overflow-x:auto!important}thead,tbody{display:table;width:100%;min-width:720px;table-layout:fixed}th,td{border-top:1px solid var(--line)!important;padding:10px 8px!important;text-align:left!important;vertical-align:top!important;overflow-wrap:anywhere}th{color:var(--muted)!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:.05em!important}td{color:#edf4f0!important}
+    code,pre,.caption,.note{background:#0d1410!important;border:1px solid var(--line)!important;border-radius:6px!important;color:#d9eee2!important}code{padding:2px 5px!important;overflow-wrap:anywhere}pre,.caption,.note{white-space:pre-wrap;word-break:break-word;padding:12px!important;max-width:100%;overflow:auto}.small,small{font-size:12px!important;color:var(--muted)!important}
+    details{border-top:1px solid var(--line);padding:10px 0}summary{cursor:pointer;color:#dce7e1!important;font-weight:700}
+    @media(max-width:720px){main{padding:0 17px 48px!important}.operator-nav{margin-bottom:26px}.operator-nav-links{gap:5px}.operator-nav-links a{padding:7px 8px;font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.grid>.card,.grid>.card:first-child{padding:15px 11px!important;border-left:1px solid var(--line)!important}.grid>.card:nth-child(odd){border-left:0!important;padding-left:0!important}.actions{display:grid!important;grid-template-columns:1fr!important}.actions a,.actions button{width:100%!important}.clip-head,.row-head{flex-direction:column!important}main>h1{font-size:26px!important}}
+  </style>`;
+  const navigation = `<nav class="operator-nav" aria-label="Clippers"><a class="operator-brand" href="/clippers">Clippers</a><div class="operator-nav-links"><a href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a><a href="/api/clippers/real-clip-permission-crm.html">Permisos</a><a href="/api/clippers/real-clip-acquisition-workbench.html">Preparar</a></div></nav><div class="operator-stage">${escapeHtml(stage)}</div>`;
+  let polished = String(body)
+    .replace("</head>", `${sharedStyles}</head>`)
+    .replace(/<main>/i, `<main>${navigation}`)
+    .replace(/<h1>[^<]*<\/h1>/i, `<h1>${escapeHtml(pageTitle)}</h1>`);
+  if (pageGuide) polished = polished.replace(/(<h1>[^<]*<\/h1>)\s*<p>.*?<\/p>/is, `$1\n  <p>${escapeHtml(pageGuide)}</p>`);
+  return polished
+    .replaceAll(">Status<", ">Estado<")
+    .replaceAll(">Rows<", ">Clips<")
+    .replaceAll(">Ready<", ">Listos<")
+    .replaceAll(">Blocked<", ">Bloqueados<")
+    .replaceAll(">Next action<", ">Siguiente paso<")
+    .replaceAll(">Dashboard<", ">Inicio<")
+    .replaceAll(">Account<", ">Cuenta<")
+    .replaceAll(">Target<", ">Archivo<")
+    .replaceAll(">Search<", ">Buscar<")
+    .replaceAll(">Reject<", ">Descartar<")
+    .replaceAll(">Next<", ">Siguiente<")
+    .replaceAll(">Recorded<", ">Registrados<")
+    .replaceAll(">Approved CRM<", ">Permisos aprobados<")
+    .replaceAll(">Recreate only<", ">Solo recrear<");
+}
+
 const html = (res, statusCode, body) => {
   res.writeHead(statusCode, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
   });
-  res.end(body);
+  res.end(polishClipperOperatorPage(body));
 };
 
 const text = (res, statusCode, body) => {
@@ -9078,7 +9164,30 @@ function renderHome(status) {
   const nextExternalRepair = status.externalEvidenceValidation.nextRepair;
   const nextExternalRepairIsActive = nextExternalRepair && !nextExternalRepair.deferredForMetricoolMvp;
   const realClipIntakeBlocked = status.realClipIntakeValidation?.status && !realClipIntakeReadyForScheduling(status.realClipIntakeValidation.status);
-  const dashboardAction = status.streamerGrowthCeo?.nextAction || status.nextBestAction;
+  const dashboardAction = status.nextBestAction || status.streamerGrowthCeo?.nextAction;
+  const routingConfirmed = status.streamerGrowthCeo?.routingConfirmation?.confirmed === true;
+  const baselineKnown = status.streamerGrowthCeo?.progressKnown === true;
+  const realClipsReady = Number(status.realClipIntakeValidation?.readyRows || 0);
+  const realClipsTotal = Number(status.realClipIntakeValidation?.totalRows || 0);
+  const scheduledRows = Number(status.scheduled || 0);
+  const measuredRows = Number(status.publicMetricsRunSheet?.readyRows || 0);
+  const dashboardCopy = dashboardAction.stage === "real_clip_intake_required"
+    ? {
+        title: "Reemplaza los videos de prueba por clips reales",
+        detail: `${status.realClipIntakeValidation?.blockedRows || 0} clips necesitan URL exacta, permiso y archivo fuente antes de pasar a Metricool.`,
+        action: "Cargar clips reales",
+      }
+    : dashboardAction.stage === "capture_metricool_baseline"
+      ? {
+          title: "Importa el punto de partida desde Metricool",
+          detail: "Faltan los seguidores y vistas reales de ambas cuentas. No se mostrarán estimados.",
+          action: "Abrir control de crecimiento",
+        }
+      : {
+          title: dashboardAction.title,
+          detail: dashboardAction.detail,
+          action: dashboardAction.primaryAction,
+        };
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -9086,67 +9195,136 @@ function renderHome(status) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Clippers TikTok Metricool Operator</title>
   <style>
-    body{font-family:Inter,Arial,sans-serif;margin:0;background:#0b0d10;color:#f4f7fb}
-    main{max-width:1040px;margin:0 auto;padding:28px 18px 48px}
-    h1{font-size:30px;line-height:1.1;margin:0 0 8px}
-    p{color:#c7d0dc;line-height:1.55}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:20px 0}
-    .card{border:1px solid #2a3441;background:#151a21;border-radius:8px;padding:16px}
-    .value{font-size:24px;font-weight:800;color:#fff}
-    .label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#9fb0c4}
-    a{color:#85d7ff}
-    .actions{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}
-    .actions a{border:1px solid #365063;background:#172433;border-radius:8px;padding:10px 12px;text-decoration:none;color:#eaf7ff}
-    button{border:1px solid #3d6a83;background:#0f3248;border-radius:8px;padding:10px 12px;color:#eaf7ff;font:inherit;cursor:pointer}
-    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-    th,td{border-top:1px solid #293644;padding:9px 8px;text-align:left;vertical-align:top}
-    th{color:#9fb0c4;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-    td{color:#edf6ff}
+    :root{color-scheme:dark;--bg:#0b100e;--surface:#111814;--surface-2:#16201b;--line:#29372f;--muted:#9eaca4;--text:#f4f7f5;--green:#52d98b;--green-dark:#153723;--amber:#f3bd62;--red:#ff7b72;--blue:#77bdfb}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:var(--bg);color:var(--text)}
+    main{max-width:1180px;margin:0 auto;padding:0 24px 72px}
+    h1,h2,h3,p{margin-top:0}
+    h1{font-size:30px;line-height:1.15;margin-bottom:7px;letter-spacing:0}
+    h2{font-size:20px;letter-spacing:0}
+    p,li{color:#c9d2cd;line-height:1.55}
+    a{color:#a8d7ff}
+    .topbar{min-height:62px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:18px}
+    .brand{font-weight:800;color:#fff;text-decoration:none;font-size:18px}
+    .top-status{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px}
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(82,217,139,.12)}
+    .dot.pending{background:var(--amber);box-shadow:0 0 0 3px rgba(243,189,98,.12)}
+    .hero{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(290px,.75fr);gap:42px;padding:38px 0 32px;align-items:start}
+    .hero-copy>p{max-width:680px;margin-bottom:0;color:var(--muted)}
+    .eyebrow,.label{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:750;letter-spacing:.08em}
+    .action-panel{border-left:3px solid var(--green);padding:3px 0 3px 20px}
+    .action-panel h2{font-size:19px;margin:8px 0}
+    .action-panel p{font-size:14px;margin-bottom:14px}
+    .badge{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-size:12px;color:#d7e0db;background:var(--surface)}
+    .primary-link,.secondary-link,button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;border-radius:6px;padding:9px 13px;font:inherit;font-weight:750;text-decoration:none;cursor:pointer}
+    .primary-link,button{border:1px solid #4fe08b;background:var(--green);color:#07130c}
+    .primary-link:hover,button:hover{background:#75e5a4}
+    .secondary-link{border:1px solid var(--line);background:var(--surface-2);color:#e8efeb}
+    .secondary-link:hover{border-color:#506158}
+    .quick-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:18px}
+    .workflow-band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:25px 0;margin-bottom:8px}
+    .workflow-head{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-bottom:18px}
+    .workflow-head h2{margin-bottom:4px}
+    .workflow-head p{font-size:13px;margin-bottom:0;color:var(--muted)}
+    .flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,1fr)}
+    .flow li{position:relative;padding:0 18px 0 28px;min-height:72px;border-left:1px solid var(--line)}
+    .flow li:first-child{border-left:0;padding-left:0}
+    .flow-index{display:block;color:var(--muted);font-size:11px;font-weight:800;margin-bottom:7px}
+    .flow strong{display:block;color:var(--text);font-size:14px;margin-bottom:3px}
+    .flow span:last-child{font-size:12px;color:var(--muted)}
+    .flow .active strong{color:var(--amber)}
+    .flow .done strong{color:var(--green)}
+    .grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin:0 0 32px;border-bottom:1px solid var(--line)}
+    .grid .card{padding:18px 16px;border:0;border-left:1px solid var(--line);min-width:0}
+    .grid .card:first-child{border-left:0;padding-left:0}
+    .value{font-size:22px;font-weight:800;color:#fff;margin-top:5px;overflow-wrap:anywhere}
+    .grid .small{margin:7px 0 0}
+    .section-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;padding:30px 0 8px}
+    .section-heading p{font-size:13px;color:var(--muted);margin:0}
+    .card{border:0;border-top:1px solid var(--line);background:transparent;border-radius:0;padding:24px 0;margin:0}
+    .card .card{margin-top:20px;padding:20px 0 0}
+    .small{font-size:12px;color:var(--muted)}
+    .tools{margin:0 0 8px;border-bottom:1px solid var(--line);padding:0 0 22px}
+    .tools>summary,.diagnostics>summary,.card>details>summary{list-style:none;cursor:pointer;color:#dbe5df;font-weight:750;padding:12px 0}
+    .tools>summary::-webkit-details-marker,.diagnostics>summary::-webkit-details-marker,.card>details>summary::-webkit-details-marker{display:none}
+    .tools>summary::after,.diagnostics>summary::after,.card>details>summary::after{content:"+";float:right;color:var(--muted)}
+    .tools[open]>summary::after,.diagnostics[open]>summary::after,.card>details[open]>summary::after{content:"-"}
+    .diagnostics{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0 18px}
+    .diagnostics>summary{font-size:16px}
+    .actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0}
+    .actions a{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:10px 12px;text-decoration:none;color:#dbe5df;font-size:13px;overflow-wrap:anywhere}
+    .actions form{margin:0}
+    .actions button{width:100%;font-size:13px}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;display:block;overflow-x:auto}
+    thead,tbody{display:table;width:100%;min-width:720px;table-layout:fixed}
+    th,td{border-top:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+    th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+    td{color:#edf4f0}
     .clip-caption{color:#c7d0dc;max-width:260px}
-    .small{font-size:12px;color:#9fb0c4}
     details{margin-top:6px}
-    summary{cursor:pointer;color:#85d7ff}
-    input,textarea{box-sizing:border-box;width:100%;border:1px solid #304253;background:#0b1118;color:#eef7ff;border-radius:6px;padding:8px;margin:6px 0;font:inherit}
-    textarea{min-height:74px}
-    pre{white-space:pre-wrap;word-break:break-word;background:#0d131a;border:1px solid #263340;border-radius:8px;padding:10px;color:#dceeff;max-width:360px}
-    code{background:#111820;border:1px solid #263340;border-radius:6px;padding:2px 5px;color:#d9f0ff}
+    summary{cursor:pointer;color:#a8d7ff}
+    input,textarea{width:100%;border:1px solid #3a4c42;background:#0d1410;color:#eef7f1;border-radius:6px;padding:10px;margin:6px 0;font:inherit}
+    textarea{min-height:86px}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0d1410;border:1px solid var(--line);border-radius:6px;padding:12px;color:#dceae2;max-width:100%;overflow:auto}
+    code{background:#111a15;border:1px solid var(--line);border-radius:5px;padding:2px 5px;color:#d9eee2}
+    .guardrail{border-top:1px solid var(--line);margin-top:24px;padding-top:22px;color:var(--muted);font-size:13px}
+    @media(max-width:860px){
+      main{padding:0 18px 52px}.hero{grid-template-columns:1fr;gap:25px;padding:30px 0}.flow{grid-template-columns:1fr}.flow li,.flow li:first-child{border-left:2px solid var(--line);padding:0 0 18px 18px;min-height:0}.flow .active{border-color:var(--amber)}.grid{grid-template-columns:repeat(2,1fr)}.grid .card,.grid .card:first-child{padding:15px 12px;border-left:1px solid var(--line)}.grid .card:nth-child(odd){border-left:0;padding-left:0}.actions{grid-template-columns:1fr}.workflow-head{align-items:start;flex-direction:column}.top-status span:last-child{display:none}
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>Clippers TikTok + Metricool</h1>
-  <p>Servidor local aislado para operar el MVP de TikTok mientras el servidor principal de la app se revisa. No publica, no agenda y no cuenta vistas por si solo.</p>
-  <div class="card">
-    <div class="label">CEO next best action</div>
-    <p><strong>${escapeHtml(dashboardAction.title)}</strong></p>
-    <p>${escapeHtml(dashboardAction.detail)}</p>
-    <p class="small">${escapeHtml([dashboardAction.stage, dashboardAction.queueItemId, dashboardAction.brand, dashboardAction.accountName].filter(Boolean).join(" · "))}</p>
-    ${dashboardAction.primaryHref ? `<p>${link(dashboardAction.primaryHref, dashboardAction.primaryAction)}</p>` : ""}
-    ${dashboardAction.endpoint ? `<form method="post" action="${escapeHtml(dashboardAction.endpoint)}"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">${escapeHtml(dashboardAction.primaryAction)}</button></form>` : ""}
-  </div>
-  <div class="card">
-    <div class="label">Streamer Growth CEO · 10K</div>
-    <p><strong>${escapeHtml(status.streamerGrowthCeo.status)}</strong> · Followers ${escapeHtml(status.streamerGrowthCeo.progressKnown ? `${status.streamerGrowthCeo.currentFollowers}/${status.streamerGrowthCeo.targetFollowers}` : "unknown until Metricool baseline")}</p>
-    <p>${escapeHtml(status.streamerGrowthCeo.nextAction.title)}</p>
-    <p class="small">CEO owns discovery, rights workflow, production planning, Metricool queue preparation, and optimization. Publishing, outreach sending, credentials, and spend remain approval-gated. ${link("/api/clippers/streamer-growth-ceo.html", "Open CEO control")}</p>
-  </div>
+  <nav class="topbar" aria-label="Navegación principal">
+    <a class="brand" href="/clippers">Clippers</a>
+    <div class="top-status"><span class="dot${routingConfirmed ? "" : " pending"}" aria-hidden="true"></span><span>${escapeHtml(routingConfirmed ? "2 cuentas confirmadas en Metricool" : "Conexión pendiente de confirmar")}</span><span class="badge">Aprobación manual</span></div>
+  </nav>
+  <header class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Centro de operación</div>
+      <h1>De video viral a clip publicado</h1>
+      <p>Encuentra clips reales, confirma permisos, prepara el archivo y envíalo a Metricool. La app bloquea cualquier video sin fuente o derechos comprobados.</p>
+      <nav class="quick-actions" aria-label="Acciones frecuentes">
+        <a class="secondary-link" href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a>
+        <a class="secondary-link" href="/api/clippers/real-clip-exact-source-candidate.html">Guardar candidato</a>
+        <a class="secondary-link" href="/api/clippers/real-clip-permission-crm.html">Gestionar permisos</a>
+        <a class="secondary-link" href="/api/clippers/real-clip-acquisition-workbench.html">Preparar clips</a>
+      </nav>
+    </div>
+    <section class="action-panel" aria-labelledby="next-action-title">
+      <div class="eyebrow">Haz esto ahora</div>
+      <h2 id="next-action-title">${escapeHtml(dashboardCopy.title)}</h2>
+      <p>${escapeHtml(dashboardCopy.detail)}</p>
+      <span class="badge">${escapeHtml([dashboardAction.stage, dashboardAction.brand].filter(Boolean).join(" · "))}</span>
+      <div class="quick-actions">
+        ${dashboardAction.primaryHref ? `<a class="primary-link" href="${escapeHtml(dashboardAction.primaryHref)}">${escapeHtml(dashboardCopy.action)}</a>` : ""}
+        ${dashboardAction.endpoint ? `<form method="post" action="${escapeHtml(dashboardAction.endpoint)}"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">${escapeHtml(dashboardCopy.action)}</button></form>` : ""}
+        <form method="get" action="/clippers"><button type="submit">Actualizar estado</button></form>
+        ${!baselineKnown ? `<a class="secondary-link" href="/api/clippers/streamer-growth-ceo.html">Ver meta 10K y baseline</a>` : ""}
+      </div>
+    </section>
+  </header>
+  <section class="workflow-band" aria-labelledby="workflow-title">
+    <div class="workflow-head"><div><h2 id="workflow-title">Flujo de trabajo</h2><p>Completa cada etapa en orden. Metricool solo se habilita cuando el clip es real y tiene permiso.</p></div><span class="badge">${escapeHtml(realClipsReady)}/${escapeHtml(realClipsTotal)} clips validados</span></div>
+    <ol class="flow">
+      <li class="${realClipsReady > 0 ? "done" : "active"}"><span class="flow-index">01</span><strong>Descubrir</strong><span>URL exacta y creador</span></li>
+      <li class="${realClipsReady > 0 ? "done" : ""}"><span class="flow-index">02</span><strong>Permisos</strong><span>Evidencia verificable</span></li>
+      <li class="${realClipsReady > 0 ? "done" : ""}"><span class="flow-index">03</span><strong>Preparar</strong><span>Archivo fuente real</span></li>
+      <li class="${scheduledRows > 0 ? "done" : ""}"><span class="flow-index">04</span><strong>Metricool</strong><span>Aprobación y agenda</span></li>
+      <li class="${measuredRows > 0 ? "done" : ""}"><span class="flow-index">05</span><strong>Optimizar</strong><span>Métricas 24h y 72h</span></li>
+    </ol>
+  </section>
   <div class="grid">
-    <div class="card"><div class="label">Estado</div><div class="value">${escapeHtml(status.status)}</div></div>
-    <div class="card"><div class="label">Batch</div><div class="value">${escapeHtml(status.batchId)}</div></div>
-    <div class="card"><div class="label">Scheduled</div><div class="value">${escapeHtml(status.scheduled)}</div></div>
-    <div class="card"><div class="label">Preflight</div><div class="value">${escapeHtml(status.preflight.passed)}/${escapeHtml(preflightTotal)}</div></div>
-    <div class="card"><div class="label">Missing Metricool Proof</div><div class="value">${escapeHtml(status.evidence.missingApproval)}</div></div>
-    <div class="card"><div class="label">Evidence Import Preview</div><div class="value">${escapeHtml(status.evidence.readyForImportPreview)}</div></div>
-    <div class="card"><div class="label">Schedule Window</div><div class="value">${escapeHtml(status.operatorSummary.scheduleWindowLabel)}</div><p class="small">${escapeHtml(status.operatorSummary.scheduleWindowAction)}</p></div>
-    <div class="card"><div class="label">Placeholder MP4 Files</div><div class="value">${escapeHtml(status.uploadPackIntegrity.readyFiles)}/${escapeHtml(status.uploadPackIntegrity.totalRows)}</div><p class="small">File integrity only · not real clips · Missing ${escapeHtml(status.uploadPackIntegrity.missingFiles)} · Zero-byte ${escapeHtml(status.uploadPackIntegrity.zeroByteFiles)}</p></div>
-    <div class="card"><div class="label">Real Clip Gap</div><div class="value">${escapeHtml(status.realClipGap.realClipRows)}/${escapeHtml(status.realClipGap.totalRows)}</div><p class="small">${escapeHtml(status.realClipGap.status)} · Generated placeholders ${escapeHtml(status.realClipGap.generatedOwnedRows)} · Missing real clips ${escapeHtml(status.realClipGap.missingRealClips)}</p></div>
-    <div class="card"><div class="label">Real Intake Validation</div><div class="value">${escapeHtml(status.realClipIntakeValidation.readyRows)}/${escapeHtml(status.realClipIntakeValidation.totalRows)}</div><p class="small">${escapeHtml(status.realClipIntakeValidation.status)} · Blocked ${escapeHtml(status.realClipIntakeValidation.blockedRows)}</p></div>
-    <div class="card"><div class="label">TikTok MVP Accounts</div><div class="value">${escapeHtml(status.metricoolMvp.activeReadyLanes)}/${escapeHtml(status.metricoolMvp.activeTargetLanes)}</div><p class="small">${escapeHtml(status.metricoolMvp.directSocialApisRequired ? "Direct APIs required" : "Direct APIs deferred")}</p></div>
-    <div class="card"><div class="label">Deferred Non-TikTok Rows</div><div class="value">${escapeHtml(status.deferredOtherPlatformRows || 0)}</div><p class="small">Held out until Robert expands beyond TikTok.</p></div>
-    <div class="card"><div class="label">Evidence Audit</div><div class="value">${escapeHtml(status.operatorAudit.events)}</div><p class="small">${escapeHtml(status.operatorAudit.accepted)} accepted · ${escapeHtml(status.operatorAudit.rejected)} rejected</p></div>
-    <div class="card"><div class="label">Evidence Integrity</div><div class="value">${escapeHtml(status.evidenceIntegrity.status)}</div><p class="small">${escapeHtml(status.evidenceIntegrity.findingsCount)} findings · read-only</p></div>
-    <div class="card"><div class="label">Local Watchdog</div><div class="value">${escapeHtml(status.watchdog.enabled ? "ON" : "OFF")}</div><p class="small">${escapeHtml(status.watchdog.nextAction)}</p></div>
+    <div class="card"><div class="label">Cuentas listas</div><div class="value">${escapeHtml(status.metricoolMvp.activeReadyLanes)}/${escapeHtml(status.metricoolMvp.activeTargetLanes)}</div></div>
+    <div class="card"><div class="label">Clips reales</div><div class="value">${escapeHtml(realClipsReady)}/${escapeHtml(realClipsTotal)}</div></div>
+    <div class="card"><div class="label">En Metricool</div><div class="value">${escapeHtml(scheduledRows)}</div></div>
+    <div class="card"><div class="label">Con métricas</div><div class="value">${escapeHtml(measuredRows)}</div></div>
+    <div class="card"><div class="label">Meta seguidores</div><div class="value">10K</div><p class="small">por cuenta</p></div>
+    <div class="card"><div class="label">Baseline</div><div class="value">${escapeHtml(baselineKnown ? status.streamerGrowthCeo.currentFollowers : "Pendiente")}</div></div>
   </div>
+  <details class="tools">
+    <summary>Herramientas, reportes y archivos avanzados</summary>
   <div class="actions">
     ${link(status.paths.cockpit, "Operator cockpit")}
     ${link("/clippers-workspace/OPEN_ME.html", "Open Clippers Ops")}
@@ -9213,9 +9391,13 @@ function renderHome(status) {
     ${link("/api/clippers/tiktok-launch-authorization.html", "TikTok authorization")}
     ${link("/api/clippers/operator-ready.json", "Ready JSON")}
     ${link("/api/clippers/evidence-integrity.json", "Evidence integrity")}
-    <form method="post" action="/api/clippers/refresh"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Refresh status</button></form>
+    <form method="post" action="/api/clippers/refresh"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Regenerar reportes</button></form>
     <form method="post" action="/api/clippers/roll-forward"><input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" /><button type="submit">Roll forward schedule</button></form>
   </div>
+  </details>
+  <div class="section-heading"><div><div class="eyebrow">Operación diaria</div><h2>Qué está bloqueado y cómo resolverlo</h2></div><p>Los detalles técnicos quedan debajo; abre solo la sección que necesites.</p></div>
+  <details class="diagnostics">
+    <summary>Ver diagnóstico completo, tablas y formularios</summary>
   <div class="card">
     <div class="label">TikTok Ops Index</div>
     <p><strong>generated drafts blocked, real clips blocked</strong> · ${escapeHtml(status.realClipGap?.generatedOwnedRows || 0)} generated draft rows are not eligible for Metricool · ${escapeHtml(status.realClipIntakeValidation?.readyRows || 0)} validated real clips ready.</p>
@@ -9724,7 +9906,8 @@ function renderHome(status) {
       </tbody>
     </table>
   </div>
-  <p>Guardrails: Metricool queda en <code>approval_required</code>, <code>realPublishEnabled=false</code>, y solo se importan URLs/métricas cuando sean reales.</p>
+  </details>
+  <p class="guardrail">Metricool permanece en <code>approval_required</code>. La publicación automática está desactivada y solo se aceptan URLs, permisos y métricas reales.</p>
 </main>
 </body>
 </html>`;

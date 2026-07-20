@@ -478,10 +478,10 @@ test("Clippers local operator server serves status and guarded workspace files",
       const homeResponse = await fetch(`http://127.0.0.1:${port}/clippers`);
       assert.equal(homeResponse.status, 200);
       const home = await homeResponse.text();
-      assert.match(home, /Placeholder MP4 Files/);
-      assert.match(home, /File integrity only · not real clips/);
+      assert.match(home, /Upload pack integrity/);
+      assert.match(home, /Metricool scheduling is blocked if any required local MP4 is missing or empty/);
       assert.match(home, /10\/10 files ready/);
-      assert.match(home, /Real Clip Gap/);
+      assert.match(home, /Real clip gap/);
       assert.match(home, /Real clips 0\/10/);
       assert.match(home, /generated_owned_placeholder_batch/);
       assert.match(home, /Generated owned placeholders 10/);
@@ -492,13 +492,38 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /Real clip manifest CSV/);
       assert.match(home, /Real clip validation/);
       assert.match(home, /Permission outreach/);
-      assert.match(home, /Real Intake Validation/);
+      assert.match(home, /Real clip intake validation/);
       assert.match(home, /Ready 0\/10/);
       assert.match(home, /not a viral third-party clip/);
-      assert.match(home, /Clippers TikTok \+ Metricool/);
-      assert.match(home, /Streamer Growth CEO · 10K/);
-      assert.match(home, /unknown until Metricool baseline/);
-      assert.match(home, /Open CEO control/);
+      assert.match(home, /De video viral a clip publicado/);
+      assert.match(home, /Flujo de trabajo/);
+      assert.match(home, /10K/);
+      assert.match(home, /Baseline/);
+      assert.match(home, /Buscar videos/);
+      assert.match(home, /Gestionar permisos/);
+      assert.match(home, /Preparar clips/);
+      assert.match(home, /Cargar clips reales/);
+      assert.match(home, /Ver meta 10K y baseline/);
+      assert.doesNotMatch(home, /nth-child\(n\+7\).*display:none/);
+      assert.match(home, /Ver diagnóstico completo, tablas y formularios/);
+      for (const [route, expectedTitle] of [
+        ["/api/clippers/real-clip-source-hunt.html", "Buscar videos virales"],
+        ["/api/clippers/real-clip-exact-source-candidate.html", "Guardar candidato"],
+        ["/api/clippers/real-clip-permission-crm.html", "Gestionar permisos"],
+        ["/api/clippers/real-clip-acquisition-workbench.html", "Preparar clips"],
+        ["/api/clippers/tiktok-launch-authorization.html", "Revisar autorizacion de TikTok"],
+        ["/api/clippers/streamer-growth-ceo.html", "Control de crecimiento a 10K"],
+        ["/api/clippers/go-live-gap-resolver.html", "Resolver bloqueos"],
+        ["/api/clippers/next-metricool-action.html", "Proxima accion en Metricool"],
+      ]) {
+        const quickActionResponse = await fetch(`http://127.0.0.1:${port}${route}`);
+        assert.equal(quickActionResponse.status, 200, `quick action ${route} should work`);
+        const quickActionHtml = await quickActionResponse.text();
+        assert.match(quickActionHtml, /data-clippers-shared-ui/);
+        assert.match(quickActionHtml, /class="operator-nav"/);
+        assert.match(quickActionHtml, new RegExp(`<h1>${expectedTitle}</h1>`));
+        assert.doesNotMatch(quickActionHtml, /operator-nav-links a:last-child\{display:none/);
+      }
       const streamerGrowthCeoResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-growth-ceo.json`);
       assert.equal(streamerGrowthCeoResponse.status, 200);
       const streamerGrowthCeo = await streamerGrowthCeoResponse.json();
@@ -525,9 +550,8 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /Batch actual/);
       assert.match(home, /Next row/);
       assert.match(home, /First publish/);
-      assert.match(home, /Schedule Window/);
       assert.match(home, /Earliest deadline/);
-      assert.match(home, /TikTok MVP Accounts/);
+      assert.match(home, /Cuentas listas/);
       assert.match(home, /TikTok \+ Metricool MVP/);
       assert.match(home, /TikTok batch by account/);
       assert.match(home, /Accounts 2 · Clips 10 · Upload files 10\/10 · Missing scheduled proof 10/);
@@ -585,17 +609,15 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /Apply accepted only imports rows that pass strict validation/);
       assert.match(home, /Copy external evidence CSV starter/);
       assert.match(home, /Never paste passwords, cookies, client secrets/);
-      assert.match(home, /Evidence Audit/);
       assert.match(home, /Evidence audit trail/);
-      assert.match(home, /Evidence Integrity/);
       assert.match(home, /Evidence integrity/);
       assert.match(home, /No fake, placeholder, secret-like, or inconsistent evidence detected/);
       assert.match(home, /No evidence mutation attempts recorded yet/);
-      assert.match(home, /Local Watchdog/);
+      assert.match(home, /Local watchdog/);
       assert.match(home, /Auto roll-forward threshold/);
       assert.match(home, /Minutes until threshold/);
       assert.match(home, /It never opens Metricool/);
-      assert.match(home, /Direct APIs deferred/);
+      assert.match(home, /Direct APIs: deferred/);
       assert.match(home, /Account readiness/);
       assert.match(home, /TikTok closeout/);
       assert.match(home, /Metricool now/);
@@ -633,15 +655,15 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /Download full published metrics CSV/);
       assert.match(home, /Public TikTok metrics run sheet/);
       assert.match(home, /locked_until_metricool_scheduled_proof/);
-      assert.match(home, /CEO next best action/);
-      assert.match(home, /Import real SPORT and memes baselines from Metricool/);
+      assert.match(home, /Haz esto ahora/);
+      assert.match(home, /Reemplaza los videos de prueba por clips reales/);
       assert.match(home, /Preview published metrics batch/);
       assert.doesNotMatch(home, /form method="post" action="\/api\/clippers\/evidence\/published-batch"/);
       assert.match(home, /Requires prior scheduled proof/);
       assert.match(home, /csrfToken/);
-      assert.match(home, /Missing Metricool Proof/);
-      assert.match(home, /Evidence Import Preview/);
-      assert.match(home, /Refresh status/);
+      assert.match(home, /Clips reales/);
+      assert.match(home, /Con métricas/);
+      assert.match(home, /Actualizar estado/);
       assert.match(home, /Roll forward schedule/);
       assert.match(home, /Copy evidence/);
       assert.match(home, /scheduled only after real Metricool scheduling proof/);
@@ -750,7 +772,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.equal(realClipIntakeValidationHtmlResponse.status, 200);
       const realClipIntakeValidationHtml = await realClipIntakeValidationHtmlResponse.text();
       assert.match(realClipIntakeValidationHtml, /Clippers Real Clip Intake Validation/);
-      assert.match(realClipIntakeValidationHtml, /Ready<\/div><div class="value">0\/10/);
+      assert.match(realClipIntakeValidationHtml, /Listos<\/div><div class="value">0\/10/);
       assert.match(realClipIntakeValidationHtml, /missing_source_file/);
       assert.doesNotMatch(realClipIntakeValidationHtml, /\/Users\/|metricool_approval_url|published_post_url|views_24h/);
 
@@ -3719,7 +3741,7 @@ test("Clippers source-drop Metricool refresh stays blocked until real clip intak
     const html = await htmlResponse.text();
     assert.match(html, /Run guarded import \+ refresh/);
     assert.match(html, /disabled/);
-    assert.match(html, /placeholders amarillos/);
+    assert.match(html, /solo los clips reales que superaron todas las validaciones/);
 
     const runResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/source-drop-metricool-refresh/run`, {
       method: "POST",
@@ -4939,8 +4961,8 @@ test("Clippers local operator ignores stale checklist readiness without real Met
       const homeResponse = await fetch(`http://127.0.0.1:${port}/clippers`);
       assert.equal(homeResponse.status, 200);
       const home = await homeResponse.text();
-      assert.match(home, /CEO next best action/);
-      assert.match(home, /Import real SPORT and memes baselines from Metricool/);
+      assert.match(home, /Haz esto ahora/);
+      assert.match(home, /Reemplaza los videos de prueba por clips reales/);
       assert.doesNotMatch(home, /Save scheduled proof for next row/);
     });
   } finally {
