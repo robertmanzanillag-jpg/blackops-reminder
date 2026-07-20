@@ -13,8 +13,9 @@ import {
   startBlackRoomAgent,
   readBlackRoomQueue,
   writeBlackRoomQueue,
+  withBlackRoomQueueLock,
 } from "../server/blackroom-daily-queue";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -103,4 +104,36 @@ test("migrates existing queued jobs into the long-form experiment", async () => 
   assert.equal(migrated.version, 2);
   assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
   assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
+});
+
+test("serializes concurrent queue mutations without losing source history", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-queue-lock-"));
+  const queuePath = path.join(directory, "queue.json");
+  await writeBlackRoomQueue(createBlackRoomQueueState(), queuePath);
+  const mutate = (videoId: string, delayMs: number) => withBlackRoomQueueLock(queuePath, async () => {
+    const state = await readBlackRoomQueue(queuePath);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    recordBlackRoomSourceUsage(state, {
+      videoId, jobId: "job-1", dj: "DJ Test", format: "vertical", language: "en",
+      durationSeconds: 15, segmentStartSeconds: 0, segmentEndSeconds: 15,
+    });
+    await writeBlackRoomQueue(state, queuePath);
+  });
+  await Promise.all([mutate("video-a", 50), mutate("video-b", 0)]);
+  const finalState = await readBlackRoomQueue(queuePath);
+  assert.deepEqual(finalState.sourceHistory.map((item) => item.videoId).sort(), ["video-a", "video-b"]);
+});
+
+test("does not steal a newly created lock before its PID is written", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-empty-lock-"));
+  const queuePath = path.join(directory, "queue.json");
+  const lockPath = `${queuePath}.lock`;
+  await writeFile(lockPath, "", "utf8");
+  let entered = false;
+  await assert.rejects(
+    withBlackRoomQueueLock(queuePath, async () => { entered = true; }, 75),
+    /Timed out waiting/,
+  );
+  assert.equal(entered, false);
+  await unlink(lockPath);
 });

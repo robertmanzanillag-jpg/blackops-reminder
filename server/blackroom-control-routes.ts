@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { pauseBlackRoomAgent, readBlackRoomQueue, startBlackRoomAgent, summarizeBlackRoomQueue, writeBlackRoomQueue } from "./blackroom-daily-queue";
+import { BLACKROOM_QUEUE_PATH, pauseBlackRoomAgent, readBlackRoomQueue, startBlackRoomAgent, summarizeBlackRoomQueue, withBlackRoomQueueLock, writeBlackRoomQueue } from "./blackroom-daily-queue";
 
 const blackRoomPage = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BlackRoom Content Agent</title><style>
 :root{color-scheme:dark;font-family:Inter,system-ui;background:#020203;color:#fff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#12313a,#07070a 38%,#000);min-height:100vh}.wrap{max-width:1050px;margin:auto;padding:42px 20px}.eyebrow{color:#67e8f9;font-size:12px;letter-spacing:.18em;text-transform:uppercase}h1{font-size:40px;margin:10px 0}.muted{color:#a1a1aa}.card{border:1px solid #ffffff1c;border-radius:18px;background:#09090be8;padding:24px}.top,.controls{display:flex;gap:16px;align-items:center;justify-content:space-between}.badge{border:1px solid #fbbf2444;background:#fbbf2414;color:#fde68a;border-radius:999px;padding:7px 12px}.badge.on{border-color:#6ee7b744;background:#10b98118;color:#a7f3d0}.controls{justify-content:flex-start;margin-top:22px;flex-wrap:wrap}select,button{height:44px;border-radius:10px;border:1px solid #ffffff24;background:#18181b;color:#fff;padding:0 15px}button{cursor:pointer;font-weight:700}.play{background:#a7f3d0;color:#052e24;border:0}.pause{color:#fde68a}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:20px}.stat,.info{border:1px solid #ffffff14;background:#0007;border-radius:12px;padding:15px}.stat small{display:block;color:#71717a;text-transform:uppercase;font-size:10px}.stat strong{font-size:25px}.info{margin-top:14px;font-size:13px;color:#a1a1aa}.channel{color:#67e8f9}@media(max-width:720px){h1{font-size:30px}.top{align-items:flex-start;flex-direction:column}.stats{grid-template-columns:repeat(2,1fr)}}
@@ -15,17 +15,23 @@ export function registerBlackRoomControlRoutes(app: Express): void {
   });
   app.post("/api/blackroom-agent/start", async (req, res) => {
     try {
-      const state = await readBlackRoomQueue();
-      startBlackRoomAgent(state, Number(req.body?.weeks || 2));
-      await writeBlackRoomQueue(state);
+      const state = await withBlackRoomQueueLock(BLACKROOM_QUEUE_PATH, async () => {
+        const current = await readBlackRoomQueue();
+        startBlackRoomAgent(current, Number(req.body?.weeks || 2));
+        await writeBlackRoomQueue(current);
+        return current;
+      });
       res.json({ agent: summarizeBlackRoomQueue(state) });
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to start BlackRoom agent" }); }
   });
   app.post("/api/blackroom-agent/pause", async (_req, res) => {
     try {
-      const state = await readBlackRoomQueue();
-      pauseBlackRoomAgent(state);
-      await writeBlackRoomQueue(state);
+      const state = await withBlackRoomQueueLock(BLACKROOM_QUEUE_PATH, async () => {
+        const current = await readBlackRoomQueue();
+        pauseBlackRoomAgent(current);
+        await writeBlackRoomQueue(current);
+        return current;
+      });
       res.json({ agent: summarizeBlackRoomQueue(state) });
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to pause BlackRoom agent" }); }
   });

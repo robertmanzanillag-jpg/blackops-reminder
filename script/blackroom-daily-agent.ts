@@ -11,6 +11,7 @@ import {
   startBlackRoomAgent,
   summarizeBlackRoomQueue,
   writeBlackRoomQueue,
+  withBlackRoomQueueLock,
   BLACKROOM_DURATION_VARIANTS,
   type BlackRoomExperimentDuration,
 } from "../server/blackroom-daily-queue";
@@ -37,53 +38,54 @@ function command(): Command {
 
 async function main(): Promise<void> {
   const queuePath = argument("--queue") || process.env.BLACKROOM_QUEUE_PATH || BLACKROOM_QUEUE_PATH;
-  const state = await readBlackRoomQueue(queuePath);
-  const recovered = recoverInterruptedBlackRoomJobs(state);
   const selectedCommand = command();
-  let created = selectedCommand === "start"
-    ? startBlackRoomAgent(state, Number(argument("--weeks") || 2))
-    : ensureBlackRoomScheduleBuffer(state);
-  let job = null;
-
-  if (selectedCommand === "pause") {
-    pauseBlackRoomAgent(state);
-  } else if (selectedCommand === "claim") {
-    job = claimNextBlackRoomJob(state);
-  } else if (selectedCommand === "complete") {
-    const jobId = argument("--job");
-    if (!jobId) throw new Error("--job is required with --complete");
-    job = completeBlackRoomJob(state, jobId);
-  } else if (selectedCommand === "retry") {
-    const jobId = argument("--job");
-    if (!jobId) throw new Error("--job is required with --retry");
-    job = retryBlackRoomJob(state, jobId, argument("--error") || "Metricool o Chrome no disponible");
-  } else if (selectedCommand === "record-source") {
-    const durationSeconds = Number(argument("--duration"));
-    if (!BLACKROOM_DURATION_VARIANTS.includes(durationSeconds as BlackRoomExperimentDuration)) {
-      throw new Error("--duration must be 15, 30, 60, 120, 300, or 600");
-    }
-    job = recordBlackRoomSourceUsage(state, {
-      videoId: argument("--video") || "",
-      jobId: argument("--job") || "",
-      dj: argument("--dj") || "unknown",
-      format: argument("--format") === "horizontal" ? "horizontal" : "vertical",
-      language: argument("--language") === "es" ? "es" : "en",
-      durationSeconds: durationSeconds as BlackRoomExperimentDuration,
-      segmentStartSeconds: Number(argument("--start-second") || 0),
-      segmentEndSeconds: Number(argument("--end-second") || durationSeconds || 60),
-    });
+  if (selectedCommand === "status") {
+    const state = await readBlackRoomQueue(queuePath);
+    console.log(JSON.stringify({ mode: "blackroom_daily_agent", command: selectedCommand, queuePath, recovered: 0, created: 0, job: null, summary: summarizeBlackRoomQueue(state) }, null, 2));
+    return;
   }
 
-  await writeBlackRoomQueue(state, queuePath);
-  console.log(JSON.stringify({
-    mode: "blackroom_daily_agent",
-    command: selectedCommand,
-    queuePath,
-    recovered,
-    created,
-    job,
-    summary: summarizeBlackRoomQueue(state),
-  }, null, 2));
+  const result = await withBlackRoomQueueLock(queuePath, async () => {
+    const state = await readBlackRoomQueue(queuePath);
+    const recovered = recoverInterruptedBlackRoomJobs(state);
+    const created = selectedCommand === "start"
+      ? startBlackRoomAgent(state, Number(argument("--weeks") || 2))
+      : ensureBlackRoomScheduleBuffer(state);
+    let job = null;
+
+    if (selectedCommand === "pause") {
+      pauseBlackRoomAgent(state);
+    } else if (selectedCommand === "claim") {
+      job = claimNextBlackRoomJob(state);
+    } else if (selectedCommand === "complete") {
+      const jobId = argument("--job");
+      if (!jobId) throw new Error("--job is required with --complete");
+      job = completeBlackRoomJob(state, jobId);
+    } else if (selectedCommand === "retry") {
+      const jobId = argument("--job");
+      if (!jobId) throw new Error("--job is required with --retry");
+      job = retryBlackRoomJob(state, jobId, argument("--error") || "Metricool o Chrome no disponible");
+    } else if (selectedCommand === "record-source") {
+      const durationSeconds = Number(argument("--duration"));
+      if (!BLACKROOM_DURATION_VARIANTS.includes(durationSeconds as BlackRoomExperimentDuration)) {
+        throw new Error("--duration must be 15, 30, 60, 120, 300, or 600");
+      }
+      job = recordBlackRoomSourceUsage(state, {
+        videoId: argument("--video") || "",
+        jobId: argument("--job") || "",
+        dj: argument("--dj") || "unknown",
+        format: argument("--format") === "horizontal" ? "horizontal" : "vertical",
+        language: argument("--language") === "es" ? "es" : "en",
+        durationSeconds: durationSeconds as BlackRoomExperimentDuration,
+        segmentStartSeconds: Number(argument("--start-second") || 0),
+        segmentEndSeconds: Number(argument("--end-second") || durationSeconds || 60),
+      });
+    }
+    await writeBlackRoomQueue(state, queuePath);
+    return { recovered, created, job, summary: summarizeBlackRoomQueue(state) };
+  });
+
+  console.log(JSON.stringify({ mode: "blackroom_daily_agent", command: selectedCommand, queuePath, ...result }, null, 2));
 }
 
 main().catch((error) => {
