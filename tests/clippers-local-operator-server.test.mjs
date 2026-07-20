@@ -2978,8 +2978,8 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
         csrfToken,
         realClipIntakeBatch: [
           "metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes",
-          "7129d59b5f5e,https://www.tiktok.com/@sportscreator/video/1234567890123456789,@sportscreator,https://rights.receipts.local/sports-creator-permission,Creator permission recorded for the sports replacement clip before source-drop import.",
-          "53467d8f7dad,https://www.tiktok.com/@memecreator/video/2234567890123456789,@memecreator,https://rights.receipts.local/meme-creator-permission,Creator permission recorded for the meme replacement clip before source-drop import.",
+          "7129d59b5f5e,https://clips.twitch.tv/ExactSportsClipSlug,@sportscreator,https://rights.receipts.local/sports-creator-permission,Creator permission recorded for the sports replacement clip before source-drop import.",
+          "53467d8f7dad,https://www.youtube.com/shorts/abcdefghijk,@memecreator,https://rights.receipts.local/meme-creator-permission,Creator permission recorded for the meme replacement clip before source-drop import.",
         ].join("\n"),
       }),
     });
@@ -2997,7 +2997,9 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     const memesManifest = await readFile(memesManifestPath, "utf8");
     assert.match(sportsManifest, /sports-real-7129d59b5f5e\.mp4/);
     assert.match(sportsManifest, /owned_or_permissioned/);
+    assert.match(sportsManifest, /,twitch,sports-real-7129d59b5f5e\.mp4/);
     assert.match(memesManifest, /memes-real-53467d8f7dad\.mp4/);
+    assert.match(memesManifest, /,youtube,memes-real-53467d8f7dad\.mp4/);
 
     const validationResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`);
     assert.equal(validationResponse.status, 200);
@@ -3316,6 +3318,8 @@ test("Clippers exact source candidate batch records TikTok, Twitch, and YouTube 
       "https://www.youtube.com/@streamer",
       "https://www.twitch.tv/streamer",
       "https://clips.twitch.tv/ExactClipSlug?filter=clips",
+      "https://user:password@clips.twitch.tv/ExactClipSlug",
+      "https://user:password@www.youtube.com/watch?v=abcdefghijk",
     ]) {
       const rejectedResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-exact-source-candidate/record-batch`, {
         method: "POST",
@@ -3366,7 +3370,7 @@ test("Clippers exact source candidate batch records TikTok, Twitch, and YouTube 
       body: new URLSearchParams({
         csrfToken,
         metricoolQueueItemId: "7129d59b5f5e",
-        exactVideoOrPostUrl: "https://www.tiktok.com/@sportscreator/video/1234567890123456789",
+        exactVideoOrPostUrl: "https://clips.twitch.tv/PermissionEvidenceClip",
         creatorOrRightsHolder: "@sportscreator",
         outreachChannel: "tiktok_dm",
         outreachStatus: "sent",
@@ -3410,7 +3414,7 @@ test("Clippers real clip permission CRM creates local evidence without unlocking
       body: new URLSearchParams({
         csrfToken,
         metricoolQueueItemId: "7129d59b5f5e",
-        exactVideoOrPostUrl: "https://www.tiktok.com/@sportscreator/video/1234567890123456789",
+        exactVideoOrPostUrl: "https://clips.twitch.tv/PermissionEvidenceClip",
         creatorOrRightsHolder: "@sportscreator",
         permissionType: "creator_permission",
         proofSummary: "Creator permission was captured for this exact sports replacement clip and the operator recorded the allowed usage, account, target row, and date in local non-secret notes.",

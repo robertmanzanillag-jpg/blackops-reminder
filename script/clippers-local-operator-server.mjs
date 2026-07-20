@@ -429,6 +429,7 @@ function isTikTokVideoUrl(value) {
     const parsed = new URL(textValue);
     const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
     if (!["tiktok.com", "m.tiktok.com"].includes(hostName)) return false;
+    if (parsed.username || parsed.password) return false;
     if (parsed.search || parsed.hash) return false;
     return /^\/@[^/]+\/video\/\d+\/?$/i.test(parsed.pathname);
   } catch {
@@ -3923,6 +3924,7 @@ function isExactYouTubeVideoOrShortUrl(value) {
   try {
     const parsed = new URL(raw);
     const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (parsed.username || parsed.password) return false;
     const videoId = /^[A-Za-z0-9_-]{11}$/;
     if (hostName === "youtu.be") {
       return !parsed.search && !parsed.hash && videoId.test(parsed.pathname.replace(/^\//, "").replace(/\/$/, ""));
@@ -3944,6 +3946,7 @@ function isExactTwitchClipUrl(value) {
   try {
     const parsed = new URL(raw);
     const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (parsed.username || parsed.password) return false;
     if (parsed.search || parsed.hash) return false;
     if (hostName === "clips.twitch.tv") return /^\/[A-Za-z0-9_-]{4,120}\/?$/.test(parsed.pathname);
     if (["twitch.tv", "m.twitch.tv"].includes(hostName)) {
@@ -3959,6 +3962,13 @@ function isExactSourceVideoOrPostUrl(value) {
   const raw = String(value || "").trim();
   if (hasStarterPlaceholder(raw)) return false;
   return isTikTokVideoUrl(raw) || isExactYouTubeVideoOrShortUrl(raw) || isExactTwitchClipUrl(raw);
+}
+
+function sourcePlatformForExactUrl(value) {
+  if (isTikTokVideoUrl(value)) return "tiktok";
+  if (isExactTwitchClipUrl(value)) return "twitch";
+  if (isExactYouTubeVideoOrShortUrl(value)) return "youtube";
+  return "unknown";
 }
 
 function concreteIntakeNotes(value) {
@@ -4329,7 +4339,7 @@ function realClipIntakeBatchTemplateCsv(status) {
   const pack = buildRealClipIntakePack(status);
   return renderCsv(realClipIntakeBatchHeader, pack.rows.map((row) => ({
     metricool_queue_item_id: safeCsvText(row.queueItemId),
-    exact_video_or_post_url: safeCsvText("<paste exact https://www.tiktok.com/@creator/video/id URL>"),
+    exact_video_or_post_url: safeCsvText("<paste exact TikTok post, Twitch clip, or YouTube video/Short URL>"),
     creator_or_rights_holder: safeCsvText("<paste creator or rights holder>"),
     evidence_link: safeCsvText(evidenceTemplateUrl(row.queueItemId)),
     operator_notes: safeCsvText("Replace with 20+ chars describing the real permission/source evidence without secrets."),
@@ -4353,7 +4363,7 @@ function buildRealClipManifestRow(validated) {
     title: safeCsvText(`${intakeRow.brand || intakeRow.accountName} permissioned replacement for queue ${intakeRow.queueItemId}`),
     url: safeCsvText(validated.exactVideoOrPostUrl),
     source: safeCsvText(validated.creatorOrRightsHolder),
-    platform: "tiktok",
+    platform: sourcePlatformForExactUrl(validated.exactVideoOrPostUrl),
     target_file_name: intakeRow.targetFileName,
     rights_status: "owned_or_permissioned",
     evidence_link: safeCsvText(validated.evidenceLink),
