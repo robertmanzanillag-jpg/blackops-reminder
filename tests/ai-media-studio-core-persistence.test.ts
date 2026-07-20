@@ -362,6 +362,7 @@ test("asset createOrGet locks the tenant checksum and stores metadata without by
   assert.equal(insert.workspaceId, scope.workspaceId);
   assert.equal(insert.kind, "video");
   assert.equal(insert.status, "ready");
+  assert.equal(insert.storageProvider, "private-object-store");
   assert.equal(insert.projectId, assetRow.projectId);
   assert.equal(insert.renderJobId, assetRow.renderJobId);
   assert.equal(insert.influencerId, assetRow.influencerId);
@@ -369,6 +370,118 @@ test("asset createOrGet locks the tenant checksum and stores metadata without by
   assert.equal(insert.publicUrl, assetRow.publicUrl);
   assert.equal(insert.thumbnailUrl, assetRow.thumbnailUrl);
   assert.equal("bytes" in insert, false);
+});
+
+test("durable owned render assets preserve the allowlisted delivery marker", async () => {
+  const checksum = "c".repeat(64);
+  const ownedRow: AiMediaAssetRow = {
+    ...assetRow,
+    id: "40000000-0000-4000-8000-000000000020",
+    storageProvider: "owned-object-storage",
+    storageKey: `ai-media-studio/workspace-owner/sha256/${checksum}.mp4`,
+    publicUrl: null,
+    thumbnailUrl: null,
+    checksum,
+    metadata: { source: { kind: "remote" } },
+  };
+  const db = new FakeDb([], [ownedRow]);
+  const repository = new DrizzleMediaAssetRepository(db as never, { workspaceId: scope.workspaceId });
+  const result = await repository.createOrGet(mapMediaAssetRow(ownedRow));
+  assert.equal(result.created, true);
+  assert.equal(result.asset.storageProvider, "owned-object-storage");
+  assert.equal(result.asset.deliveryUrl, null);
+  assert.equal(result.asset.storageKey, ownedRow.storageKey);
+  const insert = db.records[1].values as Record<string, unknown>;
+  assert.equal(insert.storageProvider, "owned-object-storage");
+  assert.equal(insert.storageKey, ownedRow.storageKey);
+  assert.equal(insert.publicUrl, null);
+});
+
+test("durable storage provider selection ignores arbitrary candidates and rejects unsafe owned claims", async () => {
+  const arbitraryRow: AiMediaAssetRow = {
+    ...assetRow,
+    id: "40000000-0000-4000-8000-000000000021",
+    storageProvider: "secret-token=must-not-persist",
+    checksum: null,
+  };
+  const arbitraryDb = new FakeDb([arbitraryRow]);
+  const repository = new DrizzleMediaAssetRepository(arbitraryDb as never, { workspaceId: scope.workspaceId });
+  await repository.createOrGet(mapMediaAssetRow(arbitraryRow));
+  assert.equal((arbitraryDb.records[0].values as Record<string, unknown>).storageProvider, "internal");
+
+  assert.throws(
+    () => new DrizzleMediaAssetRepository(new FakeDb() as never, {
+      workspaceId: scope.workspaceId,
+      storageProvider: "secret-token=must-not-persist",
+    }),
+    /not allowlisted/,
+  );
+
+  const unsafeOwned = mapMediaAssetRow({
+    ...assetRow,
+    id: "40000000-0000-4000-8000-000000000022",
+    storageProvider: "owned-object-storage",
+    storageKey: "unsafe/provider-output.mp4",
+    publicUrl: null,
+    metadata: { source: { kind: "remote" } },
+  });
+  await assert.rejects(() => repository.createOrGet(unsafeOwned), /content-addressed MP4 artifacts/);
+});
+
+test("owned candidates safely promote legacy checksum rows without changing canonical references", async () => {
+  const checksum = "d".repeat(64);
+  const legacyRow: AiMediaAssetRow = {
+    ...assetRow,
+    id: "40000000-0000-4000-8000-000000000030",
+    storageProvider: "internal",
+    storageKey: "legacy/private/location.mp4",
+    publicUrl: "https://legacy.example/bearer.mp4?token=must-not-survive",
+    checksum,
+  };
+  const ownedKey = `ai-media-studio/workspace-owner/sha256/${checksum}.mp4`;
+  const promotedRow: AiMediaAssetRow = {
+    ...legacyRow,
+    storageProvider: "owned-object-storage",
+    storageKey: ownedKey,
+    publicUrl: null,
+  };
+  const db = new FakeDb([legacyRow], [promotedRow]);
+  const repository = new DrizzleMediaAssetRepository(db as never, { workspaceId: scope.workspaceId });
+  const candidate = mapMediaAssetRow({
+    ...assetRow,
+    id: "40000000-0000-4000-8000-000000000031",
+    storageProvider: "owned-object-storage",
+    storageKey: ownedKey,
+    publicUrl: null,
+    checksum,
+    metadata: { source: { kind: "remote" } },
+  });
+  const result = await repository.createOrGet(candidate);
+  assert.equal(result.created, false);
+  assert.equal(result.asset.id, legacyRow.id);
+  assert.equal(result.asset.renderJobId, legacyRow.renderJobId);
+  assert.equal(result.asset.projectId, legacyRow.projectId);
+  assert.equal(result.asset.storageProvider, "owned-object-storage");
+  assert.equal(result.asset.storageKey, ownedKey);
+  assert.equal(result.asset.deliveryUrl, null);
+  const promotion = db.records[1];
+  assert.equal(promotion.kind, "update");
+  assert.deepEqual(promotion.values, {
+    storageProvider: "owned-object-storage",
+    storageKey: ownedKey,
+    publicUrl: null,
+    updatedAt: later,
+  });
+  const where = renderedWhere(promotion);
+  assert.match(where.sql, /owner_user_id/);
+  assert.match(where.sql, /workspace_id/);
+  assert.deepEqual(where.params, [legacyRow.id, scope.ownerUserId, scope.workspaceId, "video", checksum]);
+
+  const conflictDb = new FakeDb([{ ...promotedRow, storageKey: `different/sha256/${checksum}.mp4` }]);
+  await assert.rejects(
+    () => new DrizzleMediaAssetRepository(conflictDb as never, { workspaceId: scope.workspaceId }).createOrGet(candidate),
+    /different content-addressed key/,
+  );
 });
 
 test("asset createOrGet persists incomplete lifecycle rows without checksum dedupe", async () => {

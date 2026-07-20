@@ -21,7 +21,10 @@ export interface MediaGenerationJob {
   providerName?: string;
   influencerName?: string;
   providerJobId?: string;
+  /** Private provider URL retained only until it is copied into owned storage. */
   outputUrl?: string;
+  /** Kong-owned canonical asset. This is the only render artifact identifier exposed publicly. */
+  outputAssetId?: string;
   error?: string;
   attempts: number;
   retryCount: number;

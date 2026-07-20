@@ -2,7 +2,7 @@
 
 ## Delivery stack
 
-PR #67 (`codex/ai-media-studio`) is the provider-neutral foundation. PR2 is intentionally stacked in `codex/ai-media-studio-core` and must be reviewed as a delta from that base. PR3 lives on `codex/ai-media-studio-operations`, stacked on PR2. This stacking is a code-review strategy, not evidence that either the PR2 or PR3 migration has been applied and not deployment authorization.
+PR #67 (`codex/ai-media-studio`) is the provider-neutral foundation. PR #70 (`codex/ai-media-studio-core`) is the core layer stacked on that foundation, and PR #71 (`codex/ai-media-studio-operations`) is stacked on PR #70. PR4 lives on `codex/ai-media-studio-quality`, stacked on PR #71. This stacking is a code-review strategy, not evidence that the PR2, PR3, or PR4 migration has been applied and not deployment authorization.
 
 ## Boundary
 
@@ -54,6 +54,16 @@ The outbox port has an in-memory reference and a tenant/workspace-scoped Drizzle
 
 Queue-health/SLO snapshots are deterministic calculations over supplied measurements. They do not create telemetry or alerts by themselves.
 
+### Owned render ingest and delivery
+
+PR4 adds a provider-neutral ingest queue between a completed provider render and the canonical media library. Provider artifact URLs remain private worker inputs. A render remains in an artifact-ingest stage until a bounded worker has committed the MP4 into tenant-owned storage and linked a canonical media asset; the browser never receives the provider URL.
+
+The ingest contracts require exact lowercase HTTPS host allowlists, the standard port, bounded redirects, public-address resolution on every hop, byte and chunk limits, MIME validation, an MP4 `ftyp` check, and a SHA-256 digest. Uploads begin under a temporary tenant key and atomically commit to a tenant-scoped content-addressed key. The in-memory reader, object store, and signer prove these contracts only: a production network reader, object-storage adapter, and signer are still missing, and no provider artifact has been downloaded.
+
+The durable ingest repository deduplicates one job per tenant/workspace/render, claims due work with `FOR UPDATE SKIP LOCKED`, increments a fencing token, requires a matching unexpired lease for terminal writes, retries bounded transient failures, and dead-letters exhausted attempts or lease recoveries. If object commit succeeds but canonical catalog linkage fails, the job remains `completed` and discoverable through a bounded completed-unlinked reconciliation scan. Canonical asset materialization is idempotent by tenant/workspace/type/checksum and links both the ingest job and render job to the owned asset.
+
+Reusable delivery is minted only by the authenticated `POST /api/ai-media-studio/media-assets/:id/delivery` route. The route enforces tenant ownership and ready status, then asks an injected signer for a five-minute HTTPS URL. Library/list/job DTOs redact storage keys, provider URLs, and persisted delivery URLs. The fake signer is test evidence, not a production delivery service.
+
 ### Publishing, analytics, intake, and orchestration
 
 Publishing drafts support manual and scheduled modes. The canonical preview digest binds media, caption, platform, title/hashtags, schedule, and timezone; approval or rejection evidence must match that immutable digest. Scheduler and reconciliation services can claim due work, retry bounded failures, and dead-letter exhausted jobs through fake/provider-neutral ports. Automatic mode stays disabled. Real TikTok, Instagram, Facebook, and YouTube Shorts OAuth/connectors are missing, so no platform post is possible from this slice.
@@ -83,9 +93,9 @@ Adapters may keep finer internal stages such as submitting, downloading, or retr
 
 ## Persistence and automation roadmap
 
-The schema and repositories cover the PR2 core plus PR3 source intake, orchestration, publishing, analytics, cost, and outbox worker fields. In-memory implementations remain development/test references; production is designed to fail closed without configured persistence. Both reviewed forward/rollback migration pairs are checked in under `migrations/ai-media-studio/`, but neither migration has been applied and `db:push` has not run. Backup, staging application in order, restart/recovery, rollback rehearsal, and live App QA remain hard deployment gates. Binary assets still require a real object-storage integration.
+The schema and repositories cover the PR2 core, PR3 source intake/orchestration/publishing/analytics/cost/outbox fields, and the PR4 asset-ingest queue and canonical render-output link. In-memory implementations remain development/test references; production is designed to fail closed without configured persistence. Three forward/rollback migration pairs are checked in under `migrations/ai-media-studio/`, but none has been applied and `db:push` has not run. PR4's SQL passed the local independent checker/static App QA gate. Backup, ordered staging application, restart/recovery, rollback rehearsal, and live App QA remain hard deployment gates. Binary assets still require a real object-storage integration.
 
-PR2 and PR3 each have checked-in, operator-run migration artifacts instead of relying on `drizzle-kit push`. The SQL has not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply PR2 then PR3 to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
+PR2, PR3, and PR4 each have checked-in, operator-run migration artifacts instead of relying on `drizzle-kit push`; the PR4 pair passed local checker/static App QA review. The SQL has not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply PR2 then PR3 then PR4 to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
 
 The first source pilot should be a Radio Calendar event because the repository already has calendar and radio boundaries. A source event creates ideas/drafts first; it does not render or publish until budget, quality, rights, and approval policies pass. Automatic publishing remains disabled until dedicated connector and App QA gates exist.
 
@@ -98,9 +108,17 @@ The first source pilot should be a Radio Calendar event because the repository a
 - PR3 worker/outbox modules are explicit composition dependencies and never autostart from import.
 - PR2 must be applied before PR3 in staging. Both remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal.
 
+## PR4 integration seams
+
+- `server/ai-media-studio/assets/**` owns the ingest queue, bounded-reader, owned-storage, delivery-signer, and worker contracts. Fake adapters are development/test evidence only.
+- `server/ai-media-studio/routes.ts` composes ingest hooks that materialize one canonical tenant asset and update the render projection. The factory still starts no worker loop and performs no provider download on import.
+- Completed-unlinked reconciliation is explicit and bounded; it repairs catalog/render linkage without downloading or uploading the already committed object again.
+- Public library and job responses redact provider artifact URLs and storage internals. The authenticated delivery route creates short-lived URLs on demand and fails closed without a configured signer.
+- PR4 must be applied after PR2 and PR3 in staging. All three migrations remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal.
+
 ## Scale, security, and cost
 
-Ten thousand videos per day remains an architectural target. PR3 includes a deterministic 10,000-job fake-provider rehearsal to exercise arithmetic assumptions; it is not a load test, benchmark, provider-quota proof, or capacity claim. Readiness still requires live PostgreSQL contention, horizontal workers, backpressure, real provider quotas, object storage, observability, cost controls, failure injection, restart testing, and country-specific policy evidence.
+Ten thousand videos per day remains an architectural target. PR3 includes a deterministic 10,000-job fake-provider rehearsal to exercise arithmetic assumptions; it is not a load test, benchmark, provider-quota proof, storage-throughput proof, or capacity claim. Readiness still requires live PostgreSQL contention, horizontal render and ingest workers, backpressure, real provider quotas, production object storage, observability, cost controls, failure injection, restart testing, and country-specific policy evidence.
 
 - Secrets are environment/vault references and are never returned or logged.
 - Avatar and voice records require provenance, consent, and usage rights.

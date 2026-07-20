@@ -1,7 +1,5 @@
-import { isIP } from "node:net";
 import type { MediaAsset, MediaAssetRepository } from "./asset-domain";
 import { InMemoryMediaAssetRepository } from "./in-memory-asset-repository";
-import { isPublicNetworkAddress } from "./safe-media-downloader";
 import {
   InMemoryCanonicalResourceRepository,
   InMemoryInfluencerRepository,
@@ -275,26 +273,16 @@ export function toPublicMediaAsset(asset: MediaAsset): PublicMediaAsset {
     height: asset.metadata.height ?? null,
     durationMs: asset.metadata.durationMs ?? null,
     checksum: asset.checksumSha256,
-    deliveryUrl: safePublicMediaUrl(asset.deliveryUrl),
-    thumbnailUrl: safePublicMediaUrl(asset.thumbnailUrl),
+    // Delivery is always minted on demand by the authenticated delivery route.
+    // Persisted/legacy bearer URLs are never returned in a library listing.
+    deliveryUrl: null,
+    // Thumbnails need the same owned-object signing boundary as full assets.
+    // Until a dedicated thumbnail signer exists, fail closed instead of
+    // exposing persisted provider or bearer URLs in catalog responses.
+    thumbnailUrl: null,
     influencerId: asset.influencerId,
     projectId: asset.projectId,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
   };
-}
-
-function safePublicMediaUrl(value: string | null): string | null {
-  if (value === null) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return null;
-    const hostname = url.hostname.replace(/^\[|\]$/gu, "").toLowerCase();
-    if (!hostname || hostname === "localhost" || hostname.endsWith(".localhost")
-      || hostname.endsWith(".local") || hostname.endsWith(".internal") || hostname.endsWith(".home.arpa")) return null;
-    if (isIP(hostname) !== 0 && !isPublicNetworkAddress(hostname)) return null;
-    return url.href;
-  } catch {
-    return null;
-  }
 }

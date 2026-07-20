@@ -28,6 +28,11 @@ export type MediaAssetKind = MediaAsset["kind"];
 export type MediaAssetStatus = MediaAsset["status"];
 export type ProviderResourceKind = ProviderResource["kind"];
 
+export type AssetDelivery = {
+  url: string;
+  expiresAt: string;
+};
+
 export type InfluencerFormValues = {
   name: string;
   avatarResourceId: string;

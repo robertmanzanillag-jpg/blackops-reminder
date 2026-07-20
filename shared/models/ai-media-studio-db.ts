@@ -269,6 +269,10 @@ export const aiMediaRenderJobs = pgTable(
     request: jsonb("request").$type<Record<string, unknown>>().notNull(),
     result: jsonb("result").$type<Record<string, unknown>>(),
     outputUrl: text("output_url"),
+    outputMediaAssetId: uuid("output_media_asset_id").references(
+      (): AnyPgColumn => aiMediaMediaAssets.id,
+      { onDelete: "set null" },
+    ),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
@@ -306,6 +310,7 @@ export const aiMediaRenderJobs = pgTable(
       table.leaseExpiresAt,
     ),
     deadLetterIdx: index("ai_media_render_jobs_dead_letter_idx").on(table.deadLetterAt),
+    outputMediaAssetIdx: index("ai_media_render_jobs_output_media_asset_idx").on(table.outputMediaAssetId),
   }),
 );
 
@@ -394,6 +399,80 @@ export const aiMediaMediaAssets = pgTable(
     ),
     influencerIdx: index("ai_media_assets_influencer_idx").on(table.influencerId),
     providerResourceIdx: index("ai_media_assets_provider_resource_idx").on(table.providerResourceId),
+    ownerWorkspaceKindChecksumActiveUnique: uniqueIndex("ai_media_assets_owner_workspace_kind_checksum_active_uq")
+      .on(table.ownerUserId, table.workspaceId, table.kind, table.checksum)
+      .where(sql`${table.deletedAt} IS NULL AND ${table.checksum} IS NOT NULL`),
+  }),
+);
+
+/**
+ * Durable, provider-neutral queue that imports a completed render artifact into
+ * tenant-owned storage. Remote URLs are private worker inputs and must never be
+ * returned by public media-library DTOs.
+ */
+export const aiMediaAssetIngestJobs = pgTable(
+  "ai_media_asset_ingest_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    renderJobId: uuid("render_job_id").notNull().references(() => aiMediaRenderJobs.id, { onDelete: "cascade" }),
+    providerKey: text("provider_key").notNull(),
+    remoteArtifactRef: text("remote_artifact_ref"),
+    remoteUrl: text("remote_url"),
+    expectedMimeType: text("expected_mime_type").notNull().default("video/mp4"),
+    state: text("state").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    leaseRecoveries: integer("lease_recoveries").notNull().default(0),
+    maxLeaseRecoveries: integer("max_lease_recoveries").notNull().default(3),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    fencingToken: integer("fencing_token").notNull().default(0),
+    mediaAssetId: uuid("media_asset_id").references(() => aiMediaMediaAssets.id, { onDelete: "set null" }),
+    ownedObjectKey: text("owned_object_key"),
+    sha256: text("sha256"),
+    sizeBytes: bigint("size_bytes", { mode: "number" }),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    ownerWorkspaceRenderUnique: uniqueIndex("ai_media_asset_ingest_jobs_owner_workspace_render_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.renderJobId,
+    ),
+    queueIdx: index("ai_media_asset_ingest_jobs_queue_idx").on(
+      table.state,
+      table.availableAt,
+      table.leaseExpiresAt,
+      table.createdAt,
+    ),
+    ownerWorkspaceLeaseIdx: index("ai_media_asset_ingest_jobs_owner_workspace_lease_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.leaseOwner,
+      table.leaseExpiresAt,
+    ),
+    deadLetterIdx: index("ai_media_asset_ingest_jobs_dead_letter_idx").on(table.deadLetterAt),
+    completedUnlinkedIdx: index("ai_media_asset_ingest_jobs_completed_unlinked_idx").on(
+      table.state,
+      table.mediaAssetId,
+      table.completedAt,
+      table.createdAt,
+    ),
+    sourceReferenceCheck: check(
+      "ai_media_asset_ingest_jobs_source_reference_ck",
+      sql`${table.remoteArtifactRef} IS NOT NULL OR ${table.remoteUrl} IS NOT NULL`,
+    ),
+    attemptsCheck: check(
+      "ai_media_asset_ingest_jobs_attempts_ck",
+      sql`${table.attempts} >= 0 AND ${table.maxAttempts} > 0 AND ${table.leaseRecoveries} >= 0 AND ${table.maxLeaseRecoveries} > 0`,
+    ),
   }),
 );
 

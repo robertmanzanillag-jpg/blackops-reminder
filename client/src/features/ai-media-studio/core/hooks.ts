@@ -37,6 +37,10 @@ export function useMediaAssets(filters: MediaLibraryRequest) {
   });
 }
 
+export function useAssetDelivery() {
+  return useMutation({ mutationFn: mediaStudioCoreApi.createAssetDelivery });
+}
+
 export function useInfluencerMutations() {
   const queryClient = useQueryClient();
   const refresh = () => Promise.all([

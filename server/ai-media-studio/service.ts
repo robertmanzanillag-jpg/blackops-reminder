@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { GenerationRequest, MediaGenerationJob, ProviderStatus, ProviderWebhookEvent } from "./domain";
 import { MediaJobStateConflictError, TERMINAL_STATUSES } from "./domain";
 import type { MediaJobQueue, MediaJobRepository, VideoProvider } from "./ports";
+import type { AssetIngestJob, AssetIngestRepository } from "./assets";
 
 export class MediaStudioError extends Error {
   constructor(message: string, readonly statusCode: number) {
@@ -17,6 +18,11 @@ export interface AiMediaStudioServiceOptions {
    * due for a separately-invoked RenderWorker and never touches MediaJobQueue.
    */
   executionMode?: "inline" | "durable";
+  /** Durable, idempotent provider-output handoff. Required to own completed remote artifacts. */
+  assetIngestRepository?: AssetIngestRepository;
+  /** Live probe supplied only by a composition that owns the reader, storage, signer, and worker process. */
+  assetIngestWorkerReadiness?: { isReady(): boolean | Promise<boolean> };
+  workspaceId?: string;
 }
 
 export function isAllowedProviderAssetUrl(value: string, allowedHosts: ReadonlySet<string>): boolean {
@@ -46,7 +52,7 @@ export class AiMediaStudioService {
     const existing = await this.repository.getByIdempotencyKey(ownerUserId, request.idempotencyKey);
     if (existing) return existing;
     const provider = this.requireProvider(this.defaultProviderKey);
-    if (!(await provider.status()).configured) throw new MediaStudioError("Video provider is not configured", 503);
+    await this.requireProviderReadyForGeneration(provider);
     let job = await this.repository.create(ownerUserId, request);
     job = await this.repository.update({
       ...job,
@@ -73,6 +79,7 @@ export class AiMediaStudioService {
     const job = await this.getJob(ownerUserId, jobId);
     if (job.status !== "failed") throw new MediaStudioError("Only failed jobs can be retried", 409);
     if (job.attempts >= job.maxAttempts) throw new MediaStudioError("Maximum retry attempts reached", 409);
+    await this.requireProviderReadyForGeneration(this.requireProvider(job.providerName ?? this.defaultProviderKey));
     const pending = await this.repository.update({
       ...job,
       status: "pending",
@@ -80,6 +87,7 @@ export class AiMediaStudioService {
       stage: "queued",
       providerJobId: undefined,
       outputUrl: undefined,
+      outputAssetId: undefined,
       error: undefined,
       completedAt: undefined,
       lastProviderEventAt: undefined,
@@ -95,6 +103,9 @@ export class AiMediaStudioService {
   async cancelJob(ownerUserId: string, jobId: string): Promise<MediaGenerationJob> {
     const job = await this.getJob(ownerUserId, jobId);
     if (TERMINAL_STATUSES.has(job.status)) throw new MediaStudioError("Terminal jobs cannot be cancelled", 409);
+    if (job.stage === "artifact_ingest_queued" || job.stage === "artifact_ingest_retrying") {
+      throw new MediaStudioError("A completed provider render must finish owned artifact ingest", 409);
+    }
     if (this.executionMode === "durable" && (job.status !== "pending" || job.stage !== "queued")) {
       throw new MediaStudioError("A render already claimed by a provider cannot be cancelled", 409);
     }
@@ -146,14 +157,57 @@ export class AiMediaStudioService {
     if (event.outputUrl && !isAllowedProviderAssetUrl(event.outputUrl, this.options.allowedAssetHosts ?? new Set())) {
       throw new MediaStudioError("Provider output URL is not trusted", 400);
     }
-    if (!(await this.repository.recordWebhook(event))) return { accepted: true as const, duplicate: true as const };
+    const firstReceipt = await this.repository.recordWebhook(event);
     const job = await this.repository.getByProviderJob(providerKey, event.providerJobId);
     if (!job) {
+      if (!firstReceipt) return { accepted: true as const, duplicate: true as const, orphaned: true as const };
       await this.repository.parkWebhook(event);
       return { accepted: true as const, orphaned: true as const };
     }
+    // A verified duplicate completion must still ensure the idempotent ingest
+    // row. This deliberately closes the update/enqueue crash window: enqueue
+    // failures surface as 5xx so provider retry can recover it.
+    if (!firstReceipt) {
+      if (event.status === "completed" && event.outputUrl) await this.ensureArtifactIngest(job, event.outputUrl);
+      return { accepted: true as const, duplicate: true as const };
+    }
     await this.applyProviderEvent(job, event);
     return { accepted: true as const };
+  }
+
+  async recordArtifactIngested(ownerUserId: string, jobId: string, outputAssetId: string): Promise<MediaGenerationJob> {
+    const job = await this.getJob(ownerUserId, jobId);
+    if (job.outputAssetId) {
+      if (job.outputAssetId !== outputAssetId) throw new MediaStudioError("Render artifact already points to another canonical asset", 409);
+      return job;
+    }
+    if (job.stage !== "artifact_ingest_queued" && job.stage !== "artifact_ingest_retrying") {
+      throw new MediaStudioError("Render job is not waiting for artifact ingest", 409);
+    }
+    return this.repository.update({
+      ...job,
+      status: "completed",
+      progress: 100,
+      stage: "completed",
+      outputAssetId,
+      outputUrl: undefined,
+      error: undefined,
+      completedAt: new Date().toISOString(),
+    });
+  }
+
+  async recordArtifactIngestFailure(ownerUserId: string, jobId: string, ingest: Pick<AssetIngestJob, "state" | "lastErrorCode">): Promise<MediaGenerationJob> {
+    const job = await this.getJob(ownerUserId, jobId);
+    if (job.outputAssetId || TERMINAL_STATUSES.has(job.status)) return job;
+    const deadLettered = ingest.state === "dead_letter";
+    return this.repository.update({
+      ...job,
+      status: deadLettered ? "failed" : "rendering",
+      progress: deadLettered ? 100 : Math.max(job.progress, 95),
+      stage: deadLettered ? "artifact_ingest_failed" : "artifact_ingest_retrying",
+      error: deadLettered ? `Artifact ingest failed (${ingest.lastErrorCode ?? "ingest_failed"})` : undefined,
+      completedAt: deadLettered ? new Date().toISOString() : undefined,
+    });
   }
 
   /**
@@ -201,6 +255,23 @@ export class AiMediaStudioService {
     return provider;
   }
 
+  private async requireProviderReadyForGeneration(provider: VideoProvider): Promise<void> {
+    const status = await provider.status();
+    if (!status.configured) throw new MediaStudioError("Video provider is not configured", 503);
+    if (status.mode === "live") {
+      let workerReady = false;
+      try {
+        workerReady = this.options.assetIngestWorkerReadiness !== undefined
+          && await this.options.assetIngestWorkerReadiness.isReady() === true;
+      } catch {
+        workerReady = false;
+      }
+      if (!workerReady || !this.options.assetIngestRepository) {
+        throw new MediaStudioError("Owned artifact ingest worker is not ready", 503);
+      }
+    }
+  }
+
   private get executionMode(): "inline" | "durable" {
     return this.options.executionMode ?? "inline";
   }
@@ -221,17 +292,21 @@ export class AiMediaStudioService {
         throw new Error("Provider output URL is not trusted");
       }
       const completed = submission.status === "completed";
+      const awaitingArtifact = completed && Boolean(submission.outputUrl);
+      const missingArtifactSource = completed && !submission.outputUrl;
       let updated = await this.repository.update({
         ...job,
-        status: completed ? "completed" : "rendering",
-        progress: completed ? 100 : 10,
-        stage: completed ? "completed" : "provider_rendering",
+        status: awaitingArtifact ? "rendering" : missingArtifactSource ? "failed" : "rendering",
+        progress: awaitingArtifact ? 95 : missingArtifactSource ? 100 : 10,
+        stage: awaitingArtifact ? "artifact_ingest_queued" : missingArtifactSource ? "artifact_source_missing" : "provider_rendering",
         providerJobId: submission.providerJobId,
         outputUrl: submission.outputUrl,
         attempts: job.attempts + 1,
         startedAt,
-        completedAt: completed ? new Date().toISOString() : undefined,
+        completedAt: missingArtifactSource ? new Date().toISOString() : undefined,
+        error: missingArtifactSource ? "Provider completed without an artifact source" : undefined,
       });
+      if (submission.outputUrl) await this.ensureArtifactIngest(updated, submission.outputUrl);
       const parked = await this.repository.takeParkedWebhooks(provider.key, submission.providerJobId);
       for (const event of parked) updated = await this.applyProviderEvent(updated, event);
     } catch (error) {
@@ -250,17 +325,39 @@ export class AiMediaStudioService {
 
   private async applyProviderEvent(job: MediaGenerationJob, event: ProviderWebhookEvent): Promise<MediaGenerationJob> {
     if (TERMINAL_STATUSES.has(job.status)) return job;
+    if (job.stage === "artifact_ingest_queued" || job.stage === "artifact_ingest_retrying") {
+      if (event.status === "completed" && event.outputUrl) await this.ensureArtifactIngest(job, event.outputUrl);
+      return job;
+    }
     if (job.lastProviderEventAt && event.occurredAt <= job.lastProviderEventAt) return job;
-    const terminal = event.status === "completed" || event.status === "failed";
-    return this.repository.update({
+    const needsArtifactIngest = event.status === "completed" && Boolean(event.outputUrl);
+    const missingArtifactSource = event.status === "completed" && !event.outputUrl;
+    const terminal = missingArtifactSource || event.status === "failed";
+    const updated = await this.repository.update({
       ...job,
-      status: event.status,
-      progress: terminal ? 100 : Math.max(job.progress, 50),
-      stage: event.status === "completed" ? "completed" : event.status === "failed" ? "failed" : "provider_rendering",
+      status: needsArtifactIngest ? "rendering" : missingArtifactSource ? "failed" : event.status,
+      progress: needsArtifactIngest ? Math.max(job.progress, 95) : terminal ? 100 : Math.max(job.progress, 50),
+      stage: needsArtifactIngest ? "artifact_ingest_queued" : missingArtifactSource ? "artifact_source_missing" : event.status === "failed" ? "failed" : "provider_rendering",
       outputUrl: event.outputUrl ?? job.outputUrl,
-      error: event.error,
+      error: missingArtifactSource ? "Provider completed without an artifact source" : event.error,
       lastProviderEventAt: event.occurredAt,
       completedAt: terminal ? event.occurredAt : undefined,
     });
+    if (event.outputUrl) await this.ensureArtifactIngest(updated, event.outputUrl);
+    return updated;
+  }
+
+  private async ensureArtifactIngest(job: MediaGenerationJob, sourceUrl: string): Promise<AssetIngestJob> {
+    const repository = this.options.assetIngestRepository;
+    if (!repository) throw new MediaStudioError("Owned artifact ingest is unavailable", 503);
+    return repository.enqueue({
+      id: randomUUID(),
+      tenantId: JSON.stringify([this.options.workspaceId ?? "personal", job.ownerUserId]),
+      renderJobId: job.id,
+      sourceUrl,
+      expectedMimeType: "video/mp4",
+      maxAttempts: 4,
+      maxLeaseRecoveries: 3,
+    }, Date.now());
   }
 }

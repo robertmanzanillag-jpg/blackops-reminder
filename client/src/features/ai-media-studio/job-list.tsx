@@ -1,10 +1,11 @@
-import { ExternalLink, Loader2, RefreshCcw, RotateCcw, Square } from "lucide-react";
+import { Loader2, RefreshCcw, RotateCcw, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "./feedback";
+import { AssetDeliveryControl } from "./core/asset-delivery-control";
 import { useStudioJobs, useStudioMutations } from "./hooks";
 import type { JobStatus, MediaJob } from "./types";
 
@@ -58,11 +59,7 @@ function JobCard({ job }: { job: MediaJob }) {
               {cancelling ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square className="mr-2 h-3.5 w-3.5" aria-hidden="true" />} Cancel
             </Button>
           )}
-          {job.status === "completed" && job.asset?.url && (
-            <a href={job.asset.url} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center rounded-md border border-white/10 bg-white/5 px-3 text-sm text-zinc-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
-              Open video <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden="true" />
-            </a>
-          )}
+          {job.asset && <AssetDeliveryControl assetId={job.asset.id} available={job.status === "completed"} label="Open video" unavailableLabel="Video is not ready" compact />}
         </div>
       </div>
       {(retry.isError || cancel.isError) && <p role="alert" className="mt-3 text-xs text-red-300">{retry.error?.message || cancel.error?.message}</p>}

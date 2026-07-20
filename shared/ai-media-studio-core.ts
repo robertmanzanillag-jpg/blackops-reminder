@@ -171,6 +171,11 @@ export const mediaLibraryResponseSchema = z
   })
   .strict();
 
+export const assetDeliverySchema = z.object({
+  url: z.string().url().startsWith("https://"),
+  expiresAt: isoDateSchema,
+}).strict();
+
 export type InfluencerStatus = z.infer<typeof influencerStatusSchema>;
 export type InfluencerGender = z.infer<typeof influencerGenderSchema>;
 export type InfluencerAgeRange = z.infer<typeof influencerAgeRangeSchema>;
@@ -185,3 +190,4 @@ export type ProviderResourceListResponse = z.infer<typeof providerResourceListRe
 export type MediaAsset = z.infer<typeof mediaAssetSchema>;
 export type MediaLibraryRequest = z.infer<typeof mediaLibraryRequestSchema>;
 export type MediaLibraryResponse = z.infer<typeof mediaLibraryResponseSchema>;
+export type AssetDelivery = z.infer<typeof assetDeliverySchema>;
