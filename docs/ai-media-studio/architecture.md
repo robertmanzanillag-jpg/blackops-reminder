@@ -1,5 +1,9 @@
 # AI Media Studio Architecture
 
+## Delivery stack
+
+PR #67 (`codex/ai-media-studio`) is the clean, mergeable provider-neutral foundation. PR2 is intentionally stacked in `codex/ai-media-studio-core`; it must be reviewed as a delta from PR #67 after that base merges or is rebased. PR3 follows only after the durable core and migration gates pass. Mergeability is not deployment authorization.
+
 ## Boundary
 
 AI Media Studio owns influencers, scripts, generation requests, render jobs, provider events, generated assets, media activity, publishing jobs, and media analytics. It does not own global authentication, Kong source records, the global secret vault, or deployment.
@@ -36,9 +40,9 @@ The first HeyGen adapter targets its v3 API (`POST /v3/videos` and `GET /v3/vide
 
 ### Application to queue
 
-The future durable job envelope contains a schema version, job ID, owner/tenant ID, job type, aggregate ID, idempotency key, attempt count, availability timestamp, and correlation ID. Workers require leases, bounded retries with exponential backoff and jitter, dead-letter handling, and concurrency limits per provider and tenant.
+The durable render repository stores the job ID, owner/tenant, provider, request, attempt and availability state in the existing render-job aggregate. Workers claim with atomic leases and fencing tokens, bounded exponential retry with jitter, an independent lease-recovery budget, dead-letter handling, and concurrency limits per provider and tenant.
 
-The repository and transactional outbox can be durable through Drizzle, but the current worker queue still does not claim distributed leases, dead-letter processing, or horizontal-worker guarantees. Those queue gates must pass before automated source ingestion is enabled.
+With `DATABASE_URL`, generation uses durable execution mode: HTTP persists a due job and returns without provider submission, while the separately invoked worker performs the claim and submission. The factory intentionally starts no loop or network listener. Migration, deployed worker operation, observability, restart recovery and horizontal load evidence remain required before automated source ingestion is enabled.
 
 ### Provider webhook
 
@@ -59,11 +63,20 @@ Adapters may keep finer internal stages such as submitting, downloading, or retr
 
 ## Persistence and automation roadmap
 
-This PR includes Drizzle models and a durable repository adapter for providers, influencers, scripts, generations, jobs, provider events, media assets, and generation history. The tables are re-exported from the central schema, and the composition root selects Drizzle whenever `DATABASE_URL` is configured. In-memory persistence is restricted to development/test; production without a database fails closed with `503`. No migration or `db:push` has run, so reviewed SQL and a successful staging migration remain hard deployment gates. Later additive slices introduce publishing jobs and analytics. Binary assets live in object storage; records keep internal URI, checksum, MIME type, size, duration/dimensions, provenance, rights, and timestamps.
+This PR includes Drizzle models and durable repository adapters for providers, influencers, scripts, generations, jobs, provider events, media assets, generation history, and leased render work. The tables are re-exported from the central schema, and the composition root selects Drizzle whenever `DATABASE_URL` is configured. In-memory persistence is restricted to development/test; production without a database fails closed with `503`. Reviewed forward and data-preserving rollback SQL are checked in under `migrations/ai-media-studio/`, but neither migration nor `db:push` has run, so backup, staging application, restart/recovery, and rollback rehearsal remain hard deployment gates. Later additive slices introduce publishing jobs and analytics. Binary assets live in object storage; records keep internal URI, checksum, MIME type, size, duration/dimensions, provenance, rights, and timestamps.
 
-The repository currently uses Drizzle push rather than checked-in versioned migrations. The code exposes the schema but has not altered any database. Before deployment, the team must generate and review SQL, apply it to staging, prove restart/recovery and rollback, pass App QA, and obtain Robert's explicit approval.
+PR2 introduces its first checked-in, operator-run migration artifact instead of relying on `drizzle-kit push`. The code and SQL have not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply the reviewed SQL to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
 
 The first source pilot should be a Radio Calendar event because the repository already has calendar and radio boundaries. A source event creates ideas/drafts first; it does not render or publish until budget, quality, rights, and approval policies pass. Automatic publishing remains disabled until dedicated connector and App QA gates exist.
+
+## PR2 integration seams
+
+- `server/ai-media-studio/routes.ts` remains the single HTTP adapter/composition root for Studio-specific routes. Makers expose ports/services first; the Lead wires them only after their contracts stabilize.
+- `server/routes.ts` keeps exactly one `registerAiMediaStudioRoutes(app)` call. New core endpoints belong in the Studio router, not the global route file.
+- Runtime selection remains fail-closed: Drizzle with `DATABASE_URL`, memory only in development/test, and `503` in production without a database. PR2 adds durable queue and owned-asset adapters behind equally explicit configuration.
+- `client/src/pages/ai-media-studio.tsx` composes stable feature sections; feature makers own the components and shared DTO consumption.
+- `client/src/features/ai-media-studio/navigation.ts` gains Influencers and Media Library only when their sections exist. `client/src/App.tsx` retains one `/ai-media-studio` route, and the Dashboard retains the existing inbound link.
+- Migration SQL and its data-preserving rollback are generated and independently reviewed. They remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal before any deployment request.
 
 ## Scale, security, and cost
 

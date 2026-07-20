@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { GenerationRequest, MediaGenerationJob, ProviderStatus, ProviderWebhookEvent } from "./domain";
-import { TERMINAL_STATUSES } from "./domain";
+import { MediaJobStateConflictError, TERMINAL_STATUSES } from "./domain";
 import type { MediaJobQueue, MediaJobRepository, VideoProvider } from "./ports";
 
 export class MediaStudioError extends Error {
@@ -12,6 +12,11 @@ export class MediaStudioError extends Error {
 export interface AiMediaStudioServiceOptions {
   influencerNames?: ReadonlyMap<string, string>;
   allowedAssetHosts?: ReadonlySet<string>;
+  /**
+   * Inline is the process-local preview path. Durable leaves the database row
+   * due for a separately-invoked RenderWorker and never touches MediaJobQueue.
+   */
+  executionMode?: "inline" | "durable";
 }
 
 export function isAllowedProviderAssetUrl(value: string, allowedHosts: ReadonlySet<string>): boolean {
@@ -48,6 +53,7 @@ export class AiMediaStudioService {
       providerName: provider.key,
       influencerName: this.options.influencerNames?.get(request.influencerId) ?? "",
     });
+    if (this.executionMode === "durable") return job;
     await this.queue.enqueue({ type: "render", ownerUserId, jobId: job.id });
     await this.processNext();
     return this.getJob(ownerUserId, job.id);
@@ -78,7 +84,9 @@ export class AiMediaStudioService {
       completedAt: undefined,
       lastProviderEventAt: undefined,
       retryCount: job.retryCount + 1,
+      attempts: this.executionMode === "durable" ? job.attempts + 1 : job.attempts,
     });
+    if (this.executionMode === "durable") return pending;
     await this.queue.enqueue({ type: "render", ownerUserId, jobId });
     await this.processNext();
     return this.getJob(ownerUserId, pending.id);
@@ -87,13 +95,23 @@ export class AiMediaStudioService {
   async cancelJob(ownerUserId: string, jobId: string): Promise<MediaGenerationJob> {
     const job = await this.getJob(ownerUserId, jobId);
     if (TERMINAL_STATUSES.has(job.status)) throw new MediaStudioError("Terminal jobs cannot be cancelled", 409);
-    return this.repository.update({
-      ...job,
-      status: "cancelled",
-      progress: job.progress,
-      stage: "cancelled",
-      completedAt: new Date().toISOString(),
-    });
+    if (this.executionMode === "durable" && (job.status !== "pending" || job.stage !== "queued")) {
+      throw new MediaStudioError("A render already claimed by a provider cannot be cancelled", 409);
+    }
+    try {
+      return await this.repository.update({
+        ...job,
+        status: "cancelled",
+        progress: job.progress,
+        stage: "cancelled",
+        completedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (error instanceof MediaJobStateConflictError) {
+        throw new MediaStudioError("A render already claimed by a provider cannot be cancelled", 409);
+      }
+      throw error;
+    }
   }
 
   async dashboard(ownerUserId: string) {
@@ -138,10 +156,53 @@ export class AiMediaStudioService {
     return { accepted: true as const };
   }
 
+  /**
+   * Commits the durable worker's provider submission to the user-facing job.
+   * The worker repository has already fenced and committed the submission; this
+   * method updates the domain projection and consumes any early webhook events.
+   */
+  async recordDurableSubmission(input: {
+    ownerUserId: string;
+    jobId: string;
+    providerKey: string;
+    providerJobId: string;
+    attempt: number;
+    submittedAt?: string;
+  }): Promise<MediaGenerationJob> {
+    if (this.executionMode !== "durable") {
+      throw new MediaStudioError("Durable submission hook is unavailable in inline mode", 409);
+    }
+    const job = await this.getJob(input.ownerUserId, input.jobId);
+    if (TERMINAL_STATUSES.has(job.status) && job.status !== "cancelled") return job;
+    if (job.providerName && job.providerName !== input.providerKey) {
+      throw new MediaStudioError("Render provider does not match the media job", 409);
+    }
+    const submittedAt = input.submittedAt ?? new Date().toISOString();
+    const preserveCancellation = job.status === "cancelled";
+    let updated = await this.repository.update({
+      ...job,
+      providerName: input.providerKey,
+      providerJobId: input.providerJobId,
+      status: preserveCancellation ? "cancelled" : "rendering",
+      progress: preserveCancellation ? job.progress : Math.max(job.progress, 10),
+      stage: preserveCancellation ? "cancelled" : "provider_rendering",
+      attempts: Math.max(job.attempts, input.attempt),
+      startedAt: job.startedAt ?? submittedAt,
+      error: undefined,
+    });
+    const parked = await this.repository.takeParkedWebhooks(input.providerKey, input.providerJobId);
+    for (const event of parked) updated = await this.applyProviderEvent(updated, event);
+    return updated;
+  }
+
   private requireProvider(key: string): VideoProvider {
     const provider = this.providers.get(key);
     if (!provider) throw new MediaStudioError("Unknown video provider", 404);
     return provider;
+  }
+
+  private get executionMode(): "inline" | "durable" {
+    return this.options.executionMode ?? "inline";
   }
 
   private async processNext(): Promise<void> {

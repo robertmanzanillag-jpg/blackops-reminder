@@ -5,8 +5,9 @@ import {
   aiMediaOutbox,
   aiMediaRenderJobs,
   aiMediaWebhookEvents,
+  type AiMediaRenderJobRow,
 } from "../../../shared/models/ai-media-studio-db";
-import type { GenerationRequest, MediaGenerationJob, ProviderWebhookEvent } from "../domain";
+import { MediaJobStateConflictError, type GenerationRequest, type MediaGenerationJob, type ProviderWebhookEvent } from "../domain";
 import type { MediaJobRepository } from "../ports";
 import { mapRenderJobRow } from "./mapping";
 
@@ -34,6 +35,28 @@ function resultFields(job: MediaGenerationJob): Record<string, unknown> {
     ...(job.influencerName === undefined ? {} : { influencerName: job.influencerName }),
     ...(job.estimatedCompletionAt === undefined ? {} : { estimatedCompletionAt: job.estimatedCompletionAt }),
     ...(job.lastProviderEventAt === undefined ? {} : { lastProviderEventAt: job.lastProviderEventAt }),
+  };
+}
+
+function mapRepositoryRow(row: AiMediaRenderJobRow): MediaGenerationJob {
+  return {
+    ...mapRenderJobRow(row),
+    availableAt: row.availableAt?.toISOString(),
+    leaseOwner: row.leaseOwner ?? undefined,
+    leaseExpiresAt: row.leaseExpiresAt?.toISOString(),
+    deadLetterAt: row.deadLetterAt?.toISOString(),
+  };
+}
+
+export function durableQueueResetFields(job: MediaGenerationJob, now: Date) {
+  if (job.status !== "pending" || job.stage !== "queued") return {};
+  return {
+    availableAt: now,
+    nextAttemptAt: now,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    deadLetterAt: null,
+    queuedAt: now,
   };
 }
 
@@ -65,7 +88,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           ),
         )
         .limit(1);
-      if (existing[0]) return mapRenderJobRow(existing[0]);
+      if (existing[0]) return mapRepositoryRow(existing[0]);
 
       const now = new Date();
       const id = randomUUID();
@@ -111,7 +134,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           )
           .limit(1);
         if (!raced) throw new Error("Media job idempotency conflict could not be resolved");
-        return mapRenderJobRow(raced);
+        return mapRepositoryRow(raced);
       }
 
       await tx.insert(aiMediaOutbox).values({
@@ -124,7 +147,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         payload: { jobId: created.id, generationId: created.generationId },
       });
 
-      return mapRenderJobRow(created);
+      return mapRepositoryRow(created);
     });
   }
 
@@ -139,7 +162,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         ),
       )
       .orderBy(desc(aiMediaRenderJobs.createdAt));
-    return rows.map(mapRenderJobRow);
+    return rows.map(mapRepositoryRow);
   }
 
   async get(ownerUserId: string, jobId: string): Promise<MediaGenerationJob | undefined> {
@@ -154,7 +177,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         ),
       )
       .limit(1);
-    return row ? mapRenderJobRow(row) : undefined;
+    return row ? mapRepositoryRow(row) : undefined;
   }
 
   async getByIdempotencyKey(
@@ -172,7 +195,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         ),
       )
       .limit(1);
-    return row ? mapRenderJobRow(row) : undefined;
+    return row ? mapRepositoryRow(row) : undefined;
   }
 
   async getByProviderJob(providerKey: string, providerJobId: string): Promise<MediaGenerationJob | undefined> {
@@ -187,13 +210,18 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         ),
       )
       .limit(1);
-    return row ? mapRenderJobRow(row) : undefined;
+    return row ? mapRepositoryRow(row) : undefined;
   }
 
   async update(job: MediaGenerationJob): Promise<MediaGenerationJob> {
     return this.db.transaction(async (tx) => {
       const [current] = await tx
-        .select({ id: aiMediaRenderJobs.id })
+        .select({
+          id: aiMediaRenderJobs.id,
+          result: aiMediaRenderJobs.result,
+          status: aiMediaRenderJobs.status,
+          stage: aiMediaRenderJobs.stage,
+        })
         .from(aiMediaRenderJobs)
         .where(
           and(
@@ -205,6 +233,19 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         .limit(1);
       if (!current) throw new Error("Media job not found");
 
+      const now = new Date();
+      const isCancellationTransition = job.status === "cancelled" && current.status !== "cancelled";
+      const updatePredicates = [
+        eq(aiMediaRenderJobs.id, job.id),
+        eq(aiMediaRenderJobs.ownerUserId, job.ownerUserId),
+        eq(aiMediaRenderJobs.workspaceId, this.workspaceId),
+      ];
+      if (isCancellationTransition) {
+        updatePredicates.push(
+          eq(aiMediaRenderJobs.status, "pending"),
+          eq(aiMediaRenderJobs.stage, "queued"),
+        );
+      }
       const [saved] = await tx
         .update(aiMediaRenderJobs)
         .set({
@@ -218,20 +259,20 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           maxAttempts: job.maxAttempts,
           outputUrl: job.outputUrl ?? null,
           errorMessage: job.error ?? null,
-          result: resultFields(job),
+          // Queue fencing/recovery metadata shares this JSON document. Domain
+          // projection updates must never erase it.
+          result: { ...(current.result ?? {}), ...resultFields(job) },
           startedAt: job.startedAt ? new Date(job.startedAt) : null,
           completedAt: job.completedAt ? new Date(job.completedAt) : null,
-          updatedAt: new Date(),
+          ...durableQueueResetFields(job, now),
+          updatedAt: now,
         })
-        .where(
-          and(
-            eq(aiMediaRenderJobs.id, job.id),
-            eq(aiMediaRenderJobs.ownerUserId, job.ownerUserId),
-            eq(aiMediaRenderJobs.workspaceId, this.workspaceId),
-          ),
-        )
+        .where(and(...updatePredicates))
         .returning();
-      if (!saved) throw new Error("Media job not found");
+      if (!saved) {
+        if (isCancellationTransition) throw new MediaJobStateConflictError();
+        throw new Error("Media job not found");
+      }
 
       await tx
         .insert(aiMediaOutbox)
@@ -246,7 +287,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         })
         .onConflictDoNothing();
 
-      return mapRenderJobRow(saved);
+      return mapRepositoryRow(saved);
     });
   }
 

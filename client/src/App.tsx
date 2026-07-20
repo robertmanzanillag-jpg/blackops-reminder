@@ -34,15 +34,57 @@ type AuthMe = {
   authenticated: boolean;
   sessionBacked?: boolean;
   usingDevFallback?: boolean;
+  authServiceUnavailable?: boolean;
   user?: { id: string; username: string };
+};
+
+type AuthResolutionOptions = {
+  hostname: string;
+  isDevelopment: boolean;
+  localAuth: AuthMe | null;
 };
 
 const LOCAL_AUTH_USER_KEY = "blackops-local-auth-user";
 const PREVIEW_USER = { id: "mock-user-123", username: "robert" };
 
+export function isPreviewFallbackAllowed(hostname: string, isDevelopment: boolean) {
+  return isDevelopment || hostname === "127.0.0.1" || hostname === "localhost";
+}
+
+function resolveAuthServiceFailure({ hostname, isDevelopment, localAuth }: AuthResolutionOptions): AuthMe {
+  if (isPreviewFallbackAllowed(hostname, isDevelopment)) {
+    return localAuth || {
+      authenticated: true,
+      sessionBacked: false,
+      usingDevFallback: true,
+      user: PREVIEW_USER,
+    };
+  }
+
+  return { authenticated: false, authServiceUnavailable: true };
+}
+
+export async function resolveAuthResponse(
+  response: Response,
+  options: AuthResolutionOptions,
+): Promise<AuthMe> {
+  if (response.status === 401) return options.localAuth || { authenticated: false };
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    return resolveAuthServiceFailure(options);
+  }
+
+  try {
+    return await response.json() as AuthMe;
+  } catch {
+    return resolveAuthServiceFailure(options);
+  }
+}
+
 function getLocalPreviewAuth(): AuthMe | null {
   if (typeof window === "undefined") return null;
-  const isLocalPreview = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+  const isLocalPreview = isPreviewFallbackAllowed(window.location.hostname, false);
   if (!isLocalPreview) return null;
 
   const stored = window.localStorage.getItem(LOCAL_AUTH_USER_KEY);
@@ -59,17 +101,22 @@ function getLocalPreviewAuth(): AuthMe | null {
 
 function Router() {
   const hasLocalPreviewAuth = Boolean(getLocalPreviewAuth());
-  const { data: auth, isLoading } = useQuery<AuthMe>({
+  const { data: auth, isLoading, refetch } = useQuery<AuthMe>({
     queryKey: ["auth-me"],
     queryFn: async () => {
       const localAuth = getLocalPreviewAuth();
-      const response = await fetch("/api/auth/me");
-      const contentType = response.headers.get("content-type") || "";
-      if (response.status === 401) return localAuth || { authenticated: false };
-      if (!response.ok || !contentType.includes("application/json")) {
-        return localAuth || { authenticated: true, sessionBacked: false, usingDevFallback: true, user: PREVIEW_USER };
+      const options: AuthResolutionOptions = {
+        hostname: typeof window === "undefined" ? "" : window.location.hostname,
+        isDevelopment: import.meta.env.DEV,
+        localAuth,
+      };
+
+      try {
+        const response = await fetch("/api/auth/me");
+        return await resolveAuthResponse(response, options);
+      } catch {
+        return resolveAuthServiceFailure(options);
       }
-      return response.json();
     },
     retry: false,
   });
@@ -88,6 +135,22 @@ function Router() {
 
   if (isLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-black text-sm text-zinc-400">Cargando BlackOps...</div>;
+  }
+
+  if (auth?.authServiceUnavailable) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black px-6 text-zinc-100">
+        <div role="alert" className="w-full max-w-md rounded-xl border border-red-400/30 bg-red-950/20 p-6 text-center">
+          <h1 className="text-lg font-semibold">No se pudo verificar tu sesion</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            El servicio de autenticacion no esta disponible. El acceso protegido permanece bloqueado.
+          </p>
+          <Button type="button" variant="outline" className="mt-5" onClick={() => void refetch()}>
+            Reintentar
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (!auth?.authenticated) {
