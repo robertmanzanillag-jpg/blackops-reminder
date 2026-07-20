@@ -9705,13 +9705,13 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
   const now = new Date().toISOString();
   const manualQueue = buildRevenueManualOutreachQueue(10);
   const insideDailyQueue = Boolean(draft && manualQueue.items.some((item) => item.draftId === draft.id));
-  const canUseEmailProvider = Boolean(draft && ["email", "gmail", "mailto"].includes(draft.channel));
+  const canUseEmailProvider = draft?.channel === "email";
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
     { gate: "human_approval", passed: parsed.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
     { gate: "daily_contact_cap", passed: insideDailyQueue, fix: "Este draft no esta en la cola manual de hoy o excede el limite diario de contacto." },
-    { gate: "email_channel", passed: canUseEmailProvider, fix: "Este canal es manual; abre el perfil/formulario desde la cola de Outreach manual hoy." },
+    { gate: "email_channel", passed: canUseEmailProvider, fix: "Solo drafts con channel=email pueden enviarse por Resend; Gmail, mailto, Instagram y formularios son manuales." },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },
     { gate: "qa_clear", passed: Boolean(draft && draft.qaGates.every((gate) => gate.passed)), fix: "Resolver gates de QA antes de contactar." },
