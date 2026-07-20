@@ -1,6 +1,7 @@
 import "./env-loader";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { registerBlackRoomControlRoutes } from "./blackroom-control-routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startReminderScheduler } from "./reminder-scheduler";
@@ -367,6 +368,7 @@ app.use((req, res, next) => {
   registerLocalAuthRoutes(app);
   await initializeRevenueEnginePersistence();
   await registerRoutes(httpServer, app);
+  registerBlackRoomControlRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) return next(err);
