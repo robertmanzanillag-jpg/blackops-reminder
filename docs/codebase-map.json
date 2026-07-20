@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-01T04:41:14.137Z",
-  "repoRoot": "/private/tmp/asistente-pr55-fresh",
+  "generatedAt": "2026-07-20T09:29:21.660Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -46,6 +46,8 @@
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
+    "test:revenue-public-scout-connector": "node --import tsx --test tests/revenue-engine-public-scout-connector.test.ts",
+    "test:revenue-money-readiness-cli": "node --import tsx --test tests/revenue-engine-money-readiness-cli.test.ts",
     "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
@@ -60,6 +62,7 @@
     "ceo:create-go-live-task": "node --import tsx script/create-ceo-go-live-task.ts",
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
+    "revenue:money-readiness": "node --import tsx script/revenue-engine-money-readiness.ts",
     "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "metricool:plan": "node --import tsx script/metricool-plan.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
@@ -82,28 +85,28 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 400,
-    "filesIndexed": 332,
-    "imports": 1321,
-    "routes": 456,
-    "symbols": 7265
+    "filesVisible": 452,
+    "filesIndexed": 383,
+    "imports": 1482,
+    "routes": 467,
+    "symbols": 7575
   },
   "directories": {
+    ".": {
+      "files": 26,
+      "indexed": 18,
+      "kinds": {
+        "other": 17,
+        "docs": 8,
+        "package": 1
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
       "kinds": {
         "docs": 1,
         "other": 1
-      }
-    },
-    ".": {
-      "files": 24,
-      "indexed": 17,
-      "kinds": {
-        "other": 15,
-        "docs": 8,
-        "package": 1
       }
     },
     ".upm": {
@@ -128,29 +131,36 @@
       }
     },
     "client/src": {
-      "files": 109,
-      "indexed": 107,
+      "files": 122,
+      "indexed": 120,
       "kinds": {
-        "other": 3,
+        "other": 13,
         "client-component": 21,
         "ui-component": 55,
         "client-hook": 3,
-        "client-lib": 5,
-        "client-page": 22
+        "client-lib": 7,
+        "client-page": 23
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 6,
+      "indexed": 6,
+      "kinds": {
+        "docs": 6
       }
     },
     "docs": {
-      "files": 11,
-      "indexed": 10,
+      "files": 12,
+      "indexed": 12,
       "kinds": {
-        "docs": 11
+        "docs": 12
       }
     },
     "script": {
-      "files": 36,
-      "indexed": 34,
+      "files": 37,
+      "indexed": 35,
       "kinds": {
-        "script": 36
+        "script": 37
       }
     },
     "scripts": {
@@ -161,10 +171,17 @@
       }
     },
     "server": {
-      "files": 94,
-      "indexed": 90,
+      "files": 96,
+      "indexed": 92,
       "kinds": {
-        "server": 94
+        "server": 96
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 14,
+      "indexed": 14,
+      "kinds": {
+        "server": 14
       }
     },
     "server/replit_integrations": {
@@ -174,25 +191,25 @@
         "server": 8
       }
     },
-    "shared/models": {
-      "files": 1,
-      "indexed": 1,
+    "shared": {
+      "files": 3,
+      "indexed": 3,
       "kinds": {
-        "shared": 1
+        "shared": 3
       }
     },
-    "shared": {
-      "files": 1,
-      "indexed": 1,
+    "shared/models": {
+      "files": 2,
+      "indexed": 2,
       "kinds": {
-        "shared": 1
+        "shared": 2
       }
     },
     "tests": {
-      "files": 59,
-      "indexed": 57,
+      "files": 69,
+      "indexed": 66,
       "kinds": {
-        "test": 59
+        "test": 69
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -313,6 +330,7 @@
       "exports": [],
       "symbols": [
         "AgentsOfficePage",
+        "AiMediaStudioPage",
         "App",
         "AppQaAgentPage",
         "AssistantPage",
@@ -352,6 +370,7 @@
       "routes": [
         "/",
         "/agents-office",
+        "/ai-media-studio",
         "/app-qa-agent",
         "/assistant",
         "/automations",
@@ -2298,6 +2317,251 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/api.ts",
+      "kind": "other",
+      "imports": [
+        "./types"
+      ],
+      "exports": [
+        "mediaStudioApi"
+      ],
+      "symbols": [
+        "API_ROOT",
+        "body",
+        "fallback",
+        "mediaStudioApi",
+        "requestJson",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/create-video-workbench.tsx",
+      "kind": "other",
+      "imports": [
+        "./feedback",
+        "./hooks",
+        "./script-api",
+        "@/components/ui/button",
+        "@/components/ui/card",
+        "@/components/ui/label",
+        "@/components/ui/textarea",
+        "@shared/ai-media-studio-scripts",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "CreateVideoWorkbench"
+      ],
+      "symbols": [
+        "CreateVideoWorkbench",
+        "availableVoices",
+        "chooseInfluencer",
+        "chooseVariant",
+        "fieldClass",
+        "first",
+        "focusField",
+        "generateScripts",
+        "idempotencyKey",
+        "influencer",
+        "options",
+        "optionsQuery",
+        "scripts",
+        "selectedInfluencer",
+        "sourceId",
+        "submit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/dashboard-overview.tsx",
+      "kind": "other",
+      "imports": [
+        "./feedback",
+        "./types",
+        "@/components/ui/badge",
+        "@/components/ui/card",
+        "@/lib/utils",
+        "lucide-react"
+      ],
+      "exports": [
+        "DashboardOverview"
+      ],
+      "symbols": [
+        "DashboardOverview",
+        "Icon",
+        "delta",
+        "duration",
+        "integer",
+        "metrics",
+        "money",
+        "relativeTime",
+        "summary",
+        "time"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/feedback.tsx",
+      "kind": "other",
+      "imports": [
+        "@/components/ui/button",
+        "lucide-react"
+      ],
+      "exports": [
+        "EmptyPanel",
+        "ErrorPanel",
+        "LoadingPanel"
+      ],
+      "symbols": [
+        "EmptyPanel",
+        "ErrorPanel",
+        "LoadingPanel"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/hooks.ts",
+      "kind": "other",
+      "imports": [
+        "./api",
+        "./types",
+        "@tanstack/react-query"
+      ],
+      "exports": [
+        "studioQueryKeys",
+        "useStudioDashboard",
+        "useStudioJobs",
+        "useStudioMutations",
+        "useStudioOptions"
+      ],
+      "symbols": [
+        "cancel",
+        "create",
+        "jobs",
+        "queryClient",
+        "replaceJob",
+        "retry",
+        "studioQueryKeys",
+        "syncJob",
+        "useStudioDashboard",
+        "useStudioJobs",
+        "useStudioMutations",
+        "useStudioOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/job-list.tsx",
+      "kind": "other",
+      "imports": [
+        "./feedback",
+        "./hooks",
+        "./types",
+        "@/components/ui/badge",
+        "@/components/ui/button",
+        "@/components/ui/card",
+        "@/components/ui/progress",
+        "@/lib/utils",
+        "lucide-react"
+      ],
+      "exports": [
+        "JobList"
+      ],
+      "symbols": [
+        "JobCard",
+        "JobList",
+        "active",
+        "cancelling",
+        "dateTime",
+        "jobs",
+        "jobsQuery",
+        "money",
+        "progress",
+        "retrying"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/navigation.ts",
+      "kind": "other",
+      "imports": [
+        "lucide-react"
+      ],
+      "exports": [
+        "StudioNavItem",
+        "studioNavigation"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/script-api.ts",
+      "kind": "other",
+      "imports": [
+        "@shared/ai-media-studio-scripts"
+      ],
+      "exports": [
+        "generateScriptVariants"
+      ],
+      "symbols": [
+        "body",
+        "generateScriptVariants",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/studio-shell.tsx",
+      "kind": "other",
+      "imports": [
+        "./navigation",
+        "@/components/ui/button",
+        "@/components/ui/sheet",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "StudioShell"
+      ],
+      "symbols": [
+        "Icon",
+        "StudioBrand",
+        "StudioNav",
+        "StudioShell",
+        "link",
+        "updateHash"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/types.ts",
+      "kind": "other",
+      "imports": [
+        "@shared/ai-media-studio"
+      ],
+      "exports": [
+        "CreateGenerationInput",
+        "CreateGenerationResponse",
+        "InfluencerOption",
+        "JobStatus",
+        "LanguageOption",
+        "MediaJob",
+        "MediaStudioSummary",
+        "ProviderHealth",
+        "ProviderStatus",
+        "QueueSnapshot",
+        "StudioActivity",
+        "StudioDashboard",
+        "StudioOptions",
+        "VoiceOption"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "client/src/hooks/use-mobile.tsx",
       "kind": "client-hook",
       "imports": [
@@ -2503,6 +2767,45 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/revenue-engine-delivery-requests.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "buildCopyableTrustedDeliverRequest",
+        "isTrustedDeliveryRequestReady"
+      ],
+      "symbols": [
+        "TrustedDeliverWorkspaceRequestSource",
+        "buildCopyableTrustedDeliverRequest",
+        "isTrustedDeliveryRequestReady",
+        "isWebsiteDelivery",
+        "persistedReleaseGateReady",
+        "readyForTrustedDelivery"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/revenue-engine-public-scout-connector.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "RevenuePublicScoutConnectorContext",
+        "buildPublicScoutConnectorIntakePayload",
+        "buildPublicScoutConnectorIntakeRequest",
+        "publicScoutConnectorIntakeEndpoint"
+      ],
+      "symbols": [
+        "ConnectorPayloadObject",
+        "buildPublicScoutConnectorIntakePayload",
+        "buildPublicScoutConnectorIntakeRequest",
+        "payload",
+        "publicScoutConnectorIntakeEndpoint",
+        "results",
+        "valueOrFallback"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/utils.ts",
       "kind": "client-lib",
       "imports": [
@@ -2692,6 +2995,29 @@
         "y",
         "y1",
         "y2"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/pages/ai-media-studio.tsx",
+      "kind": "client-page",
+      "imports": [
+        "@/components/ui/button",
+        "@/features/ai-media-studio/create-video-workbench",
+        "@/features/ai-media-studio/dashboard-overview",
+        "@/features/ai-media-studio/feedback",
+        "@/features/ai-media-studio/hooks",
+        "@/features/ai-media-studio/job-list",
+        "@/features/ai-media-studio/studio-shell",
+        "@/lib/utils",
+        "lucide-react"
+      ],
+      "exports": [
+        "AiMediaStudioPage"
+      ],
+      "symbols": [
+        "dashboardQuery",
+        "providerIssue"
       ],
       "routes": []
     },
@@ -3585,6 +3911,59 @@
       "routes": []
     },
     {
+      "path": "docs/ai-media-studio/adr-0001-provider-neutral-boundary.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/architecture.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/kanban.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/persistence.md",
+      "kind": "docs",
+      "imports": [
+        "../db",
+        "./ai-media-studio/persistence"
+      ],
+      "exports": [],
+      "symbols": [
+        "mediaJobs"
+      ],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/README.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/script-generation-contract.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/assistant-stabilization-plan.md",
       "kind": "docs",
       "imports": [],
@@ -3602,6 +3981,14 @@
     },
     {
       "path": "docs/clippers-tiktok-go-live.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -3650,6 +4037,14 @@
     },
     {
       "path": "docs/metricool-tracking-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/revenue-engine-first-lead-review.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -4863,14 +5258,18 @@
         "buildMap",
         "captureAll",
         "content",
+        "datalessFiles",
         "details",
+        "detectDatalessFiles",
         "dir",
         "entrypoints",
+        "existingFiles",
         "exports",
         "extension",
         "gitVisibleFiles",
         "imports",
         "indexed",
+        "isIndexCandidate",
         "keyFiles",
         "kind",
         "kindFor",
@@ -5116,6 +5515,23 @@
         "sourceDir",
         "userId",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-engine-money-readiness.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-engine-money-readiness-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "errors",
+        "main",
+        "options",
+        "report",
+        "snapshot"
       ],
       "routes": []
     },
@@ -5396,6 +5812,393 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/domain.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "GenerationRequest",
+        "MediaGenerationJob",
+        "MediaJobStatus",
+        "ProviderStatus",
+        "ProviderWebhookEvent",
+        "TERMINAL_STATUSES"
+      ],
+      "symbols": [
+        "TERMINAL_STATUSES"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/in-memory.ts",
+      "kind": "server",
+      "imports": [
+        "./domain",
+        "./ports",
+        "node:crypto"
+      ],
+      "exports": [
+        "InMemoryMediaJobQueue",
+        "InMemoryMediaJobRepository"
+      ],
+      "symbols": [
+        "InMemoryMediaJobQueue",
+        "InMemoryMediaJobRepository",
+        "copyJob",
+        "current",
+        "events",
+        "id",
+        "job",
+        "key",
+        "now",
+        "saved"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/index.ts",
+      "kind": "server",
+      "imports": [
+        "./domain",
+        "./in-memory",
+        "./ports",
+        "./providers/fake-video-provider",
+        "./providers/heygen-video-provider",
+        "./routes",
+        "./script-service",
+        "./service",
+        "./webhook-security"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/drizzle-media-job-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../domain",
+        "../ports",
+        "./mapping",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres",
+        "node:crypto"
+      ],
+      "exports": [
+        "AiMediaStudioDrizzleDatabase",
+        "DrizzleMediaJobRepository",
+        "DrizzleMediaJobRepositoryOptions"
+      ],
+      "symbols": [
+        "DEFAULT_WORKSPACE_ID",
+        "DrizzleMediaJobRepository",
+        "UNRESOLVED_WEBHOOK_OWNER",
+        "asJsonObject",
+        "existing",
+        "id",
+        "now",
+        "resultFields",
+        "rows"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/index.ts",
+      "kind": "server",
+      "imports": [
+        "./drizzle-media-job-repository",
+        "./mapping"
+      ],
+      "exports": [
+        "DrizzleMediaJobRepository,\n  type AiMediaStudioDrizzleDatabase,\n  type DrizzleMediaJobRepositoryOptions,\n",
+        "mapRenderJobRow "
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/mapping.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../domain"
+      ],
+      "exports": [
+        "mapRenderJobRow"
+      ],
+      "symbols": [
+        "mapRenderJobRow",
+        "optionalIso",
+        "request",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/runtime.ts",
+      "kind": "server",
+      "imports": [
+        "../domain",
+        "../in-memory",
+        "../ports"
+      ],
+      "exports": [
+        "MediaJobRepositorySelection",
+        "MediaStudioPersistenceMode",
+        "MediaStudioPersistenceStatus",
+        "MediaStudioPersistenceUnavailableError",
+        "SelectMediaJobRepositoryOptions",
+        "createDefaultDurableRepository",
+        "selectMediaJobRepository"
+      ],
+      "symbols": [
+        "LazyMediaJobRepository",
+        "MediaStudioPersistenceUnavailableError",
+        "UnavailableMediaJobRepository",
+        "createDefaultDurableRepository",
+        "environment",
+        "hasConfiguredDatabase",
+        "reason",
+        "selectMediaJobRepository",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/ports.ts",
+      "kind": "server",
+      "imports": [
+        "./domain"
+      ],
+      "exports": [
+        "MediaJobQueue",
+        "MediaJobRepository",
+        "MediaQueueMessage",
+        "ProviderSubmitContext",
+        "VideoProvider",
+        "VideoSubmission"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/fake-video-provider.ts",
+      "kind": "server",
+      "imports": [
+        "../domain",
+        "../ports",
+        "node:crypto"
+      ],
+      "exports": [
+        "FakeVideoProvider"
+      ],
+      "symbols": [
+        "FakeVideoProvider",
+        "data",
+        "digest",
+        "eventId",
+        "input",
+        "object",
+        "occurredAt",
+        "providerJobId",
+        "rawStatus",
+        "status",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-video-provider.ts",
+      "kind": "server",
+      "imports": [
+        "../domain",
+        "../ports",
+        "./fake-video-provider"
+      ],
+      "exports": [
+        "HeyGenProviderOptions",
+        "HeyGenResourceMap",
+        "HeyGenVideoProvider",
+        "createHeyGenResourceResolver",
+        "parseHeyGenResourceMap"
+      ],
+      "symbols": [
+        "HeyGenVideoProvider",
+        "avatarId",
+        "configured",
+        "createHeyGenResourceResolver",
+        "entries",
+        "influencers",
+        "parseHeyGenResourceMap",
+        "parsed",
+        "payload",
+        "providerJobId",
+        "resources",
+        "response",
+        "safeStringMap",
+        "voiceId",
+        "voices"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/routes.ts",
+      "kind": "server",
+      "imports": [
+        "../../shared/ai-media-studio",
+        "../../shared/ai-media-studio-scripts",
+        "../user-context",
+        "./domain",
+        "./in-memory",
+        "./persistence/runtime",
+        "./ports",
+        "./providers/fake-video-provider",
+        "./providers/heygen-video-provider",
+        "./script-service",
+        "./service",
+        "./webhook-security",
+        "express"
+      ],
+      "exports": [
+        "AiMediaStudioDependencies",
+        "AiMediaStudioRuntime",
+        "createAiMediaStudioRuntime",
+        "registerAiMediaStudioRoutes"
+      ],
+      "symbols": [
+        "INFLUENCERS",
+        "LANGUAGES",
+        "VOICES",
+        "asyncRoute",
+        "candidate",
+        "createAiMediaStudioRuntime",
+        "dashboard",
+        "defaultProviderKey",
+        "durations",
+        "envAssetHosts",
+        "input",
+        "job",
+        "jobs",
+        "ownerUserId",
+        "persistence",
+        "providerKey",
+        "providers",
+        "queue",
+        "rawBody",
+        "rawStatus",
+        "registerAiMediaStudioRoutes",
+        "repository",
+        "requestWithRawBody",
+        "resources",
+        "result",
+        "router",
+        "runtime",
+        "scriptService",
+        "secret",
+        "service",
+        "toPublicJob",
+        "today"
+      ],
+      "routes": [
+        "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
+        "${AI_MEDIA_STUDIO_API_BASE}/generations",
+        "${AI_MEDIA_STUDIO_API_BASE}/jobs",
+        "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id",
+        "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel",
+        "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry",
+        "${AI_MEDIA_STUDIO_API_BASE}/options",
+        "${AI_MEDIA_STUDIO_API_BASE}/runtime",
+        "${AI_MEDIA_STUDIO_API_BASE}/scripts/generate",
+        "${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey"
+      ]
+    },
+    {
+      "path": "server/ai-media-studio/script-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../shared/ai-media-studio-scripts",
+        "node:crypto"
+      ],
+      "exports": [
+        "DeterministicScriptService"
+      ],
+      "symbols": [
+        "DEFAULT_ANGLES",
+        "DeterministicScriptService",
+        "angles",
+        "fact",
+        "hashtagsFor",
+        "hook",
+        "keywords",
+        "location",
+        "primary",
+        "script",
+        "stableId",
+        "titleTag",
+        "typeTag"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/service.ts",
+      "kind": "server",
+      "imports": [
+        "./domain",
+        "./ports",
+        "node:crypto"
+      ],
+      "exports": [
+        "AiMediaStudioService",
+        "AiMediaStudioServiceOptions",
+        "MediaStudioError",
+        "isAllowedProviderAssetUrl"
+      ],
+      "symbols": [
+        "AiMediaStudioService",
+        "MediaStudioError",
+        "completed",
+        "enrichedPayload",
+        "event",
+        "existing",
+        "isAllowedProviderAssetUrl",
+        "job",
+        "jobs",
+        "message",
+        "occurredAt",
+        "parked",
+        "parsed",
+        "pending",
+        "provider",
+        "providerIdempotencyKey",
+        "startedAt",
+        "submission",
+        "terminal",
+        "timestampNumber",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/webhook-security.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "WebhookVerificationInput",
+        "verifyHeyGenWebhook"
+      ],
+      "symbols": [
+        "base64",
+        "hex",
+        "safeEqual",
+        "supplied",
+        "timestampMs",
+        "verifyHeyGenWebhook"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-router.ts",
       "kind": "server",
       "imports": [],
@@ -5446,6 +6249,7 @@
         "AppQaStatus",
         "AppQaSubAgentId",
         "AppQaSubAgentReport",
+        "AppQaTargetContext",
         "AppQaVisualRouteScan",
         "BugPatrolHandoff",
         "BugPatrolReport",
@@ -5472,6 +6276,7 @@
         "LIKELY_APP_REPO_KEYWORDS",
         "SAFE_CLICK_TEXT_BLOCKLIST",
         "VISUAL_SCREENSHOT_DIR",
+        "VisualClickScoutDependencies",
         "VisualRouteTextSnapshot",
         "__appQaAgentInternals",
         "activationControls",
@@ -6977,6 +7782,8 @@
         "MinimalRepo",
         "SENSITIVE_TEXT_PATTERNS",
         "__developerAutopilotInternals",
+        "actualControls",
+        "actualValue",
         "body",
         "buildCodexDispatchComment",
         "buildCodexGitHubIssueBody",
@@ -6998,6 +7805,8 @@
         "extractExplicitRepo",
         "failingAgents",
         "fallback",
+        "getAppQaTargetContextMismatches",
+        "getAppQaTargetVisualMismatches",
         "hasClientBuildIntent",
         "hasDeveloperTarget",
         "hasFixVerb",
@@ -7012,6 +7821,7 @@
         "match",
         "matches",
         "mentionsWork",
+        "missingControls",
         "normalizeEvidence",
         "normalizeText",
         "number",
@@ -7033,7 +7843,11 @@
         "repoSelectionText",
         "request",
         "requestWithRepo",
+        "requiredTargetContext",
+        "requiredValue",
         "risks",
+        "routePath",
+        "routeScan",
         "safeRequest",
         "safeTask",
         "safeTitle",
@@ -7047,6 +7861,8 @@
         "strictCostHeavyWork",
         "subscriptionBrief",
         "subscriptionRequest",
+        "targetContextMismatches",
+        "targetVisualMismatches",
         "tests",
         "text",
         "title",
@@ -7164,6 +7980,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "markDropshippingApprovalOutboxQueued",
         "preflightDropshippingShopifyDraft",
         "prepareDropshippingApprovalOutboxMigration",
@@ -7224,6 +8041,8 @@
         "DropshippingLaunchReadiness",
         "DropshippingLearningReview",
         "DropshippingLedgerEntry",
+        "DropshippingLiveProductSignal",
+        "DropshippingLiveProductSignalSource",
         "DropshippingMarketingCampaign",
         "DropshippingMarketingDepartment",
         "DropshippingOrder",
@@ -7275,6 +8094,7 @@
         "bestProduct",
         "blocked",
         "blockedUntil",
+        "blockers",
         "boardApprovals",
         "breakEvenOrders",
         "breakEvenOrdersAtBudget",
@@ -7303,6 +8123,7 @@
         "buildProductSubagentReviews",
         "buildProfitGuard",
         "buildScoutCandidateStatus",
+        "buildScoutLiveValidation",
         "buildScoutScorecard",
         "buildScoutValidation",
         "buildShopifyDraftGuardrail",
@@ -7320,6 +8141,7 @@
         "canRiskNowUsd",
         "canSpendUsd",
         "candidate",
+        "candidateKey",
         "candidateMatchesAutopilotFocus",
         "candidates",
         "capitalPlan",
@@ -7331,10 +8153,13 @@
         "channels",
         "cleanBaseUrl",
         "clickRatePercent",
+        "confidenceBonus",
         "config",
+        "connectedSources",
         "contentCalendar",
         "contentScore",
         "conversionRatePercent",
+        "coreReady",
         "createDropshippingProductScoutCandidate",
         "createDropshippingShopifyDraft",
         "createDropshippingSocialPostBatch",
@@ -7349,6 +8174,7 @@
         "decision",
         "decisionStatus",
         "demandScore",
+        "demandSignalRank",
         "deriveOrderStatus",
         "deriveProductStatus",
         "descriptionHtml",
@@ -7385,6 +8211,8 @@
         "encodedQuery",
         "endpoint",
         "engagementRatePercent",
+        "enrichScoutInputWithLiveSignals",
+        "enriched",
         "envFlag",
         "envMoney",
         "escapeHtml",
@@ -7403,6 +8231,8 @@
         "existingToday",
         "explicit",
         "externallyValidated",
+        "feed",
+        "filePath",
         "findCampaignById",
         "forcePaidTest",
         "formatForPlatform",
@@ -7417,6 +8247,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "getDropshippingPolicyUrls",
         "getFulfillmentActionsPath",
         "getGrowthSprintsPath",
@@ -7450,10 +8281,12 @@
         "hasProductOrSupplierBlock",
         "hook",
         "hooks",
+        "hydratedEvidence",
         "isDatabaseUrlConfigured",
         "item",
         "itemIdSet",
         "items",
+        "json",
         "landedCostUsd",
         "largeCampaignBlockedReason",
         "largeCampaignReady",
@@ -7475,6 +8308,16 @@
         "launchReadyProducts",
         "legalPenalty",
         "libraryMatch",
+        "liveBySource",
+        "liveProductSignalSchema",
+        "liveProductSignalSourceSchema",
+        "liveProductSignalStatusSchema",
+        "liveScore",
+        "liveSignal",
+        "liveSignalReadiness",
+        "liveSignalScore",
+        "liveSignalsForCandidate",
+        "liveValidation",
         "loadAll",
         "loadApprovalOutbox",
         "loadApprovals",
@@ -7508,6 +8351,7 @@
         "metricool",
         "microBudget",
         "missing",
+        "missingCore",
         "missingEnv",
         "missingSignals",
         "mode",
@@ -7580,6 +8424,7 @@
         "productEconomicsPersistedSchema",
         "productName",
         "productScorecardPersistedSchema",
+        "productSignalKey",
         "productsText",
         "profitBasedTestUsd",
         "profitDiff",
@@ -7598,13 +8443,16 @@
         "qualityPenalty",
         "query",
         "queuedPosts",
+        "rank",
         "rankAutopilotCandidates",
         "ranked",
         "rankedCandidates",
         "raw",
         "rawCanSpendUsd",
+        "rawLiveValidation",
         "rawMode",
         "readJsonArray",
+        "readLiveProductSignalFeed",
         "readinessPercent",
         "ready",
         "reasons",
@@ -7648,7 +8496,9 @@
         "scopedCandidates",
         "scopedMetrics",
         "score",
+        "scoreBonus",
         "scoreDiff",
+        "scorePenalty",
         "scorecard",
         "scoutReadyCandidates",
         "scoutResult",
@@ -7688,6 +8538,8 @@
         "shopifyText",
         "shouldAnalyzeSocial",
         "shouldSuggestPaid",
+        "signalKey",
+        "signals",
         "snapshot",
         "socialBatch",
         "socialConfig",
@@ -7702,12 +8554,15 @@
         "socialSpendUsd",
         "socialViews",
         "sourceBonus",
+        "sourceCounts",
         "sprintRevenueTargetUsd",
         "sprintText",
         "stage",
         "stageGate",
         "stages",
         "status",
+        "statusScore",
+        "strongerDemandSignal",
         "subagentReviews",
         "summarizeLedger",
         "summary",
@@ -7738,7 +8593,10 @@
         "unfulfilledOrders",
         "userErrors",
         "value",
+        "verifiedSignals",
+        "verifiedSources",
         "visibleCount",
+        "weakerRisk",
         "webhookToken",
         "webhookUrl",
         "winner",
@@ -7906,6 +8764,7 @@
         "@octokit/rest"
       ],
       "exports": [
+        "GitHubAppQaTargetEvidence",
         "GitHubPullRequestReleaseStatus",
         "GitHubPullRequestUrlParts",
         "createIssue",
@@ -7945,6 +8804,7 @@
         "changesRequestedReviews",
         "checkRuns",
         "client",
+        "commentIncludesAppQaTargetEvidence",
         "completedChecks",
         "configuredToken",
         "createIssue",
@@ -7991,6 +8851,7 @@
         "pull",
         "pullNumber",
         "repoError",
+        "requiredValues",
         "reviewer",
         "segments",
         "statusList",
@@ -8392,6 +9253,7 @@
         "./market-news",
         "./promo-video-agent",
         "./reminder-scheduler",
+        "./revenue-engine",
         "./routes",
         "./session-config",
         "./static",
@@ -10029,11 +10891,91 @@
       ]
     },
     {
+      "path": "server/revenue-engine-money-readiness-cli.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "RevenueMoneyReadinessCliOptions",
+        "RevenueMoneyReadinessMode",
+        "RevenueMoneyReadinessReport",
+        "buildRevenueMoneyReadinessReport",
+        "formatRevenueMoneyReadinessText",
+        "hydrateRevenueMoneyReadinessSnapshot",
+        "parseRevenueMoneyReadinessArgs",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "symbols": [
+        "RevenueMoneyReadinessCheck",
+        "RevenueMoneyReadinessSnapshot",
+        "arg",
+        "buildRevenueMoneyReadinessReport",
+        "command",
+        "firstSprintReady",
+        "formatRevenueMoneyReadinessText",
+        "getValue",
+        "hydrateRevenueMoneyReadinessSnapshot",
+        "mode",
+        "modeReady",
+        "moneyModeReady",
+        "parseRevenueMoneyReadinessArgs",
+        "plan",
+        "prefix",
+        "productionDatabaseMissing",
+        "productionLaunchReady",
+        "productionSetupReady",
+        "researchReady",
+        "safeDryRun",
+        "sessionSecretReady",
+        "setupPacket",
+        "userId",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-engine-state-store.ts",
+      "kind": "server",
+      "imports": [
+        "@shared/schema",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "RevenueEngineStateAdapter",
+        "RevenueEngineStateCollection",
+        "RevenueEngineStateStore",
+        "RevenueEngineStateStoreHealth",
+        "RevenueEngineStateUpsert",
+        "RevenueEngineStateWrite",
+        "createDrizzleRevenueEngineStateAdapter",
+        "createRevenueEngineStateStore"
+      ],
+      "symbols": [
+        "RevenueEngineDatabase",
+        "RevenueEngineStateStore",
+        "adapter",
+        "attempt",
+        "createDrizzleRevenueEngineStateAdapter",
+        "createRevenueEngineStateStore",
+        "errorMessage",
+        "errors",
+        "loadDefaultAdapter",
+        "normalized",
+        "normalizedOwnerUserId",
+        "operation",
+        "requireKey",
+        "revisionKey",
+        "row",
+        "rows"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/routes.ts",
       "kind": "server",
       "imports": [
         "./agent-actions",
         "./ai-cost-policy",
+        "./ai-media-studio",
         "./app-qa-agent",
         "./assistant",
         "./automation-registry",
@@ -10063,7 +11005,6 @@
         "./radio-template-agent",
         "./reminder-scheduler",
         "./revenue-engine",
-        "./shopify-oauth",
         "./storage",
         "./telegram-routes",
         "./trust-executor",
@@ -10102,6 +11043,7 @@
         "appProject",
         "appQaGateSchema",
         "appQaPrCommentBody",
+        "appQaTargetContext",
         "applyButton",
         "applyReadyButton",
         "approved",
@@ -10138,6 +11080,7 @@
         "config",
         "connected",
         "connection",
+        "contentSecurityPolicy",
         "contents",
         "copyButton",
         "copyPacket",
@@ -10203,6 +11146,7 @@
         "gateScript",
         "getWeekStart",
         "githubConnected",
+        "githubProjectOwnerUserId",
         "goLiveAuditHtml",
         "goal",
         "goals",
@@ -10242,6 +11186,7 @@
         "message",
         "minimalExternalPortalLauncherHtml",
         "missingFields",
+        "modulePath",
         "month",
         "monthParam",
         "nestedErrors",
@@ -10257,6 +11202,7 @@
         "operationalHealth",
         "operatorQueue",
         "opportunities",
+        "originalJson",
         "overdueTasks",
         "overview",
         "pack",
@@ -10295,8 +11241,6 @@
         "proofTodoHtml",
         "protocol",
         "publicBaseUrlFromRedirectUri",
-        "publicIssueDescription",
-        "publicIssueTitle",
         "qaAutomation",
         "query",
         "queue",
@@ -10315,6 +11259,7 @@
         "recommendations",
         "recurringTasks",
         "redirectUri",
+        "refreshed",
         "registerRoutes",
         "release",
         "removed",
@@ -10340,12 +11285,11 @@
         "safe",
         "safePortalUrl",
         "saleGate",
-        "sanitizedBuildBrief",
         "scan",
         "seenRecurringTitles",
-        "shop",
         "slots",
         "snoozedUntil",
+        "source",
         "sourceIngestionSprint",
         "sprint",
         "status",
@@ -10604,6 +11548,7 @@
         "/api/dropshipping-ceo/launch-readiness",
         "/api/dropshipping-ceo/learning-review",
         "/api/dropshipping-ceo/ledger",
+        "/api/dropshipping-ceo/live-signal-readiness",
         "/api/dropshipping-ceo/marketing-campaign",
         "/api/dropshipping-ceo/operating-cycle",
         "/api/dropshipping-ceo/order",
@@ -10697,6 +11642,7 @@
         "/api/revenue-engine",
         "/api/revenue-engine/agent-runs",
         "/api/revenue-engine/approval-decisions",
+        "/api/revenue-engine/assets/three.module.js",
         "/api/revenue-engine/automation-agent-command",
         "/api/revenue-engine/automation-intakes",
         "/api/revenue-engine/automation-intakes/answer",
@@ -10748,10 +11694,6 @@
         "/api/revenue-engine/website-delivery-workspace",
         "/api/revenue-engine/website-opportunities",
         "/api/revenue-engine/website-opportunities/close",
-        "/api/shopify/install",
-        "/api/shopify/oauth/callback",
-        "/api/shopify/oauth/start",
-        "/api/shopify/oauth/status",
         "/api/tasks",
         "/api/tasks/:id",
         "/api/tasks/by-title/:title",
@@ -10910,6 +11852,7 @@
       "kind": "server",
       "imports": [
         "./shopify-oauth",
+        "./user-context",
         "express"
       ],
       "exports": [
@@ -10919,7 +11862,9 @@
         "escapeHtml",
         "registerShopifyRoutes",
         "result",
-        "shop"
+        "shop",
+        "shopifyOwnerUserId",
+        "userId"
       ],
       "routes": [
         "/api/shopify/install",
@@ -11782,6 +12727,148 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-scripts.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "GenerateScriptVariantsRequest",
+        "GenerateScriptVariantsResponse",
+        "MediaSourceSnapshot",
+        "MediaSourceType",
+        "ParsedGenerateScriptVariantsRequest",
+        "ScriptSet",
+        "ScriptVariant",
+        "generateScriptVariantsRequestSchema",
+        "generateScriptVariantsResponseSchema",
+        "mediaSourceSnapshotSchema",
+        "mediaSourceTypeSchema",
+        "scriptSetSchema",
+        "scriptVariantSchema"
+      ],
+      "symbols": [
+        "generateScriptVariantsRequestSchema",
+        "generateScriptVariantsResponseSchema",
+        "mediaSourceSnapshotSchema",
+        "mediaSourceTypeSchema",
+        "scriptSetSchema",
+        "scriptVariantSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/ai-media-studio.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-scripts",
+        "zod"
+      ],
+      "exports": [
+        "AI_MEDIA_STUDIO_API_BASE",
+        "AI_MEDIA_STUDIO_ROUTE",
+        "AiMediaStudioDashboardResponse",
+        "AiMediaStudioOptionsResponse",
+        "CreateGenerationRequest",
+        "CreateGenerationResponse",
+        "MediaJob",
+        "MediaJobResponse",
+        "MediaJobStatus",
+        "MediaJobsResponse",
+        "ProviderHealthStatus",
+        "ProviderStatus",
+        "createGenerationRequestSchema",
+        "createGenerationResponseSchema",
+        "dashboardResponseSchema",
+        "influencerOptionSchema",
+        "languageOptionSchema",
+        "mediaJobResponseSchema",
+        "mediaJobSchema",
+        "mediaJobStatusSchema",
+        "mediaJobsResponseSchema",
+        "mediaStudioOptionsResponseSchema",
+        "providerHealthStatusSchema",
+        "providerStatusSchema",
+        "voiceOptionSchema"
+      ],
+      "symbols": [
+        "AI_MEDIA_STUDIO_API_BASE",
+        "AI_MEDIA_STUDIO_ROUTE",
+        "createGenerationRequestSchema",
+        "createGenerationResponseSchema",
+        "dashboardResponseSchema",
+        "influencerOptionSchema",
+        "languageOptionSchema",
+        "mediaJobResponseSchema",
+        "mediaJobSchema",
+        "mediaJobStatusSchema",
+        "mediaJobsResponseSchema",
+        "mediaStudioOptionsResponseSchema",
+        "providerHealthStatusSchema",
+        "providerStatusSchema",
+        "voiceOptionSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/models/ai-media-studio-db.ts",
+      "kind": "shared",
+      "imports": [
+        "drizzle-orm/pg-core"
+      ],
+      "exports": [
+        "AiMediaOutboxRow",
+        "AiMediaRenderJobRow",
+        "AiMediaWebhookEventRow",
+        "NewAiMediaOutboxRow",
+        "NewAiMediaRenderJobRow",
+        "NewAiMediaWebhookEventRow",
+        "aiMediaAnalyticsEvents",
+        "aiMediaAnalyticsSnapshots",
+        "aiMediaCostLedger",
+        "aiMediaGenerationHistory",
+        "aiMediaInfluencers",
+        "aiMediaMediaAssets",
+        "aiMediaOutbox",
+        "aiMediaProviderAccounts",
+        "aiMediaProviderResources",
+        "aiMediaPublications",
+        "aiMediaPublishingJobs",
+        "aiMediaRenderJobs",
+        "aiMediaScriptVariants",
+        "aiMediaScripts",
+        "aiMediaSourceItems",
+        "aiMediaStudioTables",
+        "aiMediaVideoProjects",
+        "aiMediaVideos",
+        "aiMediaWebhookEvents"
+      ],
+      "symbols": [
+        "aiMediaAnalyticsEvents",
+        "aiMediaAnalyticsSnapshots",
+        "aiMediaCostLedger",
+        "aiMediaGenerationHistory",
+        "aiMediaInfluencers",
+        "aiMediaMediaAssets",
+        "aiMediaOutbox",
+        "aiMediaProviderAccounts",
+        "aiMediaProviderResources",
+        "aiMediaPublications",
+        "aiMediaPublishingJobs",
+        "aiMediaRenderJobs",
+        "aiMediaScriptVariants",
+        "aiMediaScripts",
+        "aiMediaSourceItems",
+        "aiMediaStudioTables",
+        "aiMediaVideoProjects",
+        "aiMediaVideos",
+        "aiMediaWebhookEvents",
+        "auditColumns",
+        "tenantColumns"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/models/chat.ts",
       "kind": "shared",
       "imports": [
@@ -11812,6 +12899,7 @@
       "path": "shared/schema.ts",
       "kind": "shared",
       "imports": [
+        "./models/ai-media-studio-db",
         "drizzle-orm",
         "drizzle-orm/pg-core",
         "drizzle-zod",
@@ -11904,6 +12992,7 @@
         "PriceAlert",
         "PushSubscription",
         "RadioTemplateAsset",
+        "RevenueEngineState",
         "RiskLevel",
         "ScheduledReminder",
         "Task",
@@ -11987,6 +13076,7 @@
         "priceAlerts",
         "pushSubscriptions",
         "radioTemplateAssets",
+        "revenueEngineState",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -12068,6 +13158,7 @@
         "priceAlerts",
         "pushSubscriptions",
         "radioTemplateAssets",
+        "revenueEngineState",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -12095,6 +13186,182 @@
         "cost",
         "notice",
         "previous"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-backend.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/providers/heygen-video-provider",
+        "../server/ai-media-studio/script-service",
+        "../server/ai-media-studio/service",
+        "../server/ai-media-studio/webhook-security",
+        "../shared/ai-media-studio",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FixedProvider",
+        "RecordingProvider",
+        "body",
+        "cancelled",
+        "completed",
+        "completedAt",
+        "createHarness",
+        "event",
+        "finalJob",
+        "first",
+        "job",
+        "map",
+        "nowMs",
+        "otherOwner",
+        "parsed",
+        "provider",
+        "queue",
+        "rawBody",
+        "repository",
+        "request",
+        "result",
+        "retried",
+        "second",
+        "secret",
+        "service",
+        "signature",
+        "sourceTypes",
+        "timestamp"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-persistence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/persistence/mapping",
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "completedAt",
+        "createdAt",
+        "expectedTableExports",
+        "mapped",
+        "providerAccountBlock",
+        "schemaSource"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio",
+        "../shared/ai-media-studio-scripts",
+        "express",
+        "node:assert/strict",
+        "node:crypto",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "baseUrl",
+        "cancelled",
+        "created",
+        "createdResponse",
+        "detail",
+        "failedBody",
+        "failedWebhook",
+        "generationBody",
+        "internalJob",
+        "invalid",
+        "invalidWebhook",
+        "jobsA",
+        "jobsB",
+        "jsonHeaders",
+        "optionsJson",
+        "optionsResponse",
+        "retried",
+        "retryCreate",
+        "retryInternal",
+        "retryTarget",
+        "runtime",
+        "scripts",
+        "secret",
+        "server",
+        "signature",
+        "timestamp",
+        "unauthorized",
+        "unknown",
+        "unknownBody",
+        "userId",
+        "validWebhook",
+        "validWebhookBody",
+        "webhookBody"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-runtime-persistence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/persistence/runtime",
+        "../server/ai-media-studio/ports",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "durableRepository",
+        "selection"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-schema-wiring.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "centralSchema",
+        "config",
+        "model",
+        "readWorkspaceFile"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-scripts-contract.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-scripts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "parsed",
+        "sourceTypes",
+        "variant"
       ],
       "routes": []
     },
@@ -12163,6 +13430,7 @@
         "runManual",
         "runMorningDeep",
         "runNow",
+        "runRevenueTarget",
         "salesNotes",
         "salesOnlyBody",
         "scan",
@@ -12448,22 +13716,34 @@
       "path": "tests/ceo-ownership.test.ts",
       "kind": "test",
       "imports": [
+        "../server/routes",
+        "express",
         "node:assert/strict",
         "node:fs",
+        "node:http",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "address",
+        "app",
         "assistantSource",
+        "baseUrl",
         "clippersSource",
         "indexSource",
         "localAuthSource",
+        "previousAllowDevFallback",
+        "previousDefaultUserId",
         "promoSource",
+        "requests",
+        "response",
         "revenueSource",
         "routeCalls",
         "routesSource",
         "schedulerSource",
         "scriptSource",
+        "server",
+        "shopifyRoutesSource",
         "source",
         "storageSource",
         "telegramSource",
@@ -12694,6 +13974,23 @@
       "routes": []
     },
     {
+      "path": "tests/codebase-map-dataless.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "GeneratedCodebaseMap",
+        "indexedFiles",
+        "map"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/cybersecurity-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -12731,14 +14028,24 @@
       "path": "tests/developer-autopilot-wiring.test.ts",
       "kind": "test",
       "imports": [
+        "../client/src/lib/revenue-engine-delivery-requests",
         "node:assert/strict",
         "node:fs",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "appQaGateRoute",
+        "appQaGateRouteEnd",
+        "appQaGateRouteStart",
+        "automationRequest",
         "autopilotIndex",
+        "baseWorkspace",
         "connectorMutationSource",
+        "deliverMutation",
+        "deliverMutationEnd",
+        "deliverMutationStart",
+        "deliveryRequestSource",
         "engineSource",
         "genericIndex",
         "githubHandoffRoute",
@@ -12749,19 +14056,26 @@
         "mutationEnd",
         "mutationStart",
         "routeSource",
+        "safeRunEnd",
+        "safeRunEndpoints",
+        "safeRunStart",
         "scoutDispatchEnd",
         "scoutDispatchMutation",
         "scoutDispatchStart",
         "serverSource",
         "source",
         "uiSource",
+        "websiteMissingReleaseRequest",
         "websiteOpportunityCloseEnd",
         "websiteOpportunityCloseMutation",
-        "websiteOpportunityCloseStart"
+        "websiteOpportunityCloseStart",
+        "websiteRequest"
       ],
       "routes": [
+        "/api/revenue-engine/delivery-workspaces/app-qa-gate",
         "/api/revenue-engine/delivery-workspaces/github-handoff",
-        "/api/revenue-engine/delivery-workspaces/pr-status"
+        "/api/revenue-engine/delivery-workspaces/pr-status",
+        "/api/revenue-engine/delivery-workspaces/release-gate"
       ]
     },
     {
@@ -12783,6 +14097,7 @@
         "handoff",
         "message",
         "request",
+        "requiredTargetContext",
         "safeTitle",
         "title"
       ],
@@ -12848,6 +14163,8 @@
         "order",
         "originalDatabaseUrl",
         "originalExpoPublicDomain",
+        "originalLiveProductSignalsJson",
+        "originalLiveProductSignalsPath",
         "originalMetricoolMcpUrl",
         "originalMetricoolUserId",
         "originalMetricoolUserToken",
@@ -12919,11 +14236,13 @@
         "apiFailure",
         "buildReleaseStatusInput",
         "fakeAppQaLogin",
+        "genericComment",
         "headSha",
         "missingHead",
         "pendingChecks",
         "ready",
         "staleApproval",
+        "targetedComment",
         "untrusted"
       ],
       "routes": []
@@ -13223,213 +14542,67 @@
       "routes": []
     },
     {
-      "path": "tests/revenue-engine.test.ts",
+      "path": "tests/revenue-engine-money-readiness-cli.test.ts",
       "kind": "test",
       "imports": [
-        "../server/revenue-engine",
-        "../server/routes",
-        "express",
+        "../server/revenue-engine-money-readiness-cli",
         "node:assert/strict",
-        "node:fs",
-        "node:http",
-        "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
-        "answered",
-        "app",
-        "approval",
-        "approved",
-        "attemptDelivery",
-        "bareStripePrefix",
-        "baseInput",
-        "beforeSprint",
-        "blocked",
-        "blockedClose",
-        "blockedDelivery",
-        "blockedSend",
-        "buildHandoff",
-        "buildOpportunity",
-        "call",
-        "candidate",
-        "cappedDraft",
-        "cappedQueue",
-        "cashCollectedUsd",
-        "close",
-        "closeResult",
-        "closeWithWeakNarrativePayment",
-        "closeWithWeakPaymentConfirmation",
-        "closeWithoutExplicitPaymentConfirmation",
-        "collectOpportunity",
-        "commandInput",
-        "connectorResult",
-        "contactFormItem",
-        "converted",
-        "createApprovedWebsiteDraftForTest",
-        "createSoldWebsiteWorkspaceForTest",
-        "created",
-        "delivered",
-        "delivery",
-        "depositOutcome",
-        "directWorkspace",
-        "dirtyRow",
-        "draft",
-        "draftB",
-        "draftOne",
-        "draftResult",
-        "draftTen",
-        "drafts",
-        "duplicate",
-        "duplicateDifferentTask",
-        "duplicateHandoff",
-        "duplicateSubmit",
-        "fakeClose",
-        "first",
-        "genericCategory",
-        "genericGoogleSearch",
-        "genericInstagram",
-        "genericYelp",
-        "handler",
-        "handoff",
-        "handoffItem",
-        "html",
-        "incompleteClose",
-        "initial",
-        "instagramItem",
-        "insufficientCash",
-        "invalid",
-        "invalidLedger",
-        "invoke",
-        "lead",
-        "leadA",
-        "leadB",
-        "leadOne",
-        "leadResult",
-        "leadStatusBeforeRepoBlock",
-        "leadTen",
-        "leads",
-        "legacyWorkspace",
-        "longEvidence",
-        "longNotes",
-        "longRunId",
-        "longSourceTaskId",
-        "lookup",
-        "mainBranchHandoff",
-        "mismatchedPayment",
-        "missingEvidence",
-        "missingPaymentEvidence",
-        "missingRepoHandoff",
-        "mission",
-        "mockup",
-        "newer",
-        "newerDraft",
-        "newerOpportunity",
-        "nextDraft",
-        "oldOpportunity",
-        "oldReady",
-        "older",
-        "olderClosure",
-        "olderPacket",
-        "opportunities",
-        "opportunity",
-        "opportunityOne",
-        "opportunityResult",
-        "opportunityTen",
-        "originalDatabaseUrl",
-        "originalDateNow",
-        "originalNodeEnv",
-        "originalResendApiKey",
-        "originalResendFromEmail",
-        "originalRevenueEngineFromEmail",
-        "originalRevenueMockupsDir",
-        "outcome",
-        "overflowDraft",
-        "pack",
-        "parsed",
-        "partialDeposit",
-        "paths",
-        "persistedDraft",
-        "persistedOpportunity",
-        "persistenceItem",
-        "plainPrUrl",
-        "plan",
-        "postSaleSnapshot",
-        "prTabUrl",
-        "prUrl",
-        "preHandoffSnapshot",
-        "preservedOpportunity",
-        "preview",
-        "previewPath",
-        "privateSources",
-        "qaReady",
-        "queryPrUrl",
-        "queue",
-        "quote",
-        "radar",
-        "readiness",
-        "readyDraft",
-        "readyLead",
-        "reboundAttempt",
-        "related",
-        "releaseGate",
-        "reloadedSnapshot",
-        "reply",
-        "repoSaved",
-        "requiredDepositUsd",
-        "res",
-        "response",
+        "base",
+        "output",
+        "report",
         "result",
-        "retriedDelivery",
-        "retry",
-        "review",
-        "routeLayer",
-        "row",
-        "saleGate",
-        "scopedOnly",
-        "scopedOnlyResult",
-        "scopedSnapshot",
-        "second",
-        "secondHandoff",
-        "sellWebsiteOpportunityForTest",
-        "sendResult",
-        "server",
         "snapshot",
-        "soldHandoffItem",
-        "soldOpportunity",
-        "spoofedPlatform",
-        "sprint",
-        "statusBeforeApproval",
-        "taskId",
-        "testAgentRunsPath",
-        "testApprovalDecisionsPath",
-        "testAutomationIntakesPath",
-        "testAutomationOpportunitiesPath",
-        "testDailyScoutSprintsPath",
-        "testDeliveryWorkspacesPath",
-        "testImprovementReviewsPath",
-        "testLeadsPath",
-        "testLedgerPath",
-        "testMockupsDir",
-        "testOutreachPath",
-        "testPublicLeadCandidatesPath",
-        "testScoutingMissionsPath",
-        "testWebsiteOpportunitiesPath",
-        "token",
-        "tokenMatchingInstagramExplore",
-        "tokenMatchingYelpSearch",
-        "trustedDelivery",
-        "unrelated",
-        "untrusted",
-        "untrustedDelivery",
-        "updated",
-        "updatedSprint",
-        "validRow",
-        "weakNarrativeEvidence",
-        "weakPaymentEvidence",
-        "workspace",
-        "workspaceId",
-        "wrongKind"
+        "snapshotFixture"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-engine-public-scout-connector.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/revenue-engine-public-scout-connector",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "connectorContext",
+        "payload",
+        "request",
+        "resultRow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-engine-state-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine-state-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "createMemoryAdapter",
+        "current",
+        "first",
+        "firstBlocked",
+        "firstStore",
+        "health",
+        "key",
+        "load",
+        "loaded",
+        "memory",
+        "originalUpsert",
+        "row",
+        "rows",
+        "second",
+        "staleStore",
+        "store"
       ],
       "routes": []
     },
@@ -13643,6 +14816,14 @@
       "routes": []
     },
     {
+      "path": "tsconfig.ai-media-studio.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "tsconfig.json",
       "kind": "other",
       "imports": [],
@@ -13720,6 +14901,12 @@
   ],
   "tests": [
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-media-studio-backend.test.ts",
+    "tests/ai-media-studio-persistence.test.ts",
+    "tests/ai-media-studio-routes.test.ts",
+    "tests/ai-media-studio-runtime-persistence.test.ts",
+    "tests/ai-media-studio-schema-wiring.test.ts",
+    "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
@@ -13741,6 +14928,7 @@
     "tests/clippers-agent.test.ts",
     "tests/clippers-owned-source-scripts.test.ts",
     "tests/code-agent-security.test.ts",
+    "tests/codebase-map-dataless.test.ts",
     "tests/cybersecurity-agent.test.ts",
     "tests/db-config.test.ts",
     "tests/developer-autopilot-wiring.test.ts",
@@ -13764,6 +14952,9 @@
     "tests/rate-limit.test.ts",
     "tests/reminder-scheduler.test.ts",
     "tests/revenue-engine-delivery-qa.test.ts",
+    "tests/revenue-engine-money-readiness-cli.test.ts",
+    "tests/revenue-engine-public-scout-connector.test.ts",
+    "tests/revenue-engine-state-store.test.ts",
     "tests/revenue-engine.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
@@ -13779,10 +14970,12 @@
     "tests/user-context.test.ts",
     "tests/user-migration-plan.test.ts"
   ],
+  "skippedDatalessFiles": [],
   "guardrails": [
     "Generated locally from Git-visible files only: tracked files plus untracked files that are not ignored.",
     "Skips credentials/, secrets/, .env files, node_modules/, build outputs, media folders, and large data exports.",
     "Does not index SQL files or filenames that look like dumps, backups, credentials, secrets, or tokens.",
+    "On macOS, skips iCloud placeholders marked dataless instead of blocking while their contents download.",
     "Use this map to narrow exploration; verify behavior in source files before editing."
   ]
 }

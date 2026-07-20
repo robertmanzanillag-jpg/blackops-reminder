@@ -1063,3 +1063,7 @@ export const insertScheduledReminderSchema = createInsertSchema(scheduledReminde
 
 export type ScheduledReminder = typeof scheduledReminders.$inferSelect;
 export type InsertScheduledReminder = z.infer<typeof insertScheduledReminderSchema>;
+
+// Drizzle Kit loads this file as its schema entrypoint. Re-export the isolated
+// AI Media Studio model so its tables participate in generated migrations.
+export * from "./models/ai-media-studio-db";

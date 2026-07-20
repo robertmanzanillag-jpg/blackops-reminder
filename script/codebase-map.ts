@@ -27,6 +27,7 @@ type CodebaseMap = {
   files: FileNode[];
   entrypoints: string[];
   tests: string[];
+  skippedDatalessFiles: string[];
   guardrails: string[];
 };
 
@@ -82,7 +83,42 @@ function gitVisibleFiles(): string[] {
     .filter(Boolean);
 }
 
-function shouldIndex(file: string): boolean {
+function detectDatalessFiles(visibleFiles: string[]): Set<string> {
+  if (process.platform !== "darwin" || visibleFiles.length === 0) return new Set();
+
+  try {
+    const existingFiles = visibleFiles
+      .map((file) => path.join(REPO_ROOT, file))
+      .filter((file) => existsSync(file));
+    if (existingFiles.length === 0) return new Set();
+
+    const output = execFileSync(
+      "find",
+      [
+        ...existingFiles,
+        "-type",
+        "f",
+        "-flags",
+        "+dataless",
+        "-print0",
+      ],
+      { cwd: REPO_ROOT, maxBuffer: 4 * 1024 * 1024 },
+    );
+    return new Set(
+      output
+        .toString("utf8")
+        .split("\0")
+        .filter(Boolean)
+        .map((absolute) => path.relative(REPO_ROOT, absolute)),
+    );
+  } catch {
+    // `-flags +dataless` is a macOS-specific metadata check. On unsupported
+    // filesystems or `find` implementations, retain the portable behavior.
+    return new Set();
+  }
+}
+
+function isIndexCandidate(file: string): boolean {
   if (SKIP_FILES.includes(file)) return false;
   if (SKIP_PREFIXES.some((prefix) => file.startsWith(prefix))) return false;
   if (/(^|[/_-])(dump|export|backup|credentials?|secrets?|tokens?)([/_.-]|$)/i.test(file)) return false;
@@ -92,6 +128,10 @@ function shouldIndex(file: string): boolean {
   const absolute = path.join(REPO_ROOT, file);
   if (!existsSync(absolute)) return false;
   return statSync(absolute).size <= 350_000;
+}
+
+function shouldIndex(file: string, datalessFiles: ReadonlySet<string>): boolean {
+  return isIndexCandidate(file) && !datalessFiles.has(file);
 }
 
 function kindFor(file: string): string {
@@ -170,12 +210,13 @@ function readPackage() {
 
 function buildMap(): CodebaseMap {
   const visibleFiles = gitVisibleFiles();
+  const datalessFiles = detectDatalessFiles(visibleFiles);
   const { packageName, scripts } = readPackage();
   const directories: CodebaseMap["directories"] = {};
   const files: FileNode[] = [];
 
   for (const file of visibleFiles) {
-    const indexed = shouldIndex(file);
+    const indexed = shouldIndex(file, datalessFiles);
     const kind = kindFor(file);
     addDirectory(directories, file, indexed, kind);
     if (indexed) files.push(analyze(file));
@@ -212,10 +253,14 @@ function buildMap(): CodebaseMap {
     files: files.sort((left, right) => left.path.localeCompare(right.path)),
     entrypoints,
     tests,
+    skippedDatalessFiles: [...datalessFiles]
+      .filter(isIndexCandidate)
+      .sort(),
     guardrails: [
       "Generated locally from Git-visible files only: tracked files plus untracked files that are not ignored.",
       "Skips credentials/, secrets/, .env files, node_modules/, build outputs, media folders, and large data exports.",
       "Does not index SQL files or filenames that look like dumps, backups, credentials, secrets, or tokens.",
+      "On macOS, skips iCloud placeholders marked dataless instead of blocking while their contents download.",
       "Use this map to narrow exploration; verify behavior in source files before editing.",
     ],
   };
@@ -243,6 +288,9 @@ function renderMarkdown(map: CodebaseMap): string {
   lines.push("");
   lines.push("## Guardrails");
   for (const guardrail of map.guardrails) lines.push(`- ${guardrail}`);
+  if (map.skippedDatalessFiles.length > 0) {
+    lines.push(`- Omitted ${map.skippedDatalessFiles.length} macOS dataless file(s); hydrate them and regenerate for a complete local index.`);
+  }
   lines.push("");
   lines.push("## Totals");
   lines.push(tableRow(["Git-visible files", "Indexed files", "Imports", "Routes", "Symbols"]));

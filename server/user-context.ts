@@ -25,7 +25,9 @@ const PUBLIC_API_PATHS = [
   "/api/zoho/callback",
 ];
 
-const PUBLIC_API_PATTERNS: RegExp[] = [];
+const PUBLIC_API_PATTERNS: RegExp[] = [
+  /^\/api\/ai-media-studio\/webhooks\/providers\/[a-z0-9][a-z0-9_-]{0,63}$/,
+];
 
 function cleanUserId(value: unknown): string | null {
   if (typeof value !== "string") return null;
