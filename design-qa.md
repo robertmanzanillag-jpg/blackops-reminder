@@ -55,4 +55,12 @@ No actionable P0, P1, or P2 findings remain.
 - Primary interaction tested: “Use professional version” populated the revised subject/body and “Save revision” persisted it while returning the draft to approval-required state. No email was sent.
 - No P0/P1/P2 visual or content regressions found.
 
+## Accessible website-pricing pass
+
+- Implementation evidence: `design-qa-pricing.png` in the pending-approval state.
+- The selected proposal keeps one exact recommended price and 50% deposit, while a concise line explains the available website range: $700 Starter, $1,500 Growth, and $2,500 Premium.
+- New website proposals default to the $1,500 mid-tier. Website-only production handoffs are bounded to $700–$2,500, while historical/custom bundle inputs remain readable for compatibility.
+- The pricing explanation fits the existing offer area without changing the approved visual hierarchy or introducing another nested card.
+- No P0/P1/P2 visual or workflow regressions found.
+
 final result: passed

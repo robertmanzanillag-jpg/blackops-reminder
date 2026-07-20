@@ -3453,6 +3453,62 @@ test("builds concise client-facing outreach without exposing internal economics"
   assert.equal(proposal.body.length < 1800, true);
 });
 
+test("defaults new website proposals to the accessible mid-tier price", () => {
+  const proposal = buildProposalEmail({
+    recipientEmail: "owner@example.com",
+    contactName: "Owner",
+    businessName: "Accessible Price Co",
+    businessSummary: "Public website opportunity with a verified contact path.",
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  });
+
+  assert.equal(proposal.pricing.totalSetupUsd, 1500);
+  assert.equal(proposal.pricing.depositUsd, 750);
+  assert.match(proposal.body, /Initial project: \$1,500/);
+});
+
+test("does not convert an automation-only draft into a 700 dollar website opportunity", () => {
+  const lead = recordRevenueLead({
+    businessName: "Automation Only Co",
+    area: "Miami",
+    niche: "professional services",
+    websiteStatus: "has_website",
+    contactChannel: "email",
+    contactValue: "owner@automation-only.example",
+    evidence: "Public company profile and owner email are verified.",
+    painPoint: "Needs a lead follow-up workflow.",
+    estimatedOfferUsd: 1500,
+    status: "qualified",
+  }).lead;
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@automation-only.example",
+    contactName: "Owner",
+    businessName: lead.businessName,
+    sourceUrl: "https://example.com/automation-only",
+    mockupUrl: "/api/revenue-engine/mockup-previews/automation-only",
+    businessSummary: "Verified automation opportunity with no website scope.",
+    websitePriceUsd: 0,
+    automationPriceUsd: 1500,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  }).draft;
+  approveRevenueOutreachDraft({ draftId: draft.id, approvedByRobert: true });
+
+  const result = recordRevenueWebsiteOpportunity({ leadId: lead.id, outreachDraftId: draft.id, projectType: "website" });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.opportunity, null);
+  assert.equal(result.gates.some((gate) => gate.gate === "website_scope" && !gate.passed), true);
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.websiteSalesPacketQueue.items.some((item) => item.leadId === lead.id), false);
+  assert.equal(snapshot.websiteSalesPacketQueue.blocked.some((item) => item.leadId === lead.id && item.reason.includes("precio de website")), true);
+});
+
 test("records outreach draft without sending and moves matching lead to outreach", () => {
   const leadResult = recordRevenueLead({
     businessName: "Black Room",
@@ -5317,7 +5373,7 @@ test("website-only handoff uses website deposit when draft also has automation u
   assert.equal(handoff.snapshot.metrics.appsSold, 1);
   assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 1500);
   assert.equal(handoff.snapshot.recentLedger[0].kind, "website_sale");
-  assert.equal(handoff.snapshot.recentLedger[0].amountUsd, 3000);
+  assert.equal(handoff.snapshot.recentLedger[0].amountUsd, 2500);
 });
 
 test("website delivery ledger dedupe uses exact lead token not id prefix", () => {

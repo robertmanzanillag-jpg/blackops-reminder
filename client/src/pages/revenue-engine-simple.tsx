@@ -377,6 +377,7 @@ export default function RevenueEngineSimplePage() {
                   <p className="text-xs uppercase tracking-wide text-zinc-600">Recommended offer</p>
                   <p className="mt-2 text-2xl font-semibold text-emerald-300">{money.format(selected.pricing.totalSetupUsd)}</p>
                   <p className="mt-1 text-xs text-zinc-600">Deposit {money.format(selected.pricing.depositUsd)}</p>
+                  <p className="mt-3 max-w-[290px] text-xs leading-5 text-zinc-500">Website packages range from $700 Starter to $2,500 Premium, depending on scope.</p>
                 </div>
               </div>
 
