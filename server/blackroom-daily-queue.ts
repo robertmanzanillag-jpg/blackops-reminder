@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const BLACKROOM_QUEUE_VERSION = 1;
+export const BLACKROOM_QUEUE_VERSION = 2;
 export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.json";
 export const BLACKROOM_DEFAULT_BUFFER_DAYS = 7;
 export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 10;
@@ -310,6 +310,7 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
     return {
       ...createBlackRoomQueueState(now),
       ...parsed,
+      version: BLACKROOM_QUEUE_VERSION,
       jobs,
       sourceHistory: Array.isArray(parsed.sourceHistory) ? parsed.sourceHistory : [],
     };

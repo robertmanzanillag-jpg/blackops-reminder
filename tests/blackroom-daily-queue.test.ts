@@ -100,6 +100,7 @@ test("migrates existing queued jobs into the long-form experiment", async () => 
   const queuePath = path.join(directory, "queue.json");
   await writeBlackRoomQueue(state, queuePath);
   const migrated = await readBlackRoomQueue(queuePath, now);
+  assert.equal(migrated.version, 2);
   assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
   assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
 });
