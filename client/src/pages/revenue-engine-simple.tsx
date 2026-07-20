@@ -34,6 +34,7 @@ type OutreachDraft = {
   businessName: string;
   businessSummary: string;
   sourceUrl?: string;
+  mockupUrl?: string;
   status: "draft" | "approved" | "blocked";
   subject: string;
   body: string;
@@ -69,12 +70,12 @@ type RevenueSnapshot = {
 type ViewId = "pending" | "approved" | "sent" | "replies" | "sales" | "closed";
 
 const views: Array<{ id: ViewId; label: string; icon: typeof Inbox }> = [
-  { id: "pending", label: "Por aprobar", icon: Inbox },
-  { id: "approved", label: "Aprobados", icon: CheckCircle2 },
-  { id: "sent", label: "Enviados", icon: Send },
-  { id: "replies", label: "Respuestas", icon: MessageCircle },
-  { id: "sales", label: "Ventas", icon: CircleDollarSign },
-  { id: "closed", label: "Cerrados", icon: ShieldCheck },
+  { id: "pending", label: "Needs approval", icon: Inbox },
+  { id: "approved", label: "Approved", icon: CheckCircle2 },
+  { id: "sent", label: "Sent", icon: Send },
+  { id: "replies", label: "Replies", icon: MessageCircle },
+  { id: "sales", label: "Sales", icon: CircleDollarSign },
+  { id: "closed", label: "Closed", icon: ShieldCheck },
 ];
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -86,7 +87,7 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
     body: JSON.stringify(body),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "La acción no pudo completarse");
+  if (!response.ok) throw new Error(data.error || "We couldn't complete that action.");
   return data;
 }
 
@@ -103,16 +104,42 @@ function matchesView(draft: OutreachDraft, view: ViewId) {
 
 function outcomeLabel(draft: OutreachDraft) {
   if (draft.delivery.sendStatus !== "sent") {
-    if (draft.status === "approved") return "Listo para enviar";
-    if (draft.status === "blocked") return "Necesita corrección";
-    return "Pendiente de aprobación";
+    if (draft.status === "approved") return "Ready to send";
+    if (draft.status === "blocked") return "Needs revision";
+    return "Awaiting approval";
   }
   const outcome = draft.delivery.outcome;
-  if (outcome === "reply") return "Respondió";
-  if (outcome === "call_booked") return "Llamada agendada";
-  if (outcome === "deposit_collected") return "Depósito cobrado";
-  if (outcome === "lost") return "Perdido";
-  return "Enviado";
+  if (outcome === "reply") return "Replied";
+  if (outcome === "call_booked") return "Call booked";
+  if (outcome === "deposit_collected") return "Deposit collected";
+  if (outcome === "lost") return "Lost";
+  return "Sent";
+}
+
+function professionalDraft(draft: OutreachDraft) {
+  const greeting = /^(owner|team|robert)$/i.test(draft.contactName.trim()) ? "Hello," : `Hello ${draft.contactName.trim()},`;
+  return {
+    subject: `A website concept for ${draft.businessName}`,
+    body: [
+      greeting,
+      "",
+      `I'm Robert, founder of Robert Websites. I reviewed ${draft.businessName}'s public online presence and identified an opportunity to make it easier for prospective clients to understand your services and take the next step.`,
+      "",
+      draft.mockupUrl
+        ? "I prepared a private website concept focused on clear service positioning, stronger trust signals, mobile-first performance, and a streamlined path to inquiries or appointments."
+        : "I'd like to show you a tailored website direction focused on clear service positioning, stronger trust signals, mobile-first performance, and a streamlined path to inquiries or appointments.",
+      "",
+      `The proposed project investment is ${money.format(draft.pricing.totalSetupUsd)}, with a 50% deposit of ${money.format(draft.pricing.depositUsd)} to begin. Final scope, content, and timeline would be confirmed before any work starts.`,
+      "",
+      draft.mockupUrl
+        ? "Would you be open to a brief 15-minute call this week so I can walk you through the concept and see whether it fits your goals?"
+        : "Would you be open to a brief 15-minute call this week to discuss the direction and see whether it fits your goals?",
+      "",
+      "Best regards,",
+      "Robert Manzanilla",
+      "Founder, Robert Websites",
+    ].join("\n"),
+  };
 }
 
 export default function RevenueEngineSimplePage() {
@@ -131,7 +158,7 @@ export default function RevenueEngineSimplePage() {
     queryKey: ["revenue-engine"],
     queryFn: async () => {
       const response = await fetch("/api/revenue-engine");
-      if (!response.ok) throw new Error("No se pudo cargar Revenue Engine");
+      if (!response.ok) throw new Error("Revenue Engine could not be loaded.");
       return response.json();
     },
   });
@@ -166,47 +193,47 @@ export default function RevenueEngineSimplePage() {
       subject,
       body,
     }),
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       setEditing(false);
-      setNotice({ tone: "success", text: result.reason });
+      setNotice({ tone: "success", text: "Revision saved. The email now requires a new approval." });
       setView("pending");
       await refresh();
     },
-    onError: (error: Error) => setNotice({ tone: "error", text: error.message }),
+    onError: () => setNotice({ tone: "error", text: "The revision could not be saved. Check the subject and message, then try again." }),
   });
 
   const approveMutation = useMutation({
     mutationFn: () => postJson<{ status: string; reason: string }>("/api/revenue-engine/outreach-drafts/approve", {
       draftId: selected?.id,
       approvedByRobert: true,
-      notes: "Aprobado explícitamente por Robert desde la bandeja simplificada.",
+      notes: "Explicitly approved by Robert from the simplified approval inbox.",
     }),
     onSuccess: async (result) => {
       if (result.status !== "approved") throw new Error(result.reason);
-      setNotice({ tone: "success", text: "Correo aprobado. Ya está listo para enviar." });
+      setNotice({ tone: "success", text: "Email approved. It is now ready to send." });
       setView("approved");
       await refresh();
     },
-    onError: (error: Error) => setNotice({ tone: "error", text: error.message }),
+    onError: () => setNotice({ tone: "error", text: "Approval could not be completed. Review the recipient evidence and draft status, then try again." }),
   });
 
   const sendMutation = useMutation({
     mutationFn: async () => {
-      if (!selected) throw new Error("Selecciona un correo");
-      const confirmed = window.confirm(`¿Enviar ahora este correo a ${selected.recipientEmail}?`);
-      if (!confirmed) throw new Error("Envío cancelado. No se mandó ningún correo.");
+      if (!selected) throw new Error("Select an email first.");
+      const confirmed = window.confirm(`Send this email to ${selected.recipientEmail} now?`);
+      if (!confirmed) throw new Error("Send canceled. No email was sent.");
       return postJson<{ status: string; reason?: string; draft?: OutreachDraft }>("/api/revenue-engine/outreach-send", {
         draftId: selected.id,
         approvalToSend: true,
       });
     },
     onSuccess: async (result) => {
-      if (result.status !== "sent") throw new Error(result.reason || "El proveedor bloqueó el envío");
-      setNotice({ tone: "success", text: "Correo enviado y registrado correctamente." });
+      if (result.status !== "sent") throw new Error(result.reason || "The email provider blocked the send.");
+      setNotice({ tone: "success", text: "Email sent and recorded successfully." });
       setView("sent");
       await refresh();
     },
-    onError: (error: Error) => setNotice({ tone: "error", text: error.message }),
+    onError: (error: Error) => setNotice({ tone: "error", text: error.message.startsWith("Send canceled") ? error.message : "This email could not be sent. Confirm approval, email-provider setup, and today's sending limit." }),
   });
 
   const outcomeMutation = useMutation({
@@ -216,17 +243,24 @@ export default function RevenueEngineSimplePage() {
       outcomeRecordedByRobert: true,
       cashCollectedUsd: outcome === "deposit_collected" ? Number(cashCollectedUsd) : 0,
       paymentConfirmation: outcome === "deposit_collected" ? paymentConfirmation : "",
-      notes: `Resultado registrado por Robert desde la bandeja simplificada: ${outcome}.`,
+      notes: `Outcome recorded by Robert from the simplified approval inbox: ${outcome}.`,
     }),
-    onSuccess: async (result, outcome) => {
-      setNotice({ tone: "success", text: result.reason });
+    onSuccess: async (_result, outcome) => {
+      const outcomeNotices: Record<OutreachOutcome, string> = {
+        contacted: "Contact recorded.",
+        reply: "Reply recorded.",
+        call_booked: "Call booked and recorded.",
+        deposit_collected: "Verified deposit recorded.",
+        lost: "Opportunity marked as lost.",
+      };
+      setNotice({ tone: "success", text: outcomeNotices[outcome] });
       setClosing(null);
       setCashCollectedUsd("");
       setPaymentConfirmation("");
       setView(outcome === "deposit_collected" ? "sales" : outcome === "lost" ? "closed" : outcome === "reply" || outcome === "call_booked" ? "replies" : "sent");
       await refresh();
     },
-    onError: (error: Error) => setNotice({ tone: "error", text: error.message }),
+    onError: () => setNotice({ tone: "error", text: "The outcome could not be recorded. Confirm the draft status and required payment evidence, then try again." }),
   });
 
   const counts = useMemo(() => Object.fromEntries(views.map((item) => [item.id, drafts.filter((draft) => matchesView(draft, item.id)).length])) as Record<ViewId, number>, [drafts]);
@@ -242,27 +276,27 @@ export default function RevenueEngineSimplePage() {
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 pr-36">
           <div className="flex items-center gap-4">
             <Link href="/dashboard">
-              <Button variant="ghost" size="icon" aria-label="Volver al dashboard" className="text-zinc-400 hover:text-white">
+              <Button variant="ghost" size="icon" aria-label="Back to dashboard" className="text-zinc-400 hover:text-white">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-white">Revenue Engine</h1>
-              <p className="mt-1 text-sm text-zinc-500">{counts.pending} correos necesitan tu aprobación</p>
+              <p className="mt-1 text-sm text-zinc-500">{counts.pending} {counts.pending === 1 ? "email needs" : "emails need"} your approval</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
-            <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />20 de julio de 2026</span>
+            <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
             <Link href="/revenue-engine/advanced">
               <Button variant="outline" className="border-white/15 text-zinc-200">
-                <Settings2 className="mr-2 h-4 w-4" />Herramientas avanzadas
+                <Settings2 className="mr-2 h-4 w-4" />Advanced tools
               </Button>
             </Link>
           </div>
         </div>
       </header>
 
-      <nav className="border-b border-white/10" aria-label="Estados de los correos">
+      <nav className="border-b border-white/10" aria-label="Email status">
         <div className="mx-auto grid max-w-[1500px] grid-cols-2 px-4 sm:grid-cols-3 lg:grid-cols-6 lg:px-8">
           {views.map(({ id, label, icon: Icon }) => (
             <button
@@ -290,16 +324,16 @@ export default function RevenueEngineSimplePage() {
         <aside className="border-r border-white/10 px-4 py-5 lg:px-6">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar prospectos" className="border-white/10 bg-transparent pl-10" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search prospects" className="border-white/10 bg-transparent pl-10" />
           </label>
           <div className="mt-5 divide-y divide-white/10">
-            {snapshotQuery.isLoading && <p className="py-8 text-center text-sm text-zinc-500">Cargando correos...</p>}
-            {snapshotQuery.isError && <p className="py-8 text-center text-sm text-red-300">No se pudieron cargar los correos.</p>}
+            {snapshotQuery.isLoading && <p className="py-8 text-center text-sm text-zinc-500">Loading emails...</p>}
+            {snapshotQuery.isError && <p className="py-8 text-center text-sm text-red-300">Emails could not be loaded.</p>}
             {!snapshotQuery.isLoading && filteredDrafts.length === 0 && (
               <div className="py-12 text-center">
                 <Mail className="mx-auto h-6 w-6 text-zinc-600" />
-                <p className="mt-3 text-sm text-zinc-400">No hay correos en esta sección.</p>
-                <p className="mt-1 text-xs text-zinc-600">Cuando cambien de estado aparecerán aquí.</p>
+                <p className="mt-3 text-sm text-zinc-400">No emails in this section.</p>
+                <p className="mt-1 text-xs text-zinc-600">They will appear here when their status changes.</p>
               </div>
             )}
             {filteredDrafts.map((draft) => (
@@ -311,7 +345,7 @@ export default function RevenueEngineSimplePage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="truncate font-medium text-white">{draft.businessName}</span>
-                  <span className="text-xs text-zinc-600">{new Date(draft.updatedAt).toLocaleDateString("es-US", { month: "short", day: "numeric" })}</span>
+                  <span className="text-xs text-zinc-600">{new Date(draft.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                 </div>
                 <p className="mt-1 truncate text-sm text-zinc-400">{draft.subject}</p>
                 <p className="mt-2 text-xs text-zinc-600">{outcomeLabel(draft)}</p>
@@ -325,7 +359,7 @@ export default function RevenueEngineSimplePage() {
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
                 <Inbox className="mx-auto h-8 w-8 text-zinc-700" />
-                <p className="mt-4 text-zinc-400">Selecciona un correo para revisarlo.</p>
+                <p className="mt-4 text-zinc-400">Select an email to review.</p>
               </div>
             </div>
           ) : (
@@ -334,16 +368,15 @@ export default function RevenueEngineSimplePage() {
                 <div>
                   <div className="flex items-center gap-2 text-sm text-emerald-300">
                     <ShieldCheck className="h-4 w-4" />
-                    {approvalReady ? "Destinatario y evidencia verificados" : "Necesita correcciones antes de aprobar"}
+                    {approvalReady ? "Recipient and evidence verified" : "Revisions required before approval"}
                   </div>
                   <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white">{selected.businessName}</h2>
                   <p className="mt-2 text-sm text-zinc-400">{selected.contactName} · {selected.recipientEmail}</p>
-                  <p className="mt-4 max-w-3xl text-sm leading-6 text-zinc-500">{selected.businessSummary}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-wide text-zinc-600">Oferta sugerida</p>
+                  <p className="text-xs uppercase tracking-wide text-zinc-600">Recommended offer</p>
                   <p className="mt-2 text-2xl font-semibold text-emerald-300">{money.format(selected.pricing.totalSetupUsd)}</p>
-                  <p className="mt-1 text-xs text-zinc-600">Depósito {money.format(selected.pricing.depositUsd)}</p>
+                  <p className="mt-1 text-xs text-zinc-600">Deposit {money.format(selected.pricing.depositUsd)}</p>
                 </div>
               </div>
 
@@ -351,17 +384,17 @@ export default function RevenueEngineSimplePage() {
                 {editing ? (
                   <div className="space-y-5">
                     <div>
-                      <label htmlFor="email-subject" className="text-sm font-medium text-zinc-300">Asunto</label>
+                      <label htmlFor="email-subject" className="text-sm font-medium text-zinc-300">Subject</label>
                       <Input id="email-subject" value={subject} onChange={(event) => setSubject(event.target.value)} className="mt-2 border-white/10 bg-black" />
                     </div>
                     <div>
-                      <label htmlFor="email-body" className="text-sm font-medium text-zinc-300">Mensaje completo</label>
+                      <label htmlFor="email-body" className="text-sm font-medium text-zinc-300">Full message</label>
                       <Textarea id="email-body" value={body} onChange={(event) => setBody(event.target.value)} className="mt-2 min-h-[390px] border-white/10 bg-black text-[15px] leading-7" />
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-zinc-600">Asunto</p>
+                    <p className="text-xs uppercase tracking-wide text-zinc-600">Subject</p>
                     <p className="mt-2 text-lg font-medium text-white">{selected.subject}</p>
                     <p className="mt-6 whitespace-pre-wrap text-[15px] leading-7 text-zinc-300">{selected.body}</p>
                   </div>
@@ -371,60 +404,63 @@ export default function RevenueEngineSimplePage() {
               <div className="sticky bottom-0 -mx-5 flex flex-wrap items-center gap-3 border-t border-white/10 bg-[#050708]/95 px-5 py-4 backdrop-blur lg:-mx-10 lg:px-10">
                 {editing ? (
                   <>
-                    <Button variant="outline" onClick={() => setEditing(false)} disabled={busy} className="border-white/15">Cancelar</Button>
+                    <Button variant="outline" onClick={() => setEditing(false)} disabled={busy} className="border-white/15">Cancel</Button>
                     <Button onClick={() => updateMutation.mutate()} disabled={busy || subject.trim().length < 3 || body.trim().length < 20} className="bg-sky-600 text-white hover:bg-sky-500">
-                      {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Guardar corrección
+                      {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save revision
                     </Button>
                   </>
                 ) : (
                   <>
                     <Button variant="outline" onClick={() => setEditing(true)} disabled={busy || selected.delivery.sendStatus === "sent"} className="h-12 min-w-[180px] border-sky-700 text-sky-100">
-                      <Pencil className="mr-2 h-4 w-4" />Corregir
+                      <Pencil className="mr-2 h-4 w-4" />Edit
+                    </Button>
+                    <Button variant="outline" onClick={() => { const next = professionalDraft(selected); setSubject(next.subject); setBody(next.body); setEditing(true); }} disabled={busy || selected.delivery.sendStatus === "sent"} className="h-12 min-w-[180px] border-white/15 text-zinc-100">
+                      Use professional version
                     </Button>
                     <Button onClick={() => approveMutation.mutate()} disabled={busy || selected.status === "approved" || !approvalReady || selected.delivery.sendStatus === "sent"} className="h-12 min-w-[180px] bg-emerald-600 text-white hover:bg-emerald-500">
                       {approveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      {selected.status === "approved" ? "Aprobado" : "Aprobar"}
+                      {selected.status === "approved" ? "Approved" : "Approve"}
                     </Button>
                     <Button onClick={() => sendMutation.mutate()} disabled={busy || selected.status !== "approved" || selected.delivery.sendStatus === "sent" || selected.channel !== "email"} className="h-12 min-w-[180px] bg-sky-600 text-white hover:bg-sky-500">
-                      {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar
+                      {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send
                     </Button>
                     {selected.delivery.sendStatus === "sent" && !["deposit_collected", "lost"].includes(selected.delivery.outcome || "") && !closing && (
                       <>
                         <Button variant="outline" onClick={() => outcomeMutation.mutate("reply")} disabled={busy} className="ml-auto border-emerald-700 text-emerald-100">
-                          <MessageCircle className="mr-2 h-4 w-4" />Registrar respuesta
+                          <MessageCircle className="mr-2 h-4 w-4" />Record reply
                         </Button>
                         <Button variant="outline" onClick={() => outcomeMutation.mutate("call_booked")} disabled={busy} className="border-violet-700 text-violet-100">
-                          <Phone className="mr-2 h-4 w-4" />Registrar llamada
+                          <Phone className="mr-2 h-4 w-4" />Record call
                         </Button>
                         <Button variant="outline" onClick={() => setClosing("deposit_collected")} disabled={busy} className="border-emerald-700 text-emerald-100">
-                          <CircleDollarSign className="mr-2 h-4 w-4" />Registrar depósito
+                          <CircleDollarSign className="mr-2 h-4 w-4" />Record deposit
                         </Button>
                         <Button variant="ghost" onClick={() => setClosing("lost")} disabled={busy} className="text-zinc-400 hover:text-red-200">
-                          Marcar perdido
+                          Mark as lost
                         </Button>
                       </>
                     )}
                     {closing === "deposit_collected" && (
                       <div className="ml-auto flex w-full flex-wrap items-end gap-3 border-t border-white/10 pt-4">
-                        <label className="min-w-[180px] flex-1 text-xs text-zinc-400">Monto cobrado
+                        <label className="min-w-[180px] flex-1 text-xs text-zinc-400">Amount collected
                           <Input type="number" min="1" value={cashCollectedUsd} onChange={(event) => setCashCollectedUsd(event.target.value)} placeholder="750" className="mt-2 border-white/15 bg-black" />
                         </label>
-                        <label className="min-w-[280px] flex-[2] text-xs text-zinc-400">Comprobante o referencia verificable
-                          <Input value={paymentConfirmation} onChange={(event) => setPaymentConfirmation(event.target.value)} placeholder="ID del pago o enlace al comprobante" className="mt-2 border-white/15 bg-black" />
+                        <label className="min-w-[280px] flex-[2] text-xs text-zinc-400">Verifiable payment reference
+                          <Input value={paymentConfirmation} onChange={(event) => setPaymentConfirmation(event.target.value)} placeholder="Payment ID or receipt link" className="mt-2 border-white/15 bg-black" />
                         </label>
-                        <Button variant="ghost" onClick={() => setClosing(null)}>Cancelar</Button>
-                        <Button onClick={() => outcomeMutation.mutate("deposit_collected")} disabled={busy || Number(cashCollectedUsd) <= 0 || paymentConfirmation.trim().length < 3} className="bg-emerald-600 hover:bg-emerald-500">Confirmar depósito</Button>
+                        <Button variant="ghost" onClick={() => setClosing(null)}>Cancel</Button>
+                        <Button onClick={() => outcomeMutation.mutate("deposit_collected")} disabled={busy || Number(cashCollectedUsd) <= 0 || paymentConfirmation.trim().length < 3} className="bg-emerald-600 hover:bg-emerald-500">Confirm deposit</Button>
                       </div>
                     )}
                     {closing === "lost" && (
                       <div className="ml-auto flex items-center gap-3 border-t border-white/10 pt-4 text-sm text-zinc-300">
-                        ¿Confirmas que esta oportunidad se perdió?
-                        <Button variant="ghost" onClick={() => setClosing(null)}>Cancelar</Button>
-                        <Button variant="destructive" onClick={() => outcomeMutation.mutate("lost")} disabled={busy}>Sí, marcar perdido</Button>
+                        Are you sure this opportunity was lost?
+                        <Button variant="ghost" onClick={() => setClosing(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={() => outcomeMutation.mutate("lost")} disabled={busy}>Yes, mark as lost</Button>
                       </div>
                     )}
                     {selected.channel !== "email" && selected.delivery.sendStatus !== "sent" && (
-                      <p className="text-xs text-amber-200">Este canal es manual. Ábrelo desde el correo original o cambia el draft a Email.</p>
+                      <p className="text-xs text-amber-200">This is a manual channel. Open it from the original inbox or change the draft channel to Email.</p>
                     )}
                   </>
                 )}
@@ -437,10 +473,10 @@ export default function RevenueEngineSimplePage() {
       <footer className="border-t border-white/10">
         <div className="mx-auto grid max-w-[1500px] gap-px bg-white/10 sm:grid-cols-4">
           {[
-            { label: "Cobrado confirmado", value: money.format(snapshotQuery.data?.metrics.cashCollectedUsd || 0), detail: "Solo pagos verificados", icon: CircleDollarSign },
-            { label: "Pipeline estimado", value: money.format(pipelineEstimated), detail: "No es ingreso", icon: TrendingUp },
-            { label: "Respuestas", value: String(replies), detail: "Registradas", icon: MessageCircle },
-            { label: "Llamadas", value: String(calls), detail: "Agendadas", icon: Phone },
+            { label: "Confirmed revenue", value: money.format(snapshotQuery.data?.metrics.cashCollectedUsd || 0), detail: "Verified payments only", icon: CircleDollarSign },
+            { label: "Estimated pipeline", value: money.format(pipelineEstimated), detail: "Not collected revenue", icon: TrendingUp },
+            { label: "Replies", value: String(replies), detail: "Recorded", icon: MessageCircle },
+            { label: "Calls", value: String(calls), detail: "Booked", icon: Phone },
           ].map(({ label, value, detail, icon: Icon }) => (
             <div key={label} className="flex items-center gap-4 bg-[#050708] px-6 py-5">
               <Icon className="h-6 w-6 text-emerald-300" />

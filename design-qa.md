@@ -15,24 +15,24 @@ No actionable P0, P1, or P2 findings remain.
 - Spacing and layout rhythm: the two-column inbox, full-width state navigation, message reading pane, sticky action bar, and bottom outcome strip match the source hierarchy. Runtime data controls the amount of visible list and message content.
 - Colors and visual tokens: near-black surfaces, low-contrast dividers, emerald verification/approval states, cyan send state, and muted secondary copy match the source direction and pass visible contrast checks.
 - Image and icon fidelity: the selected visual contains no required raster imagery. The implementation uses the project's existing Lucide icon system, which matches the source icon language; no CSS drawings, handcrafted SVGs, or placeholder assets were introduced.
-- Copy and content: Spanish operational labels are plain language. `Cobrado confirmado` is explicitly separated from `Pipeline estimado` and marked `No es ingreso`.
+- Copy and content: U.S. English operational labels use plain language. `Confirmed revenue` is explicitly separated from `Estimated pipeline` and marked `Not collected revenue`.
 - Accessibility: landmarks, heading order, button names, disabled send state, form labels, status feedback, and visible keyboard focus are present. Screenshot review does not claim full WCAG compliance.
 
 ## Comparison History
 
 1. Initial implementation review found one P2: the three primary action buttons were materially smaller than the selected visual and weakened the approval hierarchy.
 2. Fix applied: increased the action controls to 48px height with consistent minimum widths.
-3. Post-fix evidence: `design-qa-actions-comparison.png` shows Corregir, Aprobar, and Enviar with the intended emphasis and disabled-send affordance.
+3. Post-fix evidence: `design-qa-actions-comparison.png` shows Edit, Approve, and Send with the intended emphasis and disabled-send affordance.
 
 ## Primary Interactions Tested
 
 - Select a prospect from the inbox.
-- Approve a pending draft and verify it moves to Aprobados.
-- Open Corregir, edit subject/body, save, and verify it returns to Por aprobar.
-- Verify Enviar is disabled before approval.
-- Verify Enviar becomes enabled after approval.
+- Approve a pending draft and verify it moves to Approved.
+- Open Edit, change the subject/body, save, and verify it returns to Needs approval.
+- Verify Send is disabled before approval.
+- Verify Send becomes enabled after approval.
 - Open the send confirmation and cancel it; no email was sent.
-- Open Enviados and verify the empty state.
+- Open Sent and verify the empty state.
 - Browser console checked: no client errors.
 
 ## Residual P3 Polish
@@ -42,8 +42,17 @@ No actionable P0, P1, or P2 findings remain.
 
 ## Post-review preservation check
 
-- The full operational console remains available at `/revenue-engine/advanced` from the clearly labeled “Herramientas avanzadas” button.
-- No outreach outcome is hidden: contacted stays in Enviados, replies/calls in Respuestas, verified deposits in Ventas, and lost opportunities in Cerrados.
+- The full operational console remains available at `/revenue-engine/advanced` from the clearly labeled “Advanced tools” button.
+- No outreach outcome is hidden: contacted stays in Sent, replies/calls in Replies, verified deposits in Sales, and lost opportunities in Closed.
 - The simplified inbox can record replies, calls, verified deposits, and lost outcomes without fabricating revenue.
+
+## English localization and outreach-copy pass
+
+- Implementation evidence: `design-qa-english.png` at the existing desktop QA viewport and pending-approval state.
+- Full-view comparison: layout, typography, spacing, colors, icons, and action hierarchy remain unchanged from the previously passed source comparison; only product copy and draft content changed.
+- Focused copy check: all visible default-inbox labels, statuses, controls, dates, metrics, and the selected outreach draft are in U.S. English.
+- The professional outreach version identifies Robert, states a grounded opportunity, explains the proposed value, discloses the project price and 50% deposit, and asks for a specific 15-minute call without inventing business results.
+- Primary interaction tested: “Use professional version” populated the revised subject/body and “Save revision” persisted it while returning the draft to approval-required state. No email was sent.
+- No P0/P1/P2 visual or content regressions found.
 
 final result: passed

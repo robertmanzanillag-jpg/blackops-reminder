@@ -3448,7 +3448,7 @@ test("builds concise client-facing outreach without exposing internal economics"
   assert.match(proposal.body, /Robert Websites/);
   assert.match(proposal.body, /\$2,925/);
   assert.match(proposal.body, /\$1,463/);
-  assert.match(proposal.body, /15 minutos/);
+  assert.match(proposal.body, /15-minute call/);
   assert.doesNotMatch(proposal.body, /Costo interno|Margen mensual|Cap interno|INTERNAL ONLY|private-research-source|private\.example|93%|\$54|Revenue Engine/i);
   assert.equal(proposal.body.length < 1800, true);
 });

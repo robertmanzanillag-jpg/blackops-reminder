@@ -11399,43 +11399,44 @@ export function buildProposalEmail(input: ProposalEmailInput) {
   const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
   const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
   const genericContact = /^(owner|propietario|equipo|robert)$/i.test(input.contactName);
-  const greeting = genericContact ? "Hola," : `Hola ${input.contactName},`;
+  const greeting = genericContact ? "Hello," : `Hello ${input.contactName},`;
   const scope = [
     input.websitePriceUsd > 0
-      ? "- Website premium, rapido y responsive, con una ruta clara hacia consultas o reservas."
+      ? "- A premium, fast, responsive website with a clear path to inquiries or bookings."
       : null,
     input.websitePriceUsd > 0
-      ? "- Concepto visual 3D alineado con la marca y llamadas a la accion medibles."
+      ? "- A polished visual concept aligned with the brand and measurable calls to action."
       : null,
     input.automationPriceUsd > 0
-      ? "- Seguimiento basico de leads con aprobacion humana antes de cualquier mensaje."
+      ? "- A practical lead follow-up workflow with human approval before any message is sent."
       : null,
-    "- QA de mobile, formularios, enlaces y rollback antes de publicar.",
+    "- Mobile, form, link, and rollback QA before launch.",
   ].filter((line): line is string => Boolean(line));
-  const subject = `Idea para mejorar la experiencia digital de ${input.businessName}`;
+  const subject = `A website concept for ${input.businessName}`;
   const body = [
     greeting,
     "",
-    `Revise la experiencia digital publica de ${input.businessName} y vi una oportunidad concreta para facilitar que nuevos clientes entiendan los servicios y den el siguiente paso.`,
+    `I'm Robert, founder of Robert Websites. I reviewed ${input.businessName}'s public online presence and identified an opportunity to make it easier for prospective clients to understand your services and take the next step.`,
     "",
-    "La oportunidad principal es presentar la oferta, la confianza y el siguiente paso en un recorrido mas claro para consultas, compras o reservas.",
+    "I'd like to show you a tailored website direction focused on clearer service positioning, stronger trust signals, mobile-first performance, and a streamlined path to inquiries or appointments.",
     "",
-    `Prepare un concepto privado para ${input.businessName} con este alcance inicial:`,
+    "The initial scope includes:",
     ...scope,
     "",
-    "Inversion estimada:",
-    `- Proyecto inicial: $${totalSetupUsd.toLocaleString("en-US")}`,
-    `- Deposito para comenzar: $${depositUsd.toLocaleString("en-US")}`,
+    "Estimated investment:",
+    `- Initial project: $${totalSetupUsd.toLocaleString("en-US")}`,
+    `- 50% deposit to begin: $${depositUsd.toLocaleString("en-US")}`,
     input.monthlyRetainerUsd > 0
-      ? `- Soporte y optimizacion mensual opcional: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`
+      ? `- Optional monthly support and optimization: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/month`
       : null,
     "",
-    "Antes de comenzar confirmariamos alcance, contenido y prioridades. El preview seguiria privado hasta recibir su aprobacion.",
+    "Before any work begins, we would confirm the final scope, content, priorities, and timeline. Any design direction would remain private until you approve it.",
     "",
-    "¿Le gustaria que le comparta el preview y coordinemos una llamada breve de 15 minutos para revisarlo?",
+    "Would you be open to a brief 15-minute call this week to discuss the direction and see whether it fits your goals?",
     "",
-    "Robert",
-    "Robert Websites",
+    "Best regards,",
+    "Robert Manzanilla",
+    "Founder, Robert Websites",
   ].filter((line): line is string => line !== null).join("\n");
 
   const hasRecipientEmail = input.recipientEmail.trim().length > 0;
