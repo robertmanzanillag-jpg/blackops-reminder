@@ -6660,7 +6660,7 @@ test("persists outreach drafts across module state reloads", () => {
 
 test("blocks outreach send when email provider is missing", async () => {
   const result = recordRevenueOutreachDraft({
-    channel: "gmail",
+    channel: "email",
     approvalStatus: "approved",
     recipientEmail: "client@example.com",
     contactName: "Client",
@@ -6723,7 +6723,7 @@ test("blocks outreach send when email provider values are placeholders", async (
   process.env.RESEND_API_KEY = "replace-with-resend-api-key";
   process.env.REVENUE_ENGINE_FROM_EMAIL = "your-email@example.com";
   const result = recordRevenueOutreachDraft({
-    channel: "gmail",
+    channel: "email",
     approvalStatus: "approved",
     recipientEmail: "client@example.com",
     contactName: "Client",
@@ -6843,33 +6843,40 @@ test("enforces daily outreach cap after sequential provider sends", async () => 
 test("blocks provider send for manual-only outreach channels", async () => {
   process.env.RESEND_API_KEY = "re_test";
   process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
-  const result = recordRevenueOutreachDraft({
-    channel: "contact_form",
-    approvalStatus: "approved",
-    recipientEmail: "owner@manualchannel.example",
-    contactName: "Owner",
-    businessName: "Manual Channel Outreach",
-    sourceUrl: "https://example.com/manual-channel/contact",
-    businessSummary: "Manual Channel Outreach has public form evidence and needs a website conversion follow-up.",
-    websitePriceUsd: 3500,
-    automationPriceUsd: 2500,
-    monthlyRetainerUsd: 750,
-    estimatedInternalMonthlyCostUsd: 54,
-    notes: "",
-  });
+  let sendAttempts = 0;
   setRevenueOutreachSenderForTests(async () => {
-    throw new Error("sender should not run for manual-only channel");
+    sendAttempts += 1;
+    return { id: "must_not_send" };
   });
 
-  const sendResult = await sendRevenueOutreachDraft({
-    draftId: result.draft.id,
-    approvalToSend: true,
-  });
+  for (const channel of ["gmail", "mailto", "instagram", "contact_form"] as const) {
+    const result = recordRevenueOutreachDraft({
+      channel,
+      approvalStatus: "approved",
+      recipientEmail: `owner-${channel}@manualchannel.example`,
+      contactName: "Owner",
+      businessName: `Manual Channel Outreach ${channel}`,
+      sourceUrl: `https://example.com/manual-channel/${channel}`,
+      businessSummary: `Manual Channel Outreach ${channel} has public evidence and needs a website conversion follow-up.`,
+      websitePriceUsd: 3500,
+      automationPriceUsd: 2500,
+      monthlyRetainerUsd: 750,
+      estimatedInternalMonthlyCostUsd: 54,
+      notes: "",
+    });
 
-  assert.equal(sendResult.status, "blocked");
-  assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
-  assert.equal(sendResult.reason?.includes("canal es manual"), true);
-  assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+    const sendResult = await sendRevenueOutreachDraft({
+      draftId: result.draft.id,
+      approvalToSend: true,
+    });
+
+    assert.equal(sendResult.status, "blocked");
+    assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
+    assert.equal(sendResult.reason?.includes("Solo drafts con channel=email"), true);
+    assert.equal(sendResult.draft?.delivery.sendStatus, "blocked");
+  }
+
+  assert.equal(sendAttempts, 0);
 });
 
 test("uses fallback Resend from email when Revenue Engine from email is a placeholder", async () => {
