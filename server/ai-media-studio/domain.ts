@@ -34,6 +34,11 @@ export interface MediaGenerationJob {
   completedAt?: string;
   estimatedCompletionAt?: string;
   lastProviderEventAt?: string;
+  /** Durable queue scheduling/lease metadata (never accepted from clients). */
+  availableAt?: string;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
+  deadLetterAt?: string;
 }
 
 export interface ProviderWebhookEvent {
@@ -54,3 +59,11 @@ export interface ProviderStatus {
 }
 
 export const TERMINAL_STATUSES = new Set<MediaJobStatus>(["completed", "failed", "cancelled"]);
+
+/** Raised when a state transition loses an optimistic queue-state race. */
+export class MediaJobStateConflictError extends Error {
+  constructor(message = "Media job state changed concurrently") {
+    super(message);
+    this.name = "MediaJobStateConflictError";
+  }
+}

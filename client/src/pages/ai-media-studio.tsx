@@ -1,6 +1,8 @@
 import { RefreshCcw, Sparkles, TriangleAlert } from "lucide-react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { CreateVideoWorkbench } from "@/features/ai-media-studio/create-video-workbench";
+import { CoreStudioWorkspace } from "@/features/ai-media-studio/core";
 import { DashboardOverview } from "@/features/ai-media-studio/dashboard-overview";
 import { ErrorPanel, LoadingPanel } from "@/features/ai-media-studio/feedback";
 import { useStudioDashboard } from "@/features/ai-media-studio/hooks";
@@ -8,8 +10,31 @@ import { JobList } from "@/features/ai-media-studio/job-list";
 import { StudioShell } from "@/features/ai-media-studio/studio-shell";
 import { cn } from "@/lib/utils";
 
+function DashboardFallback({ loading, error, onRetry }: { loading: boolean; error?: string; onRetry: () => void }) {
+  return (
+    <div className="space-y-5">
+      <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24">
+        <h2 id="overview-heading" className="sr-only">Today overview</h2>
+        {loading ? <LoadingPanel label="Loading studio overview" /> : <ErrorPanel message={error ?? "Studio overview is unavailable"} onRetry={onRetry} />}
+      </section>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <section id="providers" aria-labelledby="providers-heading" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <h2 id="providers-heading" className="text-base font-semibold text-zinc-100">Provider health</h2>
+          <p className="mt-2 text-sm text-zinc-400">{loading ? "Provider status is loading with the studio overview." : "Provider status is unavailable until the overview request recovers."}</p>
+        </section>
+        <section id="activity" aria-labelledby="activity-heading" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <h2 id="activity-heading" className="text-base font-semibold text-zinc-100">Recent activity</h2>
+          <p className="mt-2 text-sm text-zinc-400">{loading ? "Recent activity is loading." : "Recent activity is unavailable until the overview request recovers."}</p>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 export default function AiMediaStudioPage() {
   const dashboardQuery = useStudioDashboard();
+  const queryClient = useQueryClient();
+  const studioFetchCount = useIsFetching({ queryKey: ["ai-media-studio"] });
   const providerIssue = dashboardQuery.data?.providers.some((provider) => provider.status === "offline" || provider.status === "degraded");
 
   return (
@@ -22,9 +47,9 @@ export default function AiMediaStudioPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">AI Media Studio</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">Prepare, preview, and monitor vertical media from one provider-neutral workspace.</p>
         </div>
-        <Button type="button" variant="outline" className="w-full border-white/10 bg-white/5 text-zinc-200 sm:w-auto" disabled={dashboardQuery.isFetching} onClick={() => dashboardQuery.refetch()}>
-          <RefreshCcw className={cn("mr-2 h-4 w-4", dashboardQuery.isFetching && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
-          Refresh studio
+        <Button type="button" variant="outline" className="w-full border-white/10 bg-white/5 text-zinc-200 sm:w-auto" disabled={studioFetchCount > 0} onClick={() => void queryClient.invalidateQueries({ queryKey: ["ai-media-studio"], refetchType: "active" })}>
+          <RefreshCcw className={cn("mr-2 h-4 w-4", studioFetchCount > 0 && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+          Refresh all studio data
         </Button>
       </header>
 
@@ -35,13 +60,15 @@ export default function AiMediaStudioPage() {
         </div>
       )}
 
-      {dashboardQuery.isLoading ? (
-        <LoadingPanel label="Loading studio overview" />
-      ) : dashboardQuery.isError ? (
-        <ErrorPanel message={dashboardQuery.error.message} onRetry={() => dashboardQuery.refetch()} />
-      ) : dashboardQuery.data ? (
+      {dashboardQuery.data ? (
         <DashboardOverview dashboard={dashboardQuery.data} />
-      ) : null}
+      ) : (
+        <DashboardFallback loading={dashboardQuery.isLoading} error={dashboardQuery.error?.message} onRetry={() => void dashboardQuery.refetch()} />
+      )}
+
+      <div className="mt-10">
+        <CoreStudioWorkspace />
+      </div>
 
       <section id="create" aria-labelledby="create-heading" className="mt-8 scroll-mt-24">
         <div className="mb-4">

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-20T09:29:21.660Z
+Generated: 2026-07-20T11:07:30.333Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 452 | 383 | 1482 | 467 | 7575 |
+| 494 | 423 | 1666 | 471 | 8243 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,27 +29,28 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `client/src` | 122 | 120 | ui-component:55, client-page:23, client-component:21, other:13 |
+| `client/src` | 133 | 131 | ui-component:55, other:24, client-page:23, client-component:21 |
 | `server` | 96 | 92 | server:96 |
-| `tests` | 69 | 66 | test:69 |
+| `tests` | 80 | 77 | test:80 |
 | `script` | 37 | 35 | script:37 |
-| `.` | 26 | 18 | other:17, docs:8, package:1 |
-| `server/ai-media-studio` | 14 | 14 | server:14 |
-| `docs` | 12 | 12 | docs:12 |
+| `server/ai-media-studio` | 30 | 30 | server:30 |
+| `.` | 25 | 18 | other:16, docs:8, package:1 |
+| `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
-| `docs/ai-media-studio` | 6 | 6 | docs:6 |
-| `shared` | 3 | 3 | shared:3 |
+| `docs/ai-media-studio` | 7 | 7 | docs:7 |
+| `shared` | 4 | 4 | shared:4 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
+| `migrations/ai-media-studio` | 3 | 1 | other:2, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/ai-media-studio`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/tools`
-- `server/ai-media-studio/routes.ts`: `${AI_MEDIA_STUDIO_API_BASE}/dashboard`, `${AI_MEDIA_STUDIO_API_BASE}/generations`, `${AI_MEDIA_STUDIO_API_BASE}/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/options`, `${AI_MEDIA_STUDIO_API_BASE}/runtime`, `${AI_MEDIA_STUDIO_API_BASE}/scripts/generate`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`
+- `server/ai-media-studio/routes.ts`: `${AI_MEDIA_STUDIO_API_BASE}/dashboard`, `${AI_MEDIA_STUDIO_API_BASE}/generations`, `${AI_MEDIA_STUDIO_API_BASE}/influencers`, `${AI_MEDIA_STUDIO_API_BASE}/influencers/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/media-assets`, `${AI_MEDIA_STUDIO_API_BASE}/options`, `${AI_MEDIA_STUDIO_API_BASE}/provider-resources`, `${AI_MEDIA_STUDIO_API_BASE}/runtime`, `${AI_MEDIA_STUDIO_API_BASE}/scripts/generate`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/index.ts`: `/api/health`, `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
@@ -63,8 +64,18 @@ Package: `rest-express`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-media-studio-assets.test.ts`
 - `tests/ai-media-studio-backend.test.ts`
+- `tests/ai-media-studio-core-client.test.ts`
+- `tests/ai-media-studio-core-persistence.test.ts`
+- `tests/ai-media-studio-core-routes.test.ts`
+- `tests/ai-media-studio-core-schema.test.ts`
+- `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-persistence.test.ts`
+- `tests/ai-media-studio-pr2-migration.test.ts`
+- `tests/ai-media-studio-render-flow-integration.test.ts`
+- `tests/ai-media-studio-render-queue-persistence.test.ts`
+- `tests/ai-media-studio-render-worker.test.ts`
 - `tests/ai-media-studio-routes.test.ts`
 - `tests/ai-media-studio-runtime-persistence.test.ts`
 - `tests/ai-media-studio-schema-wiring.test.ts`
@@ -134,7 +145,7 @@ Package: `rest-express`
 
 ## Key Files
 - `client/src/pages/agents-office.tsx` (client-page; 146 symbols, 8 imports)
-- `client/src/pages/ai-media-studio.tsx` (client-page; 2 symbols, 9 imports)
+- `client/src/pages/ai-media-studio.tsx` (client-page; 5 symbols, 11 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 11 symbols, 8 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 44 symbols, 8 imports)
@@ -194,25 +205,25 @@ Package: `rest-express`
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-media-studio/domain.ts` (server; 1 symbols)
+- `server/ai-media-studio/core/asset-domain.ts` (server; 21 symbols, 1 imports)
+- `server/ai-media-studio/core/in-memory-asset-repository.ts` (server; 17 symbols, 1 imports)
+- `server/ai-media-studio/core/in-memory-core-repositories.ts` (server; 17 symbols, 2 imports)
+- `server/ai-media-studio/core/influencer-domain.ts` (server; 40 symbols, 3 imports)
+- `server/ai-media-studio/core/resource-domain.ts` (server; 21 symbols, 2 imports)
+- `server/ai-media-studio/core/runtime.ts` (server; 24 symbols, 9 imports)
+- `server/ai-media-studio/core/safe-media-downloader.ts` (server; 34 symbols, 2 imports)
+- `server/ai-media-studio/domain.ts` (server; 2 symbols)
 - `server/ai-media-studio/in-memory.ts` (server; 10 symbols, 3 imports)
-- `server/ai-media-studio/index.ts` (server; 9 imports)
-- `server/ai-media-studio/persistence/drizzle-media-job-repository.ts` (server; 9 symbols, 7 imports)
-- `server/ai-media-studio/persistence/index.ts` (server; 2 imports)
+- `server/ai-media-studio/index.ts` (server; 14 imports)
+- `server/ai-media-studio/persistence/core-mapping.ts` (server; 18 symbols, 5 imports)
+- `server/ai-media-studio/persistence/drizzle-core-repositories.ts` (server; 15 symbols, 7 imports)
+- `server/ai-media-studio/persistence/drizzle-media-job-repository.ts` (server; 13 symbols, 7 imports)
+- `server/ai-media-studio/persistence/drizzle-render-work-repository.ts` (server; 41 symbols, 5 imports)
+- `server/ai-media-studio/persistence/index.ts` (server; 6 imports)
 - `server/ai-media-studio/persistence/mapping.ts` (server; 4 symbols, 2 imports)
 - `server/ai-media-studio/persistence/runtime.ts` (server; 9 symbols, 3 imports)
 - `server/ai-media-studio/ports.ts` (server; 1 imports)
 - `server/ai-media-studio/providers/fake-video-provider.ts` (server; 11 symbols, 3 imports)
-- `server/ai-media-studio/providers/heygen-video-provider.ts` (server; 15 symbols, 3 imports)
-- `server/ai-media-studio/routes.ts` (server; 32 symbols, 13 imports, 10 routes)
-- `server/ai-media-studio/script-service.ts` (server; 13 symbols, 2 imports)
-- `server/ai-media-studio/service.ts` (server; 21 symbols, 3 imports)
-- `server/ai-media-studio/webhook-security.ts` (server; 6 symbols, 1 imports)
-- `server/ai-router.ts` (server; 13 symbols)
-- `server/app-qa-agent.ts` (server; 187 symbols, 11 imports)
-- `server/assistant.ts` (server; 280 symbols, 24 imports, 3 routes)
-- `server/automation-registry.ts` (server; 20 symbols, 3 imports)
-- `server/blackroom-links.ts` (server; 68 symbols, 1 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

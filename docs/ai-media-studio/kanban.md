@@ -1,67 +1,75 @@
 # AI Media Studio Delivery Board
 
-Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A blocked card records owner, evidence, and the exact unblock condition. Only one agent edits a file at a time.
+Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A blocked card records owner, evidence and its exact unblock condition. Only one maker owns a file at a time.
 
-## Phase 0 — Foundation
+## Stack status
 
-| Card | Owner | State | Exit evidence |
+| Delivery | Branch / PR | State | Meaning |
 | --- | --- | --- | --- |
-| AMS-001 Boundary and ADR | Lead | Checker review | ADR and module ownership accepted |
-| AMS-002 Shared HTTP DTOs | Lead | Checker review | Zod schemas consumed by UI/API |
-| AMS-003 Provider ports/state model | Backend | Checker review | Fake provider contract tests |
-| AMS-004 Security/cost gates | Backend + checker | Checker review | Deny-default flags, HMAC and replay tests |
+| Foundation | PR #67, `codex/ai-media-studio` | Clean / mergeable | Provider-neutral vertical slice accepted as the base; no deployment implied |
+| PR2 core | `codex/ai-media-studio-core` | Stacked on PR #67 | Durable core, owned media and operational APIs; review the PR2 delta after base merge/rebase |
+| PR3 operations | Branch after PR2 | Backlog | Publishing, analytics feedback, autonomous sources and distributed scale |
 
-## Phase 1 — First vertical PR
+## PR2 — durable core and owned media
 
-| Card | Owner | State | Exit evidence |
+| Card | Owner | State | Acceptance |
 | --- | --- | --- | --- |
-| AMS-101 Studio page and route | Frontend + Lead | Checker review | Authenticated `/ai-media-studio` renders |
-| AMS-102 Dashboard/options/jobs UI | Frontend | Checker review | Loading, empty, error and populated states |
-| AMS-103 Generation orchestrator | Backend | Checker review | Create returns `202`; provider-neutral state |
-| AMS-104 Fake provider/local queue | Backend | Checker review | Deterministic create/retry/cancel tests |
-| AMS-105 Signed provider webhook | Backend + Lead | Checker review | Invalid, expired and replayed HMAC rejected |
-| AMS-106 Contract/integration tests | Backend + checker | Checker review | DTO, HTTP and lifecycle checks pass |
-| AMS-107 App QA release gate | QA | Blocked | Re-run route, clicks, API, errors and improvements after fixes |
-| AMS-108 Source snapshot contract | Lead | Checker review | Eight source types and bounded Zod input covered |
-| AMS-109 Deterministic script variants | Backend | In progress | Grounded primary script and 1–5 variants at `$0.00` |
-| AMS-110 Script variants UI | Frontend | In progress | Generate, select and copy/use a variant |
-| AMS-111 Dashboard entry point | Lead | Checker review | Inbound `/ai-media-studio` link is keyboard accessible |
+| AMS-201 Migration artifact and rollback | Data owner | Partial | Forward/rollback SQL and static tests passed independent review; backup, staging apply and rollback rehearsal remain unapplied. No production `db:push` |
+| AMS-202 Durable runtime verification | Backend runtime owner | Partial | Runtime selects Drizzle with `DATABASE_URL`, returns `503` without it in production, and isolates dev/test memory; staging restart proof remains gated by AMS-201 |
+| AMS-203 Outbox worker and durable queue | Queue owner | Done (code) | Lease fencing, bounded retry, dead-letter, recovery, quotas, cancel/submit races and idempotency tests pass; no worker loop has been deployed |
+| AMS-204 Object-storage ingest | Asset owner | Ready | Stream allowlisted HTTPS MP4 into owned storage with redirect/size/MIME/checksum controls and recovery |
+| AMS-205 Media library API | Backend media owner | Partial | Tenant-scoped asset listing, lifecycle state, relations, filters, pagination and redacted stable DTOs are integrated; detail and owned delivery URLs remain pending |
+| AMS-206 Influencer CRUD and rights | Backend identity owner | Partial | Full provider-neutral CRUD, archive lifecycle and tenant tests are integrated; consent/provenance hard gate remains pending |
+| AMS-207 Media library/influencer UI | Frontend owner | Done | Loading/empty/error/populated states, pagination/retry, async archive feedback and accessible field errors passed App QA |
+| AMS-208 Dashboard durable metrics | Backend + frontend | Pending | Counts/activity/cost derive from durable records and remain correct after restart |
+| AMS-209 Runtime/route integration | Lead | Done (code) | Single route mount composes core Drizzle/memory policy, durable execution mode and production fail-closed behavior; checker passed |
+| AMS-210 PR2 contract/integration suite | Test owner | Partial | 123 focused domain/UI/auth/migration/HTTP/map tests, focused TypeScript and client/server bundles pass; staging restart remains blocked by AMS-201 |
+| AMS-211 PR2 checker review | Independent checker | Done | Final delta review against PR #67 reported no P0-P3 findings |
+| AMS-212 PR2 App QA | App QA | Done (static) | Route, link/click, API, errors, accessibility, responsive and improvement scouts passed; no live browser target was available |
 
-PR 1 acceptance: a signed-in user can create grounded script variants from a bounded source snapshot, select a script, submit a vertical fake render job, and retry/cancel through provider-neutral APIs. It performs no paid render, external post, or automatic publishing. With `DATABASE_URL`, the runtime selects Drizzle; in-memory storage is limited to development/test, and production without a database fails closed with `503`.
+### PR2 integration order
 
-## Phase 2 — Durable core
+1. **Backend makers finish ports and services** without editing the shared composition files.
+2. **Data/queue/asset adapters land** with isolated contract tests; migration remains unapplied.
+3. **Lead integrates runtime** in `server/ai-media-studio/routes.ts`: Drizzle for configured DB, durable queue/asset ports when configured, fail closed in production.
+4. **Lead integrates top-level routes** through the single existing `registerAiMediaStudioRoutes(app)` call in `server/routes.ts`; no second mount.
+5. **Frontend maker finishes sections** behind shared DTOs. Lead updates `client/src/pages/ai-media-studio.tsx` only after those exports stabilize.
+6. **Lead updates Studio navigation** in `client/src/features/ai-media-studio/navigation.ts` for Influencers and Library; preserve the existing Dashboard inbound link and single `/ai-media-studio` App route.
+7. **Migration owner generates SQL for review**, applies only to staging after approval, then runs restart/recovery and rollback rehearsal.
+8. **Checker then App QA run**. Any warning returns the card to In progress. Replit deployment still requires Robert's explicit approval.
 
-| Card | State | Exit evidence |
-| --- | --- | --- |
-| AMS-201 Additive schema and migration strategy | Blocked | Schema is re-exported; reviewed SQL and staging migration are a hard deploy gate |
-| AMS-202 Repository and generation history | Checker review | Drizzle is wired when `DATABASE_URL` exists; restart and tenant-isolation gates remain |
-| AMS-203 Outbox and durable queue | Backlog | Lease/retry/dead-letter/idempotency tests |
-| AMS-204 Object-storage asset ingest | Backlog | Checksum, limits, SSRF and signed URL tests |
-| AMS-205 HeyGen adapter | Backlog | Sandbox contract test; cost approval gate |
+### PR2 merge gates
 
-The durable Drizzle models are re-exported from the central schema and the composition root selects `DrizzleMediaJobRepository` when `DATABASE_URL` is configured. In-memory storage is allowed only in development/test; production without a database returns `503`. No migration or `db:push` has run. Deployment is blocked until reviewed SQL, staging migration, restart recovery, tenant isolation, rollback evidence, App QA, and Robert's explicit approval all pass.
+- PR #67 merged or PR2 cleanly rebased onto its merge commit.
+- Diff reviewed against PR #67/base, not against a stale local `main`.
+- No secrets, provider credentials or customer data in code, logs, fixtures or snapshots.
+- Focused unit/contract/HTTP tests, typecheck and build pass.
+- Reviewed migration SQL, staging apply, restart recovery, backup and rollback evidence exist.
+- Independent checker reports no blocking findings.
+- App QA reports no warnings or failures.
+- PR summary includes files, commands, risks, migration state and rollback.
+- Merge does not authorize deployment; Replit deployment waits for Robert.
 
-## Phase 3 — Content engine
+## PR3 — publishing, learning and autonomous scale
 
-Influencer CRUD and consent records; avatar/voice catalog; scripts, hooks, CTA, captions, hashtags, SEO and alternatives; reusable brand assets; moderation and quality scoring.
+| Card | Owner | State | Acceptance |
+| --- | --- | --- | --- |
+| AMS-301 Publishing connector ports | Publishing owner | Backlog | TikTok, Instagram, Facebook and YouTube Shorts adapters pass provider contract tests |
+| AMS-302 Manual/scheduled publishing | Publishing + approvals | Backlog | Immutable preview, explicit approval, timezone-safe scheduler and reconciliation |
+| AMS-303 Automatic publishing policy | Trust/safety owner | Blocked | Robert approves autonomy; budget/rights/moderation gates and kill switch proven |
+| AMS-304 Analytics ingestion | Analytics owner | Backlog | Normalized engagement/retention metrics with idempotent platform collection |
+| AMS-305 Creative attribution | Analytics owner | Backlog | Rank avatar/hook/CTA/time/category and calculate cost per video/view from durable joins |
+| AMS-306 Kong source adapters | Automation owner | Backlog | Event/restaurant/hotel/promotion/deal/travel triggers emit deduped snapshots |
+| AMS-307 Automated content pipeline | Orchestration owner | Backlog | Idea -> script -> approval -> render -> ingest -> publish queue recovers after crash |
+| AMS-308 Distributed workers | Platform owner | Backlog | Leases, quotas, backpressure, autoscaling and dead-letter operations pass load tests |
+| AMS-309 Multi-country/language policy | Policy owner | Backlog | Locale, timezone, residency, rights and provider routing tested |
+| AMS-310 10,000/day capacity gate | Performance owner | Backlog | Burst/load report, SLOs, provider quotas, cost envelope and disaster recovery approved |
 
-## Phase 4 — Publishing and analytics
+### PR3 merge gates
 
-TikTok, Instagram, Facebook and YouTube Shorts adapters; manual/scheduled queues first; automatic publishing only after approval controls. Ingest views, likes, shares, comments, CTR, retention, watch time, costs, and performance dimensions.
-
-## Phase 5 — Autonomous source workflows
-
-Pilot Radio Calendar events, then restaurants, hotels, deals and travel packages. Every trigger passes dedupe, rights, budget, moderation, quality and publishing-policy gates. New integrations create drafts by default.
-
-## Phase 6 — Scale
-
-Distributed workers, provider quotas, backpressure, partitioning, multi-country/language policy, SLO dashboards, disaster recovery and load tests at burst rates consistent with 10,000+ videos/day.
-
-## Merge gates
-
-1. PR on a `codex/` branch; no direct agent changes to `main`.
-2. Targeted unit, contract, integration, typecheck and build evidence.
-3. Independent checker reviews diff, routes/APIs, security, missing tests and rollback.
-4. App QA route, link/click, API, error and improvement scouts pass without warnings.
-5. PR summary states risk, files, checks, QA, deployment status and rollback.
-6. Replit deployment waits for Robert's explicit approval.
+- PR2 durable runtime and migration are already proven in staging.
+- Every publishing platform passes OAuth/permission and sandbox review.
+- Paid rendering/posting has a cost estimate and Robert's explicit approval.
+- Rights, consent, moderation and emergency-stop tests pass.
+- Analytics definitions and attribution windows are documented and reproducible.
+- Load, recovery, checker and App QA evidence pass before any production deployment request.

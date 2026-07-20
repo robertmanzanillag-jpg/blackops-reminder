@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-20T09:29:21.660Z",
+  "generatedAt": "2026-07-20T11:07:30.333Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio",
   "packageName": "rest-express",
   "scripts": {
@@ -85,20 +85,59 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 452,
-    "filesIndexed": 383,
-    "imports": 1482,
-    "routes": 467,
-    "symbols": 7575
+    "filesVisible": 494,
+    "filesIndexed": 423,
+    "imports": 1666,
+    "routes": 471,
+    "symbols": 8243
   },
   "directories": {
-    ".": {
-      "files": 26,
-      "indexed": 18,
+    "client/src": {
+      "files": 133,
+      "indexed": 131,
       "kinds": {
-        "other": 17,
-        "docs": 8,
-        "package": 1
+        "other": 24,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 23
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "docs": 7
+      }
+    },
+    "migrations/ai-media-studio": {
+      "files": 3,
+      "indexed": 1,
+      "kinds": {
+        "other": 2,
+        "docs": 1
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 30,
+      "indexed": 30,
+      "kinds": {
+        "server": 30
+      }
+    },
+    "shared": {
+      "files": 4,
+      "indexed": 4,
+      "kinds": {
+        "shared": 4
+      }
+    },
+    "tests": {
+      "files": 80,
+      "indexed": 77,
+      "kinds": {
+        "test": 80
       }
     },
     ".agents/skills": {
@@ -107,6 +146,15 @@
       "kinds": {
         "docs": 1,
         "other": 1
+      }
+    },
+    ".": {
+      "files": 25,
+      "indexed": 18,
+      "kinds": {
+        "other": 16,
+        "docs": 8,
+        "package": 1
       }
     },
     ".upm": {
@@ -130,28 +178,9 @@
         "other": 13
       }
     },
-    "client/src": {
-      "files": 122,
-      "indexed": 120,
-      "kinds": {
-        "other": 13,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 23
-      }
-    },
-    "docs/ai-media-studio": {
-      "files": 6,
-      "indexed": 6,
-      "kinds": {
-        "docs": 6
-      }
-    },
     "docs": {
       "files": 12,
-      "indexed": 12,
+      "indexed": 11,
       "kinds": {
         "docs": 12
       }
@@ -177,13 +206,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "server": 14
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -191,25 +213,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "shared": 3
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 69,
-      "indexed": 66,
-      "kinds": {
-        "test": 69
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -327,7 +335,10 @@
         "react",
         "wouter"
       ],
-      "exports": [],
+      "exports": [
+        "isPreviewFallbackAllowed",
+        "resolveAuthResponse"
+      ],
       "symbols": [
         "AgentsOfficePage",
         "AiMediaStudioPage",
@@ -335,6 +346,7 @@
         "AppQaAgentPage",
         "AssistantPage",
         "AuthMe",
+        "AuthResolutionOptions",
         "AutomationManagerPage",
         "CeoDashboardPage",
         "ClippersPage",
@@ -361,8 +373,11 @@
         "getLocalPreviewAuth",
         "hasLocalPreviewAuth",
         "isLocalPreview",
+        "isPreviewFallbackAllowed",
         "localAuth",
         "logoutMutation",
+        "resolveAuthResponse",
+        "resolveAuthServiceFailure",
         "response",
         "stored",
         "user"
@@ -2336,9 +2351,282 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/core/api.ts",
+      "kind": "other",
+      "imports": [
+        "./types"
+      ],
+      "exports": [
+        "CoreApiBoundary",
+        "InfluencerMutationResult",
+        "mediaStudioCoreApi"
+      ],
+      "symbols": [
+        "API_ROOT",
+        "InfluencerListResponse",
+        "InfluencerResponse",
+        "MediaLibraryResponse",
+        "ProviderResourceListResponse",
+        "body",
+        "fallback",
+        "mediaStudioCoreApi",
+        "params",
+        "query",
+        "queryString",
+        "requestJson",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/archive-dialog-state.ts",
+      "kind": "other",
+      "imports": [],
+      "exports": [
+        "ArchiveDialogEvent",
+        "ArchiveDialogState",
+        "archiveDialogReducer",
+        "initialArchiveDialogState"
+      ],
+      "symbols": [
+        "archiveDialogReducer"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/core-studio-workspace.tsx",
+      "kind": "other",
+      "imports": [
+        "./influencer-workspace",
+        "./media-library",
+        "lucide-react"
+      ],
+      "exports": [
+        "CoreStudioWorkspace"
+      ],
+      "symbols": [
+        "CoreStudioWorkspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/hooks.ts",
+      "kind": "other",
+      "imports": [
+        "./api",
+        "./types",
+        "@tanstack/react-query"
+      ],
+      "exports": [
+        "coreStudioKeys",
+        "useInfluencerMutations",
+        "useInfluencers",
+        "useMediaAssets",
+        "useProviderResources"
+      ],
+      "symbols": [
+        "coreStudioKeys",
+        "create",
+        "queryClient",
+        "refresh",
+        "remove",
+        "update",
+        "useInfluencerMutations",
+        "useInfluencers",
+        "useMediaAssets",
+        "useProviderResources"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/index.ts",
+      "kind": "other",
+      "imports": [
+        "./api",
+        "./archive-dialog-state",
+        "./core-studio-workspace",
+        "./influencer-selection",
+        "./influencer-workspace",
+        "./media-library",
+        "./types"
+      ],
+      "exports": [
+        "CoreStudioWorkspace ",
+        "InfluencerWorkspace ",
+        "MediaLibrary ",
+        "archiveDialogReducer, initialArchiveDialogState ",
+        "eligibleGenerationInfluencers, reconcileGenerationInfluencer ",
+        "mediaStudioCoreApi, type CoreApiBoundary "
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/influencer-form.tsx",
+      "kind": "other",
+      "imports": [
+        "./pagination-feedback",
+        "./types",
+        "@/components/ui/button",
+        "@/components/ui/label",
+        "@/components/ui/textarea",
+        "lucide-react",
+        "react",
+        "react-hook-form"
+      ],
+      "exports": [
+        "InfluencerForm"
+      ],
+      "symbols": [
+        "InfluencerForm",
+        "InfluencerFormProps",
+        "TextField",
+        "TextareaField",
+        "errorId",
+        "errorRef",
+        "fieldName",
+        "hintId",
+        "inputClass",
+        "invalid",
+        "minimumAge",
+        "submit",
+        "textareaClass"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/influencer-selection.ts",
+      "kind": "other",
+      "imports": [],
+      "exports": [
+        "GenerationInfluencerOption",
+        "eligibleGenerationInfluencers",
+        "reconcileGenerationInfluencer"
+      ],
+      "symbols": [
+        "eligible",
+        "eligibleGenerationInfluencers",
+        "reconcileGenerationInfluencer"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/influencer-workspace.tsx",
+      "kind": "other",
+      "imports": [
+        "../feedback",
+        "./archive-dialog-state",
+        "./hooks",
+        "./influencer-form",
+        "./pagination-feedback",
+        "./types",
+        "@/components/ui/alert-dialog",
+        "@/components/ui/button",
+        "@/components/ui/card",
+        "@/components/ui/dialog",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "InfluencerWorkspace"
+      ],
+      "symbols": [
+        "ArchiveInfluencerDialog",
+        "InfluencerWorkspace",
+        "avatars",
+        "avatarsQuery",
+        "changeOpen",
+        "error",
+        "influencers",
+        "influencersQuery",
+        "initials",
+        "loading",
+        "mutationError",
+        "mutations",
+        "openCreate",
+        "openEdit",
+        "options",
+        "pending",
+        "save",
+        "voices",
+        "voicesQuery"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/media-library.tsx",
+      "kind": "other",
+      "imports": [
+        "../feedback",
+        "./hooks",
+        "./pagination-feedback",
+        "./types",
+        "@/components/ui/button",
+        "@/components/ui/card",
+        "@/components/ui/label",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "MediaLibrary"
+      ],
+      "symbols": [
+        "Icon",
+        "MediaLibrary",
+        "assets",
+        "assetsQuery",
+        "formatBytes",
+        "formatDuration",
+        "iconFor",
+        "inputClass",
+        "seconds",
+        "submitSearch"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/pagination-feedback.tsx",
+      "kind": "other",
+      "imports": [
+        "@/components/ui/button",
+        "lucide-react"
+      ],
+      "exports": [
+        "PaginationError"
+      ],
+      "symbols": [
+        "PaginationError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/types.ts",
+      "kind": "other",
+      "imports": [
+        "@shared/ai-media-studio-core"
+      ],
+      "exports": [
+        "InfluencerFormValues",
+        "MediaAssetKind",
+        "MediaAssetStatus",
+        "ProviderResourceKind",
+        "commaList",
+        "emptyInfluencerForm",
+        "influencerToForm",
+        "toInfluencerRequest"
+      ],
+      "symbols": [
+        "commaList",
+        "influencerToForm",
+        "toInfluencerRequest"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/features/ai-media-studio/create-video-workbench.tsx",
       "kind": "other",
       "imports": [
+        "./core/influencer-selection",
         "./feedback",
         "./hooks",
         "./script-api",
@@ -2359,18 +2647,21 @@
         "availableVoices",
         "chooseInfluencer",
         "chooseVariant",
+        "copyVariant",
+        "eligibleInfluencers",
         "fieldClass",
-        "first",
         "focusField",
         "generateScripts",
         "idempotencyKey",
         "influencer",
+        "next",
         "options",
         "optionsQuery",
         "scripts",
         "selectedInfluencer",
         "sourceId",
-        "submit"
+        "submit",
+        "text"
       ],
       "routes": []
     },
@@ -3003,6 +3294,7 @@
       "kind": "client-page",
       "imports": [
         "@/components/ui/button",
+        "@/features/ai-media-studio/core",
         "@/features/ai-media-studio/create-video-workbench",
         "@/features/ai-media-studio/dashboard-overview",
         "@/features/ai-media-studio/feedback",
@@ -3010,14 +3302,18 @@
         "@/features/ai-media-studio/job-list",
         "@/features/ai-media-studio/studio-shell",
         "@/lib/utils",
+        "@tanstack/react-query",
         "lucide-react"
       ],
       "exports": [
         "AiMediaStudioPage"
       ],
       "symbols": [
+        "DashboardFallback",
         "dashboardQuery",
-        "providerIssue"
+        "providerIssue",
+        "queryClient",
+        "studioFetchCount"
       ],
       "routes": []
     },
@@ -3956,6 +4252,14 @@
       "routes": []
     },
     {
+      "path": "docs/ai-media-studio/requirements-matrix.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ai-media-studio/script-generation-contract.md",
       "kind": "docs",
       "imports": [],
@@ -3981,14 +4285,6 @@
     },
     {
       "path": "docs/clippers-tiktok-go-live.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -4066,6 +4362,14 @@
         "./server/env-loader",
         "drizzle-kit"
       ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "migrations/ai-media-studio/README.md",
+      "kind": "docs",
+      "imports": [],
       "exports": [],
       "symbols": [],
       "routes": []
@@ -5812,18 +6116,347 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/core/asset-domain.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "AssetMutationResult",
+        "AssetService",
+        "CreateTextAssetRequest",
+        "DownloadedMedia",
+        "ImportRemoteAssetRequest",
+        "MEDIA_ASSET_TYPES",
+        "MediaAsset",
+        "MediaAssetMetadata",
+        "MediaAssetRepository",
+        "MediaAssetStatus",
+        "MediaAssetStorage",
+        "MediaAssetType",
+        "MediaMetadataExtractor",
+        "RemoteMediaDownloader",
+        "StoredMediaObject"
+      ],
+      "symbols": [
+        "AssetService",
+        "MEDIA_ASSET_TYPES",
+        "asset",
+        "bytes",
+        "checksumSha256",
+        "cloneBytes",
+        "downloaded",
+        "existing",
+        "extracted",
+        "id",
+        "mimeType",
+        "name",
+        "normalized",
+        "owner",
+        "requireName",
+        "requireOwner",
+        "result",
+        "saved",
+        "storageKey",
+        "stored",
+        "timestamp"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/in-memory-asset-repository.ts",
+      "kind": "server",
+      "imports": [
+        "./asset-domain"
+      ],
+      "exports": [
+        "DeterministicMediaMetadataExtractor",
+        "FakeRemoteMediaDownloader",
+        "InMemoryMediaAssetRepository",
+        "InMemoryMediaAssetStorage"
+      ],
+      "symbols": [
+        "DeterministicMediaMetadataExtractor",
+        "FakeRemoteMediaDownloader",
+        "InMemoryMediaAssetRepository",
+        "InMemoryMediaAssetStorage",
+        "StoredObject",
+        "asset",
+        "checksumKey",
+        "cloneAsset",
+        "configured",
+        "existing",
+        "existingId",
+        "id",
+        "key",
+        "response",
+        "saved",
+        "stored",
+        "validateStorageKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/in-memory-core-repositories.ts",
+      "kind": "server",
+      "imports": [
+        "./influencer-domain",
+        "./resource-domain"
+      ],
+      "exports": [
+        "InMemoryCanonicalResourceRepository",
+        "InMemoryInfluencerRepository"
+      ],
+      "symbols": [
+        "InMemoryCanonicalResourceRepository",
+        "InMemoryInfluencerRepository",
+        "cloneInfluencer",
+        "cloneResource",
+        "current",
+        "id",
+        "indexedSlug",
+        "influencerKey",
+        "key",
+        "newSlugKey",
+        "oldSlugKey",
+        "owner",
+        "resourceKey",
+        "slugKey",
+        "tenantKey",
+        "uniqueIds",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/influencer-domain.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-core",
+        "./resource-domain",
+        "node:crypto"
+      ],
+      "exports": [
+        "AiInfluencer",
+        "CreateInfluencerInput",
+        "InfluencerOption",
+        "InfluencerRepository",
+        "InfluencerService",
+        "InfluencerServiceOptions",
+        "InfluencerSlugConflictError",
+        "UpdateInfluencerInput"
+      ],
+      "symbols": [
+        "GENDERS",
+        "InfluencerService",
+        "InfluencerSlugConflictError",
+        "PUBLIC_KEYS",
+        "STATUSES",
+        "ageRange",
+        "assertPlainPublicDto",
+        "avatar",
+        "avatarResourceId",
+        "canonicalId",
+        "cloneInfluencer",
+        "current",
+        "energyLevel",
+        "generated",
+        "id",
+        "influencer",
+        "influencerGender",
+        "influencerStatus",
+        "influencers",
+        "keys",
+        "linkedResource",
+        "maximum",
+        "minimum",
+        "name",
+        "nextStatus",
+        "normalized",
+        "normalizedColorList",
+        "normalizedStringList",
+        "requiredString",
+        "resource",
+        "resourceIds",
+        "resources",
+        "scope",
+        "slug",
+        "slugFromName",
+        "tenant",
+        "timestamp",
+        "validateLinks",
+        "voice",
+        "voiceResourceId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/resource-domain.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-core",
+        "node:crypto"
+      ],
+      "exports": [
+        "CanonicalMediaResource",
+        "CanonicalResourceOption",
+        "CanonicalResourceOptions",
+        "CanonicalResourceRepository",
+        "CanonicalResourceService",
+        "CanonicalResourceServiceOptions",
+        "CanonicalResourceStatus",
+        "CanonicalResourceType",
+        "CoreDomainNotFoundError",
+        "CoreDomainValidationError",
+        "CreateCanonicalResourceInput",
+        "TenantScope",
+        "UpdateCanonicalResourceInput"
+      ],
+      "symbols": [
+        "CREATE_KEYS",
+        "CanonicalResourceService",
+        "CoreDomainNotFoundError",
+        "CoreDomainValidationError",
+        "GENDERS",
+        "UPDATE_KEYS",
+        "assertPlainPublicDto",
+        "assertScope",
+        "cloneResource",
+        "current",
+        "gender",
+        "httpsUrl",
+        "mutableStatus",
+        "nullableString",
+        "parsed",
+        "requiredString",
+        "resource",
+        "resourceKind",
+        "resources",
+        "scope",
+        "toOption"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/runtime.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-core",
+        "../persistence/runtime",
+        "./asset-domain",
+        "./in-memory-asset-repository",
+        "./in-memory-core-repositories",
+        "./influencer-domain",
+        "./resource-domain",
+        "./safe-media-downloader",
+        "node:net"
+      ],
+      "exports": [
+        "CoreCatalogRepositories",
+        "CoreCatalogRuntime",
+        "DEFAULT_MEDIA_STUDIO_WORKSPACE_ID",
+        "SelectCoreCatalogOptions",
+        "createCoreCatalogRuntime",
+        "createDefaultDurableCoreRepositories",
+        "toPublicInfluencer",
+        "toPublicMediaAsset"
+      ],
+      "symbols": [
+        "DEFAULT_MEDIA_STUDIO_WORKSPACE_ID",
+        "LazyCoreCatalogRepositories",
+        "UnavailableCoreCatalogRepositories",
+        "configuredDatabase",
+        "createCoreCatalogRuntime",
+        "createDefaultDurableCoreRepositories",
+        "ensureDefaults",
+        "environment",
+        "existing",
+        "fail",
+        "hostname",
+        "influencers",
+        "key",
+        "reason",
+        "resources",
+        "safePublicMediaUrl",
+        "seeds",
+        "selectCoreCatalog",
+        "selection",
+        "toPublicInfluencer",
+        "toPublicMediaAsset",
+        "url",
+        "value",
+        "workspaceId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/core/safe-media-downloader.ts",
+      "kind": "server",
+      "imports": [
+        "./asset-domain",
+        "node:net"
+      ],
+      "exports": [
+        "HostAddressResolver",
+        "RemoteMediaResponse",
+        "RemoteMediaTransport",
+        "SafeRemoteMediaDownloader",
+        "SafeRemoteMediaDownloaderOptions",
+        "isPublicNetworkAddress"
+      ],
+      "symbols": [
+        "SafeRemoteMediaDownloader",
+        "addresses",
+        "allowedMimes",
+        "approvedAddresses",
+        "declaredLength",
+        "expandIpv6",
+        "groups",
+        "hasIpv6Prefix",
+        "header",
+        "hostname",
+        "ipv4",
+        "ipv4MappedPrefix",
+        "isPublicNetworkAddress",
+        "isUnsafeIpv4",
+        "isUnsafeIpv6",
+        "left",
+        "literalVersion",
+        "location",
+        "maxBytes",
+        "mimeType",
+        "missing",
+        "normalizedMimeType",
+        "octets",
+        "originalUrl",
+        "parseIpv4",
+        "parsedLength",
+        "response",
+        "right",
+        "shift",
+        "sides",
+        "target",
+        "value",
+        "version",
+        "visited"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/domain.ts",
       "kind": "server",
       "imports": [],
       "exports": [
         "GenerationRequest",
         "MediaGenerationJob",
+        "MediaJobStateConflictError",
         "MediaJobStatus",
         "ProviderStatus",
         "ProviderWebhookEvent",
         "TERMINAL_STATUSES"
       ],
       "symbols": [
+        "MediaJobStateConflictError",
         "TERMINAL_STATUSES"
       ],
       "routes": []
@@ -5858,18 +6491,103 @@
       "path": "server/ai-media-studio/index.ts",
       "kind": "server",
       "imports": [
+        "./core/runtime",
         "./domain",
         "./in-memory",
+        "./persistence",
         "./ports",
         "./providers/fake-video-provider",
         "./providers/heygen-video-provider",
         "./routes",
         "./script-service",
         "./service",
-        "./webhook-security"
+        "./webhook-security",
+        "./workers",
+        "./workers/video-provider-adapter",
+        "./workers/video-render-runtime"
       ],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/core-mapping.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-core",
+        "../../../shared/models/ai-media-studio-db",
+        "../core/asset-domain",
+        "../core/influencer-domain",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "AiMediaAssetRow",
+        "AiMediaInfluencerRow",
+        "AiMediaProviderResourceRow",
+        "mapCanonicalResourceRow",
+        "mapInfluencerRow",
+        "mapMediaAssetRow"
+      ],
+      "symbols": [
+        "ASSET_TYPES",
+        "assetMetadata",
+        "assetSource",
+        "assetStatus",
+        "assetType",
+        "candidate",
+        "influencerGender",
+        "influencerStatus",
+        "iso",
+        "mapCanonicalResourceRow",
+        "mapInfluencerRow",
+        "mapMediaAssetRow",
+        "metadata",
+        "numberOrUndefined",
+        "resourceStatus",
+        "resourceType",
+        "source",
+        "stringOrNull"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/drizzle-core-repositories.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../core/asset-domain",
+        "../core/influencer-domain",
+        "../core/resource-domain",
+        "./core-mapping",
+        "./drizzle-media-job-repository",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "CanonicalResourceIdentityResolver",
+        "CanonicalResourcePersistenceIdentity",
+        "DrizzleCanonicalResourceRepository",
+        "DrizzleInfluencerRepository",
+        "DrizzleMediaAssetRepository",
+        "DrizzleMediaAssetRepositoryOptions",
+        "MediaAssetPage"
+      ],
+      "symbols": [
+        "DrizzleCanonicalResourceRepository",
+        "DrizzleInfluencerRepository",
+        "DrizzleMediaAssetRepository",
+        "assetMetadata",
+        "checksumSha256",
+        "hasMore",
+        "identity",
+        "ids",
+        "limit",
+        "lockKey",
+        "page",
+        "personaMetadata",
+        "predicates",
+        "requireInternalIdentity",
+        "rows"
+      ],
       "routes": []
     },
     {
@@ -5887,18 +6605,83 @@
       "exports": [
         "AiMediaStudioDrizzleDatabase",
         "DrizzleMediaJobRepository",
-        "DrizzleMediaJobRepositoryOptions"
+        "DrizzleMediaJobRepositoryOptions",
+        "durableQueueResetFields"
       ],
       "symbols": [
         "DEFAULT_WORKSPACE_ID",
         "DrizzleMediaJobRepository",
         "UNRESOLVED_WEBHOOK_OWNER",
         "asJsonObject",
+        "durableQueueResetFields",
         "existing",
         "id",
+        "isCancellationTransition",
+        "mapRepositoryRow",
         "now",
         "resultFields",
-        "rows"
+        "rows",
+        "updatePredicates"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/persistence/drizzle-render-work-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../workers/contracts",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres",
+        "node:crypto"
+      ],
+      "exports": [
+        "AiMediaRenderWorkDatabase",
+        "DrizzleRenderWorkRepository",
+        "DrizzleRenderWorkRepositoryOptions"
+      ],
+      "symbols": [
+        "DEFAULT_WORKSPACE_ID",
+        "DrizzleRenderWorkRepository",
+        "PRACTICAL_UNLIMITED_QUOTA",
+        "QUEUE_STATES",
+        "RawRenderQueueRow",
+        "RenderQueueMetadata",
+        "RenderQueueRow",
+        "availableAt",
+        "existing",
+        "inserted",
+        "item",
+        "jsonObject",
+        "keys",
+        "leaseExpiresAt",
+        "leaseToken",
+        "mapRow",
+        "maxAttempts",
+        "maxLeaseRecoveries",
+        "metadata",
+        "milliseconds",
+        "nonNegativeInteger",
+        "normalizeRow",
+        "now",
+        "parsed",
+        "positiveInteger",
+        "providerDefault",
+        "providerLimits",
+        "queryResult",
+        "queueMetadata",
+        "queueTitle",
+        "quota",
+        "quotaOverrides",
+        "result",
+        "retryAt",
+        "row",
+        "rowsFrom",
+        "state",
+        "tenantDefault",
+        "tenantLimits",
+        "title",
+        "totalLimit"
       ],
       "routes": []
     },
@@ -5906,11 +6689,18 @@
       "path": "server/ai-media-studio/persistence/index.ts",
       "kind": "server",
       "imports": [
+        "./core-mapping",
+        "./drizzle-core-repositories",
         "./drizzle-media-job-repository",
-        "./mapping"
+        "./drizzle-render-work-repository",
+        "./mapping",
+        "./runtime"
       ],
       "exports": [
+        "DrizzleCanonicalResourceRepository,\n  DrizzleInfluencerRepository,\n  DrizzleMediaAssetRepository,\n  type CanonicalResourceIdentityResolver,\n  type CanonicalResourcePersistenceIdentity,\n  type DrizzleMediaAssetRepositoryOptions,\n  type MediaAssetPage,\n",
         "DrizzleMediaJobRepository,\n  type AiMediaStudioDrizzleDatabase,\n  type DrizzleMediaJobRepositoryOptions,\n",
+        "DrizzleRenderWorkRepository,\n  type AiMediaRenderWorkDatabase,\n  type DrizzleRenderWorkRepositoryOptions,\n",
+        "mapCanonicalResourceRow, mapInfluencerRow, mapMediaAssetRow ",
         "mapRenderJobRow "
       ],
       "symbols": [],
@@ -6046,8 +6836,12 @@
       "kind": "server",
       "imports": [
         "../../shared/ai-media-studio",
+        "../../shared/ai-media-studio-core",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
+        "./core/influencer-domain",
+        "./core/resource-domain",
+        "./core/runtime",
         "./domain",
         "./in-memory",
         "./persistence/runtime",
@@ -6066,47 +6860,72 @@
         "registerAiMediaStudioRoutes"
       ],
       "symbols": [
-        "INFLUENCERS",
-        "LANGUAGES",
-        "VOICES",
         "asyncRoute",
+        "available",
         "candidate",
+        "core",
         "createAiMediaStudioRuntime",
+        "created",
         "dashboard",
+        "databaseUrl",
         "defaultProviderKey",
         "durations",
         "envAssetHosts",
+        "explicitHarness",
+        "hasMore",
+        "index",
+        "influencer",
         "input",
-        "job",
         "jobs",
+        "languageCodes",
+        "options",
         "ownerUserId",
+        "page",
+        "paginate",
         "persistence",
         "providerKey",
         "providers",
+        "queryValue",
+        "queryValues",
         "queue",
         "rawBody",
         "rawStatus",
         "registerAiMediaStudioRoutes",
         "repository",
         "requestWithRawBody",
+        "requireCapability",
+        "requireCatalog",
+        "requireJobs",
         "resources",
         "result",
         "router",
         "runtime",
+        "runtimeEnvironment",
+        "scope",
         "scriptService",
+        "search",
         "secret",
         "service",
+        "tenant",
         "toPublicJob",
-        "today"
+        "toPublicResource",
+        "today",
+        "updated",
+        "values",
+        "voices"
       ],
       "routes": [
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
         "${AI_MEDIA_STUDIO_API_BASE}/generations",
+        "${AI_MEDIA_STUDIO_API_BASE}/influencers",
+        "${AI_MEDIA_STUDIO_API_BASE}/influencers/:id",
         "${AI_MEDIA_STUDIO_API_BASE}/jobs",
         "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id",
         "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel",
         "${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry",
+        "${AI_MEDIA_STUDIO_API_BASE}/media-assets",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
+        "${AI_MEDIA_STUDIO_API_BASE}/provider-resources",
         "${AI_MEDIA_STUDIO_API_BASE}/runtime",
         "${AI_MEDIA_STUDIO_API_BASE}/scripts/generate",
         "${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey"
@@ -6168,10 +6987,12 @@
         "parked",
         "parsed",
         "pending",
+        "preserveCancellation",
         "provider",
         "providerIdempotencyKey",
         "startedAt",
         "submission",
+        "submittedAt",
         "terminal",
         "timestampNumber",
         "url"
@@ -6195,6 +7016,156 @@
         "supplied",
         "timestampMs",
         "verifyHeyGenWebhook"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/contracts.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "ClaimDueWorkOptions",
+        "ClaimedRenderWork",
+        "EnqueueRenderWork",
+        "LeaseRecovery",
+        "ProviderSubmission",
+        "RenderClock",
+        "RenderFailureResult",
+        "RenderQuotaPolicy",
+        "RenderRandom",
+        "RenderSubmissionProvider",
+        "RenderWorkItem",
+        "RenderWorkRepository",
+        "RenderWorkState",
+        "RenderWorkerHooks"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/in-memory-render-work-repository.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts"
+      ],
+      "exports": [
+        "InMemoryRenderWorkRepository"
+      ],
+      "symbols": [
+        "InMemoryRenderWorkRepository",
+        "candidate",
+        "copy",
+        "deadLettered",
+        "due",
+        "existing",
+        "item",
+        "leaseToken",
+        "leased",
+        "maxLeaseRecoveries",
+        "providerCount",
+        "providerLimit",
+        "quotaLimit",
+        "tenantCount",
+        "tenantLimit",
+        "totalLimit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/index.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./in-memory-render-work-repository",
+        "./render-worker"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/render-worker.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "PermanentRenderFailure",
+        "RenderRetryPolicy",
+        "RenderWorker",
+        "RenderWorkerOptions",
+        "RenderWorkerResult",
+        "providerIdempotencyKey",
+        "retryDelayMs"
+      ],
+      "symbols": [
+        "PermanentRenderFailure",
+        "RenderWorker",
+        "boundedRandom",
+        "claim",
+        "exponential",
+        "item",
+        "jitter",
+        "nowMs",
+        "provider",
+        "providerIdempotencyKey",
+        "recoveries",
+        "renderErrorMessage",
+        "result",
+        "retryDelayMs",
+        "retryable"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/video-provider-adapter.ts",
+      "kind": "server",
+      "imports": [
+        "../domain",
+        "../ports",
+        "./contracts",
+        "./render-worker"
+      ],
+      "exports": [
+        "VideoProviderRenderAdapter",
+        "adaptVideoProviders"
+      ],
+      "symbols": [
+        "VideoProviderRenderAdapter",
+        "adaptVideoProviders",
+        "status",
+        "submission"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/video-render-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "../domain",
+        "../persistence/drizzle-render-work-repository",
+        "../ports",
+        "../service",
+        "./contracts",
+        "./render-worker",
+        "./video-provider-adapter"
+      ],
+      "exports": [
+        "CreateVideoRenderWorkerOptions",
+        "createVideoRenderWorker",
+        "createVideoRenderWorkerHooks"
+      ],
+      "symbols": [
+        "call",
+        "createVideoRenderWorker",
+        "createVideoRenderWorkerHooks",
+        "firstHandler",
+        "mergeHooks",
+        "projectSubmission",
+        "projectionHooks",
+        "repository",
+        "secondHandler"
       ],
       "routes": []
     },
@@ -12727,6 +13698,78 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-core.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "CreateInfluencerRequest",
+        "Influencer",
+        "InfluencerAgeRange",
+        "InfluencerGender",
+        "InfluencerListRequest",
+        "InfluencerListResponse",
+        "InfluencerStatus",
+        "MediaAsset",
+        "MediaLibraryRequest",
+        "MediaLibraryResponse",
+        "ProviderResource",
+        "ProviderResourceListRequest",
+        "ProviderResourceListResponse",
+        "UpdateInfluencerRequest",
+        "createInfluencerRequestSchema",
+        "influencerAgeRangeSchema",
+        "influencerCoreFieldsSchema",
+        "influencerGenderSchema",
+        "influencerListRequestSchema",
+        "influencerListResponseSchema",
+        "influencerResponseSchema",
+        "influencerSchema",
+        "influencerStatusSchema",
+        "mediaAssetKindSchema",
+        "mediaAssetSchema",
+        "mediaAssetStatusSchema",
+        "mediaLibraryRequestSchema",
+        "mediaLibraryResponseSchema",
+        "providerResourceKindSchema",
+        "providerResourceListRequestSchema",
+        "providerResourceListResponseSchema",
+        "providerResourceSchema",
+        "providerResourceStatusSchema",
+        "updateInfluencerRequestSchema"
+      ],
+      "symbols": [
+        "canonicalIdSchema",
+        "categorySchema",
+        "createInfluencerRequestSchema",
+        "hexColorSchema",
+        "influencerAgeRangeSchema",
+        "influencerCoreFieldsSchema",
+        "influencerGenderSchema",
+        "influencerListRequestSchema",
+        "influencerListResponseSchema",
+        "influencerResponseSchema",
+        "influencerSchema",
+        "influencerStatusSchema",
+        "isoDateSchema",
+        "languageCodeSchema",
+        "mediaAssetKindSchema",
+        "mediaAssetSchema",
+        "mediaAssetStatusSchema",
+        "mediaLibraryRequestSchema",
+        "mediaLibraryResponseSchema",
+        "providerResourceKindSchema",
+        "providerResourceListRequestSchema",
+        "providerResourceListResponseSchema",
+        "providerResourceSchema",
+        "providerResourceStatusSchema",
+        "shortLabelSchema",
+        "updateInfluencerRequestSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-scripts.ts",
       "kind": "shared",
       "imports": [
@@ -12844,6 +13887,7 @@
         "aiMediaWebhookEvents"
       ],
       "symbols": [
+        "AiMediaRenderJobSelect",
         "aiMediaAnalyticsEvents",
         "aiMediaAnalyticsSnapshots",
         "aiMediaCostLedger",
@@ -13190,6 +14234,46 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-assets.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/asset-domain",
+        "../server/ai-media-studio/core/in-memory-asset-repository",
+        "../server/ai-media-studio/core/safe-media-downloader",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ScriptedTransport",
+        "actualLarge",
+        "base",
+        "bytes",
+        "declaredLarge",
+        "downloader",
+        "duplicate",
+        "final",
+        "first",
+        "otherTenant",
+        "privateRedirect",
+        "redirectLoop",
+        "remote",
+        "repository",
+        "response",
+        "responses",
+        "result",
+        "safeDownloader",
+        "script",
+        "second",
+        "service",
+        "storage",
+        "transport",
+        "url",
+        "wrongMime"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-backend.test.ts",
       "kind": "test",
       "imports": [
@@ -13238,6 +14322,208 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-core-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/core/api.ts",
+        "../client/src/features/ai-media-studio/core/archive-dialog-state.ts",
+        "../client/src/features/ai-media-studio/core/influencer-selection.ts",
+        "../client/src/features/ai-media-studio/core/types.ts",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "api",
+        "assets",
+        "failed",
+        "feedback",
+        "form",
+        "hooks",
+        "influencers",
+        "library",
+        "opened",
+        "options",
+        "originalFetch",
+        "page",
+        "pending",
+        "repositoryRoot",
+        "request",
+        "resources",
+        "source",
+        "workbench",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-core-persistence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/asset-domain",
+        "../server/ai-media-studio/persistence/core-mapping",
+        "../server/ai-media-studio/persistence/drizzle-core-repositories",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeDb",
+        "FakeQuery",
+        "QueryRecord",
+        "accountLookup",
+        "asset",
+        "created",
+        "cursorLookup",
+        "db",
+        "dedupeDb",
+        "deduplicated",
+        "influencer",
+        "insert",
+        "later",
+        "lock",
+        "lookup",
+        "mismatched",
+        "missing",
+        "missingDb",
+        "now",
+        "page",
+        "pageDb",
+        "paged",
+        "query",
+        "raceDb",
+        "racedLookup",
+        "readDb",
+        "readQuery",
+        "renderedWhere",
+        "repository",
+        "resource",
+        "result",
+        "scope",
+        "updateDb",
+        "updateQuery",
+        "updateRecord",
+        "updateRepository",
+        "values"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-core-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/in-memory-asset-repository",
+        "../server/ai-media-studio/core/in-memory-core-repositories",
+        "../server/ai-media-studio/core/runtime",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio-core",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "brief",
+        "coreRepositories",
+        "crossTenantUpdate",
+        "duplicate",
+        "filtered",
+        "filteredResponse",
+        "firstPage",
+        "harness",
+        "invalid",
+        "library",
+        "mismatchedGeneration",
+        "options",
+        "optionsRaw",
+        "optionsResponse",
+        "otherTenant",
+        "raw",
+        "repositories",
+        "response",
+        "runtime",
+        "scope",
+        "secondPage",
+        "seedResources",
+        "server",
+        "startRuntime",
+        "target",
+        "timestamp",
+        "updated",
+        "userHeaders",
+        "userId",
+        "voices"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-core-schema.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "asset",
+        "assetUnique",
+        "resourceUnique",
+        "safeResource",
+        "saved",
+        "source",
+        "validInfluencer"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-influencers.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/in-memory-core-repositories",
+        "../server/ai-media-studio/core/influencer-domain",
+        "../server/ai-media-studio/core/resource-domain",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "archived",
+        "avatar",
+        "createHarness",
+        "created",
+        "draft",
+        "first",
+        "fixedNow",
+        "foreignAvatar",
+        "influencerOptions",
+        "influencerRepository",
+        "influencers",
+        "other",
+        "otherAvatar",
+        "otherTenant",
+        "otherVoice",
+        "reactivated",
+        "resourceOptions",
+        "resourceRepository",
+        "resources",
+        "sequentialIds",
+        "updated",
+        "voice"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-persistence.test.ts",
       "kind": "test",
       "imports": [
@@ -13255,6 +14541,152 @@
         "mapped",
         "providerAccountBlock",
         "schemaSource"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr2-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "addConstraint",
+        "duplicateGuard",
+        "firstIndexChange",
+        "forward",
+        "influencerBackfill",
+        "influencerNotNull",
+        "match",
+        "migrationDirectory",
+        "position",
+        "preflight",
+        "readArtifact",
+        "rollback",
+        "runbook",
+        "validateConstraint"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-render-flow-integration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/domain",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/persistence/drizzle-media-job-repository",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/service",
+        "../server/ai-media-studio/workers/in-memory-render-work-repository",
+        "../server/ai-media-studio/workers/render-worker",
+        "../server/ai-media-studio/workers/video-provider-adapter",
+        "../server/ai-media-studio/workers/video-render-runtime",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CountingProvider",
+        "CountingQueue",
+        "DurableMediaRepository",
+        "afterConflict",
+        "cancelled",
+        "claimed",
+        "created",
+        "due",
+        "dueAt",
+        "duplicate",
+        "first",
+        "job",
+        "projected",
+        "provider",
+        "queue",
+        "queued",
+        "repository",
+        "result",
+        "retried",
+        "saved",
+        "service",
+        "submitted",
+        "tracked",
+        "work",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-render-queue-persistence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/persistence/drizzle-render-work-repository",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CompiledQuery",
+        "FakeTransactionalDatabase",
+        "Payload",
+        "QueryResponder",
+        "claimSql",
+        "compiled",
+        "created",
+        "deadLetters",
+        "entry",
+        "failed",
+        "fake",
+        "insert",
+        "leaseToken",
+        "previous",
+        "reconcile",
+        "recoveries",
+        "repository",
+        "row",
+        "submitted",
+        "wideQuotas"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-render-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/workers",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MutableClock",
+        "Payload",
+        "cases",
+        "clock",
+        "crashedClaim",
+        "expectedKey",
+        "first",
+        "gate",
+        "inputs",
+        "item",
+        "makeProvider",
+        "progressed",
+        "providers",
+        "quotas",
+        "renderWorker",
+        "repository",
+        "restarted",
+        "results",
+        "second",
+        "seen",
+        "strictQuotas",
+        "third",
+        "worker",
+        "workers"
       ],
       "routes": []
     },
@@ -13378,6 +14810,32 @@
         "previousGemini",
         "previousStrict",
         "route"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/app-auth-fail-closed.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "auth",
+        "authenticatedGate",
+        "end",
+        "executableResolver",
+        "loadAuthResolver",
+        "production",
+        "protectedRoutes",
+        "readAppSource",
+        "resolver",
+        "source",
+        "start",
+        "unavailableGate"
       ],
       "routes": []
     },
@@ -14901,8 +16359,18 @@
   ],
   "tests": [
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-media-studio-assets.test.ts",
     "tests/ai-media-studio-backend.test.ts",
+    "tests/ai-media-studio-core-client.test.ts",
+    "tests/ai-media-studio-core-persistence.test.ts",
+    "tests/ai-media-studio-core-routes.test.ts",
+    "tests/ai-media-studio-core-schema.test.ts",
+    "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-persistence.test.ts",
+    "tests/ai-media-studio-pr2-migration.test.ts",
+    "tests/ai-media-studio-render-flow-integration.test.ts",
+    "tests/ai-media-studio-render-queue-persistence.test.ts",
+    "tests/ai-media-studio-render-worker.test.ts",
     "tests/ai-media-studio-routes.test.ts",
     "tests/ai-media-studio-runtime-persistence.test.ts",
     "tests/ai-media-studio-schema-wiring.test.ts",

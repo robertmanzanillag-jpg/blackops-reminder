@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Clapperboard, Loader2, Play, Sparkles, WandSparkles } from "lucide-react";
+import { Check, Clapperboard, Copy, Loader2, Play, WandSparkles } from "lucide-react";
 import type { MediaSourceType, ScriptVariant } from "@shared/ai-media-studio-scripts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "./feedback";
 import { useStudioMutations, useStudioOptions } from "./hooks";
 import { generateScriptVariants } from "./script-api";
+import { eligibleGenerationInfluencers, reconcileGenerationInfluencer } from "./core/influencer-selection";
 
 const sourceTypes: Array<{ value: MediaSourceType; label: string }> = [
   { value: "events", label: "Event" },
@@ -52,27 +53,35 @@ export function CreateVideoWorkbench() {
   const [script, setScript] = useState("");
   const [variants, setVariants] = useState<ScriptVariant[]>([]);
   const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [copiedVariantId, setCopiedVariantId] = useState("");
   const [errorSummary, setErrorSummary] = useState("");
 
   const options = optionsQuery.data;
   useEffect(() => {
-    if (influencerId || !options) return;
-    const first = options.influencers.find((item) => item.status === "active" || item.status === "ready") ?? options.influencers[0];
-    if (!first) return;
-    setInfluencerId(first.id);
-    setLanguage(first.language);
-    setVoiceId(first.voiceId);
+    if (!options) return;
+    const next = reconcileGenerationInfluencer(options.influencers, influencerId);
+    if (!next) {
+      setInfluencerId("");
+      setLanguage("");
+      setVoiceId("");
+      return;
+    }
+    if (next.id === influencerId) return;
+    setInfluencerId(next.id);
+    setLanguage(next.language);
+    setVoiceId(next.voiceId);
   }, [influencerId, options]);
 
   if (optionsQuery.isLoading) return <LoadingPanel label="Loading creators and voices" />;
   if (optionsQuery.isError) return <ErrorPanel message={optionsQuery.error.message} onRetry={() => optionsQuery.refetch()} />;
-  if (!options || options.influencers.length === 0) return <EmptyPanel title="Create an AI influencer first" description="A ready influencer is required before script and video generation." />;
+  const eligibleInfluencers = options ? eligibleGenerationInfluencers(options.influencers) : [];
+  if (!options || eligibleInfluencers.length === 0) return <EmptyPanel title="Create an active AI influencer first" description="An active influencer with a ready avatar and voice is required before script and video generation." />;
 
   const availableVoices = options.voices.filter((voice) => !language || voice.language === language);
-  const selectedInfluencer = options.influencers.find((item) => item.id === influencerId);
+  const selectedInfluencer = eligibleInfluencers.find((item) => item.id === influencerId);
 
   const chooseInfluencer = (nextId: string) => {
-    const influencer = options.influencers.find((item) => item.id === nextId);
+    const influencer = eligibleInfluencers.find((item) => item.id === nextId);
     setInfluencerId(nextId);
     if (influencer) {
       setLanguage(influencer.language);
@@ -115,6 +124,7 @@ export function CreateVideoWorkbench() {
       onSuccess: (result) => {
         setVariants(result.scriptSet.variants);
         setSelectedVariantId("");
+        setCopiedVariantId("");
         setScript("");
         requestAnimationFrame(() => document.getElementById("studio-variants")?.focus());
       },
@@ -127,9 +137,28 @@ export function CreateVideoWorkbench() {
     setErrorSummary("");
   };
 
+  const copyVariant = async (variant: ScriptVariant) => {
+    const text = [
+      variant.title,
+      `Angle: ${variant.angle}`,
+      `Hook: ${variant.hook}`,
+      variant.script,
+      `CTA: ${variant.cta}`,
+      `Caption: ${variant.caption}`,
+      `Hashtags: ${variant.hashtags.join(" ")}`,
+      `SEO: ${variant.seoKeywords.join(", ")}`,
+    ].join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedVariantId(variant.id);
+    } catch {
+      setErrorSummary("The browser could not copy this variant. You can still select it and copy from the script field.");
+    }
+  };
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!influencerId) { setErrorSummary("Choose an influencer."); focusField("studio-influencer"); return; }
+    if (!selectedInfluencer) { setErrorSummary("Choose an active influencer."); focusField("studio-influencer"); return; }
     if (!language) { setErrorSummary("Choose a language."); focusField("studio-language"); return; }
     if (!voiceId) { setErrorSummary("Choose a voice."); focusField("studio-voice"); return; }
     if (variants.length > 0 && !selectedVariantId) { setErrorSummary("Select a generated script variant before rendering."); focusField("studio-variants"); return; }
@@ -163,11 +192,11 @@ export function CreateVideoWorkbench() {
           <CardHeader><CardTitle className="text-lg">2. Creator and script</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-4 md:grid-cols-3">
-              <div><Label htmlFor="studio-influencer">AI influencer</Label><select id="studio-influencer" className={fieldClass} value={influencerId} onChange={(event) => chooseInfluencer(event.target.value)}>{options.influencers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+              <div><Label htmlFor="studio-influencer">AI influencer</Label><select id="studio-influencer" className={fieldClass} value={influencerId} onChange={(event) => chooseInfluencer(event.target.value)}>{eligibleInfluencers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
               <div><Label htmlFor="studio-language">Language</Label><select id="studio-language" className={fieldClass} value={language} onChange={(event) => { setLanguage(event.target.value); setVoiceId(""); }}>{options.languages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></div>
               <div><Label htmlFor="studio-voice">Voice</Label><select id="studio-voice" className={fieldClass} value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>{availableVoices.map((item) => <option key={item.id} value={item.id}>{item.name}{item.accent ? ` · ${item.accent}` : ""}</option>)}</select></div>
             </div>
-            <Button type="button" variant="outline" className="border-emerald-300/30 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20" disabled={scripts.isPending} onClick={generateScripts}>
+            <Button type="button" variant="outline" className="border-emerald-300/30 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20" disabled={scripts.isPending || !selectedInfluencer} onClick={generateScripts}>
               {scripts.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <WandSparkles className="mr-2 h-4 w-4" aria-hidden="true" />}
               {scripts.isPending ? "Generating grounded variants…" : "Generate 3 script variants"}
             </Button>
@@ -177,15 +206,35 @@ export function CreateVideoWorkbench() {
               <fieldset id="studio-variants" tabIndex={-1} className="space-y-3 rounded-xl border border-white/10 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
                 <legend className="px-1 text-sm font-medium text-zinc-200">Select one script before rendering</legend>
                 {variants.map((variant) => (
-                  <label key={variant.id} className={`block cursor-pointer rounded-lg border p-3 transition-colors ${selectedVariantId === variant.id ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20 hover:border-white/20"}`}>
-                    <span className="flex items-start gap-3"><input type="radio" name="script-variant" value={variant.id} checked={selectedVariantId === variant.id} onChange={() => chooseVariant(variant)} className="mt-1 accent-emerald-400" /><span><span className="block text-sm font-medium text-white">{variant.title}</span><span className="mt-1 block text-xs uppercase tracking-wide text-emerald-300">{variant.angle}</span><span className="mt-2 block text-sm text-zinc-400">{variant.hook}</span></span></span>
-                  </label>
+                  <div key={variant.id} className={`rounded-lg border p-4 transition-colors ${selectedVariantId === variant.id ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20"}`}>
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input type="radio" name="script-variant" value={variant.id} checked={selectedVariantId === variant.id} onChange={() => chooseVariant(variant)} className="mt-1 accent-emerald-400" />
+                      <span><span className="block text-sm font-medium text-white">{variant.title}</span><span className="mt-1 block text-xs uppercase tracking-wide text-emerald-300">{variant.angle}</span><span className="mt-2 block text-sm text-zinc-300">{variant.hook}</span></span>
+                    </label>
+                    <details className="mt-3 border-t border-white/10 pt-3">
+                      <summary className="cursor-pointer rounded text-sm font-medium text-zinc-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Review full variant</summary>
+                      <div className="mt-3 space-y-3 text-sm leading-6 text-zinc-300">
+                        <div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Script</p><p className="mt-1 whitespace-pre-wrap">{variant.script}</p></div>
+                        <div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Call to action</p><p className="mt-1">{variant.cta}</p></div>
+                        <div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Caption</p><p className="mt-1 whitespace-pre-wrap">{variant.caption}</p></div>
+                        <div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Hashtags</p><p className="mt-1 break-words">{variant.hashtags.join(" ")}</p></div>
+                        <div><p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">SEO keywords</p><p className="mt-1">{variant.seoKeywords.join(", ")}</p></div>
+                        <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                          <Button type="button" size="sm" className="bg-emerald-400 text-zinc-950 hover:bg-emerald-300" onClick={() => chooseVariant(variant)}>Use this variant</Button>
+                          <Button type="button" size="sm" variant="outline" className="border-white/15 bg-white/5 text-zinc-100" onClick={() => void copyVariant(variant)}>
+                            {copiedVariantId === variant.id ? <Check className="mr-2 h-4 w-4" aria-hidden="true" /> : <Copy className="mr-2 h-4 w-4" aria-hidden="true" />}
+                            {copiedVariantId === variant.id ? "Copied" : "Copy all fields"}
+                          </Button>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
                 ))}
               </fieldset>
             )}
             <div><div className="flex justify-between gap-3"><Label htmlFor="studio-script">Selected or manual script</Label><span className="text-xs text-zinc-400">{script.length.toLocaleString()} / 5,000</span></div><Textarea id="studio-script" className="mt-2 min-h-52 border-white/10 bg-zinc-950 focus-visible:ring-emerald-300" value={script} onChange={(event) => { setScript(event.target.value); setErrorSummary(""); }} maxLength={5_000} placeholder="Select a variant above, then refine it here—or write a script manually." /></div>
             {errorSummary && <div id="studio-form-error" tabIndex={-1} role="alert" className="rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{errorSummary}</div>}
-            <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-zinc-400">Preview request: <span className="font-medium text-zinc-100">9:16 vertical</span></p><Button type="submit" disabled={create.isPending} className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300">{create.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Clapperboard className="mr-2 h-4 w-4" aria-hidden="true" />}{create.isPending ? "Queuing preview…" : "Queue video preview"}</Button></div>
+            <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-zinc-400">Preview request: <span className="font-medium text-zinc-100">9:16 vertical</span></p><Button type="submit" disabled={create.isPending || !selectedInfluencer} className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300">{create.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Clapperboard className="mr-2 h-4 w-4" aria-hidden="true" />}{create.isPending ? "Queuing preview…" : "Queue video preview"}</Button></div>
             <div aria-live="polite" aria-atomic="true">{create.isSuccess && <p role="status" className="rounded-lg border border-emerald-300/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">Preview queued. Job {create.data.jobId} is now tracked below.</p>}{create.isError && <p role="alert" className="rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{create.error.message}</p>}</div>
           </CardContent>
         </Card>

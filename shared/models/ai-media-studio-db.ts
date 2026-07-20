@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 /**
  * Durable, provider-neutral storage for AI Media Studio.
@@ -38,9 +39,31 @@ export const aiMediaInfluencers = pgTable(
     slug: text("slug").notNull(),
     status: text("status").notNull().default("draft"),
     description: text("description"),
+    accent: text("accent").notNull().default("neutral"),
+    language: text("language").notNull().default("en"),
+    gender: text("gender").notNull().default("unspecified"),
+    ageRange: jsonb("age_range")
+      .$type<{ minimum: number; maximum: number }>()
+      .notNull()
+      .default({ minimum: 18, maximum: 65 }),
+    personality: jsonb("personality").$type<string[]>().notNull().default([]),
+    tone: jsonb("tone").$type<string[]>().notNull().default([]),
+    speakingStyle: text("speaking_style").notNull().default("natural"),
+    categories: jsonb("categories").$type<string[]>().notNull().default([]),
+    intro: text("intro").notNull().default(""),
+    outro: text("outro").notNull().default(""),
+    energyLevel: integer("energy_level").notNull().default(5),
+    facialExpressions: jsonb("facial_expressions").$type<string[]>().notNull().default([]),
+    brandColors: jsonb("brand_colors").$type<string[]>().notNull().default([]),
     persona: jsonb("persona").$type<Record<string, unknown>>().notNull().default({}),
-    defaultVoiceResourceId: uuid("default_voice_resource_id"),
-    defaultAvatarResourceId: uuid("default_avatar_resource_id"),
+    defaultVoiceResourceId: uuid("default_voice_resource_id").references(
+      (): AnyPgColumn => aiMediaProviderResources.id,
+      { onDelete: "set null" },
+    ),
+    defaultAvatarResourceId: uuid("default_avatar_resource_id").references(
+      (): AnyPgColumn => aiMediaProviderResources.id,
+      { onDelete: "set null" },
+    ),
     ...auditColumns(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
@@ -193,6 +216,7 @@ export const aiMediaProviderResources = pgTable(
     providerAccountId: uuid("provider_account_id").notNull().references(() => aiMediaProviderAccounts.id, { onDelete: "cascade" }),
     providerKey: text("provider_key").notNull(),
     resourceType: text("resource_type").notNull(),
+    canonicalKey: text("canonical_key").notNull(),
     externalResourceId: text("external_resource_id").notNull(),
     displayName: text("display_name").notNull(),
     status: text("status").notNull().default("active"),
@@ -202,9 +226,17 @@ export const aiMediaProviderResources = pgTable(
   },
   (table) => ({
     providerExternalUnique: uniqueIndex("ai_media_provider_resources_provider_external_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
       table.providerAccountId,
       table.resourceType,
       table.externalResourceId,
+    ),
+    ownerWorkspaceCanonicalUnique: uniqueIndex("ai_media_provider_resources_owner_workspace_canonical_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.resourceType,
+      table.canonicalKey,
     ),
     ownerWorkspaceTypeIdx: index("ai_media_provider_resources_owner_workspace_type_idx").on(
       table.ownerUserId,
@@ -241,6 +273,10 @@ export const aiMediaRenderJobs = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => ({
@@ -255,7 +291,19 @@ export const aiMediaRenderJobs = pgTable(
       table.workspaceId,
       table.createdAt,
     ),
-    queueIdx: index("ai_media_render_jobs_queue_idx").on(table.status, table.nextAttemptAt, table.createdAt),
+    queueIdx: index("ai_media_render_jobs_queue_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt,
+      table.createdAt,
+    ),
+    ownerWorkspaceLeaseIdx: index("ai_media_render_jobs_owner_workspace_lease_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.leaseOwner,
+      table.leaseExpiresAt,
+    ),
+    deadLetterIdx: index("ai_media_render_jobs_dead_letter_idx").on(table.deadLetterAt),
   }),
 );
 
@@ -301,10 +349,18 @@ export const aiMediaMediaAssets = pgTable(
     ...tenantColumns(),
     projectId: uuid("project_id").references(() => aiMediaVideoProjects.id, { onDelete: "set null" }),
     renderJobId: uuid("render_job_id").references(() => aiMediaRenderJobs.id, { onDelete: "set null" }),
+    influencerId: uuid("influencer_id").references(() => aiMediaInfluencers.id, { onDelete: "set null" }),
+    providerResourceId: uuid("provider_resource_id").references(
+      () => aiMediaProviderResources.id,
+      { onDelete: "set null" },
+    ),
     kind: text("kind").notNull(),
+    name: text("name").notNull().default("Untitled asset"),
+    status: text("status").notNull().default("processing"),
     storageProvider: text("storage_provider").notNull(),
     storageKey: text("storage_key").notNull(),
     publicUrl: text("public_url"),
+    thumbnailUrl: text("thumbnail_url"),
     mimeType: text("mime_type").notNull(),
     byteSize: bigint("byte_size", { mode: "number" }),
     checksum: text("checksum"),
@@ -316,12 +372,26 @@ export const aiMediaMediaAssets = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => ({
-    storageObjectUnique: uniqueIndex("ai_media_assets_storage_object_uq").on(table.storageProvider, table.storageKey),
+    storageObjectUnique: uniqueIndex("ai_media_assets_storage_object_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.storageProvider,
+      table.storageKey,
+    ),
     ownerWorkspaceProjectIdx: index("ai_media_assets_owner_workspace_project_idx").on(
       table.ownerUserId,
       table.workspaceId,
       table.projectId,
     ),
+    ownerWorkspaceLibraryIdx: index("ai_media_assets_owner_workspace_library_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.kind,
+      table.status,
+      table.createdAt,
+    ),
+    influencerIdx: index("ai_media_assets_influencer_idx").on(table.influencerId),
+    providerResourceIdx: index("ai_media_assets_provider_resource_idx").on(table.providerResourceId),
   }),
 );
 
@@ -578,7 +648,19 @@ export const aiMediaStudioTables = {
   outbox: aiMediaOutbox,
 } as const;
 
-export type AiMediaRenderJobRow = typeof aiMediaRenderJobs.$inferSelect;
+type AiMediaRenderJobSelect = typeof aiMediaRenderJobs.$inferSelect;
+/**
+ * Lease fields are optional here for compatibility with historical row
+ * fixtures. PostgreSQL selects always populate them after the additive schema
+ * migration is applied.
+ */
+export type AiMediaRenderJobRow = Omit<
+  AiMediaRenderJobSelect,
+  "availableAt" | "leaseOwner" | "leaseExpiresAt" | "deadLetterAt"
+> & Partial<Pick<
+  AiMediaRenderJobSelect,
+  "availableAt" | "leaseOwner" | "leaseExpiresAt" | "deadLetterAt"
+>>;
 export type NewAiMediaRenderJobRow = typeof aiMediaRenderJobs.$inferInsert;
 export type AiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferSelect;
 export type NewAiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferInsert;
