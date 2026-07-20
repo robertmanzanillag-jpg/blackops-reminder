@@ -336,11 +336,9 @@ export function buildBlackRoomMetricoolDrafts(input: {
   );
   const drafts: BlackRoomMetricoolDraft[] = [];
   const remainingVideos = [...randomizedVideos];
-  durations.forEach((durationSeconds, slot) => {
-    const compatibleIndex = remainingVideos.findIndex((video) => video.durationSeconds >= durationSeconds);
-    if (compatibleIndex < 0) return;
+  const addDraft = (durationSeconds: BlackRoomDuration, video: BlackRoomYoutubeVideo) => {
+    const slot = drafts.length;
     const videoFormat: BlackRoomVideoFormat = slot % 2 === 0 ? "vertical" : "horizontal";
-    const [video] = remainingVideos.splice(compatibleIndex, 1);
     const platform = input.platforms[slot % input.platforms.length];
     const scheduledAt = new Date(input.startAt.getTime() + slot * 90 * 60 * 1000);
     drafts.push({
@@ -353,7 +351,19 @@ export function buildBlackRoomMetricoolDrafts(input: {
       status: "approval_required",
       experimentKey: `duration:${durationSeconds}|format:${videoFormat}|platform:${platform}|selection:controlled-random`,
     });
+  };
+  durations.forEach((durationSeconds) => {
+    const compatibleIndex = remainingVideos.findIndex((video) => video.durationSeconds >= durationSeconds);
+    if (compatibleIndex < 0) return;
+    const [video] = remainingVideos.splice(compatibleIndex, 1);
+    addDraft(durationSeconds, video);
   });
+  const rankedDurations = [...input.scores].sort((left, right) => right.score - left.score || left.durationSeconds - right.durationSeconds);
+  while (drafts.length < durations.length && remainingVideos.length) {
+    const video = remainingVideos.shift()!;
+    const fallback = rankedDurations.find((score) => score.durationSeconds <= video.durationSeconds);
+    if (fallback) addDraft(fallback.durationSeconds, video);
+  }
   return drafts;
 }
 

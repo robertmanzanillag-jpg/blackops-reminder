@@ -138,6 +138,7 @@ test("does not assign a long-form draft to a source that is too short", () => {
     performance: [],
     startAt: new Date("2026-07-20T12:00:00Z"),
   });
+  assert.equal(plan.metricoolDrafts.length, 10);
   assert.ok(plan.metricoolDrafts.every((draft) => sourceVideos.find((item) => item.id === draft.sourceVideoId)!.durationSeconds >= draft.durationSeconds));
   assert.equal(new Set(plan.metricoolDrafts.map((draft) => draft.sourceVideoId)).size, plan.metricoolDrafts.length);
 });
