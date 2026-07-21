@@ -313,8 +313,22 @@ ephemeral HTTPS URL. A failed render inserts no ingest. Neither path updates bud
 buckets or committed reservations. The exact composite ingest-to-render foreign key
 prevents a tenant/workspace mismatch.
 
+The reviewed hardening revokes the historical PR26 terminal-capacity capability as an
+upgrade bypass, records bounded backoff attempts and due times, enforces exact completed
+and failed projections, and permits only the idempotent completed-to-completed attachment
+needed when the ingest service and durable repository both materialize the same asset.
+Artifact delivery URLs must be renewed through exact tenant/workspace/render/account/
+credential/provider-job binding before reader I/O; response parsing aborts incrementally
+above 256 KiB. The SQL and Drizzle constraints describe the same terminal lifecycle.
+
 Do not apply this SQL automatically or use `db:push`. It is not composed into a
 route, timer or runtime, and it performs no provider I/O. Revoke all issued PR27
 terminal capabilities before the evidence-preserving rollback; the rollback removes
 the callable mutation surface but retains terminal checks/events, ingest evidence,
-columns and exact foreign keys.
+columns, exact foreign keys and the minimum read ACL required by retained guards. Local
+evidence passes focused 67/67, static 8/8, isolated PostgreSQL 16 at 4/4, full suite
+657 pass/0 fail/24 skip of 681, TypeScript, build, map/diff and App QA P0=P1=P2=0.
+This is not staging or production evidence: composition and durable resolver injection,
+staging migration/restart/rollback, real credentials/quota/webhook/billing proof, an
+approved one-video sandbox and then a 5×10 canary remain blocked behind human cost and
+deployment approval.

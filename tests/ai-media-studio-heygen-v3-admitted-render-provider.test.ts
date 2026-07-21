@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sha256Digest } from "../server/ai-media-studio/planning/contracts";
-import { HeyGenV3AdmittedRenderProvider } from "../server/ai-media-studio/providers/heygen-v3-admitted-render-provider";
+import {
+  HeyGenV3AdmittedRenderProvider,
+  HeyGenV3ProviderArtifactResolver,
+} from "../server/ai-media-studio/providers/heygen-v3-admitted-render-provider";
 import type { ExactAdmittedProviderCapability } from "../server/ai-media-studio/workers/admitted-render-contracts";
 
 const SECRET = "heygen-secret-that-must-never-appear-in-evidence";
@@ -126,6 +129,30 @@ test("timeouts, malformed success bodies and 409 remain ambiguous; reconciliatio
   });
 });
 
+test("chunked responses are cancelled as soon as the incremental 256 KiB bound is exceeded", async () => {
+  let cancelled = false;
+  let pulls = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(new Uint8Array(150 * 1024));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const outcome = await provider(async () => new Response(body, { status: 200 }))
+    .submit({ script: "Hello", aspectRatio: "9:16" }, {
+      ...capability(),
+      providerIdempotencyKey: "admit:chunked:attempt-1",
+      avatarExternalResourceId: "avatar-123",
+      voiceExternalResourceId: "voice-123",
+    });
+  assert.equal(outcome.kind, "ambiguous");
+  assert.equal(cancelled, true);
+  assert.ok(pulls <= 3, "the adapter must not continue buffering an unbounded response");
+});
+
 test("authoritative GET distinguishes processing, completed, failed and unknown", async (t) => {
   const terminalContext = { ...capability(), providerJobId: "video-123" };
 
@@ -218,5 +245,77 @@ test("account or credential rotation mismatch blocks before provider I/O", async
     ...capability({ providerAccountId: "account-2" }),
     providerJobId: "video-123",
   }), /capability does not match/u);
+  assert.equal(networkCalls, 0);
+});
+
+test("HeyGen artifact resolver uses an exact binding and refreshes through authoritative GET", async () => {
+  let networkCalls = 0;
+  const adapter = provider(async (input, init) => {
+    networkCalls += 1;
+    assert.equal(String(input), "https://api.heygen.com/v3/videos/video-123");
+    assert.equal(init?.method, "GET");
+    return jsonResponse({ data: {
+      id: "video-123",
+      status: "completed",
+      video_url: "https://files.heygen.ai/video/video-123.mp4?fresh=signature",
+    } });
+  });
+  const remoteArtifactRef = "provider-artifact://ai-media-studio/render-terminal/v1/stable";
+  const resolver = new HeyGenV3ProviderArtifactResolver({
+    provider: adapter,
+    async resolveBinding(request) {
+      assert.equal(request.remoteArtifactRef, remoteArtifactRef);
+      return {
+        jobId: request.jobId,
+        tenantId: request.tenantId,
+        renderJobId: request.renderJobId,
+        remoteArtifactRef,
+        providerJobId: "video-123",
+        capability: capability(),
+      };
+    },
+  });
+  const resolution = await resolver.resolveArtifact({
+    jobId: "ingest-1",
+    tenantId: "tenant-1",
+    renderJobId: "render-1",
+    remoteArtifactRef,
+    expectedMimeType: "video/mp4",
+  });
+  assert.deepEqual(resolution, {
+    remoteArtifactRef,
+    sourceUrl: "https://files.heygen.ai/video/video-123.mp4?fresh=signature",
+    mediaType: "video/mp4",
+    sourceUrlPolicy: "ephemeral_refresh_via_provider_get",
+  });
+  assert.equal(networkCalls, 1);
+});
+
+test("HeyGen artifact resolution rejects a cross-tenant binding before GET", async () => {
+  let networkCalls = 0;
+  const adapter = provider(async () => {
+    networkCalls += 1;
+    return jsonResponse({});
+  });
+  const resolver = new HeyGenV3ProviderArtifactResolver({
+    provider: adapter,
+    async resolveBinding(request) {
+      return {
+        jobId: request.jobId,
+        tenantId: "another-tenant",
+        renderJobId: request.renderJobId,
+        remoteArtifactRef: request.remoteArtifactRef,
+        providerJobId: "video-123",
+        capability: capability(),
+      };
+    },
+  });
+  await assert.rejects(() => resolver.resolveArtifact({
+    jobId: "ingest-1",
+    tenantId: "tenant-1",
+    renderJobId: "render-1",
+    remoteArtifactRef: "provider-artifact://stable",
+    expectedMimeType: "video/mp4",
+  }), /binding mismatch/u);
   assert.equal(networkCalls, 0);
 });

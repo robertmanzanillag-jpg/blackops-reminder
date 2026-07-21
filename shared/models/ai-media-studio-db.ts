@@ -1340,7 +1340,8 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.authoritySnapshotId} IS NULL AND ${table.authorityDigest} IS NULL
         AND ${table.launchIntentId} IS NULL AND ${table.launchIntentDigest} IS NULL
         AND ${table.admissionDigest} IS NULL AND ${table.workHandoffDigest} IS NULL
-        AND ${table.sealedRequestDigest} IS NULL AND ${table.providerCredentialVersion} IS NULL)
+        AND ${table.sealedRequestDigest} IS NULL AND ${table.providerCredentialVersion} IS NULL
+        AND ${table.leaseToken} IS NULL AND ${table.leaseFencing}>=0)
       OR (${table.budgetReservationId} IS NOT NULL AND (
         ${table.budgetReservationId} IS NOT NULL AND ${table.dailyPlanSlotId} IS NOT NULL
         AND ${table.slotAttempt}>=1 AND ${table.influencerId} IS NOT NULL
@@ -1357,21 +1358,45 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ((${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL)
           OR (${table.sourceItemId} IS NOT NULL AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
-        AND ${table.stage} IN ('admission_held','queued','leased','submitted','reconciling','failed')
+        AND ${table.stage} IN ('admission_held','queued','leased','submitted','reconciling','artifact_ingest_queued',
+          'artifact_ingest_retrying','artifact_ingest_failed','completed','failed')
         AND ${table.retryCount}=0
         AND ((${table.stage} IN ('admission_held','queued') AND ${table.status}='pending'
           AND ${table.attempts}=0 AND ${table.providerJobId} IS NULL
-          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerTerminalState} IS NULL)
         OR (${table.stage}='leased' AND ${table.status}='rendering' AND ${table.providerJobId} IS NULL
           AND ${table.attempts} IN (0,1)
           AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL
-          AND ${table.leaseExpiresAt} IS NOT NULL)
+          AND ${table.leaseExpiresAt} IS NOT NULL AND ${table.providerTerminalState} IS NULL)
         OR (${table.stage}='submitted' AND ${table.status}='rendering' AND ${table.attempts}=1
           AND ${table.providerJobId} IS NOT NULL AND ${table.leaseOwner} IS NULL
-          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)
+          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerTerminalState} IS NULL)
         OR (${table.stage} IN ('reconciling','failed') AND ${table.attempts}=1
           AND ${table.providerJobId} IS NULL AND ${table.leaseOwner} IS NULL
-          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL))
+          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerTerminalState} IS NULL)
+        OR (${table.providerTerminalState}='completed' AND ${table.attempts}=1
+          AND ${table.providerJobId} IS NOT NULL AND ${table.outputUrl} IS NULL
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL
+          AND ${table.leaseExpiresAt} IS NULL
+          AND ((${table.stage} IN ('artifact_ingest_queued','artifact_ingest_retrying')
+              AND ${table.status}='rendering' AND ${table.progress}>=95
+              AND ${table.outputMediaAssetId} IS NULL AND ${table.completedAt} IS NULL
+              AND ${table.errorMessage} IS NULL)
+            OR (${table.stage}='completed' AND ${table.status}='completed'
+              AND ${table.progress}=100 AND ${table.outputMediaAssetId} IS NOT NULL
+              AND ${table.completedAt} IS NOT NULL AND ${table.errorMessage} IS NULL)
+            OR (${table.stage}='artifact_ingest_failed' AND ${table.status}='failed'
+              AND ${table.progress}=100 AND ${table.outputMediaAssetId} IS NULL
+              AND ${table.completedAt} IS NOT NULL AND ${table.errorMessage} IS NOT NULL)))
+        OR (${table.providerTerminalState}='failed' AND ${table.stage}='failed'
+          AND ${table.status}='failed' AND ${table.progress}=100 AND ${table.attempts}=1
+          AND ${table.providerJobId} IS NOT NULL AND ${table.completedAt}=${table.providerTerminalObservedAt}
+          AND ${table.errorCode}='provider_render_failed'
+          AND ${table.errorMessage}='Video provider reported a render failure'
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL))
         AND ${table.leaseFencing}>=0
         AND isfinite(${table.availableAt}) AND isfinite(${table.queuedAt})
         AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
@@ -3531,6 +3556,11 @@ export const aiMediaProviderTerminalChecks = pgTable(
     state: text("state").notNull(),
     fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull().default(0n),
     claimCount: integer("claim_count").notNull().default(0),
+    backoffAttempt: integer("backoff_attempt").notNull().default(0),
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    lastRetryReason: text("last_retry_reason"),
+    lastObservedAt: timestamp("last_observed_at", { withTimezone: true }),
+    lastEvidenceDigest: text("last_evidence_digest"),
     leaseToken: uuid("lease_token"),
     leaseOwner: text("lease_owner"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
@@ -3542,14 +3572,14 @@ export const aiMediaProviderTerminalChecks = pgTable(
       table.ownerUserId, table.workspaceId, table.submissionAttemptId,
     ),
     claimIdx: index("ai_media_provider_terminal_checks_claim_idx").on(
-      table.ownerUserId, table.workspaceId, table.state, table.leaseExpiresAt, table.createdAt,
+      table.ownerUserId, table.workspaceId, table.state, table.nextCheckAt, table.leaseExpiresAt, table.createdAt,
     ),
     identityUnique: uniqueIndex("ai_media_provider_terminal_checks_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id,
     ),
     lifecycleCheck: check("ai_media_provider_terminal_checks_ck", sql`(
       ${table.state} IN ('pending','leased','terminal')
-      AND ${table.fencingToken}>=0 AND ${table.claimCount}>=0
+      AND ${table.fencingToken}>=0 AND ${table.claimCount}>=0 AND ${table.backoffAttempt}>=0
       AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
       AND ${table.providerCredentialVersion}>=1
       AND length(btrim(${table.providerJobId})) BETWEEN 1 AND 500
@@ -3558,7 +3588,16 @@ export const aiMediaProviderTerminalChecks = pgTable(
       AND ((${table.state}='leased')=(${table.leaseToken} IS NOT NULL))
       AND ((${table.leaseToken} IS NULL)=(${table.leaseOwner} IS NULL))
       AND ((${table.leaseToken} IS NULL)=(${table.leaseExpiresAt} IS NULL))
+      AND ((${table.state}='pending' AND ${table.nextCheckAt} IS NOT NULL)
+        OR (${table.state} IN ('leased','terminal') AND ${table.nextCheckAt} IS NULL))
       AND (${table.leaseExpiresAt} IS NULL OR isfinite(${table.leaseExpiresAt}))
+      AND (${table.nextCheckAt} IS NULL OR isfinite(${table.nextCheckAt}))
+      AND ((${table.lastRetryReason} IS NULL AND ${table.lastObservedAt} IS NULL
+          AND ${table.lastEvidenceDigest} IS NULL)
+        OR (${table.lastRetryReason} IN ('processing','unknown','provider_retryable_error',
+            'invalid_terminal_observation','capability_mismatch')
+          AND isfinite(${table.lastObservedAt})
+          AND ${table.lastEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'))
       AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
     )`),
     exactAttemptFk: foreignKey({

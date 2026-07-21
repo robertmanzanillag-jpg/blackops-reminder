@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { Sha256Digest } from "../planning/contracts";
 import type {
+  ProviderArtifactResolutionRequest,
+  ProviderArtifactResolver,
+} from "../assets/contracts";
+import type {
   AdmittedReconciliationOutcome,
   AdmittedRenderProvider,
   AdmittedSubmitOutcome,
@@ -28,6 +32,52 @@ export interface HeyGenV3AdmittedProviderOptions {
   fetchImpl?: HeyGenFetch;
   timeoutMs?: number;
   now?: () => Date;
+}
+
+export interface HeyGenV3ArtifactBinding {
+  jobId: string;
+  tenantId: string;
+  renderJobId: string;
+  remoteArtifactRef: string;
+  providerJobId: string;
+  capability: ExactAdmittedProviderCapability;
+}
+
+/**
+ * Private ingest resolver. Its binding lookup owns the durable-reference to
+ * exact-capability mapping; every resolution performs a fresh authoritative GET.
+ */
+export class HeyGenV3ProviderArtifactResolver implements ProviderArtifactResolver {
+  constructor(private readonly options: {
+    provider: HeyGenV3AdmittedRenderProvider;
+    resolveBinding(request: ProviderArtifactResolutionRequest): Promise<HeyGenV3ArtifactBinding>;
+  }) {}
+
+  async resolveArtifact(request: ProviderArtifactResolutionRequest) {
+    const binding = await this.options.resolveBinding(request);
+    if (binding.jobId !== request.jobId
+      || binding.tenantId !== request.tenantId
+      || binding.renderJobId !== request.renderJobId
+      || binding.remoteArtifactRef !== request.remoteArtifactRef) {
+      throw new Error("HeyGen durable artifact binding mismatch");
+    }
+    const observation = await this.options.provider.observeTerminal({
+      ...binding.capability,
+      providerJobId: binding.providerJobId,
+    });
+    if (observation.kind !== "completed"
+      || observation.remoteArtifactRef !== binding.providerJobId
+      || observation.mediaType !== request.expectedMimeType
+      || observation.sourceUrlPolicy !== "ephemeral_refresh_via_provider_get") {
+      throw new Error("HeyGen artifact does not currently have a fresh completed delivery URL");
+    }
+    return {
+      remoteArtifactRef: request.remoteArtifactRef,
+      sourceUrl: observation.sourceUrl,
+      mediaType: observation.mediaType,
+      sourceUrlPolicy: observation.sourceUrlPolicy,
+    };
+  }
 }
 
 /**
@@ -345,12 +395,37 @@ function parseVideoDetail(body: string, expectedVideoId: string): {
 
 async function safeResponseBody(response: Response): Promise<string | undefined> {
   const declaredLength = response.headers.get("content-length");
-  if (declaredLength && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) return undefined;
-  try {
-    const text = await response.text();
-    return Buffer.byteLength(text, "utf8") <= MAX_BODY_BYTES ? text : undefined;
-  } catch {
+  if (declaredLength && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) {
+    await response.body?.cancel().catch(() => undefined);
     return undefined;
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const parts: string[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return undefined;
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join("");
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return undefined;
+  } finally {
+    reader.releaseLock();
   }
 }
 

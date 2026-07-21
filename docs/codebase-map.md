@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T17:56:15.827Z
+Generated: 2026-07-21T18:33:48.987Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 742 | 625 | 2541 | 489 | 12174 |
+| 742 | 625 | 2542 | 489 | 12226 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -297,7 +297,7 @@ Package: `rest-express`
 - `server/ai-media-studio/analytics/in-memory-repository.ts` (server; 21 symbols, 2 imports)
 - `server/ai-media-studio/analytics/index.ts` (server; 4 imports)
 - `server/ai-media-studio/assets/contracts.ts` (server; 1 symbols)
-- `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 24 symbols, 5 imports)
+- `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 25 symbols, 5 imports)
 - `server/ai-media-studio/assets/fakes.ts` (server; 12 symbols, 2 imports)
 - `server/ai-media-studio/assets/http-artifact-reader.ts` (server; 32 symbols, 7 imports)
 - `server/ai-media-studio/assets/in-memory-repository.ts` (server; 10 symbols, 2 imports)
@@ -305,7 +305,7 @@ Package: `rest-express`
 - `server/ai-media-studio/assets/object-keys.ts` (server; 2 symbols)
 - `server/ai-media-studio/assets/production-runtime.ts` (server; 40 symbols, 4 imports)
 - `server/ai-media-studio/assets/s3-compatible-storage.ts` (server; 40 symbols, 5 imports)
-- `server/ai-media-studio/assets/worker.ts` (server; 27 symbols, 3 imports)
+- `server/ai-media-studio/assets/worker.ts` (server; 31 symbols, 3 imports)
 - `server/ai-media-studio/core/asset-domain.ts` (server; 21 symbols, 1 imports)
 - `server/ai-media-studio/core/in-memory-asset-repository.ts` (server; 17 symbols, 1 imports)
 

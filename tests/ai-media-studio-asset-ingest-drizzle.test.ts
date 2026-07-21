@@ -97,6 +97,33 @@ test("enqueue is tenant/workspace/render idempotent and rejects changed private 
   );
 });
 
+test("durable remote artifact identity is mapped and participates in enqueue idempotency", async () => {
+  const remoteArtifactRef = "provider-artifact://ai-media-studio/render-terminal/v1/stable";
+  const sourceUrl = "https://media.example.com/render.mp4?temporary=signature";
+  const fake = new FakeDatabase((query) => query.text.startsWith("WITH inserted AS")
+    ? { rows: [row({ remote_artifact_ref: remoteArtifactRef, remote_url: sourceUrl })] }
+    : { rows: [] });
+  const repository = new DrizzleAssetIngestRepository(fake.asDrizzle());
+  const input = {
+    id: "00000000-0000-4000-8000-000000000001",
+    tenantId,
+    renderJobId: "00000000-0000-4000-8000-000000000010",
+    remoteArtifactRef,
+    sourceUrl,
+    maxAttempts: 3,
+  };
+  const job = await repository.enqueue(input, 1_000);
+  assert.equal(job.remoteArtifactRef, remoteArtifactRef);
+  assert.match(fake.queries[0].text, /remote_artifact_ref/i);
+  assert.ok(fake.queries[0].params.includes(remoteArtifactRef));
+
+  const mismatch = new FakeDatabase(() => ({ rows: [row({ remote_artifact_ref: "provider-artifact://different" })] }));
+  await assert.rejects(
+    new DrizzleAssetIngestRepository(mismatch.asDrizzle()).enqueue(input, 1_000),
+    /different ingest input/u,
+  );
+});
+
 test("tenant reads require an unambiguous structured scope", async () => {
   const fake = new FakeDatabase(() => ({ rows: [row()] }));
   const repository = new DrizzleAssetIngestRepository(fake.asDrizzle());

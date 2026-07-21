@@ -82,7 +82,8 @@ export class DrizzleAdmittedRenderTerminalRepository implements AdmittedTerminal
     return committedCall(this.db.reconcile, sql`SELECT * FROM ai_media_worker_api.release_terminal_check_unknown_v1(
       ${this.options.reconcileCapabilityId}::uuid,${input.scope.ownerUserId}::text,${input.scope.workspaceId}::text,
       ${terminalCheckId(input)}::uuid,${input.terminalLeaseToken}::uuid,
-      ${input.terminalFencingToken}::bigint)`, mutationResult);
+      ${input.terminalFencingToken}::bigint,${input.reason}::text,
+      ${new Date(input.observedAt)}::timestamptz,${input.evidenceDigest}::text)`, mutationResult);
   }
 
   private async finalize(

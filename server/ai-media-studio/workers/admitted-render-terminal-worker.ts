@@ -242,8 +242,10 @@ function isSafeCompletedObservation(
 
 function remoteArtifactRef(
   claim: AdmittedTerminalClaim,
-  observation: Extract<AdmittedTerminalObservation, { kind: "completed" }>,
+  _observation: Extract<AdmittedTerminalObservation, { kind: "completed" }>,
 ): string {
+  // This identity must survive signed-URL refreshes, repeated observations, and
+  // credential rotation. Mutable evidence belongs beside it, never inside it.
   return `provider-artifact://ai-media-studio/render-terminal/v1/${createHash("sha256").update(JSON.stringify({
     version: 1,
     ownerUserId: claim.scope.ownerUserId,
@@ -251,10 +253,7 @@ function remoteArtifactRef(
     renderJobId: claim.renderJobId,
     providerAccountId: claim.providerAccountId,
     providerKey: claim.providerKey,
-    providerCredentialVersion: claim.providerCredentialVersion,
     providerJobId: claim.providerJobId,
-    authorizationDigest: claim.authorizationDigest,
-    evidenceDigest: observation.evidenceDigest,
   })).digest("hex")}`;
 }
 

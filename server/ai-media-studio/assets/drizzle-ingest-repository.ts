@@ -68,6 +68,9 @@ function mapRow(raw: RawRow): AssetIngestJob {
     id: String(raw.id),
     tenantId: structuredTenantKey(ownerUserId, workspaceId),
     renderJobId: String(value(raw, "renderJobId", "render_job_id")),
+    ...(optionalString(value(raw, "remoteArtifactRef", "remote_artifact_ref"))
+      ? { remoteArtifactRef: String(value(raw, "remoteArtifactRef", "remote_artifact_ref")) }
+      : {}),
     sourceUrl,
     expectedMimeType,
     state: String(raw.state) as AssetIngestJob["state"],
@@ -100,6 +103,9 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
 
   async enqueue(input: EnqueueAssetIngest, nowMs: number): Promise<AssetIngestJob> {
     if (!input.id || !input.renderJobId || !input.sourceUrl) throw new Error("Asset ingest identity and source are required");
+    if (input.remoteArtifactRef !== undefined && !validRemoteArtifactRef(input.remoteArtifactRef)) {
+      throw new Error("Asset ingest remote artifact identity is invalid");
+    }
     if (!Number.isInteger(input.maxAttempts) || input.maxAttempts < 1) throw new Error("maxAttempts must be positive");
     const scope = parseStructuredTenantKey(input.tenantId);
     const expectedMimeType = input.expectedMimeType ?? "video/mp4";
@@ -114,13 +120,13 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
     const result = await this.db.execute(sql`
       WITH inserted AS (
         INSERT INTO ${aiMediaAssetIngestJobs} (
-          id, owner_user_id, workspace_id, render_job_id, provider_key, remote_url,
+          id, owner_user_id, workspace_id, render_job_id, provider_key, remote_artifact_ref, remote_url,
           expected_mime_type, state, attempts, max_attempts, lease_recoveries,
           max_lease_recoveries, available_at, fencing_token, created_at, updated_at
         )
         SELECT
           ${input.id}, ${scope.ownerUserId}, ${scope.workspaceId}, render.id,
-          ${providerKey}, ${input.sourceUrl}, ${expectedMimeType}, 'queued', 0,
+          ${providerKey}, ${input.remoteArtifactRef ?? null}, ${input.sourceUrl}, ${expectedMimeType}, 'queued', 0,
           ${input.maxAttempts}, 0, ${maxLeaseRecoveries},
           ${new Date(input.availableAtMs ?? nowMs)}, 0, ${new Date(nowMs)}, ${new Date(nowMs)}
         FROM ${aiMediaRenderJobs} AS render
@@ -142,7 +148,8 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
     const raw = rows(result)[0];
     if (!raw) throw new Error("Asset ingest id collides outside the tenant/render idempotency scope");
     const job = mapRow(raw);
-    if (job.sourceUrl !== input.sourceUrl || job.expectedMimeType !== expectedMimeType) {
+    if (job.sourceUrl !== input.sourceUrl || job.remoteArtifactRef !== input.remoteArtifactRef
+      || job.expectedMimeType !== expectedMimeType) {
       throw new Error("renderJobId is already associated with different ingest input");
     }
     return job;
@@ -350,4 +357,9 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
     `))[0];
     if (!render) throw new Error("Render output is already attached to a different canonical media asset");
   }
+}
+
+function validRemoteArtifactRef(value: string): boolean {
+  return value.length >= 1 && value.length <= 1_000 && value === value.trim()
+    && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 }

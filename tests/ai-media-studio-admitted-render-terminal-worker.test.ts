@@ -107,6 +107,34 @@ test("completed terminal observation atomically records terminal state, releases
   assert.equal("budgetMutation" in completedInput.finality, false);
 });
 
+test("durable remote artifact identity is stable across URL refresh and observation evidence", async () => {
+  const refs: string[] = [];
+  for (const [sourceUrl, evidenceDigest] of [
+    ["https://cdn.example.com/render.mp4?signature=first", digest("c")],
+    ["https://cdn.example.com/render.mp4?signature=refreshed", digest("d")],
+  ] as const) {
+    const worker = new AdmittedRenderTerminalWorker({
+      workerId: "terminal-worker-stable-ref",
+      leaseDurationMs: 60_000,
+      repository: repository({
+        finalizeCompleted: async (input) => { refs.push(input.finality.remoteArtifactRef); return "applied"; },
+      }),
+      providerResolver: resolver(async () => ({
+        kind: "completed",
+        observedAt: "2026-07-21T20:01:00.000Z",
+        remoteArtifactRef: claim.providerJobId,
+        sourceUrl,
+        sourceUrlPolicy: "ephemeral_refresh_via_provider_get",
+        mediaType: "video/mp4",
+        evidenceDigest,
+      })),
+    });
+    assert.equal((await worker.runNext()).outcome, "completed");
+  }
+  assert.equal(refs.length, 2);
+  assert.equal(refs[0], refs[1]);
+});
+
 test("failed terminal observation releases capacity without artifact ingest or budget mutation", async () => {
   let failedInput: Parameters<AdmittedTerminalRepository["finalizeFailed"]>[0] | undefined;
   let completedCalls = 0;
