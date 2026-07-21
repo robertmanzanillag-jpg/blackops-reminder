@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -136,6 +137,11 @@ export const aiMediaScriptVariants = pgTable(
       table.ownerUserId,
       table.workspaceId,
       table.scriptId,
+    ),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_script_variants_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
     ),
   }),
 );
@@ -1050,6 +1056,13 @@ export const aiMediaProviderResources = pgTable(
       table.workspaceId,
       table.id,
     ),
+    ownerWorkspaceAccountProviderIdUnique: uniqueIndex("ai_media_provider_resources_owner_workspace_account_provider_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.providerAccountId,
+      table.providerKey,
+      table.id,
+    ),
   }),
 );
 
@@ -1920,6 +1933,11 @@ export const aiMediaOutbox = pgTable(
       table.workspaceId,
       table.idempotencyKey,
     ),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_outbox_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
     dispatchIdx: index("ai_media_outbox_dispatch_idx").on(
       table.status,
       table.availableAt,
@@ -1934,6 +1952,322 @@ export const aiMediaOutbox = pgTable(
     ),
     deadLetterIdx: index("ai_media_outbox_dead_letter_idx").on(table.deadLetterAt),
     aggregateIdx: index("ai_media_outbox_aggregate_idx").on(table.aggregateType, table.aggregateId, table.createdAt),
+  }),
+);
+
+/**
+ * Provider-neutral, durable production plan. Launch roster limits are enforced
+ * by the planning service rather than by this scalable storage boundary.
+ */
+export const aiMediaDailyPlans = pgTable(
+  "ai_media_daily_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    publicPlanKey: text("public_plan_key").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    sourceRosterKey: text("source_roster_key").notNull(),
+    sourceRosterDigest: text("source_roster_digest").notNull(),
+    planDate: date("plan_date", { mode: "string" }).notNull(),
+    accountingTimeZone: text("accounting_time_zone").notNull(),
+    status: text("status").notNull().default("preview"),
+    plannedSlotCount: integer("planned_slot_count").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    planDigest: text("plan_digest").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    terminalAt: timestamp("terminal_at", { withTimezone: true }),
+  },
+  (table) => ({
+    publicKeyUnique: uniqueIndex("ai_media_daily_plans_owner_workspace_public_key_uq").on(
+      table.ownerUserId, table.workspaceId, table.publicPlanKey,
+    ),
+    idempotencyUnique: uniqueIndex("ai_media_daily_plans_owner_workspace_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    rosterDayUnique: uniqueIndex("ai_media_daily_plans_owner_workspace_roster_day_uq").on(
+      table.ownerUserId, table.workspaceId, table.providerAccountId, table.sourceRosterKey,
+      table.planDate, table.accountingTimeZone,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_daily_plans_exact_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.providerAccountId,
+      table.providerKey, table.providerCredentialVersion,
+    ),
+    tenantDayIdx: index("ai_media_daily_plans_tenant_day_idx").on(
+      table.ownerUserId, table.workspaceId, table.planDate, table.status,
+    ),
+    lifecycleCheck: check("ai_media_daily_plans_lifecycle_ck", sql`(
+      ${table.publicPlanKey} ~ '^plan_[0-9a-f]{24}$'
+      AND length(btrim(${table.sourceRosterKey})) BETWEEN 1 AND 200
+      AND ${table.sourceRosterDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.planDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.accountingTimeZone})) BETWEEN 1 AND 80
+      AND ${table.providerCredentialVersion} >= 1
+      AND ${table.plannedSlotCount} BETWEEN 1 AND 100000
+      AND ${table.status} IN ('preview','planned','blocked','active','completed','cancelled')
+      AND ${table.planDate} = (${table.createdAt} AT TIME ZONE ${table.accountingTimeZone})::date
+      AND ((${table.status} IN ('completed','cancelled')) = (${table.terminalAt} IS NOT NULL))
+    )`),
+    providerAccountFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [aiMediaProviderAccounts.ownerUserId, aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id, aiMediaProviderAccounts.providerKey],
+      name: "ai_media_daily_plans_provider_account_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+export const aiMediaDailyPlanSlots = pgTable(
+  "ai_media_daily_plan_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    publicSlotKey: text("public_slot_key").notNull(),
+    dailyPlanId: uuid("daily_plan_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    sourceMemberKey: text("source_member_key").notNull(),
+    influencerId: uuid("influencer_id").notNull(),
+    avatarResourceId: uuid("avatar_resource_id").notNull(),
+    voiceResourceId: uuid("voice_resource_id").notNull(),
+    scriptVariantId: uuid("script_variant_id"),
+    videoNumber: integer("video_number").notNull(),
+    status: text("status").notNull().default("preview"),
+    slotDigest: text("slot_digest").notNull(),
+    stateVersion: integer("state_version").notNull().default(1),
+    ...auditColumns(),
+  },
+  (table) => ({
+    publicKeyUnique: uniqueIndex("ai_media_daily_plan_slots_owner_workspace_public_key_uq").on(
+      table.ownerUserId, table.workspaceId, table.publicSlotKey,
+    ),
+    planInfluencerVideoUnique: uniqueIndex("ai_media_daily_plan_slots_plan_influencer_video_uq").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanId, table.influencerId, table.videoNumber,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_daily_plan_slots_exact_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.providerAccountId,
+      table.providerKey, table.providerCredentialVersion,
+    ),
+    tenantStatusIdx: index("ai_media_daily_plan_slots_tenant_status_idx").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanId, table.status, table.videoNumber,
+    ),
+    lifecycleCheck: check("ai_media_daily_plan_slots_lifecycle_ck", sql`(
+      ${table.publicSlotKey} ~ '^slot_[0-9a-f]{24}$'
+      AND length(btrim(${table.sourceMemberKey})) BETWEEN 1 AND 200
+      AND ${table.providerCredentialVersion} >= 1
+      AND ${table.videoNumber} BETWEEN 1 AND 100000
+      AND ${table.stateVersion} >= 1
+      AND ${table.slotDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.status} IN ('preview','planned','reserved','committed','released','expired','blocked',
+        'queued','submitted','reconciling','completed','failed','cancelled')
+    )`),
+    exactPlanFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanId, table.providerAccountId,
+        table.providerKey, table.providerCredentialVersion],
+      foreignColumns: [aiMediaDailyPlans.ownerUserId, aiMediaDailyPlans.workspaceId, aiMediaDailyPlans.id,
+        aiMediaDailyPlans.providerAccountId, aiMediaDailyPlans.providerKey, aiMediaDailyPlans.providerCredentialVersion],
+      name: "ai_media_daily_plan_slots_exact_plan_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    influencerFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.influencerId],
+      foreignColumns: [aiMediaInfluencers.ownerUserId, aiMediaInfluencers.workspaceId, aiMediaInfluencers.id],
+      name: "ai_media_daily_plan_slots_influencer_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    avatarFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey, table.avatarResourceId],
+      foreignColumns: [aiMediaProviderResources.ownerUserId, aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.providerAccountId, aiMediaProviderResources.providerKey, aiMediaProviderResources.id],
+      name: "ai_media_daily_plan_slots_avatar_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    voiceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey, table.voiceResourceId],
+      foreignColumns: [aiMediaProviderResources.ownerUserId, aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.providerAccountId, aiMediaProviderResources.providerKey, aiMediaProviderResources.id],
+      name: "ai_media_daily_plan_slots_voice_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    scriptVariantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.scriptVariantId],
+      foreignColumns: [aiMediaScriptVariants.ownerUserId, aiMediaScriptVariants.workspaceId, aiMediaScriptVariants.id],
+      name: "ai_media_daily_plan_slots_script_variant_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+export const aiMediaBudgetBuckets = pgTable(
+  "ai_media_budget_buckets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    budgetDate: date("budget_date", { mode: "string" }).notNull(),
+    accountingTimeZone: text("accounting_time_zone").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    limitMicroUsd: numeric("limit_micro_usd", { precision: 20, scale: 0 }).notNull(),
+    reservedMicroUsd: numeric("reserved_micro_usd", { precision: 20, scale: 0 }).notNull().default("0"),
+    committedMicroUsd: numeric("committed_micro_usd", { precision: 20, scale: 0 }).notNull().default("0"),
+    policyDigest: text("policy_digest").notNull(),
+    policyVersion: integer("policy_version").notNull(),
+    stateVersion: integer("state_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    tenantDayUnique: uniqueIndex("ai_media_budget_buckets_tenant_day_uq").on(
+      table.ownerUserId, table.workspaceId, table.budgetDate, table.accountingTimeZone, table.currency,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_budget_buckets_exact_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.currency,
+    ),
+    lifecycleCheck: check("ai_media_budget_buckets_lifecycle_ck", sql`(
+      ${table.currency} = 'USD'
+      AND length(btrim(${table.accountingTimeZone})) BETWEEN 1 AND 80
+      AND ${table.budgetDate} = (${table.createdAt} AT TIME ZONE ${table.accountingTimeZone})::date
+      AND ${table.limitMicroUsd} BETWEEN 0 AND 9000000000000000
+      AND ${table.reservedMicroUsd} BETWEEN 0 AND 9000000000000000
+      AND ${table.committedMicroUsd} BETWEEN 0 AND 9000000000000000
+      AND ${table.reservedMicroUsd} + ${table.committedMicroUsd} <= ${table.limitMicroUsd}
+      AND ${table.policyDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.policyVersion} >= 1 AND ${table.stateVersion} >= 1
+    )`),
+  }),
+);
+
+export const aiMediaBudgetReservations = pgTable(
+  "ai_media_budget_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    budgetBucketId: uuid("budget_bucket_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    attempt: integer("attempt").notNull(),
+    state: text("state").notNull().default("reserved"),
+    submissionState: text("submission_state").notNull().default("not_started"),
+    amountMicroUsd: numeric("amount_micro_usd", { precision: 20, scale: 0 }).notNull(),
+    settledAmountMicroUsd: numeric("settled_amount_micro_usd", { precision: 20, scale: 0 }),
+    currency: text("currency").notNull().default("USD"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    admissionDigest: text("admission_digest").notNull(),
+    scriptVariantChecksum: text("script_variant_checksum").notNull(),
+    quoteDigest: text("quote_digest").notNull(),
+    quoteExpiresAt: timestamp("quote_expires_at", { withTimezone: true }).notNull(),
+    contentApprovalDigest: text("content_approval_digest").notNull(),
+    humanLaunchApprovalDigest: text("human_launch_approval_digest").notNull(),
+    governanceProfileId: uuid("governance_profile_id").notNull(),
+    governanceEvidenceDigest: text("governance_evidence_digest").notNull(),
+    policyDigest: text("policy_digest").notNull(),
+    killSwitchEvidenceDigest: text("kill_switch_evidence_digest").notNull(),
+    sandboxEvidenceDigest: text("sandbox_evidence_digest").notNull(),
+    providerIdempotencyKey: text("provider_idempotency_key").notNull(),
+    renderJobId: uuid("render_job_id"),
+    dispatchOutboxId: uuid("dispatch_outbox_id"),
+    reservedAt: timestamp("reserved_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    committedAt: timestamp("committed_at", { withTimezone: true }),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    expiredAt: timestamp("expired_at", { withTimezone: true }),
+    commitEvidenceDigest: text("commit_evidence_digest"),
+    reconciliationEvidenceDigest: text("reconciliation_evidence_digest"),
+    releaseReason: text("release_reason"),
+    ...auditColumns(),
+  },
+  (table) => ({
+    idempotencyUnique: uniqueIndex("ai_media_budget_reservations_owner_workspace_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    slotAttemptUnique: uniqueIndex("ai_media_budget_reservations_slot_attempt_uq").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.attempt,
+    ),
+    activeSlotUnique: uniqueIndex("ai_media_budget_reservations_active_slot_uq").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
+    ).where(sql`${table.state} IN ('reserved','committed')`),
+    renderJobUnique: uniqueIndex("ai_media_budget_reservations_render_job_uq").on(
+      table.renderJobId,
+    ).where(sql`${table.renderJobId} IS NOT NULL`),
+    dispatchOutboxUnique: uniqueIndex("ai_media_budget_reservations_dispatch_outbox_uq").on(
+      table.dispatchOutboxId,
+    ).where(sql`${table.dispatchOutboxId} IS NOT NULL`),
+    tenantStateIdx: index("ai_media_budget_reservations_tenant_state_idx").on(
+      table.ownerUserId, table.workspaceId, table.state, table.expiresAt,
+    ),
+    lifecycleCheck: check("ai_media_budget_reservations_lifecycle_ck", sql`(
+      ${table.providerCredentialVersion} >= 1 AND ${table.attempt} >= 1
+      AND ${table.state} IN ('reserved','committed','released','expired','settled')
+      AND ${table.submissionState} IN ('not_started','dispatching','confirmed','ambiguous','reconciled_no_submit')
+      AND ${table.currency} = 'USD'
+      AND ${table.amountMicroUsd} BETWEEN 1 AND 9000000000000000
+      AND (${table.settledAmountMicroUsd} IS NULL OR ${table.settledAmountMicroUsd} BETWEEN 0 AND ${table.amountMicroUsd})
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.admissionDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
+      AND ${table.quoteDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.contentApprovalDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.humanLaunchApprovalDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.policyDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.killSwitchEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.sandboxEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND (${table.commitEvidenceDigest} IS NULL OR ${table.commitEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')
+      AND (${table.reconciliationEvidenceDigest} IS NULL OR ${table.reconciliationEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND length(btrim(${table.providerIdempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.quoteExpiresAt} > ${table.reservedAt}
+      AND ${table.expiresAt} > ${table.reservedAt} AND ${table.expiresAt} <= ${table.quoteExpiresAt}
+      AND (${table.state} <> 'reserved' OR (${table.committedAt} IS NULL AND ${table.settledAt} IS NULL
+        AND ${table.releasedAt} IS NULL AND ${table.expiredAt} IS NULL
+        AND ${table.submissionState} = 'not_started'))
+      AND (${table.state} <> 'committed' OR (${table.committedAt} IS NOT NULL
+        AND ${table.commitEvidenceDigest} IS NOT NULL AND ${table.submissionState} <> 'not_started'
+        AND ${table.settledAt} IS NULL AND ${table.releasedAt} IS NULL AND ${table.expiredAt} IS NULL))
+      AND (${table.state} <> 'settled' OR (${table.committedAt} IS NOT NULL
+        AND ${table.settledAt} IS NOT NULL AND ${table.settledAmountMicroUsd} IS NOT NULL
+        AND ${table.submissionState} = 'confirmed' AND ${table.reconciliationEvidenceDigest} IS NOT NULL
+        AND ${table.releasedAt} IS NULL AND ${table.expiredAt} IS NULL))
+      AND (${table.state} <> 'released' OR (${table.releasedAt} IS NOT NULL AND ${table.expiredAt} IS NULL))
+      AND (${table.state} <> 'expired' OR (${table.expiredAt} IS NOT NULL
+        AND ${table.committedAt} IS NULL AND ${table.settledAt} IS NULL AND ${table.releasedAt} IS NULL))
+      AND (${table.submissionState} <> 'ambiguous' OR ${table.state} = 'committed')
+      AND (${table.state} NOT IN ('released','expired') OR ${table.submissionState} IN ('not_started','reconciled_no_submit'))
+      AND (${table.releaseReason} IS NULL OR length(btrim(${table.releaseReason})) BETWEEN 1 AND 200)
+    )`),
+    exactBucketFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.budgetBucketId, table.currency],
+      foreignColumns: [aiMediaBudgetBuckets.ownerUserId, aiMediaBudgetBuckets.workspaceId,
+        aiMediaBudgetBuckets.id, aiMediaBudgetBuckets.currency],
+      name: "ai_media_budget_reservations_exact_bucket_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactSlotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.providerAccountId,
+        table.providerKey, table.providerCredentialVersion],
+      foreignColumns: [aiMediaDailyPlanSlots.ownerUserId, aiMediaDailyPlanSlots.workspaceId,
+        aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.providerAccountId,
+        aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion],
+      name: "ai_media_budget_reservations_exact_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    governanceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.governanceProfileId],
+      foreignColumns: [aiMediaGovernanceProfiles.ownerUserId, aiMediaGovernanceProfiles.workspaceId,
+        aiMediaGovernanceProfiles.id],
+      name: "ai_media_budget_reservations_governance_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    renderJobFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId, aiMediaRenderJobs.id],
+      name: "ai_media_budget_reservations_render_job_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    dispatchOutboxFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dispatchOutboxId],
+      foreignColumns: [aiMediaOutbox.ownerUserId, aiMediaOutbox.workspaceId, aiMediaOutbox.id],
+      name: "ai_media_budget_reservations_dispatch_outbox_fk",
+    }).onUpdate("no action").onDelete("restrict"),
   }),
 );
 
@@ -1958,6 +2292,10 @@ export const aiMediaStudioTables = {
   analyticsEvents: aiMediaAnalyticsEvents,
   generationHistory: aiMediaGenerationHistory,
   costLedger: aiMediaCostLedger,
+  dailyPlans: aiMediaDailyPlans,
+  dailyPlanSlots: aiMediaDailyPlanSlots,
+  budgetBuckets: aiMediaBudgetBuckets,
+  budgetReservations: aiMediaBudgetReservations,
   sourceItems: aiMediaSourceItems,
   orchestrationRuns: aiMediaOrchestrationRuns,
   outbox: aiMediaOutbox,

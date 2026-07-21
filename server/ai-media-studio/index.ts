@@ -11,6 +11,7 @@ export * from "./providers/heygen-roster-contracts";
 export * from "./providers/heygen-roster-service";
 export * from "./providers/heygen-roster-daily-plan-service";
 export * from "./providers/drizzle-heygen-roster-repository";
+export * from "./planning";
 export * from "./core/runtime";
 export * from "./persistence";
 export * from "./workers";

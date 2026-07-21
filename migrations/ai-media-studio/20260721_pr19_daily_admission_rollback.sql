@@ -1,0 +1,11 @@
+-- AI Media Studio PR19 rollback is application-only and data preserving.
+-- Do not drop tables, columns, constraints, indexes, counters, or admission evidence.
+--
+-- 1. Disable new admission entry points and drain all writers/workers.
+-- 2. Reconcile every committed or ambiguous provider submission without releasing it automatically.
+-- 3. Verify no active reservation can reach a provider before rolling application code back.
+-- 4. Retain all four PR19 tables and their immutable audit evidence for a corrected roll-forward.
+-- 5. Re-enable only after backup, staging contention/restart rehearsal, checker, App QA,
+--    and Robert's explicit migration, spending, and deployment approvals.
+--
+-- This file intentionally contains no executable destructive SQL, DELETE, TRUNCATE, or DROP.

@@ -2,6 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR19 durable daily admission
+
+- Branch: `codex/ai-media-studio-durable-daily-admission`, stacked on draft PR #100.
+- Scope: provider-neutral plans/slots, exact bigint micro-USD domain math, durable budget buckets, immutable reservation evidence, and an unmounted reservation-only Drizzle transaction.
+- Database authority: accounting date/timezone, locks, account/credential version, governance, policy, quote, approval, sandbox, and reservation state must be revalidated in one PostgreSQL transaction.
+- Ambiguous side effects: committed money cannot expire or auto-refund after a timeout or uncertain provider response; only definitive reconciliation may release or settle it.
+- Safety boundary: SQL is reviewed artifact only and remains unapplied. No route, render job, outbox command, provider call, spend, external post, migration application, or deployment is enabled.
+- Current evidence: full AI Media Studio suite 536/536, focused admission suite 31/31, TypeScript, production build, generated codebase map, diff hygiene, independent checker, security review, and static App QA pass.
+- Remaining authority gap: governance is revalidated from locked durable revisions, but approval, sandbox, quote, policy, and kill-switch inputs are digest-bound internal evidence rather than independent durable source rows. The repository must remain unmounted until those authorities and real PostgreSQL contention/restart behavior are proven.
+- Review disposition: safe to preserve as an inert draft checkpoint; not ready to merge, apply, activate, spend, or deploy. No live PostgreSQL migration/contention rehearsal or browser target was used.
+
 ## Active recovery checkpoint: PR18 roster daily plan
 
 - Branch: `codex/ai-media-studio-roster-daily-plan`, draft PR #100, stacked on draft PR #99.

@@ -238,3 +238,20 @@ It does not yet contain reviewed forward/rollback SQL or an executable Drizzle
 activation transaction. Do not use `drizzle-kit push` to bypass those missing
 artifacts. A later reviewed slice must add relation-exact, additive SQL plus
 static tests before any staging rehearsal or release consideration.
+
+## PR19 durable daily admission draft
+
+`20260721_pr19_daily_admission_forward.sql` is an additive, unapplied migration
+for provider-neutral daily plans, plan slots, micro-USD budget buckets, and
+immutable budget reservations. It derives the accounting date from PostgreSQL
+database-owned time and a trusted server timezone, binds every relation to the
+exact tenant/provider/credential version, and prevents an ambiguous provider
+submission from automatically releasing committed money.
+
+The migration does not backfill the PR18 preview, create a render job, emit an
+outbox command, call HeyGen, spend credits, or start a worker. Do not use
+`db:push` as a substitute for reviewing and rehearsing this SQL. Before any
+application, require a restorable backup, drained writers/workers, real
+PostgreSQL concurrency and rollback rehearsal, checker and App QA, followed by
+Robert's explicit migration and deployment approval. The rollback is
+application-only and preserves every counter and admission record for audit.

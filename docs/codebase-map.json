@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T10:38:56.457Z",
+  "generatedAt": "2026-07-21T11:22:09.985Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,25 +85,263 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 683,
-    "filesIndexed": 584,
-    "imports": 2351,
+    "filesVisible": 1228,
+    "filesIndexed": 591,
+    "imports": 2374,
     "routes": 489,
-    "symbols": 11075
+    "symbols": 11269
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 113,
-      "indexed": 109,
+    ".clippers_workspace.agent-test-backup-65561-1784632799281": {
+      "files": 8,
+      "indexed": 0,
       "kinds": {
-        "server": 113
+        "docs": 2,
+        "other": 6
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/account-evidence": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/allowlist": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "docs": 2
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/developer-app-evidence": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "other": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/evidence-drop": {
+      "files": 18,
+      "indexed": 0,
+      "kinds": {
+        "docs": 17,
+        "other": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/reports": {
+      "files": 27,
+      "indexed": 0,
+      "kinds": {
+        "other": 18,
+        "docs": 9
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/scheduled": {
+      "files": 3,
+      "indexed": 0,
+      "kinds": {
+        "other": 2,
+        "docs": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-65561-1784632799281/source-drop": {
+      "files": 7,
+      "indexed": 0,
+      "kinds": {
+        "docs": 3,
+        "other": 4
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427": {
+      "files": 18,
+      "indexed": 0,
+      "kinds": {
+        "docs": 6,
+        "other": 12
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/account-evidence": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/allowlist": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "docs": 2
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/developer-app-evidence": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "other": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/evidence-drop": {
+      "files": 18,
+      "indexed": 0,
+      "kinds": {
+        "docs": 17,
+        "other": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/reports": {
+      "files": 27,
+      "indexed": 0,
+      "kinds": {
+        "other": 18,
+        "docs": 9
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/scheduled": {
+      "files": 3,
+      "indexed": 0,
+      "kinds": {
+        "other": 2,
+        "docs": 1
+      }
+    },
+    ".clippers_workspace.agent-test-backup-67219-1784632841427/source-drop": {
+      "files": 7,
+      "indexed": 0,
+      "kinds": {
+        "docs": 3,
+        "other": 4
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316": {
+      "files": 57,
+      "indexed": 0,
+      "kinds": {
+        "docs": 19,
+        "other": 38
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/account-evidence": {
+      "files": 20,
+      "indexed": 0,
+      "kinds": {
+        "docs": 12,
+        "other": 8
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/allowlist": {
+      "files": 64,
+      "indexed": 0,
+      "kinds": {
+        "docs": 64
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/credential-setup": {
+      "files": 17,
+      "indexed": 0,
+      "kinds": {
+        "docs": 6,
+        "other": 11
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/developer-app-evidence": {
+      "files": 14,
+      "indexed": 0,
+      "kinds": {
+        "docs": 3,
+        "other": 11
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/drafts": {
+      "files": 10,
+      "indexed": 0,
+      "kinds": {
+        "other": 10
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/evidence-drop": {
+      "files": 21,
+      "indexed": 0,
+      "kinds": {
+        "docs": 19,
+        "other": 2
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/permission-applications": {
+      "files": 7,
+      "indexed": 0,
+      "kinds": {
+        "docs": 5,
+        "other": 2
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/permission-drop-templates": {
+      "files": 7,
+      "indexed": 0,
+      "kinds": {
+        "docs": 1,
+        "other": 6
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/reports": {
+      "files": 27,
+      "indexed": 0,
+      "kinds": {
+        "other": 20,
+        "docs": 7
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/scheduled": {
+      "files": 12,
+      "indexed": 0,
+      "kinds": {
+        "other": 10,
+        "docs": 2
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/source-drop": {
+      "files": 69,
+      "indexed": 0,
+      "kinds": {
+        "docs": 3,
+        "other": 66
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/sources": {
+      "files": 64,
+      "indexed": 0,
+      "kinds": {
+        "other": 64
+      }
+    },
+    ".clippers_workspace.test-backup-67220-1784632834316/test-fixtures": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "other": 1
+      }
+    },
+    "migrations/ai-media-studio": {
+      "files": 25,
+      "indexed": 1,
+      "kinds": {
+        "other": 24,
+        "docs": 1
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 117,
+      "indexed": 113,
+      "kinds": {
+        "server": 117
       }
     },
     "tests": {
-      "files": 139,
-      "indexed": 132,
+      "files": 142,
+      "indexed": 135,
       "kinds": {
-        "test": 139
+        "test": 142
       }
     },
     ".agents/skills": {
@@ -168,14 +406,6 @@
       "indexed": 11,
       "kinds": {
         "docs": 12
-      }
-    },
-    "migrations/ai-media-studio": {
-      "files": 23,
-      "indexed": 1,
-      "kinds": {
-        "other": 22,
-        "docs": 1
       }
     },
     "script": {
@@ -7873,6 +8103,7 @@
         "./in-memory",
         "./operations-runtime",
         "./persistence",
+        "./planning",
         "./ports",
         "./providers/drizzle-heygen-roster-repository",
         "./providers/fake-video-provider",
@@ -9506,6 +9737,231 @@
         "selectMediaJobRepository",
         "value"
       ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "BUDGET_RESERVATION_STATES",
+        "BudgetBucket",
+        "BudgetReservation",
+        "BudgetReservationState",
+        "DAILY_PLAN_SLOT_STATES",
+        "DAILY_PLAN_STATES",
+        "DailyAdmissionBlockCode",
+        "DailyAdmissionDomainError",
+        "DailyAdmissionDomainErrorCode",
+        "DailyAdmissionEvidence",
+        "DailyAdmissionIntent",
+        "DailyLaunchApproval",
+        "DailyPlan",
+        "DailyPlanSlot",
+        "DailyPlanSlotState",
+        "DailyPlanState",
+        "MAX_MICRO_USD",
+        "MicroUsd",
+        "Sha256Digest"
+      ],
+      "symbols": [
+        "BUDGET_RESERVATION_STATES",
+        "DAILY_PLAN_SLOT_STATES",
+        "DAILY_PLAN_STATES",
+        "DailyAdmissionDomainError",
+        "MAX_MICRO_USD"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/daily-admission-domain.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "CreateDailyPlanPreviewInput",
+        "DailyPlanSlotBlueprint",
+        "DailyReservationTransition",
+        "ReserveDailyPlanSlotInput",
+        "blockDailyPlan",
+        "blockDailyPlanSlot",
+        "commitDailyPlanReservation",
+        "confirmDailyPlan",
+        "createDailyAdmissionIntent",
+        "createDailyPlanPreview",
+        "dailyAdmissionApprovalSubjectDigest",
+        "expireDailyPlanReservation",
+        "microUsd",
+        "releaseDailyPlanReservation",
+        "replanDailyPlanSlot",
+        "reserveDailyPlanSlot"
+      ],
+      "symbols": [
+        "OPAQUE_ID",
+        "PLAN_DATE",
+        "SHA256",
+        "admissionDigest",
+        "amount",
+        "approval",
+        "approvalSubjectDigest",
+        "approvedAt",
+        "assertAdmissionGates",
+        "assertBucket",
+        "assertIntentMatchesSlot",
+        "assertLinked",
+        "assertPlanComposition",
+        "assertScopeEqual",
+        "assertSlotIdentity",
+        "available",
+        "blockDailyPlan",
+        "blockDailyPlanSlot",
+        "blueprints",
+        "canonicalJson",
+        "canonicalSlots",
+        "closeReservation",
+        "commitDailyPlanReservation",
+        "confirmDailyPlan",
+        "conflict",
+        "createDailyAdmissionIntent",
+        "createDailyPlanPreview",
+        "dailyAdmissionApprovalSubjectDigest",
+        "digest",
+        "digestableEvidence",
+        "evidence",
+        "evidenceDigest",
+        "exact",
+        "exactReservationReplay",
+        "expireDailyPlanReservation",
+        "expiresAt",
+        "instant",
+        "invalid",
+        "invariant",
+        "microUsd",
+        "now",
+        "parsed",
+        "planDate",
+        "planId",
+        "positiveInteger",
+        "previewDigest",
+        "regeneratedAdmission",
+        "regeneratedKey",
+        "regeneratedSubject",
+        "releaseDailyPlanReservation",
+        "replanDailyPlanSlot",
+        "requestedExpiry",
+        "reservationExpiresAt",
+        "reservationId",
+        "reserveDailyPlanSlot",
+        "rosterDigest",
+        "scope",
+        "slotKeys",
+        "slots",
+        "stableId",
+        "timeZone",
+        "transition",
+        "validApproval",
+        "validDigest",
+        "validEvidence",
+        "validId",
+        "validInstant",
+        "validPlanDate",
+        "validScope",
+        "validTimeZone"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-daily-admission-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "./contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DailyAdmissionDatabase",
+        "DailyAdmissionGovernanceUse",
+        "DailyAdmissionPersistenceError",
+        "DailyAdmissionPersistenceErrorCode",
+        "DailyAdmissionTransactionalDatabase",
+        "DrizzleDailyAdmissionRepository",
+        "DurableDailyAdmissionReservation",
+        "ReserveAndAdmitRequest",
+        "ReserveAndAdmitResult",
+        "UnsignedReserveAndAdmitRequest",
+        "dailyAdmissionPersistenceInputDigest"
+      ],
+      "symbols": [
+        "DailyAdmissionPersistenceError",
+        "DrizzleDailyAdmissionRepository",
+        "EFFECTS",
+        "ExecuteResult",
+        "MAX_DB_MICRO_USD",
+        "SAFE",
+        "SHA256",
+        "UUID",
+        "ValidatedRequest",
+        "amount",
+        "amountMicroUsd",
+        "boolean",
+        "budgetDate",
+        "canonical",
+        "canonicalDate",
+        "canonicalIso",
+        "canonicalJson",
+        "canonicalMicroUsd",
+        "checksum",
+        "clockRow",
+        "createdRows",
+        "dailyAdmissionPersistenceInputDigest",
+        "date",
+        "digest",
+        "exactReplay",
+        "expectedInputDigest",
+        "gateRows",
+        "governanceTerritory",
+        "governanceUse",
+        "immutableMatches",
+        "invalid",
+        "invariant",
+        "isoInput",
+        "parsed",
+        "positiveInteger",
+        "raw",
+        "replayRow",
+        "replayTimeZone",
+        "request",
+        "reservation",
+        "reservationFromRow",
+        "resultRows",
+        "rows",
+        "safeString",
+        "state",
+        "submissionState",
+        "timeZone",
+        "uuid",
+        "validTimeZone",
+        "validateRequest",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/index.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./daily-admission-domain"
+      ],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -17902,7 +18358,11 @@
         "aiMediaAnalyticsEvents",
         "aiMediaAnalyticsSnapshots",
         "aiMediaAssetIngestJobs",
+        "aiMediaBudgetBuckets",
+        "aiMediaBudgetReservations",
         "aiMediaCostLedger",
+        "aiMediaDailyPlanSlots",
+        "aiMediaDailyPlans",
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
@@ -17936,7 +18396,11 @@
         "aiMediaAnalyticsEvents",
         "aiMediaAnalyticsSnapshots",
         "aiMediaAssetIngestJobs",
+        "aiMediaBudgetBuckets",
+        "aiMediaBudgetReservations",
         "aiMediaCostLedger",
+        "aiMediaDailyPlanSlots",
+        "aiMediaDailyPlans",
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
@@ -18710,6 +19174,90 @@
         "saved",
         "source",
         "validInfluencer"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-daily-admission-domain.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "admission",
+        "admitted",
+        "approvalSubject",
+        "approvedSubjectDigest",
+        "assertCode",
+        "blocked",
+        "bucket",
+        "changedEvidence",
+        "changedIntent",
+        "committed",
+        "confirmed",
+        "digest",
+        "evidence",
+        "expired",
+        "expiring",
+        "first",
+        "firstIntent",
+        "input",
+        "intent",
+        "now",
+        "originalEvidence",
+        "plannedSlot",
+        "preview",
+        "released",
+        "replanned",
+        "replay",
+        "reserve",
+        "scope",
+        "second",
+        "slot",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-daily-admission-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Rendered",
+        "assertCode",
+        "barrel",
+        "changed",
+        "databaseNow",
+        "dialect",
+        "execute",
+        "gateParameters",
+        "gates",
+        "harness",
+        "ids",
+        "input",
+        "makeDb",
+        "mutation",
+        "normalized",
+        "oldUnsigned",
+        "rendered",
+        "repository",
+        "request",
+        "reservationRow",
+        "result",
+        "scope",
+        "sha",
+        "unsigned",
+        "valid"
       ],
       "routes": []
     },
@@ -19871,6 +20419,27 @@
         "rollback",
         "sql",
         "uncommented"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "columnDefinitions",
+        "executable",
+        "forward",
+        "preflight",
+        "preflightEnd",
+        "preflightStart",
+        "rollback",
+        "tables"
       ],
       "routes": []
     },
@@ -22237,6 +22806,8 @@
     "tests/ai-media-studio-core-persistence.test.ts",
     "tests/ai-media-studio-core-routes.test.ts",
     "tests/ai-media-studio-core-schema.test.ts",
+    "tests/ai-media-studio-daily-admission-domain.test.ts",
+    "tests/ai-media-studio-daily-admission-drizzle.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-heygen-roster-client.test.ts",
@@ -22276,6 +22847,7 @@
     "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
     "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
     "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
+    "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
