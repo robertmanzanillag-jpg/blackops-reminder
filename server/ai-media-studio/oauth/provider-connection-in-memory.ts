@@ -93,13 +93,22 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     const requiredScopes = exactList(input.requiredScopes);
     validateOAuthProviderScopes(input.grantFamily, requiredScopes, requiredScopes, allowedScopes);
     const attempt: OAuthProviderConnectionAttempt = {
-      ...input,
+      id: input.id,
       scope: { ...input.scope },
+      actorUserId: input.actorUserId,
+      providerAccountId: input.providerAccountId,
+      oauthSessionId: input.oauthSessionId,
+      platform: input.platform,
+      grantFamily: input.grantFamily,
       stage: "exchange_pending",
       stageVersion: 1,
+      manifestRevision: input.manifestRevision,
       allowedScopes,
       requiredScopes,
       actualScopes: Object.freeze([]),
+      tokenBindingId: input.tokenBindingId,
+      expectedCredentialVersion: input.expectedCredentialVersion,
+      targetCredentialVersion: input.targetCredentialVersion,
       tokenArtifacts: Object.freeze([]),
       candidates: Object.freeze([]),
       selectedCandidateId: null,
@@ -114,6 +123,8 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
       leaseExpiresAt: null,
       leaseFencing: 0,
       failureCode: null,
+      expiresAt: input.expiresAt,
+      createdAt: input.createdAt,
       updatedAt: input.createdAt,
     };
     this.attempts.set(storageKey, attempt);
@@ -159,7 +170,12 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     validateOAuthProviderTokenArtifacts(attempt.grantFamily, input.tokenArtifacts, input.now);
     const updated = advance(attempt, "discovery_pending", input.now, {
       actualScopes,
-      tokenArtifacts: Object.freeze(structuredClone(input.tokenArtifacts)),
+      tokenArtifacts: Object.freeze(input.tokenArtifacts.map((artifact) => Object.freeze({
+        role: artifact.role,
+        lifetime: Object.freeze(artifact.lifetime.kind === "expires_at"
+          ? { kind: "expires_at" as const, expiresAt: artifact.lifetime.expiresAt, revalidateAt: artifact.lifetime.revalidateAt }
+          : { kind: artifact.lifetime.kind, revalidateAt: artifact.lifetime.revalidateAt }),
+      }))),
     });
     this.attempts.set(storageKey, updated);
     return clone(updated);
@@ -192,9 +208,16 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
       candidateIds.add(candidate.candidateId); targetKeys.add(identityKey);
       const verifiedTasks = exactList(candidate.verifiedTasks);
       return Object.freeze({
-        ...candidate,
+        candidateId: candidate.candidateId,
+        targetId: candidate.targetId,
+        kind: candidate.kind,
+        displayName: candidate.displayName,
+        ...(candidate.parentTargetId === undefined ? {} : { parentTargetId: candidate.parentTargetId }),
         verifiedTasks,
         capabilities: deriveOAuthProviderCapabilities(candidate.kind, verifiedTasks),
+        eligibilityDigest: candidate.eligibilityDigest,
+        manifestRevision: candidate.manifestRevision,
+        discoveredAt: candidate.discoveredAt,
       });
     });
     const updated = candidates.length === 0

@@ -103,3 +103,29 @@ test("exchange rejects scope escalation and invalid artifact lifetime genericall
   await assert.rejects(repository.markExchangeComplete({ attemptId: "attempt-1", scope, leaseToken: claim.leaseToken, leaseFencing: claim.leaseFencing, now: "2026-07-21T12:02:00.000Z", actualScopes: ["video.publish", "video.upload"], tokenArtifacts: [{ role: "operational_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-07-22T12:00:00.000Z" } }, refresh] }), OAuthProviderConnectionError);
   await assert.rejects(repository.markExchangeComplete({ attemptId: "attempt-1", scope, leaseToken: claim.leaseToken, leaseFencing: claim.leaseFencing, now: "2026-07-21T12:02:00.000Z", actualScopes: ["video.publish"], tokenArtifacts: [{ role: "operational_access", lifetime: { kind: "expires_at", expiresAt: "2026-07-21T13:00:00.000Z", revalidateAt: "2026-07-21T13:30:00.000Z" } }, refresh] }), OAuthProviderConnectionError);
 });
+
+test("in-memory persistence canonicalizes caller objects and never retains secret-shaped extras", async () => {
+  const repository = new InMemoryOAuthProviderConnectionRepository();
+  const unsafeCreate = { ...createInput(), client_secret: "never-store-create" };
+  await repository.create(unsafeCreate);
+  const exchange = await repository.claim({ attemptId: "attempt-1", scope, stage: "exchange_pending", leaseToken: "lease-1", leaseOwner: "worker-1", leaseExpiresAt: "2026-07-21T12:05:00.000Z", now: "2026-07-21T12:01:00.000Z" });
+  assert.ok(exchange);
+  const unsafeArtifact = {
+    role: "operational_access" as const,
+    lifetime: { kind: "expires_at" as const, expiresAt: "2026-07-22T12:00:00.000Z", revalidateAt: "2026-07-21T13:00:00.000Z" },
+    access_token: "never-store-artifact",
+  };
+  await repository.markExchangeComplete({ attemptId: "attempt-1", scope, leaseToken: exchange.leaseToken, leaseFencing: exchange.leaseFencing,
+    now: "2026-07-21T12:02:00.000Z", actualScopes: ["video.publish"], tokenArtifacts: [
+      unsafeArtifact,
+      { role: "refresh", lifetime: { kind: "expires_at", expiresAt: "2027-07-21T12:00:00.000Z", revalidateAt: "2026-08-21T12:00:00.000Z" }, refresh_token: "never-store-refresh" },
+    ] });
+  const discovery = await repository.claim({ attemptId: "attempt-1", scope, stage: "discovery_pending", leaseToken: "lease-2", leaseOwner: "worker-2", leaseExpiresAt: "2026-07-21T12:08:00.000Z", now: "2026-07-21T12:03:00.000Z" });
+  assert.ok(discovery);
+  await repository.recordDiscovery({ attemptId: "attempt-1", scope, leaseToken: discovery.leaseToken, leaseFencing: discovery.leaseFencing,
+    now: "2026-07-21T12:04:00.000Z", candidates: [{ candidateId: "candidate-1", targetId: "target-1", kind: "tiktok_user",
+      displayName: "Robert", verifiedTasks: ["video.publish"], eligibilityDigest: "a".repeat(64), manifestRevision: "tiktok-v2",
+      discoveredAt: "2026-07-21T12:03:00.000Z", provider_json: "never-store-provider" }] });
+  const persisted = JSON.stringify(await repository.get(scope, "attempt-1"));
+  assert.doesNotMatch(persisted, /never-store|client_secret|access_token|refresh_token|provider_json/i);
+});
