@@ -28,7 +28,8 @@ only to resolve that gate; this document itself grants no access.
    bridge this gap with `drizzle-kit push`, `npm run db:push`, inferred SQL, or
    a production schema diff. A data owner must prove whether the later deltas
    require PR16 and either add reviewed SQL or document why it is not in the
-   staging path.
+   staging path. The preserved remediation scope is
+   `docs/ai-media-studio/pr16-remediation-plan.md`.
 5. A fresh backup has not been restored successfully into an isolated database.
 6. PostgreSQL is older than 16 or `pgcrypto` is absent/untrusted.
 7. The three PR26 NOLOGIN/NOINHERIT roles and separate LOGIN principals have no

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T19:45:44.482Z",
+  "generatedAt": "2026-07-21T19:47:51.690Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,13 +86,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 750,
-    "filesIndexed": 633,
+    "filesVisible": 751,
+    "filesIndexed": 634,
     "imports": 2579,
     "routes": 491,
-    "symbols": 12299
+    "symbols": 12300
   },
   "directories": {
+    "docs/ai-media-studio": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "docs": 12
+      }
+    },
     "server/ai-media-studio": {
       "files": 133,
       "indexed": 128,
@@ -148,13 +155,6 @@
         "client-hook": 3,
         "client-lib": 7,
         "client-page": 24
-      }
-    },
-    "docs/ai-media-studio": {
-      "files": 11,
-      "indexed": 11,
-      "kinds": {
-        "docs": 11
       }
     },
     "docs": {
@@ -4835,6 +4835,14 @@
       "symbols": [
         "mediaJobs"
       ],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/pr16-remediation-plan.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -22736,6 +22744,7 @@
         "pr12",
         "pr14",
         "pr14Forward",
+        "pr16Plan",
         "pr16Stop",
         "pr19",
         "pr26Forward",

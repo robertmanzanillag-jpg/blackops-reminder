@@ -8,6 +8,7 @@ const migrationsReadme = readFileSync(new URL("README.md", migrationDirectoryUrl
 const pr14Forward = readFileSync(new URL("20260721_pr14_oauth_vault_operations_forward.sql", migrationDirectoryUrl), "utf8");
 const pr26Forward = readFileSync(new URL("20260721_pr26_db_capability_forward.sql", migrationDirectoryUrl), "utf8");
 const runbook = readFileSync(runbookUrl, "utf8");
+const pr16Plan = readFileSync(new URL("../docs/ai-media-studio/pr16-remediation-plan.md", import.meta.url), "utf8");
 
 const migrationPrefixes = [
   "20260720_pr2_core",
@@ -79,6 +80,9 @@ test("runbook inventory matches the SQL directory, proves PR13 schema-neutral an
   assert.match(migrationsReadme, /PR16 currently contains additive Drizzle schema declarations/u);
   assert.match(migrationsReadme, /does not yet contain reviewed forward\/rollback SQL/u);
   assert.match(runbook, /PR2 is a[\s\S]*delta, not an initial-schema migration/u);
+  assert.match(runbook, /pr16-remediation-plan\.md/u);
+  assert.match(pr16Plan, /PR16A — schema and integrity[\s\S]*PR16B — durable activation and CAS/u);
+  assert.match(pr16Plan, /Status: \*\*NO-GO \/ design evidence only\*\*/u);
 });
 
 test("runbook requires exact roles, private evidence, approvals and provider-free restart", () => {

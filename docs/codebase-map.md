@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T19:45:44.482Z
+Generated: 2026-07-21T19:47:51.690Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 750 | 633 | 2579 | 491 | 12299 |
+| 751 | 634 | 2579 | 491 | 12300 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -36,8 +36,8 @@ Package: `rest-express`
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
+| `docs/ai-media-studio` | 12 | 12 | docs:12 |
 | `docs` | 12 | 11 | docs:12 |
-| `docs/ai-media-studio` | 11 | 11 | docs:11 |
 | `shared` | 9 | 9 | shared:9 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `client/public` | 13 | 2 | other:13 |
