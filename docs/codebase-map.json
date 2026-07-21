@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-01T04:41:14.137Z",
-  "repoRoot": "/private/tmp/asistente-pr55-fresh",
+  "generatedAt": "2026-07-20T22:23:59.858Z",
+  "repoRoot": "/private/tmp/blackroom-longform",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -46,7 +46,10 @@
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:revenue-public-scout-connector": "node --import tsx --test tests/revenue-engine-public-scout-connector.test.ts",
+    "test:revenue-money-readiness-cli": "node --import tsx --test tests/revenue-engine-money-readiness-cli.test.ts",
+    "test:revenue-stripe": "node --import tsx --test tests/revenue-stripe.test.ts",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation && npm run test:revenue-stripe",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -60,8 +63,17 @@
     "ceo:create-go-live-task": "node --import tsx script/create-ceo-go-live-task.ts",
     "ceo:handoff": "node script/ceo-handoff.mjs",
     "ceo:verify-local": "node script/ceo-verify-local.mjs",
+    "revenue:money-readiness": "node --import tsx script/revenue-engine-money-readiness.ts",
     "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "metricool:plan": "node --import tsx script/metricool-plan.ts",
+    "blackroom:agent": "node --import tsx script/blackroom-daily-agent.ts",
+    "blackroom:control": "node script/blackroom-control-server.mjs",
+    "blackroom:worker": "node --import tsx script/blackroom-local-worker.ts",
+    "blackroom:ledger": "node --import tsx script/blackroom-worker-ledger.ts",
+    "blackroom:install-local": "zsh script/install-blackroom-local-worker-launch-agent.sh",
+    "test:blackroom-agent": "node --import tsx --test tests/blackroom-daily-queue.test.ts",
+    "test:blackroom-content": "node --import tsx --test tests/blackroom-content-agent.test.ts",
+    "test:blackroom-worker": "node --import tsx --test tests/blackroom-local-worker.test.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
@@ -82,13 +94,36 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 400,
-    "filesIndexed": 332,
-    "imports": 1321,
-    "routes": 456,
-    "symbols": 7265
+    "filesVisible": 458,
+    "filesIndexed": 379,
+    "imports": 1398,
+    "routes": 464,
+    "symbols": 7662
   },
   "directories": {
+    "script": {
+      "files": 43,
+      "indexed": 40,
+      "kinds": {
+        "script": 43
+      }
+    },
+    ".": {
+      "files": 34,
+      "indexed": 18,
+      "kinds": {
+        "other": 22,
+        "docs": 11,
+        "package": 1
+      }
+    },
+    ".agents/memory": {
+      "files": 5,
+      "indexed": 5,
+      "kinds": {
+        "docs": 5
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -97,18 +132,9 @@
         "other": 1
       }
     },
-    ".": {
-      "files": 24,
-      "indexed": 17,
-      "kinds": {
-        "other": 15,
-        "docs": 8,
-        "package": 1
-      }
-    },
-    ".upm": {
+    "bin": {
       "files": 1,
-      "indexed": 1,
+      "indexed": 0,
       "kinds": {
         "other": 1
       }
@@ -121,36 +147,29 @@
       }
     },
     "client/public": {
-      "files": 13,
+      "files": 14,
       "indexed": 2,
       "kinds": {
-        "other": 13
+        "other": 14
       }
     },
     "client/src": {
-      "files": 109,
-      "indexed": 107,
+      "files": 115,
+      "indexed": 113,
       "kinds": {
         "other": 3,
-        "client-component": 21,
+        "client-component": 22,
         "ui-component": 55,
         "client-hook": 3,
-        "client-lib": 5,
-        "client-page": 22
+        "client-lib": 7,
+        "client-page": 25
       }
     },
     "docs": {
-      "files": 11,
-      "indexed": 10,
+      "files": 12,
+      "indexed": 11,
       "kinds": {
-        "docs": 11
-      }
-    },
-    "script": {
-      "files": 36,
-      "indexed": 34,
-      "kinds": {
-        "script": 36
+        "docs": 12
       }
     },
     "scripts": {
@@ -161,17 +180,17 @@
       }
     },
     "server": {
-      "files": 94,
-      "indexed": 90,
+      "files": 111,
+      "indexed": 107,
       "kinds": {
-        "server": 94
+        "server": 111
       }
     },
     "server/replit_integrations": {
-      "files": 8,
-      "indexed": 8,
+      "files": 9,
+      "indexed": 9,
       "kinds": {
-        "server": 8
+        "server": 9
       }
     },
     "shared/models": {
@@ -189,10 +208,10 @@
       }
     },
     "tests": {
-      "files": 59,
-      "indexed": 57,
+      "files": 71,
+      "indexed": 68,
       "kinds": {
-        "test": 59
+        "test": 71
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -206,7 +225,7 @@
   },
   "files": [
     {
-      "path": ".agents/skills/codebase-overview/SKILL.md",
+      "path": ".agents/memory/drive-oauth-autoscale.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -214,8 +233,40 @@
       "routes": []
     },
     {
-      "path": ".upm/store.json",
-      "kind": "other",
+      "path": ".agents/memory/MEMORY.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/nix-pip-fix.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/pr15-deploy.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/yt-dlp-impersonate.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/skills/codebase-overview/SKILL.md",
+      "kind": "docs",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -263,6 +314,14 @@
     },
     {
       "path": "CLAUDE.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "click-path-audit.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -336,6 +395,7 @@
         "Projects",
         "PromoVideoPage",
         "RadioPage",
+        "RevenueEngineAdvancedPage",
         "RevenueEnginePage",
         "Router",
         "ToolsPage",
@@ -370,8 +430,17 @@
         "/promo-video",
         "/radio",
         "/revenue-engine",
+        "/revenue-engine/advanced",
         "/tools"
       ]
+    },
+    {
+      "path": "client/src/components/._dashboard-assistant-chat.tsx",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
     },
     {
       "path": "client/src/components/assistant-chat.tsx",
@@ -2503,6 +2572,45 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/revenue-engine-delivery-requests.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "buildCopyableTrustedDeliverRequest",
+        "isTrustedDeliveryRequestReady"
+      ],
+      "symbols": [
+        "TrustedDeliverWorkspaceRequestSource",
+        "buildCopyableTrustedDeliverRequest",
+        "isTrustedDeliveryRequestReady",
+        "isWebsiteDelivery",
+        "persistedReleaseGateReady",
+        "readyForTrustedDelivery"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/revenue-engine-public-scout-connector.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "RevenuePublicScoutConnectorContext",
+        "buildPublicScoutConnectorIntakePayload",
+        "buildPublicScoutConnectorIntakeRequest",
+        "publicScoutConnectorIntakeEndpoint"
+      ],
+      "symbols": [
+        "ConnectorPayloadObject",
+        "buildPublicScoutConnectorIntakePayload",
+        "buildPublicScoutConnectorIntakeRequest",
+        "payload",
+        "publicScoutConnectorIntakeEndpoint",
+        "results",
+        "valueOrFallback"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/utils.ts",
       "kind": "client-lib",
       "imports": [
@@ -2525,6 +2633,22 @@
         "./index.css",
         "react-dom/client"
       ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/pages/._assistant.tsx",
+      "kind": "client-page",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/pages/._dropshipping-ceo.tsx",
+      "kind": "client-page",
+      "imports": [],
       "exports": [],
       "symbols": [],
       "routes": []
@@ -3557,6 +3681,56 @@
       "routes": []
     },
     {
+      "path": "client/src/pages/revenue-engine-simple.tsx",
+      "kind": "client-page",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/input",
+        "@/components/ui/textarea",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "RevenueEngineSimplePage"
+      ],
+      "symbols": [
+        "OutreachDraft",
+        "OutreachOutcome",
+        "RevenueSnapshot",
+        "ViewId",
+        "approvalReady",
+        "approveMutation",
+        "busy",
+        "calls",
+        "confirmed",
+        "counts",
+        "data",
+        "drafts",
+        "filteredDrafts",
+        "greeting",
+        "matchesView",
+        "money",
+        "normalized",
+        "outcome",
+        "outcomeLabel",
+        "outcomeMutation",
+        "pipelineEstimated",
+        "postJson",
+        "professionalDraft",
+        "refresh",
+        "replies",
+        "response",
+        "selected",
+        "sendMutation",
+        "sent",
+        "snapshotQuery",
+        "updateMutation"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/pages/tools.tsx",
       "kind": "client-page",
       "imports": [
@@ -3579,6 +3753,14 @@
     {
       "path": "components.json",
       "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "design-qa.md",
+      "kind": "docs",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -3657,6 +3839,14 @@
       "routes": []
     },
     {
+      "path": "docs/revenue-engine-first-lead-review.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/revenue-engine-launch-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -3671,22 +3861,6 @@
         "./server/env-loader",
         "drizzle-kit"
       ],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "package 2.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "package-lock 2.json",
-      "kind": "other",
-      "imports": [],
       "exports": [],
       "symbols": [],
       "routes": []
@@ -3721,6 +3895,140 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-control-server.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:http",
+        "node:path",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "actual",
+        "allowedHosts",
+        "args",
+        "authorized",
+        "child",
+        "command",
+        "controlToken",
+        "execFileAsync",
+        "expected",
+        "fetchSite",
+        "host",
+        "npmPath",
+        "origin",
+        "page",
+        "port",
+        "projectDir",
+        "queue",
+        "raw",
+        "readBody",
+        "recoverWorker",
+        "send",
+        "server",
+        "start",
+        "state",
+        "stopWorker",
+        "url",
+        "wakeWorker",
+        "weeks",
+        "workerState",
+        "workerStatePath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-daily-agent.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-daily-queue"
+      ],
+      "exports": [],
+      "symbols": [
+        "Command",
+        "argument",
+        "command",
+        "durationSeconds",
+        "index",
+        "inline",
+        "jobId",
+        "main",
+        "queuePath",
+        "recovered",
+        "selectedCommand",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-local-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "../server/blackroom-local-worker",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "appendLog",
+        "child",
+        "codexPath",
+        "existingPid",
+        "exitCode",
+        "fallback",
+        "handle",
+        "lockPath",
+        "logPath",
+        "main",
+        "maxRunMs",
+        "output",
+        "pollMs",
+        "projectDir",
+        "queue",
+        "queuePath",
+        "readJson",
+        "runCodex",
+        "startedAt",
+        "state",
+        "statePath",
+        "stop",
+        "temporary",
+        "writeJson"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-worker-ledger.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-local-worker",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "arg",
+        "entry",
+        "index",
+        "ledger",
+        "ledgerPath",
+        "lock",
+        "lockPath",
+        "main",
+        "projectDir",
+        "readLedger",
+        "safePath",
+        "temporary",
+        "writeLedger"
+      ],
       "routes": []
     },
     {
@@ -5049,6 +5357,43 @@
       "routes": []
     },
     {
+      "path": "script/radio-local-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/local-youtube-queue",
+        "../server/radio-youtube-command"
+      ],
+      "exports": [],
+      "symbols": [
+        "ESTIMATED_COST_USD",
+        "applyDefaultCookieSource",
+        "body",
+        "chatId",
+        "clipCount",
+        "config",
+        "done",
+        "errorMessage",
+        "failed",
+        "finalQueue",
+        "getTelegramChatIdForUser",
+        "hasAnyChunk",
+        "hasCookiesB64",
+        "hasCookiesFromBrowser",
+        "hasCookiesPath",
+        "main",
+        "pending",
+        "processEntry",
+        "queue",
+        "res",
+        "result",
+        "sendTelegramNotification",
+        "summary",
+        "telegramMsg",
+        "token"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/radio-local-youtube-worker.ts",
       "kind": "script",
       "imports": [
@@ -5116,6 +5461,23 @@
         "sourceDir",
         "userId",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/revenue-engine-money-readiness.ts",
+      "kind": "script",
+      "imports": [
+        "../server/revenue-engine",
+        "../server/revenue-engine-money-readiness-cli"
+      ],
+      "exports": [],
+      "symbols": [
+        "errors",
+        "main",
+        "options",
+        "report",
+        "snapshot"
       ],
       "routes": []
     },
@@ -5229,6 +5591,70 @@
         "yStart",
         "yy"
       ],
+      "routes": []
+    },
+    {
+      "path": "server/._dropshipping-ceo.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._local-auth.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._radio-video-edit-agent.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._radio-youtube-command.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._rate-limit.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._routes.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._user-context.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._youtube-downloader.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -5446,6 +5872,7 @@
         "AppQaStatus",
         "AppQaSubAgentId",
         "AppQaSubAgentReport",
+        "AppQaTargetContext",
         "AppQaVisualRouteScan",
         "BugPatrolHandoff",
         "BugPatrolReport",
@@ -5472,6 +5899,7 @@
         "LIKELY_APP_REPO_KEYWORDS",
         "SAFE_CLICK_TEXT_BLOCKLIST",
         "VISUAL_SCREENSHOT_DIR",
+        "VisualClickScoutDependencies",
         "VisualRouteTextSnapshot",
         "__appQaAgentInternals",
         "activationControls",
@@ -6017,6 +6445,227 @@
       "routes": []
     },
     {
+      "path": "server/blackroom-content-agent.ts",
+      "kind": "server",
+      "imports": [
+        "./youtube-downloader.ts"
+      ],
+      "exports": [
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_RENDER_DIRECTORY",
+        "BLACKROOM_SOURCE_DIRECTORY",
+        "BlackRoomAgentConfig",
+        "BlackRoomDownloadJob",
+        "BlackRoomDuration",
+        "BlackRoomFormatScore",
+        "BlackRoomMetricoolDraft",
+        "BlackRoomPerformanceRecord",
+        "BlackRoomPlatform",
+        "BlackRoomRenderJob",
+        "BlackRoomVideoFormat",
+        "BlackRoomYoutubeVideo",
+        "buildBlackRoomAutopilotPlan",
+        "buildBlackRoomDownloadJobs",
+        "buildBlackRoomMetricoolDrafts",
+        "buildBlackRoomRenderJobs",
+        "listBlackRoomYoutubeVideos",
+        "sanitizeBlackRoomAgentConfig",
+        "scoreBlackRoomFormats"
+      ],
+      "symbols": [
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_RENDER_DIRECTORY",
+        "BLACKROOM_SOURCE_DIRECTORY",
+        "FetchLike",
+        "addDraft",
+        "aggregates",
+        "allocations",
+        "apiKey",
+        "asCount",
+        "availableVideos",
+        "averageEngagement",
+        "averageGrowthRate",
+        "averageRetention",
+        "averageWatchSeconds",
+        "buildBlackRoomAutopilotPlan",
+        "buildBlackRoomDownloadJobs",
+        "buildBlackRoomMetricoolDrafts",
+        "buildBlackRoomRenderJobs",
+        "channelId",
+        "channelPayload",
+        "clampInteger",
+        "compatibleIndex",
+        "confidence",
+        "config",
+        "count",
+        "detail",
+        "deterministicShuffle",
+        "distributeSlots",
+        "drafts",
+        "duration",
+        "equalWeight",
+        "exploration",
+        "fallback",
+        "fetcher",
+        "id",
+        "ids",
+        "inputPath",
+        "listBlackRoomYoutubeVideos",
+        "match",
+        "matches",
+        "observedScore",
+        "order",
+        "outputPath",
+        "outputTemplate",
+        "page",
+        "params",
+        "parseIsoDurationSeconds",
+        "parsed",
+        "payload",
+        "platform",
+        "platforms",
+        "priorScore",
+        "randomizedVideos",
+        "rankedDurations",
+        "raw",
+        "recordAverageWatchSeconds",
+        "recordEngagement",
+        "recordGrowthRate",
+        "recordRetention",
+        "remaining",
+        "remainingVideos",
+        "response",
+        "sanitizeBlackRoomAgentConfig",
+        "scheduledAt",
+        "score",
+        "scoreBlackRoomFormats",
+        "scores",
+        "slot",
+        "slots",
+        "snippet",
+        "stableHash",
+        "stableOffset",
+        "startSeconds",
+        "statistics",
+        "target",
+        "thumbnailUrl",
+        "totalScore",
+        "uploadsPlaylistId",
+        "usedSourceVideoIds",
+        "video",
+        "videosById",
+        "views",
+        "watchTimeScore",
+        "weights",
+        "youtubeJson"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-control-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-daily-queue",
+        "express"
+      ],
+      "exports": [
+        "registerBlackRoomControlRoutes"
+      ],
+      "symbols": [
+        "blackRoomPage",
+        "ids",
+        "registerBlackRoomControlRoutes",
+        "state"
+      ],
+      "routes": [
+        "/api/blackroom-agent",
+        "/api/blackroom-agent/pause",
+        "/api/blackroom-agent/start",
+        "/blackroom"
+      ]
+    },
+    {
+      "path": "server/blackroom-daily-queue.ts",
+      "kind": "server",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_DEFAULT_BUFFER_DAYS",
+        "BLACKROOM_DEFAULT_INTERVAL_MINUTES",
+        "BLACKROOM_DEFAULT_POSTS_PER_DAY",
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_QUEUE_PATH",
+        "BLACKROOM_QUEUE_VERSION",
+        "BlackRoomDailyJob",
+        "BlackRoomDailyJobStatus",
+        "BlackRoomExperimentDuration",
+        "BlackRoomQueueState",
+        "BlackRoomSourceUsage",
+        "buildRotatingSlots",
+        "claimNextBlackRoomJob",
+        "completeBlackRoomJob",
+        "createBlackRoomQueueState",
+        "ensureBlackRoomScheduleBuffer",
+        "pauseBlackRoomAgent",
+        "readBlackRoomQueue",
+        "recordBlackRoomSourceUsage",
+        "recoverInterruptedBlackRoomJobs",
+        "retryBlackRoomJob",
+        "startBlackRoomAgent",
+        "summarizeBlackRoomQueue",
+        "writeBlackRoomQueue"
+      ],
+      "symbols": [
+        "BLACKROOM_DEFAULT_BUFFER_DAYS",
+        "BLACKROOM_DEFAULT_INTERVAL_MINUTES",
+        "BLACKROOM_DEFAULT_POSTS_PER_DAY",
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_QUEUE_PATH",
+        "BLACKROOM_QUEUE_VERSION",
+        "addCalendarDays",
+        "buildRotatingSlots",
+        "claimNextBlackRoomJob",
+        "completeBlackRoomJob",
+        "createBlackRoomQueueState",
+        "createDailyJob",
+        "delayMinutes",
+        "ensureBlackRoomScheduleBuffer",
+        "existing",
+        "intervalMinutes",
+        "iso",
+        "job",
+        "jobs",
+        "localDate",
+        "minutesToTime",
+        "noonUtc",
+        "normalized",
+        "normalizedWeeks",
+        "parsed",
+        "parts",
+        "pauseBlackRoomAgent",
+        "posts",
+        "readBlackRoomQueue",
+        "recordBlackRoomSourceUsage",
+        "recoverInterruptedBlackRoomJobs",
+        "retryBlackRoomJob",
+        "startBlackRoomAgent",
+        "startMinutes",
+        "summarizeBlackRoomQueue",
+        "targetDate",
+        "temporaryPath",
+        "timestamp",
+        "timezone",
+        "today",
+        "totals",
+        "value",
+        "videoId",
+        "writeBlackRoomQueue"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/blackroom-links.ts",
       "kind": "server",
       "imports": [
@@ -6108,6 +6757,49 @@
         "value",
         "year",
         "yearText"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-local-worker.ts",
+      "kind": "server",
+      "imports": [
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_WORKER_LEDGER_PATH",
+        "BLACKROOM_WORKER_LOCK_PATH",
+        "BLACKROOM_WORKER_STATE_PATH",
+        "BlackRoomLedgerEntry",
+        "BlackRoomLedgerStatus",
+        "BlackRoomLocalWorkerState",
+        "BlackRoomWorkerLedger",
+        "assertSafeConfirmedDeletion",
+        "buildBlackRoomWorkerPrompt",
+        "createBlackRoomLocalWorkerState",
+        "createBlackRoomWorkerLedger",
+        "reserveBlackRoomLedgerEntry",
+        "shouldRunBlackRoomWorker",
+        "updateBlackRoomLedgerEntry"
+      ],
+      "symbols": [
+        "BLACKROOM_WORKER_LEDGER_PATH",
+        "BLACKROOM_WORKER_LOCK_PATH",
+        "BLACKROOM_WORKER_STATE_PATH",
+        "allowedRoots",
+        "assertSafeConfirmedDeletion",
+        "buildBlackRoomWorkerPrompt",
+        "createBlackRoomLocalWorkerState",
+        "createBlackRoomWorkerLedger",
+        "entry",
+        "ledgerPath",
+        "queuePath",
+        "reserveBlackRoomLedgerEntry",
+        "resolvedFile",
+        "resolvedProject",
+        "shouldRunBlackRoomWorker",
+        "timestamp",
+        "updateBlackRoomLedgerEntry"
       ],
       "routes": []
     },
@@ -6977,6 +7669,8 @@
         "MinimalRepo",
         "SENSITIVE_TEXT_PATTERNS",
         "__developerAutopilotInternals",
+        "actualControls",
+        "actualValue",
         "body",
         "buildCodexDispatchComment",
         "buildCodexGitHubIssueBody",
@@ -6998,6 +7692,8 @@
         "extractExplicitRepo",
         "failingAgents",
         "fallback",
+        "getAppQaTargetContextMismatches",
+        "getAppQaTargetVisualMismatches",
         "hasClientBuildIntent",
         "hasDeveloperTarget",
         "hasFixVerb",
@@ -7012,6 +7708,7 @@
         "match",
         "matches",
         "mentionsWork",
+        "missingControls",
         "normalizeEvidence",
         "normalizeText",
         "number",
@@ -7033,7 +7730,11 @@
         "repoSelectionText",
         "request",
         "requestWithRepo",
+        "requiredTargetContext",
+        "requiredValue",
         "risks",
+        "routePath",
+        "routeScan",
         "safeRequest",
         "safeTask",
         "safeTitle",
@@ -7047,6 +7748,8 @@
         "strictCostHeavyWork",
         "subscriptionBrief",
         "subscriptionRequest",
+        "targetContextMismatches",
+        "targetVisualMismatches",
         "tests",
         "text",
         "title",
@@ -7164,6 +7867,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "markDropshippingApprovalOutboxQueued",
         "preflightDropshippingShopifyDraft",
         "prepareDropshippingApprovalOutboxMigration",
@@ -7224,6 +7928,8 @@
         "DropshippingLaunchReadiness",
         "DropshippingLearningReview",
         "DropshippingLedgerEntry",
+        "DropshippingLiveProductSignal",
+        "DropshippingLiveProductSignalSource",
         "DropshippingMarketingCampaign",
         "DropshippingMarketingDepartment",
         "DropshippingOrder",
@@ -7275,6 +7981,7 @@
         "bestProduct",
         "blocked",
         "blockedUntil",
+        "blockers",
         "boardApprovals",
         "breakEvenOrders",
         "breakEvenOrdersAtBudget",
@@ -7303,6 +8010,7 @@
         "buildProductSubagentReviews",
         "buildProfitGuard",
         "buildScoutCandidateStatus",
+        "buildScoutLiveValidation",
         "buildScoutScorecard",
         "buildScoutValidation",
         "buildShopifyDraftGuardrail",
@@ -7320,6 +8028,7 @@
         "canRiskNowUsd",
         "canSpendUsd",
         "candidate",
+        "candidateKey",
         "candidateMatchesAutopilotFocus",
         "candidates",
         "capitalPlan",
@@ -7331,10 +8040,13 @@
         "channels",
         "cleanBaseUrl",
         "clickRatePercent",
+        "confidenceBonus",
         "config",
+        "connectedSources",
         "contentCalendar",
         "contentScore",
         "conversionRatePercent",
+        "coreReady",
         "createDropshippingProductScoutCandidate",
         "createDropshippingShopifyDraft",
         "createDropshippingSocialPostBatch",
@@ -7349,6 +8061,7 @@
         "decision",
         "decisionStatus",
         "demandScore",
+        "demandSignalRank",
         "deriveOrderStatus",
         "deriveProductStatus",
         "descriptionHtml",
@@ -7385,6 +8098,8 @@
         "encodedQuery",
         "endpoint",
         "engagementRatePercent",
+        "enrichScoutInputWithLiveSignals",
+        "enriched",
         "envFlag",
         "envMoney",
         "escapeHtml",
@@ -7403,6 +8118,8 @@
         "existingToday",
         "explicit",
         "externallyValidated",
+        "feed",
+        "filePath",
         "findCampaignById",
         "forcePaidTest",
         "formatForPlatform",
@@ -7417,6 +8134,7 @@
         "getDropshippingCeoSnapshot",
         "getDropshippingExecutionSetup",
         "getDropshippingLaunchReadiness",
+        "getDropshippingLiveSignalReadiness",
         "getDropshippingPolicyUrls",
         "getFulfillmentActionsPath",
         "getGrowthSprintsPath",
@@ -7450,10 +8168,12 @@
         "hasProductOrSupplierBlock",
         "hook",
         "hooks",
+        "hydratedEvidence",
         "isDatabaseUrlConfigured",
         "item",
         "itemIdSet",
         "items",
+        "json",
         "landedCostUsd",
         "largeCampaignBlockedReason",
         "largeCampaignReady",
@@ -7475,6 +8195,16 @@
         "launchReadyProducts",
         "legalPenalty",
         "libraryMatch",
+        "liveBySource",
+        "liveProductSignalSchema",
+        "liveProductSignalSourceSchema",
+        "liveProductSignalStatusSchema",
+        "liveScore",
+        "liveSignal",
+        "liveSignalReadiness",
+        "liveSignalScore",
+        "liveSignalsForCandidate",
+        "liveValidation",
         "loadAll",
         "loadApprovalOutbox",
         "loadApprovals",
@@ -7508,6 +8238,7 @@
         "metricool",
         "microBudget",
         "missing",
+        "missingCore",
         "missingEnv",
         "missingSignals",
         "mode",
@@ -7580,6 +8311,7 @@
         "productEconomicsPersistedSchema",
         "productName",
         "productScorecardPersistedSchema",
+        "productSignalKey",
         "productsText",
         "profitBasedTestUsd",
         "profitDiff",
@@ -7598,13 +8330,16 @@
         "qualityPenalty",
         "query",
         "queuedPosts",
+        "rank",
         "rankAutopilotCandidates",
         "ranked",
         "rankedCandidates",
         "raw",
         "rawCanSpendUsd",
+        "rawLiveValidation",
         "rawMode",
         "readJsonArray",
+        "readLiveProductSignalFeed",
         "readinessPercent",
         "ready",
         "reasons",
@@ -7648,7 +8383,9 @@
         "scopedCandidates",
         "scopedMetrics",
         "score",
+        "scoreBonus",
         "scoreDiff",
+        "scorePenalty",
         "scorecard",
         "scoutReadyCandidates",
         "scoutResult",
@@ -7688,6 +8425,8 @@
         "shopifyText",
         "shouldAnalyzeSocial",
         "shouldSuggestPaid",
+        "signalKey",
+        "signals",
         "snapshot",
         "socialBatch",
         "socialConfig",
@@ -7702,12 +8441,15 @@
         "socialSpendUsd",
         "socialViews",
         "sourceBonus",
+        "sourceCounts",
         "sprintRevenueTargetUsd",
         "sprintText",
         "stage",
         "stageGate",
         "stages",
         "status",
+        "statusScore",
+        "strongerDemandSignal",
         "subagentReviews",
         "summarizeLedger",
         "summary",
@@ -7738,7 +8480,10 @@
         "unfulfilledOrders",
         "userErrors",
         "value",
+        "verifiedSignals",
+        "verifiedSources",
         "visibleCount",
+        "weakerRisk",
         "webhookToken",
         "webhookUrl",
         "winner",
@@ -7906,6 +8651,7 @@
         "@octokit/rest"
       ],
       "exports": [
+        "GitHubAppQaTargetEvidence",
         "GitHubPullRequestReleaseStatus",
         "GitHubPullRequestUrlParts",
         "createIssue",
@@ -7945,6 +8691,7 @@
         "changesRequestedReviews",
         "checkRuns",
         "client",
+        "commentIncludesAppQaTargetEvidence",
         "completedChecks",
         "configuredToken",
         "createIssue",
@@ -7991,6 +8738,7 @@
         "pull",
         "pullNumber",
         "repoError",
+        "requiredValues",
         "reviewer",
         "segments",
         "statusList",
@@ -8386,12 +9134,14 @@
       "kind": "server",
       "imports": [
         "./app-qa-agent",
+        "./blackroom-control-routes",
         "./cybersecurity-agent",
         "./health-check",
         "./local-auth",
         "./market-news",
         "./promo-video-agent",
         "./reminder-scheduler",
+        "./revenue-engine",
         "./routes",
         "./session-config",
         "./static",
@@ -8616,6 +9366,44 @@
         "/api/auth/me",
         "/api/auth/register"
       ]
+    },
+    {
+      "path": "server/local-youtube-queue.ts",
+      "kind": "server",
+      "imports": [
+        "./radio-youtube-command",
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "LocalYoutubeQueueEntry",
+        "LocalYoutubeQueueStatus",
+        "enqueueLocalYoutubeAction",
+        "formatQueuedMessage",
+        "getLocalYoutubeQueue",
+        "getLocalYoutubeQueueEntry",
+        "getPendingLocalYoutubeQueue",
+        "updateLocalYoutubeQueueEntry"
+      ],
+      "symbols": [
+        "configured",
+        "dataDir",
+        "enqueueLocalYoutubeAction",
+        "entries",
+        "formatQueuedMessage",
+        "getLocalYoutubeQueue",
+        "getLocalYoutubeQueueEntry",
+        "getPendingLocalYoutubeQueue",
+        "idx",
+        "queuePath",
+        "raw",
+        "readQueue",
+        "resolveQueuePath",
+        "updateLocalYoutubeQueueEntry",
+        "writeQueue"
+      ],
+      "routes": []
     },
     {
       "path": "server/local-youtube-worker-queue.ts",
@@ -9908,6 +10696,14 @@
       "routes": []
     },
     {
+      "path": "server/replit_integrations/chat/._storage.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "server/replit_integrations/chat/index.ts",
       "kind": "server",
       "imports": [
@@ -10029,6 +10825,179 @@
       ]
     },
     {
+      "path": "server/revenue-engine-money-readiness-cli.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "RevenueMoneyReadinessCliOptions",
+        "RevenueMoneyReadinessMode",
+        "RevenueMoneyReadinessReport",
+        "buildRevenueMoneyReadinessReport",
+        "formatRevenueMoneyReadinessText",
+        "hydrateRevenueMoneyReadinessSnapshot",
+        "parseRevenueMoneyReadinessArgs",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "symbols": [
+        "RevenueMoneyReadinessCheck",
+        "RevenueMoneyReadinessSnapshot",
+        "arg",
+        "buildRevenueMoneyReadinessReport",
+        "command",
+        "firstSprintReady",
+        "formatRevenueMoneyReadinessText",
+        "getValue",
+        "hydrateRevenueMoneyReadinessSnapshot",
+        "mode",
+        "modeReady",
+        "moneyModeReady",
+        "parseRevenueMoneyReadinessArgs",
+        "plan",
+        "prefix",
+        "productionDatabaseMissing",
+        "productionLaunchReady",
+        "productionSetupReady",
+        "researchReady",
+        "safeDryRun",
+        "sessionSecretReady",
+        "setupPacket",
+        "userId",
+        "validateRevenueMoneyReadinessOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-engine-state-store.ts",
+      "kind": "server",
+      "imports": [
+        "@shared/schema",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "RevenueEngineStateAdapter",
+        "RevenueEngineStateCollection",
+        "RevenueEngineStateStore",
+        "RevenueEngineStateStoreHealth",
+        "RevenueEngineStateUpsert",
+        "RevenueEngineStateWrite",
+        "createDrizzleRevenueEngineStateAdapter",
+        "createRevenueEngineStateStore"
+      ],
+      "symbols": [
+        "RevenueEngineDatabase",
+        "RevenueEngineStateStore",
+        "adapter",
+        "attempt",
+        "createDrizzleRevenueEngineStateAdapter",
+        "createRevenueEngineStateStore",
+        "errorMessage",
+        "errors",
+        "loadDefaultAdapter",
+        "normalized",
+        "normalizedOwnerUserId",
+        "operation",
+        "requireKey",
+        "revisionKey",
+        "row",
+        "rows"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/revenue-stripe-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./push-notifications",
+        "./revenue-engine",
+        "./revenue-stripe",
+        "./storage",
+        "./telegram",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerRevenueStripeRoutes"
+      ],
+      "symbols": [
+        "accountId",
+        "botToken",
+        "channels",
+        "checks",
+        "claimed",
+        "closeResult",
+        "enabledTelegramOwners",
+        "event",
+        "existing",
+        "expectedAccountId",
+        "message",
+        "notified",
+        "notifyRevenuePayment",
+        "payment",
+        "processingAgeMs",
+        "push",
+        "rawBody",
+        "registerRevenueStripeRoutes",
+        "resolveRevenueOwnerUserId",
+        "shouldCloseOpportunity",
+        "signature",
+        "telegram",
+        "telegramConfig",
+        "userId",
+        "webhookSecret"
+      ],
+      "routes": [
+        "/api/stripe/revenue-readiness",
+        "/api/stripe/revenue-webhook"
+      ]
+    },
+    {
+      "path": "server/revenue-stripe.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueStripeEventPayload",
+        "RevenueStripePayment",
+        "assertRevenueStripeAccount",
+        "extractRevenueStripePayment",
+        "formatRevenueDealNotification",
+        "verifyRevenueStripeWebhook"
+      ],
+      "symbols": [
+        "STRIPE_SIGNATURE_TOLERANCE_SECONDS",
+        "SUPPORTED_PAYMENT_EVENTS",
+        "amountCents",
+        "assertRevenueStripeAccount",
+        "cleanString",
+        "clientEmail",
+        "clientName",
+        "currency",
+        "customerDetails",
+        "declaredAccount",
+        "entries",
+        "expected",
+        "extractRevenueStripePayment",
+        "formatMoney",
+        "formatRevenueDealNotification",
+        "leftBuffer",
+        "metadata",
+        "object",
+        "objectId",
+        "objectMetadata",
+        "parseStripeSignature",
+        "payload",
+        "paymentIntent",
+        "paymentStatus",
+        "rightBuffer",
+        "safeHexEqual",
+        "signatures",
+        "timestamp",
+        "verifyRevenueStripeWebhook"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/routes.ts",
       "kind": "server",
       "imports": [
@@ -10063,7 +11032,7 @@
         "./radio-template-agent",
         "./reminder-scheduler",
         "./revenue-engine",
-        "./shopify-oauth",
+        "./revenue-stripe-routes",
         "./storage",
         "./telegram-routes",
         "./trust-executor",
@@ -10102,6 +11071,7 @@
         "appProject",
         "appQaGateSchema",
         "appQaPrCommentBody",
+        "appQaTargetContext",
         "applyButton",
         "applyReadyButton",
         "approved",
@@ -10138,6 +11108,7 @@
         "config",
         "connected",
         "connection",
+        "contentSecurityPolicy",
         "contents",
         "copyButton",
         "copyPacket",
@@ -10203,6 +11174,7 @@
         "gateScript",
         "getWeekStart",
         "githubConnected",
+        "githubProjectOwnerUserId",
         "goLiveAuditHtml",
         "goal",
         "goals",
@@ -10242,6 +11214,7 @@
         "message",
         "minimalExternalPortalLauncherHtml",
         "missingFields",
+        "modulePath",
         "month",
         "monthParam",
         "nestedErrors",
@@ -10257,6 +11230,7 @@
         "operationalHealth",
         "operatorQueue",
         "opportunities",
+        "originalJson",
         "overdueTasks",
         "overview",
         "pack",
@@ -10295,8 +11269,6 @@
         "proofTodoHtml",
         "protocol",
         "publicBaseUrlFromRedirectUri",
-        "publicIssueDescription",
-        "publicIssueTitle",
         "qaAutomation",
         "query",
         "queue",
@@ -10315,6 +11287,7 @@
         "recommendations",
         "recurringTasks",
         "redirectUri",
+        "refreshed",
         "registerRoutes",
         "release",
         "removed",
@@ -10340,12 +11313,11 @@
         "safe",
         "safePortalUrl",
         "saleGate",
-        "sanitizedBuildBrief",
         "scan",
         "seenRecurringTitles",
-        "shop",
         "slots",
         "snoozedUntil",
+        "source",
         "sourceIngestionSprint",
         "sprint",
         "status",
@@ -10604,6 +11576,7 @@
         "/api/dropshipping-ceo/launch-readiness",
         "/api/dropshipping-ceo/learning-review",
         "/api/dropshipping-ceo/ledger",
+        "/api/dropshipping-ceo/live-signal-readiness",
         "/api/dropshipping-ceo/marketing-campaign",
         "/api/dropshipping-ceo/operating-cycle",
         "/api/dropshipping-ceo/order",
@@ -10697,6 +11670,7 @@
         "/api/revenue-engine",
         "/api/revenue-engine/agent-runs",
         "/api/revenue-engine/approval-decisions",
+        "/api/revenue-engine/assets/three.module.js",
         "/api/revenue-engine/automation-agent-command",
         "/api/revenue-engine/automation-intakes",
         "/api/revenue-engine/automation-intakes/answer",
@@ -10731,6 +11705,7 @@
         "/api/revenue-engine/money-sprint/public-candidates",
         "/api/revenue-engine/outreach-drafts",
         "/api/revenue-engine/outreach-drafts/approve",
+        "/api/revenue-engine/outreach-drafts/update",
         "/api/revenue-engine/outreach-outcome",
         "/api/revenue-engine/outreach-send",
         "/api/revenue-engine/plan",
@@ -10748,10 +11723,6 @@
         "/api/revenue-engine/website-delivery-workspace",
         "/api/revenue-engine/website-opportunities",
         "/api/revenue-engine/website-opportunities/close",
-        "/api/shopify/install",
-        "/api/shopify/oauth/callback",
-        "/api/shopify/oauth/start",
-        "/api/shopify/oauth/status",
         "/api/tasks",
         "/api/tasks/:id",
         "/api/tasks/by-title/:title",
@@ -10910,6 +11881,7 @@
       "kind": "server",
       "imports": [
         "./shopify-oauth",
+        "./user-context",
         "express"
       ],
       "exports": [
@@ -10919,7 +11891,9 @@
         "escapeHtml",
         "registerShopifyRoutes",
         "result",
-        "shop"
+        "shop",
+        "shopifyOwnerUserId",
+        "userId"
       ],
       "routes": [
         "/api/shopify/install",
@@ -11879,6 +12853,7 @@
         "InsertPriceAlert",
         "InsertPushSubscription",
         "InsertRadioTemplateAsset",
+        "InsertRevenueStripeEvent",
         "InsertScheduledReminder",
         "InsertTask",
         "InsertTelegramConfig",
@@ -11904,6 +12879,8 @@
         "PriceAlert",
         "PushSubscription",
         "RadioTemplateAsset",
+        "RevenueEngineState",
+        "RevenueStripeEvent",
         "RiskLevel",
         "ScheduledReminder",
         "Task",
@@ -11987,6 +12964,8 @@
         "priceAlerts",
         "pushSubscriptions",
         "radioTemplateAssets",
+        "revenueEngineState",
+        "revenueStripeEvents",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -12068,6 +13047,8 @@
         "priceAlerts",
         "pushSubscriptions",
         "radioTemplateAssets",
+        "revenueEngineState",
+        "revenueStripeEvents",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -12080,6 +13061,38 @@
         "weeklyTasks",
         "yearlyGoals"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/._dropshipping-ceo.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._radio-youtube-command.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._rate-limit.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._user-context.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -12163,6 +13176,7 @@
         "runManual",
         "runMorningDeep",
         "runNow",
+        "runRevenueTarget",
         "salesNotes",
         "salesOnlyBody",
         "scan",
@@ -12233,6 +13247,58 @@
       "routes": []
     },
     {
+      "path": "tests/blackroom-content-agent.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-content-agent.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "fetcher",
+        "first",
+        "input",
+        "jobs",
+        "parsed",
+        "partial",
+        "plan",
+        "scores",
+        "second",
+        "sourceVideos",
+        "url",
+        "video",
+        "videos"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-daily-queue.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "claimed",
+        "completed",
+        "directory",
+        "late",
+        "migrated",
+        "now",
+        "overnight",
+        "queuePath",
+        "retried",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/blackroom-links.test.ts",
       "kind": "test",
       "imports": [
@@ -12248,6 +13314,23 @@
         "performance",
         "result",
         "snapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-local-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-local-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "entry",
+        "ledger",
+        "project",
+        "prompt"
       ],
       "routes": []
     },
@@ -12448,22 +13531,34 @@
       "path": "tests/ceo-ownership.test.ts",
       "kind": "test",
       "imports": [
+        "../server/routes",
+        "express",
         "node:assert/strict",
         "node:fs",
+        "node:http",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "address",
+        "app",
         "assistantSource",
+        "baseUrl",
         "clippersSource",
         "indexSource",
         "localAuthSource",
+        "previousAllowDevFallback",
+        "previousDefaultUserId",
         "promoSource",
+        "requests",
+        "response",
         "revenueSource",
         "routeCalls",
         "routesSource",
         "schedulerSource",
         "scriptSource",
+        "server",
+        "shopifyRoutesSource",
         "source",
         "storageSource",
         "telegramSource",
@@ -12731,14 +13826,25 @@
       "path": "tests/developer-autopilot-wiring.test.ts",
       "kind": "test",
       "imports": [
+        "../client/src/lib/revenue-engine-delivery-requests",
         "node:assert/strict",
         "node:fs",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "appQaGateRoute",
+        "appQaGateRouteEnd",
+        "appQaGateRouteStart",
+        "appSource",
+        "automationRequest",
         "autopilotIndex",
+        "baseWorkspace",
         "connectorMutationSource",
+        "deliverMutation",
+        "deliverMutationEnd",
+        "deliverMutationStart",
+        "deliveryRequestSource",
         "engineSource",
         "genericIndex",
         "githubHandoffRoute",
@@ -12749,19 +13855,26 @@
         "mutationEnd",
         "mutationStart",
         "routeSource",
+        "safeRunEnd",
+        "safeRunEndpoints",
+        "safeRunStart",
         "scoutDispatchEnd",
         "scoutDispatchMutation",
         "scoutDispatchStart",
         "serverSource",
         "source",
         "uiSource",
+        "websiteMissingReleaseRequest",
         "websiteOpportunityCloseEnd",
         "websiteOpportunityCloseMutation",
-        "websiteOpportunityCloseStart"
+        "websiteOpportunityCloseStart",
+        "websiteRequest"
       ],
       "routes": [
+        "/api/revenue-engine/delivery-workspaces/app-qa-gate",
         "/api/revenue-engine/delivery-workspaces/github-handoff",
-        "/api/revenue-engine/delivery-workspaces/pr-status"
+        "/api/revenue-engine/delivery-workspaces/pr-status",
+        "/api/revenue-engine/delivery-workspaces/release-gate"
       ]
     },
     {
@@ -12783,6 +13896,7 @@
         "handoff",
         "message",
         "request",
+        "requiredTargetContext",
         "safeTitle",
         "title"
       ],
@@ -12848,6 +13962,8 @@
         "order",
         "originalDatabaseUrl",
         "originalExpoPublicDomain",
+        "originalLiveProductSignalsJson",
+        "originalLiveProductSignalsPath",
         "originalMetricoolMcpUrl",
         "originalMetricoolUserId",
         "originalMetricoolUserToken",
@@ -12919,11 +14035,13 @@
         "apiFailure",
         "buildReleaseStatusInput",
         "fakeAppQaLogin",
+        "genericComment",
         "headSha",
         "missingHead",
         "pendingChecks",
         "ready",
         "staleApproval",
+        "targetedComment",
         "untrusted"
       ],
       "routes": []
@@ -13028,6 +14146,38 @@
         "result",
         "stored",
         "withEnv"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/local-youtube-queue.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/local-youtube-queue",
+        "../server/radio-youtube-command",
+        "node:assert/strict",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "COUNT",
+        "all",
+        "done",
+        "e1",
+        "e2",
+        "entry",
+        "found",
+        "msg",
+        "notFound",
+        "pending",
+        "processedAt",
+        "processing",
+        "queuePath",
+        "result",
+        "tmpQueuePath"
       ],
       "routes": []
     },
@@ -13223,213 +14373,98 @@
       "routes": []
     },
     {
-      "path": "tests/revenue-engine.test.ts",
+      "path": "tests/revenue-engine-money-readiness-cli.test.ts",
       "kind": "test",
       "imports": [
-        "../server/revenue-engine",
-        "../server/routes",
-        "express",
+        "../server/revenue-engine-money-readiness-cli",
         "node:assert/strict",
-        "node:fs",
-        "node:http",
-        "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
-        "answered",
-        "app",
-        "approval",
-        "approved",
-        "attemptDelivery",
-        "bareStripePrefix",
-        "baseInput",
-        "beforeSprint",
-        "blocked",
-        "blockedClose",
-        "blockedDelivery",
-        "blockedSend",
-        "buildHandoff",
-        "buildOpportunity",
-        "call",
-        "candidate",
-        "cappedDraft",
-        "cappedQueue",
-        "cashCollectedUsd",
-        "close",
-        "closeResult",
-        "closeWithWeakNarrativePayment",
-        "closeWithWeakPaymentConfirmation",
-        "closeWithoutExplicitPaymentConfirmation",
-        "collectOpportunity",
-        "commandInput",
-        "connectorResult",
-        "contactFormItem",
-        "converted",
-        "createApprovedWebsiteDraftForTest",
-        "createSoldWebsiteWorkspaceForTest",
-        "created",
-        "delivered",
-        "delivery",
-        "depositOutcome",
-        "directWorkspace",
-        "dirtyRow",
-        "draft",
-        "draftB",
-        "draftOne",
-        "draftResult",
-        "draftTen",
-        "drafts",
-        "duplicate",
-        "duplicateDifferentTask",
-        "duplicateHandoff",
-        "duplicateSubmit",
-        "fakeClose",
-        "first",
-        "genericCategory",
-        "genericGoogleSearch",
-        "genericInstagram",
-        "genericYelp",
-        "handler",
-        "handoff",
-        "handoffItem",
-        "html",
-        "incompleteClose",
-        "initial",
-        "instagramItem",
-        "insufficientCash",
-        "invalid",
-        "invalidLedger",
-        "invoke",
-        "lead",
-        "leadA",
-        "leadB",
-        "leadOne",
-        "leadResult",
-        "leadStatusBeforeRepoBlock",
-        "leadTen",
-        "leads",
-        "legacyWorkspace",
-        "longEvidence",
-        "longNotes",
-        "longRunId",
-        "longSourceTaskId",
-        "lookup",
-        "mainBranchHandoff",
-        "mismatchedPayment",
-        "missingEvidence",
-        "missingPaymentEvidence",
-        "missingRepoHandoff",
-        "mission",
-        "mockup",
-        "newer",
-        "newerDraft",
-        "newerOpportunity",
-        "nextDraft",
-        "oldOpportunity",
-        "oldReady",
-        "older",
-        "olderClosure",
-        "olderPacket",
-        "opportunities",
-        "opportunity",
-        "opportunityOne",
-        "opportunityResult",
-        "opportunityTen",
-        "originalDatabaseUrl",
-        "originalDateNow",
-        "originalNodeEnv",
-        "originalResendApiKey",
-        "originalResendFromEmail",
-        "originalRevenueEngineFromEmail",
-        "originalRevenueMockupsDir",
-        "outcome",
-        "overflowDraft",
-        "pack",
-        "parsed",
-        "partialDeposit",
-        "paths",
-        "persistedDraft",
-        "persistedOpportunity",
-        "persistenceItem",
-        "plainPrUrl",
-        "plan",
-        "postSaleSnapshot",
-        "prTabUrl",
-        "prUrl",
-        "preHandoffSnapshot",
-        "preservedOpportunity",
-        "preview",
-        "previewPath",
-        "privateSources",
-        "qaReady",
-        "queryPrUrl",
-        "queue",
-        "quote",
-        "radar",
-        "readiness",
-        "readyDraft",
-        "readyLead",
-        "reboundAttempt",
-        "related",
-        "releaseGate",
-        "reloadedSnapshot",
-        "reply",
-        "repoSaved",
-        "requiredDepositUsd",
-        "res",
-        "response",
+        "base",
+        "output",
+        "report",
         "result",
-        "retriedDelivery",
-        "retry",
-        "review",
-        "routeLayer",
-        "row",
-        "saleGate",
-        "scopedOnly",
-        "scopedOnlyResult",
-        "scopedSnapshot",
-        "second",
-        "secondHandoff",
-        "sellWebsiteOpportunityForTest",
-        "sendResult",
-        "server",
         "snapshot",
-        "soldHandoffItem",
-        "soldOpportunity",
-        "spoofedPlatform",
-        "sprint",
-        "statusBeforeApproval",
-        "taskId",
-        "testAgentRunsPath",
-        "testApprovalDecisionsPath",
-        "testAutomationIntakesPath",
-        "testAutomationOpportunitiesPath",
-        "testDailyScoutSprintsPath",
-        "testDeliveryWorkspacesPath",
-        "testImprovementReviewsPath",
-        "testLeadsPath",
-        "testLedgerPath",
-        "testMockupsDir",
-        "testOutreachPath",
-        "testPublicLeadCandidatesPath",
-        "testScoutingMissionsPath",
-        "testWebsiteOpportunitiesPath",
-        "token",
-        "tokenMatchingInstagramExplore",
-        "tokenMatchingYelpSearch",
-        "trustedDelivery",
+        "snapshotFixture"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-engine-public-scout-connector.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/revenue-engine-public-scout-connector",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "connectorContext",
+        "payload",
+        "request",
+        "resultRow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-engine-state-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-engine-state-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "createMemoryAdapter",
+        "current",
+        "first",
+        "firstBlocked",
+        "firstStore",
+        "health",
+        "key",
+        "load",
+        "loaded",
+        "memory",
+        "originalUpsert",
+        "row",
+        "rows",
+        "second",
+        "staleStore",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/revenue-stripe.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-stripe",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "event",
+        "message",
+        "payload",
+        "payment",
+        "paymentIntent",
+        "paymentIntentEvent",
+        "secret",
+        "signature",
+        "signed",
+        "signedPayload",
+        "timestamp",
+        "unbound",
+        "unboundEvent",
+        "unpaid",
+        "unpaidEvent",
         "unrelated",
-        "untrusted",
-        "untrustedDelivery",
-        "updated",
-        "updatedSprint",
-        "validRow",
-        "weakNarrativeEvidence",
-        "weakPaymentEvidence",
-        "workspace",
-        "workspaceId",
-        "wrongKind"
+        "unrelatedEvent"
       ],
       "routes": []
     },
@@ -13643,6 +14678,14 @@
       "routes": []
     },
     {
+      "path": "threat_model.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "tsconfig.json",
       "kind": "other",
       "imports": [],
@@ -13719,12 +14762,19 @@
     "vite.config.ts"
   ],
   "tests": [
+    "tests/._dropshipping-ceo.test.ts",
+    "tests/._radio-youtube-command.test.ts",
+    "tests/._rate-limit.test.ts",
+    "tests/._user-context.test.ts",
     "tests/ai-cost-notifications.test.ts",
     "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
     "tests/automation-registry.test.ts",
+    "tests/blackroom-content-agent.test.ts",
+    "tests/blackroom-daily-queue.test.ts",
     "tests/blackroom-links.test.ts",
+    "tests/blackroom-local-worker.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
     "tests/ceo-briefing.test.ts",
@@ -13755,6 +14805,7 @@
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
     "tests/local-auth.test.ts",
+    "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
     "tests/metricool-tracking.test.ts",
@@ -13764,7 +14815,11 @@
     "tests/rate-limit.test.ts",
     "tests/reminder-scheduler.test.ts",
     "tests/revenue-engine-delivery-qa.test.ts",
+    "tests/revenue-engine-money-readiness-cli.test.ts",
+    "tests/revenue-engine-public-scout-connector.test.ts",
+    "tests/revenue-engine-state-store.test.ts",
     "tests/revenue-engine.test.ts",
+    "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/telegram-chat-flow.test.ts",

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const BLACKROOM_QUEUE_VERSION = 2;
@@ -325,4 +325,42 @@ export async function writeBlackRoomQueue(state: BlackRoomQueueState, filePath =
   const temporaryPath = `${filePath}.tmp`;
   await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await rename(temporaryPath, filePath);
+}
+
+export async function withBlackRoomQueueLock<T>(
+  filePath: string,
+  operation: () => Promise<T>,
+  timeoutMs = 10_000,
+): Promise<T> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const lockPath = `${filePath}.lock`;
+  const deadline = Date.now() + timeoutMs;
+  let lock;
+  while (!lock) {
+    try {
+      lock = await open(lockPath, "wx");
+      await lock.write(String(process.pid));
+    } catch (error: any) {
+      if (error?.code !== "EEXIST") throw error;
+      const existingPid = Number((await readFile(lockPath, "utf8").catch(() => "0")).trim());
+      let alive = false;
+      if (Number.isInteger(existingPid) && existingPid > 0) {
+        try { process.kill(existingPid, 0); alive = true; } catch { alive = false; }
+      } else {
+        const lockStat = await stat(lockPath).catch(() => null);
+        alive = Boolean(lockStat && Date.now() - lockStat.mtimeMs < 30_000);
+      }
+      if (!alive) {
+        await unlink(lockPath).catch(() => undefined);
+        continue;
+      }
+      if (Date.now() >= deadline) throw new Error("Timed out waiting for BlackRoom queue lock");
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  try { return await operation(); }
+  finally {
+    await lock.close();
+    await unlink(lockPath).catch(() => undefined);
+  }
 }
