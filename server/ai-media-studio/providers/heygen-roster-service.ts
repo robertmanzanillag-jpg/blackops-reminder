@@ -9,8 +9,10 @@ import type { TenantScope } from "../core/resource-domain";
 import {
   HeyGenRosterError,
   toHeyGenRosterStatus,
+  type HeyGenResolvedAccountContext,
   type HeyGenRosterAccountResolver,
   type HeyGenRosterNativeMember,
+  type HeyGenRosterRecord,
   type HeyGenRosterRepository,
 } from "./heygen-roster-contracts";
 
@@ -70,9 +72,7 @@ export class HeyGenRosterService {
     private readonly now: () => string = () => new Date().toISOString(),
   ) {}
 
-  async configure(scope: TenantScope, unsafeInput: unknown): Promise<ConfigureHeyGenRosterResponse> {
-    if (!validScope(scope)) throw new HeyGenRosterError("INVALID_REQUEST");
-    const request = parseRequest(unsafeInput);
+  private async resolveActiveAccount(scope: TenantScope): Promise<HeyGenResolvedAccountContext> {
     let account;
     try {
       account = await this.accountResolver.resolve(scope);
@@ -83,6 +83,22 @@ export class HeyGenRosterService {
       || account.credentialVersion < 1) {
       throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
     }
+    return account;
+  }
+
+  private assertRecordMatchesActiveAccount(
+    record: HeyGenRosterRecord,
+    account: HeyGenResolvedAccountContext,
+  ): void {
+    if (record.providerAccountId !== account.providerAccountId || record.credentialVersion > account.credentialVersion) {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+  }
+
+  async configure(scope: TenantScope, unsafeInput: unknown): Promise<ConfigureHeyGenRosterResponse> {
+    if (!validScope(scope)) throw new HeyGenRosterError("INVALID_REQUEST");
+    const request = parseRequest(unsafeInput);
+    const account = await this.resolveActiveAccount(scope);
 
     const requestDigest = stableRequestDigest(request);
     const rosterId = opaqueId("roster", `${scope.ownerUserId}\0${scope.workspaceId}\0${request.idempotencyKey}`);
@@ -113,8 +129,22 @@ export class HeyGenRosterService {
     if (!validScope(scope) || !/^roster_[a-f0-9]{24}$/u.test(rosterId)) {
       throw new HeyGenRosterError("INVALID_REQUEST");
     }
+    const account = await this.resolveActiveAccount(scope);
     try {
       const record = await this.repository.get(scope, rosterId);
+      if (record) this.assertRecordMatchesActiveAccount(record, account);
+      return record ? toHeyGenRosterStatus(record) : undefined;
+    } catch {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+  }
+
+  async currentStatus(scope: TenantScope): Promise<HeyGenRosterStatus | undefined> {
+    if (!validScope(scope)) throw new HeyGenRosterError("INVALID_REQUEST");
+    const account = await this.resolveActiveAccount(scope);
+    try {
+      const record = await this.repository.getCurrent(scope);
+      if (record) this.assertRecordMatchesActiveAccount(record, account);
       return record ? toHeyGenRosterStatus(record) : undefined;
     } catch {
       throw new HeyGenRosterError("ROSTER_UNAVAILABLE");

@@ -1,13 +1,36 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { mediaStudioCoreApi } from "./api";
 import type { MediaLibraryRequest, ProviderResourceKind } from "./types";
 
 export const coreStudioKeys = {
   all: ["ai-media-studio", "core"] as const,
   influencers: ["ai-media-studio", "core", "influencers"] as const,
+  resourceCatalogs: ["ai-media-studio", "core", "provider-resources"] as const,
   resources: (kind?: ProviderResourceKind) => ["ai-media-studio", "core", "provider-resources", kind ?? "all"] as const,
   assets: (filters: MediaLibraryRequest) => ["ai-media-studio", "core", "media-assets", filters] as const,
+  heyGenRoster: ["ai-media-studio", "core", "heygen-roster"] as const,
 };
+
+export function useHeyGenRoster() {
+  return useQuery({
+    queryKey: coreStudioKeys.heyGenRoster,
+    queryFn: mediaStudioCoreApi.heyGenRoster,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useConfigureHeyGenRoster() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: mediaStudioCoreApi.configureHeyGenRoster,
+    onSuccess: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.influencers }),
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.resourceCatalogs }),
+      queryClient.invalidateQueries({ queryKey: ["ai-media-studio", "options"] }),
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRoster }),
+    ]),
+  });
+}
 
 export function useInfluencers() {
   return useInfiniteQuery({

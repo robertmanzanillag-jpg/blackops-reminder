@@ -55,6 +55,7 @@ export type ConfigureHeyGenRosterRecord = HeyGenRosterRecord;
 export interface HeyGenRosterRepository {
   /** Atomically creates or returns an exact idempotent replay. */
   configure(input: ConfigureHeyGenRosterRecord): Promise<HeyGenRosterRecord>;
+  getCurrent(scope: TenantScope): Promise<HeyGenRosterRecord | undefined>;
   get(scope: TenantScope, rosterId: string): Promise<HeyGenRosterRecord | undefined>;
 }
 

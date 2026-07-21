@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T08:25:27.847Z",
+  "generatedAt": "2026-07-21T10:14:48.177Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,33 +85,37 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 664,
-    "filesIndexed": 569,
-    "imports": 2261,
-    "routes": 487,
-    "symbols": 10727
+    "filesVisible": 680,
+    "filesIndexed": 581,
+    "imports": 2331,
+    "routes": 488,
+    "symbols": 11015
   },
   "directories": {
-    "migrations/ai-media-studio": {
-      "files": 23,
-      "indexed": 1,
+    "client/src": {
+      "files": 152,
+      "indexed": 150,
       "kinds": {
-        "other": 22,
-        "docs": 1
+        "other": 43,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 23
       }
     },
     "server/ai-media-studio": {
-      "files": 106,
-      "indexed": 104,
+      "files": 112,
+      "indexed": 108,
       "kinds": {
-        "server": 106
+        "server": 112
       }
     },
     "tests": {
-      "files": 129,
-      "indexed": 124,
+      "files": 137,
+      "indexed": 130,
       "kinds": {
-        "test": 129
+        "test": 137
       }
     },
     ".agents/skills": {
@@ -152,18 +156,6 @@
         "other": 13
       }
     },
-    "client/src": {
-      "files": 151,
-      "indexed": 149,
-      "kinds": {
-        "other": 42,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 23
-      }
-    },
     "docs/ai-media-studio": {
       "files": 10,
       "indexed": 10,
@@ -176,6 +168,14 @@
       "indexed": 11,
       "kinds": {
         "docs": 12
+      }
+    },
+    "migrations/ai-media-studio": {
+      "files": 23,
+      "indexed": 1,
+      "kinds": {
+        "other": 22,
+        "docs": 1
       }
     },
     "script": {
@@ -207,10 +207,10 @@
       }
     },
     "shared": {
-      "files": 7,
-      "indexed": 7,
+      "files": 8,
+      "indexed": 8,
       "kinds": {
-        "shared": 7
+        "shared": 8
       }
     },
     "shared/models": {
@@ -2354,7 +2354,8 @@
       "path": "client/src/features/ai-media-studio/core/api.ts",
       "kind": "other",
       "imports": [
-        "./types"
+        "./types",
+        "@shared/ai-media-studio-heygen-roster"
       ],
       "exports": [
         "CoreApiBoundary",
@@ -2374,6 +2375,7 @@
         "query",
         "queryString",
         "requestJson",
+        "requestOptionalJson",
         "response"
       ],
       "routes": []
@@ -2439,6 +2441,7 @@
       "path": "client/src/features/ai-media-studio/core/core-studio-workspace.tsx",
       "kind": "other",
       "imports": [
+        "./heygen-roster-setup",
         "./influencer-workspace",
         "./media-library",
         "lucide-react"
@@ -2448,6 +2451,60 @@
       ],
       "symbols": [
         "CoreStudioWorkspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/heygen-roster-setup.tsx",
+      "kind": "other",
+      "imports": [
+        "./hooks",
+        "./types",
+        "@/components/ui/button",
+        "@/components/ui/label",
+        "@shared/ai-media-studio-heygen-roster",
+        "lucide-react",
+        "react",
+        "react-hook-form"
+      ],
+      "exports": [
+        "HeyGenRosterSetup",
+        "emptyHeyGenRosterMember",
+        "newHeyGenRosterAttemptKey"
+      ],
+      "symbols": [
+        "Attempt",
+        "HeyGenRosterSetup",
+        "RosterFormValues",
+        "TextField",
+        "attemptRef",
+        "bytes",
+        "controlCharacterPattern",
+        "currentRoster",
+        "emptyHeyGenRosterMember",
+        "errorId",
+        "field",
+        "fieldErrors",
+        "fingerprint",
+        "firstInvalidMemberField",
+        "hintId",
+        "id",
+        "initialValues",
+        "inputClass",
+        "invalid",
+        "languagePattern",
+        "members",
+        "mutation",
+        "nativeIdPattern",
+        "newHeyGenRosterAttemptKey",
+        "normalizedMembers",
+        "parsed",
+        "plannedVideoCount",
+        "prefix",
+        "rosterQuery",
+        "setupBlocked",
+        "statusRef",
+        "submit"
       ],
       "routes": []
     },
@@ -2462,6 +2519,8 @@
       "exports": [
         "coreStudioKeys",
         "useAssetDelivery",
+        "useConfigureHeyGenRoster",
+        "useHeyGenRoster",
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
@@ -2475,6 +2534,8 @@
         "remove",
         "update",
         "useAssetDelivery",
+        "useConfigureHeyGenRoster",
+        "useHeyGenRoster",
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
@@ -2651,7 +2712,8 @@
       "path": "client/src/features/ai-media-studio/core/types.ts",
       "kind": "other",
       "imports": [
-        "@shared/ai-media-studio-core"
+        "@shared/ai-media-studio-core",
+        "@shared/ai-media-studio-heygen-roster"
       ],
       "exports": [
         "AssetDelivery",
@@ -7808,7 +7870,10 @@
         "./operations-runtime",
         "./persistence",
         "./ports",
+        "./providers/drizzle-heygen-roster-repository",
         "./providers/fake-video-provider",
+        "./providers/heygen-roster-contracts",
+        "./providers/heygen-roster-service",
         "./providers/heygen-video-provider",
         "./routes",
         "./script-service",
@@ -8149,6 +8214,7 @@
         "result",
         "resultRows",
         "rows",
+        "safeArtifacts",
         "safeDisplay",
         "selectionDigest",
         "selectionRows",
@@ -8298,9 +8364,11 @@
         "./production-runtime",
         "./provider-connection-contracts",
         "./provider-connection-in-memory",
+        "./role-token-vault-contracts",
         "./s3-kms-authorization-code-vault",
         "./s3-kms-envelope",
         "./s3-kms-pkce-vault",
+        "./s3-kms-role-token-vault",
         "./s3-kms-token-vault",
         "./service",
         "./vault-cleanup-contracts",
@@ -8378,19 +8446,27 @@
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-oauth",
-        "../core/resource-domain"
+        "../core/resource-domain",
+        "node:crypto"
       ],
       "exports": [
         "ClaimOAuthProviderConnectionStage",
+        "CreateOAuthProviderActivationAccount",
         "CreateOAuthProviderConnectionAttempt",
+        "FinalizeOAuthProviderActivation",
         "MarkOAuthProviderExchangeComplete",
         "OAUTH_PROVIDER_CONNECTION_CAPABILITIES",
         "OAUTH_PROVIDER_CONNECTION_STAGES",
         "OAUTH_PROVIDER_GRANT_FAMILIES",
+        "OAUTH_PROVIDER_MANIFEST_REVISIONS",
         "OAUTH_PROVIDER_SCOPE_ALLOWLISTS",
         "OAUTH_PROVIDER_TARGET_KINDS",
         "OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES",
         "OAUTH_PROVIDER_VERIFIED_TASK_CAPABILITIES",
+        "OAuthProviderActivationAccount",
+        "OAuthProviderActivationArtifactEvidence",
+        "OAuthProviderActivationRepository",
+        "OAuthProviderActivationResult",
         "OAuthProviderConnectionActionableStage",
         "OAuthProviderConnectionAttempt",
         "OAuthProviderConnectionCapability",
@@ -8402,6 +8478,7 @@
         "OAuthProviderConnectionRepository",
         "OAuthProviderConnectionStage",
         "OAuthProviderGrantFamily",
+        "OAuthProviderSelectionDigestEvidence",
         "OAuthProviderTargetCandidate",
         "OAuthProviderTargetDto",
         "OAuthProviderTargetKind",
@@ -8410,9 +8487,13 @@
         "OAuthProviderTokenLifetime",
         "RecordOAuthProviderDiscovery",
         "SelectOAuthProviderTarget",
+        "deriveOAuthProviderAuthorizedDigest",
         "deriveOAuthProviderCapabilities",
+        "deriveOAuthProviderSelectionDigest",
         "isCompatibleOAuthProviderTarget",
+        "oauthProviderActivationVaultReference",
         "toOAuthProviderTargetDto",
+        "validateOAuthProviderActivationArtifacts",
         "validateOAuthProviderScopes",
         "validateOAuthProviderTokenArtifacts"
       ],
@@ -8423,18 +8504,34 @@
         "OAUTH_PROVIDER_TARGET_KINDS",
         "OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES",
         "OAuthProviderConnectionError",
+        "UUID",
+        "allowedRevocationBound",
         "allowlist",
+        "artifact",
+        "byRole",
+        "canonical",
+        "canonicalDigestList",
+        "capabilities",
+        "cloneLifetime",
+        "deriveOAuthProviderAuthorizedDigest",
         "deriveOAuthProviderCapabilities",
+        "deriveOAuthProviderSelectionDigest",
+        "digestCanonical",
         "expiryMs",
         "isCompatibleOAuthProviderTarget",
         "isUniqueSafeList",
         "nowMs",
+        "oauthProviderActivationVaultReference",
+        "opaqueBinding",
         "parseIso",
         "parsed",
         "revalidateMs",
         "roles",
+        "scopeRequirements",
         "taskMap",
         "toOAuthProviderTargetDto",
+        "validateActivationLifetime",
+        "validateOAuthProviderActivationArtifacts",
         "validateOAuthProviderScopes",
         "validateOAuthProviderTokenArtifacts"
       ],
@@ -8444,6 +8541,7 @@
       "path": "server/ai-media-studio/oauth/provider-connection-in-memory.ts",
       "kind": "server",
       "imports": [
+        "../../../shared/ai-media-studio-oauth",
         "../core/resource-domain",
         "./provider-connection-contracts"
       ],
@@ -8455,15 +8553,28 @@
         "MAX_CANDIDATES",
         "SAFE",
         "SHA256",
+        "account",
+        "accountKey",
+        "accountMatchesAuthorization",
+        "accountStorageKey",
         "actualScopes",
         "advance",
         "allowedScopes",
+        "artifactValidationNow",
+        "artifacts",
         "attempt",
+        "authorizedDigest",
         "candidate",
         "candidateIds",
         "candidates",
+        "canonical",
+        "canonicalCapabilities",
+        "canonicalSafeList",
+        "capabilities",
         "clone",
+        "cloneAccount",
         "createdMs",
+        "descriptor",
         "displayText",
         "exactList",
         "expiresMs",
@@ -8471,18 +8582,25 @@
         "identityKey",
         "immutableAllowlist",
         "key",
+        "localCapabilities",
         "nowMs",
+        "other",
         "parsed",
         "progressStage",
         "reclaim",
         "required",
         "requiredScopes",
+        "sameArtifacts",
+        "sameCanonicalList",
+        "sameLifetime",
         "sameList",
         "storageKey",
         "targetKeys",
         "targetKindFor",
         "timestamp",
         "updated",
+        "updatedAttempt",
+        "validateActivationCommand",
         "verifiedTasks"
       ],
       "routes": []
@@ -9467,6 +9585,84 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/providers/drizzle-heygen-roster-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-heygen-roster",
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "./heygen-roster-contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleHeyGenRosterRepository",
+        "HeyGenRosterDatabase",
+        "HeyGenRosterExecutor",
+        "createDrizzleHeyGenRosterAccountResolver"
+      ],
+      "symbols": [
+        "CONFIGURATION_KEY",
+        "DrizzleHeyGenRosterRepository",
+        "ExecuteResult",
+        "MAX_DURABLE_ROSTERS_PER_ACCOUNT",
+        "StoredRoster",
+        "StoredRosterNamespace",
+        "account",
+        "accountId",
+        "actual",
+        "avatarResourceId",
+        "candidate",
+        "candidates",
+        "canonicalKey",
+        "createDrizzleHeyGenRosterAccountResolver",
+        "createInfluencer",
+        "credentialVersion",
+        "digestMembers",
+        "displayName",
+        "entries",
+        "existing",
+        "existingPersona",
+        "expectedRosterId",
+        "hasExactKeys",
+        "id",
+        "influencerId",
+        "inserted",
+        "members",
+        "metadata",
+        "number",
+        "object",
+        "opaqueId",
+        "parseMember",
+        "parseNamespace",
+        "parseStoredRoster",
+        "parsed",
+        "persona",
+        "providerAccountId",
+        "raced",
+        "record",
+        "records",
+        "replay",
+        "request",
+        "resourceMetadata",
+        "result",
+        "root",
+        "rosterValues",
+        "rows",
+        "sameReplay",
+        "slug",
+        "stored",
+        "text",
+        "updated",
+        "upsertResource",
+        "validDate",
+        "validMembers",
+        "values",
+        "voiceResourceId"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/providers/fake-video-provider.ts",
       "kind": "server",
       "imports": [
@@ -9495,6 +9691,80 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/providers/heygen-roster-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-heygen-roster",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "ConfigureHeyGenRosterRecord",
+        "HEYGEN_ROSTER_ERROR_CODES",
+        "HeyGenResolvedAccountContext",
+        "HeyGenRosterAccountResolver",
+        "HeyGenRosterError",
+        "HeyGenRosterErrorCode",
+        "HeyGenRosterNativeMember",
+        "HeyGenRosterRecord",
+        "HeyGenRosterRepository",
+        "toHeyGenRosterStatus"
+      ],
+      "symbols": [
+        "HEYGEN_ROSTER_ERROR_CODES",
+        "HeyGenRosterError",
+        "toHeyGenRosterStatus"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-roster-in-memory.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./heygen-roster-contracts"
+      ],
+      "exports": [
+        "InMemoryHeyGenRosterRepository"
+      ],
+      "symbols": [
+        "InMemoryHeyGenRosterRepository",
+        "clone",
+        "existing",
+        "idempotencyStorageKey",
+        "record",
+        "scopeKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-roster-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-heygen-roster",
+        "../core/resource-domain",
+        "./heygen-roster-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "HeyGenRosterService"
+      ],
+      "symbols": [
+        "FORBIDDEN_FIELD",
+        "HeyGenRosterService",
+        "assertPlainPublicInput",
+        "child",
+        "opaqueId",
+        "parseRequest",
+        "record",
+        "request",
+        "requestDigest",
+        "rosterId",
+        "stableRequestDigest",
+        "validScope"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/providers/heygen-video-provider.ts",
       "kind": "server",
       "imports": [
@@ -9510,12 +9780,19 @@
         "parseHeyGenResourceMap"
       ],
       "symbols": [
+        "HEYGEN_API_ORIGIN",
         "HeyGenVideoProvider",
+        "MAX_HEYGEN_RESOURCE_ID_LENGTH",
+        "MAX_HEYGEN_SCRIPT_LENGTH",
+        "assertOpaqueProviderId",
         "avatarId",
+        "baseUrl",
         "configured",
         "createHeyGenResourceResolver",
         "entries",
+        "heyGenDimension",
         "influencers",
+        "isOpaqueProviderId",
         "parseHeyGenResourceMap",
         "parsed",
         "payload",
@@ -9851,6 +10128,7 @@
         "../../shared/ai-media-studio",
         "../../shared/ai-media-studio-core",
         "../../shared/ai-media-studio-governance",
+        "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
@@ -9869,6 +10147,8 @@
         "./ports",
         "./provider-webhooks",
         "./providers/fake-video-provider",
+        "./providers/heygen-roster-contracts",
+        "./providers/heygen-roster-service",
         "./providers/heygen-video-provider",
         "./publishing/domain",
         "./publishing/worker",
@@ -9904,11 +10184,13 @@
         "authenticatedPayload",
         "available",
         "candidate",
+        "configured",
         "configuredDatabase",
         "core",
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
         "createDefaultDurableGovernanceRepository",
+        "createDefaultDurableHeyGenRosterRuntime",
         "createDefaultProviderWebhookAccountResolver",
         "created",
         "dashboard",
@@ -9936,6 +10218,7 @@
         "governanceSelection",
         "hasMore",
         "heyGenProvider",
+        "heyGenRosterSelection",
         "id",
         "idSchema",
         "index",
@@ -9953,6 +10236,7 @@
         "materializeOwnedAsset",
         "materialized",
         "mediaAssetId",
+        "message",
         "method",
         "operations",
         "options",
@@ -9987,12 +10271,14 @@
         "requireCapability",
         "requireCatalog",
         "requireGovernance",
+        "requireHeyGenRoster",
         "requireJobs",
         "requireOperations",
         "resolveProviderWebhookAccount",
         "resources",
         "result",
         "review",
+        "roster",
         "router",
         "runtime",
         "runtimeEnvironment",
@@ -10004,11 +10290,13 @@
         "secret",
         "seedGovernance",
         "selectGovernanceRepository",
+        "selectHeyGenRosterRuntime",
         "service",
         "sourceType",
         "sourcesQuerySchema",
         "sourcesResponseSchema",
         "start",
+        "status",
         "summary",
         "tenant",
         "tenantId",
@@ -10046,6 +10334,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets",
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
+        "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-resources",
         "${AI_MEDIA_STUDIO_API_BASE}/publishing/connections",
         "${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs",
@@ -17248,6 +17537,54 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-heygen-roster.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "ConfigureHeyGenRosterResponse",
+        "CreateHeyGenRosterMember",
+        "CreateHeyGenRosterRequest",
+        "HEYGEN_ROSTER_MAX_AVATARS",
+        "HEYGEN_ROSTER_MAX_PLANNED_VIDEOS",
+        "HEYGEN_ROSTER_MIN_AVATARS",
+        "HEYGEN_ROSTER_MIN_PLANNED_VIDEOS",
+        "HEYGEN_ROSTER_VIDEOS_PER_AVATAR",
+        "HeyGenRosterGender",
+        "HeyGenRosterPublicMember",
+        "HeyGenRosterStatus",
+        "configureHeyGenRosterResponseSchema",
+        "createHeyGenRosterMemberSchema",
+        "createHeyGenRosterRequestSchema",
+        "heyGenRosterGenderSchema",
+        "heyGenRosterPublicMemberSchema",
+        "heyGenRosterStatusSchema"
+      ],
+      "symbols": [
+        "HEYGEN_ROSTER_MAX_AVATARS",
+        "HEYGEN_ROSTER_MAX_PLANNED_VIDEOS",
+        "HEYGEN_ROSTER_MIN_AVATARS",
+        "HEYGEN_ROSTER_MIN_PLANNED_VIDEOS",
+        "HEYGEN_ROSTER_VIDEOS_PER_AVATAR",
+        "NOT_A_PLAIN_OBJECT",
+        "accentSchema",
+        "configureHeyGenRosterResponseSchema",
+        "createHeyGenRosterMemberSchema",
+        "createHeyGenRosterRequestSchema",
+        "heyGenRosterGenderSchema",
+        "heyGenRosterPublicMemberSchema",
+        "heyGenRosterStatusSchema",
+        "idempotencyKeySchema",
+        "languageSchema",
+        "nameSchema",
+        "nativeIdSchema",
+        "requirePlainObject",
+        "seen"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-oauth.ts",
       "kind": "shared",
       "imports": [
@@ -17506,12 +17843,15 @@
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
+        "aiMediaOAuthCredentialArtifacts",
         "aiMediaOAuthSessions",
         "aiMediaOAuthTargetCandidates",
         "aiMediaOAuthTargetSelections",
         "aiMediaOAuthVaultOperations",
+        "aiMediaOAuthVaultOperationsV2",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
+        "aiMediaProviderAccountCredentialBindings",
         "aiMediaProviderAccounts",
         "aiMediaProviderResources",
         "aiMediaPublications",
@@ -17537,12 +17877,15 @@
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
+        "aiMediaOAuthCredentialArtifacts",
         "aiMediaOAuthSessions",
         "aiMediaOAuthTargetCandidates",
         "aiMediaOAuthTargetSelections",
         "aiMediaOAuthVaultOperations",
+        "aiMediaOAuthVaultOperationsV2",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
+        "aiMediaProviderAccountCredentialBindings",
         "aiMediaProviderAccounts",
         "aiMediaProviderResources",
         "aiMediaPublications",
@@ -18083,6 +18426,7 @@
         "RecordingProvider",
         "accountA",
         "accountB",
+        "accountId",
         "allowed",
         "assetIngestRepository",
         "blocked",
@@ -18122,6 +18466,7 @@
         "service",
         "signature",
         "sourceTypes",
+        "submitWithRatio",
         "timestamp"
       ],
       "routes": []
@@ -18372,6 +18717,152 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-heygen-roster-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/core/api.ts",
+        "../client/src/features/ai-media-studio/core/heygen-roster-setup.tsx",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "component",
+        "first",
+        "members",
+        "originalFetch",
+        "publicRoster",
+        "repositoryRoot",
+        "response",
+        "second"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-heygen-roster",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "inherited",
+        "member",
+        "parsed",
+        "serialized",
+        "status"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/drizzle-heygen-roster-repository",
+        "../server/ai-media-studio/providers/heygen-roster-contracts",
+        "../server/ai-media-studio/providers/heygen-roster-service",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Compiled",
+        "FakeRosterDatabase",
+        "compiled",
+        "configured",
+        "db",
+        "dialect",
+        "entry",
+        "fake",
+        "first",
+        "lock",
+        "metadata",
+        "mutationsAfterFirst",
+        "normalized",
+        "renderedResponse",
+        "replay",
+        "repository",
+        "request",
+        "resolver",
+        "serialized",
+        "service",
+        "voiceMutations"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/providers/heygen-roster-in-memory",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio-heygen-roster",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "created",
+        "createdRaw",
+        "createdResponse",
+        "currentResponse",
+        "endpoint",
+        "harness",
+        "previous",
+        "raw",
+        "runtime",
+        "server",
+        "unavailable",
+        "unavailableRaw",
+        "unsafe",
+        "userId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/heygen-roster-contracts",
+        "../server/ai-media-studio/providers/heygen-roster-in-memory",
+        "../server/ai-media-studio/providers/heygen-roster-service",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "accountResolver",
+        "changed",
+        "configured",
+        "failingService",
+        "first",
+        "prototypeInput",
+        "replay",
+        "repository",
+        "request",
+        "response",
+        "scope",
+        "serialized",
+        "service",
+        "stored",
+        "throwingService"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-http-artifact-reader.test.ts",
       "kind": "test",
       "imports": [
@@ -18618,6 +19109,47 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-oauth-provider-activation-in-memory.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "../server/ai-media-studio/oauth/provider-connection-in-memory",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "activated",
+        "activationClaim",
+        "activationCommand",
+        "artifactBindingId",
+        "attempt",
+        "claim",
+        "command",
+        "conflict",
+        "conflictRepository",
+        "discovery",
+        "exchange",
+        "expiredRepository",
+        "first",
+        "google",
+        "indeterminate",
+        "meta",
+        "persisted",
+        "recorded",
+        "repository",
+        "scope",
+        "selected",
+        "selectedTikTok",
+        "stale",
+        "staleRepository",
+        "tiktokAttempt",
+        "unsafeArtifacts",
+        "winner"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-oauth-provider-connection-contracts.test.ts",
       "kind": "test",
       "imports": [
@@ -18675,7 +19207,8 @@
         "selected",
         "selection",
         "sessionId",
-        "sql"
+        "sql",
+        "unsafeArtifact"
       ],
       "routes": []
     },
@@ -18697,6 +19230,9 @@
         "completed",
         "createInput",
         "discovery",
+        "exchange",
+        "first",
+        "persisted",
         "recorded",
         "refresh",
         "repository",
@@ -18704,6 +19240,8 @@
         "selected",
         "stale",
         "throughExchange",
+        "unsafeArtifact",
+        "unsafeCreate",
         "winner"
       ],
       "routes": []
@@ -21576,6 +22114,11 @@
     "tests/ai-media-studio-core-schema.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
+    "tests/ai-media-studio-heygen-roster-client.test.ts",
+    "tests/ai-media-studio-heygen-roster-contracts.test.ts",
+    "tests/ai-media-studio-heygen-roster-drizzle.test.ts",
+    "tests/ai-media-studio-heygen-roster-routes.test.ts",
+    "tests/ai-media-studio-heygen-roster-service.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
@@ -21583,10 +22126,13 @@
     "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
     "tests/ai-media-studio-oauth-crypto.test.ts",
     "tests/ai-media-studio-oauth-drizzle.test.ts",
+    "tests/ai-media-studio-oauth-provider-activation-in-memory.test.ts",
     "tests/ai-media-studio-oauth-provider-connection-contracts.test.ts",
     "tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts",
     "tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts",
+    "tests/ai-media-studio-oauth-role-token-vault-contracts.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts",
+    "tests/ai-media-studio-oauth-s3-kms-role-token-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-vault.test.ts",
     "tests/ai-media-studio-oauth-service.test.ts",

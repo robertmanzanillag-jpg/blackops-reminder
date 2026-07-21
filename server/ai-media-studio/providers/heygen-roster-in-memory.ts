@@ -17,6 +17,7 @@ function clone(record: HeyGenRosterRecord): HeyGenRosterRecord {
 export class InMemoryHeyGenRosterRepository implements HeyGenRosterRepository {
   private readonly byRosterId = new Map<string, HeyGenRosterRecord>();
   private readonly byIdempotencyKey = new Map<string, HeyGenRosterRecord>();
+  private readonly currentByScope = new Map<string, HeyGenRosterRecord>();
 
   async configure(input: ConfigureHeyGenRosterRecord): Promise<HeyGenRosterRecord> {
     const idempotencyStorageKey = `${scopeKey(input.scope)}\0${input.idempotencyKey}`;
@@ -33,7 +34,13 @@ export class InMemoryHeyGenRosterRepository implements HeyGenRosterRepository {
     const record = clone(input);
     this.byIdempotencyKey.set(idempotencyStorageKey, record);
     this.byRosterId.set(`${scopeKey(input.scope)}\0${input.rosterId}`, record);
+    this.currentByScope.set(scopeKey(input.scope), record);
     return clone(record);
+  }
+
+  async getCurrent(scope: TenantScope): Promise<HeyGenRosterRecord | undefined> {
+    const record = this.currentByScope.get(scopeKey(scope));
+    return record ? clone(record) : undefined;
   }
 
   async get(scope: TenantScope, rosterId: string): Promise<HeyGenRosterRecord | undefined> {

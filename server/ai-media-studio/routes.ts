@@ -24,6 +24,7 @@ import {
   type ProviderResource,
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
+import { configureHeyGenRosterResponseSchema } from "../../shared/ai-media-studio-heygen-roster";
 import {
   assetQualityReviewResponseSchema,
   createAssetQualityReviewRequestSchema,
@@ -76,6 +77,12 @@ import {
   parseHeyGenResourceMap,
   type HeyGenResourceMap,
 } from "./providers/heygen-video-provider";
+import type {
+  HeyGenRosterAccountResolver,
+  HeyGenRosterRepository,
+} from "./providers/heygen-roster-contracts";
+import { HeyGenRosterError } from "./providers/heygen-roster-contracts";
+import { HeyGenRosterService } from "./providers/heygen-roster-service";
 import { DeterministicScriptService } from "./script-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
@@ -154,6 +161,12 @@ export interface AiMediaStudioDependencies {
   governanceRepository?: GovernanceRepository;
   createDurableGovernanceRepository?: () => GovernanceRepository;
   seedGovernanceDefaults?: boolean;
+  heyGenRosterRepository?: HeyGenRosterRepository;
+  resolveHeyGenRosterAccount?: HeyGenRosterAccountResolver;
+  createDurableHeyGenRosterRuntime?: () => {
+    repository: HeyGenRosterRepository;
+    accountResolver: HeyGenRosterAccountResolver;
+  };
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -172,6 +185,8 @@ export interface AiMediaStudioRuntime {
   operations: OperationsRuntime;
   governance: GovernanceService;
   governancePersistence: MediaStudioPersistenceStatus;
+  heyGenRoster: HeyGenRosterService | undefined;
+  heyGenRosterPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -309,6 +324,72 @@ function selectGovernanceRepository(dependencies: AiMediaStudioDependencies, run
   }
   const reason = "DATABASE_URL is required outside development/test; in-memory governance persistence is disabled";
   return { repository: unavailableGovernanceRepository(reason), status: { mode: "unavailable", available: false, durable: false, reason } };
+}
+
+function createDefaultDurableHeyGenRosterRuntime(): {
+  repository: HeyGenRosterRepository;
+  accountResolver: HeyGenRosterAccountResolver;
+} {
+  let pending: Promise<{
+    repository: HeyGenRosterRepository;
+    accountResolver: HeyGenRosterAccountResolver;
+  }> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./providers/drizzle-heygen-roster-repository"),
+  ]).then(([database, adapter]) => ({
+    repository: new adapter.DrizzleHeyGenRosterRepository(database.db),
+    accountResolver: adapter.createDrizzleHeyGenRosterAccountResolver(database.db),
+  }));
+  return {
+    repository: {
+      configure: async (...args) => (await load()).repository.configure(...args),
+      get: async (...args) => (await load()).repository.get(...args),
+      getCurrent: async (...args) => (await load()).repository.getCurrent(...args),
+    },
+    accountResolver: {
+      resolve: async (...args) => (await load()).accountResolver.resolve(...args),
+    },
+  };
+}
+
+function selectHeyGenRosterRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: HeyGenRosterService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.heyGenRosterRepository && dependencies.resolveHeyGenRosterAccount) {
+    return {
+      service: new HeyGenRosterService(dependencies.heyGenRosterRepository, dependencies.resolveHeyGenRosterAccount),
+      status: { mode: "injected", available: true, durable: false, reason: "HeyGen roster runtime supplied by the composition caller" },
+    };
+  }
+  if (dependencies.heyGenRosterRepository || dependencies.resolveHeyGenRosterAccount) {
+    return {
+      service: undefined,
+      status: { mode: "unavailable", available: false, durable: false, reason: "HeyGen roster repository and account resolver must be supplied together" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const runtime = (dependencies.createDurableHeyGenRosterRuntime ?? createDefaultDurableHeyGenRosterRuntime)();
+      return {
+        service: new HeyGenRosterService(runtime.repository, runtime.accountResolver),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle HeyGen roster persistence selected" },
+      };
+    } catch (error) {
+      return {
+        service: undefined,
+        status: {
+          mode: "unavailable", available: false, durable: false,
+          reason: `HeyGen roster persistence initialization failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        },
+      };
+    }
+  }
+  return {
+    service: undefined,
+    status: { mode: "unavailable", available: false, durable: false, reason: "DATABASE_URL or an injected HeyGen roster runtime is required" },
+  };
 }
 
 function unavailableGovernanceRepository(reason: string): GovernanceRepository {
@@ -517,6 +598,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     explicitHarness && !dependencies.governanceRepository ? undefined : databaseUrl,
   );
   const governance = new GovernanceService(governanceSelection.repository);
+  const heyGenRosterSelection = selectHeyGenRosterRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -758,19 +840,21 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Catalog", core.status.mode);
     res.setHeader("X-AI-Media-Studio-Operations", operations.status.mode);
     res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-HeyGen-Roster", heyGenRosterSelection.status.mode);
     next();
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/runtime`, (req, res) => {
     getCurrentUserId(req);
     const available = persistence.status.available && core.status.available && operations.status.available && governanceSelection.status.available;
-    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status, governance: governanceSelection.status });
+    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status, governance: governanceSelection.status, heyGenRoster: heyGenRosterSelection.status });
   });
 
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");
   const requireCatalog = requireCapability(core.status, "AI Media Studio catalog");
   const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
+  const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -796,6 +880,22 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         failed: dashboard.summary.failed, cancelled: dashboard.summary.cancelled },
       recentActivity: dashboard.recentActivity.map((job) => ({ id: job.id, type: "generation", message: `${job.title}: ${job.status}`, createdAt: job.updatedAt })),
     }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenRoster, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const roster = await heyGenRosterSelection.service!.currentStatus(scope);
+    if (!roster) {
+      res.status(404).json({ error: "HeyGen roster not found", code: "ROSTER_NOT_FOUND" });
+      return;
+    }
+    res.json(configureHeyGenRosterResponseSchema.parse({ roster }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenRoster, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const configured = await heyGenRosterSelection.service!.configure(scope, req.body);
+    res.status(201).json(configureHeyGenRosterResponseSchema.parse(configured));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1231,6 +1331,16 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof HeyGenRosterError) {
+      const status = error.code === "INVALID_REQUEST" ? 400
+        : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+          : 503;
+      const message = status === 400 ? "Invalid HeyGen roster request"
+        : status === 409 ? "HeyGen roster request conflicts with an existing operation"
+          : "HeyGen roster is unavailable";
+      res.status(status).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof GovernanceGateError) {
       res.status(error.statusCode).json({ error: "Governance policy denied request", code: error.code, reasons: error.reasons });
       return;
@@ -1271,6 +1381,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     operations,
     governance,
     governancePersistence: governanceSelection.status,
+    heyGenRoster: heyGenRosterSelection.service,
+    heyGenRosterPersistence: heyGenRosterSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

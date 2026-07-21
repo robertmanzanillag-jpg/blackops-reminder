@@ -36,6 +36,26 @@ test("configure uses server-resolved account context and returns only a public-s
   assert.equal(stored?.providerAccountId, "native-account-private");
   assert.equal(stored?.members[0]?.avatarId, "native-avatar-0");
   assert.deepEqual(await service.status(scope, response.roster.rosterId), response.roster);
+  assert.deepEqual(await service.currentStatus(scope), response.roster);
+});
+
+test("current status is tenant-scoped, absent before configuration, and sanitizes repository failures", async () => {
+  const repository = new InMemoryHeyGenRosterRepository();
+  const service = new HeyGenRosterService(repository, accountResolver, () => "2030-01-01T00:00:00.000Z");
+  assert.equal(await service.currentStatus(scope), undefined);
+
+  const configured = await service.configure(scope, request());
+  assert.deepEqual(await service.currentStatus(scope), configured.roster);
+  assert.equal(await service.currentStatus({ ownerUserId: "owner-b", workspaceId: "workspace-a" }), undefined);
+
+  const failingService = new HeyGenRosterService({
+    configure: async (input) => input,
+    get: async () => undefined,
+    getCurrent: async () => { throw new Error("native-avatar-private"); },
+  }, accountResolver);
+  await assert.rejects(() => failingService.currentStatus(scope), (error: unknown) =>
+    error instanceof HeyGenRosterError && error.code === "ROSTER_UNAVAILABLE"
+      && !error.message.includes("native-avatar-private"));
 });
 
 test("exact idempotent replay preserves original status and changed payload conflicts", async () => {
@@ -85,6 +105,9 @@ test("client account fields are rejected and unresolved accounts fail closed", a
     { resolve: async () => { throw new Error("native-account-private"); } },
   );
   await assert.rejects(() => throwingService.configure(scope, request()), (error: unknown) =>
+    error instanceof HeyGenRosterError && error.code === "ACCOUNT_UNAVAILABLE"
+      && !error.message.includes("native-account-private"));
+  await assert.rejects(() => throwingService.currentStatus(scope), (error: unknown) =>
     error instanceof HeyGenRosterError && error.code === "ACCOUNT_UNAVAILABLE"
       && !error.message.includes("native-account-private"));
 });
