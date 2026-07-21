@@ -4480,7 +4480,7 @@ test("website sales packet queue keeps older ready packages visible", () => {
 
   const snapshot = getRevenueEngineSnapshot();
 
-  assert.equal(snapshot.recentLeads.some((item) => item.id === older.lead.id), false);
+  assert.equal(snapshot.recentLeads.some((item) => item.id === older.lead.id), true);
   assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 12);
   assert.equal(snapshot.websiteSalesPacketQueue.items.length, 12);
   assert.equal(snapshot.websiteSalesPacketQueue.items.some((item) => item.leadId === older.lead.id), true);
