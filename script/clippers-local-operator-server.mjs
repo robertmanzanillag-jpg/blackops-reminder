@@ -6260,8 +6260,16 @@ async function buildRealClipPermissionCrm(status) {
   const rows = await readRealClipPermissionCrmRows();
   const latest = latestPermissionCrmByQueueId(rows);
   const validationRows = status.realClipIntakeValidation?.rows || [];
-  const mergedRows = validationRows.map((row) => {
+  const mergedRows = await Promise.all(validationRows.map(async (row) => {
     const crm = latest.get(row.queueItemId) || {};
+    const recordedPermissionStatus = crm.permission_status || "not_requested";
+    const claimsApproval = recordedPermissionStatus === "approved" || recordedPermissionStatus === "owned_source";
+    const evidenceValidation = claimsApproval
+      ? await realClipEvidenceStatus(crm.evidence_link || "")
+      : { ok: false, status: "not_required_for_current_status" };
+    const permissionStatus = claimsApproval && !evidenceValidation.ok
+      ? "blocked_invalid_evidence"
+      : recordedPermissionStatus;
     return {
       queueItemId: row.queueItemId,
       category: row.category,
@@ -6273,7 +6281,9 @@ async function buildRealClipPermissionCrm(status) {
       creatorOrRightsHolder: crm.creator_or_rights_holder || "",
       outreachChannel: crm.outreach_channel || "",
       outreachStatus: crm.outreach_status || "not_sent",
-      permissionStatus: crm.permission_status || "not_requested",
+      permissionStatus,
+      recordedPermissionStatus,
+      evidenceValidationStatus: evidenceValidation.status,
       evidenceLink: crm.evidence_link || "",
       updatedAt: crm.updated_at || "",
       crmRecorded: Boolean(crm.metricool_queue_item_id),
@@ -6282,7 +6292,7 @@ async function buildRealClipPermissionCrm(status) {
         ? "Source-drop intake is ready; CRM is informational."
         : "Use CRM status to manage outreach, then record final Real Clip Intake when proof and MP4 exist.",
     };
-  });
+  }));
   const csvRows = mergedRows.map((row) => ({
     metricool_queue_item_id: row.queueItemId,
     category: row.category,
@@ -6291,6 +6301,8 @@ async function buildRealClipPermissionCrm(status) {
     intake_status: row.intakeStatus,
     outreach_status: row.outreachStatus,
     permission_status: row.permissionStatus,
+    recorded_permission_status: row.recordedPermissionStatus,
+    evidence_validation_status: row.evidenceValidationStatus,
     exact_video_or_post_url: row.exactVideoOrPostUrl,
     creator_or_rights_holder: row.creatorOrRightsHolder,
     evidence_link: row.evidenceLink,
@@ -6306,6 +6318,7 @@ async function buildRealClipPermissionCrm(status) {
     totalRows: mergedRows.length,
     recordedRows: mergedRows.filter((row) => row.crmRecorded).length,
     approvedRows: mergedRows.filter((row) => row.permissionStatus === "approved" || row.permissionStatus === "owned_source").length,
+    invalidEvidenceRows: mergedRows.filter((row) => row.permissionStatus === "blocked_invalid_evidence").length,
     deniedRows: mergedRows.filter((row) => row.permissionStatus === "denied").length,
     recreateOnlyRows: mergedRows.filter((row) => row.permissionStatus === "recreate_only").length,
     rows: mergedRows,
@@ -6317,6 +6330,8 @@ async function buildRealClipPermissionCrm(status) {
       "intake_status",
       "outreach_status",
       "permission_status",
+      "recorded_permission_status",
+      "evidence_validation_status",
       "exact_video_or_post_url",
       "creator_or_rights_holder",
       "evidence_link",
@@ -6329,6 +6344,7 @@ async function buildRealClipPermissionCrm(status) {
     guardrails: [
       "CRM records are operational notes, not final publishing approval.",
       "Approved CRM status still requires final Real Clip Intake plus a local MP4.",
+      "An approval claim with a missing, invalid, placeholder, remote-only, or unsafe evidence file is reported as blocked_invalid_evidence and is never counted as approved.",
       "Never store tokens, cookies, passwords, private keys, or sensitive private messages.",
       "Metricool remains approval_required and realPublishEnabled=false.",
     ],
@@ -6372,6 +6388,7 @@ function renderRealClipPermissionCrmPage(crm) {
     <div class="card"><div class="label">Status</div><div class="value">${escapeHtml(crm.status)}</div></div>
     <div class="card"><div class="label">Recorded</div><div class="value">${escapeHtml(crm.recordedRows)}/${escapeHtml(crm.totalRows)}</div></div>
     <div class="card"><div class="label">Approved CRM</div><div class="value">${escapeHtml(crm.approvedRows)}</div></div>
+    <div class="card"><div class="label">Invalid evidence</div><div class="value">${escapeHtml(crm.invalidEvidenceRows)}</div></div>
     <div class="card"><div class="label">Recreate only</div><div class="value">${escapeHtml(crm.recreateOnlyRows)}</div></div>
   </div>
   <div class="actions">
@@ -6403,7 +6420,7 @@ function renderRealClipPermissionCrmPage(crm) {
         ${crm.rows.map((row) => `<tr>
           <td>${escapeHtml(row.queueItemId)}<div class="small">${escapeHtml(row.category)}</div></td>
           <td>${escapeHtml(row.accountName)}</td>
-          <td>${escapeHtml(row.outreachStatus)} / ${escapeHtml(row.permissionStatus)}<div class="small">${escapeHtml(row.updatedAt || "not recorded")}</div></td>
+          <td>${escapeHtml(row.outreachStatus)} / ${escapeHtml(row.permissionStatus)}<div class="small">recorded: ${escapeHtml(row.recordedPermissionStatus)} · evidence: ${escapeHtml(row.evidenceValidationStatus)}</div><div class="small">${escapeHtml(row.updatedAt || "not recorded")}</div></td>
           <td><code>${escapeHtml(row.targetSourceDropFile)}</code><div class="small">${escapeHtml(row.intakeBlockers.join(", ") || "none")}</div></td>
           <td>
             <form method="post" action="/api/clippers/real-clip-permission-crm/record">
@@ -6418,7 +6435,7 @@ function renderRealClipPermissionCrmPage(crm) {
                 ${[...allowedOutreachStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.outreachStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
               </select>
               <select name="permissionStatus">
-                ${[...allowedPermissionStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.permissionStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+                ${[...allowedPermissionStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.recordedPermissionStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
               </select>
               <input name="evidenceLink" placeholder="https://proof... or /clippers-workspace/evidence-drop/..." value="${escapeHtml(row.evidenceLink)}" />
               <textarea name="operatorNotes" placeholder="20+ chars, concrete non-secret note"></textarea>
@@ -7280,14 +7297,16 @@ function trustedStreamerRoutingProof(input) {
   const source = String(input?.source || "").trim().toLowerCase();
   const confirmedAt = String(input?.confirmedAt || "").trim();
   const confirmedAtMs = Date.parse(confirmedAt);
+  const connectionsVerifiedAt = String(input?.connectionsVerifiedAt || confirmedAt).trim();
+  const connectionsVerifiedAtMs = Date.parse(connectionsVerifiedAt);
   const sportsAccountName = String(input?.sportsAccountName || "").trim();
   const memesAccountName = String(input?.memesAccountName || "").trim();
   const platform = String(input?.platform || "").trim().toLowerCase();
   const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
   const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
   const connectionsVerified = ["user_confirmed", "metricool_ui_verified"].includes(source)
-    && Number.isFinite(confirmedAtMs)
-    && confirmedAtMs <= Date.now() + 5 * 60_000
+    && Number.isFinite(connectionsVerifiedAtMs)
+    && connectionsVerifiedAtMs <= Date.now() + 5 * 60_000
     && platform === "tiktok"
     && input?.sportsConnected === true
     && input?.memesConnected === true
@@ -7295,6 +7314,8 @@ function trustedStreamerRoutingProof(input) {
     && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
     && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips");
   const confirmed = connectionsVerified
+    && Number.isFinite(confirmedAtMs)
+    && confirmedAtMs <= Date.now() + 5 * 60_000
     && sportsAccountName.toLowerCase() === "streamer highlights"
     && memesAccountName.toLowerCase() === "streamer reactions";
   return {
@@ -7302,7 +7323,7 @@ function trustedStreamerRoutingProof(input) {
     connectionsVerified,
     source: connectionsVerified ? source : "not_confirmed",
     confirmedAt: confirmed ? confirmedAt : "",
-    connectionsVerifiedAt: connectionsVerified ? confirmedAt : "",
+    connectionsVerifiedAt: connectionsVerified ? connectionsVerifiedAt : "",
     accountNames: {
       sportsConnection: connectionsVerified ? sportsAccountName : "SPORT",
       memesConnection: connectionsVerified ? memesAccountName : "memes",

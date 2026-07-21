@@ -2760,7 +2760,8 @@ test("Streamer Growth CEO preserves verified Metricool connections while rebrand
   const port = "5572";
   await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
     source: "metricool_ui_verified",
-    confirmedAt: new Date().toISOString(),
+    confirmedAt: "",
+    connectionsVerifiedAt: new Date().toISOString(),
     platform: "tiktok",
     sportsAccountName: "streamersclipusa",
     memesAccountName: "streamersclips",
@@ -4131,6 +4132,30 @@ test("Clippers real clip permission CRM records outreach without unlocking intak
     const operatorReady = await operatorReadyResponse.json();
     assert.equal(operatorReady.readyToScheduleNow, false);
     assert.equal(operatorReady.operatorReady, false);
+  });
+});
+
+test("Clippers permission CRM blocks stale approval claims when local evidence is missing", async () => {
+  const port = "5575";
+  const crmPath = path.join(workspaceRoot, "evidence-drop", "real-clip-permission-outreach.csv");
+  await mkdir(path.dirname(crmPath), { recursive: true });
+  await writeFile(crmPath, [
+    "metricool_queue_item_id,category,account_name,exact_video_or_post_url,creator_or_rights_holder,outreach_channel,outreach_status,permission_status,evidence_link,operator_notes,updated_at",
+    "7129d59b5f5e,sports,Streamer Highlights,https://www.twitch.tv/example/clip/ExactClipSlug,example,email,responded,approved,/clippers-workspace/evidence-drop/streamer-permissions/missing-proof.md,Legacy row incorrectly claimed permission despite missing proof.,2026-07-21T08:55:00Z",
+    "",
+  ].join("\n"));
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-crm.json`);
+    assert.equal(response.status, 200);
+    const crm = await response.json();
+    const row = crm.rows.find((candidate) => candidate.queueItemId === "7129d59b5f5e");
+    assert.equal(crm.approvedRows, 0);
+    assert.equal(crm.invalidEvidenceRows, 1);
+    assert.equal(row.recordedPermissionStatus, "approved");
+    assert.equal(row.permissionStatus, "blocked_invalid_evidence");
+    assert.match(row.evidenceValidationStatus, /missing|invalid|blocked/);
+    assert.equal(row.canUseForIntake, false);
   });
 });
 

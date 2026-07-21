@@ -8936,6 +8936,30 @@ test("prepareClipperSourceScout writes rights-gated candidates and refreshes Met
   }
 });
 
+test("source scout Metricool backlog falls back to category source-drop for legacy cached rows", () => {
+  const candidate = __clipperInternals.sourceScoutCandidateFromMetricoolBacklog({
+    accountId: "sports-daily",
+    accountName: "Sports Daily Clips",
+    category: "sports-daily",
+    connectedNetworks: ["tiktok"],
+    dailyClipTarget: 8,
+    weeklyTargetClips: 56,
+    minimumWeeklySourceAssets: 28,
+    rightsReadyAssets: 0,
+    missingSourceAssets: 1,
+    nextStep: "legacy cache without sourceDropDir",
+  } as any, 1, 1);
+  const expectedTargetPath = path.join("source-drop", "sports", "sports-metricool-01.mp4");
+
+  assert.equal(candidate.category, "sports");
+  assert.equal(candidate.targetFileName, "sports-metricool-01.mp4");
+  assert.ok(candidate.sourceDropPath?.endsWith(expectedTargetPath));
+  assert.ok(candidate.nextAction.includes(path.join("source-drop", "sports")));
+  assert.ok(candidate.rightsEvidenceNeeded.some((item) => item.includes(expectedTargetPath)));
+  assert.equal(candidate.publishGate, "blocked_rights");
+  assert.equal(candidate.canUseNow, false);
+});
+
 test("prepareClipperSourceScoutPermissionPack writes outreach and intake rows without publishing", async () => {
   const beforeStatus = await getClipperStatus();
   const previousManifest = await readFile(path.join(beforeStatus.rootDir, "source-scout-permission-pack.json"), "utf8").catch(() => null);

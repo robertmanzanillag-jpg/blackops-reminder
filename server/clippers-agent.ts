@@ -11176,10 +11176,14 @@ function sourceScoutCandidateFromMetricoolBacklog(
   rank: number,
   slot: number
 ): ClipperSourceScoutCandidate {
+  const category = normalizeTrendCategory(String(item.category || ""));
+  const sourceDropDir = typeof item.sourceDropDir === "string" && item.sourceDropDir.trim()
+    ? item.sourceDropDir.trim()
+    : path.join(SOURCE_DROP_DIR, category);
   const platform = (item.connectedNetworks[0] as ClipperPlatform | undefined) || "tiktok";
-  const targetFileName = `${item.category}-metricool-${String(slot).padStart(2, "0")}.mp4`;
-  const title = sourceSupplySuggestedTitle(item.category, slot);
-  const query = sourceSupplyViralQueries(item.category, slot)[0] || `${categoryLabelsForBackend(item.category)} viral source today rights`;
+  const targetFileName = `${category}-metricool-${String(slot).padStart(2, "0")}.mp4`;
+  const title = sourceSupplySuggestedTitle(category, slot);
+  const query = sourceSupplyViralQueries(category, slot)[0] || `${categoryLabelsForBackend(category)} viral source today rights`;
   const sourceUrl = sourceSupplySearchUrl(platform === "youtube" || platform === "instagram" || platform === "tiktok" ? platform : "google", query);
   const hookAngle = `Cubrir backlog Metricool de ${item.accountName}: buscar fuente exacta, conseguir proof y editar ${targetFileName}.`;
   const rightsStatus: ClipperAssetRightsStatus = "review_required";
@@ -11189,7 +11193,7 @@ function sourceScoutCandidateFromMetricoolBacklog(
     sourceUrl,
     sourceUrlKind: "discovery_search",
     title,
-    category: item.category,
+    category,
     suggestedAccount: item.accountName,
     platform,
     source: "metricool_source_readiness",
@@ -11201,11 +11205,11 @@ function sourceScoutCandidateFromMetricoolBacklog(
     rightsStatus,
     canUseNow: false,
     publishGate: "blocked_rights",
-    nextAction: `Encontrar fuente exacta para ${targetFileName}, guardar proof de derechos y subir el archivo a ${item.sourceDropDir}.`,
+    nextAction: `Encontrar fuente exacta para ${targetFileName}, guardar proof de derechos y subir el archivo a ${sourceDropDir}.`,
     hookAngle,
     metricoolFit: true,
     trendCandidateBatchRow: sourceScoutTrendRow({
-      category: item.category,
+      category,
       platform,
       title,
       sourceUrl,
@@ -11214,12 +11218,12 @@ function sourceScoutCandidateFromMetricoolBacklog(
       hookAngle,
     }),
     targetFileName,
-    sourceDropPath: path.join(item.sourceDropDir, targetFileName),
+    sourceDropPath: path.join(sourceDropDir, targetFileName),
     rightsEvidenceNeeded: [
-      ...sourceSupplyRequiredProof(item.category),
-      `Target source file: ${path.join(item.sourceDropDir, targetFileName)}`,
+      ...sourceSupplyRequiredProof(category),
+      `Target source file: ${path.join(sourceDropDir, targetFileName)}`,
     ],
-    rejectIf: sourceSupplyRejectIf(item.category),
+    rejectIf: sourceSupplyRejectIf(category),
   };
 }
 
@@ -50112,6 +50116,7 @@ export const __clipperInternals = {
   buildRightsEvidenceLedgerSummary,
   calculateSourceScoutViralScore,
   sourceScoutOfficialSourcePolicy,
+  sourceScoutCandidateFromMetricoolBacklog,
   sourceScoutUniqueExactUrlCount,
   weeklyFunnelDailyTargets,
   weeklyFunnelStatus,
