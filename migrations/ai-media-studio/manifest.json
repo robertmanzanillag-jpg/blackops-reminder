@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "status": "preparation-only-no-go",
+  "historicalBaseline": {
+    "sourceCommit": "8b30f1849523ba255b6fcbbedc676c3aaba35ae4",
+    "sourcePath": "shared/models/ai-media-studio-db.ts",
+    "sourceBlob": "4678f3b60595fe272ce11999806a4634317edb03",
+    "sourceSha256": "560ac47625eb1a14297a5a5d127be7cc267d5de3c1943d51ea7e19640be1972d",
+    "reason": "PR1 reconstructs the exact historical foundation needed before PR2; it refuses any pre-existing ai_media_* baseline instead of adopting inferred state."
+  },
+  "migrations": [
+    { "order": 1, "pullRequest": "PR1", "provenanceCommit": "8b30f184", "forward": { "path": "migrations/ai-media-studio/20260720_pr1_foundation_forward.sql", "sha256": "baccd12a7b45f32cf725c8bf9bf5b588efd518b86810a9989218a91b9d954f5f" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr1_foundation_rollback.sql", "sha256": "d97419372ded9904025a06dbd87652104ab9bdca7979257ec6397d3bed9d9dc0" } },
+    { "order": 2, "pullRequest": "PR2", "provenanceCommit": "a5ae9cd9", "forward": { "path": "migrations/ai-media-studio/20260720_pr2_core_forward.sql", "sha256": "c55727c7372cecb5438b8da8912e6d88cd2fb10fb5aa0e542bb16943a481aa89" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr2_core_rollback.sql", "sha256": "fb5079b69fe7fe7a19241a317174c8c4655daea5913072851438ac21c8242fe9" } },
+    { "order": 3, "pullRequest": "PR3", "provenanceCommit": "3da23854", "forward": { "path": "migrations/ai-media-studio/20260720_pr3_operations_forward.sql", "sha256": "2a7379c62d021fa86c1fb6b76a6abbcd73aa843a184241377219a3785eede0f9" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr3_operations_rollback.sql", "sha256": "f489334f07d8e63a51d4de525825aafe326279d8a69cb89349d637ef6d5b33c1" } },
+    { "order": 4, "pullRequest": "PR4", "provenanceCommit": "266e0633", "forward": { "path": "migrations/ai-media-studio/20260720_pr4_assets_forward.sql", "sha256": "918399f469d305646431e0455fcb03ef18e099e82bccff6d24d80f7053b19539" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr4_assets_rollback.sql", "sha256": "15132c2e73b2ca56a1bfc0e7255062f7a9722e0a66251af2f9d2d08ddcaddd64" } },
+    { "order": 5, "pullRequest": "PR5", "provenanceCommit": "a9d75646", "forward": { "path": "migrations/ai-media-studio/20260720_pr5_governance_forward.sql", "sha256": "e491d8e4e41d2f42a1e0e0ed8be22e2a74f8f0144d916d3938bfb2aa364bbdfa" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr5_governance_rollback.sql", "sha256": "1d17e893b0748718e2641789839c0bd4be6a80fb8a554c4248e271f9507ae73b" } },
+    { "order": 6, "pullRequest": "PR6", "provenanceCommit": "013fa633", "forward": { "path": "migrations/ai-media-studio/20260720_pr6_provider_identity_forward.sql", "sha256": "2119e5667a1f1e260f3c6c1389d6f1907ad0446725d89fc9ccadc54a3b01b35b" }, "rollback": { "path": "migrations/ai-media-studio/20260720_pr6_provider_identity_rollback.sql", "sha256": "2dc42d9f0f8b7ace168cc313237530775c1756daf799d59f36f09a651ea6b1c4" } },
+    { "order": 7, "pullRequest": "PR8", "provenanceCommit": "82127ba1", "forward": { "path": "migrations/ai-media-studio/20260721_pr8_publishing_accounts_forward.sql", "sha256": "fe6705c8a78690f8754df09b158893653f4f7f672d72f2a5a00e2c3552088104" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr8_publishing_accounts_rollback.sql", "sha256": "cc7e8c87b60b92d745da70c613f1e175e11473e82543351d16b2d03cc8b948de" } },
+    { "order": 8, "pullRequest": "PR9", "provenanceCommit": "a6cd2f31", "forward": { "path": "migrations/ai-media-studio/20260721_pr9_oauth_foundation_forward.sql", "sha256": "e7888e52855e50ccde78d4308371e82014755066f275861c2c9cc6b6f1bee0c4" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr9_oauth_foundation_rollback.sql", "sha256": "1fa9bad57e5c40be597003ee60fd7229046eed28997776c205a838a75e3cad01" } },
+    { "order": 9, "pullRequest": "PR11", "provenanceCommit": "166c519a", "forward": { "path": "migrations/ai-media-studio/20260721_pr11_oauth_policy_forward.sql", "sha256": "7950fda7ca67e243c1e5a7900fc2c9641af72e9000d3718fe8b9211059ac5c0d" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr11_oauth_policy_rollback.sql", "sha256": "0ca78374367bf9ffdfa5178942159e24c47e5d93e96ca535aaed287a06795724" } },
+    { "order": 10, "pullRequest": "PR12", "provenanceCommit": "70008e1e", "forward": { "path": "migrations/ai-media-studio/20260721_pr12_oauth_callback_saga_forward.sql", "sha256": "cf8bbd9e1f1082619d6cd9cdbd7125b04a8068a9278caa21b5bb875a10521afb" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr12_oauth_callback_saga_rollback.sql", "sha256": "69faeef6585455755af3caaedac9a6d2f3b470bbc14463ed653192154121e068" } },
+    { "order": 11, "pullRequest": "PR14", "provenanceCommit": "23cf8eba", "forward": { "path": "migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_forward.sql", "sha256": "d7f58b387cd55e2a25057f7cd10072ee0bd4e7931f9c1b5735c94901e68d9a3c" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_rollback.sql", "sha256": "b1179b2b4c5207ee100d79183f80a30cd61208a538d5d43edb566038c9e4051d" } },
+    { "order": 12, "pullRequest": "PR15", "provenanceCommit": "0e78aadd", "forward": { "path": "migrations/ai-media-studio/20260721_pr15_provider_connection_stages_forward.sql", "sha256": "99feb13c25d26d6b8edf67aad739931905eb0beaf68cde2ce71fcf64fc38f239" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr15_provider_connection_stages_rollback.sql", "sha256": "01b1fb252ce57c1b0e614c07a4f85ebcd337be812883e3f790168c3329b00159" } },
+    { "order": 13, "pullRequest": "PR16A", "provenanceCommit": "e7b2b7ab", "forward": { "path": "migrations/ai-media-studio/20260721_pr16_provider_activation_integrity_forward.sql", "sha256": "e2a7e1d3c0495b99d74fed8c9a11100d3083e1d252a0f93c54922da29057474e" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr16_provider_activation_integrity_rollback.sql", "sha256": "891164747f33039e610ed52263a44a2863e1ce626d4b3a06862e2a457ab037a6" } },
+    { "order": 14, "pullRequest": "PR16B", "provenanceCommit": "dc3e7b82", "forward": { "path": "migrations/ai-media-studio/20260721_pr16b_durable_activation_forward.sql", "sha256": "9fb7c887c0c6f2f298182cad5c4175c40882fea6919efb012fd984a0f0949752" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr16b_durable_activation_rollback.sql", "sha256": "07ad56eba7cc35bb3cf4dae899ab00808556869cfa2c476eb1925e60ef0df3f1" } },
+    { "order": 15, "pullRequest": "PR19", "provenanceCommit": "b59cd7fb", "forward": { "path": "migrations/ai-media-studio/20260721_pr19_daily_admission_forward.sql", "sha256": "38ccf7efb502491db2e1efa23c31d4ad7b05d11112badb85bf4f9a1fc0881b08" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr19_daily_admission_rollback.sql", "sha256": "e0e1182b7876c2ed2f4842c27ed51c827b080075ad2b794688f89bc12f0c33c6" } },
+    { "order": 16, "pullRequest": "PR20", "provenanceCommit": "450a1c3f", "forward": { "path": "migrations/ai-media-studio/20260721_pr20_launch_authorities_forward.sql", "sha256": "61a7d46260f6a7165eabfa039f2110d5fb7c6d7d0defecffaa53db536dd0f548" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr20_launch_authorities_rollback.sql", "sha256": "38eeb7f06e84e7b50617a4e98e953c748eb3c715fd9749647b1493b5b91d6f79" } },
+    { "order": 17, "pullRequest": "PR22", "provenanceCommit": "730cab2e", "forward": { "path": "migrations/ai-media-studio/20260721_pr22_launch_intents_forward.sql", "sha256": "c660d60b52e69010417990b64fb0f3769de33588e9baa9f0cdb289af85a8a5a2" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr22_launch_intents_rollback.sql", "sha256": "50edbfd8c4363adfdfa785affea7d2cda2fc02d6a6fb807c1d34819a8e4e4bb4" } },
+    { "order": 18, "pullRequest": "PR23", "provenanceCommit": "561e1ede", "forward": { "path": "migrations/ai-media-studio/20260721_pr23_admission_held_handoff_forward.sql", "sha256": "301e0ddb5ed006b670b83052a077cf78a97f59217f642b6045b4da021f1d29c2" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr23_admission_held_handoff_rollback.sql", "sha256": "2abce523c6177f5d82dc48bc28b31b23933f9b0738106188b8e029cb41c29c2e" } },
+    { "order": 19, "pullRequest": "PR24", "provenanceCommit": "ce892574", "forward": { "path": "migrations/ai-media-studio/20260721_pr24_held_activation_forward.sql", "sha256": "b2dd807bf0f44ce0428a9fbe3dc2bff358e5fac2a6f3caa5ab09a7639da3c527" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr24_held_activation_rollback.sql", "sha256": "0693a8cf84a11d06af69440ad6e6084feac5d59cfb27ac797f1ab7e749cc9bbd" } },
+    { "order": 20, "pullRequest": "PR25", "provenanceCommit": "06973bcd", "forward": { "path": "migrations/ai-media-studio/20260721_pr25_admitted_worker_forward.sql", "sha256": "948b681ba5ea16f8c14810490e01851b94595672fdfeea19875ef01743d33c37" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr25_admitted_worker_rollback.sql", "sha256": "29a5a44f317c236afbdb397996a456cb91b1ac2dff6e59a9db1b00560ca8a2e4" } },
+    { "order": 21, "pullRequest": "PR26", "provenanceCommit": "ec8368a7", "forward": { "path": "migrations/ai-media-studio/20260721_pr26_db_capability_forward.sql", "sha256": "3d2e007c7e3eb98e91533c0e1fdfe44d3b235e6bbc0ce9cbfb68398f276ecd6e" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr26_db_capability_rollback.sql", "sha256": "23c0a2e365234e2af73ef5fec81b4f79f4287b948cfa1eb41a3c50d2da03b8d9" } },
+    { "order": 22, "pullRequest": "PR27", "provenanceCommit": "1d0a43cd", "forward": { "path": "migrations/ai-media-studio/20260721_pr27_heygen_terminal_forward.sql", "sha256": "583ddd92b0e40eb20270398aeef3fc4a80bee3c7d6b38d325242d3ee8578cd6a" }, "rollback": { "path": "migrations/ai-media-studio/20260721_pr27_heygen_terminal_rollback.sql", "sha256": "0222d31e3260e858a04cf459fc08bf3cdd10143007fbd8a03e32fc4c1c0e111c" } }
+  ],
+  "schemaNeutralPullRequests": [
+    { "pullRequest": "PR7", "provenanceCommit": "3aec00a0", "reason": "Application-only production render-asset ownership; PR8 is the next reviewed database delta." },
+    { "pullRequest": "PR10", "provenanceCommit": "b8aeeac8", "reason": "Application-only managed OAuth vault runtime; it consumes the reviewed PR9 schema without altering it." },
+    { "pullRequest": "PR13", "provenanceCommit": "54157773", "reason": "Application-only encrypted OAuth vault adapters; PR14 depends on the database controls already introduced by PR12." },
+    { "pullRequest": "PR17", "provenanceCommit": "b53dba90", "reason": "Application-only HeyGen launch-roster contract; it does not create or mutate database objects." },
+    { "pullRequest": "PR18", "provenanceCommit": "92569e20", "reason": "Application-only blocked roster planning and onboarding; PR19 is the next reviewed database delta." },
+    { "pullRequest": "PR21", "provenanceCommit": "b3ccf69b", "reason": "Application-only guarded launch-authority issuers; PR22 is the next reviewed database delta." }
+  ],
+  "pr26": {
+    "stopBeforeForward": true,
+    "requiredRoles": [
+      { "name": "ai_media_admitted_fn_owner", "login": false, "inherit": false },
+      { "name": "ai_media_admitted_submit_executor", "login": false, "inherit": false },
+      { "name": "ai_media_admitted_reconcile_executor", "login": false, "inherit": false }
+    ],
+    "forbiddenAttributes": ["SUPERUSER", "CREATEROLE", "CREATEDB", "REPLICATION", "BYPASSRLS"],
+    "separateLoginPrincipalsRequired": true
+  },
+  "stops": [
+    { "after": "PR16B", "before": "PR19", "reason": "Stop until the exact PR16B application/repository stack and explicit rehearsal approval are recorded." },
+    { "before": "PR26", "reason": "Stop until a DBA precreates the exact NOLOGIN NOINHERIT roles and separate lane LOGIN principals under a private change record." },
+    { "after": "PR27", "before": "PR26 rollback", "reason": "Stop forward with all provider workers disabled; on reverse, retained PR27 terminal guards make PR26 rollback fail before mutation and require a forward fix. Database proof never authorizes HeyGen, network, spend, publication, restart, or deployment." }
+  ],
+  "expectedPostForward": {
+    "catalogObjectCount": 672,
+    "catalogSha256": "8c687642fbbe6b565a31d0dc83d1a1a0af20b7f4eb666ce56a0568849987f49b",
+    "aclEntryCount": 2185,
+    "aclSha256": "e71385d8dc27a7996832fec15eade25dcb5419708ca3ea641bda5b2f30594cd9"
+  }
+}

@@ -1,11 +1,15 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover reviewed incremental schema deltas after the
-PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
-local independent checker/static App QA gates. They do not create the PR1
-tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
-`npm run db:push` for reviewed SQL. The complete preparation-only manifest,
-approval gates, current PR16B stacked-review blocker, staging verification, reverse order,
+These SQL files now cover the reviewed-local PR1 foundation and every reviewed
+incremental delta through PR27. PR1 is reconstructed from foundation commit
+`8b30f184`, source blob `4678f3b60595fe272ce11999806a4634317edb03` and source
+SHA-256 `560ac47625eb1a14297a5a5d127be7cc267d5de3c1943d51ea7e19640be1972d`;
+`manifest.json` records the complete
+22-pair order and SHA-256 provenance. This is local review evidence only: the
+migrations have not been applied to any database, including staging or
+production. Do not substitute
+`drizzle-kit push` or `npm run db:push` for reviewed SQL. The complete
+preparation-only manifest, approval gates, staging verification, reverse order,
 and stop conditions live in
 `docs/ai-media-studio/staging-rehearsal-runbook.md`. That runbook does not
 authorize a database connection or migration. PR7 has no database migration in
@@ -15,12 +19,33 @@ this directory.
 
 Do not treat the per-delta notes below as an executable sequence. The sole
 current sequence authority is the preparation-only staging runbook linked
-above, and it is **NO-GO** because PR1 provenance is unproven, independently checked local PR16A SQL
-is unapplied, and independently checked local PR16B still needs exact stacked GitHub review. PR13 is a
+above, and it is **NO-GO** because the reviewed-local PR1 provenance and full
+chain have not been verified on an approved restored staging target, every SQL
+pair remains unapplied, and no rehearsal approval exists. PR13 is a
 reviewed schema-neutral adapter slice; PR14 verifies its PR12 database prerequisites. No
 database target, backup/restore, maintenance window, migration, restart, or
 deployment has been approved. Individual sections describe a delta's historical
 prerequisites and verification intent only.
+
+## PR1 reviewed-local foundation
+
+`20260720_pr1_foundation_forward.sql` is the exact initial AI Media Studio
+baseline used before PR2. Its provenance is pinned by `manifest.json` to the
+reviewed foundation source rather than inferred from the current Drizzle schema.
+It reconstructs the source's 18 tables, 20 foreign keys and 38 indexes. The
+PostgreSQL 16+ / trusted-`pgcrypto` forward migration is bounded by one
+transaction, fails closed if any baseline `ai_media_*` relation already exists,
+and is unapplied. An operator must verify the manifest digest, a fresh restored
+target, and the resulting catalog before continuing to PR2.
+
+`20260720_pr1_foundation_rollback.sql` is empty-baseline-only. It may run only
+after every later rollback, and only when the schema has zero rows and exactly
+the PR1 columns, constraints and indexes. It rejects later AI Media Studio
+objects, external dependencies and any mismatch; it never uses `CASCADE` and
+retains `pgcrypto`. Because multiple later rollbacks are intentionally data
+preserving, PR1 rollback cannot be used to force the database back to empty
+after those guards preserve rows or schema; correct the release and roll
+forward instead.
 
 The forward migration is transactional and idempotent. It backfills every new
 required value before setting `NOT NULL`, fails rather than silently repairing
@@ -335,6 +360,9 @@ route, timer or runtime, and it performs no provider I/O. Revoke all issued PR27
 terminal capabilities before the evidence-preserving rollback; the rollback removes
 the callable mutation surface but retains terminal checks/events, ingest evidence,
 columns, exact foreign keys and the minimum read ACL required by retained guards. Local
+reverse rehearsal must therefore stop before PR26 rollback: PR26 detects those retained
+guards and fails before mutation, requiring a reviewed forward fix rather than deletion.
+Local
 evidence passes focused 67/67, static 8/8, isolated PostgreSQL 16 at 4/4, full suite
 657 pass/0 fail/24 skip of 681, TypeScript, build, map/diff and App QA P0=P1=P2=0.
 This is not staging or production evidence: composition and durable resolver injection,

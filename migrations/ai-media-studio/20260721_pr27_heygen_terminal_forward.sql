@@ -671,6 +671,11 @@ ALTER FUNCTION ai_media_worker_api.record_provider_terminal_v1(uuid,text,text,uu
 REVOKE ALL ON FUNCTION ai_media_worker_api.require_terminal_capability_v1(uuid,text,text,text,text,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION ai_media_worker_api.guard_terminal_check_v1(),ai_media_worker_api.guard_terminal_event_v1(),
   ai_media_worker_api.guard_terminal_render_projection_v1() FROM PUBLIC;
+REVOKE ALL ON FUNCTION
+  ai_media_worker_api.claim_terminal_check_v1(uuid,text,text,text,integer),
+  ai_media_worker_api.release_terminal_check_unknown_v1(uuid,text,text,uuid,uuid,bigint,text,timestamptz,text),
+  ai_media_worker_api.record_provider_terminal_v1(uuid,text,text,uuid,uuid,bigint,uuid,bigint,text,uuid,text,integer,text,text,text,text,timestamptz,text)
+FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
   ai_media_worker_api.claim_terminal_check_v1(uuid,text,text,text,integer),
   ai_media_worker_api.release_terminal_check_unknown_v1(uuid,text,text,uuid,uuid,bigint,text,timestamptz,text),

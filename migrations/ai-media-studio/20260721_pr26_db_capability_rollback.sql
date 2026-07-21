@@ -10,9 +10,12 @@ BEGIN
   IF to_regclass('public.ai_media_admitted_worker_capabilities') IS NULL
     OR to_regclass('public.ai_media_submission_capacity_leases') IS NULL
     OR to_regnamespace('ai_media_worker_api') IS NULL
+    OR to_regprocedure('ai_media_worker_api.guard_terminal_check_v1()') IS NOT NULL
+    OR to_regprocedure('ai_media_worker_api.guard_terminal_event_v1()') IS NOT NULL
+    OR to_regprocedure('ai_media_worker_api.guard_terminal_render_projection_v1()') IS NOT NULL
     OR EXISTS (SELECT 1 FROM public.ai_media_admitted_worker_capabilities LIMIT 1)
     OR EXISTS (SELECT 1 FROM public.ai_media_submission_capacity_leases LIMIT 1) THEN
-    RAISE EXCEPTION 'PR26 rollback requires zero capability and zero capacity evidence; otherwise forward-fix';
+    RAISE EXCEPTION 'PR26 rollback requires zero capability/capacity evidence and no retained PR27 terminal guards; otherwise stop and forward-fix';
   END IF;
 END
 $guard$;

@@ -21,15 +21,16 @@ only to resolve that gate; this document itself grants no access.
    commit chain has not been recorded for the rehearsal.
 2. The staging database target and owner have not been explicitly identified;
    a production hostname is never an acceptable substitute.
-3. The PR1 `ai_media_*` baseline is not proven by catalog evidence. PR2 is a
-   delta, not an initial-schema migration.
-4. PR16A has independently checked local forward/rollback SQL and isolated
-   PostgreSQL integrity proof, but remains unapplied. PR16B now has a local
-   forward/rollback pair, durable activation/CAS, cleanup v2, isolated
-   PostgreSQL proof and clean checker/App QA gates, but its stacked GitHub review
-   and explicit rehearsal approval are pending. The application must still stop after the PR16B file and before
-   PR19; never bridge this gate with `drizzle-kit push`, `npm run db:push`,
-   inferred SQL, or a production schema diff. The preserved remediation scope is
+3. The reviewed-local PR1 baseline pair and provenance manifest are present,
+   but no approved operator has proved their compatibility against a named
+   restored staging catalog. PR2 remains a delta and must never substitute for
+   the PR1 baseline.
+4. PR16A and PR16B have independently checked local forward/rollback SQL,
+   isolated PostgreSQL proof and clean checker/App QA gates. Both remain
+   unapplied. Their review evidence does not authorize staging access or remove
+   the explicit rehearsal-approval gate; never bridge any migration boundary
+   with `drizzle-kit push`, `npm run db:push`, inferred SQL, or a production
+   schema diff. The preserved remediation record is
    `docs/ai-media-studio/pr16-remediation-plan.md`.
 5. A fresh backup has not been restored successfully into an isolated database.
 6. PostgreSQL is older than 16 or `pgcrypto` is absent/untrusted.
@@ -97,9 +98,10 @@ Codex and not authorization to connect.
 2. Export table, column, constraint, index, trigger, function, schema, owner,
    grant, and role catalogs for every `ai_media_*` relation and
    `ai_media_worker_api` object.
-3. Prove the PR1 baseline exists before PR2. If the baseline is partial,
-   unexpected, or already contains a later object, stop and reconcile from a
-   fresh restored copy.
+3. Prove the restored copy is an empty AI Media Studio baseline before PR1,
+   then prove the exact manifest-bound PR1 objects before PR2. If either state
+   is partial, unexpected, or already contains a later object, stop and
+   reconcile from a fresh restored copy.
 4. Prove the named PR26 roles either do not exist yet or exactly match the
    reviewed attributes. Similar names or broader inherited roles are not valid.
 5. Record row counts and orphan/duplicate preflight queries without repairing
@@ -141,21 +143,20 @@ the Git blob/SHA-256 and client exit status for each. Stop on the first nonzero
 status, lock timeout, statement timeout, warning treated as an error, unexpected
 row repair, or catalog drift. Do not skip ahead and do not use glob order.
 
-1. `migrations/ai-media-studio/20260720_pr2_core_forward.sql`
-2. `migrations/ai-media-studio/20260720_pr3_operations_forward.sql`
-3. `migrations/ai-media-studio/20260720_pr4_assets_forward.sql`
-4. `migrations/ai-media-studio/20260720_pr5_governance_forward.sql`
-5. `migrations/ai-media-studio/20260720_pr6_provider_identity_forward.sql`
-6. `migrations/ai-media-studio/20260721_pr8_publishing_accounts_forward.sql`
-7. `migrations/ai-media-studio/20260721_pr9_oauth_foundation_forward.sql`
-8. `migrations/ai-media-studio/20260721_pr11_oauth_policy_forward.sql`
-9. `migrations/ai-media-studio/20260721_pr12_oauth_callback_saga_forward.sql`
-10. `migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_forward.sql`
-11. `migrations/ai-media-studio/20260721_pr15_provider_connection_stages_forward.sql`
-12. `migrations/ai-media-studio/20260721_pr16_provider_activation_integrity_forward.sql`
-13. `migrations/ai-media-studio/20260721_pr16b_durable_activation_forward.sql`
-14. **PR16B durable repository/CAS gate — exact reviewed stacked commit and
-    explicit rehearsal approval remain a mandatory stop.**
+1. `migrations/ai-media-studio/20260720_pr1_foundation_forward.sql`
+2. `migrations/ai-media-studio/20260720_pr2_core_forward.sql`
+3. `migrations/ai-media-studio/20260720_pr3_operations_forward.sql`
+4. `migrations/ai-media-studio/20260720_pr4_assets_forward.sql`
+5. `migrations/ai-media-studio/20260720_pr5_governance_forward.sql`
+6. `migrations/ai-media-studio/20260720_pr6_provider_identity_forward.sql`
+7. `migrations/ai-media-studio/20260721_pr8_publishing_accounts_forward.sql`
+8. `migrations/ai-media-studio/20260721_pr9_oauth_foundation_forward.sql`
+9. `migrations/ai-media-studio/20260721_pr11_oauth_policy_forward.sql`
+10. `migrations/ai-media-studio/20260721_pr12_oauth_callback_saga_forward.sql`
+11. `migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_forward.sql`
+12. `migrations/ai-media-studio/20260721_pr15_provider_connection_stages_forward.sql`
+13. `migrations/ai-media-studio/20260721_pr16_provider_activation_integrity_forward.sql`
+14. `migrations/ai-media-studio/20260721_pr16b_durable_activation_forward.sql`
 15. `migrations/ai-media-studio/20260721_pr19_daily_admission_forward.sql`
 16. `migrations/ai-media-studio/20260721_pr20_launch_authorities_forward.sql`
 17. `migrations/ai-media-studio/20260721_pr22_launch_intents_forward.sql`
@@ -169,10 +170,17 @@ PR7, PR10, PR13, PR17, PR18, and PR21 have no standalone SQL file in this
 directory. That fact is not permission to infer or generate a migration. The
 operator must record the reviewed reason each is schema-neutral or covered by a
 later reviewed delta. PR13's reviewed commit is schema-neutral; PR14 verifies
-the PR12 database controls that its adapters consume. PR16A and PR16B are now
-inventoried migration pairs with clean local checker/App QA evidence, but
-PR16B's stacked GitHub review and application/repository compatibility remain a
-mandatory stop before PR19 or any restart.
+the PR12 database controls that its adapters consume. PR16A and PR16B are
+inventoried reviewed-local migration pairs with clean checker/App QA evidence.
+The 22-pair list and source provenance are machine-recorded in
+`migrations/ai-media-studio/manifest.json`; the operator must verify that exact
+manifest and every file digest before applying anything.
+
+The manifest retains an operator stop after PR16B and another before PR26.
+These are explicit approval, compatibility and DBA-principal gates, not claims
+that PR16B implementation or review is pending. A disposable local full-chain
+harness may validate SQL compatibility without granting an operator permission
+to cross either gate on staging.
 
 An approved operator invocation should be equivalent to the following shape,
 with the connection supplied by their private secret mechanism:
@@ -230,10 +238,20 @@ After the full authorized forward manifest is available and passes:
 
 Run rollback only on a fresh rehearsal copy after first rolling application code
 back to the compatible revision and draining all writers/workers again. Use the
-reverse order below; retain evidence-preserving tables/columns where each
-rollback explicitly says it is application-only or data preserving.
+reverse order below only until the first preservation stop; retain
+evidence-preserving tables/columns where each rollback explicitly says it is
+application-only or data preserving. The list records dependency order, not a
+promise that all files can or should run on one restored copy.
 
 1. `20260721_pr27_heygen_terminal_rollback.sql`
+
+**Mandatory preservation stop:** PR27 intentionally retains its terminal
+tables, foreign keys, triggers and guard functions. PR26 rollback must detect
+those guards and fail before mutation. Do not continue to item 2 on that copy;
+keep the application drained and forward-fix. Items 2–22 are applicable only
+to a separately approved compatible rehearsal state where no retained later
+surface exists, or after a new reviewed migration supplies a safe transition.
+
 2. `20260721_pr26_db_capability_rollback.sql`
 3. `20260721_pr25_admitted_worker_rollback.sql`
 4. `20260721_pr24_held_activation_rollback.sql`
@@ -241,21 +259,25 @@ rollback explicitly says it is application-only or data preserving.
 6. `20260721_pr22_launch_intents_rollback.sql`
 7. `20260721_pr20_launch_authorities_rollback.sql`
 8. `20260721_pr19_daily_admission_rollback.sql`
-9. **PR16B application/repository compatibility gate — stop before crossing
-   into the PR16B and PR16A rollback.**
-10. `20260721_pr16b_durable_activation_rollback.sql`
-11. `20260721_pr16_provider_activation_integrity_rollback.sql`
-12. `20260721_pr15_provider_connection_stages_rollback.sql`
-13. `20260721_pr14_oauth_vault_operations_rollback.sql`
-14. `20260721_pr12_oauth_callback_saga_rollback.sql`
-15. `20260721_pr11_oauth_policy_rollback.sql`
-16. `20260721_pr9_oauth_foundation_rollback.sql`
-17. `20260721_pr8_publishing_accounts_rollback.sql`
-18. `20260720_pr6_provider_identity_rollback.sql`
-19. `20260720_pr5_governance_rollback.sql`
-20. `20260720_pr4_assets_rollback.sql`
-21. `20260720_pr3_operations_rollback.sql`
-22. `20260720_pr2_core_rollback.sql`
+9. `20260721_pr16b_durable_activation_rollback.sql`
+10. `20260721_pr16_provider_activation_integrity_rollback.sql`
+11. `20260721_pr15_provider_connection_stages_rollback.sql`
+12. `20260721_pr14_oauth_vault_operations_rollback.sql`
+13. `20260721_pr12_oauth_callback_saga_rollback.sql`
+14. `20260721_pr11_oauth_policy_rollback.sql`
+15. `20260721_pr9_oauth_foundation_rollback.sql`
+16. `20260721_pr8_publishing_accounts_rollback.sql`
+17. `20260720_pr6_provider_identity_rollback.sql`
+18. `20260720_pr5_governance_rollback.sql`
+19. `20260720_pr4_assets_rollback.sql`
+20. `20260720_pr3_operations_rollback.sql`
+21. `20260720_pr2_core_rollback.sql`
+22. `20260720_pr1_foundation_rollback.sql`
+
+The PR1 rollback is valid only after every later rollback has succeeded and the
+catalog contains no post-PR1 evidence. It is an empty-baseline rollback: it must
+fail rather than erase retained evidence, and it cannot be used to force a
+return to empty after a later data-preserving rollback leaves records or schema.
 
 Do not assume rollback removes evidence or restores weakened uniqueness/foreign
 keys. Several reviewed rollback files deliberately preserve evidence and require
@@ -265,8 +287,9 @@ held/activated/submission/capacity/terminal evidence exists, keep the app
 drained and prepare a reviewed forward fix instead of forcing destructive
 rollback. Never drop retained tables/columns manually.
 
-After the reverse SQL completes, restart the exact application revision that is
-compatible with the retained rollback schema, still with every provider and
+After the approved reverse segment reaches its preservation stop, restart the
+exact application revision that is compatible with the retained rollback
+schema, still with every provider and
 queue worker disabled. Repeat the authenticated runtime/agent/dashboard reads,
 safe-unavailable checks, durable row/evidence comparisons, and at least one
 additional restart. Then rerun checker and the complete App QA route, link/click,
@@ -281,7 +304,7 @@ these occurs:
 
 - target identity is ambiguous or resembles production;
 - backup restore or hash verification fails;
-- PR1 provenance is incomplete, or PR16B checker/App QA evidence is incomplete;
+- the PR1 manifest/provenance or any reviewed-chain digest does not match;
 - a preflight detects orphan, duplicate, cross-tenant, unexpected role/grant,
   extension, trigger, function, constraint, or index state;
 - a SQL client returns nonzero, a transaction remains open/aborted, or a timeout
