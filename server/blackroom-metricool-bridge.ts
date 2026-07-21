@@ -323,15 +323,16 @@ export async function scheduleBlackRoomMetricoolPost(
   if (!input.caption.trim() || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(input.publicationDateTime)) {
     throw new Error("Invalid Metricool caption or publication date");
   }
-  // Match Metricool's official MCP client exactly. Its scheduler route uses the
-  // MCP integration source and explicitly requests JSON in both directions.
+  // Match Metricool's documented scheduler request. The `integrationSource=MCP`
+  // variant is not the regular JSON scheduler contract and can make Metricool
+  // bind an otherwise valid JSON body as null fields.
   const headers = { "X-Mc-Auth": token, "content-type": "application/json", accept: "application/json" };
   // The normalize endpoint can return a plain URL. Advertising JSON-only in
   // Accept makes Metricool answer 500 "No acceptable representation".
   const normalizeHeaders = { "X-Mc-Auth": token, accept: "*/*" };
   const date = input.publicationDateTime.slice(0, 10);
   const timezone = encodeURIComponent(input.timezone || BLACKROOM_TIMEZONE);
-  const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
+  const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}`;
   const verifyUrl = `${schedulerUrl}&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59&timezone=${timezone}&extendedRange=false`;
   const existing = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "duplicate preflight");
   const captions: Record<BlackRoomMetricoolNetwork, string> = {
