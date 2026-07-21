@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR27 HeyGen terminal evidence
+
+- Branch: `codex/ai-media-studio-heygen-terminal-evidence`, draft PR #112, stacked on draft PR #109; initial implementation is preserved at commit `3119d017` and validation follow-ups remain incremental.
+- Provider boundary: an unmounted HeyGen V3 adapter submits one exact authorized request with the persisted idempotency key, treats every transport/invalid/409 result as ambiguous, and obtains provider-authoritative status only by the confirmed `video_id`. HeyGen never mints exact negative-submission finality and never triggers an automatic refund.
+- Terminal boundary: a separate leased/fenced worker polls accepted jobs. PostgreSQL records one append-only terminal event and atomically releases active capacity; completed jobs enqueue one private MP4 ingest handoff in the same transaction, while failed jobs create no ingest. Committed money is not changed.
+- Recovery and isolation: terminal checks/events bind exact owner, workspace, attempt, account, provider, credential version, provider job and send authorization. Replay is distinguished from conflict. The ingest queue now has an exact tenant/workspace/render foreign key, a durable provider artifact reference and an ephemeral renewable URL.
+- Current evidence: focused adapter/worker/repository/migration checks pass 31/31, static migration checks pass 6/6, isolated PostgreSQL 16 passed 3/3 before the final claim-return hardening, and TypeScript plus diff hygiene pass. Full-suite, final PostgreSQL rerun, build, codebase map, independent checker and App QA are still in progress.
+- Safety boundary: PR27 remains absent from routes, public barrels, timers and runtime composition. The migration is unapplied; there is no real HeyGen request, webhook authority, spend, publication, secret change or deployment. The initial 5–10 avatars × 10 videos remain a blocked plan, not a production batch.
+
 ## Active local checkpoint: PR26 database capability and race proof
 
 - Branch: `codex/ai-media-studio-db-capability-races`, draft PR #109, stacked on draft PR #108; preserved in GitHub through incremental commits while validation continues.

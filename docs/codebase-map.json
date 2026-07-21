@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T17:13:32.869Z",
+  "generatedAt": "2026-07-21T17:56:15.827Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,18 +86,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 732,
-    "filesIndexed": 617,
-    "imports": 2504,
+    "filesVisible": 742,
+    "filesIndexed": 625,
+    "imports": 2541,
     "routes": 489,
-    "symbols": 12023
+    "symbols": 12174
   },
   "directories": {
     "server/ai-media-studio": {
-      "files": 128,
-      "indexed": 123,
+      "files": 131,
+      "indexed": 126,
       "kinds": {
-        "server": 128
+        "server": 131
       }
     },
     ".agents/skills": {
@@ -165,10 +165,10 @@
       }
     },
     "migrations/ai-media-studio": {
-      "files": 37,
+      "files": 39,
       "indexed": 1,
       "kinds": {
-        "other": 36,
+        "other": 38,
         "docs": 1
       }
     },
@@ -215,10 +215,10 @@
       }
     },
     "tests": {
-      "files": 157,
-      "indexed": 150,
+      "files": 162,
+      "indexed": 155,
       "kinds": {
-        "test": 157
+        "test": 162
       }
     },
     "tests/fixtures": {
@@ -10560,6 +10560,75 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/providers/heygen-v3-admitted-render-provider.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/contracts",
+        "../workers/admitted-render-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "HeyGenV3AdmittedProviderOptions",
+        "HeyGenV3AdmittedRenderProvider"
+      ],
+      "symbols": [
+        "ASPECT_RATIOS",
+        "ExactContext",
+        "HEYGEN_API_ORIGIN",
+        "HEYGEN_PROVIDER_KEY",
+        "HeyGenFetch",
+        "HeyGenV3AdmittedRenderProvider",
+        "IDEMPOTENCY_KEY",
+        "MAX_BODY_BYTES",
+        "MAX_PROVIDER_ID_LENGTH",
+        "MAX_SCRIPT_LENGTH",
+        "PROCESSING_STATES",
+        "aspectRatio",
+        "avatarId",
+        "body",
+        "commonEvidence",
+        "data",
+        "declaredLength",
+        "detail",
+        "durationSeconds",
+        "exactMp4Url",
+        "exactObservedAt",
+        "exactSecret",
+        "failureCode",
+        "failureMessageDigest",
+        "finiteDuration",
+        "jsonObject",
+        "objectValue",
+        "observedAt",
+        "opaqueId",
+        "parseCreateVideoResponse",
+        "parseVideoDetail",
+        "providerJobId",
+        "providerRequestId",
+        "requestDigest",
+        "requiredAspectRatio",
+        "requiredScript",
+        "responseBody",
+        "responseDigest",
+        "root",
+        "safeFailureCode",
+        "safeRequestId",
+        "safeResponseBody",
+        "script",
+        "sha256",
+        "sourceUrl",
+        "status",
+        "text",
+        "transportClass",
+        "url",
+        "validScopePart",
+        "value",
+        "videoUrl",
+        "voiceId"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/providers/heygen-video-provider.ts",
       "kind": "server",
       "imports": [
@@ -11513,10 +11582,51 @@
         "AdmittedSubmissionIdentity",
         "AdmittedSubmissionState",
         "AdmittedSubmitOutcome",
+        "AdmittedTerminalObservation",
+        "AdmittedTerminalProvider",
         "ExactAdmittedProviderCapability",
         "ExactNegativeSubmissionFinality"
       ],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/admitted-render-terminal-worker.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "./admitted-render-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "AdmittedCompletedTerminalFinality",
+        "AdmittedFailedTerminalFinality",
+        "AdmittedRenderTerminalWorker",
+        "AdmittedTerminalClaim",
+        "AdmittedTerminalFinality",
+        "AdmittedTerminalFinalizeResult",
+        "AdmittedTerminalProviderResolver",
+        "AdmittedTerminalRepository",
+        "AdmittedTerminalRetryReason",
+        "AdmittedTerminalWorkerResult"
+      ],
+      "symbols": [
+        "AdmittedRenderTerminalWorker",
+        "assertClaim",
+        "assertExactCapability",
+        "boundedProviderId",
+        "claim",
+        "classification",
+        "errorDigest",
+        "finalization",
+        "isSafeCompletedObservation",
+        "reason",
+        "released",
+        "remoteArtifactRef",
+        "terminalResult",
+        "url"
+      ],
       "routes": []
     },
     {
@@ -11624,6 +11734,48 @@
         "sameNegativeFinality",
         "sameScope",
         "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/drizzle-admitted-render-terminal-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/contracts",
+        "./admitted-render-terminal-worker",
+        "./drizzle-admitted-render-repository",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleAdmittedRenderTerminalRepository"
+      ],
+      "symbols": [
+        "DIGEST",
+        "DrizzleAdmittedRenderTerminalRepository",
+        "ExecuteResult",
+        "GuardedTerminalClaim",
+        "UUID",
+        "assertUuid",
+        "boundedString",
+        "boundedText",
+        "committedCall",
+        "completed",
+        "date",
+        "dbDigest",
+        "dbUuid",
+        "exactOptionalRow",
+        "iso",
+        "mutationResult",
+        "parsed",
+        "positive",
+        "positiveBigInt",
+        "remoteRef",
+        "remoteUrl",
+        "safeHttpsUrl",
+        "terminalCheckId",
+        "terminalMutationResult",
+        "url",
         "value"
       ],
       "routes": []
@@ -18797,6 +18949,8 @@
         "aiMediaProviderResources",
         "aiMediaProviderSubmissionAttempts",
         "aiMediaProviderSubmissionEvents",
+        "aiMediaProviderTerminalChecks",
+        "aiMediaProviderTerminalEvents",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
@@ -18843,6 +18997,8 @@
         "aiMediaProviderResources",
         "aiMediaProviderSubmissionAttempts",
         "aiMediaProviderSubmissionEvents",
+        "aiMediaProviderTerminalChecks",
+        "aiMediaProviderTerminalEvents",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
@@ -19178,6 +19334,26 @@
         "cost",
         "notice",
         "previous"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-admitted-render-terminal-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/admitted-render-terminal-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "capability",
+        "digest",
+        "repository",
+        "resolver",
+        "worker"
       ],
       "routes": []
     },
@@ -20058,6 +20234,35 @@
         "service",
         "stored",
         "throwingService"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/providers/heygen-v3-admitted-render-provider",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "SECRET",
+        "adapter",
+        "authorizationDigest",
+        "capability",
+        "headers",
+        "jsonResponse",
+        "outcome",
+        "provider",
+        "rawFailure",
+        "result",
+        "secretInThrownMessage",
+        "submitContext",
+        "terminalContext"
       ],
       "routes": []
     },
@@ -21492,6 +21697,89 @@
         "waitForBlocked",
         "waitForExpiredAttempt",
         "work"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr27-postgres-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "TEMP_PREFIX",
+        "acl",
+        "constraint",
+        "enabled",
+        "fixture",
+        "forwards",
+        "migration",
+        "ownedUrl",
+        "parsed",
+        "pool",
+        "resolvedSocket",
+        "retained",
+        "rollback",
+        "surfaces",
+        "unsafe",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr27-terminal-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "capacity",
+        "compact",
+        "event",
+        "forward",
+        "ingest",
+        "record",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr27-terminal-repository.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/workers/drizzle-admitted-render-repository",
+        "../server/ai-media-studio/workers/drizzle-admitted-render-terminal-repository",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FunctionDatabase",
+        "calls",
+        "claim",
+        "claimRow",
+        "dialect",
+        "digest",
+        "failed",
+        "h",
+        "harness",
+        "id",
+        "normalized",
+        "reconcile",
+        "rendered",
+        "row"
       ],
       "routes": []
     },
@@ -23821,6 +24109,7 @@
   ],
   "tests": [
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-media-studio-admitted-render-terminal-worker.test.ts",
     "tests/ai-media-studio-admitted-render-worker.test.ts",
     "tests/ai-media-studio-analytics.test.ts",
     "tests/ai-media-studio-asset-delivery-client.test.ts",
@@ -23845,6 +24134,7 @@
     "tests/ai-media-studio-heygen-roster-drizzle.test.ts",
     "tests/ai-media-studio-heygen-roster-routes.test.ts",
     "tests/ai-media-studio-heygen-roster-service.test.ts",
+    "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
@@ -23889,6 +24179,9 @@
     "tests/ai-media-studio-pr26-db-capability-migration.test.ts",
     "tests/ai-media-studio-pr26-db-capability.test.ts",
     "tests/ai-media-studio-pr26-postgres-races.test.ts",
+    "tests/ai-media-studio-pr27-postgres-migration.test.ts",
+    "tests/ai-media-studio-pr27-terminal-migration.test.ts",
+    "tests/ai-media-studio-pr27-terminal-repository.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
