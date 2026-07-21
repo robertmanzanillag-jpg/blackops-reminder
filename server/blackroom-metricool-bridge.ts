@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 export const BLACKROOM_METRICOOL_BLOG_ID = 6585226;
 export const BLACKROOM_TIMEZONE = "America/New_York";
 
@@ -27,28 +29,52 @@ export async function postMetricoolJsonBytes(
   const target = new URL(url);
   if (!['http:', 'https:'].includes(target.protocol)) throw new Error("Invalid Metricool scheduler protocol");
   const payloadBytes = Buffer.from(serializedPayload, "utf8");
-  const request = target.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise<Response>((resolve, reject) => {
-    const upstream = request(target, {
-      method: "POST",
-      headers: {
-        "X-Mc-Auth": token,
-        "Content-Type": "application/json; charset=utf-8",
-        Accept: "application/json",
-        "Content-Length": payloadBytes.byteLength,
-      },
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-      response.on("end", () => {
-        const status = response.statusCode || 502;
-        const body = Buffer.concat(chunks);
-        resolve(new Response(status === 204 ? null : body, { status }));
-      });
+    const child = spawn("curl", [
+      "--silent",
+      "--show-error",
+      "--request", "POST",
+      "--url", target.toString(),
+      "--header", "@/dev/fd/3",
+      "--data-binary", "@-",
+      "--output", "-",
+      "--write-out", "\n%{http_code}",
+    ], {
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
     });
-    upstream.once("error", reject);
-    upstream.setTimeout(timeoutMs, () => upstream.destroy(new Error("Metricool scheduler request timed out")));
-    upstream.end(payloadBytes);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let settled = false;
+    const finish = (error?: Error, response?: Response) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(response!);
+    };
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(new Error("Metricool scheduler request timed out"));
+    }, timeoutMs);
+    child.once("error", (error) => finish(error));
+    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
+    child.once("close", (code) => {
+      if (code !== 0) {
+        const detail = Buffer.concat(stderr).toString("utf8").replace(token, "[redacted]").replace(/\s+/g, " ").trim().slice(0, 300);
+        return finish(new Error(`Metricool scheduler transport failed${detail ? `: ${detail}` : ""}`));
+      }
+      const output = Buffer.concat(stdout);
+      const separator = output.lastIndexOf(10);
+      const status = Number(output.subarray(separator + 1).toString("ascii"));
+      if (separator < 0 || !Number.isInteger(status) || status < 100 || status > 599) {
+        return finish(new Error("Metricool scheduler transport returned an invalid status"));
+      }
+      const body = output.subarray(0, separator);
+      finish(undefined, new Response(status === 204 ? null : body, { status }));
+    });
+    child.stdio[3].end(`X-Mc-Auth: ${token}\ncontent-type: application/json\naccept: application/json\n`);
+    child.stdin.end(payloadBytes);
   });
 }
 
@@ -190,9 +216,9 @@ export async function scheduleBlackRoomMetricoolPost(
   const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   const payload = buildMetricoolTikTokPayload(input, mediaId);
   const serializedPayload = JSON.stringify(payload);
-  // Metricool's scheduler has returned an empty parsed body for otherwise
-  // valid Node fetch requests. Send the JSON over a direct HTTP request so the
-  // exact UTF-8 bytes and Content-Length reach the upstream parser unchanged.
+  // Metricool has parsed Node fetch and node:https scheduler bodies as empty
+  // in production. Replit curl is verified against the same endpoint and sends
+  // the JSON intact. The auth header travels through fd 3, never process args.
   const scheduledResponse = options.fetch
     ? await fetcher(schedulerUrl, {
         method: "POST",
@@ -210,5 +236,3 @@ export async function scheduleBlackRoomMetricoolPost(
   if (id == null || String(id).trim() === "") throw new Error("Metricool scheduled post has no identifier");
   return { metricoolId: String(id), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
 }
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
