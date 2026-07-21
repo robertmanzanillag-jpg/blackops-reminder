@@ -1,5 +1,7 @@
 import { lstat, readFile, realpath, writeFile, mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
 const captionStrategies = [
@@ -9,6 +11,7 @@ const captionStrategies = [
   { id: "hook_only", captionStyle: "minimal", subtitleStyle: "hook_only", hookStyle: "short_claim" },
 ];
 const exactTikTokPostPattern = /^https:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9._-]{2,40}\/video\/\d{8,30}\/?$/i;
+const execFileAsync = promisify(execFile);
 
 function draftAssignments(campaign, experiment, rows) {
   const draftCount = Math.floor(finiteNumber(campaign.draftsReady) || 0);
@@ -83,6 +86,68 @@ function median(values) {
 function exactEvidence(value) {
   const text = String(value || "").trim();
   return text.length >= 12 && !/<[^>]+>|placeholder|paste here|example\.com/i.test(text);
+}
+
+function csvValue(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function htmlValue(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
+  return (decision.assignments || []).map((assignment) => {
+    const media = mediaReadyBySlot[assignment.slot] || {};
+    const status = decision.canProduce !== true
+      ? "blocked_campaign"
+      : media.ready !== true
+        ? "blocked_media_missing"
+        : decision.canEnterApprovalQueue !== true
+          ? "blocked_payout_setup"
+          : "approval_required";
+    return {
+      order: assignment.slot,
+      account: decision.accountHandle,
+      platform: "tiktok",
+      campaignId: decision.campaignId,
+      draftFile: media.relativePath || assignment.draftFile,
+      strategyId: assignment.strategyId,
+      caption: assignment.captionText,
+      status,
+      publishAllowed: false,
+    };
+  });
+}
+
+function metricoolRowsCsv(rows) {
+  const columns = ["order", "account", "platform", "campaignId", "draftFile", "strategyId", "caption", "status", "publishAllowed"];
+  return `${columns.join(",")}\n${rows.map((row) => columns.map((column) => csvValue(row[column])).join(",")).join("\n")}\n`;
+}
+
+function metricoolRowsHtml(decision, rows) {
+  const clips = rows.map((row) => `
+    <article class="clip-row">
+      <video controls preload="metadata" src="/clippers-workspace/${htmlValue(row.draftFile)}"></video>
+      <div class="clip-copy">
+        <div class="meta"><span>#${htmlValue(row.order)}</span><span>${htmlValue(row.strategyId)}</span><span>${htmlValue(row.status)}</span></div>
+        <h2>${htmlValue(row.caption)}</h2>
+        <p>${htmlValue(row.draftFile)}</p>
+      </div>
+    </article>`).join("");
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Metricool Review Queue</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f7f7f5;color:#171717;font-family:Inter,Arial,sans-serif;letter-spacing:0}header{background:#171717;color:#fff;padding:28px max(20px,calc((100vw - 1120px)/2))}header h1{font-size:28px;margin:0 0 8px}header p{margin:0;color:#cfcfc9}.summary{display:flex;gap:20px;flex-wrap:wrap;padding:18px max(20px,calc((100vw - 1120px)/2));border-bottom:1px solid #d9d9d4;background:#fff}.summary strong{display:block;font-size:20px}.summary span{font-size:12px;color:#666}.notice{padding:14px max(20px,calc((100vw - 1120px)/2));background:#fff3cd;color:#5d4600;border-bottom:1px solid #ead58d}main{max-width:1120px;margin:auto}.clip-row{display:grid;grid-template-columns:180px 1fr;gap:24px;padding:24px 20px;border-bottom:1px solid #d9d9d4}.clip-row video{width:180px;aspect-ratio:9/16;background:#000}.clip-copy{align-self:center;min-width:0}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{font-size:12px;border:1px solid #bbb;padding:4px 7px;border-radius:4px}.clip-copy h2{font-size:18px;line-height:1.35;margin:14px 0 8px}.clip-copy p{font-size:12px;color:#666;overflow-wrap:anywhere;margin:0}@media(max-width:620px){.clip-row{grid-template-columns:110px 1fr;gap:14px}.clip-row video{width:110px}.clip-copy h2{font-size:15px}}
+</style></head><body><header><h1>Metricool Review Queue</h1><p>${htmlValue(decision.title)} · @${htmlValue(decision.accountHandle)}</p></header>
+<section class="summary"><div><strong>${rows.length}</strong><span>real clips</span></div><div><strong>Approval required</strong><span>Metricool mode</span></div><div><strong>${decision.cashoutReady ? "Ready" : "Pending"}</strong><span>Vyro cashout</span></div></section>
+<div class="notice">No clip is published or scheduled. Review and explicit approval are still required.</div><main>${clips}</main></body></html>`;
 }
 
 function campaignExpiryMs(campaign) {
@@ -196,12 +261,15 @@ function campaignDecision(campaign, metrics, now) {
     creator: campaign.creator,
     creatorTier: campaign.creatorTier || "unknown",
     marketplace: campaign.marketplace,
+    accountHandle: campaign.accountHandle,
     decision,
     priorityScore,
     productionBlockers,
-    publishBlockers: [...productionBlockers, ...paymentBlockers],
+    publishBlockers: productionBlockers,
+    cashoutBlockers: paymentBlockers,
     canProduce: productionBlockers.length === 0,
-    canEnterApprovalQueue: productionBlockers.length === 0 && paymentBlockers.length === 0,
+    canEnterApprovalQueue: productionBlockers.length === 0,
+    cashoutReady: paymentBlockers.length === 0,
     realPublishEnabled: false,
     metricoolApprovalRequired: true,
     payoutCpm,
@@ -220,13 +288,13 @@ function campaignDecision(campaign, metrics, now) {
     assignments,
     nextAction: productionBlockers.length
       ? `Resolve ${productionBlockers[0]}.`
-      : paymentBlockers.length
-        ? `Prepare drafts, but do not publish until ${paymentBlockers[0]} is resolved.`
-        : decision === "scale"
+      : decision === "scale"
           ? `Allocate 70% to ${experiment.winnerStrategyId || experiment.nextStrategyId} and 30% to controlled exploration.`
           : decision === "pause_and_recut"
             ? "Pause this cut style and create materially different hooks before another paid test."
-            : `Run the next controlled test with ${experiment.nextStrategyId}.`,
+            : paymentBlockers.length
+              ? `Queue the next ${experiment.nextStrategyId} test for approval; resolve ${paymentBlockers[0]} before cashout.`
+              : `Run the next controlled test with ${experiment.nextStrategyId}.`,
   };
 }
 
@@ -276,7 +344,7 @@ export function buildStreamerGrowthCeoPlan({ campaigns = [], metrics = [], now =
       "Campaign authorization is required; creator fame never replaces commercial rights.",
       "Only proof-backed finalStatus=published Metricool rows count as views; earnings require separate payout evidence.",
       "No caption or subtitle winner is declared before three real posts per strategy.",
-      "Payout identity and payment method must be verified before entering the approval queue.",
+      "Payout identity and payment method affect cashout readiness, not campaign-source or Metricool approval readiness.",
       "The CEO may prepare and rank work, but real publishing remains disabled.",
     ],
   };
@@ -295,6 +363,24 @@ async function containedRegularFile(root, candidate) {
   if (!rootReal || !fileReal || !fileStats?.isFile() || fileStats.isSymbolicLink()) return null;
   const realRelative = path.relative(rootReal, fileReal);
   return realRelative && !realRelative.startsWith("..") && !path.isAbsolute(realRelative) ? resolved : null;
+}
+
+export function resolveWorkspaceMediaPath(workspaceRoot, candidate) {
+  return path.resolve(workspaceRoot, String(candidate || "").replace(/^\/clippers-workspace\//, ""));
+}
+
+export async function validateMetricoolMp4(workspaceRoot, candidate) {
+  const resolved = await containedRegularFile(workspaceRoot, resolveWorkspaceMediaPath(workspaceRoot, candidate));
+  if (!resolved || path.extname(resolved).toLowerCase() !== ".mp4") return null;
+  const fileStats = await lstat(resolved).catch(() => null);
+  if (!fileStats || fileStats.size < 1024) return null;
+  const probe = await execFileAsync("ffprobe", [
+    "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,width,height",
+    "-of", "json", resolved,
+  ], { timeout: 30_000, maxBuffer: 1_000_000 }).catch(() => null);
+  if (!probe) return null;
+  const stream = JSON.parse(probe.stdout || "{}").streams?.[0];
+  return stream?.codec_name && Number(stream.width) > 0 && Number(stream.height) > 0 ? resolved : null;
 }
 
 async function verifyTextEvidence(workspaceRoot, evidencePath, requiredValues) {
@@ -338,6 +424,32 @@ async function main() {
   const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics });
   await mkdir(reportDir, { recursive: true });
   await writeFile(path.join(reportDir, "streamer-growth-ceo.json"), `${JSON.stringify(plan, null, 2)}\n`);
+  for (const decision of plan.decisions) {
+    const mediaReadyBySlot = {};
+    for (const assignment of decision.assignments || []) {
+      const original = resolveWorkspaceMediaPath(workspaceRoot, assignment.draftFile);
+      const extension = path.extname(original);
+      const finalMedia = assignment.subtitleStyle === "hook_only"
+        ? original
+        : path.join(path.dirname(original), "subtitled", `${path.basename(original, extension)}-${assignment.subtitleStyle}.mp4`);
+      const validatedMedia = await validateMetricoolMp4(workspaceRoot, finalMedia);
+      mediaReadyBySlot[assignment.slot] = {
+        ready: Boolean(validatedMedia),
+        relativePath: validatedMedia ? path.relative(workspaceRoot, validatedMedia) : "",
+      };
+    }
+    const rows = buildMetricoolApprovalRows(decision, mediaReadyBySlot);
+    const firstDraft = decision.assignments?.[0]?.draftFile;
+    if (firstDraft && rows.length) {
+      const firstOriginal = await containedRegularFile(workspaceRoot, resolveWorkspaceMediaPath(workspaceRoot, firstDraft));
+      const queueDir = firstOriginal ? path.dirname(firstOriginal) : "";
+      const rootRelative = queueDir ? path.relative(workspaceRoot, queueDir) : "";
+      if (rootRelative && !rootRelative.startsWith("..") && !path.isAbsolute(rootRelative)) {
+        await writeFile(path.join(queueDir, "metricool-approval-queue.csv"), metricoolRowsCsv(rows));
+        await writeFile(path.join(queueDir, "metricool-approval-queue.html"), metricoolRowsHtml(decision, rows));
+      }
+    }
+  }
   console.log(JSON.stringify(plan, null, 2));
 }
 

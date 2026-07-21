@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
-import { buildStreamerGrowthCeoPlan } from "../script/clippers-streamer-growth-ceo.mjs";
+import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspaceMediaPath, validateMetricoolMp4 } from "../script/clippers-streamer-growth-ceo.mjs";
 
 const now = new Date("2026-07-21T18:00:00.000Z");
 const publishedPostUrl = "https://www.tiktok.com/@streamersclipusa/video/1234567890123456789";
@@ -67,11 +70,13 @@ test("accepts an observed countdown without inventing an exact campaign deadline
   assert.equal(plan.decisions[0].canProduce, true);
 });
 
-test("does not enter approval queue before payout setup is verified", () => {
+test("separates Metricool approval readiness from Vyro cashout readiness", () => {
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [{ ...campaign, payoutMethodReady: false }], metrics: [], now });
   assert.equal(plan.decisions[0].canProduce, true);
-  assert.equal(plan.decisions[0].canEnterApprovalQueue, false);
-  assert.ok(plan.decisions[0].publishBlockers.includes("payout_method_not_connected"));
+  assert.equal(plan.decisions[0].canEnterApprovalQueue, true);
+  assert.equal(plan.decisions[0].cashoutReady, false);
+  assert.ok(plan.decisions[0].cashoutBlockers.includes("payout_method_not_connected"));
+  assert.equal(plan.decisions[0].publishBlockers.length, 0);
 });
 
 test("scales only after real qualifying posts and keeps exploration", () => {
@@ -152,4 +157,38 @@ test("ignores proof flags when the exact TikTok post URL is missing", () => {
   });
   assert.equal(plan.goal.measuredViews, 0);
   assert.equal(plan.decisions[0].observed.publishedPosts, 0);
+});
+
+test("Metricool rows point to final media while cashout setup remains separate", () => {
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [{ ...campaign, payoutMethodReady: false }], metrics: [], now });
+  const rows = buildMetricoolApprovalRows(plan.decisions[0], {
+    1: { ready: true, relativePath: "drafts/vyro/campaign/subtitled/final.mp4" },
+  });
+  assert.equal(rows[0].draftFile, "drafts/vyro/campaign/subtitled/final.mp4");
+  assert.equal(rows[0].status, "approval_required");
+  assert.equal(rows[0].publishAllowed, false);
+  assert.equal(rows[1].status, "blocked_media_missing");
+});
+
+test("Metricool rows require approval even after campaign and payout gates pass", () => {
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now });
+  const rows = buildMetricoolApprovalRows(plan.decisions[0], {
+    1: { ready: true, relativePath: "drafts/vyro/campaign/subtitled/final.mp4" },
+  });
+  assert.equal(rows[0].status, "approval_required");
+  assert.equal(rows[0].publishAllowed, false);
+});
+
+test("normalizes served workspace paths without accepting outside paths as ready media", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "clippers-ceo-media-"));
+  try {
+    await mkdir(path.join(root, "drafts"));
+    const fakeMp4 = path.join(root, "drafts", "fake.mp4");
+    await writeFile(fakeMp4, "not a real MP4");
+    assert.equal(resolveWorkspaceMediaPath(root, "/clippers-workspace/drafts/fake.mp4"), fakeMp4);
+    assert.equal(await validateMetricoolMp4(root, "/clippers-workspace/drafts/fake.mp4"), null);
+    assert.equal(await validateMetricoolMp4(root, "../outside.mp4"), null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
