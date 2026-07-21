@@ -110,6 +110,13 @@ async function installSchema():Promise<void>{
     [ids.submitCapability,SUBMIT_LOGIN,OWNER,WORKSPACE,digest("1"),ids.reconcileCapability,RECONCILE_LOGIN,digest("2")]);
 }
 
+async function resetOwnedSchema():Promise<void>{
+  await adminPool.query("DROP SCHEMA IF EXISTS ai_media_worker_api CASCADE");
+  await adminPool.query("DROP EXTENSION IF EXISTS pgcrypto CASCADE");
+  await adminPool.query("DROP SCHEMA public CASCADE;CREATE SCHEMA public AUTHORIZATION postgres");
+  await installSchema();
+}
+
 async function seedAuthorityGraph():Promise<void>{await adminPool.query(`
   INSERT INTO ai_media_provider_accounts(id,owner_user_id,workspace_id,provider_key,credential_version,status,credential_status)
     VALUES('${ids.account}','${OWNER}','${WORKSPACE}','heygen',1,'active','active');
@@ -206,7 +213,7 @@ async function createActivatedWork():Promise<{reservationId:string;renderJobId:s
     workHandoffDigest:admission.reservation.workHandoffDigest,requestedBy:"operator-pr26",idempotencyKey:"activate-pr26-race"};
   await activationRepository.activate({...activationUnsigned,inputDigest:activationRepository.inputDigest(activationUnsigned),
     principal:{capability:"activate-held-work",actorUserId:activationUnsigned.requestedBy} as unknown as TrustedActivationPrincipal});
-  return{reservationId:admission.reservation.id,renderJobId:admission.renderJob.id};
+  return{reservationId:admission.reservation.id,renderJobId:admission.reservation.renderJobId};
 }
 
 async function waitForBlocked(pid:number):Promise<void>{
@@ -279,8 +286,8 @@ integrationTest("two concurrent submit sessions produce one exact claim",async()
 
 integrationTest("an expired claim is replaced by a higher fence and the old lease is durable evidence",async()=>{
   // This test runs after the one-work claim test and exercises that exact durable attempt.
-  const first=await adminPool.query<{id:string;lease_token:string}>(
-    "SELECT id,lease_token::text FROM ai_media_provider_submission_attempts ORDER BY created_at LIMIT 1");
+  const first=await adminPool.query<{id:string;budget_reservation_id:string;lease_token:string;sealed_request_digest:string}>(
+    "SELECT id,budget_reservation_id,lease_token::text,sealed_request_digest FROM ai_media_provider_submission_attempts ORDER BY created_at LIMIT 1");
   assert.equal(first.rowCount,1);await adminPool.query(
     "UPDATE ai_media_provider_submission_attempts SET lease_expires_at=clock_timestamp()-interval '1 millisecond' WHERE id=$1",
     [first.rows[0].id]).then(()=>assert.fail("direct lease rewriting must be rejected"),()=>undefined);
@@ -288,7 +295,7 @@ integrationTest("an expired claim is replaced by a higher fence and the old leas
   // claim uses a bounded lease; this predicate is the only timing condition.
   await waitForExpiredAttempt(first.rows[0].id);
   const session=new RoleSession(SUBMIT_LOGIN,SUBMIT_ROLE);await session.connect();try{
-    const reclaimed=await session.query<{id:string;fencing_token:string;lease_token:string}>(
+    const reclaimed=await session.query<{id:string;fencing_token:string;lease_token:string;sealed_request_digest:string}>(
       "SELECT * FROM ai_media_worker_api.claim_admitted_v1($1,$2,$3,$4,$5)",
       [ids.submitCapability,OWNER,WORKSPACE,"submit-worker",60_000]);
     assert.equal(reclaimed.rowCount,1);assert.equal(reclaimed.rows[0].id,first.rows[0].id);
@@ -298,5 +305,107 @@ integrationTest("an expired claim is replaced by a higher fence and the old leas
       WHERE submission_attempt_id=$1 ORDER BY sequence`,[first.rows[0].id]);
     assert.deepEqual(events.rows,[{sequence:1,event_kind:"claimed",fencing_token:"1"},
       {sequence:2,event_kind:"reclaimed",fencing_token:"2"}]);
+    const stale=await session.query("SELECT * FROM ai_media_worker_api.authorize_admitted_v1($1,$2,$3,$4,$5,$6,$7,$8)",
+      [ids.submitCapability,OWNER,WORKSPACE,first.rows[0].id,first.rows[0].budget_reservation_id,1,
+        first.rows[0].lease_token,first.rows[0].sealed_request_digest]);
+    assert.equal(stale.rowCount,0,"the pre-reclaim fence must never authorize");
+    const authorized=await session.query("SELECT * FROM ai_media_worker_api.authorize_admitted_v1($1,$2,$3,$4,$5,$6,$7,$8)",
+      [ids.submitCapability,OWNER,WORKSPACE,reclaimed.rows[0].id,first.rows[0].budget_reservation_id,2,
+        reclaimed.rows[0].lease_token,reclaimed.rows[0].sealed_request_digest]);
+    assert.equal(authorized.rowCount,1);
+    const capacity=await adminPool.query<{state:string}>(
+      "SELECT state FROM ai_media_submission_capacity_leases WHERE budget_reservation_id=$1",
+      [first.rows[0].budget_reservation_id]);
+    assert.deepEqual(capacity.rows,[{state:"held"}]);
   }finally{await session.close();}
+});
+
+integrationTest("concurrent definitive no-submit finality refunds and releases capacity exactly once",async()=>{
+  const attempt=await adminPool.query<{id:string;budget_reservation_id:string;fencing_token:string;lease_token:string;
+    send_authorization_digest:string;provider_account_id:string;provider_key:string;provider_credential_version:number;
+    provider_idempotency_key:string}>(`SELECT id,budget_reservation_id,fencing_token::text,lease_token::text,
+      send_authorization_digest,provider_account_id,provider_key,provider_credential_version,provider_idempotency_key
+      FROM ai_media_provider_submission_attempts WHERE state='authorized'`);
+  assert.equal(attempt.rowCount,1);const row=attempt.rows[0];
+  const submit=new RoleSession(SUBMIT_LOGIN,SUBMIT_ROLE);await submit.connect();
+  const reconciler=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE);await reconciler.connect();
+  try{
+    const ambiguous=await submit.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.record_submit_ambiguous_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+      [ids.submitCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
+        row.send_authorization_digest,row.lease_token,null,digest("3")]);
+    assert.deepEqual(ambiguous.rows,[{applied:true}]);
+    const claimed=await reconciler.query<{reconciliation_lease_token:string;reconciliation_fencing_token:string}>(
+      "SELECT * FROM ai_media_worker_api.claim_reconciliation_v1($1,$2,$3,$4,$5)",
+      [ids.reconcileCapability,OWNER,WORKSPACE,"reconcile-worker",60_000]);
+    assert.equal(claimed.rowCount,1);const reconciliation=claimed.rows[0];
+    const barrier=await adminPool.connect(),left=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE),
+      right=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE);await left.connect();await right.connect();
+    try{
+      await barrier.query("BEGIN");await barrier.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`ai-media:admitted-reservation:${OWNER}:${WORKSPACE}:${row.budget_reservation_id}`]);
+      const finality=[ids.reconcileCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
+        row.send_authorization_digest,reconciliation.reconciliation_lease_token,
+        reconciliation.reconciliation_fencing_token,"linearizable_not_accepted_and_cannot_later_accept",
+        row.provider_account_id,row.provider_key,row.provider_credential_version,row.provider_idempotency_key,
+        new Date().toISOString(),digest("4")];
+      const leftCall=left.query<{applied:boolean}>(
+        "SELECT * FROM ai_media_worker_api.finalize_reconciled_no_submit_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",finality);
+      const rightCall=right.query<{applied:boolean}>(
+        "SELECT * FROM ai_media_worker_api.finalize_reconciled_no_submit_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",finality);
+      await waitForBlocked(left.pid);await waitForBlocked(right.pid);await barrier.query("COMMIT");
+      const outcomes=(await Promise.all([leftCall,rightCall])).map(result=>result.rows[0]?.applied).sort();
+      assert.deepEqual(outcomes,[false,true]);
+    }finally{await barrier.query("ROLLBACK").catch(()=>undefined);barrier.release();await left.close();await right.close();}
+    const ledger=await adminPool.query<{attempt_state:string;reservation_state:string;submission_state:string;
+      capacity_state:string;capacity_version:string;committed:string;terminal_events:string}>(`
+      SELECT attempt.state attempt_state,reservation.state reservation_state,reservation.submission_state,
+        capacity.state capacity_state,capacity.state_version::text capacity_version,
+        bucket.committed_micro_usd::text committed,
+        count(event.id) FILTER (WHERE event.event_kind='reconciled_no_submit')::text terminal_events
+      FROM ai_media_provider_submission_attempts attempt
+      JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
+      LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
+      WHERE attempt.id=$1 GROUP BY attempt.state,reservation.state,reservation.submission_state,
+        capacity.state,capacity.state_version,bucket.committed_micro_usd`,[row.id]);
+    assert.deepEqual(ledger.rows[0],{attempt_state:"reconciled_no_submit",reservation_state:"released",
+      submission_state:"reconciled_no_submit",capacity_state:"released",capacity_version:"2",committed:"0",terminal_events:"1"});
+  }finally{await submit.close();await reconciler.close();}
+});
+
+integrationTest("confirmed provider terminal evidence releases active capacity once without refunding committed budget",async()=>{
+  await resetOwnedSchema();const work=await createActivatedWork();
+  const submit=new RoleSession(SUBMIT_LOGIN,SUBMIT_ROLE),reconcile=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE);
+  await submit.connect();await reconcile.connect();try{
+    const claim=await submit.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.claim_admitted_v1($1,$2,$3,$4,$5)",
+      [ids.submitCapability,OWNER,WORKSPACE,"submit-worker",60_000]);assert.equal(claim.rowCount,1);
+    const claimed=claim.rows[0];
+    const authorization=await submit.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.authorize_admitted_v1($1,$2,$3,$4,$5,$6,$7,$8)",
+      [ids.submitCapability,OWNER,WORKSPACE,claimed.id,work.reservationId,claimed.fencing_token,
+        claimed.lease_token,claimed.sealed_request_digest]);assert.equal(authorization.rowCount,1);
+    const auth=authorization.rows[0],providerJobId="provider-job-pr26-terminal";
+    const confirmed=await submit.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.record_submit_confirmed_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      [ids.submitCapability,OWNER,WORKSPACE,auth.id,work.reservationId,auth.fencing_token,
+        auth.send_authorization_digest,auth.lease_token,providerJobId,null,digest("5")]);
+    assert.deepEqual(confirmed.rows,[{applied:true}]);
+    const releaseParams=[ids.reconcileCapability,OWNER,WORKSPACE,auth.id,work.reservationId,providerJobId,
+      "completed",digest("6")];
+    const first=await reconcile.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.release_terminal_capacity_v1($1,$2,$3,$4,$5,$6,$7,$8)",releaseParams);
+    const replay=await reconcile.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.release_terminal_capacity_v1($1,$2,$3,$4,$5,$6,$7,$8)",releaseParams);
+    assert.deepEqual([first.rows[0].applied,replay.rows[0].applied],[true,false]);
+    const ledger=await adminPool.query<{state:string;release_kind:string;version:string;committed:string}>(`
+      SELECT capacity.state,capacity.release_kind,capacity.state_version::text version,
+        bucket.committed_micro_usd::text committed FROM ai_media_submission_capacity_leases capacity
+      JOIN ai_media_budget_reservations reservation ON reservation.id=capacity.budget_reservation_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      WHERE capacity.budget_reservation_id=$1`,[work.reservationId]);
+    assert.deepEqual(ledger.rows[0],{state:"released",release_kind:"provider_terminal",version:"2",committed:"1250000"});
+  }finally{await submit.close();await reconcile.close();}
 });
