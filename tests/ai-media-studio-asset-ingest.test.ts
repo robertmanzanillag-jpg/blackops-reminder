@@ -11,6 +11,7 @@ import {
   type AssetIngestWorkerHooks,
   type EnqueueAssetIngest,
   type ExactHostSsrfPolicy,
+  type ProviderArtifactResolver,
 } from "../server/ai-media-studio/assets";
 
 class MutableClock {
@@ -48,11 +49,13 @@ function createWorker(input: {
   maxBytes?: number;
   maxChunkBytes?: number;
   hooks?: AssetIngestWorkerHooks;
+  providerArtifactResolver?: ProviderArtifactResolver;
 }) {
   return new AssetIngestWorker({
     workerId: "ingest-worker",
     repository: input.repository,
     reader: input.reader,
+    providerArtifactResolver: input.providerArtifactResolver,
     sourcePolicy: publicSourcePolicy,
     storage: input.storage ?? new InMemoryOwnedObjectStorage(),
     leaseDurationMs: 1_000,
@@ -133,6 +136,69 @@ test("valid MP4 is streamed to tenant-owned storage with digest and bounded sour
   assert.equal(reader.requests[0]?.policy, publicSourcePolicy);
   assert.equal(reader.requests[0]?.maxBytes, 1_000);
   assert.equal(reader.requests[0]?.maxChunkBytes, 100);
+});
+
+test("durable provider artifacts resolve a fresh URL immediately before open and never use the persisted URL", async () => {
+  const repository = new InMemoryAssetIngestRepository();
+  const order: string[] = [];
+  const persistedUrl = "https://cdn.provider.example/stale.mp4?signature=expired";
+  const freshUrl = "https://cdn.provider.example/fresh.mp4?signature=current";
+  const remoteArtifactRef = "provider-artifact://ai-media-studio/render-terminal/v1/stable-ref";
+  await enqueue(repository, { sourceUrl: persistedUrl, remoteArtifactRef });
+  const reader = new FakeBoundedArtifactReader((request) => {
+    order.push(`open:${request.url}`);
+    return stream({ finalUrl: request.url });
+  });
+  const providerArtifactResolver: ProviderArtifactResolver = {
+    async resolveArtifact(request) {
+      order.push("resolve");
+      assert.equal(request.remoteArtifactRef, remoteArtifactRef);
+      assert.equal("sourceUrl" in request, false, "persisted signed URL must not cross the resolver boundary");
+      return {
+        remoteArtifactRef,
+        sourceUrl: freshUrl,
+        mediaType: "video/mp4",
+        sourceUrlPolicy: "ephemeral_refresh_via_provider_get",
+      };
+    },
+  };
+  const result = await createWorker({ repository, reader, providerArtifactResolver }).runNext();
+  assert.equal(result.outcome, "completed");
+  assert.deepEqual(order, ["resolve", `open:${freshUrl}`]);
+  assert.equal(reader.requests[0]?.url, freshUrl);
+  assert.notEqual(reader.requests[0]?.url, persistedUrl);
+});
+
+test("a durable artifact without a fresh resolver fails closed as retryable before reader I/O", async () => {
+  const repository = new InMemoryAssetIngestRepository();
+  const reader = new FakeBoundedArtifactReader(stream());
+  await enqueue(repository, { remoteArtifactRef: "provider-artifact://stable-ref" });
+  const result = await createWorker({ repository, reader }).runNext();
+  assert.equal(result.outcome, "retry_scheduled");
+  if (result.outcome === "retry_scheduled") assert.equal(result.job.lastErrorCode, "source_unavailable");
+  assert.equal(reader.requests.length, 0);
+});
+
+test("a resolver cannot substitute a different durable artifact identity", async () => {
+  const repository = new InMemoryAssetIngestRepository();
+  const reader = new FakeBoundedArtifactReader(stream());
+  await enqueue(repository, { remoteArtifactRef: "provider-artifact://expected" });
+  const result = await createWorker({
+    repository,
+    reader,
+    providerArtifactResolver: {
+      async resolveArtifact() {
+        return {
+          remoteArtifactRef: "provider-artifact://different",
+          sourceUrl: "https://cdn.provider.example/fresh.mp4",
+          mediaType: "video/mp4",
+          sourceUrlPolicy: "ephemeral_refresh_via_provider_get",
+        };
+      },
+    },
+  }).runNext();
+  assert.equal(result.outcome, "retry_scheduled");
+  assert.equal(reader.requests.length, 0);
 });
 
 test("MIME, declared/streamed size, chunk, and MP4 signature violations are permanent", async (context) => {

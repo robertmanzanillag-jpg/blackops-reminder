@@ -4,6 +4,8 @@ export interface AssetIngestJob {
   id: string;
   tenantId: string;
   renderJobId: string;
+  /** Stable provider-owned identity used to obtain a fresh ephemeral delivery URL. */
+  remoteArtifactRef?: string;
   sourceUrl: string;
   expectedMimeType: "video/mp4";
   state: AssetIngestState;
@@ -29,6 +31,7 @@ export interface EnqueueAssetIngest {
   id: string;
   tenantId: string;
   renderJobId: string;
+  remoteArtifactRef?: string;
   sourceUrl: string;
   expectedMimeType?: "video/mp4";
   maxAttempts: number;
@@ -115,6 +118,26 @@ export interface ArtifactReadStream {
 /** Implementations must pin approved DNS addresses, validate every redirect, and stop at both bounds. */
 export interface BoundedArtifactReader {
   open(request: ArtifactReadRequest): Promise<ArtifactReadStream>;
+}
+
+export interface ProviderArtifactResolutionRequest {
+  jobId: string;
+  tenantId: string;
+  renderJobId: string;
+  remoteArtifactRef: string;
+  expectedMimeType: "video/mp4";
+}
+
+export interface ProviderArtifactResolution {
+  remoteArtifactRef: string;
+  sourceUrl: string;
+  mediaType: "video/mp4";
+  sourceUrlPolicy: "ephemeral_refresh_via_provider_get";
+}
+
+/** Resolves a durable provider identity to a fresh, private download URL. */
+export interface ProviderArtifactResolver {
+  resolveArtifact(request: ProviderArtifactResolutionRequest): Promise<ProviderArtifactResolution>;
 }
 
 export interface OwnedObjectUpload {

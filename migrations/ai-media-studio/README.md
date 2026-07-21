@@ -297,3 +297,38 @@ concurrency matrix, and pass checker plus App QA. Production provider calls, cre
 spend and deployment still require Robert's separate explicit approval. The rollback
 preserves submission/capacity evidence and the permanent PR25 deferred-trigger
 least-privilege tightening; it never restores ordinary application DML.
+
+## PR27 HeyGen terminal evidence draft
+
+`20260721_pr27_heygen_terminal_forward.sql` adds an unapplied reconcile-lane
+terminal capability surface for provider jobs already confirmed accepted. Terminal
+checks are leased and fenced; one append-only terminal event is bound to the exact
+tenant, submission attempt, account, provider, credential version, provider job and
+send authorization. Exact replay is distinguishable from conflicting evidence.
+
+Recording a first terminal event, releasing the active capacity lease and projecting
+terminal evidence occur in one transaction. A completed render also inserts one
+private MP4 ingest job in that transaction with a durable artifact reference and an
+ephemeral HTTPS URL. A failed render inserts no ingest. Neither path updates budget
+buckets or committed reservations. The exact composite ingest-to-render foreign key
+prevents a tenant/workspace mismatch.
+
+The reviewed hardening revokes the historical PR26 terminal-capacity capability as an
+upgrade bypass, records bounded backoff attempts and due times, enforces exact completed
+and failed projections, and permits only the idempotent completed-to-completed attachment
+needed when the ingest service and durable repository both materialize the same asset.
+Artifact delivery URLs must be renewed through exact tenant/workspace/render/account/
+credential/provider-job binding before reader I/O; response parsing aborts incrementally
+above 256 KiB. The SQL and Drizzle constraints describe the same terminal lifecycle.
+
+Do not apply this SQL automatically or use `db:push`. It is not composed into a
+route, timer or runtime, and it performs no provider I/O. Revoke all issued PR27
+terminal capabilities before the evidence-preserving rollback; the rollback removes
+the callable mutation surface but retains terminal checks/events, ingest evidence,
+columns, exact foreign keys and the minimum read ACL required by retained guards. Local
+evidence passes focused 67/67, static 8/8, isolated PostgreSQL 16 at 4/4, full suite
+657 pass/0 fail/24 skip of 681, TypeScript, build, map/diff and App QA P0=P1=P2=0.
+This is not staging or production evidence: composition and durable resolver injection,
+staging migration/restart/rollback, real credentials/quota/webhook/billing proof, an
+approved one-video sandbox and then a 5×10 canary remain blocked behind human cost and
+deployment approval.

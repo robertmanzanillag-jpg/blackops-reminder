@@ -16,12 +16,19 @@ export class InMemoryAssetIngestRepository implements AssetIngestRepository {
 
   async enqueue(input: EnqueueAssetIngest, nowMs: number): Promise<AssetIngestJob> {
     if (!input.id || !input.tenantId || !input.renderJobId) throw new Error("Asset ingest identity is required");
+    if (input.remoteArtifactRef !== undefined
+      && (input.remoteArtifactRef.length < 1 || input.remoteArtifactRef.length > 1_000
+        || input.remoteArtifactRef !== input.remoteArtifactRef.trim()
+        || /[\u0000-\u001f\u007f-\u009f]/u.test(input.remoteArtifactRef))) {
+      throw new Error("Asset ingest remote artifact identity is invalid");
+    }
     if (!Number.isInteger(input.maxAttempts) || input.maxAttempts < 1) throw new Error("maxAttempts must be positive");
     const renderKey = `${input.tenantId}\0${input.renderJobId}`;
     const existingId = this.renderKeys.get(renderKey);
     if (existingId) {
       const existing = this.jobs.get(existingId)!;
-      if (existing.sourceUrl !== input.sourceUrl || existing.expectedMimeType !== (input.expectedMimeType ?? "video/mp4")) {
+      if (existing.sourceUrl !== input.sourceUrl || existing.remoteArtifactRef !== input.remoteArtifactRef
+        || existing.expectedMimeType !== (input.expectedMimeType ?? "video/mp4")) {
         throw new Error("renderJobId is already associated with different ingest input");
       }
       return clone(existing);
@@ -31,6 +38,7 @@ export class InMemoryAssetIngestRepository implements AssetIngestRepository {
       id: input.id,
       tenantId: input.tenantId,
       renderJobId: input.renderJobId,
+      ...(input.remoteArtifactRef ? { remoteArtifactRef: input.remoteArtifactRef } : {}),
       sourceUrl: input.sourceUrl,
       expectedMimeType: input.expectedMimeType ?? "video/mp4",
       state: "queued",

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T17:13:32.869Z
+Generated: 2026-07-21T18:33:48.987Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 732 | 617 | 2504 | 489 | 12023 |
+| 742 | 625 | 2542 | 489 | 12226 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,9 +30,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
+| `tests` | 162 | 155 | test:162 |
 | `client/src` | 152 | 150 | ui-component:55, other:43, client-page:23, client-component:21 |
-| `tests` | 157 | 150 | test:157 |
-| `server/ai-media-studio` | 128 | 123 | server:128 |
+| `server/ai-media-studio` | 131 | 126 | server:131 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -45,7 +45,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 37 | 1 | other:36, docs:1 |
+| `migrations/ai-media-studio` | 39 | 1 | other:38, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `tests/fixtures` | 1 | 0 | test:1 |
@@ -66,6 +66,7 @@ Package: `rest-express`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-media-studio-admitted-render-terminal-worker.test.ts`
 - `tests/ai-media-studio-admitted-render-worker.test.ts`
 - `tests/ai-media-studio-analytics.test.ts`
 - `tests/ai-media-studio-asset-delivery-client.test.ts`
@@ -90,6 +91,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-roster-drizzle.test.ts`
 - `tests/ai-media-studio-heygen-roster-routes.test.ts`
 - `tests/ai-media-studio-heygen-roster-service.test.ts`
+- `tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-launch-authority-drizzle.test.ts`
@@ -134,6 +136,9 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr26-db-capability-migration.test.ts`
 - `tests/ai-media-studio-pr26-db-capability.test.ts`
 - `tests/ai-media-studio-pr26-postgres-races.test.ts`
+- `tests/ai-media-studio-pr27-postgres-migration.test.ts`
+- `tests/ai-media-studio-pr27-terminal-migration.test.ts`
+- `tests/ai-media-studio-pr27-terminal-repository.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
@@ -292,7 +297,7 @@ Package: `rest-express`
 - `server/ai-media-studio/analytics/in-memory-repository.ts` (server; 21 symbols, 2 imports)
 - `server/ai-media-studio/analytics/index.ts` (server; 4 imports)
 - `server/ai-media-studio/assets/contracts.ts` (server; 1 symbols)
-- `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 24 symbols, 5 imports)
+- `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 25 symbols, 5 imports)
 - `server/ai-media-studio/assets/fakes.ts` (server; 12 symbols, 2 imports)
 - `server/ai-media-studio/assets/http-artifact-reader.ts` (server; 32 symbols, 7 imports)
 - `server/ai-media-studio/assets/in-memory-repository.ts` (server; 10 symbols, 2 imports)
@@ -300,7 +305,7 @@ Package: `rest-express`
 - `server/ai-media-studio/assets/object-keys.ts` (server; 2 symbols)
 - `server/ai-media-studio/assets/production-runtime.ts` (server; 40 symbols, 4 imports)
 - `server/ai-media-studio/assets/s3-compatible-storage.ts` (server; 40 symbols, 5 imports)
-- `server/ai-media-studio/assets/worker.ts` (server; 27 symbols, 3 imports)
+- `server/ai-media-studio/assets/worker.ts` (server; 31 symbols, 3 imports)
 - `server/ai-media-studio/core/asset-domain.ts` (server; 21 symbols, 1 imports)
 - `server/ai-media-studio/core/in-memory-asset-repository.ts` (server; 17 symbols, 1 imports)
 

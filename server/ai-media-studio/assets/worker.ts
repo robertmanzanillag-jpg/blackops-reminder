@@ -8,6 +8,7 @@ import type {
   ExactHostSsrfPolicy,
   OwnedObjectStorage,
   ArtifactReadStream,
+  ProviderArtifactResolver,
 } from "./contracts";
 import { AssetIngestFailure } from "./contracts";
 
@@ -15,6 +16,7 @@ export interface AssetIngestWorkerOptions {
   workerId: string;
   repository: AssetIngestRepository;
   reader: BoundedArtifactReader;
+  providerArtifactResolver?: ProviderArtifactResolver;
   sourcePolicy: ExactHostSsrfPolicy;
   storage: OwnedObjectStorage;
   leaseDurationMs: number;
@@ -56,8 +58,9 @@ export class AssetIngestWorker {
     let upload: Awaited<ReturnType<OwnedObjectStorage["beginUpload"]>> | undefined;
     let artifact: ArtifactReadStream | undefined;
     try {
+      const sourceUrl = await this.resolveSourceUrl(claim.job);
       artifact = await this.options.reader.open({
-        url: claim.job.sourceUrl,
+        url: sourceUrl,
         policy: this.options.sourcePolicy,
         maxBytes: this.options.maxArtifactBytes,
         maxChunkBytes: this.options.maxChunkBytes,
@@ -137,6 +140,31 @@ export class AssetIngestWorker {
     }
   }
 
+  private async resolveSourceUrl(job: AssetIngestJob): Promise<string> {
+    if (!job.remoteArtifactRef) return job.sourceUrl;
+    const resolver = this.options.providerArtifactResolver;
+    if (!resolver) throw new AssetIngestFailure("source_unavailable", true);
+    let resolution;
+    try {
+      resolution = await resolver.resolveArtifact({
+        jobId: job.id,
+        tenantId: job.tenantId,
+        renderJobId: job.renderJobId,
+        remoteArtifactRef: job.remoteArtifactRef,
+        expectedMimeType: job.expectedMimeType,
+      });
+    } catch {
+      throw new AssetIngestFailure("source_unavailable", true);
+    }
+    if (resolution.remoteArtifactRef !== job.remoteArtifactRef
+      || resolution.mediaType !== job.expectedMimeType
+      || resolution.sourceUrlPolicy !== "ephemeral_refresh_via_provider_get"
+      || !safeEphemeralSourceUrl(resolution.sourceUrl)) {
+      throw new AssetIngestFailure("source_unavailable", true);
+    }
+    return resolution.sourceUrl;
+  }
+
   async reconcileCompletedUnlinked(limit = 100): Promise<{ linked: number; remaining: number }> {
     const jobs = await this.options.repository.listCompletedUnlinked(limit);
     if (!this.options.hooks?.onCompleted) return { linked: 0, remaining: jobs.length };
@@ -174,6 +202,16 @@ export function temporaryAssetKey(job: Pick<AssetIngestJob, "tenantId" | "render
 }
 
 function normalizeMime(value: string) { return value.split(";", 1)[0].trim().toLowerCase(); }
+
+function safeEphemeralSourceUrl(value: string): boolean {
+  if (!value || value.length > 8_192) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && Boolean(url.hostname) && !url.hash;
+  } catch {
+    return false;
+  }
+}
 
 function appendPrefix(current: Uint8Array, chunk: Uint8Array, limit: number) {
   const take = Math.min(limit - current.byteLength, chunk.byteLength);
