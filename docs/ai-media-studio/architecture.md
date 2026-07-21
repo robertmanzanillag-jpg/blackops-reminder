@@ -42,6 +42,8 @@ The HeyGen submit adapter targets Studio V2 at the pinned official origin (`POST
 
 The launch roster is deliberately smaller than the global catalog: 5–10 active setup members and 10 planned videos per avatar. This yields a 50–100 video plan, not a generated batch or throughput claim. One PostgreSQL transaction locks the unique active/verified server-side HeyGen account, records exact idempotency metadata, upserts private provider resources, and creates draft influencer bindings. The browser never selects a provider account or accepts an API key. Existing catalog scale remains uncapped by the launch roster.
 
+The daily plan preview is derived, provider-neutral state. `GET /api/ai-media-studio/provider-configurations/heygen/roster/daily-plan` ignores client attempts to choose the budget date or timezone. A trusted server-owned timezone (UTC by default) determines the date, and the response contains a deterministic `planId` plus exactly 10 `not_queued` slots per current roster member. This read model is intentionally non-durable and blocked before generation: script batches, governance approval, an atomic durable budget reservation, sandbox generation proof, and human launch approval remain required. The service performs no mutation and touches no render queue, budget table, provider adapter, worker, or publishing path.
+
 ### Application to queue
 
 The durable render repository stores the job ID, owner/tenant, provider, request, attempt and availability state in the existing render-job aggregate. Workers claim with atomic leases and fencing tokens, bounded exponential retry with jitter, an independent lease-recovery budget, dead-letter handling, and concurrency limits per provider and tenant.

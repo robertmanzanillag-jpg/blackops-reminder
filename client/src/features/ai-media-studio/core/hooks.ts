@@ -9,12 +9,21 @@ export const coreStudioKeys = {
   resources: (kind?: ProviderResourceKind) => ["ai-media-studio", "core", "provider-resources", kind ?? "all"] as const,
   assets: (filters: MediaLibraryRequest) => ["ai-media-studio", "core", "media-assets", filters] as const,
   heyGenRoster: ["ai-media-studio", "core", "heygen-roster"] as const,
+  heyGenRosterDailyPlan: ["ai-media-studio", "core", "heygen-roster", "daily-plan"] as const,
 };
 
 export function useHeyGenRoster() {
   return useQuery({
     queryKey: coreStudioKeys.heyGenRoster,
     queryFn: mediaStudioCoreApi.heyGenRoster,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useHeyGenRosterDailyPlan() {
+  return useQuery({
+    queryKey: coreStudioKeys.heyGenRosterDailyPlan,
+    queryFn: mediaStudioCoreApi.heyGenRosterDailyPlan,
     staleTime: 5 * 60_000,
   });
 }
@@ -28,6 +37,7 @@ export function useConfigureHeyGenRoster() {
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.resourceCatalogs }),
       queryClient.invalidateQueries({ queryKey: ["ai-media-studio", "options"] }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRoster }),
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRosterDailyPlan }),
     ]),
   });
 }

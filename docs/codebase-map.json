@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T10:14:48.177Z",
+  "generatedAt": "2026-07-21T10:38:56.457Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,37 +85,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 680,
-    "filesIndexed": 581,
-    "imports": 2331,
-    "routes": 488,
-    "symbols": 11015
+    "filesVisible": 683,
+    "filesIndexed": 584,
+    "imports": 2351,
+    "routes": 489,
+    "symbols": 11075
   },
   "directories": {
-    "client/src": {
-      "files": 152,
-      "indexed": 150,
-      "kinds": {
-        "other": 43,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 23
-      }
-    },
     "server/ai-media-studio": {
-      "files": 112,
-      "indexed": 108,
+      "files": 113,
+      "indexed": 109,
       "kinds": {
-        "server": 112
+        "server": 113
       }
     },
     "tests": {
-      "files": 137,
-      "indexed": 130,
+      "files": 139,
+      "indexed": 132,
       "kinds": {
-        "test": 137
+        "test": 139
       }
     },
     ".agents/skills": {
@@ -154,6 +142,18 @@
       "indexed": 2,
       "kinds": {
         "other": 13
+      }
+    },
+    "client/src": {
+      "files": 152,
+      "indexed": 150,
+      "kinds": {
+        "other": 43,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 23
       }
     },
     "docs/ai-media-studio": {
@@ -2481,6 +2481,8 @@
         "bytes",
         "controlCharacterPattern",
         "currentRoster",
+        "dailyPlan",
+        "dailyPlanQuery",
         "emptyHeyGenRosterMember",
         "errorId",
         "field",
@@ -2521,6 +2523,7 @@
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
         "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan",
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
@@ -2536,6 +2539,7 @@
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
         "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan",
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
@@ -7873,6 +7877,7 @@
         "./providers/drizzle-heygen-roster-repository",
         "./providers/fake-video-provider",
         "./providers/heygen-roster-contracts",
+        "./providers/heygen-roster-daily-plan-service",
         "./providers/heygen-roster-service",
         "./providers/heygen-video-provider",
         "./routes",
@@ -9633,6 +9638,7 @@
         "number",
         "object",
         "opaqueId",
+        "opaqueResourceKey",
         "parseMember",
         "parseNamespace",
         "parseStoredRoster",
@@ -9717,6 +9723,38 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/providers/heygen-roster-daily-plan-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-heygen-roster",
+        "../core/resource-domain",
+        "./heygen-roster-contracts",
+        "./heygen-roster-service",
+        "node:crypto"
+      ],
+      "exports": [
+        "HeyGenRosterDailyPlanService"
+      ],
+      "symbols": [
+        "HeyGenRosterDailyPlanService",
+        "blockers",
+        "currentPlanId",
+        "dateInTimeZone",
+        "defaultRequest",
+        "generatedAt",
+        "parseRequest",
+        "parts",
+        "planId",
+        "plannedVideoCount",
+        "request",
+        "roster",
+        "slotId",
+        "slots",
+        "values"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/providers/heygen-roster-in-memory.ts",
       "kind": "server",
       "imports": [
@@ -9751,6 +9789,7 @@
       "symbols": [
         "FORBIDDEN_FIELD",
         "HeyGenRosterService",
+        "account",
         "assertPlainPublicInput",
         "child",
         "opaqueId",
@@ -10148,6 +10187,7 @@
         "./provider-webhooks",
         "./providers/fake-video-provider",
         "./providers/heygen-roster-contracts",
+        "./providers/heygen-roster-daily-plan-service",
         "./providers/heygen-roster-service",
         "./providers/heygen-video-provider",
         "./publishing/domain",
@@ -10218,6 +10258,7 @@
         "governanceSelection",
         "hasMore",
         "heyGenProvider",
+        "heyGenRosterDailyPlan",
         "heyGenRosterSelection",
         "id",
         "idSchema",
@@ -10246,6 +10287,7 @@
         "parseAssetTenantId",
         "pending",
         "persistence",
+        "plan",
         "preview",
         "previewInput",
         "productionAssets",
@@ -10335,6 +10377,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
+        "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-resources",
         "${AI_MEDIA_STUDIO_API_BASE}/publishing/connections",
         "${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs",
@@ -17544,24 +17587,36 @@
       ],
       "exports": [
         "ConfigureHeyGenRosterResponse",
+        "CreateHeyGenRosterDailyPlanRequest",
         "CreateHeyGenRosterMember",
         "CreateHeyGenRosterRequest",
+        "HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS",
         "HEYGEN_ROSTER_MAX_AVATARS",
         "HEYGEN_ROSTER_MAX_PLANNED_VIDEOS",
         "HEYGEN_ROSTER_MIN_AVATARS",
         "HEYGEN_ROSTER_MIN_PLANNED_VIDEOS",
         "HEYGEN_ROSTER_VIDEOS_PER_AVATAR",
+        "HeyGenRosterDailyPlan",
+        "HeyGenRosterDailyPlanBlocker",
+        "HeyGenRosterDailyPlanResponse",
+        "HeyGenRosterDailyPlanSlot",
         "HeyGenRosterGender",
         "HeyGenRosterPublicMember",
         "HeyGenRosterStatus",
         "configureHeyGenRosterResponseSchema",
+        "createHeyGenRosterDailyPlanRequestSchema",
         "createHeyGenRosterMemberSchema",
         "createHeyGenRosterRequestSchema",
+        "heyGenRosterDailyPlanBlockerSchema",
+        "heyGenRosterDailyPlanResponseSchema",
+        "heyGenRosterDailyPlanSchema",
+        "heyGenRosterDailyPlanSlotSchema",
         "heyGenRosterGenderSchema",
         "heyGenRosterPublicMemberSchema",
         "heyGenRosterStatusSchema"
       ],
       "symbols": [
+        "HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS",
         "HEYGEN_ROSTER_MAX_AVATARS",
         "HEYGEN_ROSTER_MAX_PLANNED_VIDEOS",
         "HEYGEN_ROSTER_MIN_AVATARS",
@@ -17569,9 +17624,16 @@
         "HEYGEN_ROSTER_VIDEOS_PER_AVATAR",
         "NOT_A_PLAIN_OBJECT",
         "accentSchema",
+        "byMember",
         "configureHeyGenRosterResponseSchema",
+        "createHeyGenRosterDailyPlanRequestSchema",
         "createHeyGenRosterMemberSchema",
         "createHeyGenRosterRequestSchema",
+        "heyGenRosterDailyPlanBlockerSchema",
+        "heyGenRosterDailyPlanBlockersSchema",
+        "heyGenRosterDailyPlanResponseSchema",
+        "heyGenRosterDailyPlanSchema",
+        "heyGenRosterDailyPlanSlotSchema",
         "heyGenRosterGenderSchema",
         "heyGenRosterPublicMemberSchema",
         "heyGenRosterStatusSchema",
@@ -17579,8 +17641,11 @@
         "languageSchema",
         "nameSchema",
         "nativeIdSchema",
+        "numbers",
+        "planDateSchema",
         "requirePlainObject",
-        "seen"
+        "seen",
+        "timeZoneSchema"
       ],
       "routes": []
     },
@@ -18729,10 +18794,12 @@
       ],
       "exports": [],
       "symbols": [
+        "blockers",
         "component",
         "first",
         "members",
         "originalFetch",
+        "planId",
         "publicRoster",
         "repositoryRoot",
         "response",
@@ -18750,11 +18817,61 @@
       ],
       "exports": [],
       "symbols": [
+        "blockers",
         "inherited",
         "member",
         "parsed",
+        "plan",
+        "planId",
         "serialized",
         "status"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/resource-domain",
+        "../server/ai-media-studio/providers/heygen-roster-contracts",
+        "../server/ai-media-studio/providers/heygen-roster-daily-plan-service",
+        "../server/ai-media-studio/providers/heygen-roster-service",
+        "../shared/ai-media-studio-heygen-roster",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "first",
+        "nextDay",
+        "plan",
+        "replay",
+        "roster",
+        "rosterService",
+        "scope",
+        "service"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-daily-plan.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/heygen-roster-daily-plan-service",
+        "../server/ai-media-studio/providers/heygen-roster-in-memory",
+        "../server/ai-media-studio/providers/heygen-roster-service",
+        "../shared/ai-media-studio-heygen-roster",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "plan",
+        "planner",
+        "rosterRequest",
+        "rosterService",
+        "scope"
       ],
       "routes": []
     },
@@ -18774,6 +18891,7 @@
       "symbols": [
         "Compiled",
         "FakeRosterDatabase",
+        "canonicalKeys",
         "compiled",
         "configured",
         "db",
@@ -18814,19 +18932,26 @@
       "symbols": [
         "address",
         "app",
-        "body",
-        "created",
-        "createdRaw",
-        "createdResponse",
+        "configured",
+        "configuredResponse",
+        "crossTenant",
+        "crossTenantBody",
         "currentResponse",
         "endpoint",
+        "forceNoDevFallback",
         "harness",
+        "headers",
+        "plan",
+        "planResponse",
         "previous",
-        "raw",
+        "restoreDevFallback",
+        "rosterRequest",
         "runtime",
         "server",
+        "spoofedCalendarPlan",
+        "spoofedCalendarResponse",
+        "startRosterRuntime",
         "unavailable",
-        "unavailableRaw",
         "unsafe",
         "userId"
       ],
@@ -22116,6 +22241,8 @@
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-heygen-roster-client.test.ts",
     "tests/ai-media-studio-heygen-roster-contracts.test.ts",
+    "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
+    "tests/ai-media-studio-heygen-roster-daily-plan.test.ts",
     "tests/ai-media-studio-heygen-roster-drizzle.test.ts",
     "tests/ai-media-studio-heygen-roster-routes.test.ts",
     "tests/ai-media-studio-heygen-roster-service.test.ts",

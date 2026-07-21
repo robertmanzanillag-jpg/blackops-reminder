@@ -1,6 +1,7 @@
 import type {
   ConfigureHeyGenRosterResponse,
   CreateHeyGenRosterRequest,
+  HeyGenRosterDailyPlanResponse,
   CreateInfluencerRequest,
   AssetDelivery,
   Influencer,
@@ -11,7 +12,10 @@ import type {
   ProviderResourceListRequest,
   UpdateInfluencerRequest,
 } from "./types";
-import { configureHeyGenRosterResponseSchema } from "@shared/ai-media-studio-heygen-roster";
+import {
+  configureHeyGenRosterResponseSchema,
+  heyGenRosterDailyPlanResponseSchema,
+} from "@shared/ai-media-studio-heygen-roster";
 
 type InfluencerListResponse = { influencers: Influencer[]; nextCursor: string | null; hasMore: boolean };
 type InfluencerResponse = { influencer: Influencer };
@@ -64,6 +68,10 @@ export const mediaStudioCoreApi = {
   heyGenRoster: async (): Promise<ConfigureHeyGenRosterResponse | null> => {
     const response = await requestOptionalJson("/provider-configurations/heygen/roster");
     return response === null ? null : configureHeyGenRosterResponseSchema.parse(response);
+  },
+  heyGenRosterDailyPlan: async (): Promise<HeyGenRosterDailyPlanResponse | null> => {
+    const response = await requestOptionalJson("/provider-configurations/heygen/roster/daily-plan");
+    return response === null ? null : heyGenRosterDailyPlanResponseSchema.parse(response);
   },
   influencers: (filters: InfluencerListRequest) =>
     requestJson<InfluencerListResponse>(`/influencers${queryString({

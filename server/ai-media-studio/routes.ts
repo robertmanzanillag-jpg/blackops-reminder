@@ -24,7 +24,10 @@ import {
   type ProviderResource,
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
-import { configureHeyGenRosterResponseSchema } from "../../shared/ai-media-studio-heygen-roster";
+import {
+  configureHeyGenRosterResponseSchema,
+  heyGenRosterDailyPlanResponseSchema,
+} from "../../shared/ai-media-studio-heygen-roster";
 import {
   assetQualityReviewResponseSchema,
   createAssetQualityReviewRequestSchema,
@@ -83,6 +86,7 @@ import type {
 } from "./providers/heygen-roster-contracts";
 import { HeyGenRosterError } from "./providers/heygen-roster-contracts";
 import { HeyGenRosterService } from "./providers/heygen-roster-service";
+import { HeyGenRosterDailyPlanService } from "./providers/heygen-roster-daily-plan-service";
 import { DeterministicScriptService } from "./script-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
@@ -167,6 +171,8 @@ export interface AiMediaStudioDependencies {
     repository: HeyGenRosterRepository;
     accountResolver: HeyGenRosterAccountResolver;
   };
+  /** Trusted server-owned calendar zone for the planning-only daily roster preview. */
+  heyGenRosterDailyPlanTimeZone?: string;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -186,6 +192,7 @@ export interface AiMediaStudioRuntime {
   governance: GovernanceService;
   governancePersistence: MediaStudioPersistenceStatus;
   heyGenRoster: HeyGenRosterService | undefined;
+  heyGenRosterDailyPlan: HeyGenRosterDailyPlanService | undefined;
   heyGenRosterPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
@@ -599,6 +606,13 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   );
   const governance = new GovernanceService(governanceSelection.repository);
   const heyGenRosterSelection = selectHeyGenRosterRuntime(dependencies, databaseUrl);
+  const heyGenRosterDailyPlan = heyGenRosterSelection.service
+    ? new HeyGenRosterDailyPlanService(
+      heyGenRosterSelection.service,
+      () => new Date().toISOString(),
+      dependencies.heyGenRosterDailyPlanTimeZone ?? "UTC",
+    )
+    : undefined;
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -896,6 +910,16 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     const configured = await heyGenRosterSelection.service!.configure(scope, req.body);
     res.status(201).json(configureHeyGenRosterResponseSchema.parse(configured));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan`, requireHeyGenRoster, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const plan = await heyGenRosterDailyPlan!.currentPlan(scope);
+    if (!plan) {
+      res.status(404).json({ error: "HeyGen roster daily plan not found", code: "ROSTER_DAILY_PLAN_NOT_FOUND" });
+      return;
+    }
+    res.json(heyGenRosterDailyPlanResponseSchema.parse({ plan }));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1382,6 +1406,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     governance,
     governancePersistence: governanceSelection.status,
     heyGenRoster: heyGenRosterSelection.service,
+    heyGenRosterDailyPlan,
     heyGenRosterPersistence: heyGenRosterSelection.status,
     publishingSubmissionGate,
     router,
