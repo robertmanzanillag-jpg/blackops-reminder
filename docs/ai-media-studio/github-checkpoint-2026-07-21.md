@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active recovery checkpoint: PR18 roster daily plan
 
-- Branch: `codex/ai-media-studio-roster-daily-plan`, stacked on draft PR #99.
+- Branch: `codex/ai-media-studio-roster-daily-plan`, draft PR #100, stacked on draft PR #99.
 - Launch size: the configured 5–10 avatar roster expands to exactly 10 visible slots per avatar, or 50–100 slots total.
 - Safety: all slots are `not_queued`; the plan is `blocked_before_generation`, `canGenerate=false`, and `noSpendGuarantee=true`.
 - Calendar authority: the server owns the daily timezone (UTC by default). Query parameters cannot change the accounting date or timezone.
