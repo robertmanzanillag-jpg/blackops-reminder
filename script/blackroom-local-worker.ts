@@ -14,6 +14,7 @@ import {
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   validateBlackRoomRenderProbe,
+  validateBlackRoomAudioLoudness,
   buildBlackRoomUploadChunks,
   type BlackRoomLocalWorkerState,
 } from "../server/blackroom-local-worker";
@@ -159,6 +160,11 @@ async function publishOneReservedEntry(): Promise<boolean> {
     "-v", "error", "-show_entries", "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt", "-of", "json", entry.renderPath,
   ], { maxBuffer: 4_000_000 });
   validateBlackRoomRenderProbe(JSON.parse(probeOutput), Number(entry.durationSeconds));
+  const { stderr: loudnessOutput } = await execFileAsync(process.env.BLACKROOM_FFMPEG_PATH || "/opt/homebrew/bin/ffmpeg", [
+    "-nostdin", "-hide_banner", "-i", entry.renderPath, "-map", "0:a:0", "-af", "volumedetect", "-vn", "-sn", "-dn", "-f", "null", "-",
+  ], { maxBuffer: 8_000_000 });
+  const loudness = validateBlackRoomAudioLoudness(loudnessOutput);
+  await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
   const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");

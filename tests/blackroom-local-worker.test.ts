@@ -15,6 +15,7 @@ import {
   shouldRunBlackRoomWorker,
   updateBlackRoomLedgerEntry,
   validateBlackRoomRenderProbe,
+  validateBlackRoomAudioLoudness,
 } from "../server/blackroom-local-worker";
 
 const mediaDetails = {
@@ -101,12 +102,21 @@ test("validates Metricool and TikTok compatible MP4 renders", () => {
     format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "30.02" },
     streams: [
       { codec_type: "video", codec_name: "h264", pix_fmt: "yuv420p", width: 1080, height: 1920 },
-      { codec_type: "audio", codec_name: "aac" },
+      { codec_type: "audio", codec_name: "aac", channels: 2, duration: "30.02" },
     ],
   };
   assert.deepEqual(validateBlackRoomRenderProbe(valid, 30), { durationSeconds: 30.02, width: 1080, height: 1920 });
   assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [{ ...valid.streams[0], codec_name: "hevc" }, valid.streams[1]] }, 30), /H\.264/);
   assert.throws(() => validateBlackRoomRenderProbe({ ...valid, format: { ...valid.format, duration: "25" } }, 30), /duration/);
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [valid.streams[0], { ...valid.streams[1], duration: "2" }] }, 30), /audio track/);
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [valid.streams[0], { ...valid.streams[1], channels: 0 }] }, 30), /audio track/);
+});
+
+test("rejects silent or nearly silent DJ audio before upload", () => {
+  assert.deepEqual(validateBlackRoomAudioLoudness("mean_volume: -12.4 dB\nmax_volume: -0.8 dB"), { meanVolumeDb: -12.4, maxVolumeDb: -0.8 });
+  assert.throws(() => validateBlackRoomAudioLoudness("mean_volume: -inf dB\nmax_volume: -inf dB"), /silent/);
+  assert.throws(() => validateBlackRoomAudioLoudness("mean_volume: -50.0 dB\nmax_volume: -35.0 dB"), /audible-volume/);
+  assert.throws(() => validateBlackRoomAudioLoudness("no volumedetect summary"), /silent/);
 });
 
 test("ledger blocks duplicate slots and source videos", () => {
