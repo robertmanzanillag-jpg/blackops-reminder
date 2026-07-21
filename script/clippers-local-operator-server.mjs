@@ -7489,6 +7489,11 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
   const contactEmail = normalizeCampaignEmail(firstCampaignValue(raw, ["contactEmail", "contact_email", "businessEmail", "business_email", "email"]) || publicBusinessContact);
   const contactUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["contactUrl", "contact_url", "businessContactUrl", "business_contact_url", "contactForm", "contact_form"]) || publicBusinessContact)
     || campaignContactUrlFromEvidence(nestedContact.type, nestedContact.evidenceUrl);
+  const requiresHumanVerification = raw?.contactRequiresCaptcha === true
+    || raw?.contact_requires_captcha === true
+    || nestedContact.requiresHumanVerification === true
+    || nestedContact.requires_human_verification === true
+    || nestedContact.requiresCaptcha === true;
   const requestedPolicy = firstCampaignValue(raw, ["rightsPolicy", "rights_policy", "policyStatus", "policy_status"])
     || String(nestedPolicy.rightsPolicy || nestedPolicy.rights_policy || "").trim();
   const policySummary = firstCampaignValue(raw, ["policySummary", "policy_summary", "publicClipPolicy", "public_clip_policy", "publicClipsPolicy", "public_clips_policy", "policy"])
@@ -7501,6 +7506,8 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
   const hasVerifiedContact = Boolean((contactEmail || contactUrl) && contactEvidenceUrl);
   const priority = rightsPolicy === "forbidden"
     ? "exclude"
+    : requiresHumanVerification
+      ? "human_action_required"
     : hasVerifiedContact && rightsPolicy === "public_blanket_allow"
       ? "policy_review_first"
       : hasVerifiedContact
@@ -7523,6 +7530,7 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
     contactEmail,
     contactUrl,
     contactEvidenceUrl,
+    requiresHumanVerification,
     rightsPolicy,
     policyEvidenceUrl,
     policySummary,
@@ -7626,7 +7634,7 @@ async function buildStreamer100Campaign() {
       canPublish: false,
     };
   }));
-  const priorityOrder = { policy_review_first: 0, outreach_ready: 1, needs_verified_contact: 2, exclude: 3 };
+  const priorityOrder = { policy_review_first: 0, outreach_ready: 1, human_action_required: 2, needs_verified_contact: 3, exclude: 4 };
   const outreachOrder = { sent: 0, responded: 0, delivered: 0, not_sent: 1, "": 1, bounced: 2, failed: 2 };
   const permissionLedgerRows = mergedRows.sort((a, b) => {
     const aOutreach = outreachOrder[a.outreachStatus] ?? 1;
@@ -7640,7 +7648,7 @@ async function buildStreamer100Campaign() {
   });
   const rows = permissionLedgerRows.slice(0, 100);
   const premiumRows = permissionLedgerRows.filter((row) => row.cohort === "premium");
-  const contactableRows = rows.filter((row) => row.hasVerifiedContact && row.priority !== "exclude").length;
+  const contactableRows = rows.filter((row) => row.hasVerifiedContact && !["exclude", "human_action_required"].includes(row.priority)).length;
   const excludedRows = rows.filter((row) => row.priority === "exclude").length;
   const outreachSentRows = rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length;
   const responsesReceivedRows = rows.filter((row) => row.outreachStatus === "responded").length;
@@ -7652,6 +7660,7 @@ async function buildStreamer100Campaign() {
     researchedRows: rows.length,
     remainingResearchRows: Math.max(0, 100 - rows.length),
     contactableRows,
+    humanActionRequiredRows: rows.filter((row) => row.priority === "human_action_required").length,
     needsVerifiedContactRows: rows.filter((row) => row.priority === "needs_verified_contact").length,
     publicPolicyReviewRows: rows.filter((row) => row.rightsPolicy === "public_blanket_allow").length,
     excludedRows,
@@ -7683,7 +7692,7 @@ async function buildStreamer100Campaign() {
 function buildStreamer100CampaignCsv(campaign) {
   return renderCsv([
     "handle", "display_name", "creator_url", "platform", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
-    "contact_evidence_url", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
+    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
     "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
     "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
   ], campaign.rows.map((row) => ({
@@ -7699,6 +7708,7 @@ function buildStreamer100CampaignCsv(campaign) {
     contact_email: workspaceSafeCsvText(row.contactEmail),
     contact_url: workspaceSafeCsvText(row.contactUrl),
     contact_evidence_url: workspaceSafeCsvText(row.contactEvidenceUrl),
+    requires_human_verification: row.requiresHumanVerification ? "yes" : "no",
     rights_policy: workspaceSafeCsvText(row.rightsPolicy),
     policy_evidence_url: workspaceSafeCsvText(row.policyEvidenceUrl),
     priority: workspaceSafeCsvText(row.priority),

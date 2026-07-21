@@ -3027,6 +3027,14 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
         contactEvidenceUrl: "https://creatorhq.com/contact",
       },
       {
+        handle: "CaptchaCreator",
+        youtubeOfficialUrl: "https://www.youtube.com/@CaptchaCreator",
+        rightsPolicy: "no_evidence",
+        contactUrl: "https://www.youtube.com/@CaptchaCreator/about",
+        contactEvidenceUrl: "https://www.youtube.com/@CaptchaCreator/about",
+        contactRequiresCaptcha: true,
+      },
+      {
         handle: "SearchPageMustFail",
         officialCreatorUrl: "https://www.youtube.com/results?search_query=creator",
       },
@@ -3052,7 +3060,7 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
 
   await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
     const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
-    assert.equal(campaign.premiumRows.length, 5);
+    assert.equal(campaign.premiumRows.length, 6);
     const kick = campaign.premiumRows.find((row) => row.handle === "premiumkickcreator");
     const youtube = campaign.premiumRows.find((row) => row.handle === "PremiumYouTubeCreator");
     assert.equal(kick.platform, "kick");
@@ -3061,6 +3069,11 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(kick.twitchUrl, "");
     assert.equal(youtube.platform, "youtube");
     assert.equal(youtube.hasVerifiedContact, true);
+    const captcha = campaign.premiumRows.find((row) => row.handle === "CaptchaCreator");
+    assert.equal(captcha.hasVerifiedContact, true);
+    assert.equal(captcha.requiresHumanVerification, true);
+    assert.equal(captcha.priority, "human_action_required");
+    assert.equal(captcha.outreachStatus, "not_sent");
     assert.equal(campaign.premiumRows.some((row) => row.handle === "SearchPageMustFail"), false);
     assert.equal(campaign.premiumRows.some((row) => row.handle === "WrongCreator"), false);
     assert.ok(campaign.premiumRows.some((row) => row.handle === "foo-bar"));
