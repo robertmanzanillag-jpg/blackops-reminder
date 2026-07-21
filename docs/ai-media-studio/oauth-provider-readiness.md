@@ -2,7 +2,7 @@
 
 This is the durable provider-connection gate for AI Media Studio. It records what must be true before any OAuth callback route, real connector, refresh worker, revocation worker, or external publishing action is enabled. Current vault and saga code remains inert.
 
-## Shared contract changes still required
+## Shared staged-connection contract
 
 - Persist an immutable selected external target. Never select the first Page, Instagram professional account, or YouTube channel returned by a provider.
 - Represent token artifacts by role rather than pretending every provider has an access/refresh pair. At minimum distinguish operational access, refresh, and grant-level user access artifacts.
@@ -10,6 +10,8 @@ This is the durable provider-connection gate for AI Media Studio. It records wha
 - Validate `required scopes ⊆ actual grants ⊆ immutable provider allowlist`. Capabilities and manifest revision are derived locally from a frozen manifest and verified account tasks, never from provider JSON.
 - Separate exchange, identity discovery/selection, activation, refresh, revoke and reconciliation into fenced durable stages. A token exchange that may have reached the provider is never retried automatically.
 - Refresh always writes a new token-binding/credential-version candidate. Account CAS activates it before old material is scheduled for deletion.
+
+PR15 implements the first six items as provider-neutral domain and persistence contracts through the explicit-selection handoff (`activation_pending`). It does not activate a provider account, store role-specific vault references, delete candidate tokens, mount a route, or call a provider. Refresh/revoke/reconciliation, vault schema v2 and final account CAS integration remain required before runtime wiring.
 
 ## TikTok Web
 

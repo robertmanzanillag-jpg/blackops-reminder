@@ -241,3 +241,32 @@ Evidence before GitHub preservation:
 - Independent checker found no remaining P0-P2; independent security review found no remaining P0-P3 after the crash/fencing and error-taxonomy fixes.
 - Static App QA passed with no PR14 findings. Existing bundle-size and local `yt-dlp` build messages are baseline/environment advisories, not PR14 deltas.
 - SQL and migration shape are tested statically but have not been executed against PostgreSQL; staging rehearsal remains mandatory.
+
+## PR15 checkpoint — provider connection stages
+
+GitHub PR: pending at first local checkpoint.
+
+Branch: `codex/ai-media-studio-provider-connection-stages`, stacked on PR #92 (`codex/ai-media-studio-oauth-vault-operations`).
+
+Implemented:
+
+- Added provider-neutral durable stages for exchange, target discovery, explicit target selection and the later activation handoff.
+- Added exact target compatibility for TikTok users, YouTube channels, Facebook Pages and Instagram professional accounts. Zero targets terminalizes as not connectable; one or many targets always require explicit actor selection.
+- Added frozen grant scope allowlists, local verified-task capability derivation and safe role/lifetime descriptors without tokens, secrets, provider JSON or vault references.
+- Added additive attempt/candidate/immutable-selection tables with exact tenant, actor, provider-account, platform, OAuth-session and discovered-candidate provenance.
+- Preserved DB-clock leases/fencing and data-preserving rollback policy. The migration is checked in but unapplied.
+
+Safety boundary: this staged path is not wired into the older callback saga or production runtime. It does not activate an account, mount a route, start a timer, call AWS/a provider, apply a migration, post content or deploy. Role-specific vault references/cleanup v2, activation/account CAS integration, real connectors, refresh/revoke and sandbox evidence remain later gates.
+
+Evidence at first local checkpoint before GitHub preservation:
+
+- Focused PR15 tests passed 31/31:
+  - provider connection contracts
+  - in-memory repository parity
+  - Drizzle repository SQL-shape/state transitions
+  - PR15 additive migration and data-preserving rollback
+  - durable table export/persistence coverage
+- `git diff --check` passed.
+- `npm run check` was started but intentionally interrupted after it produced no errors or diagnostics for more than 90 seconds, because Robert asked to preserve the work in GitHub before the session/credits ran out.
+- Independent domain maker reported its four-file slice passed focused tests, TypeScript and diff hygiene before handoff.
+- Independent persistence maker/reviewer evidence was still pending at this checkpoint, so PR15 must remain WIP/draft until full checker, security and App QA gates complete.

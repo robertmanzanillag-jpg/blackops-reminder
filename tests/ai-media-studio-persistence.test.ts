@@ -18,6 +18,9 @@ const expectedTableExports = [
   "aiMediaProviderAccounts",
   "aiMediaOAuthSessions",
   "aiMediaOAuthVaultOperations",
+  "aiMediaOAuthConnectionAttempts",
+  "aiMediaOAuthTargetCandidates",
+  "aiMediaOAuthTargetSelections",
   "aiMediaProviderResources",
   "aiMediaRenderJobs",
   "aiMediaGovernanceProfiles",
@@ -40,12 +43,12 @@ test("AI Media Studio exports the complete durable table set", () => {
   for (const tableExport of expectedTableExports) {
     assert.match(schemaSource, new RegExp(`export const ${tableExport} = pgTable\\(`));
   }
-  assert.equal((schemaSource.match(/export const aiMedia[A-Za-z]+ = pgTable\(/g) ?? []).length, 24);
+  assert.equal((schemaSource.match(/export const aiMedia[A-Za-z]+ = pgTable\(/g) ?? []).length, 27);
 });
 
 test("every durable table is owner and workspace scoped", () => {
   assert.match(schemaSource, /const tenantColumns = \(\) => \(\{[\s\S]*ownerUserId: text\("owner_user_id"\)\.notNull\(\)[\s\S]*workspaceId: text\("workspace_id"\)\.notNull\(\)/);
-  assert.equal((schemaSource.match(/\.\.\.tenantColumns\(\)/g) ?? []).length, 24);
+  assert.equal((schemaSource.match(/\.\.\.tenantColumns\(\)/g) ?? []).length, 27);
 });
 
 test("provider accounts persist only a secret reference", () => {
