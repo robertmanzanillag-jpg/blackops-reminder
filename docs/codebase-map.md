@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T18:59:34.619Z
+Generated: 2026-07-21T19:14:00.207Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 746 | 629 | 2556 | 491 | 12247 |
+| 748 | 631 | 2576 | 491 | 12282 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,9 +30,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 163 | 156 | test:163 |
+| `tests` | 164 | 157 | test:164 |
 | `client/src` | 153 | 151 | ui-component:55, other:43, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 132 | 127 | server:132 |
+| `server/ai-media-studio` | 133 | 128 | server:133 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -147,6 +147,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
 - `tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts`
 - `tests/ai-media-studio-pr9-oauth-migration.test.ts`
+- `tests/ai-media-studio-production-admitted-render-runtime.test.ts`
 - `tests/ai-media-studio-production-asset-runtime.test.ts`
 - `tests/ai-media-studio-production-oauth-runtime.test.ts`
 - `tests/ai-media-studio-publishing-accounts.test.ts`
