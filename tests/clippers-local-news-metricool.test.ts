@@ -112,6 +112,57 @@ test("maps the live Metricool Facebook brand labels to the correct Miami and New
   assert.deepEqual(scheduledBlogIds, ["501", "502"]);
 });
 
+test("schedules Facebook breaking and traffic updates as text-only posts without requiring media", async () => {
+  const dir = await workspace([
+    item({ id: "miami-text-only", platform: "facebook", copy: "TRÁFICO | Cierre en Miami-Dade. Según FHP/FL511: tome una ruta alterna. Fuente: https://fl511.com" }),
+  ]);
+  let scheduledPayload: Record<string, unknown> | null = null;
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [
+          { blogId: 501, label: "Miami News", networks: ["facebook"] },
+        ] }), { status: 200 });
+      }
+      scheduledPayload = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ data: { uuid: "facebook-text-only" } }), { status: 201 });
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 1);
+  assert.deepEqual(scheduledPayload?.providers, [{ network: "facebook" }]);
+  assert.match(String(scheduledPayload?.text), /TRÁFICO/);
+  assert.equal("media" in (scheduledPayload || {}), false);
+  assert.equal("images" in (scheduledPayload || {}), false);
+  assert.equal("attachments" in (scheduledPayload || {}), false);
+});
+
+test("keeps cadence-deferred posts automatic but does not send them before notBefore", async () => {
+  const dir = await workspace([
+    item({ id: "deferred-facebook", platform: "facebook", gateReason: "cadence", notBefore: "2026-07-21T17:00:00.000Z" }),
+  ]);
+  let fetched = false;
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("deferred item must not reach Metricool"); },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.eligible, 1);
+  assert.equal(result.deferred, 1);
+  assert.equal(result.scheduled, 0);
+  assert.equal(fetched, false);
+});
+
 test("reports both Facebook news accounts ready while X remains independently pending", async () => {
   const readiness = await getClipperLocalNewsMetricoolReadiness({
     env: credentials,
