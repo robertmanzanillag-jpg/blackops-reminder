@@ -177,6 +177,7 @@ test("keeps Metricool auth out of curl arguments and sends it through standard i
   assert.equal(args.some((value) => value.includes(token)), false);
   assert.match(Buffer.concat(config).toString("utf8"), new RegExp(`X-Mc-Auth: ${token}`));
   assert.equal(args.includes("--config"), true);
+  assert.equal(args.includes("--http1.1"), true);
   assert.equal(args.some((value) => value.startsWith("@") && value.endsWith("payload.json")), true);
 });
 
@@ -220,7 +221,7 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
   assert.deepEqual(calls[4].body.providers, [{ network: "facebook" }]);
   assert.deepEqual(calls[6].body.providers, [{ network: "youtube" }]);
   assert.equal(calls[6].body.youtubeData.type, "short");
-  assert.doesNotMatch(calls[2].url, /integrationSource=/);
+  assert.match(calls[2].url, /integrationSource=MCP/);
   assert.equal((calls[2].headers as Record<string, string>).accept, "application/json");
   assert.equal((calls[2].headers as Record<string, string>)["content-length"], String(Buffer.byteLength(JSON.stringify(calls[2].body), "utf8")));
   assert.equal((calls[1].headers as Record<string, string>).accept, "*/*");
