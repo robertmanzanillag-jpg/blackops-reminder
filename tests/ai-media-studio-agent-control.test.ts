@@ -26,8 +26,8 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 2);
-  assert.equal(snapshot.summary.running, 1);
+  assert.equal(snapshot.summary.done, 3);
+  assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);

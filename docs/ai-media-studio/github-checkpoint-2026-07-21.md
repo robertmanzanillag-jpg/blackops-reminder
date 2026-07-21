@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR29 inert HeyGen V3 production composition
 
-- Branch: `codex/ai-media-studio-production-composition`, stacked on draft PR #115. No PR or deployment is implied until checker/App QA close.
+- Branch: `codex/ai-media-studio-production-composition`, draft PR #116, stacked on draft PR #115. Initial checkpoint commit: `948a1a6c`; no merge or deployment is implied.
 - Composition boundary: one internal factory creates the function-only Drizzle submit/reconcile repository, terminal repository, fixed-account HeyGen V3 provider/resolvers and production asset ingest worker. It returns explicit run-on-demand workers and `autostart=false`; it mounts no route, timer, listener or loop.
 - Exact binding: submit and terminal capabilities must match the configured provider account and credential version. Renewable artifact resolution additionally binds the ingest job, structured tenant, render job, durable artifact reference, provider job, account, credential version and authorization digest before any HeyGen GET or reader I/O.
 - Stale-URL prevention: `createProductionAssetIngestWorker` now accepts and passes the provider artifact resolver. A durable `provider-artifact://` job with a missing or mismatched resolver becomes retryable `source_unavailable`; it cannot use the persisted signed URL as fallback.
