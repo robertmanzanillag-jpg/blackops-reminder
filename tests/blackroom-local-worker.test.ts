@@ -49,6 +49,9 @@ test("prompt contains posting and deletion safety gates", () => {
   assert.match(prompt, /No abras ni navegues YouTube con Chrome/);
   assert.match(prompt, /\/opt\/homebrew\/bin\/yt-dlp/);
   assert.match(prompt, /Chrome se reserva para Metricool/);
+  assert.match(prompt, /No descargues el set completo/);
+  assert.match(prompt, /--download-sections/);
+  assert.match(prompt, /tiempos absolutos del set original/);
 });
 
 test("ledger blocks duplicate slots and source videos", () => {
