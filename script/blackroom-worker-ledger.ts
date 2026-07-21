@@ -7,6 +7,7 @@ import {
   markBlackRoomNetworkUncertain,
   confirmBlackRoomNetworkReceipt,
   resetBlackRoomNetworkAttempt,
+  scheduleBlackRoomLedgerEntry,
   reserveBlackRoomLedgerEntry,
   updateBlackRoomLedgerEntry,
   type BlackRoomWorkerLedger,
@@ -113,6 +114,11 @@ async function main(): Promise<void> {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
       if (!entry) throw new Error("reservation not found");
       result = resetBlackRoomNetworkAttempt(entry, networkArg());
+      await writeLedger(ledger);
+    } else if (process.argv.includes("--schedule")) {
+      const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
+      if (!entry) throw new Error("reservation not found");
+      result = scheduleBlackRoomLedgerEntry(entry, arg("--publication-date-time") || "");
       await writeLedger(ledger);
     } else if (process.argv.includes("--delete-confirmed")) {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));

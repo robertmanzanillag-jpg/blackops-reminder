@@ -15,6 +15,7 @@ import {
   markBlackRoomNetworkUncertain,
   reserveBlackRoomLedgerEntry,
   resetBlackRoomNetworkAttempt,
+  scheduleBlackRoomLedgerEntry,
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   updateBlackRoomLedgerEntry,
@@ -62,6 +63,16 @@ test("publishing gate honors pause and skips stale reservations", () => {
   assert.equal(selectPublishableBlackRoomReservation(queue, [{ status: "uncertain", jobId: "active-job", reservationId: "verify-only" }], now)?.reservationId, "verify-only");
   assert.equal(isBlackRoomJobPublishable({ ...queue, enabled: false }, "active-job", now), false);
   assert.equal(selectPublishableBlackRoomReservation({ ...queue, enabled: false }, entries, now), null);
+});
+
+test("owner-scheduled reservations run first in chronological order", () => {
+  const queue = { enabled: true, jobs: [{ id: "active-job", status: "retry" }] };
+  const entries = [
+    { status: "reserved", jobId: "active-job", reservationId: "legacy", publicationDateTime: null },
+    { status: "reserved", jobId: "active-job", reservationId: "later", publicationDateTime: "2026-07-21T22:45:00" },
+    { status: "reserved", jobId: "active-job", reservationId: "earlier", publicationDateTime: "2026-07-21T20:45:00" },
+  ];
+  assert.equal(selectPublishableBlackRoomReservation(queue, entries)?.reservationId, "earlier");
 });
 
 test("worker state starts stopped and recoverable", () => {
@@ -186,6 +197,20 @@ test("persists Metricool progress independently for each network", () => {
   assert.equal(entry.networkAttempts.facebook, undefined);
   assert.equal(entry.networkReceipts.facebook, undefined);
   assert.equal(entry.networkReceipts.tiktok, "991");
+});
+
+test("schedules an unconfirmed reservation without making it uncertain", () => {
+  const ledger = createBlackRoomWorkerLedger();
+  const entry = reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-1", slot: "00:30", videoId: "video-1",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/a.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/a.mp4",
+  });
+  scheduleBlackRoomLedgerEntry(entry, "2026-07-21T20:45:00");
+  assert.equal(entry.status, "reserved");
+  assert.equal(entry.publicationDateTime, "2026-07-21T20:45:00");
+  assert.throws(() => scheduleBlackRoomLedgerEntry(entry, "tonight"), /invalid Metricool publication date/);
 });
 
 test("safe deletion requires confirmed Metricool receipt and exact media path", () => {
