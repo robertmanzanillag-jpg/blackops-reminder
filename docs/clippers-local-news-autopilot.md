@@ -52,10 +52,10 @@ The status report must distinguish `active`, `optional_unconfigured`, and `block
 
 Two reserved Metricool brands are repurposed so the plan remains at ten brands:
 
-- `Miami News` → Facebook Page + X account.
-- `NY News` → Facebook Page + X account.
+- `Miami News` → Facebook Page + X account. The existing Metricool/TikTok brand label `ynb4b6r6` is accepted as its verified alias.
+- `NY News` → Facebook Page + X account. The currently connected `New York News` label is accepted as its verified alias.
 
-External owner steps are limited to creating or selecting those profiles in Metricool and granting Metricool the requested platform access. The server discovers the two brands by their exact names (or accepts explicit blog ID overrides), schedules each network separately through Metricool's official API, spaces same-lane/network posts by at least two minutes, and records successful Metricool post IDs in an idempotency ledger. Until a successful API response and later public evidence exist, an item is never counted as published.
+External owner steps are limited to creating or selecting those profiles in Metricool and granting Metricool the requested platform access. The server discovers the two brands by their verified exact-name aliases (or accepts explicit blog ID overrides), schedules each network separately through Metricool's official API, spaces same-lane/network posts by at least two minutes, and records successful Metricool post IDs in an idempotency ledger. Until a successful API response and later public evidence exist, an item is never counted as published.
 
 The existing TikTok connection is independent and is not changed by this news workflow.
 

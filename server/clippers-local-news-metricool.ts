@@ -329,9 +329,17 @@ export async function deliverClipperLocalNewsToMetricool(
       return eligible && !already.has(item.id);
     });
 
-    const laneConfig: Record<ClipperLocalNewsLane, { label: string; override?: string }> = {
-      "miami-news": { label: "Miami News", override: env.METRICOOL_MIAMI_NEWS_BLOG_ID },
-      "ny-news": { label: "NY News", override: env.METRICOOL_NY_NEWS_BLOG_ID },
+    const laneConfig: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }> = {
+      "miami-news": {
+        label: "Miami News",
+        aliases: ["Miami News", "ynb4b6r6"],
+        override: env.METRICOOL_MIAMI_NEWS_BLOG_ID,
+      },
+      "ny-news": {
+        label: "NY News",
+        aliases: ["NY News", "New York News"],
+        override: env.METRICOOL_NY_NEWS_BLOG_ID,
+      },
     };
     const needsDiscovery = (Object.keys(laneConfig) as ClipperLocalNewsLane[])
       .some((lane) => safeItems.some((item) => item.lane === lane) && !hasRealValue(laneConfig[lane].override));
@@ -348,7 +356,7 @@ export async function deliverClipperLocalNewsToMetricool(
         laneProfiles.set(lane, { label: config.label, blogId: config.override.trim(), connectedNetworks: null });
         continue;
       }
-      const match = profiles?.find((profile) => profile.label === config.label);
+      const match = profiles?.find((profile) => config.aliases.includes(profile.label));
       if (match) laneProfiles.set(lane, match);
       else if (safeItems.some((item) => item.lane === lane)) result.blockedLanes.push(lane);
     }

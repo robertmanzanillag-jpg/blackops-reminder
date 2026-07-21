@@ -84,6 +84,34 @@ test("discovers the exact Miami News brand and sends one provider with safe sche
   assert.doesNotMatch(ledger, /real-token/);
 });
 
+test("maps the live Metricool Facebook brand labels to the correct Miami and New York lanes", async () => {
+  const dir = await workspace([
+    item({ id: "miami-facebook", platform: "facebook" }),
+    item({ id: "ny-facebook", eventId: "event-ny", lane: "ny-news", platform: "facebook" }),
+  ]);
+  const scheduledBlogIds: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [
+          { blogId: 501, label: "ynb4b6r6", networks: ["facebook"] },
+          { blogId: 502, label: "New York News", networks: ["facebook"] },
+        ] }), { status: 200 });
+      }
+      if (init?.method === "POST") scheduledBlogIds.push(url.searchParams.get("blogId") || "");
+      return new Response(JSON.stringify({ id: `post-${scheduledBlogIds.length}` }), { status: 201 });
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 2);
+  assert.deepEqual(scheduledBlogIds, ["501", "502"]);
+});
+
 test("filters high/critical and approval-required queue items even if their flags conflict", async () => {
   const dir = await workspace([
     item({ id: "high", risk: "high" }),
