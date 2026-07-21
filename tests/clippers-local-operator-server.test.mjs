@@ -2901,6 +2901,7 @@ test("Streamer campaign keeps 100 delivered requests ahead of unsent research ro
     assert.equal(campaign.rows.some((row) => row.handle === "creator001"), false);
     assert.equal(campaign.rows.every((row) => row.outreachStatus === "sent"), true);
     assert.equal(campaign.rows.every((row) => row.outreachEvidenceLink === outreachEvidenceUrl), true);
+    assert.equal(campaign.nextAction, "Monitor creator replies, save every response as local evidence, and keep all clips blocked until written permission is complete.");
   });
 });
 

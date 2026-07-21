@@ -7639,6 +7639,9 @@ async function buildStreamer100Campaign() {
   const premiumRows = permissionLedgerRows.filter((row) => row.cohort === "premium");
   const contactableRows = rows.filter((row) => row.hasVerifiedContact && row.priority !== "exclude").length;
   const excludedRows = rows.filter((row) => row.priority === "exclude").length;
+  const outreachSentRows = rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length;
+  const responsesReceivedRows = rows.filter((row) => row.outreachStatus === "responded").length;
+  const blanketApprovedRows = rows.filter((row) => row.permissionStatus === "approved_blanket").length;
   return {
     status: rows.length >= 100 ? "research_complete_outreach_review_required" : "building_100_streamer_research_pool",
     generatedAt: new Date().toISOString(),
@@ -7649,9 +7652,9 @@ async function buildStreamer100Campaign() {
     needsVerifiedContactRows: rows.filter((row) => row.priority === "needs_verified_contact").length,
     publicPolicyReviewRows: rows.filter((row) => row.rightsPolicy === "public_blanket_allow").length,
     excludedRows,
-    outreachSentRows: rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length,
-    responsesReceivedRows: rows.filter((row) => row.outreachStatus === "responded").length,
-    blanketApprovedRows: rows.filter((row) => row.permissionStatus === "approved_blanket").length,
+    outreachSentRows,
+    responsesReceivedRows,
+    blanketApprovedRows,
     deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
     unverifiedOutreachRows: rows.filter((row) => row.outreachStatus === "unverified_claim").length,
     sourceFiles,
@@ -7660,9 +7663,11 @@ async function buildStreamer100Campaign() {
     permissionLedgerRows,
     nextAction: rows.length < 100
       ? `Complete ${100 - rows.length} more verified streamer research rows.`
-      : rows.some((row) => row.permissionStatus === "approved_blanket")
+      : blanketApprovedRows > 0
         ? "Use only approved creators for source review, enforce every creator restriction, and keep monitoring the remaining replies."
-        : `Review the ${contactableRows} verified contacts, send blanket permission outreach in controlled batches, and save every response as local evidence.`,
+        : outreachSentRows >= rows.length
+          ? "Monitor creator replies, save every response as local evidence, and keep all clips blocked until written permission is complete."
+          : `Send the remaining ${rows.length - outreachSentRows} blanket permission requests in controlled batches and save every response as local evidence.`,
     guardrails: [
       "Research, public contact details, and sent outreach never count as permission.",
       "A public clipping policy must explicitly cover the intended TikTok and commercial use before it can become allowlist evidence.",
