@@ -27,6 +27,7 @@ const queueItemSchema = z.object({
   autoEligible: z.boolean(),
   published: z.literal(false),
   createdAt: z.string().datetime(),
+  notBefore: z.string().datetime().nullable().optional(),
 }).passthrough();
 
 const queueFileSchema = z.object({
@@ -61,6 +62,7 @@ export interface ClipperLocalNewsMetricoolResult {
   scheduled: number;
   alreadyScheduled: number;
   filtered: number;
+  deferred: number;
   failed: number;
   blockedLanes: ClipperLocalNewsLane[];
   ledgerPath: string;
@@ -279,6 +281,7 @@ function emptyResult(ledgerPath: string): ClipperLocalNewsMetricoolResult {
     scheduled: 0,
     alreadyScheduled: 0,
     filtered: 0,
+    deferred: 0,
     failed: 0,
     blockedLanes: [],
     ledgerPath,
@@ -408,6 +411,8 @@ export async function deliverClipperLocalNewsToMetricool(
     result.scanned = queue.length;
 
     const already = new Set(ledger.entries.map((entry) => entry.queueItemId));
+    const now = options.now || (() => new Date());
+    const fetchedNow = now();
     const safeItems = queue.filter((item) => {
       const eligible = item.status === "auto_eligible"
         && item.autoEligible
@@ -416,13 +421,16 @@ export async function deliverClipperLocalNewsToMetricool(
       if (!eligible) result.filtered += 1;
       else result.eligible += 1;
       if (eligible && already.has(item.id)) result.alreadyScheduled += 1;
-      return eligible && !already.has(item.id);
+      const notBefore = item.notBefore ? new Date(item.notBefore).getTime() : Number.NEGATIVE_INFINITY;
+      const deferred = eligible && Number.isFinite(notBefore) && notBefore > fetchedNow.getTime();
+      if (deferred) result.deferred += 1;
+      return eligible && !deferred && !already.has(item.id);
     });
 
-    const laneConfig = Object.fromEntries(
-      (Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>)
-        .map(([lane, config]) => [lane, { ...config, override: env[config.overrideKey] }]),
-    ) as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
+    const laneConfig = {} as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
+    for (const [lane, config] of Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>) {
+      laneConfig[lane] = { ...config, override: env[config.overrideKey] };
+    }
     const needsDiscovery = (Object.keys(laneConfig) as ClipperLocalNewsLane[])
       .some((lane) => safeItems.some((item) => item.lane === lane) && !hasRealValue(laneConfig[lane].override));
     const profiles = needsDiscovery ? await discoverProfiles(options.fetch || globalThis.fetch, token, userId) : [];
@@ -449,8 +457,6 @@ export async function deliverClipperLocalNewsToMetricool(
     }
 
     const maxPerRun = cappedInteger(options.maxPerRun ?? env.CLIPPERS_LOCAL_NEWS_METRICOOL_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
-    const now = options.now || (() => new Date());
-    const fetchedNow = now();
     const minimumStart = fetchedNow.getTime() + MIN_SPACING_MS;
     const cursors = new Map<string, number>();
     for (const entry of ledger.entries) {

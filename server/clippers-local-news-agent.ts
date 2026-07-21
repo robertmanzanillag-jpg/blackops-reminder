@@ -8,6 +8,9 @@ export type ClipperLocalNewsPlatform = "x" | "facebook";
 export type ClipperLocalNewsRisk = "low" | "medium" | "high" | "critical";
 export type ClipperLocalNewsLifecycle = "active" | "resolved";
 export type ClipperLocalNewsQueueStatus = "approval_required" | "auto_eligible";
+export type ClipperLocalNewsSection = "traffic" | "weather" | "breaking" | "public_safety" | "local";
+export type ClipperLocalNewsEditorialUrgency = "routine" | "developing" | "breaking";
+export type ClipperLocalNewsRevisionKind = "original" | "update" | "resolved" | "correction";
 
 export interface ClipperLocalNewsRawEvent {
   id?: string;
@@ -56,6 +59,9 @@ export interface ClipperLocalNewsEvent {
   resolvedAt: string | null;
   revision: number;
   fingerprint: string;
+  section: ClipperLocalNewsSection;
+  editorialUrgency: ClipperLocalNewsEditorialUrgency;
+  revisionKind: ClipperLocalNewsRevisionKind;
 }
 
 export interface ClipperLocalNewsQueueItem {
@@ -74,6 +80,13 @@ export interface ClipperLocalNewsQueueItem {
   autoEligible: boolean;
   published: false;
   createdAt: string;
+  section: ClipperLocalNewsSection;
+  editorialUrgency: ClipperLocalNewsEditorialUrgency;
+  revisionKind: ClipperLocalNewsRevisionKind;
+  textOnly: true;
+  mediaRequired: false;
+  gateReason: "none" | "risk" | "operator_opt_out" | "cadence";
+  notBefore: string | null;
 }
 
 export interface ClipperLocalNewsMetricInput {
@@ -106,12 +119,27 @@ export interface ClipperLocalNewsStatus {
   lanes: Record<ClipperLocalNewsLane, { active: number; resolved: number; queued: number }>;
   events: { total: number; active: number; resolved: number };
   queue: { total: number; approvalRequired: number; autoEligible: number; published: 0 };
+  editorial: {
+    owner: "Local News CEO";
+    operatingMode: "professional_newsroom";
+    sections: Record<ClipperLocalNewsSection, { events: number; queued: number }>;
+    urgency: Record<ClipperLocalNewsEditorialUrgency, number>;
+    autoSafe: number;
+    reviewRequired: number;
+    cadenceHeld: number;
+    textOnlyFacebook: number;
+    duplicates: number;
+    revisions: number;
+    corrections: number;
+    resolvedRevisions: number;
+    cadence: { windowMinutes: 60; facebookPerLane: 6; facebookRoutinePerLane: 2; xPerLane: 8; xRoutinePerLane: 3 };
+  };
   metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
   connectors: Array<{ id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }>;
   coverage: {
     weather: "nws_public";
-    miamiTraffic: "configured_feed" | "not_configured";
-    nyTraffic: "ny511_configured" | "not_configured";
+    miamiTraffic: "public_incident_feed" | "configured_feed" | "not_configured";
+    nyTraffic: "notify_nyc_public" | "ny511_configured" | "not_configured";
     roadCoverageComplete: false;
     note: string;
   };
@@ -151,11 +179,19 @@ interface LocalNewsState {
   events: ClipperLocalNewsEvent[];
   queue: ClipperLocalNewsQueueItem[];
   metrics: ClipperLocalNewsMetric[];
+  editorialCounters?: { duplicates: number; revisions: number; corrections: number; resolvedRevisions: number; cadenceHeld: number };
 }
 
 const LANES: ClipperLocalNewsLane[] = ["miami-news", "ny-news"];
 const PLATFORMS: ClipperLocalNewsPlatform[] = ["x", "facebook"];
 const MAX_BATCH_SIZE = 500;
+const SECTIONS: ClipperLocalNewsSection[] = ["traffic", "weather", "breaking", "public_safety", "local"];
+const EDITORIAL_URGENCIES: ClipperLocalNewsEditorialUrgency[] = ["routine", "developing", "breaking"];
+const CADENCE = { windowMinutes: 60 as const, facebookPerLane: 6 as const, facebookRoutinePerLane: 2 as const, xPerLane: 8 as const, xRoutinePerLane: 3 as const };
+const RSS_STALE_MS = 72 * 60 * 60_000;
+const RSS_FUTURE_SKEW_MS = 6 * 60 * 60_000;
+const ARCGIS_STALE_MS = 48 * 60 * 60_000;
+const FACEBOOK_DETAIL_LIMIT = 700;
 const DEFAULT_WORKSPACE = path.join(process.cwd(), "clippers_workspace", "local-news");
 const FILES = {
   state: "state.json",
@@ -182,6 +218,15 @@ function clean(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : fallback;
 }
 
+function decodeXml(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/\s+/g, " ").trim();
+}
+
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 20);
 }
@@ -200,9 +245,32 @@ function safeUrl(value: unknown, fallback: string): string {
 function riskFor(input: { severity: string; urgency: string; title: string; eventType: string; description?: string; instruction?: string; location?: string }): ClipperLocalNewsRisk {
   const text = `${input.severity} ${input.urgency} ${input.title} ${input.eventType} ${input.description || ""} ${input.instruction || ""} ${input.location || ""}`.toLowerCase();
   if (/extreme|catastrophic|tornado emergency|hurricane warning|flash flood emergency|evacuat|\bdeath\b|\bdead\b|fatalit|fallecid|muerte|tiroteo|shooting|homicid|asesinat/.test(text)) return "critical";
-  if (/severe|immediate|warning|tornado|hurricane|flash flood|life[- ]threat|arrest|detenid|acusad|charged|indict|\bminor child\b|\bmenor(?:es)?\b|victim|víctima|violence|violencia|rumou?r|rumor|unconfirmed|no confirmado|sin confirmar|identified as|identificad[oa] como|named as/.test(text)) return "high";
+  if (/severe|immediate|warning|tornado|hurricane|flash flood|life[- ]threat|arrest|detenid|acusad|charged|indict|\bcrime\b|crimen|delito|robbery|burglary|assault|rape|sexual|kidnap|secuestr|\bminor child\b|\bmenor(?:es)?\b|victim|víctima|violence|violencia|rumou?r|rumor|unconfirmed|no confirmado|sin confirmar|identified as|identificad[oa] como|named as/.test(text)) return "high";
   if (/moderate|expected|watch|flood|storm|snow|traffic|closure|crash|incident/.test(text)) return "medium";
   return "low";
+}
+
+function sectionFor(input: { title: string; eventType: string; description: string; source: string }): ClipperLocalNewsSection {
+  const text = `${input.title} ${input.eventType} ${input.description} ${input.source}`.toLowerCase();
+  if (/traffic|tr[aá]nsito|road|route|highway|street|bridge|tunnel|closure|closed|reopened|crash|collision|congestion|lane|subway|transit|mta|fhp|fl511|511ny/.test(text)) return "traffic";
+  if (/weather|nws|storm|rain|flood|snow|wind|heat|cold|hurricane|tornado|thunder|coastal/.test(text)) return "weather";
+  if (/police|fire|public safety|seguridad p[uú]blica|emergency|rescue|missing person|shelter/.test(text)) return "public_safety";
+  if (/breaking|urgent|urgente|ultima hora|última hora/.test(text)) return "breaking";
+  return "local";
+}
+
+function editorialUrgencyFor(input: { risk: ClipperLocalNewsRisk; section: ClipperLocalNewsSection; title: string; eventType: string; urgency: string; lifecycle: ClipperLocalNewsLifecycle }): ClipperLocalNewsEditorialUrgency {
+  const text = `${input.title} ${input.eventType} ${input.urgency}`.toLowerCase();
+  if (input.risk === "critical" || /breaking|urgent|urgente|immediate|emergency|última hora|ultima hora/.test(text)) return "breaking";
+  if (input.lifecycle === "resolved") return "routine";
+  if (input.risk === "high" || input.risk === "medium" || input.section === "traffic" || input.section === "weather") return "developing";
+  return "routine";
+}
+
+function revisionKindFor(raw: ClipperLocalNewsRawEvent, lifecycle: ClipperLocalNewsLifecycle): ClipperLocalNewsRevisionKind {
+  if (lifecycle === "resolved") return "resolved";
+  const text = `${clean(raw.status)} ${clean(raw.title || raw.headline)} ${clean(raw.eventType)}`.toLowerCase();
+  return /correction|corrected|correcci[oó]n|corregid/.test(text) ? "correction" : "original";
 }
 
 function inferLane(raw: ClipperLocalNewsRawEvent, props: Record<string, unknown>): ClipperLocalNewsLane {
@@ -226,8 +294,8 @@ export function normalizeClipperLocalNewsEvent(raw: ClipperLocalNewsRawEvent, no
   const sourceUrl = safeUrl(raw.sourceUrl || props.web || props.url || props.uri || raw.id, "https://www.weather.gov/");
   const sourceEventId = clean(raw.sourceEventId || props.id || raw.id) || digest(JSON.stringify([source, raw.title, raw.location, raw.effective]));
   const title = clean(raw.title || raw.headline || props.headline || props.event, "Local public update");
-  const description = clean(raw.description || props.description);
-  const instruction = clean(raw.instruction || props.instruction);
+  const description = decodeXml(clean(raw.description || props.description));
+  const instruction = decodeXml(clean(raw.instruction || props.instruction));
   const location = clean(raw.location || raw.areaDesc || props.areaDesc, inferLane(raw, props) === "miami-news" ? "Miami area" : "New York area");
   const eventType = clean(raw.eventType || props.event, title);
   const severity = clean(raw.severity || props.severity, "Unknown");
@@ -238,8 +306,11 @@ export function normalizeClipperLocalNewsEvent(raw: ClipperLocalNewsRawEvent, no
   const effective = clean(raw.effective || props.effective || props.sent) || null;
   const expires = clean(raw.expires || props.expires || props.ends) || null;
   const risk = riskFor({ severity, urgency, title, eventType, description, instruction, location });
-  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl }));
-  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint };
+  const section = sectionFor({ title, eventType, description, source });
+  const editorialUrgency = editorialUrgencyFor({ risk, section, title, eventType, urgency, lifecycle });
+  const revisionKind = revisionKindFor(raw, lifecycle);
+  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, editorialUrgency, revisionKind }));
+  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, revisionKind };
 }
 
 function truncate(text: string, limit: number): string {
@@ -249,15 +320,18 @@ function truncate(text: string, limit: number): string {
 }
 
 export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform: ClipperLocalNewsPlatform): string {
-  const prefix = event.lifecycle === "resolved" ? "RESUELTO" : event.risk === "critical" ? "URGENTE" : event.risk === "high" ? "ALERTA" : "ACTUALIZACIÓN LOCAL";
-  const attribution = `Fuente: ${event.source}`;
+  const prefix = event.revisionKind === "correction" ? "CORRECCIÓN" : event.lifecycle === "resolved" ? "RESUELTO" : event.editorialUrgency === "breaking" ? "ÚLTIMA HORA" : event.revision > 1 ? "ACTUALIZACIÓN" : event.section === "traffic" ? "TRÁFICO" : event.section === "weather" ? "TIEMPO" : "NOTICIA LOCAL";
+  const observedAt = event.effective || event.updatedAt;
+  const time = new Intl.DateTimeFormat("es-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(observedAt));
+  const attribution = `Según ${event.source}`;
+  const impact = truncate(event.description || "La fuente oficial no publicó detalles adicionales.", FACEBOOK_DETAIL_LIMIT);
+  const action = truncate(event.instruction || "Consulta el enlace oficial antes de tomar una decisión.", FACEBOOK_DETAIL_LIMIT);
   if (platform === "x") {
-    const ending = `\nAviso: verifica la fuente oficial. ${attribution} ${event.sourceUrl}`;
-    const body = `${prefix}: ${event.title} — ${event.location}. ${event.instruction || event.description}`.trim();
+    const ending = `\n${attribution} (${time}): ${event.sourceUrl}`;
+    const body = `${prefix}: ${event.title} — ${event.location}. ${event.instruction || event.description || "Consulta la fuente oficial."}`.trim();
     return `${truncate(body, Math.max(1, 280 - ending.length))}${ending}`.slice(0, 280);
   }
-  const detail = event.description || event.instruction || "Consulta la fuente oficial para conocer la información más reciente.";
-  return `${prefix}: ${event.title}\n\n${event.location}\n${detail}\n\nAviso: verifica la información oficial antes de actuar.\n${attribution}\n${event.sourceUrl}`;
+  return `${prefix}: ${event.title}\n\nLugar: ${event.location}\nHora: ${time}\nImpacto: ${impact}\nQué hacer: ${action}\n\n${attribution}. Esta página no es la agencia emisora; verifica la actualización oficial:\n${event.sourceUrl}`;
 }
 
 const rawEventSchema = z.object({
@@ -338,7 +412,7 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
-  const queueColumns = ["id", "eventId", "eventRevision", "lane", "platform", "risk", "lifecycle", "status", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
+  const queueColumns = ["id", "eventId", "eventRevision", "lane", "platform", "section", "editorialUrgency", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "textOnly", "mediaRequired", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
@@ -358,11 +432,11 @@ function summarizeMetrics(metrics: ClipperLocalNewsMetric[]) {
 }
 
 function sourceSetup(): string {
-  return `# Local News Source Setup\n\n- NWS: public, no API key. The agent reads active alerts for Florida and New York.\n- NY511: optional and subject to its access agreement. Set both \`NY511_API_KEY\` and \`NY511_FEED_URL\`; the key is sent only at request time and is never written here.\n- Miami traffic: no complete default road feed is assumed. Set an authorized \`FL511_FEED_URL\` or \`MIAMI_NEWS_FEED_URL\`; do not use the Leon County-only ArcGIS public view as Miami coverage.\n- Generic NY feed: optional \`NY_NEWS_FEED_URL\`.\n- Webhook/manual ingestion: call the ingest function with attributed public events.\n\nOnly use public/authorized feeds. Keep secrets in environment variables. Without the optional traffic connectors, status must not be interpreted as complete road coverage.\n`;
+  return `# Local News Source Setup\n\n- NWS: public, no API key. The agent reads point alerts for Miami and New York City.\n- Notify NYC: official public RSS, no API key. Attribution must make clear that this newsroom is not the issuing agency.\n- Miami-Dade County: official public news RSS, no API key.\n- Florida road incidents: public ArcGIS layers for closures, crashes, brush fires and other incidents, restricted to Miami-Dade. This is useful incident coverage, not a claim of every road condition.\n- NY511: optional and subject to its access agreement. Set both \`NY511_API_KEY\` and \`NY511_FEED_URL\`; the key is sent only at request time and is never written here.\n- Optional authorized feeds: \`FL511_FEED_URL\`, \`MIAMI_NEWS_FEED_URL\`, and \`NY_NEWS_FEED_URL\`.\n- Webhook/manual ingestion: call the ingest function with attributed official/public events.\n\nOnly use official public or authorized feeds. Never copy commercial news articles. Keep secrets in environment variables. Public incident sources do not guarantee complete road coverage.\n`;
 }
 
 function runbook(minutes: number): string {
-  return `# Local News Agent Runbook\n\n1. Run every ${minutes} minutes (supported range: 2–5).\n2. Low/medium risk items are \`auto_eligible\` by default once a separate Metricool executor is connected; set \`CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE=false\` to require approval for all items. High/critical content always remains \`approval_required\`.\n3. \`auto_eligible\` means eligible for that separate executor; it does not mean published.\n4. Verify location, timing, attribution, and the official source URL before approval.\n5. Resolve events only from an explicit resolved/cleared/cancelled/expired/ended/reopened update or a passed \`expires\` timestamp. A road status of \`closed\` describes an active closure and does not resolve it. Absence-based resolution is allowed only when calling ingest with \`resolveMissing: true\` for the exact controlled \`snapshotLanes\`; normal fetched cycles never enable it automatically.\n6. Import observed Metricool and money metrics separately; revenue, cost, and profit summarize only recorded observations and are never inferred from queue state.\n7. NWS supplies weather alerts, not complete road coverage. NY511 needs its key/agreement; Miami traffic needs an authorized configured feed.\n`;
+  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Facebook items are explicitly text-only and never require a photo.\n3. Low/medium risk items are \`auto_eligible\` by default once a separate Metricool executor is connected; set \`CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE=false\` to require approval for all items. Deaths, victims, crimes, minors, accusations, violence, critical evacuations, and every high/critical item always remain \`approval_required\`.\n4. Cadence limits per city in a rolling hour: Facebook 6 total/2 routine; X 8 total/3 routine. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; the Metricool executor waits until that timestamp.\n5. \`auto_eligible\` means eligible for the separate executor; it does not mean published. Verify location, timing, attribution, and the official source URL before approval.\n6. Corrections, updates and resolved/reopened notices create attributed revisions. Absence-based resolution is allowed only for an explicit controlled snapshot.\n7. Import observed Metricool and money metrics separately; revenue, cost, and profit are never inferred from queue state.\n8. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
 }
 
 export async function bootstrapClipperLocalNews(options: ClipperLocalNewsOptions = {}): Promise<ClipperLocalNewsStatus> {
@@ -371,7 +445,8 @@ export async function bootstrapClipperLocalNews(options: ClipperLocalNewsOptions
   const env = options.env || process.env;
   await mkdir(dir, { recursive: true });
   let state = await readState(dir);
-  if (!state) state = { version: 1, bootstrappedAt: now, updatedAt: now, lastRunAt: null, scheduleMinutes: scheduleMinutes(env), events: [], queue: [], metrics: [] };
+  if (!state) state = { version: 1, bootstrappedAt: now, updatedAt: now, lastRunAt: null, scheduleMinutes: scheduleMinutes(env), events: [], queue: [], metrics: [], editorialCounters: { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 } };
+  state.editorialCounters ||= { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 };
   state.scheduleMinutes = scheduleMinutes(env);
   state.updatedAt = now;
   await Promise.all([
@@ -382,10 +457,22 @@ export async function bootstrapClipperLocalNews(options: ClipperLocalNewsOptions
   return getClipperLocalNewsStatus({ ...options, workspaceDir: dir });
 }
 
-function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.ProcessEnv): ClipperLocalNewsQueueItem[] {
+function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.ProcessEnv, existingQueue: ClipperLocalNewsQueueItem[]): ClipperLocalNewsQueueItem[] {
   const autoEnabled = !/^(0|false|no)$/i.test(env.CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE || "true");
-  const gated = event.risk === "high" || event.risk === "critical" || !autoEnabled;
-  return PLATFORMS.map((platform) => ({ id: digest(`${event.id}|${event.revision}|${platform}`), eventId: event.id, eventRevision: event.revision, lane: event.lane, platform, copy: buildClipperLocalNewsCopy(event, platform), source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, status: gated ? "approval_required" : "auto_eligible", approvalRequired: gated, autoEligible: !gated, published: false, createdAt: now }));
+  const nowMs = new Date(now).getTime();
+  const windowStart = nowMs - CADENCE.windowMinutes * 60_000;
+  return PLATFORMS.map((platform) => {
+    const recent = existingQueue.filter((item) => item.lane === event.lane && item.platform === platform && item.autoEligible && new Date(item.createdAt).getTime() >= windowStart);
+    const totalLimit = platform === "facebook" ? CADENCE.facebookPerLane : CADENCE.xPerLane;
+    const routineLimit = platform === "facebook" ? CADENCE.facebookRoutinePerLane : CADENCE.xRoutinePerLane;
+    const cadenceHeld = recent.length >= totalLimit || (event.editorialUrgency === "routine" && recent.filter((item) => item.editorialUrgency === "routine").length >= routineLimit);
+    const riskGated = event.risk === "high" || event.risk === "critical";
+    const gateReason = riskGated ? "risk" as const : !autoEnabled ? "operator_opt_out" as const : cadenceHeld ? "cadence" as const : "none" as const;
+    const gated = riskGated || !autoEnabled;
+    const latestRecent = recent.reduce((latest, item) => Math.max(latest, new Date(item.notBefore || item.createdAt).getTime()), nowMs);
+    const notBefore = cadenceHeld ? new Date(latestRecent + CADENCE.windowMinutes * 60_000).toISOString() : null;
+    return { id: digest(`${event.id}|${event.revision}|${platform}`), eventId: event.id, eventRevision: event.revision, lane: event.lane, platform, copy: buildClipperLocalNewsCopy(event, platform), source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status: gated ? "approval_required" : "auto_eligible", approvalRequired: gated, autoEligible: !gated, published: false, createdAt: now };
+  });
 }
 
 export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngestInput): Promise<{ created: number; updated: number; duplicates: number; resolved: number; queued: number; status: ClipperLocalNewsStatus }> {
@@ -395,6 +482,7 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
   const state = (await readState(dir))!;
   const now = isoNow(input.now);
   const env = input.env || process.env;
+  state.editorialCounters ||= { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 };
   const byId = new Map(state.events.map((event) => [event.id, event]));
   const seen = new Set<string>();
   let created = 0, updated = 0, duplicates = 0, resolved = 0, queued = 0;
@@ -402,23 +490,27 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
     const normalized = normalizeClipperLocalNewsEvent(raw, now);
     seen.add(normalized.id);
     const previous = byId.get(normalized.id);
-    if (previous?.fingerprint === normalized.fingerprint) { duplicates += 1; continue; }
-    const event: ClipperLocalNewsEvent = { ...normalized, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
+    if (previous?.fingerprint === normalized.fingerprint) { duplicates += 1; state.editorialCounters.duplicates += 1; continue; }
+    const revisionKind: ClipperLocalNewsRevisionKind = normalized.revisionKind === "correction" ? "correction" : normalized.lifecycle === "resolved" ? "resolved" : previous ? "update" : "original";
+    const event: ClipperLocalNewsEvent = { ...normalized, revisionKind, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
     byId.set(event.id, event);
     previous ? updated += 1 : created += 1;
+    if (previous) state.editorialCounters.revisions += 1;
+    if (event.revisionKind === "correction") state.editorialCounters.corrections += 1;
+    if (event.revisionKind === "resolved") state.editorialCounters.resolvedRevisions += 1;
     if (event.lifecycle === "resolved") resolved += 1;
-    const newItems = queueFor(event, now, env);
-    for (const item of newItems) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; }
+    const newItems = queueFor(event, now, env, state.queue);
+    for (const item of newItems) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; if (item.gateReason === "cadence") state.editorialCounters.cadenceHeld += 1; }
   }
   if (input.resolveMissing) {
     const lanes = new Set(input.snapshotLanes?.length ? input.snapshotLanes : LANES);
     for (const [id, previous] of byId) {
       if (previous.lifecycle !== "active" || !lanes.has(previous.lane) || seen.has(id)) continue;
-      const event = { ...previous, lifecycle: "resolved" as const, resolvedAt: now, updatedAt: now, revision: previous.revision + 1 };
+      const event = { ...previous, lifecycle: "resolved" as const, revisionKind: "resolved" as const, editorialUrgency: "routine" as const, resolvedAt: now, updatedAt: now, revision: previous.revision + 1 };
       event.fingerprint = digest(`${previous.fingerprint}|resolved`);
       byId.set(id, event);
-      updated += 1; resolved += 1;
-      for (const item of queueFor(event, now, env)) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; }
+      updated += 1; resolved += 1; state.editorialCounters.revisions += 1; state.editorialCounters.resolvedRevisions += 1;
+      for (const item of queueFor(event, now, env, state.queue)) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; if (item.gateReason === "cadence") state.editorialCounters.cadenceHeld += 1; }
     }
   }
   const nowMs = new Date(now).getTime();
@@ -426,11 +518,11 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
     if (previous.lifecycle !== "active" || !previous.expires) continue;
     const expiresAt = new Date(previous.expires).getTime();
     if (!Number.isFinite(expiresAt) || expiresAt > nowMs) continue;
-    const event = { ...previous, lifecycle: "resolved" as const, resolvedAt: now, updatedAt: now, revision: previous.revision + 1 };
+    const event = { ...previous, lifecycle: "resolved" as const, revisionKind: "resolved" as const, editorialUrgency: "routine" as const, resolvedAt: now, updatedAt: now, revision: previous.revision + 1 };
     event.fingerprint = digest(`${previous.fingerprint}|expired`);
     byId.set(id, event);
-    updated += 1; resolved += 1;
-    for (const item of queueFor(event, now, env)) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; }
+    updated += 1; resolved += 1; state.editorialCounters.revisions += 1; state.editorialCounters.resolvedRevisions += 1;
+    for (const item of queueFor(event, now, env, state.queue)) if (!state.queue.some((existing) => existing.id === item.id)) { state.queue.push(item); queued += 1; if (item.gateReason === "cadence") state.editorialCounters.cadenceHeld += 1; }
   }
   state.events = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
   state.updatedAt = now;
@@ -438,13 +530,16 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
   return { created, updated, duplicates, resolved, queued, status: await getClipperLocalNewsStatus({ ...input, workspaceDir: dir }) };
 }
 
-interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string }
+interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss"; sourceName?: string }
 interface ConnectorDefinition { id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }
 
 function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
   return [
     { id: "nws-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "nws-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "notify-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "miami-dade-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
+    { id: "fhp-miami-dade", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "ny511", lane: "ny-news", configured: Boolean(env.NY511_FEED_URL && env.NY511_API_KEY), requiresKey: true, public: false },
     { id: "fl511", lane: "miami-news", configured: Boolean(env.FL511_FEED_URL), requiresKey: false, public: false },
     { id: "miami-generic", lane: "miami-news", configured: Boolean(env.MIAMI_NEWS_FEED_URL), requiresKey: false, public: false },
@@ -454,9 +549,13 @@ function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
 
 function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
   const result: SourceDefinition[] = [
-    { id: "nws-miami", lane: "miami-news", url: "https://api.weather.gov/alerts/active?point=25.7617,-80.1918", requiresKey: false },
-    { id: "nws-nyc", lane: "ny-news", url: "https://api.weather.gov/alerts/active?point=40.7128,-74.0060", requiresKey: false },
+    { id: "nws-miami", lane: "miami-news", url: "https://api.weather.gov/alerts/active?point=25.7617,-80.1918", requiresKey: false, sourceName: "National Weather Service" },
+    { id: "nws-nyc", lane: "ny-news", url: "https://api.weather.gov/alerts/active?point=40.7128,-74.0060", requiresKey: false, sourceName: "National Weather Service" },
+    { id: "notify-nyc", lane: "ny-news", url: "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml", requiresKey: false, format: "rss", sourceName: "Notify NYC" },
+    { id: "miami-dade-news", lane: "miami-news", url: "https://www.miamidade.gov/global/rss-news.page", requiresKey: false, format: "rss", sourceName: "Miami-Dade County" },
   ];
+  const arcGisBase = "https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Road_Closures/FeatureServer";
+  ["closures", "crashes", "brush-fires", "other-incidents"].forEach((label, layer) => result.push({ id: `fhp-miami-${label}`, lane: "miami-news", url: `${arcGisBase}/${layer}/query?where=COUNTY%3D%27MIAMI-DADE%27&outFields=*&returnGeometry=false&f=json`, requiresKey: false, sourceName: "Florida Highway Patrol / FL511" }));
   if (env.NY511_FEED_URL && env.NY511_API_KEY) result.push({ id: "ny511", lane: "ny-news", url: env.NY511_FEED_URL, requiresKey: true, key: env.NY511_API_KEY });
   if (env.FL511_FEED_URL) result.push({ id: "fl511", lane: "miami-news", url: env.FL511_FEED_URL, requiresKey: false });
   if (env.MIAMI_NEWS_FEED_URL) result.push({ id: "miami-generic", lane: "miami-news", url: env.MIAMI_NEWS_FEED_URL, requiresKey: false });
@@ -470,6 +569,69 @@ function extractEvents(payload: unknown): ClipperLocalNewsRawEvent[] {
   const record = payload as Record<string, unknown>;
   for (const key of ["features", "events", "incidents", "items", "results"]) if (Array.isArray(record[key])) return record[key] as ClipperLocalNewsRawEvent[];
   return [];
+}
+
+function rssTag(item: string, tag: string): string {
+  const match = item.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match ? decodeXml(match[1]) : "";
+}
+
+function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
+  const nowMs = new Date(now).getTime();
+  return [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0, MAX_BATCH_SIZE).flatMap((match) => {
+    const item = match[1];
+    const title = rssTag(item, "title") || "Official local update";
+    const description = rssTag(item, "description");
+    const link = rssTag(item, "link") || source.url;
+    const guid = rssTag(item, "guid") || link || digest(`${title}|${description}`);
+    const published = rssTag(item, "pubDate") || rssTag(item, "dc:date");
+    const publishedDate = published ? new Date(published) : null;
+    const publishedMs = publishedDate?.getTime();
+    if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > RSS_STALE_MS || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
+    return [{ sourceEventId: guid, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined }];
+  });
+}
+
+function arcGisEffective(attributes: Record<string, unknown>): string | undefined {
+  const rawDate = clean(attributes.DATESTR);
+  if (!rawDate) return undefined;
+  const rawTime = clean(attributes.TIMESTR, "00:00");
+  const parts = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const time = rawTime.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!parts || !time) return undefined;
+  const candidate = new Date(`${parts[3]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}T${time[1].padStart(2, "0")}:${time[2]}:${time[3] || "00"}-04:00`);
+  if (!Number.isFinite(candidate.getTime())) return undefined;
+  return candidate.toISOString();
+}
+
+function sourceEvents(payload: unknown, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
+  return extractEvents(payload).flatMap((raw) => {
+    const record = raw as Record<string, unknown>;
+    const attributes = record.attributes && typeof record.attributes === "object" ? record.attributes as Record<string, unknown> : null;
+    if (!attributes) return [{ ...raw, lane: raw.lane || source.lane, source: raw.source || source.sourceName || source.id }];
+    const value = (...keys: string[]) => keys.map((key) => attributes[key]).find((candidate) => candidate !== undefined && candidate !== null);
+    const county = clean(value("COUNTY", "COUNTYNAME", "COUNTY_NAME")).toUpperCase();
+    if (source.id.startsWith("fhp-miami-") && county && county !== "MIAMI-DADE" && county !== "MIAMI DADE") return [];
+    const effective = arcGisEffective(attributes);
+    if (effective && new Date(now).getTime() - new Date(effective).getTime() > ARCGIS_STALE_MS) return [];
+    const kind = clean(value("TYPEEVENT", "INCIDENT_TYPE", "EVENT_TYPE", "TYPE", "CATEGORY"), source.id.includes("closures") ? "Road closure" : source.id.includes("crashes") ? "Traffic crash" : source.id.includes("brush-fires") ? "Brush fire" : "Road incident");
+    const road = clean(value("ROADWAY", "ROAD_NAME", "STREET", "LOCATION", "ROUTE"), "Miami-Dade road");
+    return [{
+      ...raw,
+      properties: attributes,
+      sourceEventId: clean(String(value("INCIDENTID", "INCIDENT_ID", "EVENT_ID", "OBJECTID", "FID") ?? "")) || undefined,
+      source: source.sourceName || source.id,
+      sourceUrl: source.url.split("/query?")[0],
+      lane: source.lane,
+      title: clean(value("TITLE", "HEADLINE"), `${kind} en ${road}`),
+      description: clean(value("REMARKS", "DESCRIPTION", "DETAILS", "COMMENTS")),
+      instruction: clean(value("INSTRUCTION", "ADVICE")),
+      location: road,
+      eventType: kind,
+      status: clean(value("STATUS", "EVENT_STATUS")),
+      effective,
+    }];
+  });
 }
 
 export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput = {}): Promise<{ fetchedSources: number; failedSources: Array<{ id: string; error: string }>; created: number; updated: number; duplicates: number; resolved: number; queued: number; status: ClipperLocalNewsStatus }> {
@@ -489,9 +651,9 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
       try {
         const requestUrl = new URL(source.url);
         if (source.id === "ny511" && source.key) requestUrl.searchParams.set("key", source.key);
-        const response = await fetcher(requestUrl, { headers: { Accept: "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
+        const response = await fetcher(requestUrl, { headers: { Accept: source.format === "rss" ? "application/rss+xml, application/xml, text/xml" : "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const extracted = extractEvents(await response.json()).map((event) => ({ ...event, lane: event.lane || source.lane, source: event.source || source.id }));
+        const extracted = source.format === "rss" ? rssEvents(await response.text(), source, now) : sourceEvents(await response.json(), source, now);
         events.push(...extracted); fetchedSources += 1;
       } catch (error) { failedSources.push({ id: source.id, error: error instanceof Error ? error.message : "fetch_failed" }); }
     }
@@ -544,22 +706,33 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
     for (const item of state.queue) lanes[item.lane].queued += 1;
   }
   const metrics = summarizeMetrics(state?.metrics || []);
+  const sections = Object.fromEntries(SECTIONS.map((section) => [section, { events: state?.events.filter((event) => event.section === section).length || 0, queued: state?.queue.filter((item) => item.section === section).length || 0 }])) as ClipperLocalNewsStatus["editorial"]["sections"];
+  const urgency = Object.fromEntries(EDITORIAL_URGENCIES.map((level) => [level, state?.events.filter((event) => event.editorialUrgency === level).length || 0])) as ClipperLocalNewsStatus["editorial"]["urgency"];
+  const counters = state?.editorialCounters || { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 };
   return {
     workspaceDir: dir, bootstrapped: Boolean(state), scheduleMinutes: state?.scheduleMinutes ?? scheduleMinutes(env), lastRunAt: state?.lastRunAt || null, lanes,
     events: { total: state?.events.length || 0, active: state?.events.filter((event) => event.lifecycle === "active").length || 0, resolved: state?.events.filter((event) => event.lifecycle === "resolved").length || 0 },
     queue: { total: state?.queue.length || 0, approvalRequired: state?.queue.filter((item) => item.approvalRequired).length || 0, autoEligible: state?.queue.filter((item) => item.autoEligible).length || 0, published: 0 },
+    editorial: {
+      owner: "Local News CEO", operatingMode: "professional_newsroom", sections, urgency,
+      autoSafe: state?.queue.filter((item) => item.autoEligible && item.risk !== "high" && item.risk !== "critical").length || 0,
+      reviewRequired: state?.queue.filter((item) => item.gateReason === "risk").length || 0,
+      cadenceHeld: state?.queue.filter((item) => item.gateReason === "cadence").length || counters.cadenceHeld,
+      textOnlyFacebook: state?.queue.filter((item) => item.platform === "facebook" && item.textOnly === true && item.mediaRequired === false).length || 0,
+      duplicates: counters.duplicates, revisions: counters.revisions, corrections: counters.corrections, resolvedRevisions: counters.resolvedRevisions, cadence: CADENCE,
+    },
     metrics,
     connectors: connectorCatalog(env),
     coverage: {
       weather: "nws_public",
-      miamiTraffic: env.FL511_FEED_URL || env.MIAMI_NEWS_FEED_URL ? "configured_feed" : "not_configured",
-      nyTraffic: env.NY511_FEED_URL && env.NY511_API_KEY ? "ny511_configured" : "not_configured",
+      miamiTraffic: env.FL511_FEED_URL || env.MIAMI_NEWS_FEED_URL ? "configured_feed" : "public_incident_feed",
+      nyTraffic: env.NY511_FEED_URL && env.NY511_API_KEY ? "ny511_configured" : "notify_nyc_public",
       roadCoverageComplete: false,
-      note: "NWS is weather-only. Complete road coverage is not claimed; optional traffic feeds require explicit authorized configuration.",
+      note: "Notify NYC and Miami-Dade public incident feeds provide official updates but do not guarantee complete road coverage. NY511 remains optional and requires explicit authorized configuration.",
     },
     artifacts,
-    guardrails: ["Queue state never proves or claims real publication.", "Revenue, cost, and profit include only explicitly recorded observations; no money is inferred.", "Low and medium risk items are auto-eligible by default; set CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE=false to opt out.", "High and critical risk items always require approval and are never auto-eligible.", "Secrets are read from environment variables and never persisted."],
+    guardrails: ["Queue state never proves or claims real publication.", "Facebook stories are text-only and do not require a photo.", "Only official/public or authorized sources are ingested; commercial news articles are never scraped.", "Revenue, cost, and profit include only explicitly recorded observations; no money is inferred.", "High-risk subjects including deaths, victims, crimes, minors, accusations, violence, and critical evacuations always require human approval.", "Cadence overflow remains automatic but cannot publish before its notBefore timestamp.", "Secrets are read from environment variables and never persisted."],
   };
 }
 
-export const __clipperLocalNewsInternals = { riskFor, sources, connectorCatalog, truncate, extractEvents, scheduleMinutes };
+export const __clipperLocalNewsInternals = { riskFor, sectionFor, editorialUrgencyFor, sources, connectorCatalog, truncate, extractEvents, rssEvents, sourceEvents, scheduleMinutes };
