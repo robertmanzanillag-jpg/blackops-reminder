@@ -91,12 +91,11 @@ export class DrizzleAdmittedRenderRepository implements AdmittedRenderRepository
         ${input.reconciliationFencingToken}::bigint,${input.providerJobId}::text,
         ${input.providerRequestId??null}::text,${input.evidenceDigest}::text)`,mutationResult);
     }
-    const send=input as AdmittedSendAuthorization;
-    if(!UUID.test(send.leaseToken))return false;
+    if(!isSendAuthorization(input))return false;
     return committedCall(this.db.submit,sql`SELECT * FROM ai_media_worker_api.record_submit_confirmed_v1(
       ${this.options.submitCapabilityId}::uuid,${input.scope.ownerUserId}::text,${input.scope.workspaceId}::text,
       ${input.id}::uuid,${input.budgetReservationId}::uuid,${input.fencingToken}::bigint,
-      ${input.authorizationDigest}::text,${send.leaseToken}::uuid,${input.providerJobId}::text,
+      ${input.authorizationDigest}::text,${input.leaseToken}::uuid,${input.providerJobId}::text,
       ${input.providerRequestId??null}::text,${input.evidenceDigest}::text)`,mutationResult);
   }
 
@@ -181,6 +180,10 @@ function big(value:unknown):bigint{try{const result=BigInt(String(value));if(res
 function iso(value:unknown):string{const date=value instanceof Date?value:new Date(String(value));if(Number.isNaN(date.getTime()))throw new Error("Invalid database time");return date.toISOString();}
 function boundedProviderId(value:unknown):value is string{return typeof value==='string'&&value===value.trim()&&value.length>=1&&value.length<=500;}
 function optionalProviderId(value:unknown):boolean{return value===undefined||boundedProviderId(value);}
+function isSendAuthorization(input:AdmittedAuthorizedIdentity):input is AdmittedSendAuthorization{
+  return "leaseToken" in input&&typeof input.leaseToken==="string"&&UUID.test(input.leaseToken)
+    &&"leaseExpiresAt" in input&&typeof input.leaseExpiresAt==="string"&&!Number.isNaN(Date.parse(input.leaseExpiresAt));
+}
 function assertUuid(value:string,key:string):void{if(!UUID.test(value))throw new Error(`Invalid ${key}`);}
 function assertScope(scope:TenantScope):void{if(!scope.ownerUserId.trim()||scope.ownerUserId!==scope.ownerUserId.trim()
   ||!scope.workspaceId.trim()||scope.workspaceId!==scope.workspaceId.trim())throw new Error("Exact tenant scope is required");}

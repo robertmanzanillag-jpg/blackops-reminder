@@ -272,3 +272,28 @@ checker and App QA gates, then Robert's explicit migration and deployment approv
 Rollback is application-only and preserves every authority and reservation record.
 Every policy, kill-switch, evidence, and snapshot issuer must serialize on the same
 tenant/workspace advisory transaction lock so revision selection remains linear.
+
+## PR26 admitted-worker database capability draft
+
+`20260721_pr26_db_capability_forward.sql` is an unapplied least-privilege boundary
+for the admitted provider worker introduced by PR25. A DBA must precreate the exact
+safe NOLOGIN function-owner, submit-executor and reconciliation-executor roles; the
+migration fails closed on unexpected role attributes, membership or extension state.
+It creates a closed `ai_media_worker_api` schema, exact `SESSION_USER`-bound capability
+records, versioned `SECURITY DEFINER` functions and a monotonic per-reservation active
+capacity lease. Submit and reconciliation executors have disjoint function execution
+and no direct table access.
+
+Active provider capacity is intentionally independent of committed money. An ambiguous
+or confirmed-but-not-terminal attempt remains capacity-held. Exact negative finality
+may release capacity and refund committed money once; an exact provider-terminal result
+releases capacity without claiming the provider cost vanished. No runtime terminal
+webhook or HeyGen evidence adapter is mounted by this migration.
+
+Do not apply this SQL automatically or use `db:push`. Before any staging application,
+provision separate LOGIN principals outside the migration, rehearse forward and
+fail-closed rollback on a restorable copy, prove ACL/session/tenant isolation and the
+concurrency matrix, and pass checker plus App QA. Production provider calls, credit
+spend and deployment still require Robert's separate explicit approval. The rollback
+preserves submission/capacity evidence and the permanent PR25 deferred-trigger
+least-privilege tightening; it never restores ordinary application DML.
