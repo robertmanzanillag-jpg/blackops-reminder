@@ -566,7 +566,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       const streamerCampaignCsvResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.csv`);
       assert.equal(streamerCampaignCsvResponse.status, 200);
       const streamerCampaignCsv = await streamerCampaignCsvResponse.text();
-      assert.match(streamerCampaignCsv, /^handle,twitch_url,cohort,language,country,category,contact_email/m);
+      assert.match(streamerCampaignCsv, /^handle,display_name,creator_url,platform,twitch_url,cohort,language,country,category,contact_email/m);
       assert.doesNotMatch(streamerCampaignCsv, /can_publish,yes/);
 
       const permissionPacketsResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-request-packets.json`);
@@ -2800,8 +2800,8 @@ test("Streamer blanket approvals require complete scopes and a real local eviden
     }],
   })}\n`);
   const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names", "outreach_evidence_link"];
-  const writeOutreach = async (evidenceLink, outreachEvidenceLink = "https://creatorhq.com/unverified-send-proof") => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
-    "Real Creator XYZ", "rights@creatorhq.com", "responded", "approved_blanket", "yes", "yes", "yes", "yes", evidenceLink,
+  const writeOutreach = async (evidenceLink, outreachEvidenceLink = "https://creatorhq.com/unverified-send-proof", outreachStatus = "responded") => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+    "Real Creator XYZ", "rights@creatorhq.com", outreachStatus, "approved_blanket", "yes", "yes", "yes", "yes", evidenceLink,
     "Creator granted written blanket commercial TikTok permission with complete scope.", "2026-07-20T12:00:00Z",
     "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions", outreachEvidenceLink,
   ])}\n`);
@@ -2838,6 +2838,12 @@ test("Streamer blanket approvals require complete scopes and a real local eviden
     const status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
     assert.equal(status.streamer100Campaign.blanketApprovedRows, 1);
     assert.equal(status.streamerGrowthCeo.supply.allowlistedCreators, 1);
+
+    await writeOutreach(evidenceUrl, "", "not_sent");
+    const noResponseCampaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(noResponseCampaign.rows[0].permissionStatus, "approval_evidence_incomplete");
+    assert.equal(noResponseCampaign.rows[0].evidenceLink, "");
+    assert.equal(noResponseCampaign.blanketApprovedRows, 0);
   });
 });
 
@@ -2930,6 +2936,107 @@ test("Streamer campaign permanently excludes a creator with evidenced denial", a
     assert.equal(campaign.deniedRows, 1);
     assert.equal(campaign.blanketApprovedRows, 0);
     assert.equal(campaign.rows[0].canPublish, false);
+  });
+});
+
+test("Streamer campaign counts an evidenced scope question without granting permission", async () => {
+  const port = "5549";
+  const researchDir = path.join(workspaceRoot, "research");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const evidenceDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const evidenceUrl = "/clippers-workspace/evidence-drop/streamer-permissions/creator-scope-question.md";
+  await mkdir(researchDir, { recursive: true });
+  await mkdir(evidenceDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-indie.json"), `${JSON.stringify({
+    streamers: [{
+      handle: "ScopeQuestionCreator",
+      twitchOfficialUrl: "https://www.twitch.tv/scopequestioncreator",
+      contactEmail: "rights@scopequestion.example",
+      publicContact: { type: "business_email", value: "rights@scopequestion.example", evidenceUrl: "https://scopequestion.example/contact" },
+      clipPolicy: { summary: "Written commercial permission is required.", evidenceUrl: "https://scopequestion.example/policy" },
+      rightsPolicy: "request_required",
+    }],
+  })}\n`);
+  await writeFile(path.join(evidenceDir, "creator-scope-question.md"), "Creator representative replied and requested direct links to both TikTok accounts before deciding the requested commercial clipping scope. No permission was granted.\n");
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at"];
+  await writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+    "ScopeQuestionCreator", "rights@scopequestion.example", "responded", "review_required", "no", "no", "no", "no", evidenceUrl,
+    "Representative requested account links; awaiting a scoped written decision.", "2026-07-21T14:25:00Z",
+  ])}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(campaign.responsesReceivedRows, 1);
+    assert.equal(campaign.blanketApprovedRows, 0);
+    assert.equal(campaign.deniedRows, 0);
+    assert.equal(campaign.rows[0].outreachStatus, "responded");
+    assert.equal(campaign.rows[0].permissionStatus, "review_required");
+    assert.equal(campaign.rows[0].evidenceLink, evidenceUrl);
+    assert.equal(campaign.rows[0].canPublish, false);
+  });
+});
+
+test("Streamer campaign supports premium creators on Kick and YouTube without granting rights", async () => {
+  const port = "5550";
+  const researchDir = path.join(workspaceRoot, "research");
+  await mkdir(researchDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-premium.json"), `${JSON.stringify({
+    creators: [
+      {
+        handle: "PremiumKickCreator",
+        kickOfficialUrl: "https://kick.com/premiumkickcreator/about",
+        rightsPolicy: "no_evidence",
+      },
+      {
+        handle: "PremiumYouTubeCreator",
+        youtubeOfficialUrl: "https://www.youtube.com/@PremiumYouTubeCreator",
+        rightsPolicy: "request_required",
+        contactUrl: "https://creatorhq.com/contact",
+        contactEvidenceUrl: "https://creatorhq.com/contact",
+      },
+      {
+        handle: "SearchPageMustFail",
+        officialCreatorUrl: "https://www.youtube.com/results?search_query=creator",
+      },
+      {
+        handle: "WrongCreator",
+        kickOfficialUrl: "https://kick.com/actualcreator",
+      },
+      {
+        youtubeOfficialUrl: "https://www.youtube.com/@foo-bar",
+        rightsPolicy: "no_evidence",
+      },
+      {
+        youtubeOfficialUrl: "https://www.youtube.com/@foobar",
+        rightsPolicy: "no_evidence",
+      },
+      {
+        handle: "DisplayAlias",
+        twitchOfficialUrl: "https://www.twitch.tv/canonicalcreator",
+        rightsPolicy: "no_evidence",
+      },
+    ],
+  })}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(campaign.premiumRows.length, 5);
+    const kick = campaign.premiumRows.find((row) => row.handle === "premiumkickcreator");
+    const youtube = campaign.premiumRows.find((row) => row.handle === "PremiumYouTubeCreator");
+    assert.equal(kick.platform, "kick");
+    assert.equal(kick.creatorUrl, "https://kick.com/premiumkickcreator");
+    assert.equal(kick.displayName, "PremiumKickCreator");
+    assert.equal(kick.twitchUrl, "");
+    assert.equal(youtube.platform, "youtube");
+    assert.equal(youtube.hasVerifiedContact, true);
+    assert.equal(campaign.premiumRows.some((row) => row.handle === "SearchPageMustFail"), false);
+    assert.equal(campaign.premiumRows.some((row) => row.handle === "WrongCreator"), false);
+    assert.ok(campaign.premiumRows.some((row) => row.handle === "foo-bar"));
+    assert.ok(campaign.premiumRows.some((row) => row.handle === "foobar"));
+    const twitchAlias = campaign.premiumRows.find((row) => row.handle === "canonicalcreator");
+    assert.equal(twitchAlias.displayName, "DisplayAlias");
+    assert.ok(twitchAlias.outreachHandleKeys.includes("displayalias"));
+    assert.ok(campaign.premiumRows.every((row) => row.canPublish === false));
   });
 });
 
@@ -3374,12 +3481,11 @@ test("Clippers real clip gap does not count upload pack files as real without so
 
 test("Clippers real clip intake validation requires blanket approval beyond standalone rights evidence", async () => {
   const port = "5526";
-  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
   const replacementFileName = "sports-real-7129d59b5f5e.mp4";
   const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
   const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
   await mkdir(path.dirname(replacementPath), { recursive: true });
-  await cp(sourceUploadFile, replacementPath);
+  await writeFile(replacementPath, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_500)]));
   await writeFile(manifestPath, [
     "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
     "sports,Permissioned highlight replacement,https://www.tiktok.com/@creator/video/1234567890123456789,@creator,tiktok,sports-real-7129d59b5f5e.mp4,owned_or_permissioned,https://rights.receipts.local/creator-permission-letter,high,Creator permission recorded for this replacement clip before source drop import.",
@@ -3492,7 +3598,6 @@ test("Clippers real clip intake enforces blanket creator restrictions before app
 
 test("Clippers streamer intake blocks TikTok and YouTube creators outside the blanket campaign", async () => {
   const port = "5572";
-  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
   const replacementFileName = "sports-real-7129d59b5f5e.mp4";
   const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
   const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
@@ -3501,8 +3606,8 @@ test("Clippers streamer intake blocks TikTok and YouTube creators outside the bl
   const memesManifestPath = path.join(workspaceRoot, "source-drop", "memes", "source-drop-manifest.csv");
   await mkdir(path.dirname(replacementPath), { recursive: true });
   await mkdir(path.dirname(memesReplacementPath), { recursive: true });
-  await cp(sourceUploadFile, replacementPath);
-  await cp(sourceUploadFile, memesReplacementPath);
+  await writeFile(replacementPath, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_500)]));
+  await writeFile(memesReplacementPath, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_500)]));
   await writeFile(manifestPath, [
     "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
     `sports,Unlisted TikTok streamer replacement,https://www.tiktok.com/@notallowlisted/video/1234567890123456789,@notallowlisted,tiktok,${replacementFileName},owned_or_permissioned,https://rights.receipts.local/unlisted-tiktok,high,Operator supplied a TikTok clip but the creator has no blanket campaign approval.`,
@@ -3529,12 +3634,13 @@ test("Clippers streamer intake resolves approved permissions beyond the top 100 
   const port = "5573";
   const researchDir = path.join(workspaceRoot, "research");
   const permissionDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const outreachEvidenceDir = path.join(workspaceRoot, "evidence-drop", "streamer-outreach");
   const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
   const permissionUrl = "/clippers-workspace/evidence-drop/streamer-permissions/zapproved.md";
+  const outreachEvidenceUrl = "/clippers-workspace/evidence-drop/streamer-outreach/top-100-send.md";
   const replacementFileName = "sports-real-7129d59b5f5e.mp4";
   const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
   const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
-  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
   const streamers = Array.from({ length: 100 }, (_, index) => ({
     handle: `creator${String(index).padStart(3, "0")}`,
     twitchOfficialUrl: `https://www.twitch.tv/creator${String(index).padStart(3, "0")}`,
@@ -3542,15 +3648,22 @@ test("Clippers streamer intake resolves approved permissions beyond the top 100 
   streamers.push({ handle: "zapproved", twitchOfficialUrl: "https://www.twitch.tv/zapproved" });
   await mkdir(researchDir, { recursive: true });
   await mkdir(permissionDir, { recursive: true });
+  await mkdir(outreachEvidenceDir, { recursive: true });
   await mkdir(path.dirname(replacementPath), { recursive: true });
   await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({ streamers })}\n`);
   await writeFile(path.join(permissionDir, "zapproved.md"), "zapproved granted written blanket permission for commercial TikTok edits of current and future public stream clips with revocation rights retained.\n");
+  await writeFile(path.join(outreachEvidenceDir, "top-100-send.md"), "The operator verified delivery of this controlled test batch. This local fixture is outreach evidence only and grants no rights.\n");
+  const outreachHeader = ["handle", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "outreach_evidence_link"];
+  const sentRows = streamers.slice(0, 100).map((streamer) => renderTestCsvLine([
+    streamer.handle, "sent", "requested", "no", "no", "no", "no", "", outreachEvidenceUrl,
+  ]));
   await writeFile(outreachPath, [
-    "handle,outreach_status,permission_status,scope_tiktok,scope_commercial,scope_edits,scope_future_clips,evidence_link",
-    `zapproved,not_sent,approved_blanket,yes,yes,yes,yes,${permissionUrl}`,
+    renderTestCsvLine(outreachHeader),
+    ...sentRows,
+    renderTestCsvLine(["zapproved", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionUrl, ""]),
     "",
   ].join("\n"));
-  await cp(sourceUploadFile, replacementPath);
+  await writeFile(replacementPath, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_500)]));
   await writeFile(manifestPath, [
     "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
     `sports,Approved streamer replacement,https://www.twitch.tv/zapproved/clip/ZApprovedExactClip,zapproved,twitch,${replacementFileName},owned_or_permissioned,${permissionUrl},high,Blanket approval and the exact source clip were reviewed before intake.`,

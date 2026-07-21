@@ -4188,7 +4188,7 @@ function manifestRecordForTarget(manifestRows, targetFileName) {
 async function buildRealClipIntakeValidation(status) {
   const pack = buildRealClipIntakePack(status);
   const streamerCampaign = await buildStreamer100Campaign();
-  const streamerPermissions = new Map((streamerCampaign.permissionLedgerRows || []).map((row) => [campaignHandleKey(row.handle), row]));
+  const streamerPermissions = campaignPermissionMap(streamerCampaign.permissionLedgerRows);
   const manifestCache = new Map();
   for (const category of new Set(pack.rows.map((row) => row.category))) {
     const manifestLocation = await sourceDropManifestLocation(category);
@@ -4257,7 +4257,7 @@ async function buildRealClipIntakeValidation(status) {
       record ? null : "manifest_row_missing",
       record && isExactSourceVideoOrPostUrl(url) ? null : "exact_source_video_or_post_url_missing",
       record && !hasStarterPlaceholder(source) ? null : "creator_or_source_missing",
-      record && !hasStarterPlaceholder(source) && isExactSourceVideoOrPostUrl(url) && !sourceUrlMatchesCreator(url, source)
+      record && !hasStarterPlaceholder(source) && isExactSourceVideoOrPostUrl(url) && !sourceUrlMatchesCreator(url, creatorPermission?.handle || source)
         ? "source_url_creator_not_verified"
         : null,
       record && rightsStatus === "owned_or_permissioned" ? null : "rights_status_not_owned_or_permissioned",
@@ -7337,6 +7337,37 @@ function exactTwitchChannelUrl(value) {
   }
 }
 
+function exactCreatorChannel(value) {
+  const twitchUrl = exactTwitchChannelUrl(value);
+  if (twitchUrl) {
+    return {
+      url: twitchUrl,
+      platform: "twitch",
+      handle: new URL(twitchUrl).pathname.split("/").filter(Boolean)[0],
+    };
+  }
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe) return null;
+  try {
+    const parsed = new URL(safe);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (parsed.search || parsed.hash) return null;
+    if (hostName === "kick.com") {
+      const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})(?:\/(?:about|clips))?\/?$/);
+      return match ? { url: `https://kick.com/${match[1]}`, platform: "kick", handle: match[1] } : null;
+    }
+    if (hostName === "youtube.com") {
+      const handleMatch = parsed.pathname.match(/^\/@([A-Za-z0-9_.-]{3,50})\/?$/);
+      if (handleMatch) return { url: `https://www.youtube.com/@${handleMatch[1]}`, platform: "youtube", handle: handleMatch[1] };
+      const channelMatch = parsed.pathname.match(/^\/channel\/([A-Za-z0-9_-]{10,64})\/?$/);
+      if (channelMatch) return { url: `https://www.youtube.com/channel/${channelMatch[1]}`, platform: "youtube", handle: channelMatch[1] };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function campaignCandidateRows(payload) {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -7378,7 +7409,25 @@ function campaignHandleKey(value) {
     .trim()
     .replace(/^@/, "")
     .toLowerCase()
-    .replace(/[^a-z0-9_]/g, "");
+    .replace(/[^a-z0-9_.-]/g, "");
+}
+
+function campaignRowHandleKeys(row) {
+  return [...new Set([row?.handle, ...(Array.isArray(row?.outreachHandleKeys) ? row.outreachHandleKeys : [])]
+    .map(campaignHandleKey)
+    .filter(Boolean))];
+}
+
+function campaignPermissionMap(rows) {
+  const permissions = new Map();
+  for (const row of rows || []) {
+    for (const key of campaignRowHandleKeys(row)) permissions.set(key, row);
+  }
+  return permissions;
+}
+
+function campaignRowMatchesHandle(row, handle) {
+  return campaignRowHandleKeys(row).includes(campaignHandleKey(handle));
 }
 
 function streamerPermissionRestrictions(outreach = {}) {
@@ -7408,13 +7457,18 @@ function campaignContactUrlFromEvidence(type, value) {
 }
 
 function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
-  const twitchUrl = exactTwitchChannelUrl(firstCampaignValue(raw, ["twitchUrl", "twitch_url", "twitchOfficialUrl", "twitch_official_url", "twitchOfficial", "twitch_official", "officialTwitch", "official_twitch", "officialTwitchUrl", "official_twitch_url", "channelUrl", "channel_url"]));
-  const handleFromUrl = twitchUrl ? new URL(twitchUrl).pathname.split("/").filter(Boolean)[0] : "";
+  const channel = exactCreatorChannel(firstCampaignValue(raw, [
+    "officialCreatorUrl", "official_creator_url", "officialChannelUrl", "official_channel_url", "officialUrl", "official_url",
+    "kickUrl", "kick_url", "kickOfficialUrl", "kick_official_url", "youtubeUrl", "youtube_url", "youtubeOfficialUrl", "youtube_official_url",
+    "twitchUrl", "twitch_url", "twitchOfficialUrl", "twitch_official_url", "twitchOfficial", "twitch_official", "officialTwitch", "official_twitch", "officialTwitchUrl", "official_twitch_url", "channelUrl", "channel_url",
+  ]));
+  const handleFromUrl = channel?.handle || "";
   const rawHandle = firstCampaignValue(raw, ["handle", "handleExact", "handle_exact", "twitchHandle", "twitch_handle", "creator", "name"])
     .replace(/^@/, "")
     .trim();
-  const handle = /^[A-Za-z0-9_]{3,25}$/.test(rawHandle) ? rawHandle : handleFromUrl;
-  if (!handle || !twitchUrl) return null;
+  const handle = handleFromUrl;
+  if (!handle || !channel) return null;
+  if (channel.platform !== "twitch" && rawHandle && campaignHandleKey(rawHandle) !== campaignHandleKey(handleFromUrl)) return null;
   const nestedContact = raw?.publicContact && typeof raw.publicContact === "object"
     ? raw.publicContact
     : raw?.contact && typeof raw.contact === "object"
@@ -7451,7 +7505,11 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
         : "needs_verified_contact";
   return {
     handle,
-    twitchUrl,
+    displayName: rawHandle || handle,
+    outreachHandleKeys: [...new Set([handle, rawHandle].map(campaignHandleKey).filter(Boolean))],
+    creatorUrl: channel.url,
+    platform: channel.platform,
+    twitchUrl: channel.platform === "twitch" ? channel.url : "",
     cohort,
     sourceFile,
     language: firstCampaignValue(raw, ["language", "idioma"])
@@ -7480,6 +7538,7 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
 
 async function buildStreamer100Campaign() {
   const names = [
+    "streamer-cohort-premium.json",
     "streamer-cohort-en-na.json",
     "streamer-cohort-es.json",
     "streamer-cohort-eu.json",
@@ -7509,7 +7568,7 @@ async function buildStreamer100Campaign() {
   const outreachRows = outreachRaw.trim() ? parseCsv(outreachRaw).rows : [];
   const outreachByHandle = new Map(outreachRows.map((row) => [campaignHandleKey(row.handle), row]));
   const mergedRows = await Promise.all([...byHandle.values()].map(async (row) => {
-    const outreach = outreachByHandle.get(campaignHandleKey(row.handle)) || {};
+    const outreach = row.outreachHandleKeys.map((key) => outreachByHandle.get(key)).find(Boolean) || {};
     const claimedOutreachStatus = String(outreach.outreach_status || "not_sent").trim().toLowerCase();
     const outreachEvidenceLink = String(outreach.outreach_evidence_link || "").trim();
     const requestedPermissionStatus = String(outreach.permission_status || "not_requested").trim().toLowerCase();
@@ -7524,9 +7583,9 @@ async function buildStreamer100Campaign() {
     const outreachEvidence = localOutreachEvidenceLink
       ? await realClipEvidenceStatus(outreachEvidenceLink)
       : { ok: false };
-    const blanketApprovalValid = requestedPermissionStatus === "approved_blanket" && scopeComplete && evidence.ok;
-    const permissionDenied = requestedPermissionStatus === "denied";
-    const responseEvidenceValid = ["approved_blanket", "denied"].includes(requestedPermissionStatus) && evidence.ok;
+    const responseEvidenceValid = claimedOutreachStatus === "responded" && evidence.ok;
+    const blanketApprovalValid = requestedPermissionStatus === "approved_blanket" && scopeComplete && responseEvidenceValid;
+    const permissionDeniedValid = requestedPermissionStatus === "denied" && responseEvidenceValid;
     const outreachClaimVerified = ["sent", "delivered"].includes(claimedOutreachStatus)
       ? outreachEvidence.ok
       : claimedOutreachStatus === "responded"
@@ -7554,11 +7613,13 @@ async function buildStreamer100Campaign() {
         ? "approved_blanket"
         : requestedPermissionStatus === "approved_blanket"
           ? "approval_evidence_incomplete"
-          : requestedPermissionStatus,
-      evidenceLink: blanketApprovalValid || (permissionDenied && evidence.ok) ? evidenceLink : "",
+          : requestedPermissionStatus === "denied" && !permissionDeniedValid
+            ? "denial_evidence_incomplete"
+            : requestedPermissionStatus,
+      evidenceLink: responseEvidenceValid ? evidenceLink : "",
       updatedAt: String(outreach.updated_at || "").trim(),
       restrictions: streamerPermissionRestrictions(outreach),
-      priority: permissionDenied ? "exclude" : row.priority,
+      priority: permissionDeniedValid ? "exclude" : row.priority,
       canPublish: false,
     };
   }));
@@ -7575,6 +7636,7 @@ async function buildStreamer100Campaign() {
       || a.handle.localeCompare(b.handle);
   });
   const rows = permissionLedgerRows.slice(0, 100);
+  const premiumRows = permissionLedgerRows.filter((row) => row.cohort === "premium");
   const contactableRows = rows.filter((row) => row.hasVerifiedContact && row.priority !== "exclude").length;
   const excludedRows = rows.filter((row) => row.priority === "exclude").length;
   return {
@@ -7593,6 +7655,7 @@ async function buildStreamer100Campaign() {
     deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
     unverifiedOutreachRows: rows.filter((row) => row.outreachStatus === "unverified_claim").length,
     sourceFiles,
+    premiumRows,
     rows,
     permissionLedgerRows,
     nextAction: rows.length < 100
@@ -7611,12 +7674,15 @@ async function buildStreamer100Campaign() {
 
 function buildStreamer100CampaignCsv(campaign) {
   return renderCsv([
-    "handle", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
+    "handle", "display_name", "creator_url", "platform", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
     "contact_evidence_url", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
     "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
     "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
   ], campaign.rows.map((row) => ({
     handle: workspaceSafeCsvText(row.handle),
+    display_name: workspaceSafeCsvText(row.displayName),
+    creator_url: workspaceSafeCsvText(row.creatorUrl),
+    platform: workspaceSafeCsvText(row.platform),
     twitch_url: workspaceSafeCsvText(row.twitchUrl),
     cohort: workspaceSafeCsvText(row.cohort),
     language: workspaceSafeCsvText(row.language),
@@ -7647,6 +7713,10 @@ function buildStreamer100CampaignCsv(campaign) {
   })));
 }
 
+function renderStreamerCampaignRows(rows) {
+  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
+}
+
 function renderStreamer100CampaignPage(campaign) {
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Clippers 100 Streamer Campaign</title></head>
@@ -7669,8 +7739,11 @@ function renderStreamer100CampaignPage(campaign) {
     ${link("/api/clippers/real-clip-permission-crm.html", "Permission CRM")}
   </div>
   <div class="card"><div class="label">Siguiente paso</div><p>${escapeHtml(campaign.nextAction)}</p></div>
+  <div class="card"><div class="label">Creadores premium solicitados</div><table><thead><tr><th>Creador</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Estado real</th></tr></thead><tbody>
+    ${renderStreamerCampaignRows(campaign.premiumRows)}
+  </tbody></table></div>
   <div class="card"><div class="label">Candidatos</div><table><thead><tr><th>Streamer</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Prioridad</th></tr></thead><tbody>
-    ${campaign.rows.map((row) => `<tr><td><a href="${escapeHtml(row.twitchUrl)}">${escapeHtml(row.handle)}</a><div class="small">${escapeHtml([row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("")}
+    ${renderStreamerCampaignRows(campaign.rows)}
   </tbody></table></div>
   <div class="card"><div class="label">Controles</div>${campaign.guardrails.map((item) => `<p class="small">${escapeHtml(item)}</p>`).join("")}</div>
 </main></body></html>`;
@@ -9948,7 +10021,7 @@ async function verifiedHumanReviewContactSheet(directoryPath, directory, localFi
 
 async function buildHumanReviewQueue() {
   const campaign = await buildStreamer100Campaign();
-  const permissionByHandle = new Map((campaign.permissionLedgerRows || []).map((row) => [campaignHandleKey(row.handle), row]));
+  const permissionByHandle = campaignPermissionMap(campaign.permissionLedgerRows);
   const sources = [
     {
       creator: "sadlights",
@@ -10278,11 +10351,11 @@ async function promoteHumanReviewCandidate(input = {}, { skipLock = false } = {}
     return { ok: false, statusCode: 409, error: "human_review_target_schedule_requires_roll_forward", id, metricoolQueueItemId };
   }
   const campaign = await buildStreamer100Campaign();
-  const permission = (campaign.permissionLedgerRows || []).find((row) => campaignHandleKey(row.handle) === campaignHandleKey(reviewRow.creatorHandle));
+  const permission = (campaign.permissionLedgerRows || []).find((row) => campaignRowMatchesHandle(row, reviewRow.creatorHandle));
   if (!permission || permission.permissionStatus !== "approved_blanket") {
     return { ok: false, statusCode: 409, error: "creator_blanket_permission_not_approved", id, metricoolQueueItemId };
   }
-  if (!sourceUrlMatchesCreator(reviewRow.sourceUrl, reviewRow.creatorHandle)) {
+  if (!sourceUrlMatchesCreator(reviewRow.sourceUrl, permission.handle)) {
     return { ok: false, statusCode: 409, error: "source_url_creator_not_verified", id, metricoolQueueItemId };
   }
   const allowedAccountNames = Array.isArray(permission.restrictions?.allowedAccountNames)
