@@ -40,6 +40,7 @@ import { revenueOutreachUpdateSchema, updateRevenueOutreachDraft } from "./reven
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "./clippers-local-news-agent";
 import { deliverClipperLocalNewsToMetricool } from "./clippers-local-news-metricool";
+import { getPublicLocalNewsBySlug, listPublicLocalNews, publicLocalNewsEtag, renderPublicLocalNewsShareHtml } from "./public-local-news";
 import { answerRevenueAutomationIntake, approveRevenueOutreachDraft, approveRevenuePublicLeadCandidate, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, closeRevenueWebsiteOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, createWebsiteDeliveryWorkspaceFromLead, deliverRevenueDeliveryWorkspace, deliverRevenueDeliveryWorkspaceFromTrustedApproval, deliveryReviewSchema, flushRevenueEnginePersistence, getRevenueDeliveryWorkspaceById, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, getRevenueWebsiteWorkspaceSaleGate, improvementReviewSchema, isRevenueCodexBranchName, preflightRevenueExpense, prepareRevenueEngineState, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryReleaseGate, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueOutreachOutcome, recordRevenuePublicLeadCandidate, recordRevenuePublicLeadCandidateBatch, recordRevenuePublicScoutEvidence, recordRevenueSalesAutopilot, recordRevenueScoutingMission, recordRevenueVerifiedScoutConnectorResults, recordRevenueWebsiteOpportunity, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDailyScoutSprintSchema, revenueDailyScoutSprintSubmitSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceGithubHandoffSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintFromPublicCandidatesSchema, revenueMoneySprintSchema, revenueOutreachApproveSchema, revenueOutreachDraftSchema, revenueOutreachOutcomeSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateApproveSchema, revenuePublicLeadCandidateBatchSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutAgentCommandSchema, revenuePublicScoutEvidenceSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, revenueVerifiedScoutConnectorSchema, revenueWebsiteDeliveryWorkspaceSchema, revenueWebsiteOpportunityCloseSchema, revenueWebsiteOpportunitySchema, runRevenueAutomationAgentCommand, runRevenueDailyScoutSprint, runRevenueMoneySprint, runRevenueMoneySprintFromPublicCandidates, runRevenuePublicScoutAgentCommand, runRevenueScoutDispatch, sendRevenueOutreachDraft, submitRevenueDailyScoutSprintEvidence, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
 import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
@@ -2071,6 +2072,79 @@ export async function registerRoutes(
   });
 
   // ==================== CLIPPERS COMMAND CENTER ====================
+
+  const publicLocalNewsQuerySchema = z.object({
+    city: z.enum(["miami", "new-york"]).optional(),
+    lang: z.enum(["es", "en"]).default("es"),
+    limit: z.coerce.number().int().min(1).max(100).default(30),
+  });
+  const publicLocalNewsDetailQuerySchema = z.object({
+    lang: z.enum(["es", "en"]).default("es"),
+  });
+  const publicLocalNewsSlugSchema = z.string().min(1).max(160).regex(/^[a-z0-9-]+$/);
+  const sendPublicLocalNews = (req: any, res: any, body: unknown) => {
+    const etag = publicLocalNewsEtag(body);
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+    res.set("ETag", etag);
+    if (req.header("if-none-match") === etag) return res.status(304).end();
+    return res.json(body);
+  };
+
+  app.get("/api/public/local-news", async (req, res) => {
+    try {
+      const query = publicLocalNewsQuerySchema.parse(req.query);
+      const feed = await listPublicLocalNews(query);
+      return sendPublicLocalNews(req, res, feed);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid public local news query", details: error.errors });
+      }
+      return res.status(500).json({ error: "Failed to read public local news" });
+    }
+  });
+
+  app.get("/api/public/local-news/:slug", async (req, res) => {
+    try {
+      const slug = publicLocalNewsSlugSchema.parse(req.params.slug);
+      const query = publicLocalNewsDetailQuerySchema.parse(req.query);
+      const article = await getPublicLocalNewsBySlug(slug, query);
+      if (!article) return res.status(404).json({ error: "Local news article not found" });
+      return sendPublicLocalNews(req, res, article);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid public local news request", details: error.errors });
+      }
+      return res.status(500).json({ error: "Failed to read public local news article" });
+    }
+  });
+
+  app.get("/news/article/:slug", async (req, res) => {
+    try {
+      const slug = publicLocalNewsSlugSchema.parse(req.params.slug);
+      const query = publicLocalNewsDetailQuerySchema.parse(req.query);
+      const article = await getPublicLocalNewsBySlug(slug, query);
+      if (!article) {
+        return res.status(404).type("html").send("<!doctype html><html><head><meta charset=\"utf-8\"><title>Article not found</title></head><body><main><h1>Article not found</h1></main></body></html>");
+      }
+      const configuredBase = (() => {
+        try {
+          const parsed = new URL(process.env.PUBLIC_BASE_URL || "");
+          if (parsed.protocol === "https:" || parsed.protocol === "http:") return `${parsed.protocol}//${parsed.host}`;
+        } catch { /* use the request origin */ }
+        return `${req.protocol}://${req.get("host")}`;
+      })();
+      const canonicalUrl = `${configuredBase}/news/article/${encodeURIComponent(article.slug)}?lang=${article.lang}`;
+      const imageName = article.city === "miami" ? "miami-news-profile.png" : "ny-news-profile.png";
+      const imageUrl = `${configuredBase}/local-news/${imageName}`;
+      res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+      return res.status(200).type("html").send(renderPublicLocalNewsShareHtml(article, canonicalUrl, imageUrl));
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).type("html").send("<!doctype html><html><head><meta charset=\"utf-8\"><title>Invalid article request</title></head><body><main><h1>Invalid article request</h1></main></body></html>");
+      }
+      return res.status(500).type("html").send("<!doctype html><html><head><meta charset=\"utf-8\"><title>Article unavailable</title></head><body><main><h1>Article unavailable</h1></main></body></html>");
+    }
+  });
 
   app.use("/api/clippers", (req, res, next) => {
     const userId = getCurrentUserId(req);
