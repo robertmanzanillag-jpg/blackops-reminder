@@ -60,6 +60,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     id: "00000000-0000-4000-8000-000000000001",
     owner_user_id: "tenant-a",
     workspace_id: "workspace-a",
+    provider_account_id: null,
     provider_key: "heygen",
     provider_job_id: null,
     request: { title: "Launch", sequence: 1 },
@@ -160,7 +161,11 @@ test("concurrent claims serialize quota accounting and only one fake row is clai
 test("fencing token and lease expiry protect submitted and failure mutations", async () => {
   const fake = new FakeTransactionalDatabase((query) => {
     if (query.text.includes("SET stage = 'submitted'")) {
-      if (query.params.includes("fresh-token")) return { rows: [row({ stage: "submitted", provider_job_id: "provider-1" })] };
+      if (query.params.includes("fresh-token")) return { rows: [row({
+        stage: "submitted",
+        provider_account_id: "00000000-0000-4000-8000-000000000050",
+        provider_job_id: "provider-1",
+      })] };
       return { rows: [] };
     }
     if (query.text.includes("SET stage = CASE")) {
@@ -183,16 +188,27 @@ test("fencing token and lease expiry protect submitted and failure mutations", a
     workId: "00000000-0000-4000-8000-000000000001",
     leaseToken: "stale-token",
     providerSubmissionId: "provider-stale",
+    providerAccountId: "00000000-0000-4000-8000-000000000050",
     nowMs: 2_000,
   }), undefined);
   const submitted = await repository.markSubmitted({
     workId: "00000000-0000-4000-8000-000000000001",
     leaseToken: "fresh-token",
     providerSubmissionId: "provider-1",
+    providerAccountId: "00000000-0000-4000-8000-000000000050",
     nowMs: 2_000,
   });
   assert.equal(submitted?.state, "submitted");
+  assert.equal(submitted?.providerAccountId, "00000000-0000-4000-8000-000000000050");
   assert.equal(submitted?.providerSubmissionId, "provider-1");
+
+  const submissionMutation = fake.queries.find((query) => query.text.includes("SET stage = 'submitted'"));
+  assert.ok(submissionMutation);
+  assert.match(submissionMutation.text, /provider_account_id =/i);
+  assert.match(submissionMutation.text, /FROM "ai_media_provider_accounts" AS account/i);
+  assert.match(submissionMutation.text, /account\.owner_user_id = job\.owner_user_id/i);
+  assert.match(submissionMutation.text, /account\.workspace_id = job\.workspace_id/i);
+  assert.match(submissionMutation.text, /account\.provider_key = job\.provider_key/i);
 
   const failed = await repository.recordFailure({
     workId: "00000000-0000-4000-8000-000000000001",

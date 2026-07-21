@@ -43,8 +43,8 @@ export class InMemoryMediaJobRepository implements MediaJobRepository {
     return job ? copyJob(job) : undefined;
   }
 
-  async getByProviderJob(providerKey: string, providerJobId: string): Promise<MediaGenerationJob | undefined> {
-    const id = this.providerIndex.get(`${providerKey}:${providerJobId}`);
+  async getByProviderJob(providerKey: string, providerAccountId: string, providerJobId: string): Promise<MediaGenerationJob | undefined> {
+    const id = this.providerIndex.get(this.providerIdentity(providerKey, providerAccountId, providerJobId));
     const job = id ? this.jobs.get(id) : undefined;
     return job ? copyJob(job) : undefined;
   }
@@ -52,29 +52,38 @@ export class InMemoryMediaJobRepository implements MediaJobRepository {
   async update(job: MediaGenerationJob): Promise<MediaGenerationJob> {
     const current = this.jobs.get(job.id);
     if (!current || current.ownerUserId !== job.ownerUserId) throw new Error("Media job not found");
+    if (current.providerJobId && current.providerName && current.providerAccountId) {
+      this.providerIndex.delete(this.providerIdentity(current.providerName, current.providerAccountId, current.providerJobId));
+    }
     const saved = copyJob({ ...job, updatedAt: new Date().toISOString() });
     this.jobs.set(saved.id, saved);
-    if (saved.providerJobId && saved.providerName) this.providerIndex.set(`${saved.providerName}:${saved.providerJobId}`, saved.id);
+    if (saved.providerJobId && saved.providerName && saved.providerAccountId) {
+      this.providerIndex.set(this.providerIdentity(saved.providerName, saved.providerAccountId, saved.providerJobId), saved.id);
+    }
     return copyJob(saved);
   }
 
   async recordWebhook(event: ProviderWebhookEvent): Promise<boolean> {
-    const key = `${event.providerKey}:${event.eventId}`;
+    const key = `${event.providerKey}:${event.providerAccountId}:${event.eventId}`;
     if (this.webhookIds.has(key)) return false;
     this.webhookIds.add(key);
     return true;
   }
 
   async parkWebhook(event: ProviderWebhookEvent): Promise<void> {
-    const key = `${event.providerKey}:${event.providerJobId}`;
+    const key = this.providerIdentity(event.providerKey, event.providerAccountId, event.providerJobId);
     this.parked.set(key, [...(this.parked.get(key) ?? []), { ...event }]);
   }
 
-  async takeParkedWebhooks(providerKey: string, providerJobId: string): Promise<ProviderWebhookEvent[]> {
-    const key = `${providerKey}:${providerJobId}`;
+  async takeParkedWebhooks(providerKey: string, providerAccountId: string, providerJobId: string): Promise<ProviderWebhookEvent[]> {
+    const key = this.providerIdentity(providerKey, providerAccountId, providerJobId);
     const events = this.parked.get(key) ?? [];
     this.parked.delete(key);
     return events.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)).map((event) => ({ ...event }));
+  }
+
+  private providerIdentity(providerKey: string, providerAccountId: string, providerJobId: string): string {
+    return JSON.stringify([providerKey, providerAccountId, providerJobId]);
   }
 }
 

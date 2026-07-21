@@ -61,11 +61,13 @@ export class AiMediaStudioService {
     if (existing) return existing;
     const provider = this.requireProvider(this.defaultProviderKey);
     await this.requireProviderReadyForGeneration(provider);
+    const providerAccountId = this.requireProviderAccount(provider);
     const governedRequest = governance ? { ...request, governance: { ...governance } } : request;
     let job = await this.repository.create(ownerUserId, governedRequest);
     job = await this.repository.update({
       ...job,
       providerName: provider.key,
+      providerAccountId,
       influencerName: this.options.influencerNames?.get(request.influencerId) ?? "",
     });
     if (this.executionMode === "durable") return job;
@@ -89,10 +91,13 @@ export class AiMediaStudioService {
     if (job.status !== "failed") throw new MediaStudioError("Only failed jobs can be retried", 409);
     if (job.attempts >= job.maxAttempts) throw new MediaStudioError("Maximum retry attempts reached", 409);
     const governance = await this.options.governanceGate?.assertRenderAllowed(ownerUserId, job.request);
-    await this.requireProviderReadyForGeneration(this.requireProvider(job.providerName ?? this.defaultProviderKey));
+    const provider = this.requireProvider(job.providerName ?? this.defaultProviderKey);
+    await this.requireProviderReadyForGeneration(provider);
+    const providerAccountId = this.requireProviderAccount(provider);
     const pending = await this.repository.update({
       ...job,
       request: governance ? { ...job.request, governance: { ...governance } } : job.request,
+      providerAccountId,
       status: "pending",
       progress: 0,
       stage: "queued",
@@ -154,22 +159,24 @@ export class AiMediaStudioService {
     };
   }
 
-  async ingestWebhook(providerKey: string, payload: unknown, eventIdOverride?: string, occurredAtOverride?: string) {
+  async ingestWebhook(providerKey: string, providerAccountId: string, payload: unknown, fallbackEventId?: string) {
     const provider = this.requireProvider(providerKey);
-    const enrichedPayload = payload && typeof payload === "object"
-      ? { ...payload, event_id: eventIdOverride ?? (payload as Record<string, unknown>).event_id }
-      : payload;
-    const parsed = provider.parseWebhook(enrichedPayload);
-    const timestampNumber = occurredAtOverride && /^\d+$/.test(occurredAtOverride) ? Number(occurredAtOverride) : undefined;
-    const occurredAt = occurredAtOverride
-      ? new Date(timestampNumber === undefined ? occurredAtOverride : timestampNumber * (occurredAtOverride.length <= 10 ? 1_000 : 1)).toISOString()
-      : parsed.occurredAt;
-    const event = { ...parsed, eventId: eventIdOverride ?? parsed.eventId, occurredAt };
+    if (typeof providerAccountId !== "string" || !providerAccountId.trim()) {
+      throw new MediaStudioError("Provider account scope is required", 400);
+    }
+    // Event identity and occurrence time come only from the signed payload.
+    // The optional fallback must be a deterministic digest derived by the
+    // verified route from that same raw body, never an unsigned header value.
+    const parsed = provider.parseWebhook(payload, { providerAccountId, fallbackEventId });
+    const event = {
+      ...parsed,
+      error: parsed.error ? "Video provider reported a render failure" : undefined,
+    };
     if (event.outputUrl && !isAllowedProviderAssetUrl(event.outputUrl, this.options.allowedAssetHosts ?? new Set())) {
       throw new MediaStudioError("Provider output URL is not trusted", 400);
     }
     const firstReceipt = await this.repository.recordWebhook(event);
-    const job = await this.repository.getByProviderJob(providerKey, event.providerJobId);
+    const job = await this.repository.getByProviderJob(providerKey, providerAccountId, event.providerJobId);
     if (!job) {
       if (!firstReceipt) return { accepted: true as const, duplicate: true as const, orphaned: true as const };
       await this.repository.parkWebhook(event);
@@ -230,6 +237,7 @@ export class AiMediaStudioService {
     ownerUserId: string;
     jobId: string;
     providerKey: string;
+    providerAccountId: string;
     providerJobId: string;
     attempt: number;
     submittedAt?: string;
@@ -242,11 +250,15 @@ export class AiMediaStudioService {
     if (job.providerName && job.providerName !== input.providerKey) {
       throw new MediaStudioError("Render provider does not match the media job", 409);
     }
+    if (job.providerAccountId && job.providerAccountId !== input.providerAccountId) {
+      throw new MediaStudioError("Render provider account does not match the media job", 409);
+    }
     const submittedAt = input.submittedAt ?? new Date().toISOString();
     const preserveCancellation = job.status === "cancelled";
     let updated = await this.repository.update({
       ...job,
       providerName: input.providerKey,
+      providerAccountId: input.providerAccountId,
       providerJobId: input.providerJobId,
       status: preserveCancellation ? "cancelled" : "rendering",
       progress: preserveCancellation ? job.progress : Math.max(job.progress, 10),
@@ -255,7 +267,7 @@ export class AiMediaStudioService {
       startedAt: job.startedAt ?? submittedAt,
       error: undefined,
     });
-    const parked = await this.repository.takeParkedWebhooks(input.providerKey, input.providerJobId);
+    const parked = await this.repository.takeParkedWebhooks(input.providerKey, input.providerAccountId, input.providerJobId);
     for (const event of parked) updated = await this.applyProviderEvent(updated, event);
     return updated;
   }
@@ -270,6 +282,7 @@ export class AiMediaStudioService {
     const status = await provider.status();
     if (!status.configured) throw new MediaStudioError("Video provider is not configured", 503);
     if (status.mode === "live") {
+      this.requireProviderAccount(provider);
       let workerReady = false;
       try {
         workerReady = this.options.assetIngestWorkerReadiness !== undefined
@@ -283,6 +296,12 @@ export class AiMediaStudioService {
     }
   }
 
+  private requireProviderAccount(provider: VideoProvider): string {
+    const providerAccountId = provider.providerAccountId?.trim();
+    if (!providerAccountId) throw new MediaStudioError("Video provider account is not configured", 503);
+    return providerAccountId;
+  }
+
   private get executionMode(): "inline" | "durable" {
     return this.options.executionMode ?? "inline";
   }
@@ -293,8 +312,13 @@ export class AiMediaStudioService {
     const job = await this.repository.get(message.ownerUserId, message.jobId);
     if (!job || job.status !== "pending" || !job.providerName) return;
     const provider = this.requireProvider(job.providerName);
+    const providerAccountId = this.requireProviderAccount(provider);
     const startedAt = new Date().toISOString();
+    let providerInteractionStarted = false;
     try {
+      if (job.providerAccountId !== providerAccountId) {
+        throw new MediaStudioError("Render provider account changed before submission", 409);
+      }
       const providerIdempotencyKey = createHash("sha256")
         .update(`${job.generationId}:attempt:${job.attempts + 1}`)
         .digest("hex");
@@ -306,7 +330,8 @@ export class AiMediaStudioService {
           || job.request.governance.evidenceDigest !== currentGovernance.evidenceDigest)) {
         throw new MediaStudioError("Governance evidence changed before provider submission", 403);
       }
-      const submission = await provider.submit(job.request, { idempotencyKey: providerIdempotencyKey });
+      providerInteractionStarted = true;
+      const submission = await provider.submit(job.request, { idempotencyKey: providerIdempotencyKey, providerAccountId });
       if (submission.outputUrl && !isAllowedProviderAssetUrl(submission.outputUrl, this.options.allowedAssetHosts ?? new Set())) {
         throw new Error("Provider output URL is not trusted");
       }
@@ -326,7 +351,7 @@ export class AiMediaStudioService {
         error: missingArtifactSource ? "Provider completed without an artifact source" : undefined,
       });
       if (submission.outputUrl) await this.ensureArtifactIngest(updated, submission.outputUrl);
-      const parked = await this.repository.takeParkedWebhooks(provider.key, submission.providerJobId);
+      const parked = await this.repository.takeParkedWebhooks(provider.key, providerAccountId, submission.providerJobId);
       for (const event of parked) updated = await this.applyProviderEvent(updated, event);
     } catch (error) {
       await this.repository.update({
@@ -337,7 +362,9 @@ export class AiMediaStudioService {
         attempts: job.attempts + 1,
         startedAt,
         completedAt: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Video provider failed",
+        error: providerInteractionStarted
+          ? "Video provider submission failed"
+          : error instanceof Error ? error.message.slice(0, 500) : "Video provider submission failed",
       });
     }
   }
@@ -358,7 +385,9 @@ export class AiMediaStudioService {
       progress: needsArtifactIngest ? Math.max(job.progress, 95) : terminal ? 100 : Math.max(job.progress, 50),
       stage: needsArtifactIngest ? "artifact_ingest_queued" : missingArtifactSource ? "artifact_source_missing" : event.status === "failed" ? "failed" : "provider_rendering",
       outputUrl: event.outputUrl ?? job.outputUrl,
-      error: missingArtifactSource ? "Provider completed without an artifact source" : event.error,
+      error: missingArtifactSource
+        ? "Provider completed without an artifact source"
+        : event.error ? "Video provider reported a render failure" : undefined,
       lastProviderEventAt: event.occurredAt,
       completedAt: terminal ? event.occurredAt : undefined,
     });

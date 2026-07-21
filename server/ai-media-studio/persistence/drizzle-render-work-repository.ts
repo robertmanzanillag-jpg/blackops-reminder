@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { aiMediaRenderJobs } from "../../../shared/models/ai-media-studio-db";
+import { aiMediaProviderAccounts, aiMediaRenderJobs } from "../../../shared/models/ai-media-studio-db";
 import type {
   ClaimedRenderWork,
   ClaimDueWorkOptions,
@@ -43,6 +43,7 @@ interface RenderQueueRow {
   id: string;
   ownerUserId: string;
   workspaceId: string;
+  providerAccountId: string | null;
   providerKey: string | null;
   providerJobId: string | null;
   request: unknown;
@@ -106,6 +107,7 @@ function normalizeRow(raw: RawRenderQueueRow): RenderQueueRow {
     id: String(raw.id ?? ""),
     ownerUserId: String(raw.ownerUserId ?? raw.owner_user_id ?? ""),
     workspaceId: String(raw.workspaceId ?? raw.workspace_id ?? ""),
+    providerAccountId: (raw.providerAccountId ?? raw.provider_account_id ?? null) as string | null,
     providerKey: (raw.providerKey ?? raw.provider_key ?? null) as string | null,
     providerJobId: (raw.providerJobId ?? raw.provider_job_id ?? null) as string | null,
     request: raw.request,
@@ -142,6 +144,7 @@ function mapRow<TPayload>(raw: RawRenderQueueRow): RenderWorkItem<TPayload> {
     id: row.id,
     tenantId: row.ownerUserId,
     providerKey: row.providerKey,
+    ...(row.providerAccountId ? { providerAccountId: row.providerAccountId } : {}),
     payload: row.request as TPayload,
     state,
     attempt: positiveInteger(row.attempts, 1),
@@ -333,13 +336,16 @@ export class DrizzleRenderWorkRepository<TPayload = unknown> implements RenderWo
     workId: string;
     leaseToken: string;
     providerSubmissionId: string;
+    providerAccountId: string;
     nowMs: number;
   }): Promise<RenderWorkItem<TPayload> | undefined> {
+    if (!input.providerAccountId.trim()) throw new Error("Provider account identity is required");
     const now = new Date(input.nowMs);
     const result = await this.db.execute(sql`
       UPDATE ${aiMediaRenderJobs} AS job
       SET stage = 'submitted',
           status = 'rendering',
+          provider_account_id = ${input.providerAccountId},
           provider_job_id = ${input.providerSubmissionId},
           lease_owner = NULL,
           lease_expires_at = NULL,
@@ -356,6 +362,14 @@ export class DrizzleRenderWorkRepository<TPayload = unknown> implements RenderWo
         AND job.stage = 'leased'
         AND job.lease_expires_at > ${now}
         AND job.result -> '__renderQueue' ->> 'leaseToken' = ${input.leaseToken}
+        AND EXISTS (
+          SELECT 1
+          FROM ${aiMediaProviderAccounts} AS account
+          WHERE account.id = ${input.providerAccountId}
+            AND account.owner_user_id = job.owner_user_id
+            AND account.workspace_id = job.workspace_id
+            AND account.provider_key = job.provider_key
+        )
         ${this.tenantScopeSql("job")}
         ${this.providerScopeSql("job")}
       RETURNING job.*

@@ -86,7 +86,11 @@ This slice does not contain a legal-document or legal-proof vault and does not e
 
 ### Provider webhook
 
-`POST /api/ai-media-studio/webhooks/providers/:providerKey` is exempt from application-user authentication so an external provider can reach it. The module must still reject a missing, invalid, expired, or replayed signature. HeyGen verification uses the raw body and `Heygen-Signature`, `Heygen-Timestamp`, and `Heygen-Event-Id`, with an approximately five-minute tolerance and event-ID dedupe.
+`POST /api/ai-media-studio/webhooks/providers/:providerKey/accounts/:endpointKey` is exempt from application-user authentication so an external provider can reach it, but the opaque account endpoint must resolve server-side to exactly one tenant/provider account. Production has no provider-only fallback URL and no process-global webhook secret path; development/test may inject a provider-only compatibility harness only for local tests.
+
+HeyGen verification uses HMAC-SHA256 over the exact raw request body and checks active plus unexpired previous secret candidates resolved from server-side secret references. Replay identity and occurrence time are accepted only from signed JSON body fields; if the body has no event id, the route uses a stable raw-body SHA-256 digest as the fallback id. Unsigned request headers such as timestamp or event id are deliberately ignored for HeyGen routing, dedupe, and ordering.
+
+Render job lookup, webhook dedupe, parked callbacks, and worker submission projection are scoped by `(providerAccountId, providerKey, providerJobId/eventId)`. Provider-controlled error text is sanitized before it reaches stored job state or public responses.
 
 Webhook processing is idempotent and fast. The system must not trust remote artifact URLs without allowlisting, redirect limits, size limits, and SSRF protection; reconciliation covers missing callbacks.
 

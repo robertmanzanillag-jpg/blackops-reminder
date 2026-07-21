@@ -4,6 +4,7 @@ import { FakeVideoProvider } from "./fake-video-provider";
 
 export interface HeyGenProviderOptions {
   apiKey?: string;
+  providerAccountId?: string;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   resolveResources?: (request: Parameters<VideoProvider["submit"]>[0]) => Promise<{ avatarId: string; voiceId: string }>;
@@ -51,6 +52,7 @@ export function createHeyGenResourceResolver(map: HeyGenResourceMap | undefined)
 
 export class HeyGenVideoProvider implements VideoProvider {
   readonly key = "heygen";
+  readonly providerAccountId?: string;
   private readonly apiKey?: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -58,6 +60,7 @@ export class HeyGenVideoProvider implements VideoProvider {
 
   constructor(options: HeyGenProviderOptions = {}) {
     this.apiKey = options.apiKey?.trim();
+    this.providerAccountId = options.providerAccountId?.trim() || undefined;
     this.baseUrl = (options.baseUrl ?? "https://api.heygen.com").replace(/\/$/, "");
     if (new URL(this.baseUrl).protocol !== "https:") throw new Error("HeyGen base URL must use HTTPS");
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -65,12 +68,13 @@ export class HeyGenVideoProvider implements VideoProvider {
   }
 
   async status() {
-    const configured = Boolean(this.apiKey && this.resolveResources);
+    const configured = Boolean(this.apiKey && this.resolveResources && this.providerAccountId);
     return { key: this.key, configured, healthy: configured, mode: "live" as const };
   }
 
   async submit(request: Parameters<VideoProvider["submit"]>[0], context: Parameters<VideoProvider["submit"]>[1]) {
-    if (!this.apiKey || !this.resolveResources) throw new Error("HeyGen provider is not configured");
+    if (!this.apiKey || !this.resolveResources || !this.providerAccountId) throw new Error("HeyGen provider is not configured");
+    if (context.providerAccountId !== this.providerAccountId) throw new Error("HeyGen provider account scope mismatch");
     const resources = await this.resolveResources(request);
     const response = await this.fetchImpl(`${this.baseUrl}/v3/videos`, {
       method: "POST",
@@ -96,7 +100,10 @@ export class HeyGenVideoProvider implements VideoProvider {
     // Cancellation stays internal: HeyGen DELETE permanently deletes an asset.
   }
 
-  parseWebhook(payload: unknown): ProviderWebhookEvent {
-    return { ...new FakeVideoProvider().parseWebhook(payload), providerKey: this.key };
+  parseWebhook(payload: unknown, context: Parameters<VideoProvider["parseWebhook"]>[1]): ProviderWebhookEvent {
+    return {
+      ...new FakeVideoProvider({ providerAccountId: context.providerAccountId }).parseWebhook(payload, context),
+      providerKey: this.key,
+    };
   }
 }

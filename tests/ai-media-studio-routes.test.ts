@@ -12,11 +12,9 @@ import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets"
 import { PublishingPolicyDeniedError, type PublicationJob } from "../server/ai-media-studio/publishing";
 import type { VideoProvider } from "../server/ai-media-studio/ports";
 
-process.env.NODE_ENV = "production";
-process.env.ALLOW_DEV_USER_FALLBACK = "false";
-
 class LiveRuntimeProvider implements VideoProvider {
   readonly key = "live-runtime";
+  readonly providerAccountId = "00000000-0000-4000-8000-0000000000f1";
   async status() { return { key: this.key, configured: true, healthy: true, mode: "live" as const }; }
   async submit() { return { providerJobId: "live-runtime-job", status: "rendering" as const }; }
   async cancel() {}
@@ -43,11 +41,61 @@ test("runtime wiring does not infer live ingest-worker readiness from repository
   assert.equal((await allowed.service.createGeneration("user-a", input)).status, "rendering");
 });
 
+test("production account webhook route fails closed when no endpoint resolver is injected", async (t) => {
+  const app = express();
+  app.use(express.json({ verify: (req, _res, buffer) => { (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer); } }));
+  const runtime = createAiMediaStudioRuntime({
+    repository: new InMemoryMediaJobRepository(),
+    runtimeEnvironment: "production",
+    operations: { runtimeEnvironment: "test" },
+  });
+  app.use(runtime.router);
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/ai-media-studio/webhooks/providers/fake/accounts/endpoint-0123456789012345`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "heygen-signature": "untrusted" },
+    body: JSON.stringify({ event_id: "event-1" }),
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Webhook endpoint unavailable" });
+
+  const defaultProductionRuntime = createAiMediaStudioRuntime({
+    repository: new InMemoryMediaJobRepository(),
+    runtimeEnvironment: "production",
+    operations: { runtimeEnvironment: "test" },
+  });
+  assert.deepEqual((await defaultProductionRuntime.service.dashboard("user-a")).providers.map((provider) => provider.key), ["heygen"]);
+});
+
+test("production rejects fake provider composition even when explicitly injected", () => {
+  assert.throws(
+    () => createAiMediaStudioRuntime({
+      repository: new InMemoryMediaJobRepository(),
+      providers: [new FakeVideoProvider({ autoComplete: false })],
+      defaultProviderKey: "fake",
+      runtimeEnvironment: "production",
+      operations: { runtimeEnvironment: "test" },
+    }),
+    /Fake video provider is not allowed in production/,
+  );
+});
+
 function signature(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
 test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook transitions", async (t) => {
+  const previousDevFallback = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.ALLOW_DEV_USER_FALLBACK = "false";
+  t.after(() => {
+    if (previousDevFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previousDevFallback;
+  });
+
   const app = express();
   app.use(express.json({ verify: (req, _res, buffer) => { (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer); } }));
   app.use((req, _res, next) => {
@@ -56,11 +104,22 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
     next();
   });
   const secret = "route-test-webhook-secret";
+  const providerAccountId = "00000000-0000-4000-8000-0000000000f0";
+  const endpointKey = "route-endpoint-0123456789ab";
   const runtime = createAiMediaStudioRuntime({
     repository: new InMemoryMediaJobRepository(),
-    providers: [new FakeVideoProvider({ autoComplete: false })],
+    providers: [new FakeVideoProvider({ autoComplete: false, providerAccountId })],
     defaultProviderKey: "fake",
-    webhookSecrets: { fake: secret, unknown: secret },
+    runtimeEnvironment: "test",
+    resolveProviderWebhookAccount: async ({ providerKey, endpointKey: requestedEndpoint }) => requestedEndpoint === endpointKey
+      ? {
+          providerKey,
+          endpointKey: requestedEndpoint,
+          providerAccountId,
+          tenant: { ownerUserId: "user-a", workspaceId: "personal" },
+          secrets: [{ value: secret, state: "active" }],
+        }
+      : undefined,
     allowedAssetHosts: new Set(["cdn.example.com"]),
     operations: { runtimeEnvironment: "test" },
   });
@@ -100,7 +159,7 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
 
   const webhookBody = JSON.stringify({ event_type: "avatar_video.success", event_data: { video_id: created.job.id, video_url: "https://cdn.example.com/render.mp4" } });
   const timestamp = String(Math.floor(Date.now() / 1_000));
-  const invalidWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake`, {
+  const invalidWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake/accounts/${endpointKey}`, {
     method: "POST", headers: { "content-type": "application/json", "heygen-signature": "bad", "heygen-timestamp": timestamp, "heygen-event-id": "route-event-1" }, body: webhookBody,
   });
   assert.equal(invalidWebhook.status, 401);
@@ -108,10 +167,19 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
 
   const internalJob = await runtime.service.getJob("user-a", created.jobId);
   const validWebhookBody = JSON.stringify({ event_type: "avatar_video.success", event_data: { video_id: internalJob.providerJobId, video_url: "https://cdn.example.com/render.mp4" } });
-  const validWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake`, {
+  const validWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake/accounts/${endpointKey}`, {
     method: "POST", headers: { "content-type": "application/json", "heygen-signature": signature(validWebhookBody, secret), "heygen-timestamp": timestamp, "heygen-event-id": "route-event-2" }, body: validWebhookBody,
   });
   assert.equal(validWebhook.status, 202);
+  const replayWithChangedUnsignedHeaders = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake/accounts/${endpointKey}`, {
+    method: "POST", headers: { "content-type": "application/json", "heygen-signature": signature(validWebhookBody, secret), "heygen-timestamp": "0", "heygen-event-id": "attacker-changed-id" }, body: validWebhookBody,
+  });
+  assert.equal(replayWithChangedUnsignedHeaders.status, 202);
+  assert.equal((await replayWithChangedUnsignedHeaders.json() as { duplicate?: boolean }).duplicate, true);
+  const providerOnlyLegacyRoute = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake`, {
+    method: "POST", headers: { "content-type": "application/json", "heygen-signature": signature(validWebhookBody, secret) }, body: validWebhookBody,
+  });
+  assert.equal(providerOnlyLegacyRoute.status, 404);
   const detail = mediaJobResponseSchema.parse(await (await fetch(`${baseUrl}/api/ai-media-studio/jobs/${created.jobId}`, { headers: { "x-test-user": "user-a" } })).json());
   assert.equal(detail.job.status, "rendering");
   assert.equal(detail.job.stage, "artifact_ingest_queued");
@@ -120,7 +188,7 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
   assert.equal((await fetch(`${baseUrl}/api/ai-media-studio/jobs/${created.jobId}/cancel`, { method: "POST", headers: { "x-test-user": "user-a" } })).status, 409);
 
   const unknownBody = JSON.stringify({ event_type: "avatar_video.success", event_data: { video_id: "unknown" } });
-  const unknown = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/unknown`, {
+  const unknown = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/unknown/accounts/${endpointKey}`, {
     method: "POST", headers: { "content-type": "application/json", "heygen-signature": signature(unknownBody, secret), "heygen-timestamp": timestamp, "heygen-event-id": "unknown-event" }, body: unknownBody,
   });
   assert.equal(unknown.status, 404);
@@ -131,7 +199,7 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
   const retryTarget = createGenerationResponseSchema.parse(await retryCreate.json());
   const retryInternal = await runtime.service.getJob("user-a", retryTarget.jobId);
   const failedBody = JSON.stringify({ event_type: "avatar_video.fail", event_data: { video_id: retryInternal.providerJobId, message: "render failed" } });
-  const failedWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake`, {
+  const failedWebhook = await fetch(`${baseUrl}/api/ai-media-studio/webhooks/providers/fake/accounts/${endpointKey}`, {
     method: "POST", headers: { "content-type": "application/json", "heygen-signature": signature(failedBody, secret), "heygen-timestamp": timestamp, "heygen-event-id": "route-event-failed" }, body: failedBody,
   });
   assert.equal(failedWebhook.status, 202);

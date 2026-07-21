@@ -200,6 +200,10 @@ export const aiMediaProviderAccounts = pgTable(
     displayName: text("display_name").notNull(),
     status: text("status").notNull().default("disconnected"),
     secretRef: text("secret_ref"),
+    webhookEndpointKey: text("webhook_endpoint_key"),
+    webhookSecretRef: text("webhook_secret_ref"),
+    webhookPreviousSecretRef: text("webhook_previous_secret_ref"),
+    webhookPreviousSecretExpiresAt: timestamp("webhook_previous_secret_expires_at", { withTimezone: true }),
     externalAccountId: text("external_account_id"),
     capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
     configuration: jsonb("configuration").$type<Record<string, unknown>>().notNull().default({}),
@@ -207,12 +211,44 @@ export const aiMediaProviderAccounts = pgTable(
     ...auditColumns(),
   },
   (table) => ({
-    ownerWorkspaceProviderUnique: uniqueIndex("ai_media_provider_accounts_owner_workspace_provider_uq").on(
+    ownerWorkspaceProviderStatusIdx: index("ai_media_provider_accounts_owner_workspace_provider_status_idx").on(
       table.ownerUserId,
       table.workspaceId,
       table.providerKey,
+      table.status,
     ),
+    ownerWorkspaceProviderExternalUnique: uniqueIndex("ai_media_provider_accounts_owner_workspace_provider_external_uq")
+      .on(table.ownerUserId, table.workspaceId, table.providerKey, table.externalAccountId)
+      .where(sql`${table.externalAccountId} IS NOT NULL`),
+    providerEndpointUnique: uniqueIndex("ai_media_provider_accounts_provider_endpoint_uq")
+      .on(table.providerKey, table.webhookEndpointKey)
+      .where(sql`${table.webhookEndpointKey} IS NOT NULL`),
     providerStatusIdx: index("ai_media_provider_accounts_provider_status_idx").on(table.providerKey, table.status),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_provider_accounts_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+    ownerWorkspaceIdProviderUnique: uniqueIndex("ai_media_provider_accounts_owner_workspace_id_provider_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.providerKey,
+    ),
+    webhookMetadataCheck: check(
+      "ai_media_provider_accounts_webhook_metadata_ck",
+      sql`(
+        ((${table.webhookEndpointKey} IS NULL) = (${table.webhookSecretRef} IS NULL))
+        AND (${table.webhookEndpointKey} IS NULL OR (
+          length(btrim(${table.webhookEndpointKey})) BETWEEN 24 AND 128
+          AND ${table.webhookEndpointKey} ~ '^[A-Za-z0-9_-]+$'
+          AND length(btrim(${table.webhookSecretRef})) BETWEEN 1 AND 500
+        ))
+        AND ((${table.webhookPreviousSecretRef} IS NULL) = (${table.webhookPreviousSecretExpiresAt} IS NULL))
+        AND (${table.webhookPreviousSecretRef} IS NULL OR ${table.webhookSecretRef} IS NOT NULL)
+        AND (${table.webhookPreviousSecretRef} IS NULL OR length(btrim(${table.webhookPreviousSecretRef})) BETWEEN 1 AND 500)
+      )`,
+    ),
   }),
 );
 
@@ -365,7 +401,7 @@ export const aiMediaRenderJobs = pgTable(
     ...tenantColumns(),
     generationId: uuid("generation_id").notNull().defaultRandom(),
     projectId: uuid("project_id").references(() => aiMediaVideoProjects.id, { onDelete: "set null" }),
-    providerAccountId: uuid("provider_account_id").references(() => aiMediaProviderAccounts.id, { onDelete: "set null" }),
+    providerAccountId: uuid("provider_account_id"),
     providerKey: text("provider_key"),
     providerJobId: text("provider_job_id"),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -403,7 +439,16 @@ export const aiMediaRenderJobs = pgTable(
       table.workspaceId,
       table.idempotencyKey,
     ),
-    providerJobUnique: uniqueIndex("ai_media_render_jobs_provider_job_uq").on(table.providerKey, table.providerJobId),
+    providerJobUnique: uniqueIndex("ai_media_render_jobs_provider_account_job_uq")
+      .on(table.providerAccountId, table.providerKey, table.providerJobId)
+      .where(sql`${table.providerJobId} IS NOT NULL`),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_render_jobs_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+    ownerWorkspaceProviderAccountJobUnique: uniqueIndex("ai_media_render_jobs_owner_workspace_provider_account_job_uq")
+      .on(table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey, table.id),
     ownerWorkspaceCreatedIdx: index("ai_media_render_jobs_owner_workspace_created_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -433,6 +478,20 @@ export const aiMediaRenderJobs = pgTable(
       ],
       name: "ai_media_render_jobs_governance_profile_tenant_fk",
     }).onDelete("restrict"),
+    providerAccountTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_render_jobs_provider_account_tenant_fk",
+    }).onDelete("restrict"),
+    providerIdentityCheck: check(
+      "ai_media_render_jobs_provider_identity_ck",
+      sql`${table.providerJobId} IS NULL OR (${table.providerAccountId} IS NOT NULL AND ${table.providerKey} IS NOT NULL)`,
+    ),
     governanceEvidenceCheck: check(
       "ai_media_render_jobs_governance_evidence_ck",
       sql`(${table.governanceProfileId} IS NULL AND ${table.governanceEvidenceDigest} IS NULL) OR (${table.governanceProfileId} IS NOT NULL AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')`,
@@ -446,9 +505,10 @@ export const aiMediaWebhookEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     ...tenantColumns(),
     providerKey: text("provider_key").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
     eventId: text("event_id").notNull(),
     providerJobId: text("provider_job_id").notNull(),
-    renderJobId: uuid("render_job_id").references(() => aiMediaRenderJobs.id, { onDelete: "set null" }),
+    renderJobId: uuid("render_job_id"),
     eventType: text("event_type").notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     payloadDigest: text("payload_digest"),
@@ -461,8 +521,13 @@ export const aiMediaWebhookEvents = pgTable(
     ...auditColumns(),
   },
   (table) => ({
-    providerEventUnique: uniqueIndex("ai_media_webhook_events_provider_event_uq").on(table.providerKey, table.eventId),
-    providerJobStatusIdx: index("ai_media_webhook_events_provider_job_status_idx").on(
+    providerEventUnique: uniqueIndex("ai_media_webhook_events_provider_account_event_uq").on(
+      table.providerAccountId,
+      table.providerKey,
+      table.eventId,
+    ),
+    providerJobStatusIdx: index("ai_media_webhook_events_provider_account_job_status_idx").on(
+      table.providerAccountId,
       table.providerKey,
       table.providerJobId,
       table.status,
@@ -472,6 +537,33 @@ export const aiMediaWebhookEvents = pgTable(
       table.workspaceId,
       table.occurredAt,
     ),
+    providerAccountTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_webhook_events_provider_account_tenant_fk",
+    }).onDelete("restrict"),
+    renderJobIdentityFk: foreignKey({
+      columns: [
+        table.ownerUserId,
+        table.workspaceId,
+        table.providerAccountId,
+        table.providerKey,
+        table.renderJobId,
+      ],
+      foreignColumns: [
+        aiMediaRenderJobs.ownerUserId,
+        aiMediaRenderJobs.workspaceId,
+        aiMediaRenderJobs.providerAccountId,
+        aiMediaRenderJobs.providerKey,
+        aiMediaRenderJobs.id,
+      ],
+      name: "ai_media_webhook_events_render_job_identity_fk",
+    }).onDelete("restrict"),
   }),
 );
 

@@ -107,6 +107,7 @@ export class RenderWorker<TPayload = unknown> {
         idempotencyKey: providerIdempotencyKey(claim.item.id, claim.item.attempt),
       });
       if (!submission.providerSubmissionId) throw new Error("Provider returned no submission id");
+      if (!submission.providerAccountId) throw new PermanentRenderFailure("Provider returned no account identity");
     } catch (error) {
       const nowMs = this.clock.now();
       const retryable = !(error instanceof PermanentRenderFailure)
@@ -139,6 +140,7 @@ export class RenderWorker<TPayload = unknown> {
       workId: claim.item.id,
       leaseToken: claim.leaseToken,
       providerSubmissionId: submission.providerSubmissionId,
+      providerAccountId: submission.providerAccountId,
       nowMs: this.clock.now(),
     });
     if (!item) {
@@ -148,6 +150,7 @@ export class RenderWorker<TPayload = unknown> {
         ...claim.item,
         state: "submitted",
         providerSubmissionId: submission.providerSubmissionId,
+        providerAccountId: submission.providerAccountId,
         updatedAtMs: this.clock.now(),
       };
       await this.options.hooks?.onLeaseLost?.(uncommittedSubmission);
@@ -161,6 +164,7 @@ export class RenderWorker<TPayload = unknown> {
 export class PermanentRenderFailure extends Error {}
 
 function renderErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message.slice(0, 1_000);
+  if (error instanceof PermanentRenderFailure && error.message) return error.message.slice(0, 500);
+  if (error instanceof GovernanceGateError) return "Render governance policy denied submission";
   return "Render provider submission failed";
 }

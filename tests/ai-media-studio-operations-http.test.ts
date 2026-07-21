@@ -21,19 +21,25 @@ import {
 import type { CoreCatalogRepositories } from "../server/ai-media-studio/core/runtime";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import type { OperationsRepositories } from "../server/ai-media-studio/operations-runtime";
+import { HeyGenVideoProvider } from "../server/ai-media-studio/providers/heygen-video-provider";
 import { InMemoryPublishingRepository } from "../server/ai-media-studio/publishing/in-memory";
 import { createPublishingPreview, tenantKey } from "../server/ai-media-studio/publishing/domain";
-import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
 import { createAiMediaStudioRuntime } from "../server/ai-media-studio/routes";
 import { InMemorySourceRepository } from "../server/ai-media-studio/sources/in-memory-source-repository";
-
-process.env.NODE_ENV = "production";
-process.env.ALLOW_DEV_USER_FALLBACK = "false";
 
 const instant = "2026-07-20T12:00:00.000Z";
 const scopeA = { ownerUserId: "user-a", workspaceId: "personal" } as const;
 const scopeB = { ownerUserId: "user-b", workspaceId: "personal" } as const;
 const headersA = { "content-type": "application/json", "x-test-user": scopeA.ownerUserId };
+
+function forceNoDevFallback(): () => void {
+  const previous = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.ALLOW_DEV_USER_FALLBACK = "false";
+  return () => {
+    if (previous === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previous;
+  };
+}
 
 function coreRepositories(): CoreCatalogRepositories {
   return {
@@ -95,6 +101,7 @@ async function startHarness(options: {
   productionWithoutDatabase?: boolean;
   now?: () => Date;
 } = {}) {
+  const restoreDevFallback = forceNoDevFallback();
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -104,9 +111,9 @@ async function startHarness(options: {
   });
   const runtime = createAiMediaStudioRuntime({
     repository: new InMemoryMediaJobRepository(),
-    providers: [new FakeVideoProvider()],
-    defaultProviderKey: "fake",
-    runtimeEnvironment: "production",
+    providers: [new HeyGenVideoProvider()],
+    defaultProviderKey: "heygen",
+    runtimeEnvironment: options.productionWithoutDatabase ? "production" : "test",
     databaseUrl: "",
     ...(options.core ? { coreRepositories: options.core, seedCoreDefaults: false } : {}),
     ...(!options.productionWithoutDatabase && options.operations
@@ -146,7 +153,13 @@ async function startHarness(options: {
   return {
     runtime,
     baseUrl: `http://127.0.0.1:${address.port}`,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+    close: async () => {
+      try {
+        await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      } finally {
+        restoreDevFallback();
+      }
+    },
   };
 }
 

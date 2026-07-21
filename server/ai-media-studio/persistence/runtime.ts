@@ -46,11 +46,11 @@ class LazyMediaJobRepository implements MediaJobRepository {
   async list(ownerUserId: string): Promise<MediaGenerationJob[]> { return (await this.repository()).list(ownerUserId); }
   async get(ownerUserId: string, jobId: string): Promise<MediaGenerationJob | undefined> { return (await this.repository()).get(ownerUserId, jobId); }
   async getByIdempotencyKey(ownerUserId: string, idempotencyKey: string): Promise<MediaGenerationJob | undefined> { return (await this.repository()).getByIdempotencyKey(ownerUserId, idempotencyKey); }
-  async getByProviderJob(providerKey: string, providerJobId: string): Promise<MediaGenerationJob | undefined> { return (await this.repository()).getByProviderJob(providerKey, providerJobId); }
+  async getByProviderJob(providerKey: string, providerAccountId: string, providerJobId: string): Promise<MediaGenerationJob | undefined> { return (await this.repository()).getByProviderJob(providerKey, providerAccountId, providerJobId); }
   async update(job: MediaGenerationJob): Promise<MediaGenerationJob> { return (await this.repository()).update(job); }
   async recordWebhook(event: ProviderWebhookEvent): Promise<boolean> { return (await this.repository()).recordWebhook(event); }
   async parkWebhook(event: ProviderWebhookEvent): Promise<void> { return (await this.repository()).parkWebhook(event); }
-  async takeParkedWebhooks(providerKey: string, providerJobId: string): Promise<ProviderWebhookEvent[]> { return (await this.repository()).takeParkedWebhooks(providerKey, providerJobId); }
+  async takeParkedWebhooks(providerKey: string, providerAccountId: string, providerJobId: string): Promise<ProviderWebhookEvent[]> { return (await this.repository()).takeParkedWebhooks(providerKey, providerAccountId, providerJobId); }
 }
 
 /** Avoids opening a PostgreSQL pool merely by importing the HTTP composition root. */
@@ -75,11 +75,11 @@ class UnavailableMediaJobRepository implements MediaJobRepository {
   async list(_ownerUserId: string): Promise<MediaGenerationJob[]> { return this.fail(); }
   async get(_ownerUserId: string, _jobId: string): Promise<MediaGenerationJob | undefined> { return this.fail(); }
   async getByIdempotencyKey(_ownerUserId: string, _idempotencyKey: string): Promise<MediaGenerationJob | undefined> { return this.fail(); }
-  async getByProviderJob(_providerKey: string, _providerJobId: string): Promise<MediaGenerationJob | undefined> { return this.fail(); }
+  async getByProviderJob(_providerKey: string, _providerAccountId: string, _providerJobId: string): Promise<MediaGenerationJob | undefined> { return this.fail(); }
   async update(_job: MediaGenerationJob): Promise<MediaGenerationJob> { return this.fail(); }
   async recordWebhook(_event: ProviderWebhookEvent): Promise<boolean> { return this.fail(); }
   async parkWebhook(_event: ProviderWebhookEvent): Promise<void> { return this.fail(); }
-  async takeParkedWebhooks(_providerKey: string, _providerJobId: string): Promise<ProviderWebhookEvent[]> { return this.fail(); }
+  async takeParkedWebhooks(_providerKey: string, _providerAccountId: string, _providerJobId: string): Promise<ProviderWebhookEvent[]> { return this.fail(); }
 }
 
 function hasConfiguredDatabase(databaseUrl: string | undefined): boolean {

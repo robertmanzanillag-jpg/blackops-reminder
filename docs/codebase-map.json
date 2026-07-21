@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T02:33:12.359Z",
+  "generatedAt": "2026-07-21T03:28:49.644Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,59 +85,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 588,
-    "filesIndexed": 511,
-    "imports": 2027,
-    "routes": 486,
-    "symbols": 9605
+    "filesVisible": 598,
+    "filesIndexed": 517,
+    "imports": 2049,
+    "routes": 487,
+    "symbols": 9695
   },
   "directories": {
-    "client/src": {
-      "files": 151,
-      "indexed": 149,
-      "kinds": {
-        "other": 42,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 23
-      }
-    },
-    "docs/ai-media-studio": {
-      "files": 8,
-      "indexed": 8,
-      "kinds": {
-        "docs": 8
-      }
-    },
     "migrations/ai-media-studio": {
-      "files": 9,
+      "files": 11,
       "indexed": 1,
       "kinds": {
-        "other": 8,
+        "other": 10,
         "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 76,
-      "indexed": 76,
+      "files": 80,
+      "indexed": 79,
       "kinds": {
-        "server": 76
-      }
-    },
-    "shared": {
-      "files": 6,
-      "indexed": 6,
-      "kinds": {
-        "shared": 6
+        "server": 80
       }
     },
     "tests": {
-      "files": 100,
-      "indexed": 97,
+      "files": 104,
+      "indexed": 100,
       "kinds": {
-        "test": 100
+        "test": 104
       }
     },
     ".agents/skills": {
@@ -178,6 +152,25 @@
         "other": 13
       }
     },
+    "client/src": {
+      "files": 151,
+      "indexed": 149,
+      "kinds": {
+        "other": 42,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 23
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 8,
+      "indexed": 8,
+      "kinds": {
+        "docs": 8
+      }
+    },
     "docs": {
       "files": 12,
       "indexed": 11,
@@ -211,6 +204,13 @@
       "indexed": 8,
       "kinds": {
         "server": 8
+      }
+    },
+    "shared": {
+      "files": 6,
+      "indexed": 6,
+      "kinds": {
+        "shared": 6
       }
     },
     "shared/models": {
@@ -8056,7 +8056,6 @@
       "symbols": [
         "DEFAULT_WORKSPACE_ID",
         "DrizzleMediaJobRepository",
-        "UNRESOLVED_WEBHOOK_OWNER",
         "asJsonObject",
         "durableQueueResetFields",
         "existing",
@@ -8210,9 +8209,73 @@
         "MediaJobRepository",
         "MediaQueueMessage",
         "ProviderSubmitContext",
+        "ProviderWebhookParseContext",
         "VideoProvider",
         "VideoSubmission"
       ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/provider-webhooks/contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../webhook-security"
+      ],
+      "exports": [
+        "ProviderWebhookAccountResolver",
+        "ProviderWebhookTenant",
+        "ResolvedProviderWebhookAccount",
+        "isResolvedWebhookAccountValid",
+        "isSafeProviderKey",
+        "isSafeProviderWebhookEndpointKey"
+      ],
+      "symbols": [
+        "SAFE_ENDPOINT_KEY",
+        "SAFE_PROVIDER_KEY",
+        "isResolvedWebhookAccountValid",
+        "isSafeProviderKey",
+        "isSafeProviderWebhookEndpointKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/provider-webhooks/drizzle-resolver.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./contracts",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres"
+      ],
+      "exports": [
+        "DrizzleProviderWebhookResolverOptions",
+        "ProviderWebhookResolverDatabase",
+        "WebhookSecretReferenceResolver",
+        "createDrizzleProviderWebhookAccountResolver"
+      ],
+      "symbols": [
+        "activeSecret",
+        "createDrizzleProviderWebhookAccountResolver",
+        "nowMs",
+        "previousExpiry",
+        "previousSecret",
+        "row",
+        "rows",
+        "statuses",
+        "workspaceId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/provider-webhooks/index.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./drizzle-resolver",
+        "./env-secret-resolver"
+      ],
+      "exports": [],
       "symbols": [],
       "routes": []
     },
@@ -8225,9 +8288,11 @@
         "node:crypto"
       ],
       "exports": [
+        "FAKE_VIDEO_PROVIDER_ACCOUNT_ID",
         "FakeVideoProvider"
       ],
       "symbols": [
+        "FAKE_VIDEO_PROVIDER_ACCOUNT_ID",
         "FakeVideoProvider",
         "data",
         "digest",
@@ -8564,6 +8629,7 @@
         "./operations-runtime",
         "./persistence/runtime",
         "./ports",
+        "./provider-webhooks",
         "./providers/fake-video-provider",
         "./providers/heygen-video-provider",
         "./publishing/domain",
@@ -8583,6 +8649,7 @@
         "registerAiMediaStudioRoutes"
       ],
       "symbols": [
+        "account",
         "actorId",
         "analyticsWindow",
         "approval",
@@ -8595,6 +8662,7 @@
         "attached",
         "attributionQuerySchema",
         "attributionResponseSchema",
+        "authenticatedPayload",
         "available",
         "candidate",
         "configuredDatabase",
@@ -8604,6 +8672,7 @@
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
         "createDefaultDurableGovernanceRepository",
+        "createDefaultProviderWebhookAccountResolver",
         "created",
         "dashboard",
         "databaseUrl",
@@ -8614,9 +8683,11 @@
         "durations",
         "emptyActionSchema",
         "end",
+        "endpointKey",
         "engagements",
         "ensureGovernanceDefaults",
         "envAssetHosts",
+        "envelope",
         "environment",
         "error",
         "evidence",
@@ -8627,6 +8698,7 @@
         "governanceSeeds",
         "governanceSelection",
         "hasMore",
+        "heyGenProvider",
         "id",
         "idSchema",
         "index",
@@ -8656,6 +8728,7 @@
         "preview",
         "previewInput",
         "profile",
+        "providerAccountId",
         "providerKey",
         "providers",
         "publicPublishingStatus",
@@ -8678,6 +8751,7 @@
         "requireGovernance",
         "requireJobs",
         "requireOperations",
+        "resolveProviderWebhookAccount",
         "resources",
         "result",
         "review",
@@ -8744,7 +8818,8 @@
         "${AI_MEDIA_STUDIO_API_BASE}/publishing/preview",
         "${AI_MEDIA_STUDIO_API_BASE}/runtime",
         "${AI_MEDIA_STUDIO_API_BASE}/scripts/generate",
-        "${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey"
+        "${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey",
+        "${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey/accounts/:endpointKey"
       ]
     },
     {
@@ -8796,7 +8871,6 @@
         "completed",
         "currentGovernance",
         "deadLettered",
-        "enrichedPayload",
         "event",
         "existing",
         "firstReceipt",
@@ -8808,12 +8882,12 @@
         "message",
         "missingArtifactSource",
         "needsArtifactIngest",
-        "occurredAt",
         "parked",
         "parsed",
         "pending",
         "preserveCancellation",
         "provider",
+        "providerAccountId",
         "providerIdempotencyKey",
         "repository",
         "startedAt",
@@ -8821,7 +8895,6 @@
         "submission",
         "submittedAt",
         "terminal",
-        "timestampNumber",
         "updated",
         "url"
       ],
@@ -9056,16 +9129,42 @@
         "node:crypto"
       ],
       "exports": [
+        "VerifiedWebhookEnvelope",
+        "WebhookSecretCandidate",
         "WebhookVerificationInput",
-        "verifyHeyGenWebhook"
+        "deriveVerifiedWebhookEnvelope",
+        "verifyHeyGenWebhook",
+        "verifyHeyGenWebhookWithRotation"
       ],
       "symbols": [
         "base64",
+        "base64Matches",
+        "boundedEventId",
+        "candidateVerified",
+        "data",
+        "deriveVerifiedWebhookEnvelope",
+        "digest",
+        "eventId",
+        "expiryMs",
         "hex",
+        "hexMatches",
+        "leftBuffer",
+        "normalizedSignature",
+        "nowMs",
+        "object",
+        "occurredAt",
+        "parsed",
+        "rightBuffer",
+        "root",
         "safeEqual",
+        "signature",
         "supplied",
         "timestampMs",
-        "verifyHeyGenWebhook"
+        "usable",
+        "validAuthenticatedTimestamp",
+        "validOccurredAt",
+        "verifyHeyGenWebhook",
+        "verifyHeyGenWebhookWithRotation"
       ],
       "routes": []
     },
@@ -9186,6 +9285,7 @@
       "symbols": [
         "VideoProviderRenderAdapter",
         "adaptVideoProviders",
+        "providerAccountId",
         "status",
         "submission"
       ],
@@ -16681,8 +16781,11 @@
       "exports": [],
       "symbols": [
         "FixedProvider",
+        "LeakyProvider",
         "LiveTestVideoProvider",
         "RecordingProvider",
+        "accountA",
+        "accountB",
         "allowed",
         "assetIngestRepository",
         "blocked",
@@ -16694,12 +16797,16 @@
         "createHarness",
         "created",
         "event",
+        "eventA",
+        "eventB",
         "failed",
+        "fallback",
         "finalJob",
         "first",
         "ingest",
         "ingestRepository",
         "job",
+        "leakyService",
         "map",
         "nowMs",
         "otherOwner",
@@ -16708,6 +16815,7 @@
         "queue",
         "rawBody",
         "readinessWithoutQueue",
+        "rejected",
         "repository",
         "request",
         "result",
@@ -16847,6 +16955,7 @@
         "filtered",
         "filteredResponse",
         "firstPage",
+        "forceNoDevFallback",
         "harness",
         "invalid",
         "library",
@@ -16855,9 +16964,11 @@
         "optionsRaw",
         "optionsResponse",
         "otherTenant",
+        "previous",
         "raw",
         "repositories",
         "response",
+        "restoreDevFallback",
         "runtime",
         "scope",
         "secondPage",
@@ -17070,7 +17181,7 @@
         "../server/ai-media-studio/core/runtime",
         "../server/ai-media-studio/in-memory",
         "../server/ai-media-studio/operations-runtime",
-        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/providers/heygen-video-provider",
         "../server/ai-media-studio/publishing/domain",
         "../server/ai-media-studio/publishing/in-memory",
         "../server/ai-media-studio/routes",
@@ -17115,6 +17226,7 @@
         "firstApproval",
         "firstApproved",
         "firstPage",
+        "forceNoDevFallback",
         "forged",
         "futureAt",
         "futureJob",
@@ -17136,6 +17248,7 @@
         "policyResponse",
         "preview",
         "previewResponse",
+        "previous",
         "query",
         "raw",
         "rejectCreated",
@@ -17147,6 +17260,7 @@
         "replayed",
         "request",
         "response",
+        "restoreDevFallback",
         "retriedResponse",
         "retryAsset",
         "retryCreated",
@@ -17415,6 +17529,26 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "directory",
+        "forward",
+        "model",
+        "read",
+        "repository",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-publishing-drizzle.test.ts",
       "kind": "test",
       "imports": [
@@ -17593,6 +17727,7 @@
         "recoveries",
         "repository",
         "row",
+        "submissionMutation",
         "submitted",
         "wideQuotas"
       ],
@@ -17610,6 +17745,7 @@
       "exports": [],
       "symbols": [
         "MutableClock",
+        "PROVIDER_ACCOUNT_ID",
         "Payload",
         "cases",
         "clock",
@@ -17626,6 +17762,7 @@
         "renderWorker",
         "repository",
         "restarted",
+        "result",
         "results",
         "second",
         "seen",
@@ -17670,11 +17807,13 @@
         "checksum",
         "created",
         "createdResponse",
+        "defaultProductionRuntime",
         "deletedPreview",
         "deletedReview",
         "deniedApproval",
         "deniedGeneration",
         "detail",
+        "endpointKey",
         "failedBody",
         "failedWebhook",
         "forgedIdentity",
@@ -17699,10 +17838,15 @@
         "optionsJson",
         "optionsResponse",
         "previewBody",
+        "previousDevFallback",
         "profileBody",
         "profilePath",
         "provider",
+        "providerAccountId",
+        "providerOnlyLegacyRoute",
         "qualityDeniedApproval",
+        "replayWithChangedUnsignedHeaders",
+        "response",
         "restoredReview",
         "retried",
         "retryCreate",
@@ -17812,6 +17956,52 @@
         "selected",
         "tenantA",
         "tenantB"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-webhook-resolver.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/provider-webhooks",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "base",
+        "expired",
+        "fakeSelectDatabase",
+        "missing",
+        "resolved",
+        "resolver"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-webhook-security.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/provider-webhooks",
+        "../server/ai-media-studio/webhook-security",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "bodyWithId",
+        "bodyWithoutId",
+        "candidates",
+        "first",
+        "nowMs",
+        "rawBody",
+        "receivedAtMs",
+        "replayWithChangedHeaders",
+        "sign"
       ],
       "routes": []
     },
@@ -19423,6 +19613,7 @@
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
+    "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",
     "tests/ai-media-studio-publishing.test.ts",
     "tests/ai-media-studio-render-flow-integration.test.ts",
@@ -19433,6 +19624,9 @@
     "tests/ai-media-studio-schema-wiring.test.ts",
     "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-media-studio-sources.test.ts",
+    "tests/ai-media-studio-webhook-env-secret.test.ts",
+    "tests/ai-media-studio-webhook-resolver.test.ts",
+    "tests/ai-media-studio-webhook-security.test.ts",
     "tests/ai-media-studio-worker-loop.test.ts",
     "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",

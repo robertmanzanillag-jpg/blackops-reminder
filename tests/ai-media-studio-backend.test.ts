@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 import { createGenerationRequestSchema, mediaJobSchema } from "../shared/ai-media-studio";
 import { InMemoryMediaJobQueue, InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
-import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
+import { FAKE_VIDEO_PROVIDER_ACCOUNT_ID, FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
 import { createHeyGenResourceResolver, HeyGenVideoProvider, parseHeyGenResourceMap } from "../server/ai-media-studio/providers/heygen-video-provider";
 import { AiMediaStudioService } from "../server/ai-media-studio/service";
 import { DeterministicScriptService } from "../server/ai-media-studio/script-service";
@@ -13,6 +13,7 @@ import type { VideoProvider } from "../server/ai-media-studio/ports";
 
 class LiveTestVideoProvider implements VideoProvider {
   readonly key = "live-test";
+  readonly providerAccountId = "00000000-0000-4000-8000-0000000000a1";
   async status() { return { key: this.key, configured: true, healthy: true, mode: "live" as const }; }
   async submit() { return { providerJobId: "live-provider-job", status: "rendering" as const }; }
   async cancel() {}
@@ -161,14 +162,14 @@ test("deduplicates signed provider events, ensures one owned ingest and ignores 
     data: { provider_job_id: job.providerJobId, status: "completed", video_url: "https://cdn.example.com/video.mp4" },
   };
 
-  assert.deepEqual(await service.ingestWebhook("fake", completed), { accepted: true });
-  assert.deepEqual(await service.ingestWebhook("fake", completed), { accepted: true, duplicate: true });
-  await service.ingestWebhook("fake", {
+  assert.deepEqual(await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, completed), { accepted: true });
+  assert.deepEqual(await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, completed), { accepted: true, duplicate: true });
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "evt-old-rendering",
     occurred_at: "2026-07-20T15:04:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "rendering" },
   });
-  await service.ingestWebhook("fake", {
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "evt-new-rendering",
     occurred_at: "2026-07-20T15:06:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "rendering" },
@@ -189,7 +190,7 @@ test("deduplicates signed provider events, ensures one owned ingest and ignores 
 test("completed webhook without a provider artifact fails with a safe explicit state", async () => {
   const { service, request } = createHarness();
   const job = await service.createGeneration("user-a", request);
-  await service.ingestWebhook("fake", {
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "completed-without-source", occurred_at: "2026-07-20T15:05:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "completed" },
   });
@@ -203,8 +204,8 @@ test("completed webhook without a provider artifact fails with a safe explicit s
 test("failed is terminal until an explicit retry and cannot return to rendering by webhook", async () => {
   const { service, request } = createHarness();
   const job = await service.createGeneration("user-a", request);
-  await service.ingestWebhook("fake", { event_id: "terminal-fail", occurred_at: "2026-07-20T15:05:00.000Z", data: { provider_job_id: job.providerJobId, status: "failed" } });
-  await service.ingestWebhook("fake", { event_id: "late-rendering", occurred_at: "2026-07-20T15:06:00.000Z", data: { provider_job_id: job.providerJobId, status: "rendering" } });
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, { event_id: "terminal-fail", occurred_at: "2026-07-20T15:05:00.000Z", data: { provider_job_id: job.providerJobId, status: "failed" } });
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, { event_id: "late-rendering", occurred_at: "2026-07-20T15:06:00.000Z", data: { provider_job_id: job.providerJobId, status: "rendering" } });
   assert.equal((await service.getJob("user-a", job.id)).status, "failed");
 });
 
@@ -218,7 +219,7 @@ test("parks an early webhook until its provider job becomes available", async ()
     assetIngestRepository: new InMemoryAssetIngestRepository(),
   });
   const request = createHarness().request;
-  const result = await service.ingestWebhook("fake", {
+  const result = await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "evt-early",
     occurred_at: "2026-07-20T15:05:00.000Z",
     data: { provider_job_id: "fixed-provider-job", status: "success", video_url: "https://cdn.example.com/early.mp4" },
@@ -231,6 +232,29 @@ test("parks an early webhook until its provider job becomes available", async ()
   assert.equal(job.outputUrl, "https://cdn.example.com/early.mp4");
 });
 
+test("provider job, event dedupe, and parked delivery identities are account-scoped", async () => {
+  const repository = new InMemoryMediaJobRepository();
+  const accountA = "00000000-0000-4000-8000-0000000000d1";
+  const accountB = "00000000-0000-4000-8000-0000000000d2";
+  const first = await repository.create("owner-a", { ...createHarness().request, idempotencyKey: "account-a-job" });
+  const second = await repository.create("owner-b", { ...createHarness().request, idempotencyKey: "account-b-job" });
+  await repository.update({ ...first, providerName: "heygen", providerAccountId: accountA, providerJobId: "shared-provider-job" });
+  await repository.update({ ...second, providerName: "heygen", providerAccountId: accountB, providerJobId: "shared-provider-job" });
+
+  assert.equal((await repository.getByProviderJob("heygen", accountA, "shared-provider-job"))?.ownerUserId, "owner-a");
+  assert.equal((await repository.getByProviderJob("heygen", accountB, "shared-provider-job"))?.ownerUserId, "owner-b");
+
+  const eventA = { eventId: "shared-event", providerKey: "heygen", providerAccountId: accountA, providerJobId: "early", status: "rendering" as const, occurredAt: "2026-07-20T15:00:00.000Z" };
+  const eventB = { ...eventA, providerAccountId: accountB };
+  assert.equal(await repository.recordWebhook(eventA), true);
+  assert.equal(await repository.recordWebhook(eventA), false);
+  assert.equal(await repository.recordWebhook(eventB), true);
+  await repository.parkWebhook(eventA);
+  await repository.parkWebhook(eventB);
+  assert.deepEqual((await repository.takeParkedWebhooks("heygen", accountA, "early")).map((event) => event.providerAccountId), [accountA]);
+  assert.deepEqual((await repository.takeParkedWebhooks("heygen", accountB, "early")).map((event) => event.providerAccountId), [accountB]);
+});
+
 test("cancel is internal and failed jobs can be retried", async () => {
   const first = createHarness();
   const cancelled = await first.service.cancelJob("user-a", (await first.service.createGeneration("user-a", first.request)).id);
@@ -238,7 +262,7 @@ test("cancel is internal and failed jobs can be retried", async () => {
 
   const second = createHarness();
   const job = await second.service.createGeneration("user-a", second.request);
-  await second.service.ingestWebhook("fake", {
+  await second.service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "evt-failed",
     occurred_at: "2026-07-20T15:05:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "failed", error: "render rejected" },
@@ -247,6 +271,27 @@ test("cancel is internal and failed jobs can be retried", async () => {
   assert.equal(retried.status, "rendering");
   assert.equal(retried.retryCount, 1);
   assert.equal(retried.attempts, 2);
+});
+
+test("provider-controlled errors are sanitized before job storage", async () => {
+  const { service, request } = createHarness();
+  const job = await service.createGeneration("user-a", { ...request, idempotencyKey: "sanitized-webhook-error" });
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
+    event_id: "secret-error",
+    occurred_at: "2026-07-20T15:05:00.000Z",
+    data: { provider_job_id: job.providerJobId, status: "failed", error: "Bearer must-not-be-stored customer@example.com" },
+  });
+  const failed = await service.getJob("user-a", job.id);
+  assert.equal(failed.error, "Video provider reported a render failure");
+  assert.doesNotMatch(JSON.stringify(failed), /must-not-be-stored|customer@example\.com|Bearer/);
+
+  class LeakyProvider extends FakeVideoProvider {
+    override async submit(): Promise<never> { throw new Error("api_key=must-not-be-stored"); }
+  }
+  const leakyService = new AiMediaStudioService(new InMemoryMediaJobRepository(), new InMemoryMediaJobQueue(), [new LeakyProvider()], "fake");
+  const rejected = await leakyService.createGeneration("user-a", { ...request, idempotencyKey: "sanitized-submit-error" });
+  assert.equal(rejected.error, "Video provider submission failed");
+  assert.doesNotMatch(JSON.stringify(rejected), /must-not-be-stored|api_key/);
 });
 
 test("derives a new provider idempotency key for every retry attempt", async () => {
@@ -260,7 +305,7 @@ test("derives a new provider idempotency key for every retry attempt", async () 
   const repository = new InMemoryMediaJobRepository();
   const service = new AiMediaStudioService(repository, new InMemoryMediaJobQueue(), [new RecordingProvider({ autoComplete: false })], "fake");
   const job = await service.createGeneration("user-a", createHarness().request);
-  await service.ingestWebhook("fake", { event_id: "failed-1", occurred_at: "2026-07-20T15:05:00.000Z", data: { provider_job_id: job.providerJobId, status: "failed" } });
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, { event_id: "failed-1", occurred_at: "2026-07-20T15:05:00.000Z", data: { provider_job_id: job.providerJobId, status: "failed" } });
   await service.retryJob("user-a", job.id);
   assert.equal(keys.length, 2);
   assert.notEqual(keys[0], keys[1]);
@@ -270,7 +315,7 @@ test("derives a new provider idempotency key for every retry attempt", async () 
 test("rejects untrusted provider output URLs before storing them", async () => {
   const { service, request } = createHarness();
   const job = await service.createGeneration("user-a", request);
-  await assert.rejects(() => service.ingestWebhook("fake", {
+  await assert.rejects(() => service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "untrusted-url", occurred_at: "2026-07-20T15:05:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "success", video_url: "http://127.0.0.1/private" },
   }), /not trusted/i);
@@ -294,6 +339,7 @@ test("HeyGen adapter uses v3, idempotency and canonical resource resolution", as
   let capturedInit: RequestInit | undefined;
   const provider = new HeyGenVideoProvider({
     apiKey: "not-logged-test-key",
+    providerAccountId: "00000000-0000-4000-8000-0000000000b1",
     resolveResources: async () => ({ avatarId: "provider-avatar", voiceId: "provider-voice" }),
     fetchImpl: async (input, init) => {
       capturedUrl = String(input);
@@ -302,7 +348,7 @@ test("HeyGen adapter uses v3, idempotency and canonical resource resolution", as
     },
   });
   const request = createHarness().request;
-  const result = await provider.submit(request, { idempotencyKey: request.idempotencyKey });
+  const result = await provider.submit(request, { idempotencyKey: request.idempotencyKey, providerAccountId: provider.providerAccountId! });
 
   assert.equal(result.providerJobId, "heygen-job-1");
   assert.equal(capturedUrl, "https://api.heygen.com/v3/videos");
@@ -318,17 +364,35 @@ test("HeyGen adapter uses v3, idempotency and canonical resource resolution", as
   });
 });
 
+test("live HeyGen submit fails closed without an explicit provider account identity", async () => {
+  const provider = new HeyGenVideoProvider({
+    apiKey: "not-logged-test-key",
+    resolveResources: async () => ({ avatarId: "provider-avatar", voiceId: "provider-voice" }),
+  });
+  assert.equal((await provider.status()).configured, false);
+  await assert.rejects(
+    () => provider.submit(createHarness().request, { idempotencyKey: "missing-account", providerAccountId: "attacker-account" }),
+    /not configured/i,
+  );
+});
+
 test("HeyGen parser accepts documented event_data and resource maps stay canonical", () => {
   const map = parseHeyGenResourceMap(JSON.stringify({ influencers: { "emily-food": "provider-avatar" }, voices: { "voice-emily-en": "provider-voice" } }));
   assert.ok(map);
   assert.ok(createHeyGenResourceResolver(map));
-  const provider = new HeyGenVideoProvider();
+  const provider = new HeyGenVideoProvider({ providerAccountId: "00000000-0000-4000-8000-0000000000b1" });
   const event = provider.parseWebhook({
     event_id: "evt-documented", event_type: "avatar_video.success", occurred_at: "2026-07-20T15:00:00.000Z",
     event_data: { video_id: "video-123", video_url: "https://cdn.example.com/video.mp4" },
-  });
+  }, { providerAccountId: provider.providerAccountId! });
   assert.equal(event.providerJobId, "video-123");
   assert.equal(event.status, "completed");
+  assert.equal(event.providerAccountId, provider.providerAccountId);
+  const fallback = provider.parseWebhook({
+    event_type: "avatar_video.processing", occurred_at: "2026-07-20T15:00:00.000Z",
+    event_data: { video_id: "video-456" },
+  }, { providerAccountId: provider.providerAccountId!, fallbackEventId: "sha256:verified-raw-body" });
+  assert.equal(fallback.eventId, "sha256:verified-raw-body");
   assert.equal(parseHeyGenResourceMap('{"influencers":{"__proto__":{}},"voices":{}}'), undefined);
 });
 

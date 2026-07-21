@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GenerationRequest, MediaGenerationJob } from "../server/ai-media-studio/domain";
 import { InMemoryMediaJobQueue, InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
-import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
+import { FAKE_VIDEO_PROVIDER_ACCOUNT_ID, FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
 import { durableQueueResetFields } from "../server/ai-media-studio/persistence/drizzle-media-job-repository";
 import { AiMediaStudioService } from "../server/ai-media-studio/service";
 import { InMemoryRenderWorkRepository } from "../server/ai-media-studio/workers/in-memory-render-work-repository";
@@ -40,7 +40,7 @@ class CountingProvider extends FakeVideoProvider {
 
   override async submit(
     input: GenerationRequest,
-    context: { idempotencyKey: string },
+    context: Parameters<FakeVideoProvider["submit"]>[1],
   ) {
     this.submissions += 1;
     this.idempotencyKeys.push(context.idempotencyKey);
@@ -129,6 +129,7 @@ test("one durable worker claim submits once with a stable key and projects provi
   assert.equal(projected.stage, "provider_rendering");
   assert.equal(projected.attempts, 1);
   assert.ok(projected.providerJobId?.startsWith("fake_"));
+  assert.equal(projected.providerAccountId, FAKE_VIDEO_PROVIDER_ACCOUNT_ID);
   assert.equal(queue.enqueues, 0);
   assert.equal(queue.dequeues, 0);
 });
@@ -173,10 +174,11 @@ test("durable explicit retry is reset due and advances the provider attempt with
     ownerUserId: "owner-a",
     jobId: created.id,
     providerKey: "fake",
+    providerAccountId: FAKE_VIDEO_PROVIDER_ACCOUNT_ID,
     providerJobId: "provider-failed-1",
     attempt: 1,
   });
-  await service.ingestWebhook("fake", {
+  await service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "failed-event-1",
     occurred_at: "2026-07-20T20:00:00.000Z",
     data: { provider_job_id: submitted.providerJobId, status: "failed" },
@@ -273,10 +275,12 @@ test("a provider submission that loses its lease is still tracked without revivi
   const result = await worker.runNext();
   assert.equal(result.outcome, "lease_lost");
   assert.ok(result.item.providerSubmissionId?.startsWith("fake_"));
+  assert.equal(result.item.providerAccountId, FAKE_VIDEO_PROVIDER_ACCOUNT_ID);
   assert.equal(provider.submissions, 1);
   const tracked = await service.getJob("owner-race", job.id);
   assert.equal(tracked.status, "cancelled");
   assert.equal(tracked.stage, "cancelled");
   assert.equal(tracked.providerJobId, result.item.providerSubmissionId);
+  assert.equal(tracked.providerAccountId, FAKE_VIDEO_PROVIDER_ACCOUNT_ID);
   assert.equal(tracked.attempts, 1);
 });

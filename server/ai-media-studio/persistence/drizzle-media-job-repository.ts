@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   aiMediaOutbox,
+  aiMediaProviderAccounts,
   aiMediaRenderJobs,
   aiMediaWebhookEvents,
   type AiMediaRenderJobRow,
@@ -22,8 +23,6 @@ export interface DrizzleMediaJobRepositoryOptions {
 export type AiMediaStudioDrizzleDatabase = NodePgDatabase;
 
 const DEFAULT_WORKSPACE_ID = "personal";
-const UNRESOLVED_WEBHOOK_OWNER = "unresolved:webhook";
-
 function asJsonObject(value: object): Record<string, unknown> {
   return value as unknown as Record<string, unknown>;
 }
@@ -200,13 +199,18 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
     return row ? mapRepositoryRow(row) : undefined;
   }
 
-  async getByProviderJob(providerKey: string, providerJobId: string): Promise<MediaGenerationJob | undefined> {
+  async getByProviderJob(
+    providerKey: string,
+    providerAccountId: string,
+    providerJobId: string,
+  ): Promise<MediaGenerationJob | undefined> {
     const [row] = await this.db
       .select()
       .from(aiMediaRenderJobs)
       .where(
         and(
           eq(aiMediaRenderJobs.providerKey, providerKey),
+          eq(aiMediaRenderJobs.providerAccountId, providerAccountId),
           eq(aiMediaRenderJobs.providerJobId, providerJobId),
           eq(aiMediaRenderJobs.workspaceId, this.workspaceId),
         ),
@@ -252,6 +256,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         .update(aiMediaRenderJobs)
         .set({
           providerKey: job.providerName ?? null,
+          providerAccountId: job.providerAccountId ?? null,
           providerJobId: job.providerJobId ?? null,
           status: job.status,
           stage: job.stage ?? job.status,
@@ -299,6 +304,23 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
 
   async recordWebhook(event: ProviderWebhookEvent): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      const [account] = await tx
+        .select({
+          id: aiMediaProviderAccounts.id,
+          ownerUserId: aiMediaProviderAccounts.ownerUserId,
+          workspaceId: aiMediaProviderAccounts.workspaceId,
+        })
+        .from(aiMediaProviderAccounts)
+        .where(
+          and(
+            eq(aiMediaProviderAccounts.id, event.providerAccountId),
+            eq(aiMediaProviderAccounts.providerKey, event.providerKey),
+            eq(aiMediaProviderAccounts.workspaceId, this.workspaceId),
+          ),
+        )
+        .limit(1);
+      if (!account) throw new Error("Provider account is unavailable in this workspace");
+
       const [job] = await tx
         .select({
           id: aiMediaRenderJobs.id,
@@ -309,7 +331,10 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         .where(
           and(
             eq(aiMediaRenderJobs.providerKey, event.providerKey),
+            eq(aiMediaRenderJobs.providerAccountId, event.providerAccountId),
             eq(aiMediaRenderJobs.providerJobId, event.providerJobId),
+            eq(aiMediaRenderJobs.ownerUserId, account.ownerUserId),
+            eq(aiMediaRenderJobs.workspaceId, account.workspaceId),
           ),
         )
         .limit(1);
@@ -317,9 +342,10 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
       const [inserted] = await tx
         .insert(aiMediaWebhookEvents)
         .values({
-          ownerUserId: job?.ownerUserId ?? UNRESOLVED_WEBHOOK_OWNER,
-          workspaceId: job?.workspaceId ?? this.workspaceId,
+          ownerUserId: account.ownerUserId,
+          workspaceId: account.workspaceId,
           providerKey: event.providerKey,
+          providerAccountId: event.providerAccountId,
           eventId: event.eventId,
           providerJobId: event.providerJobId,
           renderJobId: job?.id,
@@ -329,7 +355,13 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           status: "received",
           occurredAt: new Date(event.occurredAt),
         })
-        .onConflictDoNothing({ target: [aiMediaWebhookEvents.providerKey, aiMediaWebhookEvents.eventId] })
+        .onConflictDoNothing({
+          target: [
+            aiMediaWebhookEvents.providerAccountId,
+            aiMediaWebhookEvents.providerKey,
+            aiMediaWebhookEvents.eventId,
+          ],
+        })
         .returning({ id: aiMediaWebhookEvents.id });
 
       return Boolean(inserted);
@@ -343,12 +375,18 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
       .where(
         and(
           eq(aiMediaWebhookEvents.providerKey, event.providerKey),
+          eq(aiMediaWebhookEvents.providerAccountId, event.providerAccountId),
           eq(aiMediaWebhookEvents.eventId, event.eventId),
+          eq(aiMediaWebhookEvents.workspaceId, this.workspaceId),
         ),
       );
   }
 
-  async takeParkedWebhooks(providerKey: string, providerJobId: string): Promise<ProviderWebhookEvent[]> {
+  async takeParkedWebhooks(
+    providerKey: string,
+    providerAccountId: string,
+    providerJobId: string,
+  ): Promise<ProviderWebhookEvent[]> {
     return this.db.transaction(async (tx) => {
       const rows = await tx
         .select()
@@ -356,7 +394,9 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         .where(
           and(
             eq(aiMediaWebhookEvents.providerKey, providerKey),
+            eq(aiMediaWebhookEvents.providerAccountId, providerAccountId),
             eq(aiMediaWebhookEvents.providerJobId, providerJobId),
+            eq(aiMediaWebhookEvents.workspaceId, this.workspaceId),
             eq(aiMediaWebhookEvents.status, "parked"),
           ),
         )
@@ -374,7 +414,9 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
         .where(
           and(
             eq(aiMediaRenderJobs.providerKey, providerKey),
+            eq(aiMediaRenderJobs.providerAccountId, providerAccountId),
             eq(aiMediaRenderJobs.providerJobId, providerJobId),
+            eq(aiMediaRenderJobs.workspaceId, this.workspaceId),
           ),
         )
         .limit(1);
@@ -404,6 +446,7 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
       return claimed.map((row) => ({
         eventId: row.eventId,
         providerKey: row.providerKey,
+        providerAccountId: row.providerAccountId,
         providerJobId: row.providerJobId,
         status: row.eventType as ProviderWebhookEvent["status"],
         occurredAt: row.occurredAt.toISOString(),
