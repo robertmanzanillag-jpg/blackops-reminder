@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -43,7 +43,7 @@ test("risk gate blocks critical events and copy stays platform-specific", async 
   await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE: "true" }, events: [{ ...event, title: "Hurricane Warning", severity: "Extreme", description: "Evacuate immediately. ".repeat(40) }] });
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   assert.equal(queue.length, 2);
-  assert.ok(queue.every((item: any) => item.status === "approval_required" && item.published === false));
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.publishDecision === "quarantine" && item.published === false));
   const x = queue.find((item: any) => item.platform === "x");
   const facebook = queue.find((item: any) => item.platform === "facebook");
   assert.ok(x.copy.length <= 280);
@@ -118,21 +118,84 @@ test("professional newsroom classifies desks and produces attributed Facebook te
   assert.equal(result.status.editorial.textOnlyFacebook, 1);
 });
 
-test("cadence defers overflow with notBefore while preserving automatic eligibility", async (t) => {
+test("adaptive Facebook cadence allows relevant developing coverage and defers conservative overflow", async (t) => {
   const workspaceDir = await fixture(t);
-  const events = Array.from({ length: 7 }, (_, index) => ({
+  const events = Array.from({ length: 9 }, (_, index) => ({
     sourceEventId: `traffic-${index}`, source: "Notify NYC", sourceUrl: `https://notify.nyc/${index}`, lane: "ny-news" as const,
     title: `Traffic closure ${index}`, description: "One lane is closed.", location: `Street ${index}`, eventType: "Traffic closure",
   }));
   const result = await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events });
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   const facebook = queue.filter((item: any) => item.platform === "facebook");
-  assert.equal(facebook.filter((item: any) => item.gateReason === "none").length, 6);
+  assert.equal(facebook.filter((item: any) => item.gateReason === "none").length, 8);
   const deferred = facebook.find((item: any) => item.gateReason === "cadence");
   assert.equal(deferred.status, "auto_eligible");
   assert.equal(deferred.approvalRequired, false);
   assert.equal(deferred.notBefore, "2026-07-21T13:00:00.000Z");
-  assert.equal(result.status.editorial.cadenceHeld, 1);
+  assert.equal(result.status.editorial.cadenceHeld, 2);
+  assert.equal(result.status.editorial.cadence.facebookRelevantMax, 10);
+});
+
+test("three-role committee records auditable unanimous verdicts and hashes on every queue item", async (t) => {
+  const workspaceDir = await fixture(t);
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [event] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(queue.length, 2);
+  for (const item of queue) {
+    assert.deepEqual(item.verdicts.map((verdict: any) => verdict.role), ["source_verifier", "safety_editor", "monetization_editor"]);
+    assert.ok(item.verdicts.every((verdict: any) => verdict.verdict === "approve" && verdict.checkedAt === "2026-07-21T12:00:00.000Z"));
+    assert.equal(item.consensus, "unanimous_approve");
+    assert.equal(item.publishDecision, "auto_publish");
+    assert.match(item.reviewHash, /^[a-f0-9]{64}$/);
+    assert.ok(item.evidence.some((evidence: string) => /^copyHash=[a-f0-9]{64}$/.test(evidence)));
+  }
+});
+
+test("verified official sensitive facts can publish automatically but unsafe claims fail closed", async (t) => {
+  const workspaceDir = await fixture(t);
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "nws-miami")!;
+  const fetched = __clipperLocalNewsInternals.sourceEvents({ features: [
+    { sourceEventId: "fatal-official", title: "Fatal storm update", description: "Officials confirmed one death.", location: "Downtown Miami", eventType: "Public safety update", severity: "Extreme" },
+    { sourceEventId: "accusation", title: "Official arrest update", description: "A person was arrested and charged; the allegation is unresolved.", location: "Downtown Miami", eventType: "Public safety update", severity: "Severe" },
+    { sourceEventId: "minor", title: "Minor identified", description: "A 14-year-old child was identified as a victim.", location: "Downtown Miami", eventType: "Public safety update", severity: "Severe" },
+  ] }, source, "2026-07-21T12:00:00Z");
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: fetched });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.filter((item: any) => item.source.includes("National Weather Service") && item.publishDecision === "auto_publish").length >= 2);
+  assert.ok(queue.filter((item: any) => item.reasons.includes("unresolved_accusation")).every((item: any) => item.publishDecision === "quarantine" && item.autoEligible === false));
+  assert.ok(queue.filter((item: any) => item.reasons.includes("identifiable_minor")).every((item: any) => item.publishDecision === "reject" && item.autoEligible === false));
+});
+
+test("critical evacuation is automatic only with verified provenance, a specific zone and a live validity window", async (t) => {
+  const workspaceDir = await fixture(t);
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "nws-miami")!;
+  const fetched = __clipperLocalNewsInternals.sourceEvents({ features: [{
+    sourceEventId: "evac-live", title: "Evacuation order", description: "Evacuate now.", instruction: "Leave Zone A.",
+    location: "Zone A east of Biscayne Boulevard", eventType: "Emergency evacuation", severity: "Extreme",
+    effective: "2026-07-21T11:55:00Z", expires: "2026-07-21T14:00:00Z",
+  }] }, source, "2026-07-21T12:00:00Z");
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: fetched });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.publishDecision === "auto_publish" && item.reasons.includes("critical_evacuation_provenance_zone_and_validity_verified")));
+
+  const manualWorkspace = await fixture(t);
+  await ingestClipperLocalNewsEvents({ workspaceDir: manualWorkspace, now: "2026-07-21T12:00:00Z", events: [{ ...event, sourceEventId: "manual-evac", title: "Evacuation order", description: "Evacuate now.", location: "Zone A", severity: "Extreme", effective: "2026-07-21T11:55:00Z", expires: "2026-07-21T14:00:00Z" }] });
+  const manualQueue = JSON.parse(await readFile(path.join(manualWorkspace, "metricool-queue.json"), "utf8")).items;
+  assert.ok(manualQueue.every((item: any) => item.publishDecision === "quarantine" && item.reasons.includes("sensitive_story_missing_verified_connector_provenance")));
+});
+
+test("unknown sources, contradictory reports, graphic violence, private victim addresses, and engagement bait never auto publish", async (t) => {
+  const workspaceDir = await fixture(t);
+  const cases = [
+    { sourceEventId: "unknown", source: "Random Blog", sourceUrl: "https://example.com/story", title: "Traffic closure", description: "Road closed downtown." },
+    { sourceEventId: "conflict", title: "Conflicting reports", description: "Officials published contradictory information." },
+    { sourceEventId: "graphic", title: "Graphic violence", description: "Graphic gore was shown." },
+    { sourceEventId: "address", title: "Victim update", description: "The victim lives at 123 Main Street." },
+    { sourceEventId: "bait", title: "You won't believe this storm", description: "Share before everyone else." },
+  ].map((item) => ({ ...event, severity: "Severe", ...item }));
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: cases });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.autoEligible === false && ["quarantine", "reject"].includes(item.publishDecision)));
 });
 
 test("updates, corrections and resolved notices are tracked as newsroom revisions", async (t) => {
@@ -187,13 +250,13 @@ test("Facebook newsroom copy keeps official detail concise for long source descr
   assert.match(facebook.copy, /Qué hacer: Use alternate route/);
 });
 
-test("sensitive Spanish and English topics are gated for approval", async (t) => {
+test("sensitive Spanish and English topics receive automatic final quarantine or rejection", async (t) => {
   const workspaceDir = await fixture(t);
   const sensitive = ["Menor identificado como víctima", "Unconfirmed shooting", "Arresto y acusación", "Fallecido en incidente", "Rumor sin confirmar", "Crime investigation involving a robbery"];
   await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { CLIPPERS_LOCAL_NEWS_AUTO_ELIGIBLE: "true" }, events: sensitive.map((title, index) => ({ ...event, sourceEventId: `sensitive-${index}`, title: index === 4 ? "Actualización policial" : title, description: index === 4 ? title : event.description })) });
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   assert.equal(queue.length, sensitive.length * 2);
-  assert.ok(queue.every((item: any) => ["high", "critical"].includes(item.risk) && item.status === "approval_required"));
+  assert.ok(queue.every((item: any) => ["high", "critical"].includes(item.risk) && ["quarantined", "rejected"].includes(item.status) && item.approvalRequired === false));
 });
 
 test("NY511 sends its key only as an ephemeral query parameter and never persists it", async (t) => {
@@ -249,8 +312,31 @@ test("metrics roll into analytics and status without changing publish claims", a
     { eventId: "nws-1", lane: "miami-news", platform: "facebook" },
   ] });
   assert.deepEqual(result.status.metrics, { total: 2, impressions: 100, engagements: 9, clicks: 4, shares: 2, revenueUsd: 12.5, costUsd: 3.25, profitUsd: 9.25 });
+  assert.deepEqual(result.status.monetization, {
+    targetUsd: 10000, revenueUsd: 12.5, remainingUsd: 9987.5, progressPct: 0.13,
+    externalEligibility: "unverified", pagesEligible: null, policyViolations: null, verifiedAt: null,
+    bySection: { weather: { posts: 1, reach: 100, engagement: 9, revenueUsd: 12.5 } },
+  });
   assert.equal(result.status.queue.published, 0);
   assert.match(await readFile(result.status.artifacts.analytics, "utf8"), /"impressions": 100/);
   assert.match(await readFile(result.status.artifacts.analyticsCsv, "utf8"), /revenueUsd,costUsd/);
   assert.deepEqual((await getClipperLocalNewsStatus({ workspaceDir })).metrics, result.status.metrics);
+});
+
+test("bootstrap safely backfills committee decisions for legacy queue state", async (t) => {
+  const workspaceDir = await fixture(t);
+  await bootstrapClipperLocalNews({ workspaceDir, now: "2026-07-21T12:00:00Z" });
+  const statePath = path.join(workspaceDir, "state.json");
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:01:00Z", events: [event] });
+  const populated = JSON.parse(await readFile(statePath, "utf8"));
+  for (const item of populated.queue) {
+    delete item.verdicts; delete item.evidence; delete item.consensus; delete item.publishDecision; delete item.reasons; delete item.checkedAt; delete item.reviewHash;
+  }
+  await writeFile(statePath, `${JSON.stringify(populated)}\n`, "utf8");
+  const status = await bootstrapClipperLocalNews({ workspaceDir, now: "2026-07-21T12:02:00Z" });
+  const migrated = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(state.version, 1);
+  assert.ok(migrated.every((item: any) => item.verdicts.length === 3 && item.consensus === "unanimous_approve" && /^[a-f0-9]{64}$/.test(item.reviewHash)));
+  assert.equal(status.editorial.committee.reviewed, 2);
 });
