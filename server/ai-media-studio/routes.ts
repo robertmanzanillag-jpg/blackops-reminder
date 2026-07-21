@@ -40,6 +40,7 @@ import {
   publishingJobListRequestSchema,
   publishingJobListResponseSchema,
   publishingJobSchema,
+  publishingConnectionsResponseSchema,
   publishingPreviewSchema,
   socialPlatformSchema,
   sourceItemSchema,
@@ -376,15 +377,6 @@ const sourcesQuerySchema = cursorPageRequestSchema.extend({
 const jobResponseSchema = z.object({ job: publishingJobSchema }).strict();
 const attributionResponseSchema = paginatedResponseSchema(attributionSchema);
 const sourcesResponseSchema = paginatedResponseSchema(sourceItemSchema);
-const connectionSchema = z.object({
-  platform: socialPlatformSchema,
-  status: z.enum(["ready", "attention", "not_connected"]),
-  accountLabel: z.string().max(200).nullable(),
-  capabilities: z.array(z.string().max(100)).max(20),
-  checkedAt: z.string().datetime({ offset: true }).nullable(),
-  message: z.string().max(500),
-}).strict();
-const connectionsResponseSchema = z.object({ connections: z.array(connectionSchema).max(4) }).strict();
 
 function publicPublishingStatus(state: PublicPublication["state"] | "rejected"): PublishingJob["status"] {
   const map: Record<string, PublishingJob["status"]> = {
@@ -1136,7 +1128,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/publishing/connections`, requireOperations, asyncRoute(async (req, res) => {
     const scope = await tenant(req);
-    res.json(connectionsResponseSchema.parse({ connections: await operations.connections(scope) }));
+    res.json(publishingConnectionsResponseSchema.parse({ connections: await operations.connections(scope) }));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/analytics/summary`, requireOperations, asyncRoute(async (req, res) => {

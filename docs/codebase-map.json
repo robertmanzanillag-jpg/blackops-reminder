@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T04:12:15.647Z",
+  "generatedAt": "2026-07-21T04:27:19.543Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,13 +85,35 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 605,
-    "filesIndexed": 524,
-    "imports": 2090,
+    "filesVisible": 610,
+    "filesIndexed": 527,
+    "imports": 2107,
     "routes": 487,
-    "symbols": 9884
+    "symbols": 9942
   },
   "directories": {
+    "migrations/ai-media-studio": {
+      "files": 13,
+      "indexed": 1,
+      "kinds": {
+        "other": 12,
+        "docs": 1
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 85,
+      "indexed": 84,
+      "kinds": {
+        "server": 85
+      }
+    },
+    "tests": {
+      "files": 109,
+      "indexed": 105,
+      "kinds": {
+        "test": 109
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -156,14 +178,6 @@
         "docs": 12
       }
     },
-    "migrations/ai-media-studio": {
-      "files": 11,
-      "indexed": 1,
-      "kinds": {
-        "other": 10,
-        "docs": 1
-      }
-    },
     "script": {
       "files": 38,
       "indexed": 36,
@@ -185,13 +199,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 84,
-      "indexed": 83,
-      "kinds": {
-        "server": 84
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -211,13 +218,6 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 107,
-      "indexed": 103,
-      "kinds": {
-        "test": 107
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -7816,6 +7816,7 @@
         "./analytics/in-memory-repository",
         "./core/resource-domain",
         "./persistence/runtime",
+        "./publishing/accounts",
         "./publishing/in-memory",
         "./publishing/ports",
         "./publishing/service",
@@ -7833,8 +7834,13 @@
         "createOperationsRuntime"
       ],
       "symbols": [
+        "accountLabel",
         "byPlatform",
+        "capabilities",
+        "checkedAt",
+        "checkedAtEpoch",
         "configuredDatabase",
+        "connectionId",
         "createDefaultDurableOperationsRepositories",
         "createOperationsRuntime",
         "environment",
@@ -7842,6 +7848,7 @@
         "item",
         "lazyRepository",
         "load",
+        "message",
         "method",
         "now",
         "reason",
@@ -7850,6 +7857,7 @@
         "safeConnections",
         "selectRepositories",
         "selection",
+        "status",
         "unavailableRepository",
         "value"
       ],
@@ -8540,6 +8548,55 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/publishing/accounts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./domain",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "PUBLISHING_CAPABILITIES",
+        "PublishingAccountConnection",
+        "PublishingAccountScope",
+        "PublishingAccountsDatabase",
+        "PublishingAccountsRepository",
+        "PublishingCapability",
+        "PublishingConnectionStatus",
+        "createPublishingAccountsRepository"
+      ],
+      "symbols": [
+        "CAPABILITY_SET",
+        "ExecuteResult",
+        "PLATFORM_SET",
+        "PUBLISHING_CAPABILITIES",
+        "ProviderAccountRow",
+        "accountLabel",
+        "asCheckedAt",
+        "asNonEmptyString",
+        "assertUsable",
+        "capabilities",
+        "checkedAt",
+        "connection",
+        "connectionForPlatform",
+        "connectionId",
+        "connections",
+        "createPublishingAccountsRepository",
+        "grouped",
+        "isUsable",
+        "listConnections",
+        "parseCapabilities",
+        "parsed",
+        "requireScope",
+        "result",
+        "rows",
+        "rowsFrom",
+        "selected",
+        "usableRows"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/publishing/domain.ts",
       "kind": "server",
       "imports": [
@@ -8694,6 +8751,7 @@
       "path": "server/ai-media-studio/publishing/index.ts",
       "kind": "server",
       "imports": [
+        "./accounts",
         "./domain",
         "./drizzle-repository",
         "./fake-provider",
@@ -8865,8 +8923,6 @@
         "available",
         "candidate",
         "configuredDatabase",
-        "connectionSchema",
-        "connectionsResponseSchema",
         "core",
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
@@ -16228,6 +16284,9 @@
         "OrchestrationRun",
         "Publication",
         "PublicationAnalyticsMapping",
+        "PublishingCapability",
+        "PublishingConnection",
+        "PublishingConnectionsResponse",
         "PublishingJob",
         "PublishingMode",
         "PublishingPreview",
@@ -16252,6 +16311,9 @@
         "publicationAnalyticsMappingSchema",
         "publicationSchema",
         "publicationStatusSchema",
+        "publishingCapabilitySchema",
+        "publishingConnectionSchema",
+        "publishingConnectionsResponseSchema",
         "publishingJobListRequestSchema",
         "publishingJobListResponseSchema",
         "publishingJobSchema",
@@ -16287,6 +16349,9 @@
         "publicationAnalyticsMappingSchema",
         "publicationSchema",
         "publicationStatusSchema",
+        "publishingCapabilitySchema",
+        "publishingConnectionSchema",
+        "publishingConnectionsResponseSchema",
         "publishingJobListRequestSchema",
         "publishingJobListResponseSchema",
         "publishingJobSchema",
@@ -17791,6 +17856,27 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "addedColumns",
+        "directory",
+        "forward",
+        "model",
+        "publishingJobsModel",
+        "read",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-production-asset-runtime.test.ts",
       "kind": "test",
       "imports": [
@@ -17827,6 +17913,40 @@
         "unavailable",
         "unavailableResponse",
         "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-publishing-accounts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/analytics/in-memory-repository",
+        "../server/ai-media-studio/operations-runtime",
+        "../server/ai-media-studio/publishing/accounts",
+        "../server/ai-media-studio/publishing/in-memory",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "compiled",
+        "connection",
+        "connections",
+        "dialect",
+        "durable",
+        "durableConnections",
+        "explicit",
+        "explicitConnections",
+        "mockDatabase",
+        "normalizedSql",
+        "owner",
+        "providerRow",
+        "readyConnection",
+        "repositories",
+        "repository",
+        "scope"
       ],
       "routes": []
     },
@@ -19940,7 +20060,9 @@
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
+    "tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts",
     "tests/ai-media-studio-production-asset-runtime.test.ts",
+    "tests/ai-media-studio-publishing-accounts.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",
     "tests/ai-media-studio-publishing.test.ts",
     "tests/ai-media-studio-render-flow-integration.test.ts",

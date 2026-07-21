@@ -1,11 +1,12 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover the incremental PR2, PR3, PR4, PR5, and PR6 schema deltas after the
+These SQL files cover the incremental PR2, PR3, PR4, PR5, PR6, and PR8 schema deltas after the
 PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
 local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
 `npm run db:push` for the reviewed SQL and release sequence below. Apply the
-deltas strictly in PR2 -> PR3 -> PR4 -> PR5 -> PR6 order.
+deltas strictly in PR2 -> PR3 -> PR4 -> PR5 -> PR6 -> PR8 order. PR7 has no
+database migration in this directory.
 
 ## Required release sequence
 
@@ -150,3 +151,32 @@ conflict with those assumptions. It retains all account identity, endpoint
 references, rotation metadata, composite constraints, indexes, and rows. Roll
 application code back only to a revision that understands account-scoped
 identity; otherwise roll forward after correcting the release issue.
+
+## PR8 publishing-account isolation release
+
+`20260721_pr8_publishing_accounts_forward.sql` is the additive PR8 delta and has
+not been applied to any database. Apply it only after PR6. It replaces the loose
+id-only `SET NULL` publishing-job account reference with a composite foreign key
+that requires every non-null account binding to match the job's owner, workspace,
+and platform (`platform = provider_key`). The platform remains required, while
+`provider_account_id` remains nullable for intentionally unbound drafts.
+
+Drain publishing writers and workers, take and verify a restorable backup, and
+apply the checked-in SQL to staging with an operator-reviewed PostgreSQL client.
+The migration preflights both tables, every required identity column, and the
+valid PR6 composite unique index. It aborts on orphaned, cross-tenant, or
+platform-mismatched non-null bindings. It does not infer or backfill an account.
+
+Before release, prove on staging that:
+
+1. A publishing job may reference an account only inside its exact tenant and workspace.
+2. The job platform must equal the provider account's `provider_key`.
+3. Nullable unbound drafts remain valid and `platform` remains non-null.
+4. Existing valid account-bound jobs remain attached when an account deletion is attempted.
+5. Full checker and App QA gates pass, followed by Robert's explicit approval before any Replit/production deployment.
+
+The PR8 rollback is application-only and intentionally retains the composite
+constraint, PR6 candidate key, columns, and all rows. Restoring the id-only
+`SET NULL` foreign key would weaken isolation and silently detach publishing
+intent. Roll code back only to a revision compatible with the retained nullable
+account column and composite identity; otherwise correct the release and roll forward.

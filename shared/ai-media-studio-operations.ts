@@ -17,6 +17,19 @@ const optionalWindowSchema = z
   .refine(({ from, to }) => Date.parse(from) <= Date.parse(to), { message: "from must not be after to", path: ["to"] });
 
 export const socialPlatformSchema = z.enum(["tiktok", "instagram", "facebook", "youtube_shorts"]);
+export const publishingCapabilitySchema = z.enum(["publish_video", "schedule_post", "read_analytics", "webhook_events"]);
+export const publishingConnectionSchema = z
+  .object({
+    connectionId: canonicalIdSchema.nullable(),
+    platform: socialPlatformSchema,
+    status: z.enum(["ready", "attention", "not_connected"]),
+    accountLabel: z.string().trim().min(1).max(200).nullable(),
+    capabilities: z.array(publishingCapabilitySchema).max(4),
+    checkedAt: isoDateSchema.nullable(),
+    message: z.string().trim().min(1).max(500),
+  })
+  .strict();
+export const publishingConnectionsResponseSchema = z.object({ connections: z.array(publishingConnectionSchema).length(4) }).strict();
 export const publishingModeSchema = z.enum(["manual", "scheduled", "automatic"]);
 export const publishingJobStatusSchema = z.enum([
   "pending_approval",
@@ -284,6 +297,9 @@ export const orchestrationRunSchema = z
   .strict();
 
 export type SocialPlatform = z.infer<typeof socialPlatformSchema>;
+export type PublishingCapability = z.infer<typeof publishingCapabilitySchema>;
+export type PublishingConnection = z.infer<typeof publishingConnectionSchema>;
+export type PublishingConnectionsResponse = z.infer<typeof publishingConnectionsResponseSchema>;
 export type PublishingMode = z.infer<typeof publishingModeSchema>;
 export type PublishingPreview = z.infer<typeof publishingPreviewSchema>;
 export type ApprovalEvidence = z.infer<typeof approvalEvidenceSchema>;

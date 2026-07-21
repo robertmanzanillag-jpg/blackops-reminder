@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T04:12:15.647Z
+Generated: 2026-07-21T04:27:19.543Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 605 | 524 | 2090 | 487 | 9884 |
+| 610 | 527 | 2107 | 487 | 9942 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,9 +30,9 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 107 | 103 | test:107 |
+| `tests` | 109 | 105 | test:109 |
 | `server` | 96 | 92 | server:96 |
-| `server/ai-media-studio` | 84 | 83 | server:84 |
+| `server/ai-media-studio` | 85 | 84 | server:85 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs` | 12 | 11 | docs:12 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 11 | 1 | other:10, docs:1 |
+| `migrations/ai-media-studio` | 13 | 1 | other:12, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 
@@ -91,7 +91,9 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
+- `tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts`
 - `tests/ai-media-studio-production-asset-runtime.test.ts`
+- `tests/ai-media-studio-publishing-accounts.test.ts`
 - `tests/ai-media-studio-publishing-drizzle.test.ts`
 - `tests/ai-media-studio-publishing.test.ts`
 - `tests/ai-media-studio-render-flow-integration.test.ts`

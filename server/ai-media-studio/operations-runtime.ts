@@ -1,4 +1,9 @@
-import type { AutomationPolicy, SocialPlatform } from "../../shared/ai-media-studio-operations";
+import type {
+  AutomationPolicy,
+  PublishingCapability,
+  PublishingConnection,
+  SocialPlatform,
+} from "../../shared/ai-media-studio-operations";
 import { and, eq } from "drizzle-orm";
 import { aiMediaMediaAssets } from "../../shared/models/ai-media-studio-db";
 import { AnalyticsService, type AnalyticsRepository } from "./analytics/domain";
@@ -6,6 +11,10 @@ import { InMemoryAnalyticsRepository } from "./analytics/in-memory-repository";
 import type { MediaStudioPersistenceStatus } from "./persistence/runtime";
 import { MediaStudioPersistenceUnavailableError } from "./persistence/runtime";
 import { InMemoryPublishingRepository } from "./publishing/in-memory";
+import {
+  PUBLISHING_CAPABILITIES,
+  type PublishingAccountsRepository,
+} from "./publishing/accounts";
 import type { PublishingRepository } from "./publishing/ports";
 import { PublishingService } from "./publishing/service";
 import type { SourceRepository } from "./sources/contracts";
@@ -13,6 +22,7 @@ import { InMemorySourceRepository } from "./sources/in-memory-source-repository"
 import type { TenantScope } from "./core/resource-domain";
 
 export interface PublishingConnectionReadiness {
+  connectionId?: string | null;
   platform: SocialPlatform;
   status: "ready" | "attention" | "not_connected";
   accountLabel: string | null;
@@ -29,6 +39,7 @@ export interface OperationsRepositories {
   publishing: PublishingRepository;
   analytics: AnalyticsRepository;
   sources: SourceRepository;
+  publishingAccounts?: PublishingAccountsRepository;
 }
 
 export interface OperationsRuntimeDependencies {
@@ -45,7 +56,7 @@ export interface OperationsRuntime {
   publishing: PublishingService;
   analytics: AnalyticsService;
   sources: SourceRepository;
-  connections(scope: TenantScope): Promise<readonly PublishingConnectionReadiness[]>;
+  connections(scope: TenantScope): Promise<readonly PublishingConnection[]>;
   status: MediaStudioPersistenceStatus;
   policy(): AutomationPolicy;
 }
@@ -78,13 +89,14 @@ function unavailableRepository<T extends object>(reason: string): T {
 
 /** Loads Drizzle lazily so importing the HTTP composition root never opens a database pool. */
 export function createDefaultDurableOperationsRepositories(): OperationsRepositories {
-  let pending: Promise<OperationsRepositories> | undefined;
+  let pending: Promise<OperationsRepositories & { publishingAccounts: PublishingAccountsRepository }> | undefined;
   const load = () => (pending ??= Promise.all([
     import("../db"),
     import("./publishing/drizzle-repository"),
     import("./analytics/drizzle-repository"),
     import("./sources/drizzle-source-repository"),
-  ]).then(([database, publishing, analytics, sources]) => ({
+    import("./publishing/accounts"),
+  ]).then(([database, publishing, analytics, sources, accounts]) => ({
     publishing: new publishing.DrizzlePublishingRepository(database.db, async (scope, mediaAssetId) => {
       const [owned] = await database.db.select({ id: aiMediaMediaAssets.id }).from(aiMediaMediaAssets).where(and(
         eq(aiMediaMediaAssets.id, mediaAssetId),
@@ -98,11 +110,13 @@ export function createDefaultDurableOperationsRepositories(): OperationsReposito
       throw new Error("Analytics ingestion must resolve a publishing job through its trusted adapter");
     }),
     sources: new sources.DrizzleSourceRepository(database.db),
+    publishingAccounts: accounts.createPublishingAccountsRepository(database.db),
   })));
   return {
     publishing: lazyRepository(async () => (await load()).publishing),
     analytics: lazyRepository(async () => (await load()).analytics),
     sources: lazyRepository(async () => (await load()).sources),
+    publishingAccounts: lazyRepository(async () => (await load()).publishingAccounts),
   };
 }
 
@@ -143,18 +157,32 @@ function selectRepositories(options: OperationsRuntimeDependencies): { repositor
   };
 }
 
-function safeConnections(input: readonly PublishingConnectionReadiness[] | undefined): PublishingConnectionReadiness[] {
+function safeConnections(input: readonly PublishingConnectionReadiness[] | undefined): PublishingConnection[] {
   const byPlatform = new Map(input?.map((item) => [item.platform, item]));
   return platforms.map((platform) => {
     const item = byPlatform.get(platform);
-    if (!item) return { platform, status: "not_connected", accountLabel: null, capabilities: [], checkedAt: null, message: "No publishing connection is configured" };
+    if (!item) return { connectionId: null, platform, status: "not_connected", accountLabel: null, capabilities: [], checkedAt: null, message: "No publishing connection is configured" };
+    const connectionId = typeof item.connectionId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(item.connectionId)
+      ? item.connectionId
+      : null;
+    const capabilities = PUBLISHING_CAPABILITIES.filter((capability) => Array.isArray(item.capabilities) && item.capabilities.includes(capability)) as PublishingCapability[];
+    const accountLabel = typeof item.accountLabel === "string" && item.accountLabel.trim()
+      ? item.accountLabel.trim().slice(0, 200)
+      : null;
+    const checkedAtEpoch = typeof item.checkedAt === "string" ? Date.parse(item.checkedAt) : Number.NaN;
+    const checkedAt = Number.isFinite(checkedAtEpoch) ? new Date(checkedAtEpoch).toISOString() : null;
+    const status = ["ready", "attention", "not_connected"].includes(item.status) ? item.status : "attention";
+    const message = typeof item.message === "string" && item.message.trim()
+      ? item.message.trim().slice(0, 500)
+      : "Publishing connection requires attention";
     return {
+      connectionId,
       platform,
-      status: item.status,
-      accountLabel: item.accountLabel?.slice(0, 200) ?? null,
-      capabilities: item.capabilities.filter((value) => typeof value === "string").slice(0, 20).map((value) => value.slice(0, 100)),
-      checkedAt: item.checkedAt,
-      message: item.message.slice(0, 500),
+      status,
+      accountLabel,
+      capabilities,
+      checkedAt,
+      message,
     };
   });
 }
@@ -166,7 +194,11 @@ export function createOperationsRuntime(options: OperationsRuntimeDependencies =
     publishing: new PublishingService(selection.repositories.publishing, { now: () => now().getTime() }),
     analytics: new AnalyticsService(selection.repositories.analytics, { now }),
     sources: selection.repositories.sources,
-    connections: async (scope) => safeConnections(await options.resolveConnections?.(scope)),
+    connections: async (scope) => safeConnections(
+      options.resolveConnections
+        ? await options.resolveConnections(scope)
+        : await selection.repositories.publishingAccounts?.listConnections(scope),
+    ),
     status: selection.status,
     policy: () => ({
       automaticPublishingEnabled: false,

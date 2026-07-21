@@ -30,6 +30,7 @@ export type AttributionResponse = { attributions: Attribution[]; nextCursor: str
 export type SourcesResponse = { sources: SourceItem[]; nextCursor: string | null; hasMore: boolean };
 
 export type PublishingConnection = {
+  connectionId: string | null;
   platform: SocialPlatform;
   status: "ready" | "attention" | "not_connected";
   accountLabel: string | null;

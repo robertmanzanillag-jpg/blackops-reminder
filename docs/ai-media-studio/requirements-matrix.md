@@ -83,7 +83,7 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| TikTok, Instagram, Facebook and YouTube Shorts | Partial | Provider-neutral contracts/ports, connection-readiness DTOs and fake adapter cover all four platforms | Real OAuth/permission review, adapters, ingestion and sandbox evidence per platform |
+| TikTok, Instagram, Facebook and YouTube Shorts | Partial | Provider-neutral contracts/ports, strict tenant-scoped durable account readiness, vault-reference-only identity, composite job/account/platform isolation and fake adapters cover all four platforms | Real OAuth/permission review, vault materialization, adapters, ingestion and sandbox evidence per platform |
 | Manual publishing | Partial | Server-generated immutable preview, explicit approval/rejection evidence, authenticated routes, repository/service, client API and UI are integrated | Configured real provider execution and sandbox evidence; Robert approval before external posting |
 | Scheduled publishing | Partial | Authenticated routes, timezone-bound schedule, due claim, bounded retry/dead-letter and reconciliation code exist | Deploy an approved worker and prove missed-run/restart behavior against live PostgreSQL |
 | Automatic publishing | Missing | Explicitly disabled | Separate Robert approval, policy engine, spend/risk review and kill switch |

@@ -501,7 +501,7 @@ test("operations HTTP exposes redacted readiness and tenant analytics/source rea
   assert.equal(connections.connections.length, 4);
   assert.equal(connections.connections.find((item) => item.platform === "tiktok")?.status, "ready");
   assert.doesNotMatch(connectionRaw, /must-not-leak|apiToken|accessToken|credential|providerAccountId/i);
-  assert.deepEqual(Object.keys(connections.connections[0]).sort(), ["accountLabel", "capabilities", "checkedAt", "message", "platform", "status"]);
+  assert.deepEqual(Object.keys(connections.connections[0]).sort(), ["accountLabel", "capabilities", "checkedAt", "connectionId", "message", "platform", "status"]);
 
   const otherTenantConnections = await fetch(`${harness.baseUrl}/api/ai-media-studio/publishing/connections`, {
     headers: { "x-test-user": scopeB.ownerUserId },
