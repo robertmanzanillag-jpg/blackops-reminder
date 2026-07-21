@@ -60,6 +60,7 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
   assert.deepEqual(calls[2].body.media, { mediaId: input.mediaUrl });
   assert.match(calls[2].url, /integrationSource=MCP/);
   assert.equal((calls[2].headers as Record<string, string>).accept, "application/json");
+  assert.equal((calls[2].headers as Record<string, string>)["content-length"], String(Buffer.byteLength(JSON.stringify(calls[2].body), "utf8")));
   assert.equal((calls[1].headers as Record<string, string>).accept, "*/*");
   assert.equal((calls[1].headers as Record<string, string>)["content-type"], undefined);
 });
