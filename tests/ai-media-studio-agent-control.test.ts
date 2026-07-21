@@ -26,9 +26,9 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 3);
+  assert.equal(snapshot.summary.done, 4);
   assert.equal(snapshot.summary.running, 0);
-  assert.equal(snapshot.summary.ready, 1);
+  assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
   for (const item of snapshot.workItems) {
@@ -54,12 +54,13 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
-  assert.equal(durablePlan?.state, "ready");
+  assert.equal(durablePlan?.state, "done");
+  assert.equal(durablePlan?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/136");
   assert.match(durablePlan?.acceptance.join(" ") ?? "", /exactly ten blocked durable slots per avatar/u);
   assert.match(durablePlan?.acceptance.join(" ") ?? "", /no budget reservation[\s\S]*provider call/u);
   assert.match(durablePlan?.evidence.join(" ") ?? "", /PostgreSQL 16[\s\S]*5→50[\s\S]*10→100/u);
   assert.match(durablePlan?.evidence.join(" ") ?? "", /checker[\s\S]*App QA[\s\S]*P0=P1=P2=0/u);
-  assert.match(durablePlan?.blockers.join(" ") ?? "", /GitHub draft PR checkpoint/u);
+  assert.match(durablePlan?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /separate approval[\s\S]*restored-staging rehearsal/u);

@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: durable 5–10 avatar roster plan bridge
 
-- Branch: `codex/ai-media-studio-durable-roster-plan-bridge`, stacked on draft PR #131. No merge, migration application, provider activation or deployment is implied.
+- Branch: `codex/ai-media-studio-durable-roster-plan-bridge`, preserved as draft PR #136 and stacked on draft PR #131. No merge, migration application, provider activation or deployment is implied.
 - Scope: one account-row-locked roster transaction persists the private catalog bindings, one blocked daily plan and exactly 10 blocked slots per avatar in the existing PR19 tables. The initial 5-avatar configuration yields 50 slots and the launch cap of 10 yields 100.
 - Authority boundary: PostgreSQL supplies the timestamp; the server supplies the canonical IANA accounting timezone. Tenant, provider account, credential version, roster, member, influencer, avatar and voice bindings are checked on write and durable read. Exact replay does not duplicate the plan or slots, while a changed payload conflicts.
 - Safety boundary: the public plan keeps only opaque keys and `not_queued`, `canGenerate=false`, `noSpendGuarantee=true`. No budget reservation, render job, outbox command, provider submission, HeyGen/network call, migration application, spend, publication, secret change or deploy is introduced.

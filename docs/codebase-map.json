@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T23:38:25.073Z",
+  "generatedAt": "2026-07-21T23:48:57.377Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-roster-plan-bridge",
   "packageName": "rest-express",
   "scripts": {
@@ -94,13 +94,6 @@
     "symbols": 12699
   },
   "directories": {
-    "tests": {
-      "files": 177,
-      "indexed": 168,
-      "kinds": {
-        "test": 177
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -220,6 +213,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 177,
+      "indexed": 168,
+      "kinds": {
+        "test": 177
       }
     },
     "tests/fixtures": {

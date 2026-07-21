@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T23:38:25.073Z
+Generated: 2026-07-21T23:48:57.377Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-roster-plan-bridge`
 Package: `rest-express`
 
