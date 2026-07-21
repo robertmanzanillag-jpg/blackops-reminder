@@ -520,6 +520,22 @@ test("caps lead plan spend at the starting monthly budget", () => {
   assert.equal(plan.budget.isInsideCap, true);
 });
 
+test("keeps a zero-budget lead plan entirely free", () => {
+  const plan = buildRevenueEnginePlan({
+    area: "Miami",
+    niche: "med spas",
+    offerFocus: "both",
+    monthlyBudgetUsd: 0,
+    leadCount: 10,
+  });
+
+  assert.equal(plan.budget.monthlyCapUsd, 0);
+  assert.equal(plan.budget.estimatedFirstBatchUsd, 0);
+  assert.equal(plan.budget.remainingBudgetUsd, 0);
+  assert.equal(plan.budget.isInsideCap, true);
+  assert.equal(plan.budget.mode, "free_public_research");
+});
+
 test("builds a no-website scouting mission with approval gates", () => {
   const mission = buildRevenueScoutingMission({
     area: "Miami",
