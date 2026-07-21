@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { getCalendarEvents } from "./google-calendar";
+import { getCalendarEvents, makeGoogleCalendarExternalId, parseGoogleCalendarExternalId } from "./google-calendar";
 
 export async function syncGoogleCalendarToTasks(userId: string): Promise<{ synced: number; updated: number; total: number }> {
   const weekStart = new Date();
@@ -14,14 +14,20 @@ export async function syncGoogleCalendarToTasks(userId: string): Promise<{ synce
   const existingByGoogleId = new Map(
     existingTasks
       .filter((task) => task.externalId && task.externalSource === "google")
-      .map((task) => [task.externalId, task])
+      .flatMap((task) => {
+        const parsed = parseGoogleCalendarExternalId(task.externalId);
+        const keys = [task.externalId as string];
+        if (parsed?.eventId && parsed.eventId !== task.externalId) keys.push(parsed.eventId);
+        return keys.map((key) => [key, task] as const);
+      })
   );
 
   let synced = 0;
   let updated = 0;
 
   for (const event of events) {
-    const existing = existingByGoogleId.get(event.id);
+    const externalId = makeGoogleCalendarExternalId(event.calendarId, event.id);
+    const existing = existingByGoogleId.get(externalId) || existingByGoogleId.get(event.id);
 
     if (!existing) {
       await storage.createTask(userId, {
@@ -32,7 +38,7 @@ export async function syncGoogleCalendarToTasks(userId: string): Promise<{ synce
         priority: "normal",
         completed: false,
         type: "event",
-        externalId: event.id,
+        externalId,
         externalSource: "google",
       });
       synced++;
@@ -43,6 +49,7 @@ export async function syncGoogleCalendarToTasks(userId: string): Promise<{ synce
     const nextEndDate = event.endDate || null;
     const changed =
       existing.title !== event.title ||
+      existing.externalId !== externalId ||
       (existing.description || null) !== nextDescription ||
       new Date(existing.date).getTime() !== new Date(event.date).getTime() ||
       ((existing.endDate && new Date(existing.endDate).getTime()) || null) !== ((nextEndDate && new Date(nextEndDate).getTime()) || null) ||
@@ -57,7 +64,7 @@ export async function syncGoogleCalendarToTasks(userId: string): Promise<{ synce
         priority: existing.priority || "normal",
         completed: existing.completed,
         type: "event",
-        externalId: event.id,
+        externalId,
         externalSource: "google",
       });
       updated++;

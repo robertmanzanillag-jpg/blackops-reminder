@@ -139,12 +139,13 @@ async function getCalendarContext(): Promise<string> {
     let context = "📅 CALENDARIO DE GOOGLE:\n";
     
     if (radioEvents.length > 0) {
-      context += "\n🎵 EVENTOS DE RADIO (con eventId para modificar):\n";
+      context += "\n🎵 EVENTOS DE RADIO (con eventId y calendarId para modificar):\n";
       radioEvents.forEach((e: any) => {
         // e.date is already a Date object from getCalendarEvents
         const dateStr = e.date ? format(e.date, "EEEE d 'de' MMMM yyyy", { locale: es }) : "Sin fecha";
         context += `\n📻 ${dateStr}\n`;
         context += `   eventId: ${e.id}\n`;
+        context += `   calendarId: ${e.calendarId}\n`;
         // Limpiar HTML de la descripción
         const cleanDesc = e.description 
           ? e.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
@@ -284,8 +285,8 @@ COMANDOS DISPONIBLES (úsalos cuando sea apropiado):
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [CREAR_RECORDATORIO: {"message": "...", "hour": 8, "minute": 0, "daysOfWeek": ["monday", "tuesday"]}]
 - [GOOGLE_DRIVE_CREATE_FOLDER: {"driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"]}]
-- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
-- [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
+- [MODIFICAR_RADIO: {"eventId": "ID_DEL_EVENTO", "calendarId": "BLACK_ROOM_CALENDAR_ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
 - [RADIO_YOUTUBE_CLIPS: {"youtubeUrl": "https://youtube.com/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [RADIO_DRIVE_VIDEO_CLIPS: {"sourceDriveFileId": "GOOGLE_DRIVE_FILE_ID", "sourceDriveUrl": "https://drive.google.com/file/d/...", "driveFolderPath": ["Robert A", "Videos de Black Room", "Radio Junio"], "createFolderIfMissing": true, "djName": "LUCIA REINA", "musicUrl": "https://youtube.com/...", "instagramClipCount": 3, "tiktokClipCount": 3, "deleteSourceAfterSuccess": true}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock", "quantity": "10", "avgBuyPrice": "150.50"}]
@@ -296,7 +297,7 @@ INFORMACIÓN SOBRE RADIO:
 - Los eventos de Radio son los MIÉRCOLES
 - La descripción del evento tiene el formato: "7: nombre_dj\\n8: nombre_dj\\n9: nombre_dj"
 - 7, 8, 9 representan las horas (7pm, 8pm, 9pm Pacific)
-- Cada Radio tiene un eventId (externalId) único que necesitas para modificarlo
+- Cada Radio tiene un eventId y calendarId únicos que necesitas para modificarlo en el calendario Black Room
 - Si un slot está vacío, aparece como "7:" o "7: " (sin nombre)
 - Si el usuario manda un YouTube y pide sacar clips/videos de radio, usa RADIO_YOUTUBE_CLIPS. Necesitas driveFolderPath; si no dice carpeta de Drive, pregunta antes.
 - Si el usuario pide crear carpeta/subcarpeta en el mismo mensaje, incluye createFolderIfMissing:true. Si solo pide guardar en una carpeta, deja que el sistema confirme si no existe.
@@ -310,7 +311,7 @@ INFORMACIÓN SOBRE RADIO:
 METRICOOL / SOCIAL PUBLISHING:
 - Si el usuario pide postear, publicar, programar, correr campanas, preparar cola o automatizar clips/redes con Metricool, usa METRICOOL_AUTOMATION.
 - Usa publishMode:"approval_required" por defecto.
-- Usa publishMode:"auto_after_connection" solo si pide automatico/live explicitamente. Aun asi quedara pendiente de aprobacion.
+- Si pide automatico/live, usa igualmente publishMode:"approval_required"; Metricool MVP queda pendiente de revision manual.
 - Nunca digas que ya publicaste en redes. Di que queda cola preparada o pendiente de aprobacion.
 
 TIPOS DE INVERSIÓN: stock, etf, crypto, bond, fund`;
@@ -489,7 +490,7 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,
@@ -1023,7 +1024,7 @@ async function processAssistantResponse(userId: string, response: string): Promi
         executionMode: "user_requested",
         actionType: "marketing.metricool_automation",
         resourceType: "metricool_execution_queue",
-        title: metricoolData.publishMode === "auto_after_connection" ? "Preparar Metricool auto publish" : "Preparar cola Metricool",
+        title: "Preparar cola Metricool",
         description: buildMetricoolPendingDescription(metricoolData),
         input: metricoolData,
         proposedChanges: metricoolData,

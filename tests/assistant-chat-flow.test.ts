@@ -140,7 +140,8 @@ test("web assistant routes Metricool posting requests into approval-gated automa
   assert.ok(direct);
   assert.match(direct.command, /METRICOOL_AUTOMATION/);
   assert.match(direct.command, /"clipsPerAccount":6/);
-  assert.match(direct.command, /"publishMode":"auto_after_connection"/);
+  assert.match(direct.command, /"publishMode":"approval_required"/);
+  assert.match(direct.content, /approval_required/);
   assert.match(source, /marketing\.metricool_automation/);
   assert.match(executor, /executeMetricoolAutomationAction/);
 });
@@ -275,11 +276,14 @@ test("dashboard exposes monthly AI spend tracking", () => {
   assert.match(policy, /BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD/);
   assert.match(policy, /BLACKOPS_METRICOOL_MONTHLY_USD/);
   assert.match(routes, /\/api\/ai-spend\/monthly/);
-  assert.match(routes, /buildMonthlyAiSpendReport\(runs\)/);
+  assert.match(routes, /storage\.getAutomationDefinitions\(userId\)/);
+  assert.match(routes, /buildMonthlyAiSpendReport\(runs, undefined, automations\)/);
   assert.match(dashboard, /MonthlySpendPanel/);
   assert.match(panel, /monthly-spend-panel/);
   assert.match(panel, /\/api\/ai-spend\/monthly/);
   assert.match(panel, /Gasto mensual/);
+  assert.match(panel, /Historial de gasto/);
+  assert.match(policy, /history/);
 });
 
 test("web assistant prepares clear Google Calendar requests without model routing", () => {
@@ -295,6 +299,21 @@ test("web assistant prepares clear Google Calendar requests without model routin
   assert.match(direct.eventData.endDate, /^2026-06-23T20:00:00-04:00$/);
   assert.match(direct.eventData.description || "", /3:00 PM/);
   assert.doesNotMatch(direct.command, /BLACKROOM_LINK_ADD|BLACKROOM_LINK_DEACTIVATE/);
+});
+
+test("web assistant prompt keeps Google Calendar edits on Black Room calendar", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const syncSource = readFileSync("server/calendar-sync.ts", "utf8");
+  const executorSource = readFileSync("server/trust-executor.ts", "utf8");
+
+  assert.match(source, /calendario de Black Room/);
+  assert.match(source, /"calendarId": "BLACK_ROOM_CALENDAR_ID"/);
+  assert.match(source, /consérvalo al editar/);
+  assert.match(source, /formatGoogleCalendarContextIds/);
+  assert.match(source, /calendarId: \$\{parsed\.calendarId\}/);
+  assert.match(syncSource, /makeGoogleCalendarExternalId\(event\.calendarId, event\.id\)/);
+  assert.match(executorSource, /googleCalendarExternalIdCandidates/);
+  assert.match(executorSource, /makeGoogleCalendarExternalId\(calendarId, parsed\.eventId\)/);
 });
 
 test("web assistant extracts promo video text and typography from natural requests", () => {
@@ -338,6 +357,51 @@ test("web assistant routes Black Room website link add when URL is present", () 
   assert.doesNotMatch(direct.command, /CREAR_EVENTO_GOOGLE|EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
 });
 
+test("web assistant routes natural Black Room website link updates", () => {
+  const direct = buildDirectBlackRoomCommand(
+    "cambia el url de BLACK ROOM & FRIENDS en los links de Black Room a https://kongnightlife.com/p/new-friends"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /BLACKROOM_LINK_UPDATE/);
+  assert.match(direct.command, /"matchTitle":"BLACK ROOM & FRIENDS"/);
+  assert.match(direct.command, /https:\/\/kongnightlife\.com\/p\/new-friends/);
+  assert.doesNotMatch(direct.command, /CREAR_EVENTO_GOOGLE|EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
+});
+
+test("web assistant treats eliminar Black Room website link as soft deactivation", () => {
+  const direct = buildDirectBlackRoomCommand(
+    "elimina BLACK ROOM & FRIENDS de los links de Black Room"
+  );
+
+  assert.ok(direct);
+  assert.match(direct.command, /BLACKROOM_LINK_DEACTIVATE/);
+  assert.match(direct.command, /BLACK ROOM & FRIENDS/);
+  assert.doesNotMatch(direct.command, /DELETE|CREAR_EVENTO_GOOGLE|EDITAR_EVENTO_GOOGLE|MODIFICAR_RADIO/);
+});
+
+test("web assistant rejects URL-only Black Room link add requests", () => {
+  assert.equal(
+    buildDirectBlackRoomCommand("agrega https://tickets.example/new a los links de Black Room"),
+    null,
+  );
+  assert.equal(
+    buildDirectBlackRoomCommand("agrega este link https://tickets.example/new a los links de Black Room"),
+    null,
+  );
+});
+
+test("web assistant does not treat analytics deletion as link deactivation", () => {
+  assert.equal(
+    buildDirectBlackRoomCommand("borra analytics de los links de Black Room"),
+    null,
+  );
+  assert.equal(
+    buildDirectBlackRoomCommand("elimina data de los links de Black Room"),
+    null,
+  );
+});
+
 test("web assistant does not add vague Black Room event link without URL", () => {
   const direct = buildDirectBlackRoomCommand(
     "AGG ESTE EVENTO A L LINK DE BLACK ROOM"
@@ -360,42 +424,30 @@ test("dashboard assistant chat shows Black Room approval creation errors", () =>
   assert.match(source, /No pude completar la accion/);
 });
 
-test("assistant chats surface radio video status, errors, and cost", () => {
+test("assistant chats surface radio YouTube execution errors", () => {
   const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
   const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
   const webAssistant = readFileSync("server/assistant.ts", "utf8");
 
   assert.match(dashboardChat, /data\.radioYoutubeError/);
-  assert.match(dashboardChat, /data\.radioDriveVideoError/);
-  assert.match(dashboardChat, /data\.assistantStatus/);
-  assert.match(dashboardChat, /data\.radioYoutubeNeedsConfirmation/);
-  assert.match(dashboardChat, /data\.radioDriveVideoNeedsDjName/);
-  assert.match(dashboardChat, /streamBuffer/);
   assert.match(dashboardChat, /data\.actionExecutionError/);
   assert.match(assistantPage, /data\.radioYoutubeError/);
-  assert.match(assistantPage, /data\.radioDriveVideoError/);
-  assert.match(assistantPage, /data\.assistantStatus/);
-  assert.match(assistantPage, /data\.radioYoutubeNeedsConfirmation/);
-  assert.match(assistantPage, /data\.radioDriveVideoNeedsDjName/);
-  assert.match(assistantPage, /streamBuffer/);
   assert.match(assistantPage, /data\.actionExecutionError/);
   assert.match(webAssistant, /actionExecutionError/);
-  assert.match(webAssistant, /RADIO_DRIVE_VIDEO_STATUS_MESSAGE/);
-  assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
-  assert.match(webAssistant, /startAssistantStatusHeartbeat/);
-  assert.match(webAssistant, /Tiempo trabajando/);
-  assert.match(webAssistant, /withRadioEditEstimatedCost/);
 });
 
-test("production health check responds before static fallback", () => {
-  const source = readFileSync("server/index.ts", "utf8");
-  const healthIndex = source.indexOf('app.get(["/health", "/api/health"]');
-  const staticIndex = source.indexOf("serveStatic(app)");
+test("assistant chats show long-running radio job status updates", () => {
+  const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
+  const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
+  const webAssistant = readFileSync("server/assistant.ts", "utf8");
 
-  assert.ok(healthIndex > -1);
-  assert.ok(staticIndex > -1);
-  assert.ok(healthIndex < staticIndex);
-  assert.match(source, /status: "ok"/);
+  assert.match(webAssistant, /assistantStatus/);
+  assert.match(webAssistant, /RADIO_YOUTUBE_STATUS_MESSAGE/);
+  assert.match(webAssistant, /Gasto estimado de esta corrida: \$0\.00 USD/);
+  assert.match(dashboardChat, /data\.assistantStatus/);
+  assert.match(assistantPage, /data\.assistantStatus/);
+  assert.match(dashboardChat, /assistantStatus \|\| "Revisando tu calendario/);
+  assert.match(assistantPage, /assistantStatus \|\| "Pensando y revisando tu contexto/);
 });
 
 test("radio YouTube approval executor fails failed processor results", () => {
@@ -408,7 +460,11 @@ test("radio YouTube approval executor fails failed processor results", () => {
 test("web assistant only auto-executes after explicit chat approval", () => {
   assert.equal(userAlreadyApprovedExecution("si, hazlo"), true);
   assert.equal(userAlreadyApprovedExecution("lo apruebo, ejecutalo"), true);
-  assert.equal(userAlreadyApprovedExecution("si quiero que empiece la tarea"), true);
+  assert.equal(userAlreadyApprovedExecution("si quiero que lo hagas"), true);
+  assert.equal(userAlreadyApprovedExecution("continuar"), false);
+  assert.equal(userAlreadyApprovedExecution("continua con la tarea"), false);
+  assert.equal(userAlreadyApprovedExecution("sigue con eso"), false);
+  assert.equal(userAlreadyApprovedExecution("ok continuar"), false);
   assert.equal(userAlreadyApprovedExecution("quiero que cambies el link de Black Room"), false);
   assert.equal(userAlreadyApprovedExecution("prepara la tarea para aprobar"), false);
 });
@@ -425,6 +481,8 @@ test("assistant approval prompt explains chat approval shortcut", () => {
   const dashboardChat = readFileSync("client/src/components/dashboard-assistant-chat.tsx", "utf8");
   const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
 
-  assert.match(dashboardChat, /Puedes decir "si, hazlo"/);
-  assert.match(assistantPage, /Puedes decir "si, hazlo"/);
+  assert.match(dashboardChat, /"si, hazlo"/);
+  assert.match(assistantPage, /"si, hazlo"/);
+  assert.doesNotMatch(dashboardChat, /Puedes decir "continuar"/);
+  assert.doesNotMatch(assistantPage, /Puedes decir "continuar"/);
 });

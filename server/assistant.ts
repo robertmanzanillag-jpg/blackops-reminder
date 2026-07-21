@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { DEFAULT_DEV_USER_ID, getCurrentUserId, getSystemUserId } from "./user-context";
+import { getCurrentUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
@@ -10,6 +10,7 @@ import { getCeoConversationHistory, saveCeoConversationMessage } from "./ceo-con
 import { formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "./blackroom-links";
 import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-agent";
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
+import { parseGoogleCalendarExternalId } from "./google-calendar";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
@@ -27,13 +28,35 @@ const ASSISTANT_TIMEZONE = "America/New_York";
 const CHEAP_SCOUT_CACHE_TTL_MS = 10 * 60 * 1000;
 const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
 const RADIO_EDIT_ESTIMATED_COST_TEXT = "Gasto estimado de esta corrida: $0.00 USD.";
-const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: preparo Drive, descargo el MP4 fuente, creo los clips y luego los subo a tu carpeta. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
-const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargo el YouTube, creo los clips, los subo a Drive y borro el video largo local. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
-const APPROVED_SHARED_CONNECTOR_OWNER_IDS = new Set([DEFAULT_DEV_USER_ID, "robert"]);
-const APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set(["robert"]);
+const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargando el YouTube, creando los clips, subiéndolos a Google Drive y borrando el video largo local al terminar. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
+const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: descargando el MP4 de Drive, creando los clips, subiéndolos a Google Drive y borrando el video largo local al terminar. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
+
+function writeAssistantSse(res: Response, payload: Record<string, unknown>): void {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function withRadioEditEstimatedCost(message: string): string {
+  return message.includes("Gasto estimado") || message.includes("Costo estimado")
+    ? message
+    : `${message}\n\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
+}
+
+function startAssistantStatusHeartbeat(res: Response, message: string): () => void {
+  let active = true;
+  const send = () => {
+    if (!active) return;
+    writeAssistantSse(res, { assistantStatus: message });
+  };
+  send();
+  const timer = setInterval(send, 15_000);
+  return () => {
+    active = false;
+    clearInterval(timer);
+  };
+}
 
 function estimateTokensFromText(text: string): number {
   return Math.ceil(Math.max(0, text.length) / 4);
@@ -41,69 +64,6 @@ function estimateTokensFromText(text: string): number {
 
 function formatAiApiCostPreview(provider: string, model: string, operation: string, estimatedCostUsd: number): string {
   return `Costo API aproximado antes de ejecutar: ${provider.toUpperCase()} ${model} para ${operation} puede salir hasta ~$${estimatedCostUsd.toFixed(4)} USD. Si ya lo aprobaste, sigo con la tarea.`;
-}
-
-function withRadioEditEstimatedCost(message: string): string {
-  return /gasto estimado/i.test(message) ? message : `${message}\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
-}
-
-async function isConfiguredSingleUserOwner(userId: string): Promise<boolean> {
-  try {
-    if (userId === getSystemUserId()) return true;
-  } catch {
-    // Robert approved this temporary owner path while DEFAULT_USER_ID is absent in production.
-  }
-
-  if (APPROVED_SHARED_CONNECTOR_OWNER_IDS.has(userId)) return true;
-
-  const user = await storage.getUser(userId).catch(() => undefined);
-  return Boolean(user?.username && APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES.has(user.username.trim().toLowerCase()));
-}
-
-function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
-  res.write(`data: ${JSON.stringify({
-    content: `No puedo ejecutar ${connectorName} para este usuario porque usa conectores compartidos de producción. Solo el owner configurado puede correr esta acción.`,
-    sharedConnectorBlocked: true,
-  })}\n\n`);
-}
-
-function writeAssistantSse(res: Response, payload: Record<string, unknown>): void {
-  if (res.writableEnded || res.destroyed) return;
-  try {
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  } catch {
-    // A disconnected browser should not stop long-running video work or history writes.
-  }
-}
-
-function formatElapsedAssistantWork(startedAt: number): string {
-  const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
-  const minutes = Math.floor(elapsedSeconds / 60);
-  const seconds = elapsedSeconds % 60;
-  return `${minutes}m ${seconds}s`;
-}
-
-function writeAssistantStatus(res: Response, statusMessage: string, startedAt: number): void {
-  const assistantStatus = `${statusMessage} Tiempo trabajando: ${formatElapsedAssistantWork(startedAt)}.`;
-  writeAssistantSse(res, { assistantStatus });
-}
-
-function startAssistantStatusHeartbeat(res: Response, statusMessage: string): () => void {
-  const startedAt = Date.now();
-  writeAssistantStatus(res, statusMessage, startedAt);
-  const timer = setInterval(() => {
-    writeAssistantStatus(res, statusMessage, startedAt);
-  }, 15_000);
-  timer.unref?.();
-
-  const stop = () => clearInterval(timer);
-  res.once("close", stop);
-
-  return () => {
-    res.removeListener("close", stop);
-    stop();
-  };
 }
 
 function normalizeAssistantCacheText(message = ""): string {
@@ -251,9 +211,9 @@ export function userAlreadyApprovedExecution(message?: string): boolean {
   if (!message) return false;
   const text = normalizeApprovalText(message);
   return [
-    /\b(hazlo|hazlo ya|dale|aprobado|apruebo|lo apruebo|confirmo|confirmado|autorizo|autorizado|ejecuta|ejecutalo|procede|empieza|comienza)\b/,
-    /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|empieza|comienza|ejecuta|ejecutalo|hazlo|procede)\b/,
-    /\b(quiero que|puedes)\b.*\b(empiece|empieces|comience|comiences|lo hagas|lo haga|ejecutes|ejecutarlo)\b/,
+    /\b(hazlo|hazlo ya|aprobado|apruebo|lo apruebo|confirmo|confirmado|autorizo|autorizado|ejecuta|ejecutalo|procede|empieza|comienza)\b/,
+    /\b(si|ok|dale)\b.*\b(cambialo|cambiame|actualizalo|agregalo|desactivalo|quitalo|ejecuta|ejecutalo|hazlo|procede|apruebo|aprobado|confirmo|autorizo)\b/,
+    /\b(quiero que|puedes)\b.*\b(lo hagas|lo haga|ejecutes|ejecutarlo|lo apruebes|apruebes|confirmes|autorices)\b/,
   ].some((pattern) => pattern.test(text));
 }
 
@@ -469,7 +429,7 @@ function extractBlackRoomLinkTarget(message: string): string | null {
   const cleaned = message.replace(/\s+/g, " ").trim();
   const patterns = [
     /(?:evento|link|bot[oó]n|timer|contador)\s+de\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
-    /(?:desactiva|desactivar|quitar|quita|oculta|ocultar|remueve|remover|borra|borrar)\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
+    /(?:desactiva|desactivar|quitar|quita|oculta|ocultar|remueve|remover|borra|borrar|elimina|eliminar)\s+(.+?)\s+de\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
     /(?:agrega|agregar|agregame|agr[eé]game|a[nñ]ade|a[nñ]adir|mete|meter|sube|subir)\s+(.+?)\s+(?:a|en)\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
     /(?:evento|link|bot[oó]n|timer|contador)\s+(.+?)\s+en\s+(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room/i,
   ];
@@ -483,6 +443,59 @@ function extractBlackRoomLinkTarget(message: string): string | null {
   return null;
 }
 
+function cleanBlackRoomLinkTitle(value: string): string | null {
+  const cleaned = value
+    .replace(/https?:\/\/[^\s"'<>]+/gi, " ")
+    .replace(/\b(?:a|por|con|para)\s*$/i, " ")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.length >= 2 ? cleaned : null;
+}
+
+function isGenericBlackRoomLinkTitle(value: string): boolean {
+  const normalized = normalizeApprovalText(value);
+  return (
+    /https?:\/\//i.test(value) ||
+    [
+      "este evento",
+      "el evento",
+      "este link",
+      "el link",
+      "link",
+      "url",
+      "la url",
+      "analytics",
+      "analiticas",
+      "analitica",
+      "data",
+      "datos",
+      "clicks",
+      "metricas",
+      "estadisticas",
+      "performance",
+      "rendimiento",
+    ].includes(normalized)
+  );
+}
+
+function extractBlackRoomLinkUpdateTarget(message: string): string | null {
+  const cleaned = message.replace(/https?:\/\/[^\s"'<>]+/gi, " ").replace(/\s+/g, " ").trim();
+  const targetArea = String.raw`(?:los\s+)?(?:links?|linsks?|website|web|p[aá]gina|builder)\s+de\s+black\s+room`;
+  const patterns = [
+    new RegExp(String.raw`(?:edita|editar|actualiza|actualizar|cambia|cambiar|modifica|modificar|reemplaza|reemplazar)\s+(?:el\s+)?(?:url|link|bot[oó]n|evento)?\s*(?:de\s+)?(.+?)\s+(?:en|de)\s+${targetArea}`, "i"),
+    new RegExp(String.raw`(?:edita|editar|actualiza|actualizar|cambia|cambiar|modifica|modificar|reemplaza|reemplazar)\s+(?:en\s+)?${targetArea}\s+(?:el\s+)?(?:url|link|bot[oó]n|evento)?\s*(?:de\s+)?(.+)$`, "i"),
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    const value = match?.[1] ? cleanBlackRoomLinkTitle(match[1]) : null;
+    if (value) return value;
+  }
+
+  return extractBlackRoomLinkTarget(message);
+}
+
 function extractFirstUrl(message: string): string | null {
   return message.match(/https?:\/\/[^\s"'<>]+/i)?.[0]?.replace(/[),.;]+$/, "") || null;
 }
@@ -492,18 +505,34 @@ export function buildDirectBlackRoomCommand(message?: string): { content: string
   const text = normalizeApprovalText(message);
   const isBlackRoom = text.includes("black room");
   const isWebsiteTarget = /\b(links?|linsks?|website|web|pagina|builder)\b/.test(text);
-  const wantsDeactivate = /\b(desactiv\w*|quit\w*|ocult\w*|remuev\w*|remov\w*|borr\w*)\b/.test(text);
+  const wantsDeactivate = /\b(desactiv\w*|quit\w*|ocult\w*|remuev\w*|remov\w*|borr\w*|elimin\w*)\b/.test(text);
+  const wantsUpdate = /\b(edit\w*|actualiz\w*|cambi\w*|modific\w*|reemplaz\w*)\b/.test(text);
   const wantsAdd = /\b(agg|agreg\w*|anad\w*|añad\w*|met\w*|sub\w*)\b/.test(text);
 
-  if (!isBlackRoom || !isWebsiteTarget || (!wantsDeactivate && !wantsAdd)) return null;
+  if (!isBlackRoom || !isWebsiteTarget || (!wantsDeactivate && !wantsAdd && !wantsUpdate)) return null;
+
+  if (wantsUpdate && !wantsDeactivate) {
+    const url = extractFirstUrl(message);
+    const target = extractBlackRoomLinkUpdateTarget(message);
+    if (!url || !target) return null;
+
+    return {
+      content: `Entendido. Voy a editar "${target}" en los links de Black Room.`,
+      command: `[BLACKROOM_LINK_UPDATE: ${JSON.stringify({
+        matchTitle: target,
+        title: target,
+        url,
+        icon: "ticket",
+      })}]`,
+    };
+  }
 
   const title = extractBlackRoomLinkTarget(message);
   if (!title) return null;
 
   if (wantsAdd && !wantsDeactivate) {
     const url = extractFirstUrl(message);
-    const normalizedTitle = normalizeApprovalText(title);
-    if (!url || normalizedTitle === "este evento" || normalizedTitle === "el evento") return null;
+    if (!url || isGenericBlackRoomLinkTitle(title)) return null;
 
     return {
       content: `Entendido. Voy a agregar "${title}" a los links de Black Room.`,
@@ -517,6 +546,7 @@ export function buildDirectBlackRoomCommand(message?: string): { content: string
   }
 
   if (!wantsDeactivate) return null;
+  if (isGenericBlackRoomLinkTitle(title)) return null;
 
   return {
     content: `Entendido. Voy a desactivar "${title}" de los links de Black Room sin borrar su data histórica.`,
@@ -819,6 +849,22 @@ function isAllDayEvent(startDate: Date, endDate: Date | null): boolean {
   return hours >= 23 && hours <= 25;
 }
 
+function isBlackRoomCalendarTask(task: { externalSource?: string | null; externalId?: string | null; title?: string | null; description?: string | null }): boolean {
+  if (task.externalSource !== "google") return true;
+  const parsed = parseGoogleCalendarExternalId(task.externalId);
+  if (parsed?.calendarId) return true;
+  const text = normalizeApprovalText(`${task.title || ""} ${task.description || ""}`);
+  return /\b(black room|blackroom|radio|kong)\b/.test(text);
+}
+
+function formatGoogleCalendarContextIds(externalId?: string | null): string {
+  const parsed = parseGoogleCalendarExternalId(externalId);
+  if (!parsed) return "";
+  return parsed.calendarId
+    ? ` (eventId: ${parsed.eventId}, calendarId: ${parsed.calendarId})`
+    : ` (eventId: ${parsed.eventId})`;
+}
+
 async function getCalendarContext(userId: string): Promise<string> {
   const tasks = await storage.getTasks(userId);
   const weeklyTasks = await storage.getWeeklyTasks(userId, startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -830,6 +876,7 @@ async function getCalendarContext(userId: string): Promise<string> {
 
   const upcomingTasks = tasks
     .filter(t => new Date(t.date) >= now && new Date(t.date) <= twelveMonthsFromNow)
+    .filter(isBlackRoomCalendarTask)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const tasksByDay: Record<string, typeof tasks> = {};
@@ -851,7 +898,7 @@ async function getCalendarContext(userId: string): Promise<string> {
       const radioDate = new Date(radio.date);
       const dateStr = format(radioDate, "EEEE d 'de' MMMM", { locale: es });
       const desc = radio.description ? stripHtml(radio.description).replace(/\n/g, " | ") : "Sin DJs programados";
-      context += `- ${dateStr} (eventId: ${radio.externalId}): ${desc}\n`;
+      context += `- ${dateStr}${formatGoogleCalendarContextIds(radio.externalId)}: ${desc}\n`;
     }
     context += `\n`;
   }
@@ -866,7 +913,7 @@ async function getCalendarContext(userId: string): Promise<string> {
       const time = isAllDay ? "Todo el día" : format(taskDate, "HH:mm");
       const status = task.completed ? "✓" : "○";
       const source = task.externalSource ? ` [${task.externalSource}]` : "";
-      const eventId = task.externalId ? ` (eventId: ${task.externalId})` : "";
+      const eventId = formatGoogleCalendarContextIds(task.externalId);
       let descText = "";
       if (task.description) {
         const cleaned = stripHtml(task.description);
@@ -980,6 +1027,7 @@ EVENTOS DE RADIO (Black Room Radio):
 - Son eventos de "Todo el día" con DJs programados por hora (7pm, 8pm, 9pm)
 - La descripción muestra: "7: nombre_dj" = DJ a las 7pm
 - Cada Radio tiene un eventId único para modificarlo
+- El Google Calendar conectado para estos eventos es el calendario de Black Room. Si el contexto incluye calendarId, consérvalo al editar. Si no aparece, el backend usa el calendario Black Room configurado/conectado.
 
 COMANDOS DISPONIBLES:
 - [CREAR_TAREA: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "priority": "normal|high|low"}]
@@ -993,10 +1041,10 @@ COMANDOS DISPONIBLES:
 - [BLACKROOM_LINK_DEACTIVATE: {"title": "...", "url": "...", "reason": "..."}]
 - [BLACKROOM_LINK_PERFORMANCE: {"title": "...", "url": "...", "limit": 10}]
 - [BLACKROOM_TIMER_ADD: {"title": "...", "date": "YYYY-MM-DDTHH:mm", "url": "https://...", "partyTitle": "..."}]
-- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|auto_after_connection|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
-- [MODIFICAR_RADIO: {"eventId": "ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
-- [CREAR_EVENTO_GOOGLE: {"title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "..."}]
-- [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
+- [METRICOOL_AUTOMATION: {"clipsPerAccount": 8, "publishMode": "approval_required|draft_only", "riskTolerance": "safe|growth|aggressive", "platforms": ["tiktok", "instagram"], "campaign": "...", "notes": "..."}]
+- [MODIFICAR_RADIO: {"eventId": "ID", "calendarId": "BLACK_ROOM_CALENDAR_ID", "description": "7: DJ1\\n8: DJ2\\n9: DJ3"}]
+- [CREAR_EVENTO_GOOGLE: {"title": "...", "calendarId": "BLACK_ROOM_CALENDAR_ID", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
+- [EDITAR_EVENTO_GOOGLE: {"eventId": "ID", "calendarId": "BLACK_ROOM_CALENDAR_ID", "title": "...", "date": "YYYY-MM-DDTHH:mm:ss", "endDate": "...", "description": "...", "location": "...", "isAllDay": false}]
 - [GUARDAR_INFO: {"category": "...", "key": "...", "value": "..."}]
 - [AGREGAR_INVERSION: {"symbol": "AAPL", "name": "Apple Inc", "type": "stock|etf|crypto|bond|fund", "quantity": "10", "avgBuyPrice": "150.50"}]
 - [ACTUALIZAR_INVERSION: {"symbol": "AAPL", "quantity": "15", "avgBuyPrice": "145.00"}]
@@ -1052,7 +1100,7 @@ Puedes crear clips verticales de promo con videos locales ya conectados desde la
 Puedes preparar campanas, clips y colas de publicacion con Metricool usando METRICOOL_AUTOMATION.
 - Usa este comando cuando el usuario pida postear, publicar, programar, correr campanas, preparar cola, o automatizar clips/redes con Metricool.
 - publishMode por defecto debe ser "approval_required".
-- Usa "auto_after_connection" solo si el usuario pide explicitamente automatico/live; aun asi el sistema lo pondra como accion pendiente y el backend mantiene las banderas de seguridad.
+- Si el usuario pide automatico/live, usa igualmente "approval_required"; Metricool MVP requiere revision manual y evidencia real antes de contar publicaciones.
 - Nunca digas que ya publicaste en redes. Di que preparaste la cola o que quedo pendiente de aprobacion.
 - Si el usuario pide publicar inmediatamente, crea la accion Metricool y explica que necesita aprobacion y que real publish requiere CLIPPERS_ENABLE_REAL_PUBLISH=true y METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH=false.
 
@@ -1182,7 +1230,6 @@ export function registerAssistantRoutes(app: Express): void {
     try {
       const userId = getCurrentUserId(req);
       requestUserId = userId;
-      const isOwnerUser = await isConfiguredSingleUserOwner(userId);
       const { message, conversationHistory = [], images } = req.body;
       
       console.log(`[Assistant] Request received - message: ${message ? 'yes' : 'no'}, images: ${images?.length || 0}`);
@@ -1230,20 +1277,13 @@ export function registerAssistantRoutes(app: Express): void {
           });
         }
 
-        writeAssistantSse(res, { content: directRadioDriveVideoCommand.content });
+        res.write(`data: ${JSON.stringify({ content: directRadioDriveVideoCommand.content })}\n\n`);
 
         if (directRadioDriveVideoCommandNeedsDriveFolder(directRadioDriveVideoCommand) || directRadioDriveVideoCommand.needsMusicUrl) {
           await saveCeoConversationMessage(userId, "assistant", directRadioDriveVideoCommand.content).catch((historyError) => {
             console.error("Error saving direct radio Drive video folder question:", historyError);
           });
-          writeAssistantSse(res, { done: true });
-          res.end();
-          return;
-        }
-
-        if (!isOwnerUser) {
-          writeOwnerOnlySharedConnectorBlock(res, "Google Drive/radio video");
-          writeAssistantSse(res, { done: true });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           res.end();
           return;
         }
@@ -1252,31 +1292,27 @@ export function registerAssistantRoutes(app: Express): void {
           const stopStatusHeartbeat = startAssistantStatusHeartbeat(res, RADIO_DRIVE_VIDEO_STATUS_MESSAGE);
           const result = await executeDirectRadioDriveVideoCommand(directRadioDriveVideoCommand, userId).finally(stopStatusHeartbeat);
           const summary = formatRadioDriveVideoResult(result);
-          if (result.status === "failed") {
-            writeAssistantSse(res, { radioDriveVideoError: summary });
-          } else {
-            writeAssistantSse(res, {
-              content: `\n\n${summary}`,
-              radioDriveVideoProcessed: result.status === "completed",
-              radioDriveVideoNeedsConfirmation: result.status === "queued",
-              radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            });
-          }
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${summary}`,
+            radioDriveVideoProcessed: result.status === "completed",
+            radioDriveVideoNeedsConfirmation: result.status === "queued",
+            radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\n${directRadioDriveVideoCommand.command}\n${summary}`).catch((historyError) => {
             console.error("Error saving direct radio Drive video assistant response:", historyError);
           });
         } catch (e: any) {
-          const errorText = e.message || "No pude procesar el MP4 de Google Drive para radio";
-          writeAssistantSse(res, { radioDriveVideoError: withRadioEditEstimatedCost(errorText) });
+          const errorText = withRadioEditEstimatedCost(e.message || "No pude procesar el MP4 de Google Drive para radio");
+          res.write(`data: ${JSON.stringify({ radioDriveVideoError: errorText })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioDriveVideoCommand.content}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct radio Drive video assistant error:", historyError);
           });
         }
 
-        writeAssistantSse(res, { done: true });
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
         return;
       }
@@ -1293,20 +1329,13 @@ export function registerAssistantRoutes(app: Express): void {
           });
         }
 
-        writeAssistantSse(res, { content: directRadioYoutubeCommand.content });
+        res.write(`data: ${JSON.stringify({ content: directRadioYoutubeCommand.content })}\n\n`);
 
         if (directRadioYoutubeCommandNeedsDriveFolder(directRadioYoutubeCommand) || directRadioYoutubeCommand.needsMusicUrl) {
           await saveCeoConversationMessage(userId, "assistant", directRadioYoutubeCommand.content).catch((historyError) => {
             console.error("Error saving direct radio YouTube folder question:", historyError);
           });
-          writeAssistantSse(res, { done: true });
-          res.end();
-          return;
-        }
-
-        if (!isOwnerUser) {
-          writeOwnerOnlySharedConnectorBlock(res, "YouTube, Google Drive y clips de radio");
-          writeAssistantSse(res, { done: true });
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           res.end();
           return;
         }
@@ -1315,39 +1344,33 @@ export function registerAssistantRoutes(app: Express): void {
           const stopStatusHeartbeat = startAssistantStatusHeartbeat(res, RADIO_YOUTUBE_STATUS_MESSAGE);
           const result = await executeDirectRadioYoutubeCommand(directRadioYoutubeCommand, userId).finally(stopStatusHeartbeat);
           const summary = formatRadioYoutubeResult(result);
-          if (result.status === "failed") {
-            writeAssistantSse(res, { radioYoutubeError: summary });
-          } else {
-            writeAssistantSse(res, {
-              content: `\n\n${summary}`,
-              radioYoutubeProcessed: result.status === "completed",
-              radioYoutubeNeedsConfirmation: result.status === "queued",
-              radioYoutubeNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            });
-          }
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${summary}`,
+            radioYoutubeProcessed: result.status === "completed",
+            radioYoutubeNeedsConfirmation: result.status === "queued",
+            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\n${directRadioYoutubeCommand.command}\n${summary}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant response:", historyError);
           });
         } catch (e: any) {
-          const errorText = e.message || "No pude procesar el link de YouTube para radio";
-          writeAssistantSse(res, { radioYoutubeError: withRadioEditEstimatedCost(errorText) });
+          const errorText = withRadioEditEstimatedCost(e.message || "No pude procesar el link de YouTube para radio");
+          res.write(`data: ${JSON.stringify({ radioYoutubeError: errorText })}\n\n`);
           await saveCeoConversationMessage(userId, "assistant", `${directRadioYoutubeCommand.content}\nError: ${errorText}`).catch((historyError) => {
             console.error("Error saving direct radio YouTube assistant error:", historyError);
           });
         }
 
-        writeAssistantSse(res, { done: true });
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
         res.end();
         return;
       }
 
       const developerAutopilotHandoff = message
-        ? isOwnerUser
-          ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
-          : null
+        ? await createDeveloperAutopilotHandoff(userId, message, "web_chat")
         : null;
       if (developerAutopilotHandoff && developerAutopilotHandoff.status !== "invalid_request") {
         res.setHeader("Content-Type", "text/event-stream");
@@ -1388,13 +1411,6 @@ export function registerAssistantRoutes(app: Express): void {
           await saveCeoConversationMessage(userId, "assistant", directGoogleDriveFolderCommand.content).catch((historyError) => {
             console.error("Error saving direct Google Drive folder question:", historyError);
           });
-          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-          res.end();
-          return;
-        }
-
-        if (!isOwnerUser) {
-          writeOwnerOnlySharedConnectorBlock(res, "Google Drive");
           res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
           res.end();
           return;
@@ -1493,13 +1509,6 @@ export function registerAssistantRoutes(app: Express): void {
         }
 
         res.write(`data: ${JSON.stringify({ content: directGoogleCalendarCommand.content })}\n\n`);
-
-        if (!isOwnerUser) {
-          writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
-          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-          res.end();
-          return;
-        }
 
         try {
           const pendingAction = await createPendingActionForApproval({
@@ -1649,10 +1658,8 @@ export function registerAssistantRoutes(app: Express): void {
         fullResponse = `${directMetricoolCommand.content}\n${directMetricoolCommand.command}`;
         res.write(`data: ${JSON.stringify({ content: directMetricoolCommand.content })}\n\n`);
       } else if (modelRoute.tier === "subscription_handoff") {
-        const handoff = isOwnerUser
-          ? await createDeveloperAutopilotHandoff(userId, message || "trabajo pesado para membresia", "web_chat")
-          : null;
-        fullResponse = handoff?.status === "subscription_brief"
+        const handoff = await createDeveloperAutopilotHandoff(userId, message || "trabajo pesado para membresia", "web_chat");
+        fullResponse = handoff.status === "subscription_brief"
           ? handoff.message
           : [
               "Para ahorrar API, este trabajo debe ir por tu membresia ChatGPT/Codex Pro en vez de resolverse con modelo fuerte dentro del app.",
@@ -1818,10 +1825,6 @@ export function registerAssistantRoutes(app: Express): void {
       let radioYoutubeMatch;
       while ((radioYoutubeMatch = radioYoutubeRegex.exec(fullResponse)) !== null) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "YouTube, Google Drive y clips de radio");
-            continue;
-          }
           const radioYoutubeData = JSON.parse(radioYoutubeMatch[1]);
           const stopStatusHeartbeat = startAssistantStatusHeartbeat(res, RADIO_YOUTUBE_STATUS_MESSAGE);
           const result = await executeDirectRadioYoutubeCommand({
@@ -1838,24 +1841,19 @@ export function registerAssistantRoutes(app: Express): void {
             content: "Voy a procesar ese YouTube para radio.",
             command: radioYoutubeMatch[0],
           }, userId).finally(stopStatusHeartbeat);
-          const summary = formatRadioYoutubeResult(result);
-          if (result.status === "failed") {
-            writeAssistantSse(res, { radioYoutubeError: summary });
-          } else {
-            writeAssistantSse(res, {
-              content: `\n\n${summary}`,
-              radioYoutubeProcessed: result.status === "completed",
-              radioYoutubeNeedsConfirmation: result.status === "queued",
-              radioYoutubeNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            });
-          }
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${formatRadioYoutubeResult(result)}`,
+            radioYoutubeProcessed: result.status === "completed",
+            radioYoutubeNeedsConfirmation: result.status === "queued",
+            radioYoutubeNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
         } catch (e: any) {
-          writeAssistantSse(res, {
+          res.write(`data: ${JSON.stringify({
             radioYoutubeError: withRadioEditEstimatedCost(e.message || "No pude procesar el link de YouTube para radio"),
-          });
+          })}\n\n`);
         }
       }
 
@@ -1863,10 +1861,6 @@ export function registerAssistantRoutes(app: Express): void {
       let radioDriveVideoMatch;
       while ((radioDriveVideoMatch = radioDriveVideoRegex.exec(fullResponse)) !== null) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "Google Drive/radio video");
-            continue;
-          }
           const radioDriveVideoData = JSON.parse(radioDriveVideoMatch[1]);
           const stopStatusHeartbeat = startAssistantStatusHeartbeat(res, RADIO_DRIVE_VIDEO_STATUS_MESSAGE);
           const result = await executeDirectRadioDriveVideoCommand({
@@ -1883,24 +1877,19 @@ export function registerAssistantRoutes(app: Express): void {
             content: "Voy a procesar ese MP4 de Drive para radio.",
             command: radioDriveVideoMatch[0],
           }, userId).finally(stopStatusHeartbeat);
-          const summary = formatRadioDriveVideoResult(result);
-          if (result.status === "failed") {
-            writeAssistantSse(res, { radioDriveVideoError: summary });
-          } else {
-            writeAssistantSse(res, {
-              content: `\n\n${summary}`,
-              radioDriveVideoProcessed: result.status === "completed",
-              radioDriveVideoNeedsConfirmation: result.status === "queued",
-              radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
-              pendingActionId: result.pendingActionId,
-              driveFolderPath: result.driveFolderPath,
-              clips: result.clips,
-            });
-          }
+          res.write(`data: ${JSON.stringify({
+            content: `\n\n${formatRadioDriveVideoResult(result)}`,
+            radioDriveVideoProcessed: result.status === "completed",
+            radioDriveVideoNeedsConfirmation: result.status === "queued",
+            radioDriveVideoNeedsDjName: result.status === "needs_dj_name",
+            pendingActionId: result.pendingActionId,
+            driveFolderPath: result.driveFolderPath,
+            clips: result.clips,
+          })}\n\n`);
         } catch (e: any) {
-          writeAssistantSse(res, {
+          res.write(`data: ${JSON.stringify({
             radioDriveVideoError: withRadioEditEstimatedCost(e.message || "No pude procesar el MP4 de Google Drive para radio"),
-          });
+          })}\n\n`);
         }
       }
 
@@ -1908,10 +1897,6 @@ export function registerAssistantRoutes(app: Express): void {
       let googleDriveCreateFolderMatch;
       while ((googleDriveCreateFolderMatch = googleDriveCreateFolderRegex.exec(fullResponse)) !== null) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "Google Drive");
-            continue;
-          }
           const driveData = JSON.parse(googleDriveCreateFolderMatch[1]);
           const result = await createGoogleDriveFolderPath({
             userId,
@@ -1999,12 +1984,6 @@ export function registerAssistantRoutes(app: Express): void {
       const radioMatch = fullResponse.match(/\[MODIFICAR_RADIO:\s*(\{[^}]+\})\]/);
       if (radioMatch) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
-            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-            res.end();
-            return;
-          }
           const radioData = JSON.parse(radioMatch[1]);
           const pendingAction = await createPendingActionForApproval({
             userId,
@@ -2037,12 +2016,6 @@ export function registerAssistantRoutes(app: Express): void {
       const googleEventMatch = fullResponse.match(/\[CREAR_EVENTO_GOOGLE:\s*(\{[^}]+\})\]/);
       if (googleEventMatch) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
-            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-            res.end();
-            return;
-          }
           const eventData = JSON.parse(googleEventMatch[1]);
           const pendingAction = await createPendingActionForApproval({
             userId,
@@ -2075,10 +2048,6 @@ export function registerAssistantRoutes(app: Express): void {
       let editGoogleEventMatch;
       while ((editGoogleEventMatch = editGoogleEventRegex.exec(fullResponse)) !== null) {
         try {
-          if (!isOwnerUser) {
-            writeOwnerOnlySharedConnectorBlock(res, "Google Calendar");
-            continue;
-          }
           const eventData = JSON.parse(editGoogleEventMatch[1]);
           if (!eventData.eventId) {
             res.write(`data: ${JSON.stringify({ googleEventError: "Falta eventId para editar el evento" })}\n\n`);
@@ -2258,9 +2227,7 @@ export function registerAssistantRoutes(app: Express): void {
             executionMode: "user_requested",
             actionType: "marketing.metricool_automation",
             resourceType: "metricool_execution_queue",
-            title: metricoolData.publishMode === "auto_after_connection"
-              ? "Preparar Metricool auto publish"
-              : "Preparar cola Metricool",
+            title: "Preparar cola Metricool",
             description: buildMetricoolPendingDescription(metricoolData),
             input: metricoolData,
             proposedChanges: {

@@ -93,10 +93,9 @@ function cleanFolderHint(value?: string): string | null {
     .replace(/[."'“”‘’]+$/g, "")
     .replace(/^["'“”‘’]+/g, "")
     .replace(/\s+/g, " ")
-    .replace(/^[\s:]+|[\s:]+$/g, "")
     .trim();
 
-  if (/^(?:de|del|la|el|los|las|mi|mis|tu|tus|su|sus|en|a|esta|este|esa|ese|enviada?|enviado|link|url|aqui|ah[ií]|drive|google drive)$/i.test(cleaned)) return null;
+  if (/^(?:de|del|la|el|los|las|en|a)$/i.test(cleaned)) return null;
   return cleaned.length >= 2 ? cleaned : null;
 }
 
@@ -188,17 +187,6 @@ function normalizeRequestedClipCount(value?: string | null): number | undefined 
 
 function extractRequestedRadioClipCounts(message: string): { instagramClipCount?: number; tiktokClipCount?: number } {
   const text = normalizeText(message);
-  const enumeratesOneClipPerPlatform = (
-    /\b1[\s.)/-]+(?:tiktok|reels?)\b[\s\S]{0,180}\b2[\s.)/-]+(?:ig|instagram)\b/.test(text) ||
-    /\b1[\s.)/-]+(?:ig|instagram)\b[\s\S]{0,180}\b2[\s.)/-]+(?:tiktok|reels?)\b/.test(text)
-  );
-  const totalClipCount = normalizeRequestedClipCount(
-    text.match(/\b(\d{1,2})\s+(?:clips?|videos?|reels?|edits?)\s+(?:listos?|total(?:es)?|para\s+publicar)\b/i)?.[1],
-  );
-  if (enumeratesOneClipPerPlatform && totalClipCount && totalClipCount <= 2) {
-    return {};
-  }
-
   const sharedCount = normalizeRequestedClipCount(
     text.match(/\b(\d{1,2})\s+(?:clips?|videos?|reels?|edits?)\b(?=[\s\S]{0,100}\b(?:ig|instagram)\b)(?=[\s\S]{0,100}\btiktok\b)/i)?.[1],
   );
@@ -238,12 +226,7 @@ export function extractDriveFolderPathFromMessage(message: string): string[] | n
     ];
 
     for (const pattern of driveUrlChildPatterns) {
-      const match = messageWithoutDriveUrls.match(pattern);
-      const matchText = match?.[0] || "";
-      if (match && !/\b(?:crea|crear|creame|créame|haz(?:me)?|usa(?:r)?|subcarpeta|llamada?|nombre)\b/i.test(matchText)) {
-        continue;
-      }
-      const cleaned = cleanCreateFolderHint(match?.[1]);
+      const cleaned = cleanCreateFolderHint(messageWithoutDriveUrls.match(pattern)?.[1]);
       if (cleaned) return splitDriveFolderPath(cleaned);
     }
   }
@@ -479,10 +462,7 @@ function formatRadioVideoResult(result: RadioYoutubeProcessResult | RadioDriveVi
   }
 
   if (result.status !== "completed") {
-    return [
-      `No pude completar los clips: ${result.error || "error desconocido"}`,
-      `Gasto estimado de esta edición: $${ESTIMATED_COST_PER_EDITED_VIDEO_USD.toFixed(2)} USD.`,
-    ].join("\n");
+    return `No pude completar los clips: ${result.error || "error desconocido"}`;
   }
 
   const links = (result.clips || [])

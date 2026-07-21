@@ -60,6 +60,10 @@ const SKIP_FILES = [
   "data_export_yearly.csv",
 ];
 
+const SKIP_PATH_PATTERNS = [
+  /^dist(?:[./-]|$)/,
+];
+
 const TEXT_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
@@ -85,6 +89,7 @@ function gitVisibleFiles(): string[] {
 function shouldIndex(file: string): boolean {
   if (SKIP_FILES.includes(file)) return false;
   if (SKIP_PREFIXES.some((prefix) => file.startsWith(prefix))) return false;
+  if (SKIP_PATH_PATTERNS.some((pattern) => pattern.test(file))) return false;
   if (/(^|[/_-])(dump|export|backup|credentials?|secrets?|tokens?)([/_.-]|$)/i.test(file)) return false;
   const extension = path.extname(file);
   if (!TEXT_EXTENSIONS.has(extension)) return false;
@@ -153,6 +158,7 @@ function analyze(file: string): FileNode {
 
 function addDirectory(directories: CodebaseMap["directories"], file: string, indexed: boolean, kind: string) {
   if (SKIP_PREFIXES.some((prefix) => file.startsWith(prefix))) return;
+  if (SKIP_PATH_PATTERNS.some((pattern) => pattern.test(file))) return;
   if (SKIP_FILES.includes(file)) return;
   const dir = path.dirname(file) === "." ? "." : path.dirname(file).split(path.sep).slice(0, 2).join("/");
   directories[dir] ??= { files: 0, indexed: 0, kinds: {} };

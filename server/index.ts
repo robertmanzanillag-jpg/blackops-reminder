@@ -1,6 +1,7 @@
 import "./env-loader";
-import express, { type Request, Response, NextFunction } from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { registerBlackRoomControlRoutes } from "./blackroom-control-routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startReminderScheduler } from "./reminder-scheduler";
@@ -21,10 +22,6 @@ const httpServer = createServer(app);
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
-
-app.get(["/health", "/api/health"], (_req, res) => {
-  res.status(200).json({ status: "ok" });
-});
 
 async function getStartupMaintenanceUserIds(): Promise<string[]> {
   const configuredOwners = (await storage.getEnabledTelegramConfigs())
@@ -58,14 +55,14 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: '8mb',
-    verify: (req, _res, buf) => {
+    limit: '50mb',
+    verify: (req: Request, _res: Response, buf: Buffer) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
+app.use(express.urlencoded({ extended: false }));
 
 app.get("/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt", (_req, res) => {
   res
@@ -77,6 +74,15 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
   res
     .type("text/plain")
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "blackops-reminder",
+    checkedAt: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+  });
 });
 
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
@@ -356,6 +362,7 @@ app.use((req, res, next) => {
 (async () => {
   registerLocalAuthRoutes(app);
   await registerRoutes(httpServer, app);
+  registerBlackRoomControlRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -385,7 +392,6 @@ app.use((req, res, next) => {
     {
       port,
       host,
-      reusePort: host === "0.0.0.0",
     },
     () => {
       log(`serving on ${host}:${port}`);

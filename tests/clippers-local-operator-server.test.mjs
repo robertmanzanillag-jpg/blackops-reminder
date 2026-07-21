@@ -192,6 +192,7 @@ async function resetTestWorkspace() {
   await rm(operatorAuditLogPath, { force: true });
   await rm(streamerGrowthMetricsPath, { force: true });
   await rm(path.join(workspaceRoot, "evidence-drop", "real-clip-permissions"), { force: true, recursive: true });
+  await rm(path.join(workspaceRoot, "research"), { force: true, recursive: true });
   await rm(path.join(testWorkspaceParent, "package.json"), { force: true });
 }
 
@@ -513,6 +514,7 @@ test("Clippers local operator server serves status and guarded workspace files",
         ["/api/clippers/real-clip-acquisition-workbench.html", "Preparar clips"],
         ["/api/clippers/tiktok-launch-authorization.html", "Revisar autorizacion de TikTok"],
         ["/api/clippers/streamer-growth-ceo.html", "Control de crecimiento a 10K"],
+        ["/api/clippers/streamer-100-campaign.html", "Campana de 100 streamers"],
         ["/api/clippers/go-live-gap-resolver.html", "Resolver bloqueos"],
         ["/api/clippers/next-metricool-action.html", "Proxima accion en Metricool"],
       ]) {
@@ -546,7 +548,29 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(streamerGrowthCeoHtml, /dos cuentas 100% streamers hasta 10K seguidores por cuenta/);
       assert.match(streamerGrowthCeoHtml, /Streamer Highlights/);
       assert.match(streamerGrowthCeoHtml, /Streamer Reactions/);
+      assert.match(streamerGrowthCeoHtml, /100 blanket approvals/);
       assert.match(streamerGrowthCeoHtml, /Human approval gates/);
+
+      const streamerCampaignResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+      assert.equal(streamerCampaignResponse.status, 200);
+      const streamerCampaign = await streamerCampaignResponse.json();
+      assert.equal(streamerCampaign.targetStreamers, 100);
+      assert.equal(streamerCampaign.blanketApprovedRows, 0);
+      assert.ok(streamerCampaign.rows.every((row) => row.canPublish === false));
+
+      const streamerCampaignCsvResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.csv`);
+      assert.equal(streamerCampaignCsvResponse.status, 200);
+      const streamerCampaignCsv = await streamerCampaignCsvResponse.text();
+      assert.match(streamerCampaignCsv, /^handle,twitch_url,cohort,language,country,category,contact_email/m);
+      assert.doesNotMatch(streamerCampaignCsv, /can_publish,yes/);
+
+      const permissionPacketsResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-request-packets.json`);
+      assert.equal(permissionPacketsResponse.status, 200);
+      const permissionPackets = await permissionPacketsResponse.json();
+      assert.equal(permissionPackets.rows[0].permissionScope, "blanket_creator_tiktok_commercial");
+      assert.match(permissionPackets.rows[0].message, /blanket permission/i);
+      assert.match(permissionPackets.rows[0].message, /future clips/i);
+      assert.match(permissionPackets.rows[0].message, /monetize/i);
       assert.match(home, /Batch actual/);
       assert.match(home, /Next row/);
       assert.match(home, /First publish/);
@@ -2718,6 +2742,50 @@ test("Streamer Growth CEO ignores follower and view claims in account routing pr
     assert.equal(status.streamerGrowthCeo.progressKnown, false);
     assert.equal(status.streamerGrowthCeo.metricsSource, "metricool_not_imported");
     assert.equal(status.streamerGrowthCeo.nextAction.stage, "capture_metricool_baseline");
+  });
+});
+
+test("Streamer blanket approvals require complete scopes and a real local evidence file", async () => {
+  const port = "5527";
+  const researchDir = path.join(workspaceRoot, "research");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const evidenceDir = path.join(workspaceRoot, "evidence-drop", "real-clip-permissions");
+  const evidenceUrl = "/clippers-workspace/evidence-drop/real-clip-permissions/real-creator-xyz.md";
+  await mkdir(researchDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({
+    streamers: [{
+      handle: "RealCreatorXYZ",
+      twitchOfficialUrl: "https://www.twitch.tv/realcreatorxyz",
+      contact: { type: "management_email", value: "rights@creatorhq.com", evidenceUrl: "https://creatorhq.com/contact" },
+      clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission is required.", evidenceUrl: "https://creatorhq.com/policy" },
+    }],
+  })}\n`);
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at"];
+  const writeOutreach = async (evidenceLink) => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+    "RealCreatorXYZ", "rights@creatorhq.com", "responded", "approved_blanket", "yes", "yes", "yes", "yes", evidenceLink,
+    "Creator granted written blanket commercial TikTok permission with complete scope.", "2026-07-20T12:00:00Z",
+  ])}\n`);
+  await writeOutreach("https://creatorhq.com/remote-proof");
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const remoteResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+    assert.equal(remoteResponse.status, 200);
+    const remoteCampaign = await remoteResponse.json();
+    assert.equal(remoteCampaign.rows.length, 1, JSON.stringify(remoteCampaign));
+    assert.equal(remoteCampaign.rows[0].rightsPolicy, "request_required");
+    assert.equal(remoteCampaign.rows[0].permissionStatus, "approval_evidence_incomplete");
+    assert.equal(remoteCampaign.blanketApprovedRows, 0);
+    assert.equal(remoteCampaign.rows[0].canPublish, false);
+
+    await mkdir(evidenceDir, { recursive: true });
+    await writeFile(path.join(evidenceDir, "real-creator-xyz.md"), "Creator replied in writing and granted both TikTok pages commercial use of current and future stream clips, including vertical edits, captions, attribution rules, and revocation on written request.\n");
+    await writeOutreach(evidenceUrl);
+    const localResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+    assert.equal(localResponse.status, 200);
+    const localCampaign = await localResponse.json();
+    assert.equal(localCampaign.rows[0].permissionStatus, "approved_blanket");
+    assert.equal(localCampaign.blanketApprovedRows, 1);
+    assert.equal(localCampaign.rows[0].canPublish, false);
   });
 });
 

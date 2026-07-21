@@ -45,8 +45,6 @@ export function DashboardAssistantChat() {
       .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "Listo, lo mande al calendario.")
       .replace(/\[EDITAR_EVENTO_GOOGLE:.*?\]/g, "Listo, actualice el evento.")
       .replace(/\[MODIFICAR_RADIO:.*?\]/g, "Listo, actualice Radio.")
-      .replace(/\[RADIO_YOUTUBE_CLIPS:.*?\]/g, "")
-      .replace(/\[RADIO_DRIVE_VIDEO_CLIPS:.*?\]/g, "")
       .replace(/\[AGREGAR_INVERSION:.*?\]/g, "Listo, agregue la inversion.")
       .replace(/\[ACTUALIZAR_INVERSION:.*?\]/g, "Listo, actualice la inversion.")
       .replace(/\[ELIMINAR_INVERSION:.*?\]/g, "Listo, elimine la inversion.")
@@ -65,7 +63,7 @@ export function DashboardAssistantChat() {
     setMessages((prev) => [...prev, { role: "user", content: text }]);
     setInput("");
     setIsLoading(true);
-    setAssistantStatus("Revisando tu contexto...");
+    setAssistantStatus("Revisando tu calendario...");
 
     try {
       const response = await fetch("/api/assistant/chat", {
@@ -87,108 +85,103 @@ export function DashboardAssistantChat() {
 
       const decoder = new TextDecoder();
       let assistantMessage = "";
-      let streamBuffer = "";
-      let sawAssistantStatus = false;
-      let sawTerminalAssistantEvent = false;
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-      const updateAssistantMessage = () => {
-        setMessages((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = {
-            role: "assistant",
-            content: cleanAssistantText(assistantMessage) || "Trabajando...",
-          };
-          return next;
-        });
-      };
-
-      const handleStreamData = (data: any) => {
-        if (data.content) {
-          assistantMessage += data.content;
-          setAssistantStatus("");
-          updateAssistantMessage();
-        }
-        if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
-          sawAssistantStatus = true;
-          setAssistantStatus(data.assistantStatus.trim());
-        }
-        if (
-          data.radioYoutubeProcessed ||
-          data.radioYoutubeNeedsConfirmation ||
-          data.radioYoutubeNeedsDjName ||
-          data.radioDriveVideoProcessed ||
-          data.radioDriveVideoNeedsConfirmation ||
-          data.radioDriveVideoNeedsDjName
-        ) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-        }
-        if (
-          data.taskCreated ||
-          data.googleEventCreated ||
-          data.actionExecuted ||
-          data.radioUpdated ||
-          data.investmentCreated ||
-          data.investmentUpdated ||
-          data.promoVideosGenerated
-        ) {
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-          queryClient.invalidateQueries({ queryKey: ["investments"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
-        }
-        if (data.promoVideoError) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nNo pude generar los videos de promo: ${data.promoVideoError}`;
-          updateAssistantMessage();
-        }
-        if (data.actionExecuted) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-          queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
-          updateAssistantMessage();
-        }
-        if (data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.metricoolAutomationError || data.actionExecutionError) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.metricoolAutomationError || data.actionExecutionError}`;
-          updateAssistantMessage();
-        }
-        if (data.approvalRequired && data.pendingAction) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
-          queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
-          updateAssistantMessage();
-        }
-      };
-
-      const processStreamEvent = (eventText: string) => {
-        for (const line of eventText.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            handleStreamData(JSON.parse(line.slice(6)));
-          } catch (error) {}
-        }
-      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        streamBuffer += decoder.decode(value, { stream: true });
-        const events = streamBuffer.split("\n\n");
-        streamBuffer = events.pop() || "";
-        for (const eventText of events) processStreamEvent(eventText);
-      }
-      streamBuffer += decoder.decode();
-      if (streamBuffer.trim()) processStreamEvent(streamBuffer);
-      if (sawAssistantStatus && !sawTerminalAssistantEvent && !/Listo\.|No pude completar|Pendiente de aprobacion|Total estimado de esta edición/i.test(assistantMessage)) {
-        assistantMessage += "\n\nNo pude completar la accion: el proceso terminó sin devolver resultado final. Gasto estimado de esta corrida: $0.00 USD.";
-        updateAssistantMessage();
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
+              setAssistantStatus(data.assistantStatus.trim());
+            }
+            if (data.content) {
+              assistantMessage += data.content;
+              setAssistantStatus("");
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage) || "Trabajando...",
+                };
+                return next;
+              });
+            }
+            if (
+              data.taskCreated ||
+              data.googleEventCreated ||
+              data.actionExecuted ||
+              data.radioUpdated ||
+              data.investmentCreated ||
+              data.investmentUpdated ||
+              data.promoVideosGenerated
+            ) {
+              queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              queryClient.invalidateQueries({ queryKey: ["investments"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
+            }
+            if (data.promoVideoError) {
+              assistantMessage += `\n\nNo pude generar los videos de promo: ${data.promoVideoError}`;
+              setAssistantStatus("");
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
+            }
+            if (data.actionExecuted) {
+              assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
+              setAssistantStatus("");
+              queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
+            }
+            if (data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.metricoolAutomationError || data.actionExecutionError) {
+              assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.metricoolAutomationError || data.actionExecutionError}`;
+              setAssistantStatus("");
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
+            }
+            if (data.approvalRequired && data.pendingAction) {
+              assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo, o revisarlo en approvals antes de ejecutar.`;
+              setAssistantStatus("");
+              queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  role: "assistant",
+                  content: cleanAssistantText(assistantMessage),
+                };
+                return next;
+              });
+            }
+            if (data.done) {
+              setAssistantStatus("");
+            }
+          } catch (error) {}
+        }
       }
     } catch (error) {
       setMessages((prev) => [

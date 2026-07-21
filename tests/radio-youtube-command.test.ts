@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, extractDriveFolderPathFromMessage, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "../server/radio-youtube-command";
 import { extractGoogleDriveFileIdFromUrl } from "../server/google-drive-file-url";
@@ -98,48 +98,12 @@ test("asks for Drive destination when only a Drive MP4 source is provided", () =
   assert.equal(command?.command, "");
 });
 
-test("does not treat Drive open file links as destination folders", () => {
-  const command = buildDirectRadioDriveVideoCommand(
-    "https://drive.google.com/open?id=1abcDEFghiJKLmnopQRSTuv sacame clips para tiktok e instagram",
-  );
-
-  assert.ok(command);
-  assert.equal(command?.sourceDriveFileId, "1abcDEFghiJKLmnopQRSTuv");
-  assert.equal(command?.driveParentFolderId, undefined);
-  assert.equal(command ? directRadioDriveVideoCommandNeedsDriveFolder(command) : false, true);
-  assert.equal(command?.command, "");
-});
-
 test("uses a Google Drive folder URL as the parent destination", () => {
   const command = buildDirectRadioYoutubeCommand("https://youtu.be/GcVZvXKz2jU sacame clips y guardalos en https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW?usp=drive_link");
   assert.equal(command?.youtubeUrl, "https://youtu.be/GcVZvXKz2jU");
   assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
   assert.deepEqual(command?.driveFolderPath, []);
   assert.equal(command ? directRadioYoutubeCommandNeedsDriveFolder(command) : true, false);
-});
-
-test("does not invent a child folder from a bare Google Drive folder URL prompt", () => {
-  const command = buildDirectRadioYoutubeCommand(
-    "Toma este video de YouTube: https://youtu.be/GcVZvXkz2jU Descárgalo en 1080p, no en 720p. Crea 2 clips listos para publicar: 1. TikTok/Reels vertical 9:16, 1080x1920, 30 segundos. 2. Instagram feed/reel 4:5, 1080x1350, 60 segundos. Usa el momento con más energía del set. Nómbralos con DJ QA TEST. Después de crear los clips, borra el video largo local. Guarda los clips en esta carpeta de Google Drive: https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW",
-  );
-
-  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
-  assert.deepEqual(command?.driveFolderPath, []);
-  assert.equal(command?.instagramClipCount, undefined);
-  assert.equal(command?.tiktokClipCount, undefined);
-  assert.match(command?.content || "", /los clips de radio para Instagram y TikTok/);
-  assert.doesNotMatch(command?.content || "", /esta/);
-});
-
-test("does not invent a child folder from my Drive folder URL wording", () => {
-  const command = buildDirectRadioYoutubeCommand(
-    "Toma este video de YouTube: https://youtu.be/GcVZvXkz2jU Descárgalo en 1080p, no en 720p. Crea 2 clips listos para publicar: 1. TikTok/Reels vertical 9:16, 1080x1920, 30 segundos. 2. Instagram feed/reel 4:5, 1080x1350, 60 segundos. Usa el momento con más energía del set. Nómbralos con DJ QA_REPLIT_FINAL. Después de crear los clips, borra el video largo local. Guarda los clips en mi carpeta de Google Drive: https://drive.google.com/drive/folders/1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW",
-  );
-
-  assert.equal(command?.driveParentFolderId, "1DFAJg05WgnKj1rXu0YUrOWWrT15ilVWW");
-  assert.deepEqual(command?.driveFolderPath, []);
-  assert.doesNotMatch(command?.content || "", /: mi\b/);
-  assert.match(command?.content || "", /carpeta de Google Drive que enviaste/);
 });
 
 test("extracts a child folder inside a Google Drive folder URL", () => {
@@ -242,18 +206,6 @@ test("includes estimated cost in completed radio YouTube summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 2 videos/);
 });
 
-test("includes estimated cost in failed radio video summary", () => {
-  const summary = formatRadioDriveVideoResult({
-    sourceDriveFileId: "1abcDEFghiJKLmnopQRSTuv",
-    videoPath: "https://drive.google.com/file/d/1abcDEFghiJKLmnopQRSTuv/view",
-    status: "failed",
-    error: "Drive download failed",
-  });
-
-  assert.match(summary, /No pude completar los clips: Drive download failed/);
-  assert.match(summary, /Gasto estimado de esta edición: \$0\.00 USD/);
-});
-
 test("includes local source cleanup in completed Drive MP4 summary", () => {
   const summary = formatRadioDriveVideoResult({
     sourceDriveFileId: "1abcDEFghiJKLmnopQRSTuv",
@@ -280,360 +232,58 @@ test("includes local source cleanup in completed Drive MP4 summary", () => {
   assert.match(summary, /Total estimado de esta edición: \$0\.00 USD para 1 video/);
 });
 
-test("yt-dlp command specs try 1080p video with bounded JS solver fallbacks by default", () => {
-  const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
-  const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
-  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
-  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
-
-  try {
-    delete process.env.YT_DLP_JS_RUNTIMES;
-    delete process.env.YT_DLP_REMOTE_COMPONENTS;
-    delete process.env.YT_DLP_IMPERSONATE_TARGETS;
-    delete process.env.YT_DLP_MAX_VARIANTS;
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-      explicitBinary: "/workspace/bin/yt-dlp",
-      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
-    });
-
-    assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
-    assert.ok(specs.length <= 18);
-    assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
-    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
-    assert.ok(specs.every((spec) => !spec.args.includes("deno")));
-    assert.ok(specs.every((spec) => !spec.args.includes("--impersonate")));
-    assert.ok(specs.every((spec) => spec.args.includes("--socket-timeout") && spec.args.includes("30")));
-    assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
-    assert.ok(specs.some((spec) => spec.args.includes("bv*[height<=1080][ext=mp4]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080][ext=mp4]/b[height<=1080]/best[height<=1080]/best")));
-    assert.ok(specs.every((spec) => {
-      const formatIndex = spec.args.indexOf("-f");
-      return formatIndex !== -1 && /height<=1080|best/.test(spec.args[formatIndex + 1] || "");
-    }));
-    assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
-  } finally {
-    if (previousRuntimeConfig === undefined) {
-      delete process.env.YT_DLP_JS_RUNTIMES;
-    } else {
-      process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
-    }
-    if (previousRemoteComponents === undefined) {
-      delete process.env.YT_DLP_REMOTE_COMPONENTS;
-    } else {
-      process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
-    }
-    if (previousImpersonateTargets === undefined) {
-      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
-    } else {
-      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
-    }
-    if (previousMaxVariants === undefined) {
-      delete process.env.YT_DLP_MAX_VARIANTS;
-    } else {
-      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
-    }
-  }
-});
-
-test("yt-dlp command specs use impersonation only when a fresh Python package is available", () => {
-  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
-  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
-
-  try {
-    delete process.env.YT_DLP_IMPERSONATE_TARGETS;
-    process.env.YT_DLP_MAX_VARIANTS = "100";
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-      explicitBinary: "/workspace/bin/yt-dlp",
-      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
-      freshPythonPackageDir: "/tmp/robplanner-yt-dlp-python",
-    });
-
-    assert.ok(specs.some((spec) => spec.args.includes("--impersonate") && spec.args.includes("chrome")));
-  } finally {
-    if (previousImpersonateTargets === undefined) {
-      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
-    } else {
-      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
-    }
-    if (previousMaxVariants === undefined) {
-      delete process.env.YT_DLP_MAX_VARIANTS;
-    } else {
-      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
-    }
-  }
-});
-
-test("yt-dlp command specs allow disabling impersonation attempts", () => {
-  const previousImpersonateTargets = process.env.YT_DLP_IMPERSONATE_TARGETS;
-
-  try {
-    process.env.YT_DLP_IMPERSONATE_TARGETS = "off";
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-      explicitBinary: "/workspace/bin/yt-dlp",
-      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
-    });
-
-    assert.ok(specs.length > 0);
-    assert.ok(specs.every((spec) => !spec.args.includes("--impersonate")));
-  } finally {
-    if (previousImpersonateTargets === undefined) {
-      delete process.env.YT_DLP_IMPERSONATE_TARGETS;
-    } else {
-      process.env.YT_DLP_IMPERSONATE_TARGETS = previousImpersonateTargets;
-    }
-  }
-});
-
-test("yt-dlp command specs allow explicit JS runtime flags", () => {
-  const previousRuntimeConfig = process.env.YT_DLP_JS_RUNTIMES;
-  const previousRemoteComponents = process.env.YT_DLP_REMOTE_COMPONENTS;
-  const previousMaxVariants = process.env.YT_DLP_MAX_VARIANTS;
-
-  try {
-    process.env.YT_DLP_JS_RUNTIMES = "deno,node";
-    delete process.env.YT_DLP_REMOTE_COMPONENTS;
-    process.env.YT_DLP_MAX_VARIANTS = "100";
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-      explicitBinary: "/workspace/bin/yt-dlp",
-      cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
-    });
-
-    assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
-    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
-    assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
-    assert.ok(specs.some((spec) => spec.args.includes("--remote-components") && spec.args.includes("ejs:github")));
-  } finally {
-    if (previousRuntimeConfig === undefined) {
-      delete process.env.YT_DLP_JS_RUNTIMES;
-    } else {
-      process.env.YT_DLP_JS_RUNTIMES = previousRuntimeConfig;
-    }
-    if (previousRemoteComponents === undefined) {
-      delete process.env.YT_DLP_REMOTE_COMPONENTS;
-    } else {
-      process.env.YT_DLP_REMOTE_COMPONENTS = previousRemoteComponents;
-    }
-    if (previousMaxVariants === undefined) {
-      delete process.env.YT_DLP_MAX_VARIANTS;
-    } else {
-      process.env.YT_DLP_MAX_VARIANTS = previousMaxVariants;
-    }
-  }
-});
-
-test("yt-dlp command specs materialize YouTube cookies from base64 secret", () => {
-  const previous = {
-    YT_DLP_COOKIES_PATH: process.env.YT_DLP_COOKIES_PATH,
-    YT_DLP_COOKIES_B64: process.env.YT_DLP_COOKIES_B64,
-    YT_DLP_COOKIES_B64_1: process.env.YT_DLP_COOKIES_B64_1,
-    YT_DLP_COOKIES_B64_2: process.env.YT_DLP_COOKIES_B64_2,
-    YT_DLP_COOKIES_BASE64: process.env.YT_DLP_COOKIES_BASE64,
-    YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
-    YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
-  };
-  const cookieFile = [
-    "# Netscape HTTP Cookie File",
-    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tVISITOR_INFO1_LIVE\tfake-test-value",
-  ].join("\n");
-  let materializedPath = "";
-
-  try {
-    delete process.env.YT_DLP_COOKIES_PATH;
-    delete process.env.YT_DLP_COOKIES_BASE64;
-    delete process.env.YT_DLP_COOKIES;
-    delete process.env.YT_DLP_COOKIES_FROM_BROWSER;
-    delete process.env.YT_DLP_COOKIES_B64_1;
-    delete process.env.YT_DLP_COOKIES_B64_2;
-    process.env.YT_DLP_COOKIES_B64 = Buffer.from(cookieFile, "utf8").toString("base64");
-
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-    });
-
-    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
-    assert.notEqual(firstCookiesIndex, -1);
-    materializedPath = specs[0].args[firstCookiesIndex + 1];
-    assert.match(materializedPath, /yt-dlp-youtube-cookies-[a-f0-9]+\.txt$/);
-    assert.ok(existsSync(materializedPath));
-    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
-    assert.ok(specs.some((spec) => spec.args.includes("--cookies") && spec.args.includes(materializedPath)));
-    assert.ok(specs.some((spec) => !spec.args.includes("--cookies")));
-  } finally {
-    if (materializedPath) rmSync(materializedPath, { force: true });
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
-});
-
-test("yt-dlp command specs prefer chunked base64 YouTube cookies over single secret", () => {
-  const previous = {
-    YT_DLP_COOKIES_PATH: process.env.YT_DLP_COOKIES_PATH,
-    YT_DLP_COOKIES_B64: process.env.YT_DLP_COOKIES_B64,
-    YT_DLP_COOKIES_B64_1: process.env.YT_DLP_COOKIES_B64_1,
-    YT_DLP_COOKIES_B64_2: process.env.YT_DLP_COOKIES_B64_2,
-    YT_DLP_COOKIES_BASE64: process.env.YT_DLP_COOKIES_BASE64,
-    YT_DLP_COOKIES: process.env.YT_DLP_COOKIES,
-    YT_DLP_COOKIES_FROM_BROWSER: process.env.YT_DLP_COOKIES_FROM_BROWSER,
-  };
-  const cookieFile = [
-    "# Netscape HTTP Cookie File",
-    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tLOGIN_INFO\tfull-cookie-test-value",
-  ].join("\n");
-  const encoded = Buffer.from(cookieFile, "utf8").toString("base64");
-  let materializedPath = "";
-
-  try {
-    delete process.env.YT_DLP_COOKIES_PATH;
-    delete process.env.YT_DLP_COOKIES_BASE64;
-    delete process.env.YT_DLP_COOKIES;
-    delete process.env.YT_DLP_COOKIES_FROM_BROWSER;
-    process.env.YT_DLP_COOKIES_B64 = Buffer.from("stale-cookie", "utf8").toString("base64");
-    process.env.YT_DLP_COOKIES_B64_1 = encoded.slice(0, 12);
-    process.env.YT_DLP_COOKIES_B64_2 = encoded.slice(12);
-
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-    });
-
-    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
-    assert.notEqual(firstCookiesIndex, -1);
-    materializedPath = specs[0].args[firstCookiesIndex + 1];
-    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
-  } finally {
-    if (materializedPath) rmSync(materializedPath, { force: true });
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
-  }
-});
-
-test("yt-dlp command specs skip invalid chunks and fall through to valid single key", () => {
-  const names = [
-    "YT_DLP_COOKIES_PATH",
-    "YT_DLP_COOKIES_B64",
-    "YT_DLP_COOKIES_BASE64",
-    "YT_DLP_COOKIES",
-    "YT_DLP_COOKIES_FROM_BROWSER",
-    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_B64_${index + 1}`),
-    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_B64_${String(index + 1).padStart(3, "0")}`),
-    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_BASE64_${index + 1}`),
-    ...Array.from({ length: 200 }, (_, index) => `YT_DLP_COOKIES_BASE64_${String(index + 1).padStart(3, "0")}`),
-  ];
-  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
-  const cookieFile = [
-    "# Netscape HTTP Cookie File",
-    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tLOGIN_INFO\tvalid-single-key",
-    ".google.com\tTRUE\t/\tTRUE\t1893456000\tSID\tvalid-google-cookie",
-  ].join("\n");
-  let materializedPath = "";
-
-  try {
-    for (const name of names) delete process.env[name];
-    process.env.YT_DLP_COOKIES_B64_1 = Buffer.from("not cookies\tbut\tmany\ttabs\tthat\tlook\tstructured\n", "utf8").toString("base64");
-    process.env.YT_DLP_COOKIES_B64_2 = Buffer.from("also\tinvalid\tand\tmissing\tyoutube\tdomains\n", "utf8").toString("base64");
-    process.env.YT_DLP_COOKIES_B64 = Buffer.from(cookieFile, "utf8").toString("base64");
-
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXkz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-    });
-
-    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
-    assert.notEqual(firstCookiesIndex, -1);
-    materializedPath = specs[0].args[firstCookiesIndex + 1];
-    assert.equal(readFileSync(materializedPath, "utf8"), `${cookieFile}\n`);
-  } finally {
-    if (materializedPath) rmSync(materializedPath, { force: true });
-    for (const [name, value] of Object.entries(original)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-  }
-});
-
-test("yt-dlp cookie chunks tolerate Replit lexicographic secret ordering", () => {
-  const names = [
-    "YT_DLP_COOKIES_PATH",
-    "YT_DLP_COOKIES_B64",
-    "YT_DLP_COOKIES_BASE64",
-    "YT_DLP_COOKIES",
-    "YT_DLP_COOKIES_FROM_BROWSER",
-    ...Array.from({ length: 12 }, (_, index) => `YT_DLP_COOKIES_B64_${index + 1}`),
-  ];
-  const original = Object.fromEntries(names.map((name) => [name, process.env[name]]));
-  try {
-    for (const name of names) delete process.env[name];
-    const cookieFile = [
-      "# Netscape HTTP Cookie File",
-      ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tVISITOR_INFO1_LIVE\tabc",
-      ".google.com\tTRUE\t/\tTRUE\t1893456000\tSID\tdef",
-      "",
-    ].join("\n");
-    const encoded = Buffer.from(cookieFile, "utf8").toString("base64");
-    const chunkSize = Math.ceil(encoded.length / 12);
-    const chunks = Array.from({ length: 12 }, (_, index) => encoded.slice(index * chunkSize, (index + 1) * chunkSize));
-    const keysInReplitVisualOrder = [1, 10, 11, 12, 2, 3, 4, 5, 6, 7, 8, 9];
-    keysInReplitVisualOrder.forEach((keyNumber, index) => {
-      process.env[`YT_DLP_COOKIES_B64_${keyNumber}`] = chunks[index];
-    });
-
-    const specs = buildYtDlpCommandSpecs({
-      url: "https://youtu.be/GcVZvXKz2jU",
-      outputTemplate: "/tmp/%(id)s.%(ext)s",
-      mode: "video",
-      freshPythonPackageDir: null,
-    });
-    const firstCookiesIndex = specs[0].args.indexOf("--cookies");
-    assert.notEqual(firstCookiesIndex, -1);
-    const materializedPath = specs[0].args[firstCookiesIndex + 1];
-    assert.ok(existsSync(materializedPath));
-    const materialized = readFileSync(materializedPath, "utf8");
-    assert.match(materialized, /Netscape HTTP Cookie File/);
-    assert.match(materialized, /\.youtube\.com/);
-  } finally {
-    for (const [name, value] of Object.entries(original)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-  }
-});
-
-test("yt-dlp command specs prefer fresh Python package when available", () => {
+test("yt-dlp command specs try 1080p video with and without JS runtime flags", () => {
   const specs = buildYtDlpCommandSpecs({
     url: "https://youtu.be/GcVZvXkz2jU",
     outputTemplate: "/tmp/%(id)s.%(ext)s",
     mode: "video",
-    freshPythonPackageDir: "/tmp/robplanner-yt-dlp-python",
+    explicitBinary: "/workspace/bin/yt-dlp",
+    cookieArgs: ["--cookies", "/tmp/youtube-cookies.txt"],
   });
 
-  assert.equal(specs[0].command, "python3");
-  assert.deepEqual(specs[0].args.slice(0, 2), ["-m", "yt_dlp"]);
-  assert.match(specs[0].env?.PYTHONPATH || "", /\/tmp\/robplanner-yt-dlp-python/);
+  assert.ok(specs.some((spec) => spec.command === "/workspace/bin/yt-dlp"));
+  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("deno")));
+  assert.ok(specs.some((spec) => spec.args.includes("--js-runtimes") && spec.args.includes("node")));
+  assert.ok(specs.some((spec) => !spec.args.includes("--js-runtimes")));
+  assert.ok(specs.every((spec) => spec.args.includes("bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/best")));
+  assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes("/tmp/youtube-cookies.txt")));
+});
+
+test("yt-dlp command specs materialize chunked base64 YouTube cookies", () => {
+  const cookieText = [
+    "# Netscape HTTP Cookie File",
+    ".youtube.com\tTRUE\t/\tTRUE\t1893456000\tVISITOR_INFO1_LIVE\tfake_value",
+    "",
+  ].join("\n");
+  const encoded = Buffer.from(cookieText, "utf8").toString("base64");
+  const midpoint = Math.ceil(encoded.length / 2);
+  const previousDirect = process.env.YT_DLP_COOKIES_B64;
+  const previousOne = process.env.YT_DLP_COOKIES_B64_1;
+  const previousTwo = process.env.YT_DLP_COOKIES_B64_2;
+
+  delete process.env.YT_DLP_COOKIES_B64;
+  process.env.YT_DLP_COOKIES_B64_1 = encoded.slice(0, midpoint);
+  process.env.YT_DLP_COOKIES_B64_2 = encoded.slice(midpoint);
+
+  try {
+    const specs = buildYtDlpCommandSpecs({
+      url: "https://youtu.be/GcVZvXkz2jU",
+      outputTemplate: "/tmp/%(id)s.%(ext)s",
+      mode: "video",
+    });
+    const cookiesIndex = specs[0].args.indexOf("--cookies");
+    assert.ok(cookiesIndex >= 0);
+    const cookiePath = specs[0].args[cookiesIndex + 1];
+    assert.match(readFileSync(cookiePath, "utf8"), /Netscape HTTP Cookie File/);
+    assert.ok(specs.every((spec) => spec.args.includes("--cookies") && spec.args.includes(cookiePath)));
+  } finally {
+    if (previousDirect === undefined) delete process.env.YT_DLP_COOKIES_B64;
+    else process.env.YT_DLP_COOKIES_B64 = previousDirect;
+    if (previousOne === undefined) delete process.env.YT_DLP_COOKIES_B64_1;
+    else process.env.YT_DLP_COOKIES_B64_1 = previousOne;
+    if (previousTwo === undefined) delete process.env.YT_DLP_COOKIES_B64_2;
+    else process.env.YT_DLP_COOKIES_B64_2 = previousTwo;
+  }
 });
 
 test("yt-dlp failure message explains YouTube bot blocks without routing to GitHub", () => {
@@ -643,30 +293,6 @@ test("yt-dlp failure message explains YouTube bot blocks without routing to GitH
   );
 
   assert.match(message, /YouTube bloqueó la descarga desde Replit/);
-  assert.match(message, /YT_DLP_COOKIES_B64|YT_DLP_COOKIES_PATH|MP4 fuente/);
-  assert.doesNotMatch(message, /GitHub|handoff|PR/i);
-});
-
-test("yt-dlp failure message explains stale extractor format errors", () => {
-  const message = formatYtDlpFailureMessage(
-    "WARNING: [youtube] YouTube said: ERROR - Precondition check failed. ERROR: Requested format is not available. Only images are available for download.",
-    "video",
-  );
-
-  assert.match(message, /formatos inválidos o incompletos/);
-  assert.match(message, /yt-dlp está viejo|cookies de YouTube/);
   assert.match(message, /YT_DLP_COOKIES_B64|MP4 fuente/);
-});
-
-test("yt-dlp failure message does not let unsupported js runtime variants hide bot blocks", () => {
-  const message = formatYtDlpFailureMessage(
-    [
-      "yt-dlp failed with code 2: __main__.py: error: no such option: --js-runtimes",
-      "ERROR: [youtube] GcVZvXkz2jU: Sign in to confirm you're not a bot. Use --cookies for the authentication.",
-    ].join("\n"),
-    "video",
-  );
-
-  assert.match(message, /YouTube bloqueó la descarga desde Replit/);
-  assert.doesNotMatch(message, /no soporta --js-runtimes|demasiado vieja/);
+  assert.doesNotMatch(message, /GitHub|handoff|PR/i);
 });

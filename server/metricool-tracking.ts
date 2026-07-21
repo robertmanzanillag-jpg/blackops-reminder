@@ -68,8 +68,8 @@ export const METRICOOL_BRAND_PLAN: MetricoolBrandPlan[] = [
     name: "Kong",
     ownerAgent: "KONG AI",
     status: "draft_only",
-    networks: ["instagram"],
-    notes: "Metricool only covers public social tracking; WhatsApp, email, and venue ops stay outside Metricool.",
+    networks: ["instagram", "tiktok"],
+    notes: "Instagram and TikTok are connected in Metricool for public social tracking; publishing remains approval-required. WhatsApp, email, and venue ops stay outside Metricool.",
   },
   {
     id: "sports-daily",
