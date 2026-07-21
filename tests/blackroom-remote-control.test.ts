@@ -89,12 +89,18 @@ test("offline paused panel keeps Play available so the command can be queued", (
   const synced = false;
   const pausing = !desired && remoteOnline && !synced;
   assert.equal(desired || pausing, false);
+  assert.match(blackRoomPage, /async function run\(path,opt,priority=false\)/);
+  assert.match(blackRoomPage, /pause\.onclick=\(\)=>run\('\/api\/blackroom-agent\/pause',\{method:'POST'\},true\)/);
+  assert.match(blackRoomPage, /generation===requestGeneration/);
 });
 
 test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /Habla con el agente/);
   assert.match(blackRoomPage, /\/api\/blackroom-agent\/chat/);
   assert.match(blackRoomPage, /sube 3 videos más hoy/);
+  assert.match(blackRoomPage, /TikTok \+ Facebook \+ YouTube Shorts/);
+  assert.match(blackRoomPage, /facebook\.com\/profile\.php\?id=61568193332044/);
+  assert.match(blackRoomPage, /confirmar todos los destinos requeridos/);
   const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
   assert.doesNotThrow(() => new Function(script));
 });

@@ -62,6 +62,8 @@ test("assistant routing recognizes BlackRoom orders without hijacking unrelated 
   assert.equal(looksLikeBlackRoomAssistantRequest("desactiva el link del website de BlackRoom"), false);
   assert.equal(looksLikeBlackRoomAssistantRequest("agrega el video del DJ Ana https://youtu.be/abc123xyz al website de BlackRoom"), false);
   assert.equal(looksLikeBlackRoomAssistantRequest("¿cómo va la cola de BlackRoom?"), true);
+  assert.equal(looksLikeBlackRoomAssistantRequest("activa Facebook para los videos de BlackRoom"), true);
+  assert.equal(looksLikeBlackRoomAssistantRequest("activa YouTube Shorts para BlackRoom"), true);
 });
 
 test("start wording with para does not get mistaken for pause", () => {
