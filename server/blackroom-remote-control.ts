@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { blackRoomRemoteControl } from "@shared/schema";
+import type { BlackRoomRemoteCommand } from "./blackroom-chat";
 
 export const BLACKROOM_REMOTE_ONLINE_WINDOW_MS = 90_000;
 const BLACKROOM_REMOTE_CONTROL_ID = "blackroom-primary";
@@ -21,6 +22,8 @@ export interface BlackRoomRemoteControlState {
   generation: number;
   updatedAt: string;
   device: BlackRoomRemoteDeviceStatus | null;
+  commands: BlackRoomRemoteCommand[];
+  chatHistory: Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>;
 }
 
 export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRemoteControlState {
@@ -31,6 +34,8 @@ export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRe
     generation: 0,
     updatedAt: now.toISOString(),
     device: null,
+    commands: [],
+    chatHistory: [],
   };
 }
 
@@ -63,6 +68,26 @@ export function recordBlackRoomRemoteHeartbeat(
   return state;
 }
 
+export function appendBlackRoomRemoteCommand(
+  state: BlackRoomRemoteControlState,
+  input: { message: string; reply: string; command: BlackRoomRemoteCommand | null },
+  now = new Date(),
+): BlackRoomRemoteControlState {
+  const createdAt = now.toISOString();
+  state.chatHistory.push(
+    { id: `${createdAt}-user`, role: "user", text: input.message.slice(0, 1_000), createdAt },
+    { id: `${createdAt}-assistant`, role: "assistant", text: input.reply.slice(0, 2_000), createdAt },
+  );
+  state.chatHistory = state.chatHistory.slice(-40);
+  if (input.command) {
+    state.commands.push(input.command);
+    state.commands = state.commands.slice(-100);
+    state.generation += 1;
+    state.updatedAt = createdAt;
+  }
+  return state;
+}
+
 export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState, now = new Date()): boolean {
   if (!state.device?.seenAt) return false;
   const seenAt = new Date(state.device.seenAt).getTime();
@@ -79,6 +104,8 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     weeks: Math.max(1, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
     generation: Math.max(0, Math.floor(Number(parsed.generation || 0))),
     device: parsed.device || null,
+    commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
+    chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
   };
 }
 

@@ -14,6 +14,7 @@ import {
   readBlackRoomQueue,
   writeBlackRoomQueue,
   withBlackRoomQueueLock,
+  applyBlackRoomRemoteCommands,
 } from "../server/blackroom-daily-queue";
 import { mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -91,6 +92,55 @@ test("starts weeks of work and pause prevents new claims", () => {
   assert.equal(claimNextBlackRoomJob(state, now), null);
 });
 
+test("applies remote quantity, extra-today and priority-source commands once", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  const commands = [
+    { id: "daily-12", type: "daily_target" as const, posts: 12, createdAt: now.toISOString() },
+    { id: "extra-3", type: "extra_posts" as const, posts: 3, targetDate: state.jobs[0].targetDate, createdAt: now.toISOString() },
+    { id: "source-1", type: "priority_source" as const, url: "https://youtu.be/video123", createdAt: now.toISOString() },
+  ];
+  assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 3);
+  assert.equal(state.postsPerDay, 12);
+  assert.equal(state.jobs[0].requirements.posts, 15);
+  assert.equal(state.prioritySources[0].status, "pending");
+  assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 0);
+});
+
+test("daily target changes do not erase extra posts already requested for a date", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  const targetDate = state.jobs[0].targetDate;
+  applyBlackRoomRemoteCommands(state, [{ id: "extra", type: "extra_posts", posts: 3, targetDate, createdAt: now.toISOString() }], now);
+  applyBlackRoomRemoteCommands(state, [{ id: "daily", type: "daily_target", posts: 8, createdAt: now.toISOString() }], now);
+  assert.equal(state.jobs[0].requirements.posts, 11);
+});
+
+test("extra today creates exactly the requested future slots when today has no daily batch", () => {
+  const now = new Date("2026-07-21T18:00:00.000Z"); // 14:00 America/New_York
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  assert.equal(state.jobs.some((job) => job.targetDate === "2026-07-21"), false);
+  applyBlackRoomRemoteCommands(state, [{
+    id: "extra-today", type: "extra_posts", posts: 3, targetDate: "2026-07-21", createdAt: now.toISOString(),
+  }], now);
+  const today = state.jobs.find((job) => job.targetDate === "2026-07-21");
+  assert.equal(today?.requirements.posts, 3);
+  assert.deepEqual(today?.slots.map((slot) => slot.localTime), ["14:15", "15:45", "17:15"]);
+});
+
+test("repeated extra-today commands add only the new amount to an ad hoc batch", () => {
+  const now = new Date("2026-07-21T18:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  applyBlackRoomRemoteCommands(state, [{ id: "extra-3", type: "extra_posts", posts: 3, targetDate: "2026-07-21", createdAt: now.toISOString() }], now);
+  applyBlackRoomRemoteCommands(state, [{ id: "extra-2", type: "extra_posts", posts: 2, targetDate: "2026-07-21", createdAt: now.toISOString() }], now);
+  const today = state.jobs.find((job) => job.targetDate === "2026-07-21");
+  assert.equal(today?.requirements.posts, 5);
+  assert.deepEqual(today?.slots.map((slot) => slot.localTime), ["14:15", "15:45", "17:15", "18:45", "20:15"]);
+});
+
 test("migrates existing queued jobs into the long-form experiment", async () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
@@ -101,7 +151,7 @@ test("migrates existing queued jobs into the long-form experiment", async () => 
   const queuePath = path.join(directory, "queue.json");
   await writeBlackRoomQueue(state, queuePath);
   const migrated = await readBlackRoomQueue(queuePath, now);
-  assert.equal(migrated.version, 2);
+  assert.equal(migrated.version, 3);
   assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
   assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
 });
