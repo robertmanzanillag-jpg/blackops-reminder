@@ -11,7 +11,7 @@ import {
   HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
   createHeyGenRosterRequestSchema,
 } from "@shared/ai-media-studio-heygen-roster";
-import { useConfigureHeyGenRoster, useHeyGenRoster } from "./hooks";
+import { useConfigureHeyGenRoster, useHeyGenRoster, useHeyGenRosterDailyPlan } from "./hooks";
 import type {
   CreateHeyGenRosterMember,
   CreateHeyGenRosterRequest,
@@ -99,6 +99,7 @@ function firstInvalidMemberField(errors: FieldErrors<RosterFormValues>): string 
 
 export function HeyGenRosterSetup() {
   const rosterQuery = useHeyGenRoster();
+  const dailyPlanQuery = useHeyGenRosterDailyPlan();
   const mutation = useConfigureHeyGenRoster();
   const attemptRef = useRef<Attempt | undefined>(undefined);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -113,6 +114,7 @@ export function HeyGenRosterSetup() {
   const { fields, append, remove } = useFieldArray({ control, name: "members" });
   const plannedVideoCount = fields.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR;
   const currentRoster = mutation.data?.roster ?? rosterQuery.data?.roster;
+  const dailyPlan = dailyPlanQuery.data?.plan;
   const setupBlocked = rosterQuery.isLoading || rosterQuery.isError;
 
   const invalid = (invalidFields: FieldErrors<RosterFormValues>) => {
@@ -233,6 +235,41 @@ export function HeyGenRosterSetup() {
             {currentRoster.members.map((member) => <li key={member.memberId} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2">{member.name} · {member.language} · {member.videosPlanned} planned</li>)}
           </ul>
           <p className="mt-3 text-xs leading-5 text-emerald-100/80">Next blocker: complete rights/governance and launch approvals before generation.</p>
+        </div>
+      )}
+
+      {currentRoster && !dailyPlan && (dailyPlanQuery.isLoading || dailyPlanQuery.isFetching) && (
+        <p role="status" className="mt-4 text-sm text-zinc-400">Preparing the no-spend daily plan preview…</p>
+      )}
+      {currentRoster && dailyPlanQuery.isError && (
+        <div role="alert" className="mt-4 flex flex-col gap-3 rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
+          <p>The daily plan preview is unavailable. No jobs were queued and no credits were spent.</p>
+          <Button type="button" size="sm" variant="outline" className="shrink-0 border-red-200/30 bg-transparent text-red-50" disabled={dailyPlanQuery.isFetching} onClick={() => dailyPlanQuery.refetch()}>{dailyPlanQuery.isFetching ? "Checking…" : "Retry daily plan"}</Button>
+        </div>
+      )}
+
+      {dailyPlan && (
+        <div aria-labelledby="heygen-daily-plan-heading" className="mt-4 rounded-xl border border-sky-300/20 bg-sky-400/[0.06] p-4 text-sm text-sky-50">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 id="heygen-daily-plan-heading" className="font-semibold">Daily plan preview: {dailyPlan.plannedVideoCount} videos</h3>
+              <p className="mt-1 text-xs leading-5 text-sky-100/80">
+                {dailyPlan.planDate} · {dailyPlan.timeZone}. {dailyPlan.avatarCount} avatars × {dailyPlan.videosPerAvatar} videos each. All slots are blocked before generation, so this view creates no jobs and spends no credits.
+              </p>
+            </div>
+            <span className="rounded-full border border-sky-200/25 px-3 py-1 text-xs font-medium text-sky-100">No spend: {dailyPlan.noSpendGuarantee ? "on" : "off"}</span>
+          </div>
+          <dl className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-black/15 p-3"><dt className="text-sky-100/70">Queued</dt><dd className="mt-1 font-semibold text-white">0</dd></div>
+            <div className="rounded-lg border border-white/10 bg-black/15 p-3"><dt className="text-sky-100/70">Plan slots</dt><dd className="mt-1 font-semibold text-white">{dailyPlan.slots.length}</dd></div>
+            <div className="rounded-lg border border-white/10 bg-black/15 p-3"><dt className="text-sky-100/70">Generation allowed</dt><dd className="mt-1 font-semibold text-white">{dailyPlan.canGenerate ? "Yes" : "No"}</dd></div>
+          </dl>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-sky-100/70">Blockers before launch</p>
+          <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+            {dailyPlan.blockers.map((blocker) => (
+              <li key={blocker} className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1">{blocker.replaceAll("_", " ")}</li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

@@ -2,6 +2,16 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active recovery checkpoint: PR18 roster daily plan
+
+- Branch: `codex/ai-media-studio-roster-daily-plan`, draft PR #100, stacked on draft PR #99.
+- Launch size: the configured 5–10 avatar roster expands to exactly 10 visible slots per avatar, or 50–100 slots total.
+- Safety: all slots are `not_queued`; the plan is `blocked_before_generation`, `canGenerate=false`, and `noSpendGuarantee=true`.
+- Calendar authority: the server owns the daily timezone (UTC by default). Query parameters cannot change the accounting date or timezone.
+- Persistence boundary: this PR is a derived, non-durable preview. It does not create a daily-plan row, reserve budget, create scripts/jobs/outbox messages, call HeyGen, publish, apply a migration, spend credits, or deploy.
+- Local evidence: full AI Media Studio suite 513/513, focused plan tests, TypeScript, production build, diff hygiene, independent checker and static App QA pass. Browser-visual QA was not run because no live target was used.
+- Required next: reviewed durable plan/slot and atomic budget-reservation schema, transaction-time calendar semantics, governance and human approval digests, sandbox proof, and separate spend/deployment approval.
+
 ## Latest recovery checkpoint: PR17 HeyGen launch roster
 
 - Branch: `codex/ai-media-studio-heygen-launch-roster`, draft PR #99, stacked on PR #97 / `codex/ai-media-studio-provider-activation-cas`.

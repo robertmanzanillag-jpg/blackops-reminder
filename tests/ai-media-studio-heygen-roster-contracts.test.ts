@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   HEYGEN_ROSTER_MAX_AVATARS,
   HEYGEN_ROSTER_MAX_PLANNED_VIDEOS,
+  HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS,
   HEYGEN_ROSTER_MIN_AVATARS,
   HEYGEN_ROSTER_MIN_PLANNED_VIDEOS,
   HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
   createHeyGenRosterRequestSchema,
+  heyGenRosterDailyPlanSchema,
   heyGenRosterStatusSchema,
 } from "../shared/ai-media-studio-heygen-roster";
 
@@ -70,4 +72,37 @@ test("public status schema has no provider account, avatar, or voice identifiers
   });
   const serialized = JSON.stringify(status);
   assert.doesNotMatch(serialized, /avatarId|voiceId|providerAccountId|apiKey|secret|token/iu);
+});
+
+test("daily plan schema requires exactly 10 blocked no-spend slots per avatar", () => {
+  const blockers = [...HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS];
+  const planId = "plan_bbbbbbbbbbbbbbbbbbbbbbbb";
+  const plan = {
+    planId,
+    rosterId: "roster_aaaaaaaaaaaaaaaaaaaaaaaa",
+    planDate: "2030-01-01",
+    timeZone: "America/New_York",
+    status: "blocked_before_generation",
+    avatarCount: 5,
+    videosPerAvatar: 10,
+    plannedVideoCount: 50,
+    canGenerate: false,
+    noSpendGuarantee: true,
+    generatedAt: "2030-01-01T00:00:00.000Z",
+    blockers,
+    slots: Array.from({ length: 50 }, (_, index) => ({
+      slotId: `slot_${String(index + 1).padStart(24, "0")}`,
+      planId,
+      rosterId: "roster_aaaaaaaaaaaaaaaaaaaaaaaa",
+      memberId: `member_${String(Math.floor(index / 10) + 1).padStart(24, "0")}`,
+      creatorName: `Creator ${Math.floor(index / 10) + 1}`,
+      videoNumber: (index % 10) + 1,
+      status: "not_queued",
+      blockers,
+    })),
+  };
+  assert.equal(heyGenRosterDailyPlanSchema.safeParse(plan).success, true);
+  assert.equal(heyGenRosterDailyPlanSchema.safeParse({ ...plan, canGenerate: true }).success, false);
+  assert.equal(heyGenRosterDailyPlanSchema.safeParse({ ...plan, blockers: blockers.toReversed() }).success, false);
+  assert.equal(heyGenRosterDailyPlanSchema.safeParse({ ...plan, slots: plan.slots.slice(0, 49) }).success, false);
 });

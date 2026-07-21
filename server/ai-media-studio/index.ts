@@ -9,6 +9,7 @@ export * from "./providers/fake-video-provider";
 export * from "./providers/heygen-video-provider";
 export * from "./providers/heygen-roster-contracts";
 export * from "./providers/heygen-roster-service";
+export * from "./providers/heygen-roster-daily-plan-service";
 export * from "./providers/drizzle-heygen-roster-repository";
 export * from "./core/runtime";
 export * from "./persistence";
