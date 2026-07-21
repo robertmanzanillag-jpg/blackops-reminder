@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
 import { es } from "date-fns/locale";
-import { DEFAULT_DEV_USER_ID, getCurrentUserId, getSystemUserId } from "./user-context";
+import { getCurrentUserId } from "./user-context";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { generateTelegramAssistantContext } from "./ceo-briefing";
@@ -12,6 +12,8 @@ import { PromoVideoSourceError, runPromoVideoAutoDaily } from "./promo-video-age
 import { buildDirectGoogleDriveFolderCommand, createGoogleDriveFolderPath, formatGoogleDriveFolderCreateResult } from "./google-drive-folder-command";
 import { buildDirectRadioDriveVideoCommand, buildDirectRadioYoutubeCommand, directRadioDriveVideoCommandNeedsDriveFolder, directRadioYoutubeCommandNeedsDriveFolder, executeDirectRadioDriveVideoCommand, executeDirectRadioYoutubeCommand, extractDriveFolderPathFromMessage, formatRadioDriveVideoResult, formatRadioYoutubeResult } from "./radio-youtube-command";
 import { buildDirectMetricoolCommand, buildMetricoolPendingDescription, sanitizeMetricoolAutomationInput } from "./metricool-chat-actions";
+import { executeBlackRoomChatMessage, looksLikeBlackRoomAssistantRequest } from "./blackroom-chat-service";
+import { isConfiguredSingleUserOwner } from "./single-user-owner";
 import { buildClaudeSkillContext } from "./claude-skill-bridge";
 import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
@@ -29,8 +31,6 @@ const CHEAP_SCOUT_CACHE_MAX_ENTRIES = 200;
 const RADIO_EDIT_ESTIMATED_COST_TEXT = "Gasto estimado de esta corrida: $0.00 USD.";
 const RADIO_DRIVE_VIDEO_STATUS_MESSAGE = `Estoy trabajando: preparo Drive, descargo el MP4 fuente, creo los clips y luego los subo a tu carpeta. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
 const RADIO_YOUTUBE_STATUS_MESSAGE = `Estoy trabajando: descargo el YouTube, creo los clips, los subo a Drive y borro el video largo local. ${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
-const APPROVED_SHARED_CONNECTOR_OWNER_IDS = new Set([DEFAULT_DEV_USER_ID, "robert"]);
-const APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set(["robert"]);
 const cheapScoutResponseCache = new Map<string, { response: string; expiresAt: number }>();
 
 export { buildDirectMetricoolCommand };
@@ -45,19 +45,6 @@ function formatAiApiCostPreview(provider: string, model: string, operation: stri
 
 function withRadioEditEstimatedCost(message: string): string {
   return /gasto estimado/i.test(message) ? message : `${message}\n${RADIO_EDIT_ESTIMATED_COST_TEXT}`;
-}
-
-async function isConfiguredSingleUserOwner(userId: string): Promise<boolean> {
-  try {
-    if (userId === getSystemUserId()) return true;
-  } catch {
-    // Robert approved this temporary owner path while DEFAULT_USER_ID is absent in production.
-  }
-
-  if (APPROVED_SHARED_CONNECTOR_OWNER_IDS.has(userId)) return true;
-
-  const user = await storage.getUser(userId).catch(() => undefined);
-  return Boolean(user?.username && APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES.has(user.username.trim().toLowerCase()));
 }
 
 function writeOwnerOnlySharedConnectorBlock(res: Response, connectorName: string): void {
@@ -1114,7 +1101,7 @@ La app es un centro de mando personal llamado BlackOps/CEO Assistant. El usuario
 
 Pantallas y capacidades principales:
 - Dashboard: resumen del dia, tareas, pendientes, aprobaciones y acceso rapido al asistente.
-- Assistant: chat principal. Permite texto, fotos/capturas y notas de voz. Puede crear tareas, revisar agenda, analizar portafolio, preparar acciones y pedir aprobacion antes de ejecutar cambios sensibles.
+- Assistant: chat principal. Permite texto, fotos/capturas y notas de voz. Puede crear tareas, revisar agenda, analizar portafolio, preparar acciones y pedir aprobacion antes de ejecutar cambios sensibles. Tambien controla BlackRoom: Play/Pause, semanas de cola, cantidad diaria, extras para hoy, una URL especifica de YouTube, estado de la cola y recomendacion de analytics.
 - Projects, Tools y Agents Office: organizan proyectos, herramientas y agentes de trabajo.
 - Automation Manager: revisar automatizaciones, recordatorios y tareas programadas.
 - Portfolio/Investment Detail: revisar o actualizar inversiones.
@@ -1189,6 +1176,46 @@ export function registerAssistantRoutes(app: Express): void {
 
       if (!message && (!images || images.length === 0)) {
         return res.status(400).json({ error: "Message or images are required" });
+      }
+
+      if (message && looksLikeBlackRoomAssistantRequest(message)) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        await saveCeoConversationMessage(userId, "user", message).catch((historyError) => {
+          console.error("Error saving BlackRoom control user message:", historyError);
+        });
+
+        if (!isOwnerUser) {
+          writeOwnerOnlySharedConnectorBlock(res, "el agente de BlackRoom");
+          writeAssistantSse(res, { done: true });
+          res.end();
+          return;
+        }
+
+        try {
+          const result = await executeBlackRoomChatMessage(message);
+          writeAssistantSse(res, {
+            content: result.reply,
+            blackRoomControlled: true,
+            blackRoomCommand: result.command?.type || null,
+            blackRoomEnabled: result.remote.desiredEnabled,
+          });
+          await saveCeoConversationMessage(userId, "assistant", result.reply).catch((historyError) => {
+            console.error("Error saving BlackRoom control assistant response:", historyError);
+          });
+        } catch (error: any) {
+          const errorText = error.message || "No pude controlar el agente de BlackRoom";
+          writeAssistantSse(res, { blackRoomAgentError: errorText });
+          await saveCeoConversationMessage(userId, "assistant", `Error: ${errorText}`).catch((historyError) => {
+            console.error("Error saving BlackRoom control assistant error:", historyError);
+          });
+        }
+
+        writeAssistantSse(res, { done: true });
+        res.end();
+        return;
       }
 
       const directPendingExecution = await executeSinglePendingApprovalFromChat(userId, message);

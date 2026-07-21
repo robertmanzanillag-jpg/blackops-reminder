@@ -6,6 +6,26 @@ import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { resolveDatabaseConnectionString } from "./database-url";
 import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection, type RevenueEngineStateStore } from "./revenue-engine-state-store";
 
+const REVENUE_WEBSITE_MIN_USD = 700;
+const REVENUE_WEBSITE_MAX_USD = 2500;
+const REVENUE_WEBSITE_DEFAULT_USD = 1500;
+
+function clampRevenueWebsitePrice(value: number) {
+  if (value <= 0) return 0;
+  return Math.min(REVENUE_WEBSITE_MAX_USD, Math.max(REVENUE_WEBSITE_MIN_USD, Math.round(value)));
+}
+
+function revenueWebsitePackageName(priceUsd: number) {
+  if (priceUsd >= REVENUE_WEBSITE_MAX_USD) return "Website Premium 3D";
+  if (priceUsd > REVENUE_WEBSITE_MIN_USD) return "Website Growth";
+  return "Website Starter";
+}
+
+function revenueWebsiteOfferName(websitePriceUsd: number, includesAutomation: boolean) {
+  const websiteName = revenueWebsitePackageName(websitePriceUsd);
+  return includesAutomation ? `${websiteName} + Automation Sprint` : websiteName;
+}
+
 const REVENUE_MONTHLY_COST_CAP_USD = 100;
 
 export const revenueEnginePlanSchema = z.object({
@@ -104,7 +124,7 @@ export const proposalEmailSchema = z.object({
   businessName: z.string().trim().min(2).max(160),
   sourceUrl: z.string().trim().url().max(300).optional(),
   businessSummary: z.string().trim().min(10).max(2000),
-  websitePriceUsd: z.coerce.number().min(0).max(100000).default(3500),
+  websitePriceUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   automationPriceUsd: z.coerce.number().min(0).max(100000).default(2500),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
   estimatedInternalMonthlyCostUsd: z.coerce.number().min(0).max(5000).default(54),
@@ -142,6 +162,14 @@ export const revenueOutreachApproveSchema = z.object({
 });
 
 export type RevenueOutreachApproveInput = z.infer<typeof revenueOutreachApproveSchema>;
+
+export const revenueOutreachUpdateSchema = z.object({
+  draftId: z.string().trim().min(1).max(160),
+  subject: z.string().trim().min(3).max(240),
+  body: z.string().trim().min(20).max(12000),
+});
+
+export type RevenueOutreachUpdateInput = z.infer<typeof revenueOutreachUpdateSchema>;
 
 export const revenueOutreachOutcomeSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
@@ -223,7 +251,7 @@ export const revenueLeadSchema = z.object({
   contactValue: z.string().trim().max(240).optional().default(""),
   evidence: z.string().trim().max(1200).optional().default(""),
   painPoint: z.string().trim().max(500).optional().default(""),
-  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(2500),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   status: z.enum(["research", "qualified", "mockup_ready", "outreach_ready", "contacted", "proposal_sent", "closed", "disqualified"]).default("research"),
 });
 
@@ -236,8 +264,8 @@ export const revenueMockupSchema = z.object({
   websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
   evidence: z.string().trim().max(1200).optional().default(""),
   painPoint: z.string().trim().max(500).optional().default(""),
-  primaryOffer: z.string().trim().max(200).optional().default("Website 3D Premium + Automation Sprint"),
-  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  primaryOffer: z.string().trim().max(200).optional().default("Business Website"),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   includeAutomation: z.boolean().default(true),
 });
 
@@ -267,8 +295,8 @@ export type RevenueLaunchReadinessInput = z.infer<typeof revenueLaunchReadinessS
 export const revenueProjectPlanSchema = z.object({
   clientName: z.string().trim().min(2).max(160),
   projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
-  packageName: z.string().trim().min(2).max(200).default("Website 3D Premium + Automation Sprint"),
-  setupUsd: z.coerce.number().min(0).max(100000).default(3500),
+  packageName: z.string().trim().min(2).max(200).default("Business Website"),
+  setupUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   monthlyRetainerUsd: z.coerce.number().min(0).max(25000).default(750),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
   depositPaid: z.boolean().default(false),
@@ -409,7 +437,7 @@ export const revenueAgentRunSchema = z.object({
   request: z.string().trim().min(8).max(1600),
   stage: z.enum(["lead_research", "mockup", "outreach", "proposal", "production", "delivery", "improvement"]).default("lead_research"),
   projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
-  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
   monthlyBudgetUsd: z.coerce.number().min(0).max(100).default(100),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
@@ -431,7 +459,7 @@ export const revenueSalesAutopilotSchema = z.object({
   painPoint: z.string().trim().max(500).optional().default(""),
   request: z.string().trim().min(8).max(1600),
   projectType: z.enum(["website", "automation", "bundle"]).default("bundle"),
-  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(3500),
+  estimatedOfferUsd: z.coerce.number().min(0).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   estimatedInternalCostUsd: z.coerce.number().min(0).max(5000).default(54),
   monthlyBudgetUsd: z.coerce.number().min(0).max(100).default(100),
   cashCollectedUsd: z.coerce.number().min(0).max(1000000).default(0),
@@ -530,7 +558,7 @@ export const revenuePublicScoutEvidenceSchema = z.object({
   publicEvidenceVerified: z.boolean().default(false),
   approvalToImport: z.boolean().default(false),
   approvedByRobert: z.boolean().default(false),
-  defaultOfferUsd: z.coerce.number().min(1500).max(100000).default(3500),
+  defaultOfferUsd: z.coerce.number().min(REVENUE_WEBSITE_MIN_USD).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   maxCandidates: z.coerce.number().int().min(1).max(50).default(25),
   notes: z.string().trim().max(1000).optional().default(""),
 });
@@ -548,7 +576,7 @@ const revenueVerifiedScoutConnectorResultSchema = z.object({
   sourceUrl: z.string().trim().url().max(300),
   evidence: z.string().trim().min(12).max(1200),
   painPoint: z.string().trim().min(8).max(500).default("Needs a stronger website, lead capture and follow-up."),
-  estimatedOfferUsd: z.coerce.number().min(1500).max(100000).default(3500),
+  estimatedOfferUsd: z.coerce.number().min(REVENUE_WEBSITE_MIN_USD).max(100000).default(REVENUE_WEBSITE_DEFAULT_USD),
   contactName: z.string().trim().max(120).optional().default("Owner"),
   businessSummary: z.string().trim().max(800).optional().default(""),
 });
@@ -2848,20 +2876,29 @@ const packages = [
   {
     id: "website-starter",
     name: "Website Starter",
+    priceUsd: 700,
+    recurringUsd: 0,
+    marginTarget: "80%+",
+    delivery: "3-5 days",
+    includes: ["One-page website", "Mobile responsive", "Contact form", "Launch handoff"],
+  },
+  {
+    id: "website-growth",
+    name: "Website Growth",
     priceUsd: 1500,
     recurringUsd: 79,
     marginTarget: "80%+",
-    delivery: "3-5 dias",
-    includes: ["One-page premium", "Copy local", "Formulario", "Hosting handoff"],
+    delivery: "5-7 days",
+    includes: ["Up to five sections", "Conversion-focused copy", "Contact or booking flow", "Basic local SEO"],
   },
   {
     id: "website-3d",
-    name: "Website 3D Premium",
-    priceUsd: 3500,
+    name: "Website Premium 3D",
+    priceUsd: 2500,
     recurringUsd: 149,
     marginTarget: "75%+",
-    delivery: "7-10 dias",
-    includes: ["Hero 3D", "Galeria dinamica", "SEO local", "Analytics"],
+    delivery: "7-10 days",
+    includes: ["Custom 3D hero", "Dynamic gallery", "Local SEO", "Analytics"],
   },
   {
     id: "automation-sprint",
@@ -4272,7 +4309,7 @@ export function createWebsiteDeliveryWorkspaceFromLead(input: RevenueWebsiteDeli
     releaseGateHeadSha: "",
     clientName: lead.businessName,
     projectType,
-    packageName: projectType === "website" ? "Website 3D Premium" : "Website 3D Premium + Automation Sprint",
+    packageName: revenueWebsiteOfferName(outreachDraft?.websitePriceUsd || setupUsd, projectType === "bundle"),
     setupUsd,
     monthlyRetainerUsd,
     estimatedInternalCostUsd,
@@ -4634,6 +4671,7 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(
     { gate: "lead_found", passed: true, fix: "Seleccionar un lead existente." },
     { gate: "draft_found", passed: true, fix: "Crear propuesta/draft conectado al lead." },
     { gate: "draft_approved", passed: draft.status === "approved", fix: "Aprobar el draft antes de crear oportunidad website." },
+    { gate: "website_scope", passed: draft.websitePriceUsd > 0, fix: "Agregar alcance y precio de website antes de crear una oportunidad website." },
     { gate: "mockup", passed: Boolean(draft.mockupUrl), fix: "Generar o adjuntar mockup preview." },
     { gate: "public_source", passed: Boolean(draft.sourceUrl), fix: "Adjuntar sourceUrl publico del negocio." },
     { gate: "draft_qa", passed: !failedBlockingGate, fix: failedBlockingGate?.fix || "Corregir QA del draft." },
@@ -4644,7 +4682,7 @@ function syncRevenueWebsiteOpportunityFromDepositOutcome(
   const now = new Date().toISOString();
   const preserveClosedChain = isClosedRevenueWebsiteOpportunity(existing);
   const projectType = existing?.projectType || (draft.automationPriceUsd > 0 ? "bundle" as const : "website" as const);
-  const setupUsd = existing?.setupUsd || (projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd);
+  const setupUsd = existing?.setupUsd || (projectType === "website" ? clampRevenueWebsitePrice(draft.websitePriceUsd) : draft.pricing.totalSetupUsd);
   const requiredDepositUsd = existing?.requiredDepositUsd || Math.round(setupUsd * 0.5);
   const status = existing?.status === "delivered"
     ? "delivered" as const
@@ -4714,6 +4752,7 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
     { gate: "lead_found", passed: Boolean(lead), fix: "Seleccionar un lead existente." },
     { gate: "draft_found", passed: Boolean(draft), fix: "Crear propuesta/draft conectado al lead." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de crear oportunidad website." },
+    { gate: "website_scope", passed: Boolean(draft && draft.websitePriceUsd > 0), fix: "Agregar alcance y precio de website antes de crear una oportunidad website." },
     { gate: "mockup", passed: Boolean(draft?.mockupUrl), fix: "Generar o adjuntar mockup preview." },
     { gate: "public_source", passed: Boolean(draft?.sourceUrl), fix: "Adjuntar sourceUrl publico del negocio." },
     { gate: "draft_qa", passed: !failedBlockingGate, fix: failedBlockingGate?.fix || "Corregir QA del draft." },
@@ -4737,7 +4776,7 @@ export function recordRevenueWebsiteOpportunity(input: RevenueWebsiteOpportunity
     ? existing.projectType
     : parsed.projectType === "website" || draft.automationPriceUsd <= 0 ? "website" as const : "bundle" as const;
   const existingStatus = isClosedRevenueWebsiteOpportunity(existing) || existing?.status === "scope_approved" ? existing.status : "quoted";
-  const quotedSetupUsd = projectType === "website" ? Math.max(1500, draft.websitePriceUsd) : draft.pricing.totalSetupUsd;
+  const quotedSetupUsd = projectType === "website" ? clampRevenueWebsitePrice(draft.websitePriceUsd) : draft.pricing.totalSetupUsd;
   const setupUsd = isClosedRevenueWebsiteOpportunity(existing) ? existing.setupUsd : quotedSetupUsd;
   const requiredDepositUsd = isClosedRevenueWebsiteOpportunity(existing) ? existing.requiredDepositUsd : Math.round(setupUsd * 0.5);
   const opportunity: RevenueWebsiteOpportunity = {
@@ -4916,6 +4955,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
     });
 
   const items = closureOpportunities.map((opportunity) => {
+    const closureDraft = revenueOutreachDrafts.find((draft) => draft.id === opportunity.sourceOutreachDraftId);
     const needsDeposit = !opportunity.depositPaid;
     const needsScope = !opportunity.scopeApproved;
     const closureStage: RevenueWebsiteClosureQueue["items"][number]["closureStage"] =
@@ -4972,7 +5012,7 @@ function buildRevenueWebsiteClosureQueue(): RevenueWebsiteClosureQueue {
       copyableClosurePacket: [
         `Website closure packet: ${opportunity.businessName}`,
         `Status: ${opportunity.status}`,
-        `Package: ${opportunity.projectType === "bundle" ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium"}`,
+        `Package: ${revenueWebsiteOfferName(closureDraft?.websitePriceUsd || opportunity.setupUsd, opportunity.projectType === "bundle")}`,
         `Setup: $${opportunity.setupUsd.toLocaleString("en-US")}`,
         `Deposit required: $${opportunity.requiredDepositUsd.toLocaleString("en-US")}`,
         `Cash recorded: $${opportunity.cashCollectedUsd.toLocaleString("en-US")}`,
@@ -5031,6 +5071,7 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
     const blockedReasons = [
       ...qualification.missing,
       !draft && "falta propuesta/draft conectado",
+      draft && draft.websitePriceUsd <= 0 && "falta alcance y precio de website",
       draft && !mockupUrl && "falta mockup preview",
       draft && !sourceUrl && "falta sourceUrl publico",
       draft && failedBlockingGate && failedBlockingGate.fix,
@@ -5048,7 +5089,7 @@ function buildRevenueWebsiteSalesPacketQueue(): RevenueWebsiteSalesPacketQueue {
       continue;
     }
 
-    const primaryOffer = draft.automationPriceUsd > 0 ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium";
+    const primaryOffer = revenueWebsiteOfferName(draft.websitePriceUsd, draft.automationPriceUsd > 0);
     const opportunityRequest = {
       leadId: lead.id,
       outreachDraftId: draft.id,
@@ -7969,7 +8010,7 @@ export function recordRevenueVerifiedScoutConnectorResults(input: RevenueVerifie
     publicEvidenceVerified: false,
     approvalToImport: false,
     approvedByRobert: false,
-    defaultOfferUsd: 3500,
+    defaultOfferUsd: REVENUE_WEBSITE_DEFAULT_USD,
     maxCandidates: parsed.results.length,
     notes,
   });
@@ -8520,7 +8561,7 @@ export function buildRevenueMockup(input: RevenueMockupInput) {
         ]
       : ["Automation upsell preparado para fase 2."],
     offer: {
-      packageName: input.primaryOffer || "Website 3D Premium + Automation Sprint",
+      packageName: input.primaryOffer || "Business Website + Automation Sprint",
       setupUsd,
       automationUsd,
       totalUsd,
@@ -9555,7 +9596,7 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
     websiteStatus: parsed.websiteStatus,
     evidence: parsed.evidence,
     painPoint: parsed.painPoint,
-    primaryOffer: includeAutomation ? "Website 3D Premium + Automation Sprint" : "Website 3D Premium",
+    primaryOffer: revenueWebsiteOfferName(clampRevenueWebsitePrice(parsed.estimatedOfferUsd), includeAutomation),
     estimatedOfferUsd: parsed.estimatedOfferUsd,
     includeAutomation,
   });
@@ -9601,7 +9642,7 @@ export function recordRevenueSalesAutopilot(input: RevenueSalesAutopilotInput) {
         businessName: parsed.businessName,
         sourceUrl: parsed.sourceUrl || undefined,
         businessSummary: parsed.businessSummary || `${parsed.businessName} en ${parsed.area}: ${parsed.evidence || parsed.painPoint}`,
-        websitePriceUsd: includeAutomation ? Math.round(parsed.estimatedOfferUsd * 0.65) : parsed.estimatedOfferUsd,
+        websitePriceUsd: clampRevenueWebsitePrice(includeAutomation ? parsed.estimatedOfferUsd * 0.65 : parsed.estimatedOfferUsd),
         automationPriceUsd: includeAutomation ? Math.round(parsed.estimatedOfferUsd * 0.35) : 0,
         monthlyRetainerUsd: parsed.monthlyRetainerUsd,
         estimatedInternalMonthlyCostUsd: parsed.estimatedInternalCostUsd,
@@ -9691,6 +9732,52 @@ export function approveRevenueOutreachDraft(input: RevenueOutreachApproveInput) 
       sendsOutreach: false,
       spendsMoney: false,
       writesPreviewFiles: false,
+      createsLedger: false,
+      createsDelivery: false,
+    },
+  };
+}
+
+export function updateRevenueOutreachDraft(input: RevenueOutreachUpdateInput) {
+  loadRevenueOutreach();
+  const parsed = revenueOutreachUpdateSchema.parse(input);
+  const draft = revenueOutreachDrafts.find((item) => item.id === parsed.draftId) || null;
+  const gates = [
+    { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
+    { gate: "not_sent", passed: draft?.delivery.sendStatus !== "sent", fix: "Un correo enviado no puede editarse; crea un follow-up nuevo." },
+  ];
+  const failedGate = gates.find((gate) => !gate.passed);
+
+  if (!draft || failedGate) {
+    return {
+      status: "blocked" as const,
+      reason: failedGate?.fix || "No se pudo actualizar el draft.",
+      gates,
+      draft,
+      snapshot: getRevenueEngineSnapshot(),
+    };
+  }
+
+  draft.subject = parsed.subject;
+  draft.body = parsed.body;
+  draft.status = "draft";
+  draft.approvalStatus = "draft";
+  draft.qaGates = draft.qaGates.map((gate) => gate.gate === "approval"
+    ? { ...gate, passed: false, fix: "Robert debe volver a aprobar el mensaje después de cualquier corrección." }
+    : gate);
+  draft.updatedAt = new Date().toISOString();
+  draft.nextAction = "Revisar el mensaje corregido y aprobarlo antes de enviar.";
+  persistRevenueOutreach();
+
+  return {
+    status: "updated" as const,
+    reason: "Corrección guardada. El correo volvió a draft y necesita una nueva aprobación.",
+    gates,
+    draft,
+    snapshot: getRevenueEngineSnapshot(),
+    safety: {
+      sendsOutreach: false,
+      spendsMoney: false,
       createsLedger: false,
       createsDelivery: false,
     },
@@ -11340,48 +11427,50 @@ export function recordRevenueDeliveryWorkspaceImprovementReview(input: RevenueDe
 }
 
 export function buildProposalEmail(input: ProposalEmailInput) {
-  const totalSetupUsd = input.websitePriceUsd + input.automationPriceUsd;
+  const websitePriceUsd = Number.isFinite(input.websitePriceUsd) ? input.websitePriceUsd : REVENUE_WEBSITE_DEFAULT_USD;
+  const totalSetupUsd = websitePriceUsd + input.automationPriceUsd;
   const depositUsd = Math.round(totalSetupUsd * 0.5);
   const grossMarginUsd = input.monthlyRetainerUsd - input.estimatedInternalMonthlyCostUsd;
   const grossMarginPercent = input.monthlyRetainerUsd > 0 ? Math.round((grossMarginUsd / input.monthlyRetainerUsd) * 100) : 0;
   const genericContact = /^(owner|propietario|equipo|robert)$/i.test(input.contactName);
-  const greeting = genericContact ? "Hola," : `Hola ${input.contactName},`;
+  const greeting = genericContact ? "Hello," : `Hello ${input.contactName},`;
   const scope = [
-    input.websitePriceUsd > 0
-      ? "- Website premium, rapido y responsive, con una ruta clara hacia consultas o reservas."
+    websitePriceUsd > 0
+      ? "- A premium, fast, responsive website with a clear path to inquiries or bookings."
       : null,
-    input.websitePriceUsd > 0
-      ? "- Concepto visual 3D alineado con la marca y llamadas a la accion medibles."
+    websitePriceUsd > 0
+      ? "- A polished visual concept aligned with the brand and measurable calls to action."
       : null,
     input.automationPriceUsd > 0
-      ? "- Seguimiento basico de leads con aprobacion humana antes de cualquier mensaje."
+      ? "- A practical lead follow-up workflow with human approval before any message is sent."
       : null,
-    "- QA de mobile, formularios, enlaces y rollback antes de publicar.",
+    "- Mobile, form, link, and rollback QA before launch.",
   ].filter((line): line is string => Boolean(line));
-  const subject = `Idea para mejorar la experiencia digital de ${input.businessName}`;
+  const subject = `A website concept for ${input.businessName}`;
   const body = [
     greeting,
     "",
-    `Revise la experiencia digital publica de ${input.businessName} y vi una oportunidad concreta para facilitar que nuevos clientes entiendan los servicios y den el siguiente paso.`,
+    `I'm Robert, founder of Robert Websites. I reviewed ${input.businessName}'s public online presence and identified an opportunity to make it easier for prospective clients to understand your services and take the next step.`,
     "",
-    "La oportunidad principal es presentar la oferta, la confianza y el siguiente paso en un recorrido mas claro para consultas, compras o reservas.",
+    "I'd like to show you a tailored website direction focused on clearer service positioning, stronger trust signals, mobile-first performance, and a streamlined path to inquiries or appointments.",
     "",
-    `Prepare un concepto privado para ${input.businessName} con este alcance inicial:`,
+    "The initial scope includes:",
     ...scope,
     "",
-    "Inversion estimada:",
-    `- Proyecto inicial: $${totalSetupUsd.toLocaleString("en-US")}`,
-    `- Deposito para comenzar: $${depositUsd.toLocaleString("en-US")}`,
+    "Estimated investment:",
+    `- Initial project: $${totalSetupUsd.toLocaleString("en-US")}`,
+    `- 50% deposit to begin: $${depositUsd.toLocaleString("en-US")}`,
     input.monthlyRetainerUsd > 0
-      ? `- Soporte y optimizacion mensual opcional: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/mes`
+      ? `- Optional monthly support and optimization: $${input.monthlyRetainerUsd.toLocaleString("en-US")}/month`
       : null,
     "",
-    "Antes de comenzar confirmariamos alcance, contenido y prioridades. El preview seguiria privado hasta recibir su aprobacion.",
+    "Before any work begins, we would confirm the final scope, content, priorities, and timeline. Any design direction would remain private until you approve it.",
     "",
-    "¿Le gustaria que le comparta el preview y coordinemos una llamada breve de 15 minutos para revisarlo?",
+    "Would you be open to a brief 15-minute call this week to discuss the direction and see whether it fits your goals?",
     "",
-    "Robert",
-    "Robert Websites",
+    "Best regards,",
+    "Robert Manzanilla",
+    "Founder, Robert Websites",
   ].filter((line): line is string => line !== null).join("\n");
 
   const hasRecipientEmail = input.recipientEmail.trim().length > 0;
@@ -11936,7 +12025,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         websiteStatus: seed.websiteStatus,
         evidence: seed.evidence,
         painPoint: seed.painPoint,
-        primaryOffer: parsed.offerFocus === "automations" ? "Automation Sprint + Revenue Dashboard" : "Website 3D Premium + Automation Sprint",
+        primaryOffer: parsed.offerFocus === "automations" ? "Automation Sprint + Revenue Dashboard" : "Business Website + Automation Sprint",
         estimatedOfferUsd: seed.estimatedOfferUsd,
         includeAutomation: parsed.offerFocus !== "websites",
       }, { writeFile: parsed.writePreviewFiles });
@@ -11955,7 +12044,7 @@ export function runRevenueMoneySprint(input: RevenueMoneySprintInput) {
         sourceUrl: seed.sourceUrl,
         mockupUrl: preview?.previewUrl,
         businessSummary: summarizeSeedLead(seed),
-        websitePriceUsd: parsed.offerFocus === "automations" ? 0 : Math.max(1500, Math.round(seed.estimatedOfferUsd * 0.65)),
+        websitePriceUsd: parsed.offerFocus === "automations" ? 0 : clampRevenueWebsitePrice(parsed.offerFocus === "websites" ? seed.estimatedOfferUsd : seed.estimatedOfferUsd * 0.65),
         automationPriceUsd: parsed.offerFocus === "websites" ? 0 : Math.max(750, Math.round(seed.estimatedOfferUsd * 0.35)),
         monthlyRetainerUsd: 750,
         estimatedInternalMonthlyCostUsd: 54,

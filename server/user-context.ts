@@ -20,13 +20,21 @@ const PUBLIC_API_PATHS = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/telegram/webhook",
+  "/api/stripe/revenue-webhook",
   "/api/google-drive/oauth/callback",
   "/api/canva/oauth/callback",
   "/api/zoho/callback",
+  "/api/blackroom-agent/remote",
+  "/api/blackroom-agent/metricool/schedule",
 ];
 
+// These device endpoints remain protected by the BlackRoom bearer token in
+// their route handlers. They must bypass browser-session auth so the signed
+// local worker and Metricool can exchange media without a user cookie.
 const PUBLIC_API_PATTERNS: RegExp[] = [
   /^\/api\/ai-media-studio\/webhooks\/providers\/[a-z0-9][a-z0-9_-]{0,63}$/,
+  /^\/api\/blackroom-agent\/media\/[^/]+$/,
+  /^\/api\/blackroom-agent\/media\/chunked\/[^/]+\/(?:\d+|complete)$/,
 ];
 
 function cleanUserId(value: unknown): string | null {
