@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   BLACKROOM_WORKER_LOCK_PATH,
   BLACKROOM_WORKER_STATE_PATH,
+  buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
   createBlackRoomLocalWorkerState,
   shouldRunBlackRoomWorker,
@@ -71,9 +72,9 @@ async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
   const output = await open(logPath, "a");
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
-    const child = spawn(codexPath, [
-      "exec", "--ephemeral", "--color", "never", "-a", "never", "-s", "workspace-write", "-C", projectDir, "-",
-    ], { cwd: projectDir, detached: true, stdio: ["pipe", output.fd, output.fd] });
+    const child = spawn(codexPath, buildBlackRoomCodexArgs(projectDir), {
+      cwd: projectDir, detached: true, stdio: ["pipe", output.fd, output.fd],
+    });
     activeChild = child;
     state.pid = child.pid || null;
     await writeJson(statePath, state);

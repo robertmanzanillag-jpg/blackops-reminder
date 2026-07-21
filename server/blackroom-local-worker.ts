@@ -56,6 +56,10 @@ export function createBlackRoomLocalWorkerState(): BlackRoomLocalWorkerState {
   };
 }
 
+export function buildBlackRoomCodexArgs(projectDir: string): string[] {
+  return ["exec", "--ephemeral", "--color", "never", "-s", "workspace-write", "-C", projectDir, "-"];
+}
+
 export function shouldRunBlackRoomWorker(
   queue: { enabled?: unknown; jobs?: Array<{ status?: string; notBefore?: string }> },
   now = new Date(),

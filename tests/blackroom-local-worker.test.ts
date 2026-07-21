@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertSafeConfirmedDeletion,
+  buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
@@ -26,6 +27,14 @@ test("worker state starts stopped and recoverable", () => {
   assert.deepEqual(createBlackRoomLocalWorkerState(), {
     running: false, workerPid: null, pid: null, startedAt: null, finishedAt: null, lastExitCode: null, lastError: null, runs: 0,
   });
+});
+
+test("uses only Codex exec flags supported by the installed noninteractive CLI", () => {
+  const args = buildBlackRoomCodexArgs("/tmp/blackroom-project");
+  assert.deepEqual(args.slice(0, 3), ["exec", "--ephemeral", "--color"]);
+  assert.equal(args.includes("-a"), false);
+  assert.equal(args.includes("workspace-write"), true);
+  assert.equal(args.at(-1), "-");
 });
 
 test("prompt contains posting and deletion safety gates", () => {
