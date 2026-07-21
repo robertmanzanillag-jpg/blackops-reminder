@@ -102,6 +102,8 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           idempotencyKey: request.idempotencyKey,
           title: request.script.trim().slice(0, 80),
           request: asJsonObject(request),
+          governanceProfileId: request.governance?.profileId ?? null,
+          governanceEvidenceDigest: request.governance?.evidenceDigest ?? null,
           status: "pending",
           stage: "queued",
           progress: 0,
@@ -260,6 +262,9 @@ export class DrizzleMediaJobRepository implements MediaJobRepository {
           outputUrl: job.outputUrl ?? null,
           outputMediaAssetId: job.outputAssetId ?? null,
           errorMessage: job.error ?? null,
+          request: asJsonObject(job.request),
+          governanceProfileId: job.request.governance?.profileId ?? null,
+          governanceEvidenceDigest: job.request.governance?.evidenceDigest ?? null,
           // Queue fencing/recovery metadata shares this JSON document. Domain
           // projection updates must never erase it.
           result: { ...(current.result ?? {}), ...resultFields(job) },

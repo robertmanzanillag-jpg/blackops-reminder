@@ -5,6 +5,7 @@ import type {
   StudioDashboard,
   StudioOptions,
 } from "./types";
+import { actionableApiError } from "./governance/errors";
 
 const API_ROOT = "/api/ai-media-studio";
 
@@ -19,8 +20,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const fallback = `Request failed (${response.status})`;
     let message = fallback;
     try {
-      const body = (await response.json()) as { message?: string; error?: string };
-      message = body.message || body.error || fallback;
+      message = actionableApiError(await response.json(), fallback);
     } catch {
       // The API can return an empty response when an upstream provider is unavailable.
     }

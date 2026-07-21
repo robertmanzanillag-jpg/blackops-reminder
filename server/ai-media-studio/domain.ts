@@ -7,6 +7,11 @@ export interface GenerationRequest {
   language: string;
   aspectRatio: "9:16";
   idempotencyKey: string;
+  /** Trusted server-only evidence. The public request schema never accepts this field. */
+  governance?: {
+    profileId: string;
+    evidenceDigest: `sha256:${string}`;
+  };
 }
 
 export interface MediaGenerationJob {

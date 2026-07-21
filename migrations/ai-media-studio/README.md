@@ -1,11 +1,11 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover the incremental PR2, PR3, and PR4 schema deltas after the
-PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 passed its
-local independent checker/static App QA gate. They do not create the PR1
+These SQL files cover the incremental PR2, PR3, PR4, and PR5 schema deltas after the
+PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
+local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
 `npm run db:push` for the reviewed SQL and release sequence below. Apply the
-deltas strictly in PR2 -> PR3 -> PR4 order.
+deltas strictly in PR2 -> PR3 -> PR4 -> PR5 order.
 
 ## Required release sequence
 
@@ -86,3 +86,34 @@ owned object metadata, queue/fencing/error evidence, render-output link, foreign
 key, indexes and all rows for recovery. Roll application code back first with
 render/ingest workers drained; if multiple deltas must be rolled back, use PR4
 before PR3 before PR2 after exports and a fresh verified backup.
+
+## PR5 governance and quality release
+
+`20260720_pr5_governance_forward.sql` is the additive PR5 delta and has not
+been applied to any database. It adds append-only, tenant-scoped influencer
+governance revisions and checksum-bound asset quality reviews. It also records
+the exact governance profile and evidence digest used by a render job. Composite
+foreign keys prevent cross-tenant identity, resource, asset/checksum, revision,
+and render-profile references; tenant idempotency and per-aggregate version
+uniqueness make retries and concurrent appends fail closed.
+
+Apply PR5 only after PR4 passes its staging gates. With writers and workers
+drained, take and verify a restorable backup, obtain checker approval, apply the
+checked-in forward SQL to staging, and prove:
+
+1. Cross-tenant influencer, avatar, voice, asset/checksum, previous-revision,
+   and render-profile references are rejected by PostgreSQL.
+2. Same-key/same-input retries return the original record while same-key/different-input
+   requests conflict, and concurrent version appends cannot create two canonical revisions.
+3. Revoked, not-yet-valid, expired, use/territory-disallowed, brand-policy-failing,
+   missing-review, rejected-review, and checksum-mismatched renders/publications fail closed.
+4. Render rows retain the exact immutable governance evidence digest used at dispatch.
+5. Full checker and App QA gates pass, followed by Robert's explicit approval before
+   any Replit/production deployment.
+
+The PR5 rollback is intentionally data preserving: it retains both new tables,
+all evidence and revision chains, composite constraints and indexes, and render
+snapshot columns. Roll application code back first with writers/workers drained.
+For multiple deltas, use PR5 before PR4 before PR3 before PR2 after a fresh
+verified backup. Destructive evidence purging requires a separate retention
+approval, reviewed migration, and recovery rehearsal.

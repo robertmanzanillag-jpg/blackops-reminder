@@ -52,6 +52,54 @@ test("creates a provider-neutral vertical job and isolates it by authenticated o
   await assert.rejects(() => service.getJob("user-b", job.id), /not found/i);
 });
 
+test("generation resolves governance before persistence and again immediately before inline submit", async () => {
+  const repository = new InMemoryMediaJobRepository();
+  const provider = new LiveTestVideoProvider();
+  let checks = 0;
+  const service = new AiMediaStudioService(repository, new InMemoryMediaJobQueue(), [provider], provider.key, {
+    assetIngestRepository: new InMemoryAssetIngestRepository(),
+    assetIngestWorkerReadiness: { isReady: () => true },
+    governanceGate: {
+      assertRenderAllowed() {
+        checks += 1;
+        if (checks === 2) throw new Error("profile revoked before provider submit");
+      },
+    },
+  });
+
+  const failed = await service.createGeneration("user-a", createHarness().request);
+  assert.equal(checks, 2);
+  assert.equal(failed.status, "failed");
+  assert.match(failed.error ?? "", /profile revoked/i);
+
+  const blockedRepository = new InMemoryMediaJobRepository();
+  const blocked = new AiMediaStudioService(blockedRepository, new InMemoryMediaJobQueue(), [provider], provider.key, {
+    governanceGate: { assertRenderAllowed: () => { throw new Error("profile missing"); } },
+  });
+  await assert.rejects(blocked.createGeneration("user-a", createHarness().request), /profile missing/i);
+  assert.deepEqual(await blockedRepository.list("user-a"), []);
+});
+
+test("durable create binds the current governance snapshot and explicit retry refreshes it", async () => {
+  const repository = new InMemoryMediaJobRepository();
+  let current = { profileId: "00000000-0000-4000-8000-000000000001", evidenceDigest: `sha256:${"1".repeat(64)}` as const };
+  const service = new AiMediaStudioService(
+    repository,
+    new InMemoryMediaJobQueue(),
+    [new FakeVideoProvider({ autoComplete: false })],
+    "fake",
+    { executionMode: "durable", governanceGate: { assertRenderAllowed: () => ({ ...current }) } },
+  );
+  const created = await service.createGeneration("user-a", createHarness().request);
+  assert.deepEqual(created.request.governance, current);
+  await repository.update({ ...created, status: "failed", stage: "failed", progress: 100, attempts: 1 });
+
+  current = { profileId: "00000000-0000-4000-8000-000000000002", evidenceDigest: `sha256:${"2".repeat(64)}` };
+  const retried = await service.retryJob("user-a", created.id);
+  assert.deepEqual(retried.request.governance, current);
+  assert.equal(retried.status, "pending");
+});
+
 test("live generation fails closed unless explicit ingest-worker readiness and its repository are supplied", async () => {
   const request = createHarness().request;
   const provider = new LiveTestVideoProvider();

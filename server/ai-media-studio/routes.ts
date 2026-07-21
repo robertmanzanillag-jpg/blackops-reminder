@@ -25,6 +25,13 @@ import {
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
 import {
+  assetQualityReviewResponseSchema,
+  createAssetQualityReviewRequestSchema,
+  createInfluencerGovernanceProfileRequestSchema,
+  influencerGovernanceProfileResponseSchema,
+  revokeInfluencerGovernanceProfileRequestSchema,
+} from "../../shared/ai-media-studio-governance";
+import {
   analyticsSummarySchema,
   attributionSchema,
   automationPolicySchema,
@@ -84,8 +91,11 @@ import {
 } from "./operations-runtime";
 import {
   PublishingInvariantError,
+  PublishingPolicyDeniedError,
+  type PublicationJob,
   type PublicPublication,
 } from "./publishing/domain";
+import type { PublishingSubmissionGate } from "./publishing/worker";
 import type { CanonicalSourceItem } from "./sources/contracts";
 import { SourceCursorError } from "./sources/source-pagination";
 import {
@@ -95,6 +105,19 @@ import {
   type AssetIngestRepository,
   type AssetIngestWorkerHooks,
 } from "./assets";
+import type { GovernanceRepository } from "./governance/contracts";
+import {
+  GovernanceConflictError,
+  GovernanceGateError,
+  GovernanceNotFoundError,
+  GovernanceValidationError,
+} from "./governance/contracts";
+import { InMemoryGovernanceRepository } from "./governance/in-memory-repository";
+import {
+  GovernanceService,
+  toPublicAssetQualityReview,
+  toPublicInfluencerGovernanceProfile,
+} from "./governance/service";
 
 export interface AiMediaStudioDependencies {
   repository?: MediaJobRepository;
@@ -111,6 +134,9 @@ export interface AiMediaStudioDependencies {
   createDurableCoreRepositories?: () => CoreCatalogRepositories;
   workspaceId?: string;
   seedCoreDefaults?: boolean;
+  governanceRepository?: GovernanceRepository;
+  createDurableGovernanceRepository?: () => GovernanceRepository;
+  seedGovernanceDefaults?: boolean;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -123,6 +149,9 @@ export interface AiMediaStudioRuntime {
   router: Router;
   persistence: MediaStudioPersistenceStatus;
   operations: OperationsRuntime;
+  governance: GovernanceService;
+  governancePersistence: MediaStudioPersistenceStatus;
+  publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
   reconcileCompletedAssetIngests(limit?: number): Promise<number>;
@@ -199,6 +228,60 @@ function createDefaultDurableAssetIngestRepository(): AssetIngestRepository {
     reconcileExpiredLeases: async (...args) => (await load()).reconcileExpiredLeases(...args),
     listDeadLetters: async (...args) => (await load()).listDeadLetters(...args),
   };
+}
+
+function configuredDatabase(value: string | undefined): boolean {
+  const databaseUrl = value?.trim();
+  return Boolean(databaseUrl && !/^(change[-_ ]?me|replace[-_ ]?me|your[-_ ]|example|placeholder)/iu.test(databaseUrl));
+}
+
+function createDefaultDurableGovernanceRepository(): GovernanceRepository {
+  let pending: Promise<GovernanceRepository> | undefined;
+  const load = () => pending ??= Promise.all([import("../db"), import("./governance/drizzle-repository")])
+    .then(([database, adapter]) => new adapter.DrizzleGovernanceRepository(database.db));
+  return new Proxy({}, {
+    get: (_target, property) => async (...args: unknown[]) => {
+      const repository = await load();
+      const method = Reflect.get(repository, property);
+      if (typeof method !== "function") throw new Error(`Governance repository method ${String(property)} is unavailable`);
+      return Reflect.apply(method, repository, args);
+    },
+  }) as GovernanceRepository;
+}
+
+function selectGovernanceRepository(dependencies: AiMediaStudioDependencies, runtimeEnvironment: string | undefined, databaseUrl: string | undefined): {
+  repository: GovernanceRepository;
+  status: MediaStudioPersistenceStatus;
+} {
+  if (dependencies.governanceRepository) {
+    return { repository: dependencies.governanceRepository, status: { mode: "injected", available: true, durable: false, reason: "Governance repository supplied by the composition caller" } };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      return {
+        repository: (dependencies.createDurableGovernanceRepository ?? createDefaultDurableGovernanceRepository)(),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle governance persistence selected" },
+      };
+    } catch (error) {
+      const reason = `Governance persistence initialization failed: ${error instanceof Error ? error.message : "unknown error"}`;
+      return { repository: unavailableGovernanceRepository(reason), status: { mode: "unavailable", available: false, durable: false, reason } };
+    }
+  }
+  const environment = runtimeEnvironment?.trim().toLowerCase();
+  if (environment === "development" || environment === "test") {
+    return {
+      repository: new InMemoryGovernanceRepository(),
+      status: { mode: "memory", available: true, durable: false, reason: `Ephemeral governance persistence allowed for ${environment}` },
+    };
+  }
+  const reason = "DATABASE_URL is required outside development/test; in-memory governance persistence is disabled";
+  return { repository: unavailableGovernanceRepository(reason), status: { mode: "unavailable", available: false, durable: false, reason } };
+}
+
+function unavailableGovernanceRepository(reason: string): GovernanceRepository {
+  return new Proxy({}, {
+    get: () => async () => { throw new MediaStudioPersistenceUnavailableError(reason); },
+  }) as GovernanceRepository;
 }
 
 function paginate<T extends { id: string }>(items: T[], cursor: string | undefined, limit: number): {
@@ -400,6 +483,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     workspaceId: dependencies.workspaceId,
     seedDefaults: dependencies.seedCoreDefaults,
   });
+  const governanceSelection = selectGovernanceRepository(
+    dependencies,
+    explicitHarness && !dependencies.governanceRepository ? "test" : runtimeEnvironment,
+    explicitHarness && !dependencies.governanceRepository ? undefined : databaseUrl,
+  );
+  const governance = new GovernanceService(governanceSelection.repository);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -420,12 +509,116 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     new HeyGenVideoProvider({ apiKey: process.env.HEYGEN_API_KEY, resolveResources: createHeyGenResourceResolver(resources) }),
   ];
   const defaultProviderKey = dependencies.defaultProviderKey ?? (process.env.AI_MEDIA_STUDIO_HEYGEN_ENABLED === "true" ? "heygen" : "fake");
+  const seedGovernance = dependencies.seedGovernanceDefaults
+    ?? (!governanceSelection.status.durable && governanceSelection.status.available && (explicitHarness || environment === "development" || environment === "test"));
+  const governanceSeeds = new Map<string, Promise<void>>();
+  const ensureGovernanceDefaults = async (scope: TenantScope): Promise<void> => {
+    if (!seedGovernance) return;
+    const key = JSON.stringify([scope.workspaceId, scope.ownerUserId]);
+    let pending = governanceSeeds.get(key);
+    if (!pending) {
+      pending = (async () => {
+        const samples = [
+          { influencerId: "emily-food", avatarId: "avatar-emily", voiceId: "voice-emily-en" },
+          { influencerId: "sofia-travel", avatarId: "avatar-sofia", voiceId: "voice-sofia-es" },
+        ] as const;
+        for (const sample of samples) {
+          if (await governance.getCurrentProfile(scope, sample.influencerId)) continue;
+          await governance.createProfile(scope, scope.ownerUserId, sample, {
+            consentBasis: "synthetic_not_applicable",
+            rightsBasis: "owned",
+            allowedUses: ["internal_preview", "organic_social"],
+            territories: ["WORLDWIDE"],
+            validFrom: "2026-01-01T00:00:00.000Z",
+            expiresAt: "2035-01-01T00:00:00.000Z",
+            policyVersion: "sample-fixture-v1",
+            proofDigest: `sha256:${"0".repeat(64)}`,
+            brandPolicy: { requiredTerms: [], prohibitedTerms: [] },
+            idempotencyKey: `sample-${sample.influencerId}-profile-v1`,
+          });
+        }
+      })().catch((error) => {
+        governanceSeeds.delete(key);
+        throw error;
+      });
+      governanceSeeds.set(key, pending);
+    }
+    await pending;
+  };
+  const assertRenderGovernance = async (
+    ownerUserId: string,
+    request: MediaGenerationJob["request"],
+  ): Promise<NonNullable<MediaGenerationJob["request"]["governance"]>> => {
+    const scope = { ownerUserId, workspaceId: core.workspaceId };
+    await core.ensureDefaults(scope);
+    await ensureGovernanceDefaults(scope);
+    const influencer = await core.influencers.get(scope, request.influencerId);
+    if (!influencer.avatarResourceId || !influencer.voiceResourceId) {
+      throw new CoreDomainValidationError("Generation requires canonical avatar and voice resources");
+    }
+    const profile = await governance.assertRenderAllowed(scope, {
+      influencerId: influencer.id,
+      avatarId: influencer.avatarResourceId,
+      voiceId: influencer.voiceResourceId,
+      use: "internal_preview",
+      territory: "WORLDWIDE",
+      content: request.script,
+    });
+    return { profileId: profile.id, evidenceDigest: profile.evidenceDigest };
+  };
+  const assertPublishingGovernance = async (
+    scope: TenantScope,
+    input: Pick<PublicationJob["preview"], "assetId" | "caption" | "hashtags">
+      & Partial<Pick<PublicationJob["preview"], "assetDigest" | "title">>,
+  ): Promise<void> => {
+    await core.ensureDefaults(scope);
+    await ensureGovernanceDefaults(scope);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, input.assetId);
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    if (asset.type !== "video" || asset.status !== "ready" || asset.deletedAt !== null || !asset.checksumSha256) {
+      throw new CoreDomainValidationError("Publishing requires a ready undeleted canonical video asset with an immutable checksum");
+    }
+    if (input.assetDigest !== undefined && input.assetDigest !== `sha256:${asset.checksumSha256}`) {
+      throw new PublishingInvariantError("Publishing asset digest no longer matches the canonical immutable checksum");
+    }
+    if (!asset.influencerId) throw new GovernanceGateError(["profile_missing"]);
+    const influencer = await core.influencers.get(scope, asset.influencerId);
+    if (!influencer.avatarResourceId || !influencer.voiceResourceId) {
+      throw new GovernanceGateError(["avatar_mismatch", "voice_mismatch"]);
+    }
+    await governance.assertPublishAllowed(scope, {
+      influencerId: influencer.id,
+      avatarId: influencer.avatarResourceId,
+      voiceId: influencer.voiceResourceId,
+      use: "organic_social",
+      territory: "WORLDWIDE",
+      content: [input.title, input.caption, ...input.hashtags].filter(Boolean).join(" "),
+      assetId: asset.id,
+      assetChecksum: asset.checksumSha256,
+    });
+  };
+  const publishingSubmissionGate: PublishingSubmissionGate = {
+    async assertCanSubmit(job) {
+      try {
+        await assertPublishingGovernance(job.scope, job.preview);
+      } catch (error) {
+        if (error instanceof GovernanceGateError
+          || error instanceof CoreDomainNotFoundError
+          || error instanceof CoreDomainValidationError
+          || error instanceof PublishingInvariantError) {
+          throw new PublishingPolicyDeniedError("Publishing governance changed after approval; provider submission was blocked");
+        }
+        throw error;
+      }
+    },
+  };
   const service = new AiMediaStudioService(repository, queue, providers, defaultProviderKey, {
     allowedAssetHosts: dependencies.allowedAssetHosts ?? envAssetHosts(),
     executionMode: persistence.status.durable ? "durable" : "inline",
     assetIngestRepository,
     assetIngestWorkerReadiness: dependencies.assetIngestWorkerReadiness,
     workspaceId: core.workspaceId,
+    governanceGate: { assertRenderAllowed: assertRenderGovernance },
   });
   const scriptService = new DeterministicScriptService();
   const router = Router();
@@ -515,21 +708,24 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Persistence", persistence.status.mode);
     res.setHeader("X-AI-Media-Studio-Catalog", core.status.mode);
     res.setHeader("X-AI-Media-Studio-Operations", operations.status.mode);
+    res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
     next();
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/runtime`, (req, res) => {
     getCurrentUserId(req);
-    const available = persistence.status.available && core.status.available && operations.status.available;
-    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status });
+    const available = persistence.status.available && core.status.available && operations.status.available && governanceSelection.status.available;
+    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status, governance: governanceSelection.status });
   });
 
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");
   const requireCatalog = requireCapability(core.status, "AI Media Studio catalog");
   const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
+  const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
+    await ensureGovernanceDefaults(scope);
     return scope;
   };
 
@@ -613,6 +809,42 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.status(204).end();
   }));
 
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile`, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const influencerId = idSchema.parse(req.params.id);
+    await core.influencers.get(scope, influencerId);
+    const profile = await governance.getCurrentProfile(scope, influencerId);
+    if (!profile) throw new GovernanceNotFoundError("Influencer governance profile not found");
+    res.json(influencerGovernanceProfileResponseSchema.parse({ profile: toPublicInfluencerGovernanceProfile(profile) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile`, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const influencer = await core.influencers.get(scope, idSchema.parse(req.params.id));
+    if (!influencer.avatarResourceId || !influencer.voiceResourceId) {
+      throw new CoreDomainValidationError("Governance profiles require canonical avatar and voice resources");
+    }
+    const profile = await governance.createProfile(scope, scope.ownerUserId, {
+      influencerId: influencer.id,
+      avatarId: influencer.avatarResourceId,
+      voiceId: influencer.voiceResourceId,
+    }, createInfluencerGovernanceProfileRequestSchema.parse(req.body));
+    res.status(201).json(influencerGovernanceProfileResponseSchema.parse({ profile: toPublicInfluencerGovernanceProfile(profile) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile/revoke`, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const influencerId = idSchema.parse(req.params.id);
+    await core.influencers.get(scope, influencerId);
+    const profile = await governance.revokeProfile(
+      scope,
+      scope.ownerUserId,
+      influencerId,
+      revokeInfluencerGovernanceProfileRequestSchema.parse(req.body),
+    );
+    res.json(influencerGovernanceProfileResponseSchema.parse({ profile: toPublicInfluencerGovernanceProfile(profile) }));
+  }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-resources`, requireCatalog, asyncRoute(async (req, res) => {
     const input = providerResourceListRequestSchema.parse({
       kind: queryValue(req.query.kind),
@@ -668,12 +900,39 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(assetDeliverySchema.parse({ url, expiresAt: new Date(issuedAt + expiresInSeconds * 1_000).toISOString() }));
   }));
 
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review`, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const assetId = idSchema.parse(req.params.id);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, assetId);
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    const review = await governance.getCurrentReview(scope, assetId);
+    if (!review) throw new GovernanceNotFoundError("Asset quality review not found");
+    res.json(assetQualityReviewResponseSchema.parse({ review: toPublicAssetQualityReview(review) }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review`, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
+    const scope = await tenant(req);
+    const assetId = idSchema.parse(req.params.id);
+    const asset = await core.repositories.assets.get(scope.ownerUserId, assetId);
+    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
+    if (asset.type !== "video" || asset.status !== "ready" || asset.deletedAt !== null || !asset.checksumSha256) {
+      throw new CoreDomainValidationError("Quality reviews require a ready undeleted canonical video asset with an immutable checksum");
+    }
+    const review = await governance.createQualityReview(
+      scope,
+      scope.ownerUserId,
+      { assetId: asset.id, assetChecksum: asset.checksumSha256 },
+      createAssetQualityReviewRequestSchema.parse(req.body),
+    );
+    res.status(201).json(assetQualityReviewResponseSchema.parse({ review: toPublicAssetQualityReview(review) }));
+  }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/jobs`, requireJobs, asyncRoute(async (req, res) => {
     const jobs = await Promise.all((await service.listJobs(getCurrentUserId(req))).map(reconcileCompletedArtifact));
     res.json(mediaJobsResponseSchema.parse({ jobs: jobs.map(toPublicJob) }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/generations`, requireJobs, requireCatalog, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/generations`, requireJobs, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     const input = createGenerationRequestSchema.parse(req.body);
     const scope = await tenant(req);
     const influencer = await core.influencers.get(scope, input.influencerId);
@@ -705,7 +964,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(publishingJobListResponseSchema.parse({ items: page.values, nextCursor: page.nextCursor, hasMore: page.hasMore }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/preview`, requireOperations, requireCatalog, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/preview`, requireOperations, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     const input = publishingPreviewRequestSchema.parse(req.body);
     if (input.schedule.mode === "automatic") {
       const error = new Error("Automatic publishing is disabled") as Error & { statusCode: number };
@@ -713,9 +972,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       throw error;
     }
     const scope = await tenant(req);
+    await assertPublishingGovernance(scope, {
+      assetId: input.mediaAssetId,
+      caption: input.caption,
+      hashtags: input.hashtags,
+      ...(input.title ? { title: input.title } : {}),
+    });
     const asset = await core.repositories.assets.get(scope.ownerUserId, input.mediaAssetId);
-    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
-    if (asset.status !== "ready" || !asset.checksumSha256) throw new CoreDomainValidationError("Publishing requires a ready canonical media asset with an immutable checksum");
+    if (!asset?.checksumSha256) throw new CoreDomainNotFoundError("Media asset not found");
     const preview = operations.publishing.createPreview({
       assetId: asset.id,
       assetDigest: `sha256:${asset.checksumSha256}`,
@@ -734,7 +998,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     } }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, requireCatalog, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     const input = createPublishingJobRequestSchema.parse(req.body);
     if (input.schedule.mode === "automatic") {
       const error = new Error("Automatic publishing is disabled") as Error & { statusCode: number };
@@ -742,9 +1006,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       throw error;
     }
     const scope = await tenant(req);
+    await assertPublishingGovernance(scope, {
+      assetId: input.mediaAssetId,
+      caption: input.caption,
+      hashtags: input.hashtags,
+      ...(input.title ? { title: input.title } : {}),
+    });
     const asset = await core.repositories.assets.get(scope.ownerUserId, input.mediaAssetId);
-    if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
-    if (asset.status !== "ready" || !asset.checksumSha256) throw new CoreDomainValidationError("Publishing requires a ready canonical media asset with an immutable checksum");
+    if (!asset?.checksumSha256) throw new CoreDomainNotFoundError("Media asset not found");
     const previewInput = {
       assetId: asset.id,
       assetDigest: `sha256:${asset.checksumSha256}`,
@@ -762,13 +1031,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.status(201).json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/approve`, requireOperations, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/approve`, requireOperations, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     const id = idSchema.parse(req.params.id);
     const input = digestActionSchema.parse(req.body);
     const scope = await tenant(req);
     const actorId = scope.ownerUserId;
     const existing = await operations.publishing.get(scope, id);
     if (!existing) throw new CoreDomainNotFoundError("Publishing job not found");
+    await assertPublishingGovernance(scope, existing.preview);
     const publication = existing.preview.scheduledFor && existing.preview.timezone
       ? await operations.publishing.approveScheduled(scope, id, {
           approvedByUserId: actorId,
@@ -796,9 +1066,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/retry`, requireOperations, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/retry`, requireOperations, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     emptyActionSchema.parse(req.body);
-    const publication = await operations.publishing.retry(await tenant(req), idSchema.parse(req.params.id));
+    const scope = await tenant(req);
+    const id = idSchema.parse(req.params.id);
+    const existing = await operations.publishing.get(scope, id);
+    if (!existing) throw new CoreDomainNotFoundError("Publishing job not found");
+    await assertPublishingGovernance(scope, existing.preview);
+    const publication = await operations.publishing.retry(scope, id);
     res.json(jobResponseSchema.parse({ job: toPublishingJob(publication) }));
   }));
 
@@ -839,7 +1114,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const job = await reconcileCompletedArtifact(await service.getJob(getCurrentUserId(req), req.params.id));
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(job) }));
   }));
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, requireJobs, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, requireJobs, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.retryJob(getCurrentUserId(req), req.params.id)) }));
   }));
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, requireJobs, asyncRoute(async (req, res) => {
@@ -860,6 +1135,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }));
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof GovernanceGateError) {
+      res.status(error.statusCode).json({ error: "Governance policy denied request", code: error.code, reasons: error.reasons });
+      return;
+    }
+    if (error instanceof GovernanceValidationError || error instanceof GovernanceNotFoundError || error instanceof GovernanceConflictError) {
+      res.status(error.statusCode).json({ error: error.message, code: error.code });
+      return;
+    }
     if (error instanceof MediaStudioError || error instanceof MediaStudioPersistenceUnavailableError) { res.status(error.statusCode).json({ error: error.message }); return; }
     if (error instanceof CoreDomainValidationError || error instanceof AnalyticsValidationError) { res.status(400).json({ error: error.message, code: "code" in error ? error.code : "ANALYTICS_VALIDATION" }); return; }
     if (error instanceof SourceCursorError) { res.status(400).json({ error: "Invalid source cursor", code: "SOURCE_CURSOR_INVALID" }); return; }
@@ -886,7 +1169,19 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     console.error("[AiMediaStudio] Request failed", error instanceof Error ? error.message : "Unknown error");
     res.status(500).json({ error: "AI Media Studio request failed" });
   });
-  return { service, core, operations, router, persistence: persistence.status, assetIngestRepository, assetIngestHooks, reconcileCompletedAssetIngests };
+  return {
+    service,
+    core,
+    operations,
+    governance,
+    governancePersistence: governanceSelection.status,
+    publishingSubmissionGate,
+    router,
+    persistence: persistence.status,
+    assetIngestRepository,
+    assetIngestHooks,
+    reconcileCompletedAssetIngests,
+  };
 }
 
 export function registerAiMediaStudioRoutes(app: Express, dependencies: AiMediaStudioDependencies = {}): AiMediaStudioRuntime {

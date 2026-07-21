@@ -3,7 +3,7 @@
 This module defines the durable storage boundary for AI Media Studio. Its tables
 are re-exported from the application's central schema and its repository is
 selected by the relevant runtime when `DATABASE_URL` is configured. None of the
-PR2, PR3, or PR4 migrations has been applied.
+PR2, PR3, PR4, or PR5 migrations has been applied.
 
 ## Scope
 
@@ -14,7 +14,8 @@ PR2, PR3, or PR4 migrations has been applied.
 - provider accounts and provider resources;
 - webhook receipt/parking, publishing jobs and publications;
 - analytics snapshots/events, generation history and the cost ledger;
-- source intake, orchestration runs and a transactional outbox.
+- source intake, orchestration runs and a transactional outbox;
+- append-only influencer governance profiles and checksum-bound asset quality reviews.
 
 The model is neutral with respect to video, voice, model, storage and publishing
 providers. Provider-specific identifiers and JSON metadata are stored only at
@@ -50,6 +51,14 @@ Fakes cover the bounded reader, tenant content-addressed object store and
 short-lived delivery signer contracts. Production implementations of all three
 are still missing, and the runtime starts no ingest worker automatically.
 
+PR5 adds `DrizzleGovernanceRepository`. Profile and review appends are scoped by
+owner/workspace, take a subject-specific PostgreSQL advisory transaction lock,
+validate tenant ownership, require a strict previous-record/version chain, and
+bind idempotency keys to an input digest. Current-record reads are deterministic;
+expiration and policy decisions remain service concerns instead of hidden query
+behavior. This has local SQL-shape and full AI Media Studio suite coverage, but
+it is not live PostgreSQL concurrency, restart, or migration evidence.
+
 ```ts
 import { db } from "../db";
 import { DrizzleMediaJobRepository } from "./ai-media-studio/persistence";
@@ -58,17 +67,17 @@ const mediaJobs = new DrizzleMediaJobRepository(db, { workspaceId: "personal" })
 ```
 
 The tables are re-exported by `shared/schema.ts`, which is the entrypoint loaded
-by `drizzle.config.ts`. PR2, PR3, and PR4 forward/rollback SQL are checked in,
+by `drizzle.config.ts`. PR2, PR3, PR4, and PR5 forward/rollback SQL are checked in,
 but **this does not mean any migration exists in a database**. Apply PR2 before
-PR3 and PR3 before PR4. Deploying a Drizzle runtime before its migration would
+PR3, PR3 before PR4, and PR4 before PR5. Deploying a Drizzle runtime before its migration would
 produce missing relation or column failures.
 
 Do **not** use `db:push` as an application path. Back up and verify the database,
-apply the reviewed PR2 then PR3 then PR4 SQL to staging, run repository, contention,
+apply the reviewed PR2 then PR3 then PR4 then PR5 SQL to staging, run repository, contention,
 restart/recovery and rollback rehearsals, and only then promote through the
-normal PR and App QA gates. PR #71 and PR4 both passed final checker and static
-App QA; live database and browser-environment
-gates remain pending.
+normal PR and App QA gates. PR #71, PR4, and PR5 passed their local final checker and static
+App QA gates; live database and
+browser-environment gates remain pending.
 Production deployment additionally requires Robert's explicit approval.
 
 Creation and updates write an outbox record in the same transaction. Webhook
@@ -108,6 +117,11 @@ SQL-shape coverage, not live PostgreSQL contention or restart evidence.
 - Outbox ack/nack is fenced by owner, workspace, lease expiry and monotonic token.
 - Query paths are indexed by tenant, status and scheduling/capture timestamps.
 - Media rows store storage keys/checksums and metadata, never the binary itself.
+- Governance profiles and quality reviews append revisions; historical evidence is never overwritten.
+- A governance idempotency key is tenant-scoped and cannot be reused for different input evidence.
+- A quality review is tenant-bound to both the media asset ID and the exact asset checksum.
+- Render submission revalidates current governance instead of trusting queue-time evidence.
+- Publishing preview, creation, approval, retry, and last-mile provider submission require current governance, checksum-matching approved quality evidence, and the separate immutable-preview approval. The worker gate is mandatory and has no permissive production fallback.
 
 ## Verification
 
@@ -124,9 +138,12 @@ node --import tsx --test tests/ai-media-studio-persistence.test.ts
 
 They do not connect to PostgreSQL or mutate schema. PR #71's authoritative run
 passed 203 non-HTTP and 9 HTTP AI Media Studio tests (212 total). PR4 adds focused
-tests on top of that baseline; final aggregate/checker evidence belongs in the
-PR review. Neither result proves migration behavior against live PostgreSQL,
-real provider download, object-storage delivery, deployment or capacity.
+tests on top of that baseline. PR5's final aggregate passed 287/287 AI Media Studio
+tests plus isolated client/server bundles, checker PASS, and static App QA PASS
+with no remaining P0-P3 findings. Global TypeScript remained unavailable because
+shared workspace dependencies were missing. This proves code paths and SQL shape,
+not live PostgreSQL, real provider download, object storage, staging, or browser proof.
+There is no legal proof vault and no automated video-analysis pipeline in PR5.
 
 ## Rollback
 
@@ -134,8 +151,9 @@ Before migration, rollback is a code rollback to the preceding release. After
 ordered staging migration, roll application code back without selecting memory
 in production and preserve tables during the observation window so queue,
 approval, analytics and audit evidence remain recoverable. PR3 rollback must run
-before PR2 rollback; if PR4 was applied, run its data-preserving rollback before
-PR3. PR4 keeps the ingest table, render output link, private references, queue
+before PR2 rollback; if PR5 was applied, its data-preserving rollback retains
+governance profiles, reviews, render snapshots and audit evidence before the PR4
+rollback. PR4 keeps the ingest table, render output link, private references, queue
 evidence and owned asset rows, removing only its active-checksum uniqueness rule
 after restoring a lookup index. Only use separately reviewed rollback SQL after
 exports and recovery checks; automatic publishing, external posting and

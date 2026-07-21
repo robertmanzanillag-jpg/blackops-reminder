@@ -7,7 +7,7 @@ import { durableQueueResetFields } from "../server/ai-media-studio/persistence/d
 import { AiMediaStudioService } from "../server/ai-media-studio/service";
 import { InMemoryRenderWorkRepository } from "../server/ai-media-studio/workers/in-memory-render-work-repository";
 import { providerIdempotencyKey, RenderWorker } from "../server/ai-media-studio/workers/render-worker";
-import { createVideoRenderWorkerHooks } from "../server/ai-media-studio/workers/video-render-runtime";
+import { createGovernedVideoRenderSubmissionGate, createVideoRenderWorkerHooks } from "../server/ai-media-studio/workers/video-render-runtime";
 import { VideoProviderRenderAdapter } from "../server/ai-media-studio/workers/video-provider-adapter";
 
 const request: GenerationRequest = {
@@ -115,6 +115,7 @@ test("one durable worker claim submits once with a stable key and projects provi
     quotas: { maxConcurrentTotal: 1, maxConcurrentPerProvider: 1, maxConcurrentPerTenant: 1 },
     leaseDurationMs: 30_000,
     retry: { baseDelayMs: 1_000, maxDelayMs: 10_000, jitterRatio: 0 },
+    submissionGate: { assertCanSubmit: () => undefined },
     clock: { now: () => dueAt },
     hooks: createVideoRenderWorkerHooks(service),
   });
@@ -130,6 +131,32 @@ test("one durable worker claim submits once with a stable key and projects provi
   assert.ok(projected.providerJobId?.startsWith("fake_"));
   assert.equal(queue.enqueues, 0);
   assert.equal(queue.dequeues, 0);
+});
+
+test("a rotated governance snapshot dead-letters before durable provider submit", async () => {
+  const work = new InMemoryRenderWorkRepository<GenerationRequest>();
+  const provider = new CountingProvider({ autoComplete: false });
+  const payload: GenerationRequest = {
+    ...request,
+    governance: { profileId: "00000000-0000-4000-8000-000000000001", evidenceDigest: `sha256:${"1".repeat(64)}` },
+  };
+  await work.enqueue({ id: "stale-governance-work", tenantId: "owner-a", providerKey: "fake", payload, maxAttempts: 3 }, 1_000);
+  const renderWorker = new RenderWorker<GenerationRequest>({
+    workerId: "governance-worker",
+    repository: work,
+    providers: [new VideoProviderRenderAdapter(provider)],
+    quotas: { maxConcurrentTotal: 1, maxConcurrentPerProvider: 1, maxConcurrentPerTenant: 1 },
+    leaseDurationMs: 30_000,
+    retry: { baseDelayMs: 1_000, maxDelayMs: 10_000, jitterRatio: 0 },
+    clock: { now: () => 1_000 },
+    submissionGate: createGovernedVideoRenderSubmissionGate(async () => ({
+      profileId: "00000000-0000-4000-8000-000000000002",
+      evidenceDigest: `sha256:${"2".repeat(64)}`,
+    })),
+  });
+
+  assert.equal((await renderWorker.runNext()).outcome, "dead_letter");
+  assert.equal(provider.submissions, 0);
 });
 
 test("durable explicit retry is reset due and advances the provider attempt without submitting", async () => {
@@ -238,6 +265,7 @@ test("a provider submission that loses its lease is still tracked without revivi
     quotas: { maxConcurrentTotal: 1, maxConcurrentPerProvider: 1, maxConcurrentPerTenant: 1 },
     leaseDurationMs: 30_000,
     retry: { baseDelayMs: 1_000, maxDelayMs: 10_000, jitterRatio: 0 },
+    submissionGate: { assertCanSubmit: () => undefined },
     clock: { now: () => dueAt },
     hooks: createVideoRenderWorkerHooks(service),
   });

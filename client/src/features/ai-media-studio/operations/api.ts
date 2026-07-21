@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import type { MediaAsset } from "@shared/ai-media-studio-core";
 import type { PublishingPreview } from "@shared/ai-media-studio-operations";
+import { actionableApiError } from "../governance/errors";
 
 const API_ROOT = "/api/ai-media-studio";
 
@@ -27,8 +28,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const fallback = `Request failed (${response.status})`;
     let message = fallback;
     try {
-      const body = (await response.json()) as { error?: string; message?: string };
-      message = body.error || body.message || fallback;
+      message = actionableApiError(await response.json(), fallback);
     } catch {
       // Retain the bounded status message when no JSON body is available.
     }

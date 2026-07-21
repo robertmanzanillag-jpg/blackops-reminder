@@ -195,6 +195,7 @@ test("workbench reconciles refreshed options and disables transient stale submis
   assert.match(workbench, /setLanguage\(""\)/);
   assert.match(workbench, /setVoiceId\(""\)/);
   assert.match(workbench, /if \(next\.id === influencerId\) return/);
-  assert.match(workbench, /disabled=\{create\.isPending \|\| !selectedInfluencer\}/);
+  assert.match(workbench, /disabled=\{create\.isPending \|\| !selectedInfluencer \|\| governanceQuery\.isLoading \|\| governanceQuery\.isError \|\| !governanceReadyForPreview\}/);
   assert.match(workbench, /if \(!selectedInfluencer\)/);
+  assert.match(workbench, /if \(!governanceReadyForPreview\)/);
 });

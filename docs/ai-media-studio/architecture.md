@@ -2,7 +2,7 @@
 
 ## Delivery stack
 
-PR #67 (`codex/ai-media-studio`) is the provider-neutral foundation. PR #70 (`codex/ai-media-studio-core`) is the core layer stacked on that foundation, and PR #71 (`codex/ai-media-studio-operations`) is stacked on PR #70. PR4 lives on `codex/ai-media-studio-quality`, stacked on PR #71. This stacking is a code-review strategy, not evidence that the PR2, PR3, or PR4 migration has been applied and not deployment authorization.
+PR #67 (`codex/ai-media-studio`) is the provider-neutral foundation. PR #70 (`codex/ai-media-studio-core`) is the core layer stacked on that foundation, and PR #71 (`codex/ai-media-studio-operations`) is stacked on PR #70. PR4 lives on `codex/ai-media-studio-quality`, stacked on PR #71. PR5 lives on `codex/ai-media-studio-governance`, stacked on PR4, and its local AI Media Studio suite, independent checker, and App QA revalidation have passed. This stacking is a code-review strategy, not evidence that any PR2-PR5 migration has been applied and not deployment authorization.
 
 ## Boundary
 
@@ -74,6 +74,16 @@ Source intake accepts bounded provider-neutral snapshots, computes canonical con
 
 The source orchestrator applies idempotent state transitions with rights, moderation, immutable approval, budget reservation, and kill-switch evidence. The Drizzle repository uses state/version compare-and-swap and writes emissions to the transactional outbox. This proves guarded state-machine and repository behavior in code; no autonomous end-to-end consumer is running.
 
+### Governance and quality gates
+
+PR5 introduces tenant-scoped, append-only influencer governance profiles and asset quality reviews. A new profile or review extends an immutable revision chain; an idempotency key may replay only the same input digest. Durable appends validate tenant ownership, serialize competing revisions with a PostgreSQL advisory transaction lock, and never update or delete prior evidence. Public records omit internal bindings, proof digests, actors, tenant scope, and idempotency fields.
+
+Render policy checks consent/rights basis, validity window, revocation, exact influencer/avatar/voice bindings, allowed use, territory, and required/prohibited brand terms. Generation checks before persistence, retry checks again, and both inline and durable execution revalidate immediately before provider submission so queued work cannot rely on stale authorization.
+
+Quality reviews score natural movement, eye contact, speech quality, lighting, realism, brand consistency, and vertical quality. The service derives `approved`, `needs_review`, or `rejected`; durable evidence is bound to the exact tenant-owned asset checksum. Publishing preview, draft creation, approval, operator retry, and the worker's final provider submission all fail closed unless current influencer governance and an approved current-checksum review pass the server-side gate. Every `PublishingWorker` composition must receive the runtime's mandatory `publishingSubmissionGate`; there is no permissive default. Client governance, review, render-readiness, and publishing guidance are operator surfaces only; they do not replace server enforcement.
+
+This slice does not contain a legal-document or legal-proof vault and does not establish that a proof digest corresponds to a reviewed contract. It also does not perform automated video analysis: quality scores are human-entered evidence, and PR5 persistence accepts only the `human` evaluator type.
+
 ### Provider webhook
 
 `POST /api/ai-media-studio/webhooks/providers/:providerKey` is exempt from application-user authentication so an external provider can reach it. The module must still reject a missing, invalid, expired, or replayed signature. HeyGen verification uses the raw body and `Heygen-Signature`, `Heygen-Timestamp`, and `Heygen-Event-Id`, with an approximately five-minute tolerance and event-ID dedupe.
@@ -93,9 +103,9 @@ Adapters may keep finer internal stages such as submitting, downloading, or retr
 
 ## Persistence and automation roadmap
 
-The schema and repositories cover the PR2 core, PR3 source intake/orchestration/publishing/analytics/cost/outbox fields, and the PR4 asset-ingest queue and canonical render-output link. In-memory implementations remain development/test references; production is designed to fail closed without configured persistence. Three forward/rollback migration pairs are checked in under `migrations/ai-media-studio/`, but none has been applied and `db:push` has not run. PR4's SQL passed the local independent checker/static App QA gate. Backup, ordered staging application, restart/recovery, rollback rehearsal, and live App QA remain hard deployment gates. Binary assets still require a real object-storage integration.
+The schema and repositories cover the PR2 core, PR3 source intake/orchestration/publishing/analytics/cost/outbox fields, the PR4 asset-ingest queue and canonical render-output link, and PR5 append-only governance/quality evidence plus render-governance snapshots. In-memory implementations remain development/test references; production is designed to fail closed without configured persistence. Four forward/rollback migration pairs are checked in under `migrations/ai-media-studio/`, but none has been applied and `db:push` has not run. PR5 implementation has local test, checker, and static App QA evidence, but backup, ordered staging application, restart/recovery, rollback rehearsal, and live-browser App QA remain hard deployment gates. Binary assets still require a real object-storage integration.
 
-PR2, PR3, and PR4 each have checked-in, operator-run migration artifacts instead of relying on `drizzle-kit push`; the PR4 pair passed local checker/static App QA review. The SQL has not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply PR2 then PR3 then PR4 to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
+PR2 through PR5 each have checked-in, operator-run migration artifacts instead of relying on `drizzle-kit push`. The SQL has not altered any database. Before deployment, the team must take and verify a backup, drain writers/workers, apply PR2 then PR3 then PR4 then PR5 to staging, prove restart/recovery and rollback, rerun App QA against that environment, and obtain Robert's explicit approval.
 
 The first source pilot should be a Radio Calendar event because the repository already has calendar and radio boundaries. A source event creates ideas/drafts first; it does not render or publish until budget, quality, rights, and approval policies pass. Automatic publishing remains disabled until dedicated connector and App QA gates exist.
 
@@ -116,9 +126,18 @@ The first source pilot should be a Radio Calendar event because the repository a
 - Public library and job responses redact provider artifact URLs and storage internals. The authenticated delivery route creates short-lived URLs on demand and fails closed without a configured signer.
 - PR4 must be applied after PR2 and PR3 in staging. All three migrations remain unapplied until backup and staging approval, followed by restart/recovery and rollback rehearsal.
 
+## PR5 integration seams
+
+- `shared/ai-media-studio-governance.ts` is the public request/response contract; internal bindings and evidence remain server-owned.
+- `server/ai-media-studio/governance/**` owns append-only repositories, evidence digests, profile/review services, and render/publish gate decisions.
+- `server/ai-media-studio/routes.ts` remains the single authenticated composition root. Governance persistence follows the existing fail-closed runtime policy and is never selected from client-supplied evidence.
+- Render authorization is revalidated adjacent to provider submission, including retries; a UI readiness result is informational and can become stale.
+- A quality decision is valid only for the exact current asset checksum. Publishing approval and the immutable publishing-preview digest remain separate required evidence.
+- PR5 must be applied after PR4. PR2, PR3, PR4, and PR5 remain unapplied; staging/live-browser App QA and Robert deployment approval remain separate release gates.
+
 ## Scale, security, and cost
 
-Ten thousand videos per day remains an architectural target. PR3 includes a deterministic 10,000-job fake-provider rehearsal to exercise arithmetic assumptions; it is not a load test, benchmark, provider-quota proof, storage-throughput proof, or capacity claim. Readiness still requires live PostgreSQL contention, horizontal render and ingest workers, backpressure, real provider quotas, production object storage, observability, cost controls, failure injection, restart testing, and country-specific policy evidence.
+Ten thousand videos per day remains an architectural target. PR3 includes a deterministic 10,000-job fake-provider rehearsal to exercise arithmetic assumptions; it is not a load test, benchmark, provider-quota proof, storage-throughput proof, or capacity claim. PR5 adds no capacity evidence. Readiness still requires live PostgreSQL contention, horizontal render and ingest workers, backpressure, real provider quotas, production object storage, observability, cost controls, failure injection, restart testing, country-specific policy evidence, a live browser pass, and staging/deployment proof.
 
 - Secrets are environment/vault references and are never returned or logged.
 - Avatar and voice records require provenance, consent, and usage rights.

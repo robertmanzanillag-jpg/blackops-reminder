@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -79,6 +80,11 @@ export const aiMediaInfluencers = pgTable(
       table.ownerUserId,
       table.workspaceId,
       table.status,
+    ),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_influencers_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
     ),
   }),
 );
@@ -245,6 +251,110 @@ export const aiMediaProviderResources = pgTable(
       table.workspaceId,
       table.resourceType,
     ),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_provider_resources_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+  }),
+);
+
+/**
+ * Immutable governance revisions. Policy changes append a row linked through
+ * `previousProfileId`; callers must never overwrite historical evidence.
+ */
+export const aiMediaGovernanceProfiles = pgTable(
+  "ai_media_governance_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    influencerId: uuid("influencer_id").notNull(),
+    avatarResourceId: uuid("avatar_resource_id").notNull(),
+    voiceResourceId: uuid("voice_resource_id").notNull(),
+    state: text("state").notNull().default("active"),
+    consentBasis: text("consent_basis").notNull(),
+    rightsBasis: text("rights_basis").notNull(),
+    allowedUses: jsonb("allowed_uses").$type<string[]>().notNull(),
+    territories: jsonb("territories").$type<string[]>().notNull(),
+    proofDigest: text("proof_digest").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    brandPolicy: jsonb("brand_policy").$type<Record<string, unknown>>().notNull().default({}),
+    version: integer("version").notNull().default(1),
+    policyVersion: text("policy_version").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    previousProfileId: uuid("previous_profile_id"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    ...auditColumns(),
+  },
+  (table) => ({
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_governance_profiles_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+    ownerWorkspaceIdempotencyUnique: uniqueIndex(
+      "ai_media_governance_profiles_owner_workspace_idempotency_uq",
+    ).on(table.ownerUserId, table.workspaceId, table.idempotencyKey),
+    ownerWorkspaceInfluencerVersionUnique: uniqueIndex(
+      "ai_media_governance_profiles_owner_workspace_influencer_version_uq",
+    ).on(table.ownerUserId, table.workspaceId, table.influencerId, table.version),
+    ownerWorkspaceStateExpiryIdx: index(
+      "ai_media_governance_profiles_owner_workspace_state_expiry_idx",
+    ).on(table.ownerUserId, table.workspaceId, table.state, table.expiresAt),
+    previousProfileIdx: index("ai_media_governance_profiles_previous_profile_idx").on(table.previousProfileId),
+    influencerTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.influencerId],
+      foreignColumns: [aiMediaInfluencers.ownerUserId, aiMediaInfluencers.workspaceId, aiMediaInfluencers.id],
+      name: "ai_media_governance_profiles_influencer_tenant_fk",
+    }).onDelete("restrict"),
+    avatarTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.avatarResourceId],
+      foreignColumns: [
+        aiMediaProviderResources.ownerUserId,
+        aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.id,
+      ],
+      name: "ai_media_governance_profiles_avatar_tenant_fk",
+    }).onDelete("restrict"),
+    voiceTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.voiceResourceId],
+      foreignColumns: [
+        aiMediaProviderResources.ownerUserId,
+        aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.id,
+      ],
+      name: "ai_media_governance_profiles_voice_tenant_fk",
+    }).onDelete("restrict"),
+    previousProfileTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.previousProfileId],
+      foreignColumns: [table.ownerUserId, table.workspaceId, table.id],
+      name: "ai_media_governance_profiles_previous_tenant_fk",
+    }).onDelete("restrict"),
+    stateCheck: check(
+      "ai_media_governance_profiles_state_ck",
+      sql`${table.state} IN ('active', 'revoked')`,
+    ),
+    basisCheck: check(
+      "ai_media_governance_profiles_basis_ck",
+      sql`${table.consentBasis} IN ('obtained', 'synthetic_not_applicable') AND ${table.rightsBasis} IN ('owned', 'licensed')`,
+    ),
+    evidenceCheck: check(
+      "ai_media_governance_profiles_evidence_ck",
+      sql`${table.proofDigest} ~ '^sha256:[0-9a-f]{64}$' AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$' AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'`,
+    ),
+    documentShapeCheck: check(
+      "ai_media_governance_profiles_document_shape_ck",
+      sql`jsonb_typeof(${table.allowedUses}) = 'array' AND jsonb_array_length(${table.allowedUses}) > 0 AND ${table.allowedUses} <@ '["internal_preview", "organic_social", "paid_ads", "commercial"]'::jsonb AND jsonb_typeof(${table.territories}) = 'array' AND jsonb_array_length(${table.territories}) > 0 AND jsonb_typeof(${table.brandPolicy}) = 'object'`,
+    ),
+    revisionCheck: check(
+      "ai_media_governance_profiles_revision_ck",
+      sql`${table.version} > 0 AND length(btrim(${table.policyVersion})) BETWEEN 1 AND 64 AND length(btrim(${table.actorUserId})) > 0 AND length(btrim(${table.idempotencyKey})) > 0 AND ${table.expiresAt} > ${table.validFrom} AND ${table.previousProfileId} IS DISTINCT FROM ${table.id} AND ((${table.state} = 'revoked' AND ${table.revokedAt} IS NOT NULL AND length(btrim(${table.revocationReason})) BETWEEN 1 AND 500) OR (${table.state} = 'active' AND ${table.revokedAt} IS NULL AND ${table.revocationReason} IS NULL))`,
+    ),
   }),
 );
 
@@ -273,6 +383,8 @@ export const aiMediaRenderJobs = pgTable(
       (): AnyPgColumn => aiMediaMediaAssets.id,
       { onDelete: "set null" },
     ),
+    governanceProfileId: uuid("governance_profile_id"),
+    governanceEvidenceDigest: text("governance_evidence_digest"),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
@@ -311,6 +423,20 @@ export const aiMediaRenderJobs = pgTable(
     ),
     deadLetterIdx: index("ai_media_render_jobs_dead_letter_idx").on(table.deadLetterAt),
     outputMediaAssetIdx: index("ai_media_render_jobs_output_media_asset_idx").on(table.outputMediaAssetId),
+    governanceProfileIdx: index("ai_media_render_jobs_governance_profile_idx").on(table.governanceProfileId),
+    governanceProfileTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.governanceProfileId],
+      foreignColumns: [
+        aiMediaGovernanceProfiles.ownerUserId,
+        aiMediaGovernanceProfiles.workspaceId,
+        aiMediaGovernanceProfiles.id,
+      ],
+      name: "ai_media_render_jobs_governance_profile_tenant_fk",
+    }).onDelete("restrict"),
+    governanceEvidenceCheck: check(
+      "ai_media_render_jobs_governance_evidence_ck",
+      sql`(${table.governanceProfileId} IS NULL AND ${table.governanceEvidenceDigest} IS NULL) OR (${table.governanceProfileId} IS NOT NULL AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')`,
+    ),
   }),
 );
 
@@ -402,6 +528,103 @@ export const aiMediaMediaAssets = pgTable(
     ownerWorkspaceKindChecksumActiveUnique: uniqueIndex("ai_media_assets_owner_workspace_kind_checksum_active_uq")
       .on(table.ownerUserId, table.workspaceId, table.kind, table.checksum)
       .where(sql`${table.deletedAt} IS NULL AND ${table.checksum} IS NOT NULL`),
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_assets_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+    ownerWorkspaceIdChecksumUnique: uniqueIndex("ai_media_assets_owner_workspace_id_checksum_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.checksum,
+    ),
+  }),
+);
+
+/**
+ * Immutable quality decisions bound to the exact checksum that was evaluated.
+ * Re-evaluation appends a revision instead of mutating prior review evidence.
+ */
+export const aiMediaQualityReviews = pgTable(
+  "ai_media_quality_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    mediaAssetId: uuid("media_asset_id").notNull(),
+    assetChecksum: text("asset_checksum").notNull(),
+    evaluatorType: text("evaluator_type").notNull().default("human"),
+    decision: text("decision").notNull(),
+    version: integer("version").notNull().default(1),
+    criteria: jsonb("criteria").$type<Record<string, unknown>>().notNull(),
+    notes: text("notes"),
+    evidenceDigest: text("evidence_digest").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    previousReviewId: uuid("previous_review_id"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    ...auditColumns(),
+  },
+  (table) => ({
+    ownerWorkspaceIdUnique: uniqueIndex("ai_media_quality_reviews_owner_workspace_id_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+    ),
+    ownerWorkspaceIdempotencyUnique: uniqueIndex(
+      "ai_media_quality_reviews_owner_workspace_idempotency_uq",
+    ).on(table.ownerUserId, table.workspaceId, table.idempotencyKey),
+    ownerWorkspaceAssetCreatedIdx: index("ai_media_quality_reviews_owner_workspace_asset_created_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.mediaAssetId,
+      table.createdAt,
+    ),
+    ownerWorkspaceAssetVersionUnique: uniqueIndex("ai_media_quality_reviews_owner_workspace_asset_version_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.mediaAssetId,
+      table.version,
+    ),
+    ownerWorkspaceDecisionCreatedIdx: index(
+      "ai_media_quality_reviews_owner_workspace_decision_created_idx",
+    ).on(table.ownerUserId, table.workspaceId, table.decision, table.createdAt),
+    previousReviewIdx: index("ai_media_quality_reviews_previous_review_idx").on(table.previousReviewId),
+    mediaAssetChecksumTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.mediaAssetId, table.assetChecksum],
+      foreignColumns: [
+        aiMediaMediaAssets.ownerUserId,
+        aiMediaMediaAssets.workspaceId,
+        aiMediaMediaAssets.id,
+        aiMediaMediaAssets.checksum,
+      ],
+      name: "ai_media_quality_reviews_asset_checksum_tenant_fk",
+    }).onDelete("restrict"),
+    previousReviewTenantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.previousReviewId],
+      foreignColumns: [table.ownerUserId, table.workspaceId, table.id],
+      name: "ai_media_quality_reviews_previous_tenant_fk",
+    }).onDelete("restrict"),
+    evaluatorTypeCheck: check(
+      "ai_media_quality_reviews_evaluator_type_ck",
+      sql`${table.evaluatorType} = 'human'`,
+    ),
+    decisionCheck: check(
+      "ai_media_quality_reviews_decision_ck",
+      sql`${table.decision} IN ('approved', 'rejected', 'needs_review')`,
+    ),
+    evidenceCheck: check(
+      "ai_media_quality_reviews_evidence_ck",
+      sql`${table.assetChecksum} ~ '^[0-9a-f]{64}$' AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$' AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$' AND length(btrim(${table.actorUserId})) > 0 AND length(btrim(${table.idempotencyKey})) > 0`,
+    ),
+    criteriaShapeCheck: check(
+      "ai_media_quality_reviews_criteria_shape_ck",
+      sql`CASE WHEN jsonb_typeof(${table.criteria}) = 'object' AND ${table.criteria} ?& ARRAY['naturalMovement', 'eyeContact', 'speechQuality', 'lighting', 'realism', 'brandConsistency', 'verticalQuality'] AND (${table.criteria} - 'naturalMovement' - 'eyeContact' - 'speechQuality' - 'lighting' - 'realism' - 'brandConsistency' - 'verticalQuality') = '{}'::jsonb AND jsonb_typeof(${table.criteria}->'naturalMovement') = 'number' AND jsonb_typeof(${table.criteria}->'eyeContact') = 'number' AND jsonb_typeof(${table.criteria}->'speechQuality') = 'number' AND jsonb_typeof(${table.criteria}->'lighting') = 'number' AND jsonb_typeof(${table.criteria}->'realism') = 'number' AND jsonb_typeof(${table.criteria}->'brandConsistency') = 'number' AND jsonb_typeof(${table.criteria}->'verticalQuality') = 'number' AND (${table.criteria}->>'naturalMovement') ~ '^[1-5]$' AND (${table.criteria}->>'eyeContact') ~ '^[1-5]$' AND (${table.criteria}->>'speechQuality') ~ '^[1-5]$' AND (${table.criteria}->>'lighting') ~ '^[1-5]$' AND (${table.criteria}->>'realism') ~ '^[1-5]$' AND (${table.criteria}->>'brandConsistency') ~ '^[1-5]$' AND (${table.criteria}->>'verticalQuality') ~ '^[1-5]$' THEN CASE WHEN (${table.criteria}->>'naturalMovement')::integer <= 2 OR (${table.criteria}->>'eyeContact')::integer <= 2 OR (${table.criteria}->>'speechQuality')::integer <= 2 OR (${table.criteria}->>'lighting')::integer <= 2 OR (${table.criteria}->>'realism')::integer <= 2 OR (${table.criteria}->>'brandConsistency')::integer <= 2 OR (${table.criteria}->>'verticalQuality')::integer <= 2 THEN ${table.decision} = 'rejected' WHEN (${table.criteria}->>'naturalMovement')::integer >= 4 AND (${table.criteria}->>'eyeContact')::integer >= 4 AND (${table.criteria}->>'speechQuality')::integer >= 4 AND (${table.criteria}->>'lighting')::integer >= 4 AND (${table.criteria}->>'realism')::integer >= 4 AND (${table.criteria}->>'brandConsistency')::integer >= 4 AND (${table.criteria}->>'verticalQuality')::integer >= 4 THEN ${table.decision} = 'approved' ELSE ${table.decision} = 'needs_review' END ELSE false END AND (${table.notes} IS NULL OR length(${table.notes}) <= 2000)`,
+    ),
+    revisionCheck: check(
+      "ai_media_quality_reviews_revision_ck",
+      sql`${table.version} > 0 AND ${table.previousReviewId} IS DISTINCT FROM ${table.id}`,
+    ),
   }),
 );
 
@@ -860,9 +1083,11 @@ export const aiMediaStudioTables = {
   videos: aiMediaVideos,
   providerAccounts: aiMediaProviderAccounts,
   providerResources: aiMediaProviderResources,
+  governanceProfiles: aiMediaGovernanceProfiles,
   renderJobs: aiMediaRenderJobs,
   webhookEvents: aiMediaWebhookEvents,
   mediaAssets: aiMediaMediaAssets,
+  qualityReviews: aiMediaQualityReviews,
   publishingJobs: aiMediaPublishingJobs,
   publications: aiMediaPublications,
   analyticsSnapshots: aiMediaAnalyticsSnapshots,
@@ -888,6 +1113,10 @@ export type AiMediaRenderJobRow = Omit<
   "availableAt" | "leaseOwner" | "leaseExpiresAt" | "deadLetterAt"
 >>;
 export type NewAiMediaRenderJobRow = typeof aiMediaRenderJobs.$inferInsert;
+export type AiMediaGovernanceProfileRow = typeof aiMediaGovernanceProfiles.$inferSelect;
+export type NewAiMediaGovernanceProfileRow = typeof aiMediaGovernanceProfiles.$inferInsert;
+export type AiMediaQualityReviewRow = typeof aiMediaQualityReviews.$inferSelect;
+export type NewAiMediaQualityReviewRow = typeof aiMediaQualityReviews.$inferInsert;
 export type AiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferSelect;
 export type NewAiMediaWebhookEventRow = typeof aiMediaWebhookEvents.$inferInsert;
 export type AiMediaOutboxRow = typeof aiMediaOutbox.$inferSelect;

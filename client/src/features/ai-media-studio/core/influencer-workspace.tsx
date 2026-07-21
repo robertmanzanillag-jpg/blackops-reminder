@@ -26,6 +26,7 @@ import { InfluencerForm } from "./influencer-form";
 import { archiveDialogReducer, initialArchiveDialogState } from "./archive-dialog-state";
 import { PaginationError } from "./pagination-feedback";
 import type { CreateInfluencerRequest, Influencer } from "./types";
+import { InfluencerGovernanceControl } from "../governance/influencer-governance";
 
 const statusStyles: Record<Influencer["status"], string> = {
   active: "border-emerald-300/30 bg-emerald-400/10 text-emerald-200",
@@ -151,6 +152,7 @@ export function InfluencerWorkspace() {
                   <div><dt className="text-zinc-400">Energy</dt><dd className="mt-1 font-medium text-zinc-100">{influencer.energyLevel}/10</dd></div>
                   <div><dt className="text-zinc-400">Resources</dt><dd className="mt-1 font-medium text-zinc-100">{influencer.avatarResourceId && influencer.voiceResourceId ? "Ready" : "Needs setup"}</dd></div>
                 </dl>
+                <InfluencerGovernanceControl influencer={influencer} />
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                   <Button type="button" variant="outline" className="flex-1 border-white/15 bg-white/5 text-zinc-100" onClick={() => openEdit(influencer)}><Edit3 className="mr-2 h-4 w-4" aria-hidden="true" /> Edit</Button>
                   <ArchiveInfluencerDialog influencer={influencer} remove={mutations.remove} />

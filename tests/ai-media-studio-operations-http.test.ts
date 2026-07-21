@@ -52,6 +52,17 @@ function operationsRepositories(): OperationsRepositories {
 }
 
 async function seedAsset(repositories: CoreCatalogRepositories, ownerUserId: string, id: string, checksum: string) {
+  const scope = { ownerUserId, workspaceId: "personal" };
+  if (!(await repositories.resources.get(scope, "avatar-emily"))) {
+    await repositories.resources.create(scope, { id: "avatar-emily", kind: "avatar", name: "Emily", status: "active", language: "en", accent: null, gender: "female", previewUrl: null, thumbnailUrl: null, synchronizedAt: instant });
+    await repositories.resources.create(scope, { id: "voice-emily-en", kind: "voice", name: "Emily voice", status: "active", language: "en", accent: null, gender: "female", previewUrl: null, thumbnailUrl: null, synchronizedAt: instant });
+    await repositories.influencers.create(scope, {
+      id: "emily-food", slug: "emily-food", name: "Emily", avatarResourceId: "avatar-emily", voiceResourceId: "voice-emily-en",
+      accent: "American", language: "en", gender: "female", ageRange: { minimum: 25, maximum: 34 }, personality: ["warm"], tone: ["friendly"],
+      speakingStyle: "Natural", categories: ["food"], intro: "Intro", outro: "Outro", energyLevel: 7,
+      facialExpressions: ["smile"], brandColors: ["#111827"], status: "active", createdAt: instant, updatedAt: instant,
+    });
+  }
   await repositories.assets.createOrGet({
     id,
     ownerUserId,
@@ -68,7 +79,7 @@ async function seedAsset(repositories: CoreCatalogRepositories, ownerUserId: str
     thumbnailUrl: null,
     projectId: null,
     renderJobId: null,
-    influencerId: null,
+    influencerId: "emily-food",
     providerResourceId: null,
     source: { kind: "text" },
     metadata: { width: 1080, height: 1920, durationMs: 10_000 },
@@ -115,6 +126,18 @@ async function startHarness(options: {
         } }
       : {}),
   });
+  if (options.core && !options.productionWithoutDatabase) {
+    for (const scope of [scopeA, scopeB]) {
+      for (const asset of await options.core.assets.list(scope.ownerUserId)) {
+        if (!asset.checksumSha256) continue;
+        await runtime.governance.createQualityReview(scope, scope.ownerUserId, { assetId: asset.id, assetChecksum: asset.checksumSha256 }, {
+          criteria: { naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 5, brandConsistency: 5, verticalQuality: 5 },
+          notes: "Explicit approved route-test fixture",
+          idempotencyKey: `review-${scope.ownerUserId}-${asset.id}`,
+        });
+      }
+    }
+  }
   app.use(runtime.router);
   const server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -308,6 +331,25 @@ test("operations HTTP publishing is fail-closed, tenant-scoped, digest-bound, ap
     retryable: false,
     retryAt: instant,
     now: instant,
+  });
+  const retryAsset = await harness.runtime.core.repositories.assets.get(scopeA.ownerUserId, "asset-a");
+  assert.ok(retryAsset?.checksumSha256);
+  await harness.runtime.governance.createQualityReview(scopeA, scopeA.ownerUserId, {
+    assetId: retryAsset.id, assetChecksum: retryAsset.checksumSha256,
+  }, {
+    criteria: { naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 3, brandConsistency: 5, verticalQuality: 5 },
+    notes: "Retry gate regression fixture",
+    idempotencyKey: "retry-needs-review",
+  });
+  const deniedRetryResponse = await jsonPost(harness.baseUrl, `/api/ai-media-studio/publishing/jobs/${retryCreated.id}/retry`, {});
+  assert.equal(deniedRetryResponse.status, 403);
+  assert.deepEqual((await deniedRetryResponse.json() as { reasons: string[] }).reasons, ["quality_review_not_approved"]);
+  await harness.runtime.governance.createQualityReview(scopeA, scopeA.ownerUserId, {
+    assetId: retryAsset.id, assetChecksum: retryAsset.checksumSha256,
+  }, {
+    criteria: { naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 5, brandConsistency: 5, verticalQuality: 5 },
+    notes: "Retry gate restored fixture",
+    idempotencyKey: "retry-approved-review",
   });
   const retriedResponse = await jsonPost(harness.baseUrl, `/api/ai-media-studio/publishing/jobs/${retryCreated.id}/retry`, {});
   assert.equal(retriedResponse.status, 200);
