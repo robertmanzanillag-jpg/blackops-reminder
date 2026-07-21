@@ -15,6 +15,7 @@ import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./sessio
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
+import { startClipperLocalNewsScheduler } from "./clippers-local-news-scheduler";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 
@@ -410,6 +411,7 @@ app.use((req, res, next) => {
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
       startAppQaScheduler();
+      startClipperLocalNewsScheduler();
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");

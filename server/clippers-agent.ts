@@ -5702,6 +5702,8 @@ export interface ClipperMetricoolPublishingChannel {
   metricoolSource: "live" | "cache" | "plan";
   networks: MetricoolNetwork[];
   connectedNetworks: MetricoolNetwork[];
+  connectedProfileHandles: Partial<Record<MetricoolNetwork, string>>;
+  connectedProfileUrls: Partial<Record<MetricoolNetwork, string>>;
   accountStatus: ClipperAccountStatus;
   dailyClipTarget: number;
   weeklyViewsGoal: number;
@@ -7648,9 +7650,33 @@ const DEFAULT_SOURCES: ClipperSource[] = [
     rightsMode: "review_required",
     status: "connected",
   },
+  {
+    id: "local-news-official-feeds",
+    label: "Fuentes oficiales de noticias locales",
+    type: "official_api",
+    freshness: "cada 2-5 minutos",
+    rightsMode: "owned",
+    status: "connected",
+  },
 ];
 
+function mergeClipperSources(configured: ClipperSource[] | undefined): ClipperSource[] {
+  if (!Array.isArray(configured) || configured.length === 0) return DEFAULT_SOURCES;
+  const configuredById = new Map(configured.map((source) => [source.id, source]));
+  return [
+    ...DEFAULT_SOURCES.map((source) => configuredById.get(source.id) || source),
+    ...configured.filter((source) => !DEFAULT_SOURCES.some((item) => item.id === source.id)),
+  ];
+}
+
 const DEFAULT_AGENTS: ClipperSubAgent[] = [
+  {
+    id: "local-news-scout",
+    name: "Local News Scout",
+    job: "Monitorea alertas oficiales de Miami y Nueva York y prepara actualizaciones originales para X y Facebook.",
+    status: "active",
+    output: "Deduplica incidentes, enlaza la fuente oficial y separa auto_eligible de approval_required sin afirmar publicaciones reales.",
+  },
   {
     id: "trend-scout",
     name: "Trend Scout",
@@ -28206,6 +28232,7 @@ interface MetricoolConnectedBrand {
   label: string;
   timezone: string | null;
   connectedNetworks: MetricoolNetwork[];
+  connectedProfileHandles: Partial<Record<MetricoolNetwork, string>>;
   source: "live" | "cache";
 }
 
@@ -28242,6 +28269,36 @@ function collectMetricoolNetworks(value: unknown, parentKey = ""): MetricoolNetw
     }
   }
   return Array.from(found);
+}
+
+function normalizeMetricoolProfileHandle(value: unknown): string {
+  const handle = typeof value === "string" ? value.trim().replace(/^@/, "") : "";
+  return /^[A-Za-z0-9._-]{2,64}$/.test(handle) ? handle : "";
+}
+
+function collectMetricoolProfileHandles(record: Record<string, unknown>): Partial<Record<MetricoolNetwork, string>> {
+  const handles: Partial<Record<MetricoolNetwork, string>> = {};
+  const explicit = record.connectedProfileHandles;
+  if (explicit && typeof explicit === "object" && !Array.isArray(explicit)) {
+    for (const [key, value] of Object.entries(explicit as Record<string, unknown>)) {
+      const network = normalizeMetricoolNetwork(key);
+      const handle = normalizeMetricoolProfileHandle(value);
+      if (network && handle) handles[network] = handle;
+    }
+  }
+  const networksData = record.networksData;
+  if (networksData && typeof networksData === "object" && !Array.isArray(networksData)) {
+    for (const [key, value] of Object.entries(networksData as Record<string, unknown>)) {
+      const network = normalizeMetricoolNetwork(key);
+      if (!network) continue;
+      const direct = normalizeMetricoolProfileHandle(value);
+      const nested = value && typeof value === "object" && !Array.isArray(value)
+        ? normalizeMetricoolProfileHandle((value as Record<string, unknown>).username ?? (value as Record<string, unknown>).handle ?? (value as Record<string, unknown>).profile)
+        : "";
+      if (direct || nested) handles[network] = direct || nested;
+    }
+  }
+  return handles;
 }
 
 function metricoolBrandMatchesAccount(brand: MetricoolConnectedBrand, account: ClipperAccount): boolean {
@@ -28285,6 +28342,7 @@ function parseMetricoolConnectedBrand(item: unknown, source: "live" | "cache"): 
     label,
     timezone: typeof record.timezone === "string" ? record.timezone : null,
     connectedNetworks: collectMetricoolNetworks(networksValue),
+    connectedProfileHandles: collectMetricoolProfileHandles(record),
     source,
   };
 }
@@ -28328,6 +28386,7 @@ async function fetchMetricoolConnectedBrands(): Promise<MetricoolConnectedBrand[
         label: brand.label,
         timezone: brand.timezone,
         connectedNetworks: brand.connectedNetworks,
+        connectedProfileHandles: brand.connectedProfileHandles,
         syncedAt: new Date().toISOString(),
       })),
     }, null, 2)).catch(() => undefined);
@@ -28373,6 +28432,9 @@ async function buildClipperMetricoolPublishingSummary(
       ? connectedBrand.connectedNetworks.filter((network) => requiredClipperPlatforms.includes(network as ClipperPlatform))
       : [];
     const connectedProfiles = connectedNetworks.length;
+    const connectedProfileHandles = connectedBrand?.connectedProfileHandles || {};
+    const connectedProfileUrls: Partial<Record<MetricoolNetwork, string>> = {};
+    if (connectedProfileHandles.tiktok) connectedProfileUrls.tiktok = `https://www.tiktok.com/@${connectedProfileHandles.tiktok}`;
     const requiredProfiles = requiredClipperPlatforms.length;
     const missingProfileLabels = requiredClipperPlatforms
       .filter((platform) => !connectedNetworks.includes(platform as MetricoolNetwork))
@@ -28409,6 +28471,8 @@ async function buildClipperMetricoolPublishingSummary(
       metricoolSource: connectedBrand?.source || "plan",
       networks,
       connectedNetworks,
+      connectedProfileHandles,
+      connectedProfileUrls,
       accountStatus: account.status,
       dailyClipTarget: account.dailyClipTarget,
       weeklyViewsGoal: account.weeklyViewsGoal,
@@ -43772,7 +43836,7 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     oauthConnections,
     tokenRecords
   );
-  const sources = Array.isArray(config.sources) && config.sources.length ? config.sources : DEFAULT_SOURCES;
+  const sources = mergeClipperSources(config.sources);
   const dailyClipsTarget = accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
   const weeklyViewsPerAccount = 1_000_000;
   const credentialChecks = buildCredentialChecks();
@@ -44211,7 +44275,7 @@ export async function bootstrapClipperAccounts(userId = getSystemUserId()): Prom
   await writeWorkspaceReadme();
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
-  const sources = Array.isArray(config.sources) && config.sources.length ? config.sources : DEFAULT_SOURCES;
+  const sources = mergeClipperSources(config.sources);
   await writeFile(CONFIG_PATH, JSON.stringify({ ...config, accounts, sources }, null, 2));
   return getClipperStatus(userId);
 }

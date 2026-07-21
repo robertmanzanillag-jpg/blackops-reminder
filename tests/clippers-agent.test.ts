@@ -518,6 +518,8 @@ test("getClipperStatus exposes guarded growth goals", async () => {
   assert.ok(status.goals.totalWeeklyGoal >= 3_000_000);
   assert.ok(status.guardrails.some((rule) => rule.includes("licenciado")));
   assert.ok(status.agents.some((agent) => agent.id === "rights-gate"));
+  assert.ok(status.agents.some((agent) => agent.id === "local-news-scout" && agent.status === "active"));
+  assert.ok(status.sources.some((source) => source.id === "local-news-official-feeds" && source.type === "official_api"));
   assert.ok(status.growthAudit.score >= 0 && status.growthAudit.score <= 100);
   const metricsLoop = status.growthAudit.items.find((item) => item.id === "metrics-loop");
   assert.ok(metricsLoop);
@@ -3711,8 +3713,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
   process.env.METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH = "false";
   const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({
     data: [
-      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
-      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktok: { connected: true } } },
+      { id: 6431687, label: "SPORT", timezone: "America/New_York", networksData: { tiktokData: "streamersclipusa" } },
+      { id: 6431685, label: "memes", timezone: "America/New_York", networksData: { tiktokData: "streamersclips" } },
     ],
   }), { status: 200, headers: { "content-type": "application/json" } }));
 
@@ -3724,6 +3726,8 @@ test("prepareClipperMetricoolPublishingPlan writes Sports and Memes Metricool la
     assert.ok(metricoolPublishing.channels.some((channel) => channel.accountId === "meme-radar" && channel.metricoolBrandName === "memes" && channel.metricoolBlogId === "6431685"));
     assert.ok(metricoolPublishing.channels.every((channel) => channel.networks.includes("tiktok") && channel.networks.includes("instagram")));
     assert.ok(metricoolPublishing.channels.every((channel) => channel.connectedNetworks.includes("tiktok")));
+    assert.ok(metricoolPublishing.channels.some((channel) => channel.accountId === "sports-daily" && channel.connectedProfileHandles.tiktok === "streamersclipusa" && channel.connectedProfileUrls.tiktok === "https://www.tiktok.com/@streamersclipusa"));
+    assert.ok(metricoolPublishing.channels.some((channel) => channel.accountId === "meme-radar" && channel.connectedProfileHandles.tiktok === "streamersclips" && channel.connectedProfileUrls.tiktok === "https://www.tiktok.com/@streamersclips"));
     assert.ok(metricoolPublishing.channels.every((channel) => channel.connectPortalUrl === "https://app.metricool.com/"));
     assert.ok(metricoolPublishing.channels.every((channel) => channel.permissionsToGrant.some((permission) => permission.includes("Instagram"))));
     assert.ok(metricoolPublishing.channels.every((channel) => channel.connectionSteps.some((step) => step.includes("Volver a Clippers"))));

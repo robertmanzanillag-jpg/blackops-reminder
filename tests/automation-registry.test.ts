@@ -78,3 +78,16 @@ test("default automations expose Bug Patrol and daily QA report", () => {
   assert.equal((automation.metadata as any).bugPatrol, true);
   assert.equal((automation.metadata as any).digest, "daily");
 });
+
+test("registers the active five-minute Clippers local-news intake cycle", () => {
+  const automation = DEFAULT_AUTOMATIONS.find((item) => item.key === "clippers-local-news-cycle");
+
+  assert.ok(automation);
+  assert.deepEqual(automation.schedule, { kind: "interval", everyMinutes: 5 });
+  assert.equal(automation.status, "active");
+  assert.equal(automation.assignedAgentId, "clippers-agent");
+  assert.equal((automation.metadata as any).source, "server/clippers-local-news-agent.ts");
+  assert.equal((automation.metadata as any).function, "runClipperLocalNewsCycle");
+  assert.equal((automation.metadata as any).requiresMetricoolConnection, true);
+  assert.deepEqual((automation.metadata as any).brandIds, ["winner-account-1", "winner-account-2"]);
+});
