@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR30 staging rehearsal runbook
 
-- Branch: `codex/ai-media-studio-staging-rehearsal-runbook`, stacked on draft PR #116. This is documentation/static validation only; it does not authorize or perform a database connection.
+- Branch: `codex/ai-media-studio-staging-rehearsal-runbook`, draft PR #118, stacked on draft PR #116. Initial checkpoint commit: `bdd1f2fd`. This is documentation/static validation only; it does not authorize or perform a database connection.
 - Runbook: `docs/ai-media-studio/staging-rehearsal-runbook.md` defines named approvals, immutable evidence, read-only preflight, backup/isolated restore, one-file-at-a-time forward order, restart with provider workers off, exact reverse order, stop conditions and the separately approved one-video handoff.
 - SQL inventory: all 19 checked-in forward files and all 19 rollback files are listed in exact order and compared to the migration directory by a static test. `db:push` and inferred SQL are forbidden.
 - Critical audit result: the chain is NO-GO. PR14 explicitly requires validated PR13 OAuth controls, but no PR13 SQL artifact exists here. PR16 is also documented as Drizzle-only with no reviewed forward/rollback SQL. PR1 baseline, the named staging target, restorable backup, maintenance window and separate DB principals/capabilities are also unproven/unapproved.

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T19:28:15.594Z",
+  "generatedAt": "2026-07-21T19:30:04.860Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -93,25 +93,11 @@
     "symbols": 12300
   },
   "directories": {
-    "docs/ai-media-studio": {
-      "files": 11,
-      "indexed": 11,
-      "kinds": {
-        "docs": 11
-      }
-    },
     "server/ai-media-studio": {
       "files": 133,
       "indexed": 128,
       "kinds": {
         "server": 133
-      }
-    },
-    "tests": {
-      "files": 165,
-      "indexed": 158,
-      "kinds": {
-        "test": 165
       }
     },
     ".agents/skills": {
@@ -162,6 +148,13 @@
         "client-hook": 3,
         "client-lib": 7,
         "client-page": 24
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 11,
+      "indexed": 11,
+      "kinds": {
+        "docs": 11
       }
     },
     "docs": {
@@ -219,6 +212,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 165,
+      "indexed": 158,
+      "kinds": {
+        "test": 165
       }
     },
     "tests/fixtures": {
