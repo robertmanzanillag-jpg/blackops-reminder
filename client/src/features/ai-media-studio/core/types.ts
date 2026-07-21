@@ -10,6 +10,14 @@ import type {
   ProviderResourceListRequest,
   UpdateInfluencerRequest,
 } from "@shared/ai-media-studio-core";
+import type {
+  ConfigureHeyGenRosterResponse,
+  CreateHeyGenRosterMember,
+  CreateHeyGenRosterRequest,
+  HeyGenRosterGender,
+  HeyGenRosterPublicMember,
+  HeyGenRosterStatus,
+} from "@shared/ai-media-studio-heygen-roster";
 
 export type {
   CreateInfluencerRequest,
@@ -22,6 +30,15 @@ export type {
   ProviderResource,
   ProviderResourceListRequest,
   UpdateInfluencerRequest,
+};
+
+export type {
+  ConfigureHeyGenRosterResponse,
+  CreateHeyGenRosterMember,
+  CreateHeyGenRosterRequest,
+  HeyGenRosterGender,
+  HeyGenRosterPublicMember,
+  HeyGenRosterStatus,
 };
 
 export type MediaAssetKind = MediaAsset["kind"];

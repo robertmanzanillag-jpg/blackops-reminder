@@ -24,9 +24,9 @@ Kong source event -> application use case -> durable job port -> provider adapte
 
 ### Frontend to HTTP API
 
-The frontend sends business intent: influencer, voice, language, script, idempotency key, and `9:16` format. It never sends a HeyGen avatar ID or chooses an SDK operation. Create returns HTTP `202` with `{ generationId, jobId, job }`; detail, retry, and cancel return `{ job }`.
+Generation requests send provider-neutral business intent: influencer, voice, language, script, idempotency key, and `9:16` format. They never send a HeyGen avatar ID or choose an SDK operation. The separate authenticated roster-onboarding boundary accepts `avatar_id` and `voice_id` only to create private provider-resource mappings; it never returns those identifiers. Generation create returns HTTP `202` with `{ generationId, jobId, job }`; detail, retry, and cancel return `{ job }`.
 
-Scripts are capped at 5,000 characters to match the verified HeyGen v3 input limit. Client idempotency keys use 8–200 characters from letters, digits, `.`, `_`, `:`, and `-`; this intentionally stays inside HeyGen's wider 1–255-character allowance.
+Scripts are capped below 5,000 characters to match the verified HeyGen Studio V2 text-input limit. Client idempotency keys use 8–200 characters from letters, digits, `.`, `_`, `:`, and `-`.
 
 Dashboard returns `{ summary, providers, queue, recentActivity }`. Options returns `{ influencers, voices, languages }`. The source of truth is `shared/ai-media-studio.ts`.
 
@@ -38,7 +38,9 @@ Script generation accepts a bounded Kong source snapshot through `POST /api/ai-m
 
 Business use cases depend on capability ports such as `VideoProvider`, `AvatarCatalogProvider`, and `VoiceCatalogProvider`. HeyGen, Tavus, Captions, and fake/local implementations adapt those ports. Provider selection is policy-driven and deny-by-default when an adapter is not configured.
 
-The first HeyGen adapter targets its v3 API (`POST /v3/videos` and `GET /v3/videos/:id`) using `X-Api-Key` and `Idempotency-Key`. A UI cancel is an internal state change because no verified render-cancel operation exists; permanent video deletion is not a substitute for cancellation. Provider download URLs are treated as temporary even when a TTL is not documented.
+The HeyGen submit adapter targets Studio V2 at the pinned official origin (`POST https://api.heygen.com/v2/video/generate`) using `X-Api-Key`, an idempotency key, `video_inputs`, and bounded 720-class dimensions. It accepts only `data.video_id` and has no legacy fallback or automatic submit retry, avoiding a second billable request after an ambiguous side effect. Status/reconciliation remains inert until its exact account-scoped provider contract is separately verified. A UI cancel is an internal state change because no verified render-cancel operation exists; permanent video deletion is not a substitute for cancellation. Provider download URLs are temporary inputs to owned ingest, never browser-facing durable assets.
+
+The launch roster is deliberately smaller than the global catalog: 5–10 active setup members and 10 planned videos per avatar. This yields a 50–100 video plan, not a generated batch or throughput claim. One PostgreSQL transaction locks the unique active/verified server-side HeyGen account, records exact idempotency metadata, upserts private provider resources, and creates draft influencer bindings. The browser never selects a provider account or accepts an API key. Existing catalog scale remains uncapped by the launch roster.
 
 ### Application to queue
 

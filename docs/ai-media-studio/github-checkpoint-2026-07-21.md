@@ -2,7 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Latest recovery checkpoint: PR11 OAuth policy hardening
+## Latest recovery checkpoint: PR17 HeyGen launch roster
+
+- Branch: `codex/ai-media-studio-heygen-launch-roster`, draft PR #99, stacked on PR #97 / `codex/ai-media-studio-provider-activation-cas`.
+- Launch boundary: 5–10 avatars, 10 planned videos per avatar, 50–100 planned videos total. This is planning/onboarding evidence, not rendered output or capacity evidence.
+- UI/API: authenticated GET/POST roster boundary plus a dedicated wizard for name, HeyGen `avatar_id`, HeyGen `voice_id`, language, accent, and gender. Native IDs are request-only and never appear in public responses, URLs, browser storage, or logs.
+- Persistence: one account-row-locked transaction stores idempotency evidence, private provider resources, and draft provider-neutral influencers. The roster cap does not limit the global catalog.
+- Provider correction: inert HeyGen submission uses the official Studio V2 `/v2/video/generate` payload, strict `data.video_id`, scripts shorter than 5,000 characters, official-origin pinning, and no V3 fallback or automatic submit retry.
+- Safety boundary: no HeyGen request, render enqueue, generation, credit spend, migration apply, publishing action, deployment, or secret change was performed.
+- Required before use: exactly one active/verified server-owned HeyGen account, governance/rights approval, atomic daily cost admission, sandbox evidence, final checker/App QA, and Robert's separate deployment/spend approval.
+
+## Earlier recovery checkpoint: PR11 OAuth policy hardening
 
 - Branch: `codex/ai-media-studio-oauth-policy-hardening`, PR #85, stacked on PR #84 / `codex/ai-media-studio-managed-oauth-vault`.
 - Scope: persist a provider-neutral `required_s256 | none` PKCE policy snapshot, omit PKCE for the currently documented TikTok/Meta/Google web-server flows, preserve Google's offline-consent parameters, reject `authorized` callbacks until an atomic claim/exchange/token-vault flow exists, strengthen redirect defense-in-depth, and add S3 object expiration metadata.

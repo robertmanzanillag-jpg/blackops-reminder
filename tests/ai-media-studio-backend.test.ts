@@ -334,34 +334,111 @@ test("verifies webhook HMAC and rejects stale timestamps", () => {
   assert.equal(verifyHeyGenWebhook({ rawBody, secret, signature, timestamp: String(Number(timestamp) - 301), nowMs }), false);
 });
 
-test("HeyGen adapter uses v3, idempotency and canonical resource resolution", async () => {
+test("HeyGen adapter uses Studio V2 with an exact portrait payload and canonical resources", async () => {
   let capturedUrl = "";
   let capturedInit: RequestInit | undefined;
+  let fetchCalls = 0;
   const provider = new HeyGenVideoProvider({
     apiKey: "not-logged-test-key",
     providerAccountId: "00000000-0000-4000-8000-0000000000b1",
     resolveResources: async () => ({ avatarId: "provider-avatar", voiceId: "provider-voice" }),
     fetchImpl: async (input, init) => {
+      fetchCalls += 1;
       capturedUrl = String(input);
       capturedInit = init;
-      return new Response(JSON.stringify({ data: { id: "heygen-job-1" } }), { status: 200 });
+      return new Response(JSON.stringify({ data: { video_id: "heygen-job-1" } }), { status: 200 });
     },
   });
   const request = createHarness().request;
+  assert.deepEqual(await provider.status(), { key: "heygen", configured: true, healthy: true, mode: "live" });
+  assert.equal(fetchCalls, 0);
   const result = await provider.submit(request, { idempotencyKey: request.idempotencyKey, providerAccountId: provider.providerAccountId! });
 
   assert.equal(result.providerJobId, "heygen-job-1");
-  assert.equal(capturedUrl, "https://api.heygen.com/v3/videos");
+  assert.equal(fetchCalls, 1);
+  assert.equal(capturedUrl, "https://api.heygen.com/v2/video/generate");
+  assert.equal((capturedInit?.headers as Record<string, string>)["content-type"], "application/json");
+  assert.equal((capturedInit?.headers as Record<string, string>)["x-api-key"], "not-logged-test-key");
   assert.equal((capturedInit?.headers as Record<string, string>)["idempotency-key"], request.idempotencyKey);
   const body = JSON.parse(String(capturedInit?.body));
   assert.deepEqual(body, {
-    type: "avatar",
-    avatar_id: "provider-avatar",
-    script: request.script,
-    voice_id: "provider-voice",
-    aspect_ratio: "9:16",
-    resolution: "1080p",
+    video_inputs: [{
+      character: { type: "avatar", avatar_id: "provider-avatar", avatar_style: "normal" },
+      voice: { type: "text", input_text: request.script, voice_id: "provider-voice" },
+    }],
+    dimension: { width: 720, height: 1280 },
   });
+});
+
+test("HeyGen Studio V2 fails closed on unsafe input and noncanonical responses", async () => {
+  const accountId = "00000000-0000-4000-8000-0000000000b1";
+  let responseBody: unknown = { data: { video_id: "video-ok" } };
+  let fetchCalls = 0;
+  let resources = { avatarId: "provider-avatar", voiceId: "provider-voice" };
+  const provider = new HeyGenVideoProvider({
+    apiKey: "not-logged-test-key",
+    providerAccountId: accountId,
+    resolveResources: async () => resources,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response(JSON.stringify(responseBody), { status: 200 });
+    },
+  });
+  const request = createHarness().request;
+
+  await assert.rejects(
+    provider.submit({ ...request, script: "x".repeat(5_000) }, { idempotencyKey: request.idempotencyKey, providerAccountId: accountId }),
+    /fewer than 5000/i,
+  );
+  assert.equal(fetchCalls, 0);
+
+  resources = { avatarId: "provider-avatar\n", voiceId: "provider-voice" };
+  await assert.rejects(
+    provider.submit(request, { idempotencyKey: request.idempotencyKey, providerAccountId: accountId }),
+    /avatar id is invalid/i,
+  );
+  assert.equal(fetchCalls, 0);
+
+  resources = { avatarId: "provider-avatar", voiceId: "provider-voice" };
+  responseBody = { data: { id: "legacy-fallback-must-not-pass" }, id: "root-fallback-must-not-pass" };
+  await assert.rejects(
+    provider.submit(request, { idempotencyKey: request.idempotencyKey, providerAccountId: accountId }),
+    /did not include a video id/i,
+  );
+  assert.equal(fetchCalls, 1);
+
+  assert.throws(
+    () => new HeyGenVideoProvider({ baseUrl: "https://attacker.example" }),
+    /official HTTPS API origin/i,
+  );
+});
+
+test("HeyGen Studio V2 derives bounded 720-class dimensions and rejects unknown ratios", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const accountId = "00000000-0000-4000-8000-0000000000b1";
+  const provider = new HeyGenVideoProvider({
+    apiKey: "not-logged-test-key",
+    providerAccountId: accountId,
+    resolveResources: async () => ({ avatarId: "provider-avatar", voiceId: "provider-voice" }),
+    fetchImpl: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ data: { video_id: `video-${bodies.length}` } }), { status: 200 });
+    },
+  });
+  const request = createHarness().request;
+  const submitWithRatio = (aspectRatio: string) => provider.submit(
+    { ...request, aspectRatio } as unknown as Parameters<VideoProvider["submit"]>[0],
+    { idempotencyKey: request.idempotencyKey, providerAccountId: accountId },
+  );
+
+  await submitWithRatio("16:9");
+  await submitWithRatio("1:1");
+  assert.deepEqual(bodies.map((body) => body.dimension), [
+    { width: 1280, height: 720 },
+    { width: 720, height: 720 },
+  ]);
+  await assert.rejects(submitWithRatio("4:5"), /aspect ratio is not supported/i);
+  assert.equal(bodies.length, 2);
 });
 
 test("live HeyGen submit fails closed without an explicit provider account identity", async () => {
@@ -394,6 +471,7 @@ test("HeyGen parser accepts documented event_data and resource maps stay canonic
   }, { providerAccountId: provider.providerAccountId!, fallbackEventId: "sha256:verified-raw-body" });
   assert.equal(fallback.eventId, "sha256:verified-raw-body");
   assert.equal(parseHeyGenResourceMap('{"influencers":{"__proto__":{}},"voices":{}}'), undefined);
+  assert.equal(parseHeyGenResourceMap('{"influencers":{"emily":" provider-avatar"},"voices":{"voice":"provider-voice"}}'), undefined);
 });
 
 test("maps an internal job to the shared contract shape", async () => {

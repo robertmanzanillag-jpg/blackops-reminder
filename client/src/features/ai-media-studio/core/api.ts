@@ -1,4 +1,6 @@
 import type {
+  ConfigureHeyGenRosterResponse,
+  CreateHeyGenRosterRequest,
   CreateInfluencerRequest,
   AssetDelivery,
   Influencer,
@@ -9,6 +11,7 @@ import type {
   ProviderResourceListRequest,
   UpdateInfluencerRequest,
 } from "./types";
+import { configureHeyGenRosterResponseSchema } from "@shared/ai-media-studio-heygen-roster";
 
 type InfluencerListResponse = { influencers: Influencer[]; nextCursor: string | null; hasMore: boolean };
 type InfluencerResponse = { influencer: Influencer };
@@ -40,6 +43,13 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function requestOptionalJson(path: string): Promise<unknown | null> {
+  const response = await fetch(`${API_ROOT}${path}`, { credentials: "include" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  return response.json() as Promise<unknown>;
+}
+
 function queryString(values: Record<string, string | number | readonly string[] | undefined>): string {
   const params = new URLSearchParams();
   Object.entries(values).forEach(([key, value]) => {
@@ -51,6 +61,10 @@ function queryString(values: Record<string, string | number | readonly string[] 
 }
 
 export const mediaStudioCoreApi = {
+  heyGenRoster: async (): Promise<ConfigureHeyGenRosterResponse | null> => {
+    const response = await requestOptionalJson("/provider-configurations/heygen/roster");
+    return response === null ? null : configureHeyGenRosterResponseSchema.parse(response);
+  },
   influencers: (filters: InfluencerListRequest) =>
     requestJson<InfluencerListResponse>(`/influencers${queryString({
       status: filters.status,
@@ -96,6 +110,13 @@ export const mediaStudioCoreApi = {
     })}`),
   createAssetDelivery: (id: string) =>
     requestJson<AssetDelivery>(`/media-assets/${encodeURIComponent(id)}/delivery`, { method: "POST" }),
+  configureHeyGenRoster: async (input: CreateHeyGenRosterRequest): Promise<ConfigureHeyGenRosterResponse> => {
+    const response = await requestJson<unknown>("/provider-configurations/heygen/roster", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return configureHeyGenRosterResponseSchema.parse(response);
+  },
 };
 
 export type CoreApiBoundary = typeof mediaStudioCoreApi;
