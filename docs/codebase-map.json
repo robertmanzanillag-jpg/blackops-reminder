@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T04:29:17.654Z",
+  "generatedAt": "2026-07-21T04:34:37.024Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control",
   "packageName": "rest-express",
   "scripts": {
@@ -74,7 +74,7 @@
     "test:blackroom-agent": "node --import tsx --test tests/blackroom-daily-queue.test.ts",
     "test:blackroom-content": "node --import tsx --test tests/blackroom-content-agent.test.ts",
     "test:blackroom-worker": "node --import tsx --test tests/blackroom-local-worker.test.ts",
-    "test:blackroom-remote": "node --import tsx --test tests/blackroom-remote-control.test.ts",
+    "test:blackroom-remote": "node --import tsx --test tests/blackroom-remote-control.test.ts tests/blackroom-remote-sync.test.mjs",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
@@ -95,25 +95,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 460,
-    "filesIndexed": 381,
-    "imports": 1410,
+    "filesVisible": 462,
+    "filesIndexed": 383,
+    "imports": 1412,
     "routes": 465,
-    "symbols": 7729
+    "symbols": 7737
   },
   "directories": {
-    "server": {
-      "files": 112,
-      "indexed": 108,
+    "script": {
+      "files": 44,
+      "indexed": 41,
       "kinds": {
-        "server": 112
+        "script": 44
       }
     },
     "tests": {
-      "files": 72,
-      "indexed": 69,
+      "files": 73,
+      "indexed": 70,
       "kinds": {
-        "test": 72
+        "test": 73
       }
     },
     ".": {
@@ -180,18 +180,18 @@
         "docs": 12
       }
     },
-    "script": {
-      "files": 43,
-      "indexed": 40,
-      "kinds": {
-        "script": 43
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 112,
+      "indexed": 108,
+      "kinds": {
+        "server": 112
       }
     },
     "server/replit_integrations": {
@@ -3902,6 +3902,7 @@
       "path": "script/blackroom-control-server.mjs",
       "kind": "script",
       "imports": [
+        "./blackroom-remote-sync.mjs",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -3927,12 +3928,14 @@
         "npmPath",
         "origin",
         "page",
+        "plan",
         "port",
         "projectDir",
         "queue",
         "raw",
         "readBody",
         "recoverWorker",
+        "remoteLoop",
         "remotePollMs",
         "remoteRequest",
         "remoteToken",
@@ -4019,6 +4022,20 @@
         "terminateChildGroup",
         "waitForChildExit",
         "writeJson"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-remote-sync.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "planBlackRoomRemoteSync"
+      ],
+      "symbols": [
+        "desiredEnabled",
+        "generation",
+        "planBlackRoomRemoteSync"
       ],
       "routes": []
     },
@@ -6611,8 +6628,6 @@
         "hasValidBlackRoomRemoteToken",
         "ids",
         "localQueue",
-        "mutateRemoteControl",
-        "next",
         "registerBlackRoomControlRoutes",
         "remote",
         "remoteView",
@@ -6860,33 +6875,37 @@
       "path": "server/blackroom-remote-control.ts",
       "kind": "server",
       "imports": [
-        "node:fs/promises",
-        "node:path"
+        "@shared/schema",
+        "drizzle-orm"
       ],
       "exports": [
-        "BLACKROOM_REMOTE_CONTROL_PATH",
         "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
         "BlackRoomRemoteControlState",
         "BlackRoomRemoteDeviceStatus",
         "createBlackRoomRemoteControlState",
+        "initializeBlackRoomRemoteControlPersistence",
         "isBlackRoomRemoteDeviceOnline",
+        "mutateBlackRoomRemoteControl",
         "readBlackRoomRemoteControl",
         "recordBlackRoomRemoteHeartbeat",
-        "setBlackRoomRemoteCommand",
-        "writeBlackRoomRemoteControl"
+        "setBlackRoomRemoteCommand"
       ],
       "symbols": [
-        "BLACKROOM_REMOTE_CONTROL_PATH",
+        "BLACKROOM_REMOTE_CONTROL_ID",
         "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
         "createBlackRoomRemoteControlState",
+        "database",
+        "db",
+        "initializeBlackRoomRemoteControlPersistence",
         "isBlackRoomRemoteDeviceOnline",
+        "mutateBlackRoomRemoteControl",
+        "normalizeRemoteControlState",
         "parsed",
         "readBlackRoomRemoteControl",
         "recordBlackRoomRemoteHeartbeat",
         "seenAt",
         "setBlackRoomRemoteCommand",
-        "temporary",
-        "writeBlackRoomRemoteControl"
+        "state"
       ],
       "routes": []
     },
@@ -9222,6 +9241,7 @@
       "imports": [
         "./app-qa-agent",
         "./blackroom-control-routes",
+        "./blackroom-remote-control",
         "./cybersecurity-agent",
         "./health-check",
         "./local-auth",
@@ -12994,6 +13014,7 @@
         "auditLogs",
         "automationDefinitions",
         "automationRuns",
+        "blackRoomRemoteControl",
         "canvaOAuthTokens",
         "conversations",
         "djContacts",
@@ -13077,6 +13098,7 @@
         "auditLogs",
         "automationDefinitions",
         "automationRuns",
+        "blackRoomRemoteControl",
         "canvaOAuthTokens",
         "conversations",
         "djContacts",
@@ -13433,19 +13455,29 @@
         "../server/blackroom-control-routes",
         "../server/blackroom-remote-control",
         "node:assert/strict",
-        "node:fs/promises",
-        "node:os",
-        "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
-        "directory",
-        "filePath",
         "now",
-        "restored",
         "state",
         "token"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-remote-sync.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-remote-sync.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "pause",
+        "play",
+        "stalePlay"
       ],
       "routes": []
     },

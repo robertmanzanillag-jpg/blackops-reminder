@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { eq, sql } from "drizzle-orm";
+import { blackRoomRemoteControl } from "@shared/schema";
 
-export const BLACKROOM_REMOTE_CONTROL_PATH = "clippers_workspace/blackroom/agent/remote-control.json";
 export const BLACKROOM_REMOTE_ONLINE_WINDOW_MS = 90_000;
+const BLACKROOM_REMOTE_CONTROL_ID = "blackroom-primary";
+let initializationPromise: Promise<void> | undefined;
 
 export interface BlackRoomRemoteDeviceStatus {
   deviceId: string;
@@ -10,6 +11,7 @@ export interface BlackRoomRemoteDeviceStatus {
   queue: Record<string, unknown>;
   worker: Record<string, unknown>;
   lastError: string | null;
+  appliedGeneration: number;
 }
 
 export interface BlackRoomRemoteControlState {
@@ -56,6 +58,7 @@ export function recordBlackRoomRemoteHeartbeat(
     queue: input.queue && typeof input.queue === "object" ? input.queue : {},
     worker: input.worker && typeof input.worker === "object" ? input.worker : {},
     lastError: input.lastError ? String(input.lastError).slice(0, 1_000) : null,
+    appliedGeneration: Math.max(0, Math.floor(Number(input.appliedGeneration || 0))),
   };
   return state;
 }
@@ -66,32 +69,69 @@ export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState
   return Number.isFinite(seenAt) && now.getTime() - seenAt <= BLACKROOM_REMOTE_ONLINE_WINDOW_MS;
 }
 
-export async function readBlackRoomRemoteControl(
-  filePath = process.env.BLACKROOM_REMOTE_CONTROL_PATH || BLACKROOM_REMOTE_CONTROL_PATH,
-): Promise<BlackRoomRemoteControlState> {
-  try {
-    const parsed = JSON.parse(await readFile(filePath, "utf8")) as Partial<BlackRoomRemoteControlState>;
-    return {
-      ...createBlackRoomRemoteControlState(),
-      ...parsed,
-      version: 1,
-      desiredEnabled: Boolean(parsed.desiredEnabled),
-      weeks: Math.max(1, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
-      generation: Math.max(0, Math.floor(Number(parsed.generation || 0))),
-      device: parsed.device || null,
-    };
-  } catch (error: any) {
-    if (error?.code === "ENOENT") return createBlackRoomRemoteControlState();
-    throw error;
-  }
+function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlState {
+  const parsed = value && typeof value === "object" ? value as Partial<BlackRoomRemoteControlState> : {};
+  return {
+    ...createBlackRoomRemoteControlState(),
+    ...parsed,
+    version: 1,
+    desiredEnabled: Boolean(parsed.desiredEnabled),
+    weeks: Math.max(1, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
+    generation: Math.max(0, Math.floor(Number(parsed.generation || 0))),
+    device: parsed.device || null,
+  };
 }
 
-export async function writeBlackRoomRemoteControl(
-  state: BlackRoomRemoteControlState,
-  filePath = process.env.BLACKROOM_REMOTE_CONTROL_PATH || BLACKROOM_REMOTE_CONTROL_PATH,
-): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-  await rename(temporary, filePath);
+async function database() {
+  return (await import("./db")).db;
+}
+
+export async function initializeBlackRoomRemoteControlPersistence(): Promise<void> {
+  initializationPromise ??= database().then((db) => db.execute(sql`
+      CREATE TABLE IF NOT EXISTS blackroom_remote_control (
+        id varchar PRIMARY KEY,
+        data jsonb NOT NULL,
+        revision integer NOT NULL DEFAULT 1,
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `)).then(() => undefined).catch((error) => {
+      initializationPromise = undefined;
+      throw error;
+    });
+  await initializationPromise;
+}
+
+export async function readBlackRoomRemoteControl(): Promise<BlackRoomRemoteControlState> {
+  await initializeBlackRoomRemoteControlPersistence();
+  const db = await database();
+  const [row] = await db.select().from(blackRoomRemoteControl).where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID));
+  return row ? normalizeRemoteControlState(row.data) : createBlackRoomRemoteControlState();
+}
+
+export async function mutateBlackRoomRemoteControl(
+  mutation: (state: BlackRoomRemoteControlState) => void,
+): Promise<BlackRoomRemoteControlState> {
+  await initializeBlackRoomRemoteControlPersistence();
+  const db = await database();
+  return db.transaction(async (tx) => {
+    let [row] = await tx.select().from(blackRoomRemoteControl)
+      .where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID)).for("update");
+    if (!row) {
+      await tx.insert(blackRoomRemoteControl).values({
+        id: BLACKROOM_REMOTE_CONTROL_ID,
+        data: createBlackRoomRemoteControlState(),
+      }).onConflictDoNothing();
+      [row] = await tx.select().from(blackRoomRemoteControl)
+        .where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID)).for("update");
+    }
+    if (!row) throw new Error("BlackRoom remote control row could not be initialized");
+    const state = normalizeRemoteControlState(row.data);
+    mutation(state);
+    await tx.update(blackRoomRemoteControl).set({
+      data: state,
+      revision: row.revision + 1,
+      updatedAt: new Date(),
+    }).where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID));
+    return state;
+  });
 }

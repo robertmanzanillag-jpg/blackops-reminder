@@ -1,5 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
+umask 077
 
 PROJECT_DIR="${BLACKROOM_PROJECT_DIR:-$(pwd)}"
 PLIST_PATH="$HOME/Library/LaunchAgents/com.blackroom.content-agent.plist"
@@ -32,6 +33,8 @@ cat > "$PLIST_PATH" <<PLIST
   <key>StandardErrorPath</key><string>${LOG_DIR}/control.error.log</string>
 </dict></plist>
 PLIST
+
+chmod 600 "$PLIST_PATH"
 
 plutil -lint "$PLIST_PATH"
 launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true

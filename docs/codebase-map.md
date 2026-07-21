@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T04:29:17.654Z
+Generated: 2026-07-21T04:34:37.024Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 460 | 381 | 1410 | 465 | 7729 |
+| 462 | 383 | 1412 | 465 | 7737 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `client/src` | 115 | 113 | ui-component:55, client-page:25, client-component:22, client-lib:7 |
 | `server` | 112 | 108 | server:112 |
-| `tests` | 72 | 69 | test:72 |
-| `script` | 43 | 40 | script:43 |
+| `tests` | 73 | 70 | test:73 |
+| `script` | 44 | 41 | script:44 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -159,9 +159,10 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 31 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 39 symbols, 6 imports)
+- `script/blackroom-control-server.mjs` (script; 41 symbols, 7 imports)
 - `script/blackroom-daily-agent.ts` (script; 14 symbols, 1 imports)
 - `script/blackroom-local-worker.ts` (script; 29 symbols, 5 imports)
+- `script/blackroom-remote-sync.mjs` (script; 3 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 25 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
@@ -214,7 +215,6 @@ Package: `rest-express`
 - `server/ai-router.ts` (server; 13 symbols)
 - `server/app-qa-agent.ts` (server; 187 symbols, 11 imports)
 - `server/assistant.ts` (server; 280 symbols, 24 imports, 3 routes)
-- `server/automation-registry.ts` (server; 20 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -16,6 +16,7 @@ import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
+import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 
 const app = express();
 const httpServer = createServer(app);
@@ -367,6 +368,7 @@ app.use((req, res, next) => {
 (async () => {
   registerLocalAuthRoutes(app);
   await initializeRevenueEnginePersistence();
+  await initializeBlackRoomRemoteControlPersistence();
   await registerRoutes(httpServer, app);
   registerBlackRoomControlRoutes(app);
 

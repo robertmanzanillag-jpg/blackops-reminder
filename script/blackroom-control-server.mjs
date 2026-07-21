@@ -4,6 +4,7 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { planBlackRoomRemoteSync } from "./blackroom-remote-sync.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectDir = process.cwd();
@@ -16,6 +17,7 @@ const remotePollMs = Math.max(10_000, Number(process.env.BLACKROOM_REMOTE_POLL_M
 const controlToken = randomBytes(32).toString("hex");
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 let commandTail = Promise.resolve();
+let lastAppliedGeneration = -1;
 
 async function command(name, weeks) {
   const args = ["run", "blackroom:agent", "--", `--${name}`];
@@ -73,13 +75,15 @@ async function syncRemoteControl() {
   try {
     const { control } = await remoteRequest("GET");
     queue = await serializedCommand("status");
-    if (control.desiredEnabled && !queue.enabled) {
+    const plan = planBlackRoomRemoteSync({ control, localEnabled: queue.enabled, lastAppliedGeneration });
+    if (plan.action === "start") {
       queue = await serializedCommand("start", control.weeks);
       wakeWorker();
-    } else if (!control.desiredEnabled && queue.enabled) {
+    } else if (plan.action === "pause") {
       queue = await serializedCommand("pause");
       await stopWorker();
     }
+    lastAppliedGeneration = plan.generation;
   } catch (error) {
     lastError = error instanceof Error ? error.message : String(error);
     console.error("[blackroom-control] remote sync failed:", lastError);
@@ -91,6 +95,7 @@ async function syncRemoteControl() {
       queue,
       worker: await workerState(),
       lastError,
+      appliedGeneration: Math.max(0, lastAppliedGeneration),
     });
   } catch (error) {
     console.error("[blackroom-control] remote heartbeat failed:", error instanceof Error ? error.message : error);
@@ -156,8 +161,11 @@ server.listen(port, "127.0.0.1", () => console.log(`[blackroom-control] http://1
 setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
 if (remoteToken) {
-  setTimeout(syncRemoteControl, 2_000);
-  setInterval(syncRemoteControl, remotePollMs).unref();
+  const remoteLoop = async () => {
+    await syncRemoteControl();
+    setTimeout(remoteLoop, remotePollMs).unref();
+  };
+  setTimeout(remoteLoop, 2_000);
 } else {
   console.warn("[blackroom-control] BLACKROOM_REMOTE_CONTROL_TOKEN is not configured; Replit control is disabled");
 }

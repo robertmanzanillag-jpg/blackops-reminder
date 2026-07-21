@@ -1,29 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { hasValidBlackRoomRemoteToken } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
-  readBlackRoomRemoteControl,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
-  writeBlackRoomRemoteControl,
 } from "../server/blackroom-remote-control";
 
-test("remote command survives disk persistence and increments its generation", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-remote-"));
-  const filePath = path.join(directory, "remote.json");
+test("remote command increments its monotonic generation", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
   const state = createBlackRoomRemoteControlState(now);
   setBlackRoomRemoteCommand(state, true, 3, now);
-  await writeBlackRoomRemoteControl(state, filePath);
-  const restored = await readBlackRoomRemoteControl(filePath);
-  assert.equal(restored.desiredEnabled, true);
-  assert.equal(restored.weeks, 3);
-  assert.equal(restored.generation, 1);
+  assert.equal(state.desiredEnabled, true);
+  assert.equal(state.weeks, 3);
+  assert.equal(state.generation, 1);
 });
 
 test("heartbeat reports the Mac online only inside the freshness window", () => {
@@ -33,9 +24,11 @@ test("heartbeat reports the Mac online only inside the freshness window", () => 
     queue: { enabled: true },
     worker: { running: true },
     lastError: null,
+    appliedGeneration: 3,
   }, new Date("2026-07-21T12:00:00.000Z"));
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:01:00.000Z")), true);
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:02:00.000Z")), false);
+  assert.equal(state.device?.appliedGeneration, 3);
 });
 
 test("device authentication rejects missing, short, placeholder, and incorrect tokens", () => {
