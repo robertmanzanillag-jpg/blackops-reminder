@@ -83,7 +83,7 @@ function PublishingComposer() {
 
   return (
     <Card className="border-white/10 bg-white/[0.035] text-white shadow-none">
-      <CardHeader><CardTitle className="text-base">Create approval draft</CardTitle><p className="text-sm text-zinc-400">Manual and scheduled drafts never publish until an operator approves the immutable preview.</p></CardHeader>
+      <CardHeader><CardTitle className="text-base">Create approval draft</CardTitle><p className="text-sm text-zinc-400">Manual and scheduled drafts never publish until an operator approves the immutable preview. The server also requires an approved quality review tied to the current asset checksum and current influencer governance.</p></CardHeader>
       <CardContent>
         <form onSubmit={submit} noValidate className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -95,8 +95,8 @@ function PublishingComposer() {
               </select>
               {assets.isLoading && <p id="publish-asset-status" role="status" className="mt-2 text-xs text-zinc-400">Loading ready canonical media assets…</p>}
               {assets.isError && <div id="publish-asset-status" role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-red-200"><span>{assets.error.message}</span><Button type="button" size="sm" variant="outline" onClick={() => void assets.refetch()} disabled={assets.isFetching} className="border-red-300/20 bg-red-400/5 text-red-100">{assets.isFetching ? "Retrying…" : "Retry assets"}</Button></div>}
-              {!assets.isLoading && !assets.isError && readyAssets.length === 0 && <p id="publish-asset-status" role="status" className="mt-2 text-xs text-amber-200">No ready canonical media assets are available. Finish an asset before creating a publishing draft.</p>}
-              {!assets.isLoading && !assets.isError && readyAssets.length > 0 && <p id="publish-asset-status" className="mt-2 text-xs text-zinc-400">{readyAssets.length} ready {readyAssets.length === 1 ? "asset" : "assets"} available.</p>}
+              {!assets.isLoading && !assets.isError && readyAssets.length === 0 && <p id="publish-asset-status" role="status" className="mt-2 text-xs text-amber-200">No ready canonical media assets are available. Finish an asset and its quality review before creating a publishing draft.</p>}
+              {!assets.isLoading && !assets.isError && readyAssets.length > 0 && <p id="publish-asset-status" className="mt-2 text-xs text-zinc-400">{readyAssets.length} ready {readyAssets.length === 1 ? "asset" : "assets"} available. Final quality and governance eligibility is verified by the server when the draft is created.</p>}
             </div>
             <div><Label htmlFor="publish-platform">Platform</Label><select id="publish-platform" className={inputClass} value={platform} onChange={(event) => setPlatform(event.target.value as SocialPlatform)}>{platforms.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
             <div><Label htmlFor="publish-mode">Publishing mode</Label><select id="publish-mode" className={inputClass} value={mode} onChange={(event) => setMode(event.target.value as "manual" | "scheduled")}><option value="manual">Manual approval</option><option value="scheduled">Scheduled after approval</option><option value="automatic" disabled>Automatic · locked</option></select></div>

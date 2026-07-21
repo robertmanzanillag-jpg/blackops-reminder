@@ -37,10 +37,10 @@ test("provider completion becomes a tenant-owned canonical asset only after boun
       assets,
     },
     runtimeEnvironment: "test",
-    seedCoreDefaults: false,
+    seedCoreDefaults: true,
   });
   const job = await runtime.service.createGeneration("owner-a", {
-    influencerId: "influencer-a", script: "A finished owned render.", voiceId: "voice-a",
+    influencerId: "emily-food", script: "A finished owned render.", voiceId: "voice-emily-en",
     language: "en-US", aspectRatio: "9:16", idempotencyKey: "owned-artifact-flow-001",
   });
   await runtime.service.ingestWebhook("fake", {

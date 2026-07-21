@@ -3,7 +3,13 @@ import type { GenerationRequest, MediaGenerationJob, ProviderWebhookEvent } from
 import type { MediaJobQueue, MediaJobRepository, MediaQueueMessage } from "./ports";
 
 function copyJob(job: MediaGenerationJob): MediaGenerationJob {
-  return { ...job, request: { ...job.request } };
+  return {
+    ...job,
+    request: {
+      ...job.request,
+      ...(job.request.governance ? { governance: { ...job.request.governance } } : {}),
+    },
+  };
 }
 export class InMemoryMediaJobRepository implements MediaJobRepository {
   private readonly jobs = new Map<string, MediaGenerationJob>();

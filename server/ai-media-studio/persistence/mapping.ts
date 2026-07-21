@@ -7,7 +7,18 @@ function optionalIso(value: Date | null): string | undefined {
 
 /** Pure DB-row mapping, kept independent from a live driver for contract tests. */
 export function mapRenderJobRow(row: AiMediaRenderJobRow): MediaGenerationJob {
-  const request = row.request as unknown as GenerationRequest;
+  const storedRequest = row.request as unknown as GenerationRequest;
+  const request: GenerationRequest = {
+    ...storedRequest,
+    ...(row.governanceProfileId && row.governanceEvidenceDigest
+      ? {
+          governance: {
+            profileId: row.governanceProfileId,
+            evidenceDigest: row.governanceEvidenceDigest as `sha256:${string}`,
+          },
+        }
+      : { governance: undefined }),
+  };
   const result = (row.result ?? {}) as Record<string, unknown>;
 
   return {

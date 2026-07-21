@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { GovernanceGateError } from "../governance/contracts";
 import type {
   RenderClock,
   ProviderSubmission,
@@ -17,6 +18,15 @@ export interface RenderRetryPolicy {
   isRetryable?: (error: unknown) => boolean;
 }
 
+/**
+ * Mandatory last-mile policy check. Durable compositions must resolve all
+ * evidence from trusted server-side repositories; the claimed payload is only
+ * the subject of the check and is never itself evidence.
+ */
+export interface RenderSubmissionGate<TPayload> {
+  assertCanSubmit(item: Readonly<RenderWorkItem<TPayload>>): void | Promise<void>;
+}
+
 export interface RenderWorkerOptions<TPayload> {
   workerId: string;
   repository: RenderWorkRepository<TPayload>;
@@ -24,6 +34,7 @@ export interface RenderWorkerOptions<TPayload> {
   quotas: RenderQuotaPolicy;
   leaseDurationMs: number;
   retry: RenderRetryPolicy;
+  submissionGate: RenderSubmissionGate<TPayload>;
   clock?: RenderClock;
   random?: RenderRandom;
   hooks?: RenderWorkerHooks<TPayload>;
@@ -86,6 +97,9 @@ export class RenderWorker<TPayload = unknown> {
     let submission: ProviderSubmission;
     try {
       if (!provider) throw new PermanentRenderFailure(`Unknown render provider: ${claim.item.providerKey}`);
+      // Keep this immediately adjacent to provider.submit. Creation, enqueue,
+      // retry, or an earlier worker check can all become stale while queued.
+      await this.options.submissionGate.assertCanSubmit(claim.item);
       submission = await provider.submit(claim.item.payload, {
         workId: claim.item.id,
         tenantId: claim.item.tenantId,
@@ -95,7 +109,9 @@ export class RenderWorker<TPayload = unknown> {
       if (!submission.providerSubmissionId) throw new Error("Provider returned no submission id");
     } catch (error) {
       const nowMs = this.clock.now();
-      const retryable = !(error instanceof PermanentRenderFailure) && (this.options.retry.isRetryable?.(error) ?? true);
+      const retryable = !(error instanceof PermanentRenderFailure)
+        && !(error instanceof GovernanceGateError)
+        && (this.options.retry.isRetryable?.(error) ?? true);
       const result = await this.options.repository.recordFailure({
         workId: claim.item.id,
         leaseToken: claim.leaseToken,

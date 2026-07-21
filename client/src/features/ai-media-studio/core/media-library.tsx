@@ -8,6 +8,7 @@ import { AssetDeliveryControl } from "./asset-delivery-control";
 import { useMediaAssets } from "./hooks";
 import { PaginationError } from "./pagination-feedback";
 import type { MediaAsset, MediaAssetKind, MediaAssetStatus, MediaLibraryRequest } from "./types";
+import { AssetQualityReviewControl } from "../governance/asset-quality-review";
 
 const kinds: Array<{ value: "all" | MediaAssetKind; label: string }> = [
   { value: "all", label: "All assets" }, { value: "video", label: "Videos" }, { value: "script", label: "Scripts" },
@@ -96,6 +97,8 @@ export function MediaLibrary() {
                       <h3 className="truncate text-sm font-semibold text-white">{asset.name}</h3>
                       <div className="mt-2 flex items-center justify-between gap-2 text-xs text-zinc-400"><span>{formatBytes(asset.byteSize)}</span><span className="capitalize">{asset.status}</span></div>
                       {formatDuration(asset.durationMs) && <p className="mt-1 text-xs text-zinc-400">Duration {formatDuration(asset.durationMs)}</p>}
+                      {asset.kind === "video" && asset.status === "ready" && <AssetQualityReviewControl assetId={asset.id} />}
+                      {asset.kind === "video" && asset.status !== "ready" && <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-2 text-xs text-zinc-400">Quality review becomes available when the video is ready.</p>}
                       {/* AssetDeliveryControl uses authenticated, short-lived links with rel="noreferrer" semantics. */}
                       <AssetDeliveryControl assetId={asset.id} available={asset.status === "ready"} unavailableLabel={deliveryUnavailableLabel(asset.status)} />
                     </CardContent>

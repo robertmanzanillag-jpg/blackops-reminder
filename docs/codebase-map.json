@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-20T21:58:09.308Z",
+  "generatedAt": "2026-07-21T02:33:12.359Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,18 +85,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 569,
-    "filesIndexed": 494,
-    "imports": 1956,
-    "routes": 483,
-    "symbols": 9343
+    "filesVisible": 588,
+    "filesIndexed": 511,
+    "imports": 2027,
+    "routes": 486,
+    "symbols": 9605
   },
   "directories": {
     "client/src": {
-      "files": 144,
-      "indexed": 142,
+      "files": 151,
+      "indexed": 149,
       "kinds": {
-        "other": 35,
+        "other": 42,
         "client-component": 21,
         "ui-component": 55,
         "client-hook": 3,
@@ -104,26 +104,40 @@
         "client-page": 23
       }
     },
+    "docs/ai-media-studio": {
+      "files": 8,
+      "indexed": 8,
+      "kinds": {
+        "docs": 8
+      }
+    },
     "migrations/ai-media-studio": {
-      "files": 7,
+      "files": 9,
       "indexed": 1,
       "kinds": {
-        "other": 6,
+        "other": 8,
         "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 71,
-      "indexed": 71,
+      "files": 76,
+      "indexed": 76,
       "kinds": {
-        "server": 71
+        "server": 76
+      }
+    },
+    "shared": {
+      "files": 6,
+      "indexed": 6,
+      "kinds": {
+        "shared": 6
       }
     },
     "tests": {
-      "files": 97,
-      "indexed": 94,
+      "files": 100,
+      "indexed": 97,
       "kinds": {
-        "test": 97
+        "test": 100
       }
     },
     ".agents/skills": {
@@ -164,13 +178,6 @@
         "other": 13
       }
     },
-    "docs/ai-media-studio": {
-      "files": 7,
-      "indexed": 7,
-      "kinds": {
-        "docs": 7
-      }
-    },
     "docs": {
       "files": 12,
       "indexed": 11,
@@ -204,13 +211,6 @@
       "indexed": 8,
       "kinds": {
         "server": 8
-      }
-    },
-    "shared": {
-      "files": 5,
-      "indexed": 5,
-      "kinds": {
-        "shared": 5
       }
     },
     "shared/models": {
@@ -2335,6 +2335,7 @@
       "path": "client/src/features/ai-media-studio/api.ts",
       "kind": "other",
       "imports": [
+        "./governance/errors",
         "./types"
       ],
       "exports": [
@@ -2342,7 +2343,6 @@
       ],
       "symbols": [
         "API_ROOT",
-        "body",
         "fallback",
         "mediaStudioApi",
         "requestJson",
@@ -2559,6 +2559,7 @@
       "kind": "other",
       "imports": [
         "../feedback",
+        "../governance/influencer-governance",
         "./archive-dialog-state",
         "./hooks",
         "./influencer-form",
@@ -2602,6 +2603,7 @@
       "kind": "other",
       "imports": [
         "../feedback",
+        "../governance/asset-quality-review",
         "./asset-delivery-control",
         "./hooks",
         "./pagination-feedback",
@@ -2675,6 +2677,7 @@
       "imports": [
         "./core/influencer-selection",
         "./feedback",
+        "./governance/hooks",
         "./hooks",
         "./script-api",
         "@/components/ui/button",
@@ -2699,6 +2702,11 @@
         "fieldClass",
         "focusField",
         "generateScripts",
+        "governanceNowMs",
+        "governanceProfile",
+        "governanceQuery",
+        "governanceReadyForPreview",
+        "governanceStatusText",
         "idempotencyKey",
         "influencer",
         "next",
@@ -2756,6 +2764,176 @@
         "EmptyPanel",
         "ErrorPanel",
         "LoadingPanel"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/api.test.ts",
+      "kind": "other",
+      "imports": [
+        "./api",
+        "./errors",
+        "./types",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "body",
+        "component",
+        "input",
+        "originalFetch"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/api.ts",
+      "kind": "other",
+      "imports": [
+        "./errors",
+        "./types"
+      ],
+      "exports": [
+        "GovernanceApiError",
+        "governanceApi"
+      ],
+      "symbols": [
+        "API_ROOT",
+        "GovernanceApiError",
+        "fallback",
+        "governanceApi",
+        "requestJson",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/asset-quality-review.tsx",
+      "kind": "other",
+      "imports": [
+        "./hooks",
+        "./types",
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/components/ui/label",
+        "@/components/ui/textarea",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "AssetQualityReviewControl"
+      ],
+      "symbols": [
+        "AssetQualityReviewControl",
+        "decision",
+        "inputClass",
+        "mutation",
+        "query",
+        "review",
+        "submit",
+        "tone"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/errors.ts",
+      "kind": "other",
+      "imports": [],
+      "exports": [
+        "actionableApiError"
+      ],
+      "symbols": [
+        "GovernanceReason",
+        "actionableApiError",
+        "candidate",
+        "governanceReasonMessages",
+        "isGovernanceReason",
+        "messages"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/hooks.ts",
+      "kind": "other",
+      "imports": [
+        "./api",
+        "@tanstack/react-query"
+      ],
+      "exports": [
+        "governanceKeys",
+        "useAssetQualityReview",
+        "useAssetQualityReviewMutation",
+        "useInfluencerGovernance",
+        "useInfluencerGovernanceMutations"
+      ],
+      "symbols": [
+        "client",
+        "governanceKeys",
+        "refresh",
+        "useAssetQualityReview",
+        "useAssetQualityReviewMutation",
+        "useInfluencerGovernance",
+        "useInfluencerGovernanceMutations"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/influencer-governance.tsx",
+      "kind": "other",
+      "imports": [
+        "../core/types",
+        "./hooks",
+        "./types",
+        "@/components/ui/alert-dialog",
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/components/ui/label",
+        "@/components/ui/textarea",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "InfluencerGovernanceControl"
+      ],
+      "symbols": [
+        "InfluencerGovernanceControl",
+        "ProfileDialog",
+        "RevokeProfile",
+        "display",
+        "inputClass",
+        "mutations",
+        "profile",
+        "profileDisplay",
+        "query",
+        "submit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/governance/types.ts",
+      "kind": "other",
+      "imports": [
+        "@shared/ai-media-studio-governance"
+      ],
+      "exports": [
+        "CreateInfluencerGovernanceProfile",
+        "allowedUses",
+        "commaSeparated",
+        "consentBases",
+        "idempotencyKey",
+        "isSha256Digest",
+        "qualityScoreKeys",
+        "rightsBases"
+      ],
+      "symbols": [
+        "allowedUses",
+        "commaSeparated",
+        "consentBases",
+        "idempotencyKey",
+        "isSha256Digest",
+        "qualityScoreKeys",
+        "rightsBases"
       ],
       "routes": []
     },
@@ -2876,6 +3054,7 @@
       "path": "client/src/features/ai-media-studio/operations/api.ts",
       "kind": "other",
       "imports": [
+        "../governance/errors",
         "./types",
         "@shared/ai-media-studio-core",
         "@shared/ai-media-studio-operations"
@@ -2885,7 +3064,6 @@
       ],
       "symbols": [
         "API_ROOT",
-        "body",
         "fallback",
         "operationsApi",
         "params",
@@ -4543,6 +4721,14 @@
       "symbols": [
         "mediaJobs"
       ],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/pr5-governance-notes.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -7197,6 +7383,182 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/governance/contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-governance",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "AssetQualityReview",
+        "GovernanceAppendResult",
+        "GovernanceConflictError",
+        "GovernanceGateError",
+        "GovernanceGateReason",
+        "GovernanceIdempotency",
+        "GovernanceNotFoundError",
+        "GovernanceProfileBinding",
+        "GovernanceRepository",
+        "GovernanceValidationError",
+        "InfluencerGovernanceProfile",
+        "PublishGovernanceGateInput",
+        "QualityReviewBinding",
+        "RenderGovernanceGateInput"
+      ],
+      "symbols": [
+        "GovernanceConflictError",
+        "GovernanceGateError",
+        "GovernanceNotFoundError",
+        "GovernanceValidationError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/governance/drizzle-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./contracts",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres"
+      ],
+      "exports": [
+        "DrizzleGovernanceRepository",
+        "GovernanceDatabase"
+      ],
+      "symbols": [
+        "DrizzleGovernanceRepository",
+        "GovernanceExecutor",
+        "RawRow",
+        "assertIdempotencyDigest",
+        "assertRecordScope",
+        "expectedPreviousId",
+        "expectedVersion",
+        "inserted",
+        "iso",
+        "lockKey",
+        "lockSubject",
+        "mapProfile",
+        "mapReview",
+        "notes",
+        "nullableIso",
+        "ownership",
+        "previous",
+        "raced",
+        "replay",
+        "row",
+        "rows",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/governance/in-memory-repository.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts"
+      ],
+      "exports": [
+        "InMemoryGovernanceRepository"
+      ],
+      "symbols": [
+        "IdempotencyRecord",
+        "InMemoryGovernanceRepository",
+        "clone",
+        "created",
+        "current",
+        "currentId",
+        "currentIds",
+        "existing",
+        "id",
+        "key",
+        "prior",
+        "record",
+        "records",
+        "replay",
+        "tenantKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/governance/index.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./drizzle-repository",
+        "./in-memory-repository",
+        "./service"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/governance/service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-governance",
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "GovernanceService",
+        "GovernanceServiceOptions",
+        "deriveQualityReviewStatus",
+        "governanceDigest",
+        "toPublicAssetQualityReview",
+        "toPublicInfluencerGovernanceProfile"
+      ],
+      "symbols": [
+        "GovernanceService",
+        "actorUserId",
+        "allowedUses",
+        "binding",
+        "brandPolicy",
+        "canonicalBrandPolicy",
+        "canonicalJson",
+        "content",
+        "createdAt",
+        "current",
+        "deriveQualityReviewStatus",
+        "expiresAt",
+        "gate",
+        "governanceDigest",
+        "influencerId",
+        "inputDigest",
+        "instant",
+        "normalizeInstant",
+        "normalizedText",
+        "opaqueServerId",
+        "parsePublic",
+        "prefixedSha256",
+        "profile",
+        "profileGateReasons",
+        "prohibitedNormalized",
+        "prohibitedTerms",
+        "proofDigest",
+        "rawSha256",
+        "reasons",
+        "request",
+        "requiredTerms",
+        "review",
+        "scope",
+        "territories",
+        "time",
+        "toPublicAssetQualityReview",
+        "toPublicInfluencerGovernanceProfile",
+        "unique",
+        "uniqueSorted",
+        "validFrom",
+        "validProfileBinding",
+        "validRenderGate",
+        "validReviewBinding",
+        "validScope",
+        "values"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/in-memory.ts",
       "kind": "server",
       "imports": [
@@ -7802,8 +8164,8 @@
       "symbols": [
         "mapRenderJobRow",
         "optionalIso",
-        "request",
-        "result"
+        "result",
+        "storedRequest"
       ],
       "routes": []
     },
@@ -8148,12 +8510,14 @@
       "path": "server/ai-media-studio/publishing/worker.ts",
       "kind": "server",
       "imports": [
+        "../governance/contracts",
         "./domain",
         "./ports"
       ],
       "exports": [
         "PermanentPublishingFailure",
         "PublishingRetryPolicy",
+        "PublishingSubmissionGate",
         "PublishingWorker",
         "PublishingWorkerOptions",
         "PublishingWorkerResult",
@@ -8183,6 +8547,7 @@
       "imports": [
         "../../shared/ai-media-studio",
         "../../shared/ai-media-studio-core",
+        "../../shared/ai-media-studio-governance",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
@@ -8192,6 +8557,9 @@
         "./core/resource-domain",
         "./core/runtime",
         "./domain",
+        "./governance/contracts",
+        "./governance/in-memory-repository",
+        "./governance/service",
         "./in-memory",
         "./operations-runtime",
         "./persistence/runtime",
@@ -8199,6 +8567,7 @@
         "./providers/fake-video-provider",
         "./providers/heygen-video-provider",
         "./publishing/domain",
+        "./publishing/worker",
         "./script-service",
         "./service",
         "./sources/contracts",
@@ -8217,7 +8586,10 @@
         "actorId",
         "analyticsWindow",
         "approval",
+        "assertPublishingGovernance",
+        "assertRenderGovernance",
         "asset",
+        "assetId",
         "assetIngestRepository",
         "asyncRoute",
         "attached",
@@ -8225,11 +8597,13 @@
         "attributionResponseSchema",
         "available",
         "candidate",
+        "configuredDatabase",
         "connectionSchema",
         "connectionsResponseSchema",
         "core",
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
+        "createDefaultDurableGovernanceRepository",
         "created",
         "dashboard",
         "databaseUrl",
@@ -8241,6 +8615,7 @@
         "emptyActionSchema",
         "end",
         "engagements",
+        "ensureGovernanceDefaults",
         "envAssetHosts",
         "environment",
         "error",
@@ -8248,22 +8623,28 @@
         "existing",
         "expiresInSeconds",
         "explicitHarness",
+        "governance",
+        "governanceSeeds",
+        "governanceSelection",
         "hasMore",
         "id",
         "idSchema",
         "index",
         "influencer",
+        "influencerId",
         "ingest",
         "input",
         "issuedAt",
         "job",
         "jobResponseSchema",
         "jobs",
+        "key",
         "languageCodes",
         "load",
         "materializeOwnedAsset",
         "materialized",
         "mediaAssetId",
+        "method",
         "operations",
         "options",
         "ownerUserId",
@@ -8274,6 +8655,7 @@
         "persistence",
         "preview",
         "previewInput",
+        "profile",
         "providerKey",
         "providers",
         "publicPublishingStatus",
@@ -8284,6 +8666,7 @@
         "queue",
         "rawBody",
         "rawStatus",
+        "reason",
         "reconcileCompletedArtifact",
         "reconcileCompletedAssetIngests",
         "registerAiMediaStudioRoutes",
@@ -8292,18 +8675,23 @@
         "requestWithRawBody",
         "requireCapability",
         "requireCatalog",
+        "requireGovernance",
         "requireJobs",
         "requireOperations",
         "resources",
         "result",
+        "review",
         "router",
         "runtime",
         "runtimeEnvironment",
+        "samples",
         "scheduledFor",
         "scope",
         "scriptService",
         "search",
         "secret",
+        "seedGovernance",
+        "selectGovernanceRepository",
         "service",
         "sourceType",
         "sourcesQuerySchema",
@@ -8320,6 +8708,7 @@
         "toPublishingJob",
         "toSourceItem",
         "today",
+        "unavailableGovernanceRepository",
         "updated",
         "url",
         "values",
@@ -8333,6 +8722,9 @@
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources",
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
         "${AI_MEDIA_STUDIO_API_BASE}/generations",
+        "${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review",
+        "${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile",
+        "${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile/revoke",
         "${AI_MEDIA_STUDIO_API_BASE}/influencers",
         "${AI_MEDIA_STUDIO_API_BASE}/influencers/:id",
         "${AI_MEDIA_STUDIO_API_BASE}/jobs",
@@ -8402,11 +8794,14 @@
         "MediaStudioError",
         "awaitingArtifact",
         "completed",
+        "currentGovernance",
         "deadLettered",
         "enrichedPayload",
         "event",
         "existing",
         "firstReceipt",
+        "governance",
+        "governedRequest",
         "isAllowedProviderAssetUrl",
         "job",
         "jobs",
@@ -8742,12 +9137,14 @@
       "path": "server/ai-media-studio/workers/render-worker.ts",
       "kind": "server",
       "imports": [
+        "../governance/contracts",
         "./contracts",
         "node:crypto"
       ],
       "exports": [
         "PermanentRenderFailure",
         "RenderRetryPolicy",
+        "RenderSubmissionGate",
         "RenderWorker",
         "RenderWorkerOptions",
         "RenderWorkerResult",
@@ -8808,13 +9205,18 @@
       ],
       "exports": [
         "CreateVideoRenderWorkerOptions",
+        "CurrentRenderGovernanceResolver",
+        "createGovernedVideoRenderSubmissionGate",
         "createVideoRenderWorker",
         "createVideoRenderWorkerHooks"
       ],
       "symbols": [
+        "bound",
         "call",
+        "createGovernedVideoRenderSubmissionGate",
         "createVideoRenderWorker",
         "createVideoRenderWorkerHooks",
+        "current",
         "firstHandler",
         "mergeHooks",
         "projectSubmission",
@@ -15450,6 +15852,64 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-governance.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "ALLOWED_USES",
+        "AllowedUse",
+        "AssetQualityReview",
+        "AssetQualityReviewResponse",
+        "BrandPolicy",
+        "CONSENT_BASES",
+        "ConsentBasis",
+        "CreateAssetQualityReviewRequest",
+        "CreateInfluencerGovernanceProfileRequest",
+        "InfluencerGovernanceProfile",
+        "InfluencerGovernanceProfileResponse",
+        "QUALITY_CRITERIA",
+        "QUALITY_REVIEW_STATUSES",
+        "QualityCriterion",
+        "QualityReviewStatus",
+        "QualityScores",
+        "RIGHTS_BASES",
+        "RevokeInfluencerGovernanceProfileRequest",
+        "RightsBasis",
+        "assetQualityReviewResponseSchema",
+        "assetQualityReviewSchema",
+        "brandPolicySchema",
+        "createAssetQualityReviewRequestSchema",
+        "createInfluencerGovernanceProfileRequestSchema",
+        "influencerGovernanceProfileResponseSchema",
+        "influencerGovernanceProfileSchema",
+        "qualityScoresSchema",
+        "revokeInfluencerGovernanceProfileRequestSchema"
+      ],
+      "symbols": [
+        "ALLOWED_USES",
+        "CONSENT_BASES",
+        "QUALITY_CRITERIA",
+        "QUALITY_REVIEW_STATUSES",
+        "RIGHTS_BASES",
+        "assetQualityReviewResponseSchema",
+        "assetQualityReviewSchema",
+        "brandPolicySchema",
+        "createAssetQualityReviewRequestSchema",
+        "createInfluencerGovernanceProfileRequestSchema",
+        "digestSchema",
+        "idempotencyKeySchema",
+        "influencerGovernanceProfileResponseSchema",
+        "influencerGovernanceProfileSchema",
+        "opaqueIdSchema",
+        "policyTermSchema",
+        "qualityScoresSchema",
+        "revokeInfluencerGovernanceProfileRequestSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-operations.ts",
       "kind": "shared",
       "imports": [
@@ -15636,14 +16096,18 @@
         "drizzle-orm/pg-core"
       ],
       "exports": [
+        "AiMediaGovernanceProfileRow",
         "AiMediaOrchestrationRunRow",
         "AiMediaOutboxRow",
         "AiMediaPublishingJobRow",
+        "AiMediaQualityReviewRow",
         "AiMediaRenderJobRow",
         "AiMediaWebhookEventRow",
+        "NewAiMediaGovernanceProfileRow",
         "NewAiMediaOrchestrationRunRow",
         "NewAiMediaOutboxRow",
         "NewAiMediaPublishingJobRow",
+        "NewAiMediaQualityReviewRow",
         "NewAiMediaRenderJobRow",
         "NewAiMediaWebhookEventRow",
         "aiMediaAnalyticsEvents",
@@ -15651,6 +16115,7 @@
         "aiMediaAssetIngestJobs",
         "aiMediaCostLedger",
         "aiMediaGenerationHistory",
+        "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOrchestrationRuns",
@@ -15659,6 +16124,7 @@
         "aiMediaProviderResources",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
+        "aiMediaQualityReviews",
         "aiMediaRenderJobs",
         "aiMediaScriptVariants",
         "aiMediaScripts",
@@ -15675,6 +16141,7 @@
         "aiMediaAssetIngestJobs",
         "aiMediaCostLedger",
         "aiMediaGenerationHistory",
+        "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOrchestrationRuns",
@@ -15683,6 +16150,7 @@
         "aiMediaProviderResources",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
+        "aiMediaQualityReviews",
         "aiMediaRenderJobs",
         "aiMediaScriptVariants",
         "aiMediaScripts",
@@ -16218,11 +16686,13 @@
         "allowed",
         "assetIngestRepository",
         "blocked",
+        "blockedRepository",
         "body",
         "cancelled",
         "completed",
         "completedAt",
         "createHarness",
+        "created",
         "event",
         "failed",
         "finalJob",
@@ -16426,6 +16896,74 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-governance-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/governance/contracts",
+        "../server/ai-media-studio/governance/drizzle-repository",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeDb",
+        "assetChecksum",
+        "compiled",
+        "createdAt",
+        "current",
+        "db",
+        "digestA",
+        "digestB",
+        "insert",
+        "ownership",
+        "profile",
+        "profileRow",
+        "query",
+        "result",
+        "review",
+        "reviewRow",
+        "row",
+        "scope",
+        "serialized"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-governance.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/governance",
+        "../shared/ai-media-studio-governance",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "allowed",
+        "approvedCriteria",
+        "assetChecksum",
+        "binding",
+        "first",
+        "gate",
+        "harness",
+        "internal",
+        "internalPreview",
+        "other",
+        "profile",
+        "profileRequest",
+        "proofDigest",
+        "replay",
+        "repository",
+        "revoked",
+        "second",
+        "service",
+        "tenantA",
+        "tenantB"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-influencers.test.ts",
       "kind": "test",
       "imports": [
@@ -16571,6 +17109,7 @@
         "crossTenant",
         "crossTenantApproval",
         "crossTenantCursor",
+        "deniedRetryResponse",
         "digest",
         "draftResponse",
         "firstApproval",
@@ -16609,6 +17148,7 @@
         "request",
         "response",
         "retriedResponse",
+        "retryAsset",
         "retryCreated",
         "retryPreview",
         "retryRequest",
@@ -16623,6 +17163,7 @@
         "scheduledPreviewResponse",
         "scheduledReplay",
         "scheduledRequest",
+        "scope",
         "scopeA",
         "scopeB",
         "seedAsset",
@@ -16855,6 +17396,25 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr5-governance-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "directory",
+        "forward",
+        "model",
+        "read",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-publishing-drizzle.test.ts",
       "kind": "test",
       "imports": [
@@ -16990,6 +17550,7 @@
         "provider",
         "queue",
         "queued",
+        "renderWorker",
         "repository",
         "result",
         "retried",
@@ -17041,6 +17602,7 @@
       "path": "tests/ai-media-studio-render-worker.test.ts",
       "kind": "test",
       "imports": [
+        "../server/ai-media-studio/governance/contracts",
         "../server/ai-media-studio/workers",
         "node:assert/strict",
         "node:test"
@@ -17082,6 +17644,7 @@
         "../server/ai-media-studio/in-memory",
         "../server/ai-media-studio/ports",
         "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/publishing",
         "../server/ai-media-studio/routes",
         "../shared/ai-media-studio",
         "../shared/ai-media-studio-scripts",
@@ -17097,39 +17660,68 @@
         "address",
         "allowed",
         "app",
+        "approvedCriteria",
+        "approvedReview",
+        "approvedReviewJson",
         "base",
         "baseUrl",
         "blocked",
         "cancelled",
+        "checksum",
         "created",
         "createdResponse",
+        "deletedPreview",
+        "deletedReview",
+        "deniedApproval",
+        "deniedGeneration",
         "detail",
         "failedBody",
         "failedWebhook",
+        "forgedIdentity",
         "generationBody",
+        "governedDraft",
+        "governedDraftResponse",
+        "governedPreview",
+        "governedPreviewResponse",
+        "governedPublication",
         "input",
         "internalJob",
         "invalid",
         "invalidWebhook",
         "jobsA",
         "jobsB",
+        "jobsBeforeDeniedGeneration",
         "jsonHeaders",
+        "missingReview",
+        "needsReview",
+        "nonVideoPreview",
+        "nonVideoReview",
         "optionsJson",
         "optionsResponse",
+        "previewBody",
+        "profileBody",
+        "profilePath",
         "provider",
+        "qualityDeniedApproval",
+        "restoredReview",
         "retried",
         "retryCreate",
         "retryInternal",
         "retryTarget",
+        "reviewPath",
+        "revokedProfile",
         "runtime",
         "scripts",
         "secret",
+        "seededProfileJson",
+        "seededProfileResponse",
         "server",
         "signature",
         "timestamp",
         "unauthorized",
         "unknown",
         "unknownBody",
+        "updatedProfileResponse",
         "userId",
         "validWebhook",
         "validWebhookBody",
@@ -18816,6 +19408,8 @@
     "tests/ai-media-studio-core-persistence.test.ts",
     "tests/ai-media-studio-core-routes.test.ts",
     "tests/ai-media-studio-core-schema.test.ts",
+    "tests/ai-media-studio-governance-drizzle.test.ts",
+    "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
@@ -18828,6 +19422,7 @@
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
+    "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",
     "tests/ai-media-studio-publishing.test.ts",
     "tests/ai-media-studio-render-flow-integration.test.ts",

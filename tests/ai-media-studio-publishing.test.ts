@@ -52,6 +52,7 @@ async function scheduledFixture(options: { scope?: TenantScope; clock?: Clock; r
 function worker(fixture: Awaited<ReturnType<typeof scheduledFixture>>, provider: PublishingProvider, overrides: Partial<ConstructorParameters<typeof PublishingWorker>[0]> = {}) {
   return new PublishingWorker({
     workerId: "publisher-1", repository: fixture.repository, providers: [provider], leaseDurationMs: 1_000,
+    submissionGate: { assertCanSubmit: () => undefined },
     policy: { automaticPublishingEnabled: true, enabledTenantKeys: new Set([tenantKey(fixture.scope)]) },
     retry: { baseDelayMs: 100, maxDelayMs: 1_000, jitterRatio: 0 }, clock: fixture.clock, random: () => 0.5, ...overrides,
   });
@@ -140,7 +141,7 @@ test("timezone handling requires an offset and a valid IANA zone", () => {
 test("automatic publishing is denied by default before claims or provider submission", async () => {
   const fixture = await scheduledFixture(); fixture.clock.advance(60_000);
   const provider = new FakePublishingProvider("tiktok");
-  const disabled = new PublishingWorker({ workerId: "disabled", repository: fixture.repository, providers: [provider], leaseDurationMs: 1_000, retry: { baseDelayMs: 1, maxDelayMs: 1, jitterRatio: 0 }, clock: fixture.clock });
+  const disabled = new PublishingWorker({ workerId: "disabled", repository: fixture.repository, providers: [provider], submissionGate: { assertCanSubmit: () => undefined }, leaseDurationMs: 1_000, retry: { baseDelayMs: 1, maxDelayMs: 1, jitterRatio: 0 }, clock: fixture.clock });
   assert.deepEqual(await disabled.runNext(), { outcome: "disabled" });
   assert.equal(provider.submissions.length, 0);
   assert.equal((await fixture.repository.get(scopeA, fixture.draft.id))?.state, "scheduled");
@@ -157,6 +158,7 @@ test("manual approval queues immediate execution, while an unapproved draft neve
   const provider = new FakePublishingProvider("facebook");
   const publisher = new PublishingWorker({
     workerId: "manual-worker", repository, providers: [provider], leaseDurationMs: 1_000,
+    submissionGate: { assertCanSubmit: () => undefined },
     policy: { automaticPublishingEnabled: true, enabledTenantKeys: new Set([tenantKey(scopeA)]) },
     retry: { baseDelayMs: 10, maxDelayMs: 100, jitterRatio: 0 }, clock,
   });
@@ -183,6 +185,7 @@ test("manual rejection requires matching evidence and is terminal/non-claimable"
   const provider = new FakePublishingProvider("facebook");
   assert.equal((await new PublishingWorker({
     workerId: "worker", repository, providers: [provider], leaseDurationMs: 1_000,
+    submissionGate: { assertCanSubmit: () => undefined },
     policy: { automaticPublishingEnabled: true, enabledTenantKeys: new Set([tenantKey(scopeA)]) },
     retry: { baseDelayMs: 10, maxDelayMs: 100, jitterRatio: 0 }, clock,
   }).runNext()).outcome, "idle");
@@ -211,6 +214,24 @@ test("explicit tenant policy plus manual approval allows one provider submission
   assert.equal(result.outcome, "submitted");
   assert.equal(provider.submissions.length, 1);
   assert.equal(provider.submissions[0]?.context.idempotencyKey, providerPublishIdempotencyKey(fixture.job));
+});
+
+test("last-mile governance denial is terminal and prevents provider submission", async () => {
+  const fixture = await scheduledFixture(); fixture.clock.advance(60_000);
+  const provider = new FakePublishingProvider("tiktok");
+  let checks = 0;
+  const result = await worker(fixture, provider, {
+    submissionGate: {
+      assertCanSubmit() {
+        checks += 1;
+        throw new PublishingPolicyDeniedError("Consent was revoked after approval");
+      },
+    },
+  }).runNext();
+  assert.equal(result.outcome, "dead_letter");
+  assert.equal(checks, 1);
+  assert.equal(provider.submissions.length, 0);
+  assert.equal((await fixture.repository.get(scopeA, fixture.draft.id))?.lastError, "Consent was revoked after approval");
 });
 
 test("policy helper rejects missing evidence even if flags are enabled", () => {

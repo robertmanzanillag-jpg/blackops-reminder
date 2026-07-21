@@ -1,11 +1,13 @@
 import {
   automaticPublishingAllowed,
   providerPublishIdempotencyKey,
+  PublishingPolicyDeniedError,
   type AutomaticPublishingPolicy,
   type PublicationJob,
   type PublishingPlatform,
 } from "./domain";
 import type { PublishingClock, PublishingProvider, PublishingRepository } from "./ports";
+import { GovernanceGateError } from "../governance/contracts";
 
 export interface PublishingRetryPolicy {
   baseDelayMs: number;
@@ -14,10 +16,16 @@ export interface PublishingRetryPolicy {
   isRetryable?: (error: unknown) => boolean;
 }
 
+/** Trusted, server-side last-mile authorization. It must not rely on request-supplied evidence. */
+export interface PublishingSubmissionGate {
+  assertCanSubmit(job: Readonly<PublicationJob>): void | Promise<void>;
+}
+
 export interface PublishingWorkerOptions {
   workerId: string;
   repository: PublishingRepository;
   providers: readonly PublishingProvider[];
+  submissionGate: PublishingSubmissionGate;
   policy?: AutomaticPublishingPolicy;
   leaseDurationMs: number;
   retry: PublishingRetryPolicy;
@@ -41,6 +49,7 @@ export class PublishingWorker {
     if (options.retry.baseDelayMs < 0 || options.retry.maxDelayMs < options.retry.baseDelayMs || options.retry.jitterRatio < 0 || options.retry.jitterRatio > 1) {
       throw new Error("Invalid publishing retry policy");
     }
+    if (!options.submissionGate) throw new Error("A publishing submission governance gate is required");
     this.providers = new Map(options.providers.map((provider) => [provider.platform, provider]));
     this.clock = options.clock ?? systemClock;
     this.random = options.random ?? Math.random;
@@ -70,6 +79,9 @@ export class PublishingWorker {
     const idempotencyKey = providerPublishIdempotencyKey(claim.job);
     try {
       if (!provider) throw new PermanentPublishingFailure(`No provider is configured for ${claim.job.preview.platform}`);
+      // Revalidate immediately before the external side effect so an approval,
+      // consent, rights, or quality revocation cannot race a queued publication.
+      await this.options.submissionGate.assertCanSubmit(claim.job);
       const submission = await provider.submit(claim.job.preview, {
         publicationId: claim.job.id,
         scope: claim.job.scope,
@@ -90,7 +102,10 @@ export class PublishingWorker {
   }
 
   private async failClaim(job: PublicationJob, leaseToken: string, error: unknown): Promise<PublishingWorkerResult> {
-    const retryable = !(error instanceof PermanentPublishingFailure) && (this.options.retry.isRetryable?.(error) ?? true);
+    const retryable = !(error instanceof PermanentPublishingFailure)
+      && !(error instanceof PublishingPolicyDeniedError)
+      && !(error instanceof GovernanceGateError)
+      && (this.options.retry.isRetryable?.(error) ?? true);
     const retryAt = new Date(this.clock.now() + publishingRetryDelayMs(job.attempt, this.options.retry, this.random)).toISOString();
     const failed = await this.options.repository.recordFailure({
       scope: job.scope, publicationId: job.id, leaseToken,

@@ -23,6 +23,13 @@ export interface AiMediaStudioServiceOptions {
   /** Live probe supplied only by a composition that owns the reader, storage, signer, and worker process. */
   assetIngestWorkerReadiness?: { isReady(): boolean | Promise<boolean> };
   workspaceId?: string;
+  /** Trusted server-side governance resolver; never populated from request evidence. */
+  governanceGate?: {
+    assertRenderAllowed(ownerUserId: string, request: GenerationRequest):
+      | void
+      | GenerationRequest["governance"]
+      | Promise<void | GenerationRequest["governance"]>;
+  };
 }
 
 export function isAllowedProviderAssetUrl(value: string, allowedHosts: ReadonlySet<string>): boolean {
@@ -49,11 +56,13 @@ export class AiMediaStudioService {
 
   async createGeneration(ownerUserId: string, request: GenerationRequest): Promise<MediaGenerationJob> {
     if (request.script.length > 5_000) throw new MediaStudioError("Script exceeds the provider limit of 5000 characters", 400);
+    const governance = await this.options.governanceGate?.assertRenderAllowed(ownerUserId, request);
     const existing = await this.repository.getByIdempotencyKey(ownerUserId, request.idempotencyKey);
     if (existing) return existing;
     const provider = this.requireProvider(this.defaultProviderKey);
     await this.requireProviderReadyForGeneration(provider);
-    let job = await this.repository.create(ownerUserId, request);
+    const governedRequest = governance ? { ...request, governance: { ...governance } } : request;
+    let job = await this.repository.create(ownerUserId, governedRequest);
     job = await this.repository.update({
       ...job,
       providerName: provider.key,
@@ -79,9 +88,11 @@ export class AiMediaStudioService {
     const job = await this.getJob(ownerUserId, jobId);
     if (job.status !== "failed") throw new MediaStudioError("Only failed jobs can be retried", 409);
     if (job.attempts >= job.maxAttempts) throw new MediaStudioError("Maximum retry attempts reached", 409);
+    const governance = await this.options.governanceGate?.assertRenderAllowed(ownerUserId, job.request);
     await this.requireProviderReadyForGeneration(this.requireProvider(job.providerName ?? this.defaultProviderKey));
     const pending = await this.repository.update({
       ...job,
+      request: governance ? { ...job.request, governance: { ...governance } } : job.request,
       status: "pending",
       progress: 0,
       stage: "queued",
@@ -287,6 +298,14 @@ export class AiMediaStudioService {
       const providerIdempotencyKey = createHash("sha256")
         .update(`${job.generationId}:attempt:${job.attempts + 1}`)
         .digest("hex");
+      // Inline execution has the same last-mile revalidation as the durable
+      // worker. Evidence is resolved by the injected server-side gate.
+      const currentGovernance = await this.options.governanceGate?.assertRenderAllowed(job.ownerUserId, job.request);
+      if (job.request.governance && currentGovernance
+        && (job.request.governance.profileId !== currentGovernance.profileId
+          || job.request.governance.evidenceDigest !== currentGovernance.evidenceDigest)) {
+        throw new MediaStudioError("Governance evidence changed before provider submission", 403);
+      }
       const submission = await provider.submit(job.request, { idempotencyKey: providerIdempotencyKey });
       if (submission.outputUrl && !isAllowedProviderAssetUrl(submission.outputUrl, this.options.allowedAssetHosts ?? new Set())) {
         throw new Error("Provider output URL is not trusted");

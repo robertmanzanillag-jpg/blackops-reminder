@@ -7,7 +7,7 @@ import {
 import type { VideoProvider } from "../ports";
 import type { AiMediaStudioService } from "../service";
 import type { RenderClock, RenderQuotaPolicy, RenderRandom, RenderWorkerHooks } from "./contracts";
-import { RenderWorker, type RenderRetryPolicy } from "./render-worker";
+import { PermanentRenderFailure, RenderWorker, type RenderRetryPolicy, type RenderSubmissionGate } from "./render-worker";
 import { adaptVideoProviders } from "./video-provider-adapter";
 
 export interface CreateVideoRenderWorkerOptions extends DrizzleRenderWorkRepositoryOptions {
@@ -18,9 +18,32 @@ export interface CreateVideoRenderWorkerOptions extends DrizzleRenderWorkReposit
   quotas?: RenderQuotaPolicy;
   leaseDurationMs?: number;
   retry?: RenderRetryPolicy;
+  /** Required server-side governance check, rerun immediately before provider submit. */
+  submissionGate: RenderSubmissionGate<GenerationRequest>;
   clock?: RenderClock;
   random?: RenderRandom;
   hooks?: RenderWorkerHooks<GenerationRequest>;
+}
+
+export type CurrentRenderGovernanceResolver = (
+  ownerUserId: string,
+  request: GenerationRequest,
+) => Promise<NonNullable<GenerationRequest["governance"]>>;
+
+/** Builds the mandatory worker gate from a trusted current-profile resolver. */
+export function createGovernedVideoRenderSubmissionGate(
+  resolveCurrent: CurrentRenderGovernanceResolver,
+): RenderSubmissionGate<GenerationRequest> {
+  return {
+    async assertCanSubmit(item) {
+      const bound = item.payload.governance;
+      if (!bound) throw new PermanentRenderFailure("Render job has no bound governance evidence");
+      const current = await resolveCurrent(item.tenantId, item.payload);
+      if (current.profileId !== bound.profileId || current.evidenceDigest !== bound.evidenceDigest) {
+        throw new PermanentRenderFailure("Render governance evidence is stale");
+      }
+    },
+  };
 }
 
 const DEFAULT_QUOTAS: RenderQuotaPolicy = {
@@ -55,6 +78,7 @@ export function createVideoRenderWorker(
     quotas: options.quotas ?? DEFAULT_QUOTAS,
     leaseDurationMs: options.leaseDurationMs ?? 60_000,
     retry: options.retry ?? DEFAULT_RETRY,
+    submissionGate: options.submissionGate,
     clock: options.clock,
     random: options.random,
     hooks: mergeHooks(projectionHooks, options.hooks),

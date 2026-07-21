@@ -24,8 +24,10 @@ test("the wired module exposes key migration tables", () => {
   for (const table of [
     ["aiMediaInfluencers", "ai_media_influencers"],
     ["aiMediaRenderJobs", "ai_media_render_jobs"],
+    ["aiMediaGovernanceProfiles", "ai_media_governance_profiles"],
     ["aiMediaWebhookEvents", "ai_media_webhook_events"],
     ["aiMediaMediaAssets", "ai_media_assets"],
+    ["aiMediaQualityReviews", "ai_media_quality_reviews"],
     ["aiMediaPublishingJobs", "ai_media_publishing_jobs"],
     ["aiMediaCostLedger", "ai_media_cost_ledger"],
     ["aiMediaOutbox", "ai_media_outbox"],

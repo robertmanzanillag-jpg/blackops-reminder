@@ -9,6 +9,7 @@ import { createAiMediaStudioRuntime } from "../server/ai-media-studio/routes";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
 import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets";
+import { PublishingPolicyDeniedError, type PublicationJob } from "../server/ai-media-studio/publishing";
 import type { VideoProvider } from "../server/ai-media-studio/ports";
 
 process.env.NODE_ENV = "production";
@@ -25,8 +26,8 @@ class LiveRuntimeProvider implements VideoProvider {
 test("runtime wiring does not infer live ingest-worker readiness from repository presence", async () => {
   const provider = new LiveRuntimeProvider();
   const input = {
-    influencerId: "influencer-a", script: "A live readiness probe.", voiceId: "voice-a",
-    language: "en-US", aspectRatio: "9:16" as const, idempotencyKey: "live-runtime-readiness-001",
+    influencerId: "emily-food", script: "A live readiness probe.", voiceId: "voice-emily-en",
+    language: "en", aspectRatio: "9:16" as const, idempotencyKey: "live-runtime-readiness-001",
   };
   const base = {
     repository: new InMemoryMediaJobRepository(), providers: [provider], defaultProviderKey: provider.key,
@@ -61,6 +62,7 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
     defaultProviderKey: "fake",
     webhookSecrets: { fake: secret, unknown: secret },
     allowedAssetHosts: new Set(["cdn.example.com"]),
+    operations: { runtimeEnvironment: "test" },
   });
   app.use(runtime.router);
   const server = createServer(app);
@@ -145,4 +147,142 @@ test("AI Media Studio HTTP routes enforce auth, schemas and signed webhook trans
   });
   assert.equal(scripts.status, 200);
   assert.equal(generateScriptVariantsResponseSchema.parse(await scripts.json()).scriptSet.variants.length, 2);
+
+  const profilePath = `${baseUrl}/api/ai-media-studio/governance/influencers/emily-food/profile`;
+  const seededProfileResponse = await fetch(profilePath, { headers: { "x-test-user": "user-a" } });
+  assert.equal(seededProfileResponse.status, 200);
+  const seededProfileJson = await seededProfileResponse.json() as { profile: Record<string, unknown> };
+  assert.equal(seededProfileJson.profile.policyVersion, "sample-fixture-v1");
+  assert.doesNotMatch(JSON.stringify(seededProfileJson), /ownerUserId|createdByUserId|proofDigest|evidenceDigest|avatar-emily|voice-emily/);
+
+  const profileBody = {
+    consentBasis: "obtained", rightsBasis: "licensed", allowedUses: ["internal_preview", "organic_social"], territories: ["WORLDWIDE"],
+    validFrom: "2026-01-01T00:00:00.000Z", expiresAt: "2035-01-01T00:00:00.000Z", policyVersion: "route-governance-v2",
+    proofDigest: `sha256:${"a".repeat(64)}`, brandPolicy: { requiredTerms: [], prohibitedTerms: ["forbidden claim"] }, idempotencyKey: "profile-route-v2",
+  };
+  const forgedIdentity = await fetch(profilePath, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ ...profileBody, influencerId: "attacker-choice" }),
+  });
+  assert.equal(forgedIdentity.status, 400);
+  const updatedProfileResponse = await fetch(profilePath, { method: "POST", headers: jsonHeaders, body: JSON.stringify(profileBody) });
+  assert.equal(updatedProfileResponse.status, 201);
+  assert.doesNotMatch(JSON.stringify(await updatedProfileResponse.json()), /proofDigest|evidenceDigest|createdByUserId|avatar-emily/);
+
+  const checksum = "b".repeat(64);
+  await runtime.core.repositories.assets.createOrGet({
+    id: "governed-asset", ownerUserId: "user-a", workspaceId: runtime.core.workspaceId, type: "video", name: "Governed render", status: "ready",
+    mimeType: "video/mp4", sizeBytes: 1_024, checksumSha256: checksum, storageProvider: "owned-object-storage", storageKey: "assets/governed.mp4",
+    deliveryUrl: null, thumbnailUrl: null, projectId: null, renderJobId: null, influencerId: "emily-food", providerResourceId: null,
+    source: { kind: "remote" }, metadata: { width: 1080, height: 1920 }, createdAt: "2026-07-20T12:00:00.000Z",
+    updatedAt: "2026-07-20T12:00:00.000Z", deletedAt: null,
+  });
+  const previewBody = {
+    mediaAssetId: "governed-asset", platform: "tiktok", caption: "A safe reviewed caption", hashtags: ["safe"], title: "Reviewed",
+    timezone: null, schedule: { mode: "manual", scheduledFor: null, timezone: null }, idempotencyKey: "governed-preview-1",
+  };
+  const missingReview = await fetch(`${baseUrl}/api/ai-media-studio/publishing/preview`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(previewBody) });
+  assert.equal(missingReview.status, 403);
+  assert.deepEqual((await missingReview.json() as { reasons: string[] }).reasons, ["quality_review_missing"]);
+
+  await runtime.core.repositories.assets.createOrGet({
+    id: "governed-script-asset", ownerUserId: "user-a", workspaceId: runtime.core.workspaceId, type: "script", name: "Reviewed script", status: "ready",
+    mimeType: "text/plain", sizeBytes: 128, checksumSha256: "c".repeat(64), storageProvider: "owned-object-storage", storageKey: "assets/script.txt",
+    deliveryUrl: null, thumbnailUrl: null, projectId: null, renderJobId: null, influencerId: "emily-food", providerResourceId: null,
+    source: { kind: "text" }, metadata: {}, createdAt: "2026-07-20T12:00:00.000Z",
+    updatedAt: "2026-07-20T12:00:00.000Z", deletedAt: null,
+  });
+  const nonVideoReview = await fetch(`${baseUrl}/api/ai-media-studio/governance/assets/governed-script-asset/quality-review`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ criteria: {
+      naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 5, brandConsistency: 5, verticalQuality: 5,
+    }, idempotencyKey: "quality-route-non-video-1" }),
+  });
+  assert.equal(nonVideoReview.status, 400);
+  const nonVideoPreview = await fetch(`${baseUrl}/api/ai-media-studio/publishing/preview`, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ ...previewBody, mediaAssetId: "governed-script-asset", idempotencyKey: "preview-non-video-denied" }),
+  });
+  assert.equal(nonVideoPreview.status, 400);
+
+  await runtime.core.repositories.assets.createOrGet({
+    id: "governed-deleted-video", ownerUserId: "user-a", workspaceId: runtime.core.workspaceId, type: "video", name: "Deleted video", status: "ready",
+    mimeType: "video/mp4", sizeBytes: 256, checksumSha256: "d".repeat(64), storageProvider: "owned-object-storage", storageKey: "assets/deleted.mp4",
+    deliveryUrl: null, thumbnailUrl: null, projectId: null, renderJobId: null, influencerId: "emily-food", providerResourceId: null,
+    source: { kind: "remote" }, metadata: {}, createdAt: "2026-07-20T12:00:00.000Z", updatedAt: "2026-07-20T12:01:00.000Z",
+    deletedAt: "2026-07-20T12:01:00.000Z",
+  });
+  const deletedReview = await fetch(`${baseUrl}/api/ai-media-studio/governance/assets/governed-deleted-video/quality-review`, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ criteria: { naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 5, brandConsistency: 5, verticalQuality: 5 }, idempotencyKey: "quality-deleted-denied" }),
+  });
+  assert.equal(deletedReview.status, 400);
+  const deletedPreview = await fetch(`${baseUrl}/api/ai-media-studio/publishing/preview`, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ ...previewBody, mediaAssetId: "governed-deleted-video", idempotencyKey: "preview-deleted-denied" }),
+  });
+  assert.equal(deletedPreview.status, 400);
+
+  const reviewPath = `${baseUrl}/api/ai-media-studio/governance/assets/governed-asset/quality-review`;
+  const approvedCriteria = { naturalMovement: 5, eyeContact: 5, speechQuality: 5, lighting: 5, realism: 5, brandConsistency: 5, verticalQuality: 5 };
+  const approvedReview = await fetch(reviewPath, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ criteria: approvedCriteria, notes: "Human-reviewed fixture", idempotencyKey: "quality-route-approved-1" }),
+  });
+  assert.equal(approvedReview.status, 201);
+  const approvedReviewJson = await approvedReview.json() as { review: Record<string, unknown> };
+  assert.equal(approvedReviewJson.review.status, "approved");
+  assert.doesNotMatch(JSON.stringify(approvedReviewJson), /assetChecksum|reviewedByUserId|evidenceDigest|ownerUserId/);
+  const governedPreviewResponse = await fetch(`${baseUrl}/api/ai-media-studio/publishing/preview`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify(previewBody),
+  });
+  assert.equal(governedPreviewResponse.status, 200);
+  const governedPreview = await governedPreviewResponse.json() as { preview: { digest: string } };
+  const governedDraftResponse = await fetch(`${baseUrl}/api/ai-media-studio/publishing/jobs`, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ ...previewBody, previewDigest: governedPreview.preview.digest }),
+  });
+  assert.equal(governedDraftResponse.status, 201);
+  const governedDraft = await governedDraftResponse.json() as { job: { id: string } };
+  const needsReview = await fetch(reviewPath, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ criteria: { ...approvedCriteria, realism: 3 }, notes: "Replacement review needs work", idempotencyKey: "quality-route-needs-review-2" }),
+  });
+  assert.equal(needsReview.status, 201);
+  const qualityDeniedApproval = await fetch(`${baseUrl}/api/ai-media-studio/publishing/jobs/${governedDraft.job.id}/approve`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ previewDigest: governedPreview.preview.digest }),
+  });
+  assert.equal(qualityDeniedApproval.status, 403);
+  assert.deepEqual((await qualityDeniedApproval.json() as { reasons: string[] }).reasons, ["quality_review_not_approved"]);
+  const restoredReview = await fetch(reviewPath, {
+    method: "POST", headers: jsonHeaders,
+    body: JSON.stringify({ criteria: approvedCriteria, notes: "Replacement review approved", idempotencyKey: "quality-route-approved-3" }),
+  });
+  assert.equal(restoredReview.status, 201);
+
+  const revokedProfile = await fetch(`${profilePath}/revoke`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ reason: "Consent withdrawn", idempotencyKey: "profile-route-revoke-1" }),
+  });
+  assert.equal(revokedProfile.status, 200);
+  const governedPublication = await runtime.operations.publishing.get(
+    { ownerUserId: "user-a", workspaceId: runtime.core.workspaceId },
+    governedDraft.job.id,
+  );
+  assert.ok(governedPublication);
+  await assert.rejects(
+    runtime.publishingSubmissionGate.assertCanSubmit({
+      scope: { ownerUserId: "user-a", workspaceId: runtime.core.workspaceId },
+      preview: governedPublication.preview,
+    } as PublicationJob),
+    PublishingPolicyDeniedError,
+  );
+  const deniedApproval = await fetch(`${baseUrl}/api/ai-media-studio/publishing/jobs/${governedDraft.job.id}/approve`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ previewDigest: governedPreview.preview.digest }),
+  });
+  assert.equal(deniedApproval.status, 403);
+  assert.deepEqual((await deniedApproval.json() as { reasons: string[] }).reasons, ["profile_revoked"]);
+  const jobsBeforeDeniedGeneration = (await runtime.service.listJobs("user-a")).length;
+  const deniedGeneration = await fetch(`${baseUrl}/api/ai-media-studio/generations`, {
+    method: "POST", headers: jsonHeaders, body: JSON.stringify({ ...generationBody, idempotencyKey: "route-generation-governance-denied" }),
+  });
+  assert.equal(deniedGeneration.status, 403);
+  assert.deepEqual((await deniedGeneration.json() as { reasons: string[] }).reasons, ["profile_revoked"]);
+  assert.equal((await runtime.service.listJobs("user-a")).length, jobsBeforeDeniedGeneration);
 });

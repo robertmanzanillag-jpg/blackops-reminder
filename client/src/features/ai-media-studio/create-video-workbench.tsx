@@ -10,6 +10,7 @@ import { EmptyPanel, ErrorPanel, LoadingPanel } from "./feedback";
 import { useStudioMutations, useStudioOptions } from "./hooks";
 import { generateScriptVariants } from "./script-api";
 import { eligibleGenerationInfluencers, reconcileGenerationInfluencer } from "./core/influencer-selection";
+import { useInfluencerGovernance } from "./governance/hooks";
 
 const sourceTypes: Array<{ value: MediaSourceType; label: string }> = [
   { value: "events", label: "Event" },
@@ -55,6 +56,7 @@ export function CreateVideoWorkbench() {
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [copiedVariantId, setCopiedVariantId] = useState("");
   const [errorSummary, setErrorSummary] = useState("");
+  const governanceQuery = useInfluencerGovernance(influencerId);
 
   const options = optionsQuery.data;
   useEffect(() => {
@@ -79,6 +81,22 @@ export function CreateVideoWorkbench() {
 
   const availableVoices = options.voices.filter((voice) => !language || voice.language === language);
   const selectedInfluencer = eligibleInfluencers.find((item) => item.id === influencerId);
+  const governanceProfile = governanceQuery.data;
+  const governanceNowMs = Date.now();
+  const governanceReadyForPreview = Boolean(governanceProfile
+    && !governanceProfile.revokedAt
+    && governanceProfile.allowedUses.includes("internal_preview")
+    && Date.parse(governanceProfile.validFrom) <= governanceNowMs
+    && governanceNowMs < Date.parse(governanceProfile.expiresAt));
+  const governanceStatusText = governanceQuery.isLoading
+    ? "Checking server-owned governance readiness…"
+    : governanceQuery.isError
+      ? "Governance readiness is unavailable."
+      : governanceReadyForPreview
+        ? "Governance ready for internal preview. The server revalidates policy and script terms before rendering."
+        : governanceProfile
+          ? "Governance blocked: renew the profile or allow internal previews before rendering."
+          : "Governance blocked: create an influencer governance profile before rendering.";
 
   const chooseInfluencer = (nextId: string) => {
     const influencer = eligibleInfluencers.find((item) => item.id === nextId);
@@ -159,6 +177,9 @@ export function CreateVideoWorkbench() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedInfluencer) { setErrorSummary("Choose an active influencer."); focusField("studio-influencer"); return; }
+    if (governanceQuery.isLoading) { setErrorSummary("Wait for the server governance check to finish."); return; }
+    if (governanceQuery.isError) { setErrorSummary("Governance readiness could not be verified. Retry the check before rendering."); return; }
+    if (!governanceReadyForPreview) { setErrorSummary("Rendering is blocked until this influencer has a current governance profile that allows internal preview."); return; }
     if (!language) { setErrorSummary("Choose a language."); focusField("studio-language"); return; }
     if (!voiceId) { setErrorSummary("Choose a voice."); focusField("studio-voice"); return; }
     if (variants.length > 0 && !selectedVariantId) { setErrorSummary("Select a generated script variant before rendering."); focusField("studio-variants"); return; }
@@ -195,6 +216,9 @@ export function CreateVideoWorkbench() {
               <div><Label htmlFor="studio-influencer">AI influencer</Label><select id="studio-influencer" className={fieldClass} value={influencerId} onChange={(event) => chooseInfluencer(event.target.value)}>{eligibleInfluencers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
               <div><Label htmlFor="studio-language">Language</Label><select id="studio-language" className={fieldClass} value={language} onChange={(event) => { setLanguage(event.target.value); setVoiceId(""); }}>{options.languages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></div>
               <div><Label htmlFor="studio-voice">Voice</Label><select id="studio-voice" className={fieldClass} value={voiceId} onChange={(event) => setVoiceId(event.target.value)}>{availableVoices.map((item) => <option key={item.id} value={item.id}>{item.name}{item.accent ? ` · ${item.accent}` : ""}</option>)}</select></div>
+            </div>
+            <div role={governanceQuery.isError ? "alert" : "status"} className={`rounded-lg border p-3 text-sm ${governanceReadyForPreview ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100" : governanceQuery.isError ? "border-red-300/20 bg-red-400/10 text-red-100" : "border-amber-300/20 bg-amber-400/10 text-amber-100"}`}>
+              {governanceQuery.isError ? <span>{governanceStatusText} <Button type="button" size="sm" variant="outline" className="ml-2 border-red-300/20" onClick={() => void governanceQuery.refetch()}>Retry</Button></span> : governanceStatusText}
             </div>
             <Button type="button" variant="outline" className="border-emerald-300/30 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20" disabled={scripts.isPending || !selectedInfluencer} onClick={generateScripts}>
               {scripts.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <WandSparkles className="mr-2 h-4 w-4" aria-hidden="true" />}
@@ -234,7 +258,7 @@ export function CreateVideoWorkbench() {
             )}
             <div><div className="flex justify-between gap-3"><Label htmlFor="studio-script">Selected or manual script</Label><span className="text-xs text-zinc-400">{script.length.toLocaleString()} / 5,000</span></div><Textarea id="studio-script" className="mt-2 min-h-52 border-white/10 bg-zinc-950 focus-visible:ring-emerald-300" value={script} onChange={(event) => { setScript(event.target.value); setErrorSummary(""); }} maxLength={5_000} placeholder="Select a variant above, then refine it here—or write a script manually." /></div>
             {errorSummary && <div id="studio-form-error" tabIndex={-1} role="alert" className="rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{errorSummary}</div>}
-            <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-zinc-400">Preview request: <span className="font-medium text-zinc-100">9:16 vertical</span></p><Button type="submit" disabled={create.isPending || !selectedInfluencer} className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300">{create.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Clapperboard className="mr-2 h-4 w-4" aria-hidden="true" />}{create.isPending ? "Queuing preview…" : "Queue video preview"}</Button></div>
+            <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-zinc-400">Preview request: <span className="font-medium text-zinc-100">9:16 vertical</span></p><Button type="submit" disabled={create.isPending || !selectedInfluencer || governanceQuery.isLoading || governanceQuery.isError || !governanceReadyForPreview} className="min-h-11 bg-emerald-400 text-zinc-950 hover:bg-emerald-300">{create.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Clapperboard className="mr-2 h-4 w-4" aria-hidden="true" />}{create.isPending ? "Queuing preview…" : "Queue video preview"}</Button></div>
             <div aria-live="polite" aria-atomic="true">{create.isSuccess && <p role="status" className="rounded-lg border border-emerald-300/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">Preview queued. Job {create.data.jobId} is now tracked below.</p>}{create.isError && <p role="alert" className="rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{create.error.message}</p>}</div>
           </CardContent>
         </Card>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GovernanceGateError } from "../server/ai-media-studio/governance/contracts";
 import {
   InMemoryRenderWorkRepository,
   RenderWorker,
@@ -35,6 +36,7 @@ function worker(
     quotas,
     leaseDurationMs: 1_000,
     retry: { baseDelayMs: 100, maxDelayMs: 10_000, jitterRatio: 0 },
+    submissionGate: { assertCanSubmit: () => undefined },
     clock,
     random: () => 0.5,
     ...overrides,
@@ -62,6 +64,30 @@ test("two workers cannot claim or submit the same active lease", async () => {
   release();
   assert.equal((await first).outcome, "submitted");
   assert.deepEqual(calls, ["work-1"]);
+});
+
+test("the required submission gate runs immediately before and can block the provider", async () => {
+  const repository = new InMemoryRenderWorkRepository<Payload>();
+  await repository.enqueue({ id: "governed", tenantId: "tenant-a", providerKey: "video", payload: { sequence: 1 }, maxAttempts: 3 }, 1_000);
+  const events: string[] = [];
+  const provider: RenderSubmissionProvider<Payload> = {
+    key: "video",
+    async submit() {
+      events.push("provider");
+      return { providerSubmissionId: "must-not-submit" };
+    },
+  };
+  const renderWorker = worker("governed-worker", repository, provider, new MutableClock(1_000), {
+    submissionGate: {
+      assertCanSubmit() {
+        events.push("gate");
+        throw new GovernanceGateError(["profile_revoked"]);
+      },
+    },
+  });
+
+  assert.equal((await renderWorker.runNext()).outcome, "dead_letter");
+  assert.deepEqual(events, ["gate"]);
 });
 
 test("an expired lease is recovered after restart with the same provider idempotency key", async () => {
@@ -192,6 +218,7 @@ test("a permanent provider/configuration failure dead-letters immediately", asyn
     quotas,
     leaseDurationMs: 1_000,
     retry: { baseDelayMs: 100, maxDelayMs: 1_000, jitterRatio: 0 },
+    submissionGate: { assertCanSubmit: () => undefined },
     clock: { now: () => 1_000 },
   });
   assert.equal((await renderWorker.runNext()).outcome, "dead_letter");
@@ -227,6 +254,7 @@ test("1,000 jobs are claimed and submitted exactly once across concurrent worker
     quotas: { maxConcurrentPerProvider: 25, maxConcurrentPerTenant: 8, maxConcurrentTotal: 100 },
     leaseDurationMs: 5_000,
     retry: { baseDelayMs: 10, maxDelayMs: 100, jitterRatio: 0 },
+    submissionGate: { assertCanSubmit: () => undefined },
     clock,
   }));
 
