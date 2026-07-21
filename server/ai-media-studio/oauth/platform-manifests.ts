@@ -6,12 +6,13 @@ export type OAuthPlatformManifest = Readonly<{
   authorizationClientIdParameter: "client_id" | "client_key";
   scopeSeparator: "comma" | "space";
   pkce: "required_s256" | "unsupported" | "omitted_by_policy";
+  authorizationParameters?: Readonly<Record<string, string>>;
   defaultScopes: readonly string[];
   productionGate: string;
   docs: readonly string[];
 }>;
 
-export const AI_MEDIA_OAUTH_PLATFORM_MANIFESTS: Readonly<Record<AiMediaOAuthPlatform, OAuthPlatformManifest>> = {
+const manifests: Record<AiMediaOAuthPlatform, OAuthPlatformManifest> = {
   tiktok: {
     platform: "tiktok",
     authorizationEndpoint: "https://www.tiktok.com/v2/auth/authorize/",
@@ -56,7 +57,12 @@ export const AI_MEDIA_OAUTH_PLATFORM_MANIFESTS: Readonly<Record<AiMediaOAuthPlat
     authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
     authorizationClientIdParameter: "client_id",
     scopeSeparator: "space",
-    pkce: "required_s256",
+    pkce: "omitted_by_policy",
+    authorizationParameters: {
+      access_type: "offline",
+      include_granted_scopes: "false",
+      prompt: "consent",
+    },
     defaultScopes: ["https://www.googleapis.com/auth/youtube.upload"],
     productionGate: "Google OAuth verification/API Services review, channel authorization, and YouTube upload quota readiness are required before videos.insert.",
     docs: [
@@ -66,3 +72,12 @@ export const AI_MEDIA_OAUTH_PLATFORM_MANIFESTS: Readonly<Record<AiMediaOAuthPlat
     ],
   },
 };
+
+for (const manifest of Object.values(manifests)) {
+  Object.freeze(manifest.defaultScopes);
+  Object.freeze(manifest.docs);
+  if (manifest.authorizationParameters) Object.freeze(manifest.authorizationParameters);
+  Object.freeze(manifest);
+}
+
+export const AI_MEDIA_OAUTH_PLATFORM_MANIFESTS: Readonly<Record<AiMediaOAuthPlatform, OAuthPlatformManifest>> = Object.freeze(manifests);

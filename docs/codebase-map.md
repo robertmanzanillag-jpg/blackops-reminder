@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T05:16:08.779Z
+Generated: 2026-07-21T05:50:09.648Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 631 | 546 | 2174 | 487 | 10152 |
+| 634 | 547 | 2177 | 487 | 10174 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 116 | 112 | test:116 |
+| `tests` | 117 | 113 | test:117 |
 | `server/ai-media-studio` | 95 | 94 | server:95 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 38 | 36 | script:38 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 15 | 1 | other:14, docs:1 |
+| `migrations/ai-media-studio` | 17 | 1 | other:16, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 
@@ -90,6 +90,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-orchestration.test.ts`
 - `tests/ai-media-studio-owned-artifact-flow.test.ts`
 - `tests/ai-media-studio-persistence.test.ts`
+- `tests/ai-media-studio-pr11-oauth-policy-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`

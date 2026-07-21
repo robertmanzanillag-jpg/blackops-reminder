@@ -49,6 +49,7 @@ class RecordingClient implements S3KmsCommandClient {
         BucketKeyEnabled: this.put.input.BucketKeyEnabled,
         Metadata: this.put.input.Metadata,
         ContentLength: this.put.input.ContentLength,
+        Expires: this.put.input.Expires,
       };
     }
     if (command instanceof HeadObjectCommand) {
@@ -60,6 +61,7 @@ class RecordingClient implements S3KmsCommandClient {
         BucketKeyEnabled: this.put.input.BucketKeyEnabled,
         Metadata: this.put.input.Metadata,
         ContentLength: this.put.input.ContentLength,
+        Expires: this.put.input.Expires,
       };
     }
     if (command instanceof DeleteObjectCommand) return {};
@@ -94,8 +96,21 @@ test("S3 PKCE vault is inert at construction and writes an exclusive, SSE-KMS bu
   assert.equal(put.input.BucketKeyEnabled, true);
   assert.equal(put.input.IfNoneMatch, "*");
   assert.equal(put.input.ContentType, "application/json");
+  assert.equal(put.input.Tagging, "classification=oauth-pkce&retention=ephemeral");
+  assert.equal(put.input.Expires?.toISOString(), context.expiresAt);
   assert.deepEqual(Object.keys(put.input.Metadata ?? {}).sort(), ["binding-digest", "expires-at", "session-id"]);
   assert.equal(JSON.stringify(put.input).includes("owner-1"), false, "identity binding is represented only by its digest");
+  assert.equal(put.input.Tagging?.includes(SESSION_ID), false);
+  assert.equal(put.input.Tagging?.includes(VERIFIER), false);
+});
+
+test("S3 Expires is emitted and validated at HTTP-date second precision", async () => {
+  const client = new RecordingClient();
+  const store = vault(client);
+  const millisecondContext = { ...context, expiresAt: "2026-07-21T12:10:00.987Z" };
+  const reference = await store.put(VERIFIER, millisecondContext);
+  assert.equal(client.put?.input.Expires?.toISOString(), "2026-07-21T12:10:00.000Z");
+  assert.equal(await store.read(reference, millisecondContext), VERIFIER);
 });
 
 test("S3 PKCE vault reads only an exact encrypted binding and deletes only the exact key", async () => {

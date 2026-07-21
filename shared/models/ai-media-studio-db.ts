@@ -280,9 +280,10 @@ export const aiMediaOAuthSessions = pgTable(
     stateDigest: text("state_digest").notNull(),
     redirectUri: text("redirect_uri").notNull(),
     requestedScopes: jsonb("requested_scopes").$type<string[]>().notNull().default([]),
-    codeChallenge: text("code_challenge").notNull(),
-    codeChallengeMethod: text("code_challenge_method").notNull().default("S256"),
-    pkceVerifierRef: text("pkce_verifier_ref").notNull(),
+    pkceMode: text("pkce_mode").notNull(),
+    codeChallenge: text("code_challenge"),
+    codeChallengeMethod: text("code_challenge_method"),
+    pkceVerifierRef: text("pkce_verifier_ref"),
     status: text("status").notNull().default("pending"),
     outcome: text("outcome"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -313,10 +314,21 @@ export const aiMediaOAuthSessions = pgTable(
     pkceCheck: check(
       "ai_media_oauth_sessions_pkce_ck",
       sql`(
-        ${table.codeChallengeMethod} = 'S256'
-        AND length(${table.codeChallenge}) = 43
-        AND ${table.codeChallenge} ~ '^[A-Za-z0-9_-]+$'
-        AND ${table.pkceVerifierRef} ~ '^vault://ai-media-studio/oauth-pkce/v1/[0-9A-Fa-f-]{36}$'
+        (
+          ${table.pkceMode} = 'required_s256'
+          AND ${table.codeChallenge} IS NOT NULL
+          AND ${table.codeChallengeMethod} = 'S256'
+          AND length(${table.codeChallenge}) = 43
+          AND ${table.codeChallenge} ~ '^[A-Za-z0-9_-]+$'
+          AND ${table.pkceVerifierRef} IS NOT NULL
+          AND ${table.pkceVerifierRef} ~ '^vault://ai-media-studio/oauth-pkce/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        )
+        OR (
+          ${table.pkceMode} = 'none'
+          AND ${table.codeChallenge} IS NULL
+          AND ${table.codeChallengeMethod} IS NULL
+          AND ${table.pkceVerifierRef} IS NULL
+        )
       )`,
     ),
     lifecycleCheck: check(
@@ -333,6 +345,20 @@ export const aiMediaOAuthSessions = pgTable(
     redirectCheck: check(
       "ai_media_oauth_sessions_redirect_ck",
       sql`${table.redirectUri} ~ '^https://' AND length(${table.redirectUri}) BETWEEN 12 AND 2048`,
+    ),
+    redirectTrustedCheck: check(
+      "ai_media_oauth_sessions_redirect_trusted_ck",
+      sql`(
+        length(${table.redirectUri}) BETWEEN 12 AND 512
+        AND ${table.redirectUri} !~ '[?#]'
+        AND ${table.redirectUri} !~ '[[:cntrl:][:space:]]'
+        AND position(chr(92) in ${table.redirectUri}) = 0
+        AND ${table.redirectUri} !~ '^https://[^/]*[@:]'
+        AND ${table.redirectUri} ~ '^https://[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/'
+        AND position('..' in split_part(substring(${table.redirectUri} from 9), '/', 1)) = 0
+        AND ${table.redirectUri} !~ '^https://localhost/'
+        AND ${table.redirectUri} !~ '^https://(?:[0-9]+|0x[0-9a-f]+)(?:[.](?:[0-9]+|0x[0-9a-f]+))*/'
+      )`,
     ),
     actorCheck: check(
       "ai_media_oauth_sessions_actor_ck",

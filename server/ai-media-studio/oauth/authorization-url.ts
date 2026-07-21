@@ -5,6 +5,17 @@ import { AI_MEDIA_OAUTH_PLATFORM_MANIFESTS } from "./platform-manifests";
 const STATE = /^[A-Za-z0-9_-]{64}$/u;
 const PKCE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/u;
 const CLIENT_ID = /^[A-Za-z0-9._:-]{1,512}$/u;
+const AUTHORIZATION_PARAMETER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
+const RESERVED_PARAMETERS = new Set([
+  "client_id",
+  "client_key",
+  "redirect_uri",
+  "response_type",
+  "scope",
+  "state",
+  "code_challenge",
+  "code_challenge_method",
+]);
 
 export type OAuthAuthorizationUrlInput = Readonly<{
   platform: AiMediaOAuthPlatform;
@@ -24,6 +35,14 @@ export function buildOAuthAuthorizationUrl(input: OAuthAuthorizationUrlInput): s
   const redirectUri = trustedRedirectUri(input.redirectUri);
   if (manifest.pkce === "required_s256" && !PKCE_CHALLENGE.test(input.codeChallenge ?? "")) throw rejected();
   if (manifest.pkce !== "required_s256" && input.codeChallenge !== undefined) throw rejected();
+  const authorizationParameters = Object.entries(manifest.authorizationParameters ?? {});
+  if (authorizationParameters.some(([key, value]) => (
+    !AUTHORIZATION_PARAMETER.test(key)
+    || RESERVED_PARAMETERS.has(key)
+    || typeof value !== "string"
+    || !value
+    || value.length > 512
+  ))) throw rejected();
 
   const url = new URL(manifest.authorizationEndpoint);
   url.searchParams.set(manifest.authorizationClientIdParameter, input.clientId);
@@ -35,9 +54,10 @@ export function buildOAuthAuthorizationUrl(input: OAuthAuthorizationUrlInput): s
   if (manifest.pkce === "required_s256") {
     url.searchParams.set("code_challenge", input.codeChallenge!);
     url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("access_type", "offline");
-    url.searchParams.set("include_granted_scopes", "false");
-    url.searchParams.set("prompt", "consent");
+  }
+  for (const [key, value] of authorizationParameters) {
+    if (url.searchParams.has(key)) throw rejected();
+    url.searchParams.set(key, value);
   }
   return url.toString();
 }
@@ -47,6 +67,7 @@ export function trustedOAuthRedirectUri(value: string): string {
 }
 
 function trustedRedirectUri(value: string): string {
+  if (typeof value !== "string" || value.length < 12 || value.length > 512) throw rejected();
   let url: URL;
   try {
     url = new URL(value);
@@ -67,7 +88,7 @@ function trustedRedirectUri(value: string): string {
 }
 
 function isIpLiteral(hostname: string): boolean {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname) || hostname.includes(":");
+  return /^\d+(?:\.\d*)*$/u.test(hostname) || hostname.includes(":");
 }
 
 function rejected(): OAuthFlowError {

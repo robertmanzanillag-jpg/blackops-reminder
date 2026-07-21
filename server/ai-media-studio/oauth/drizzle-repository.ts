@@ -26,12 +26,22 @@ function iso(raw: unknown): string {
   return date.toISOString();
 }
 
+function nullableString(raw: unknown): string | null {
+  return raw == null ? null : String(raw);
+}
+
 function mapRow(row: Record<string, unknown>): OAuthSession {
   const requested = value(row, "requestedScopes", "requested_scopes");
   const requestedScopes = typeof requested === "string" ? JSON.parse(requested) : requested;
   if (!Array.isArray(requestedScopes) || requestedScopes.some((scope) => typeof scope !== "string")) {
     throw new Error("Invalid OAuth session scopes");
   }
+  const pkceMode = value(row, "pkceMode", "pkce_mode");
+  const codeChallengeMethod = nullableString(value(row, "codeChallengeMethod", "code_challenge_method"));
+  if (
+    (pkceMode !== "required_s256" && pkceMode !== "none")
+    || (codeChallengeMethod !== null && codeChallengeMethod !== "S256")
+  ) throw new Error("Invalid OAuth PKCE snapshot");
   return {
     id: String(row.id),
     scope: {
@@ -44,9 +54,10 @@ function mapRow(row: Record<string, unknown>): OAuthSession {
     stateDigest: String(value(row, "stateDigest", "state_digest")),
     redirectUri: String(value(row, "redirectUri", "redirect_uri")),
     requestedScopes,
-    codeChallenge: String(value(row, "codeChallenge", "code_challenge")),
-    codeChallengeMethod: "S256",
-    pkceVerifierRef: String(value(row, "pkceVerifierRef", "pkce_verifier_ref")),
+    pkceMode,
+    codeChallenge: nullableString(value(row, "codeChallenge", "code_challenge")),
+    codeChallengeMethod,
+    pkceVerifierRef: nullableString(value(row, "pkceVerifierRef", "pkce_verifier_ref")),
     status: String(row.status) as OAuthSession["status"],
     outcome: (row.outcome ?? null) as OAuthSession["outcome"],
     expiresAt: iso(value(row, "expiresAt", "expires_at")),
@@ -63,12 +74,12 @@ export class DrizzleOAuthSessionRepository implements OAuthSessionRepository {
     const result = await this.db.execute(sql`
       INSERT INTO ${aiMediaOAuthSessions} (
         id, owner_user_id, workspace_id, actor_user_id, provider_account_id, platform,
-        state_digest, redirect_uri, requested_scopes, code_challenge,
+        state_digest, redirect_uri, requested_scopes, pkce_mode, code_challenge,
         code_challenge_method, pkce_verifier_ref, status, expires_at, created_at, updated_at
       ) VALUES (
         ${input.id}, ${input.scope.ownerUserId}, ${input.scope.workspaceId}, ${input.actorUserId},
         ${input.providerAccountId}, ${input.platform}, ${input.stateDigest}, ${input.redirectUri},
-        ${JSON.stringify(input.requestedScopes)}::jsonb, ${input.codeChallenge}, 'S256',
+        ${JSON.stringify(input.requestedScopes)}::jsonb, ${input.pkceMode}, ${input.codeChallenge}, ${input.codeChallengeMethod},
         ${input.pkceVerifierRef}, 'pending', ${new Date(input.expiresAt)},
         ${new Date(input.createdAt)}, ${new Date(input.createdAt)}
       ) RETURNING *

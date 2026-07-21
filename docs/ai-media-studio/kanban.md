@@ -13,6 +13,7 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | PR5–PR8 hardening | PRs #75, #77, #80 and #82 | Ready for GitHub review | Governance, account-scoped provider identity, production asset adapters and tenant/platform publishing-account isolation passed local gates; migrations remain unapplied |
 | PR9 OAuth control plane | PR #83, `codex/ai-media-studio-social-oauth-foundation`, stacked on PR #82 | Ready for GitHub review | Durable one-time state, PKCE/vault ports and unverified credential lifecycle passed local gates; no live connector or route |
 | PR10 managed OAuth vault | PR #84, `codex/ai-media-studio-managed-oauth-vault`, stacked on PR #83 | Checker findings | Internal S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition pass code/test and static App QA gates. Before readiness, resolve or explicitly split the checker findings for platform-specific PKCE allocation, authorized-flow verifier deletion, and DB redirect defense-in-depth. Routes, token exchange, refresh/revocation, sandbox proof and deployment remain absent |
+| PR11 OAuth policy hardening | PR #85, `codex/ai-media-studio-oauth-policy-hardening`, stacked on PR #84 | Ready for GitHub review | Provider-neutral PKCE snapshots, fail-closed authorized callback handling, trusted redirect DB fence and expiring S3 PKCE objects pass 34/34 focused tests, TypeScript, build, checker and static App QA. Migration is unapplied; token exchange/routes/provider sandbox/deployment remain absent |
 
 ## PR2 — durable core and owned media
 
@@ -70,7 +71,7 @@ The PR2, PR3, and PR4 migrations remain unapplied. No `db:push`, live PostgreSQL
 | AMS-308 Distributed workers | Platform owner | Partial (code) | No-autostart loop, durable/in-memory outbox, fencing, retry/DLQ, health snapshot and render quotas exist; no deployment, autoscaling or real load proof |
 | AMS-309 Multi-country/language policy | Policy owner | Partial (code) | Admission evaluates provider/tenant limits, language, country, timezone and daily budget; residency/rights/provider-routing operations remain missing |
 | AMS-310 10,000/day capacity gate | Performance owner | Blocked on real environment | Deterministic 10k fake-provider rehearsal exists and is not capacity proof; burst/load, SLO telemetry, provider quotas, cost envelope and DR remain required |
-| AMS-311 OAuth/vault control plane | Identity owner | Checker review | Durable digest-only state, mandatory PKCE S256, opaque purpose-scoped vault references, exact account binding, legacy-unverified lifecycle, S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition are ready to preserve in the stacked PR branch; mounted routes, token exchange, refresh/revocation and sandbox proof remain blocked |
+| AMS-311 OAuth/vault control plane | Identity owner | Checker review | Durable digest-only state, provider-neutral persisted PKCE policy snapshots, opaque purpose-scoped vault references, exact account binding, legacy-unverified lifecycle, S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition are preserved in the stacked PR branches; authorized claim/exchange, mounted routes, token vault, refresh/revocation and sandbox proof remain blocked |
 
 ### PR3 current integration evidence
 

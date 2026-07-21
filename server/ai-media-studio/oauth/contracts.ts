@@ -1,5 +1,6 @@
 import type {
   AiMediaOAuthOutcome,
+  AiMediaOAuthPkceMode,
   AiMediaOAuthPlatform,
 } from "../../../shared/ai-media-studio-oauth";
 import type { TenantScope } from "../core/resource-domain";
@@ -16,9 +17,10 @@ export type OAuthSession = Readonly<{
   stateDigest: string;
   redirectUri: string;
   requestedScopes: readonly string[];
-  codeChallenge: string;
-  codeChallengeMethod: "S256";
-  pkceVerifierRef: string;
+  pkceMode: AiMediaOAuthPkceMode;
+  codeChallenge: string | null;
+  codeChallengeMethod: "S256" | null;
+  pkceVerifierRef: string | null;
   status: OAuthSessionStatus;
   outcome: AiMediaOAuthOutcome | null;
   expiresAt: string;
@@ -70,6 +72,7 @@ export interface OAuthAccountBindingVerifier {
 export type OAuthPlatformPolicy = Readonly<{
   redirectUris: readonly string[];
   scopes: readonly string[];
+  pkce: AiMediaOAuthPkceMode;
 }>;
 
 export type OAuthPlatformPolicies = Readonly<Partial<Record<AiMediaOAuthPlatform, OAuthPlatformPolicy>>>;

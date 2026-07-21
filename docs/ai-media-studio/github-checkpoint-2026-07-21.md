@@ -2,6 +2,20 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Latest recovery checkpoint: PR11 OAuth policy hardening
+
+- Branch: `codex/ai-media-studio-oauth-policy-hardening`, PR #85, stacked on PR #84 / `codex/ai-media-studio-managed-oauth-vault`.
+- Scope: persist a provider-neutral `required_s256 | none` PKCE policy snapshot, omit PKCE for the currently documented TikTok/Meta/Google web-server flows, preserve Google's offline-consent parameters, reject `authorized` callbacks until an atomic claim/exchange/token-vault flow exists, strengthen redirect defense-in-depth, and add S3 object expiration metadata.
+- Migration artifacts: `20260721_pr11_oauth_policy_forward.sql` and its application-only, data-preserving rollback. They are reviewed artifacts only and have not been applied.
+- Focused OAuth/PR11 tests: 34/34 passing.
+- TypeScript: `npx tsc --noEmit` passing.
+- Production build: `npm run build` passing; existing bundle-size and local `yt-dlp` environment warnings remain unrelated to PR11.
+- Codebase map: `npm run codebase:map` completed and refreshed the generated maps.
+- Diff hygiene: `git diff --check` passing.
+- Independent App QA: passing with no warnings; browser/click QA is not applicable because PR11 adds no route or UI.
+- Independent checker: passing after fixes for exact migration preflight, alternate IPv4 literal rejection, and pre-await policy snapshot capture. SQL was reviewed statically and not applied to PostgreSQL.
+- Explicit safety boundary: no token exchange, long-lived token vault, refresh/revocation, live OAuth route, provider call, migration apply, external post, spend or deployment.
+
 ## Current branch
 
 - Worktree: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
@@ -131,8 +145,8 @@ Files intentionally out of scope for the first PR10 code slice:
 
 ## Next recovery steps if this Codex session stops
 
-1. Continue on branch `codex/ai-media-studio-managed-oauth-vault`.
-2. Finish independent checker and App QA review before calling the PR10 code slice ready.
-3. Push the reviewed code and evidence to PR #84.
-4. Continue with a separate PR for callback-safe token exchange, long-lived token vaulting, account CAS binding, refresh/revocation and provider sandbox proof.
+1. Continue on branch `codex/ai-media-studio-oauth-policy-hardening` and review only its delta from PR #84.
+2. Preserve the stacked order: PR #83 -> PR #84 -> PR11 OAuth policy hardening.
+3. Confirm GitHub PR status and execute the reviewed migration in an approved staging/PostgreSQL rehearsal before calling the database change production-ready.
+4. Continue with a separate PR for callback-safe claim/exchange, long-lived token vaulting, account CAS binding, refresh/revocation and provider sandbox proof.
 5. Do not mount OAuth routes, deploy, apply migrations or post externally without the required release gates and Robert’s explicit approval.
