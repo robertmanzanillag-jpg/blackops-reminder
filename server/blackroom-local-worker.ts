@@ -15,6 +15,18 @@ export interface BlackRoomLocalWorkerState {
   runs: number;
 }
 
+export const BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+
+export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES): Array<{ index: number; start: number; end: number; size: number }> {
+  if (!Number.isSafeInteger(totalBytes) || totalBytes <= 0 || !Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new Error("Invalid BlackRoom upload size");
+  const chunks: Array<{ index: number; start: number; end: number; size: number }> = [];
+  for (let start = 0, index = 0; start < totalBytes; start += chunkBytes, index += 1) {
+    const end = Math.min(totalBytes - 1, start + chunkBytes - 1);
+    chunks.push({ index, start, end, size: end - start + 1 });
+  }
+  return chunks;
+}
+
 export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
 
 export interface BlackRoomLedgerEntry {

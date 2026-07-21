@@ -33,6 +33,7 @@ const PUBLIC_API_PATHS = [
 // local worker and Metricool can exchange media without a user cookie.
 const PUBLIC_API_PATTERNS: RegExp[] = [
   /^\/api\/blackroom-agent\/media\/[^/]+$/,
+  /^\/api\/blackroom-agent\/media\/chunked\/[^/]+\/(?:\d+|complete)$/,
 ];
 
 function cleanUserId(value: unknown): string | null {

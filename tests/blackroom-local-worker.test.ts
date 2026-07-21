@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES,
+  buildBlackRoomUploadChunks,
   assertSafeConfirmedDeletion,
   buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
@@ -19,6 +21,16 @@ const mediaDetails = {
   dj: "DJ Test", language: "en" as const, format: "vertical" as const, durationSeconds: 30 as const,
   segmentStartSeconds: 10, segmentEndSeconds: 40, caption: "Drop incoming.",
 };
+
+test("splits remote video uploads below Replit's per-request limit", () => {
+  const totalBytes = BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2 + 123;
+  assert.deepEqual(buildBlackRoomUploadChunks(totalBytes), [
+    { index: 0, start: 0, end: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES - 1, size: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES },
+    { index: 1, start: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES, end: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2 - 1, size: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES },
+    { index: 2, start: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2, end: totalBytes - 1, size: 123 },
+  ]);
+  assert.throws(() => buildBlackRoomUploadChunks(0), /Invalid BlackRoom upload size/);
+});
 
 test("worker only runs for an enabled actionable queue", () => {
   assert.equal(shouldRunBlackRoomWorker({ enabled: false, jobs: [{ status: "queued" }] }), false);
