@@ -1,27 +1,39 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import {
   BLACKROOM_WORKER_LOCK_PATH,
   BLACKROOM_WORKER_STATE_PATH,
   buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
   createBlackRoomLocalWorkerState,
+  nextBlackRoomPublicationDateTime,
+  isBlackRoomJobPublishable,
+  selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
+  validateBlackRoomRenderProbe,
   type BlackRoomLocalWorkerState,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
 
 const projectDir = path.resolve(process.env.BLACKROOM_PROJECT_DIR || process.cwd());
 const queuePath = path.join(projectDir, process.env.BLACKROOM_QUEUE_PATH || BLACKROOM_QUEUE_PATH);
+const ledgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-ledger.json");
 const statePath = path.join(projectDir, BLACKROOM_WORKER_STATE_PATH);
 const lockPath = path.join(projectDir, BLACKROOM_WORKER_LOCK_PATH);
 const logPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker.log");
 const codexPath = process.env.BLACKROOM_CODEX_PATH || "/Applications/ChatGPT.app/Contents/Resources/codex";
 const pollMs = Math.max(5_000, Number(process.env.BLACKROOM_WORKER_POLL_MS || 15_000));
 const maxRunMs = Math.max(60_000, Number(process.env.BLACKROOM_WORKER_MAX_RUN_MS || 45 * 60_000));
+const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://robplanner.replit.app").replace(/\/$/, "");
+const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
+const execFileAsync = promisify(execFile);
 let activeChild: ReturnType<typeof spawn> | null = null;
 let stopping = false;
+
+class BlackRoomPublishPausedError extends Error {}
 
 function waitForChildExit(child: ReturnType<typeof spawn>): Promise<number> {
   if (child.exitCode !== null) return Promise.resolve(child.exitCode ?? 1);
@@ -61,6 +73,108 @@ async function appendLog(message: string): Promise<void> {
   const handle = await open(logPath, "a");
   try { await handle.write(`${new Date().toISOString()} ${message}\n`); }
   finally { await handle.close(); }
+}
+
+async function runNpm(args: string[]): Promise<void> {
+  await execFileAsync(process.env.BLACKROOM_NPM_PATH || "npm", args, { cwd: projectDir, maxBuffer: 4_000_000 });
+}
+
+async function remoteJson(url: string, init: RequestInit & { duplex?: "half" }, timeoutMs = 180_000): Promise<any> {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`);
+  return data;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return Boolean((await stat(filePath).catch(() => null))?.isFile());
+}
+
+async function ensureSourceRecorded(entry: any): Promise<void> {
+  const queue = await readJson<any>(queuePath, { sourceHistory: [] });
+  const existing = (queue.sourceHistory || []).find((candidate: any) => candidate.videoId === entry.videoId);
+  if (existing) {
+    if (existing.jobId !== entry.jobId) throw new Error(`Source ${entry.videoId} belongs to another BlackRoom job`);
+    return;
+  }
+  await runNpm(["run", "blackroom:agent", "--", "--record-source", "--video", entry.videoId, "--job", entry.jobId,
+    "--dj", entry.dj, "--format", entry.format, "--language", entry.language, "--duration", String(entry.durationSeconds),
+    "--start-second", String(entry.segmentStartSeconds), "--end-second", String(entry.segmentEndSeconds)]);
+}
+
+async function deleteConfirmedMedia(entry: any): Promise<void> {
+  for (const filePath of [entry.renderPath, entry.sourcePath]) {
+    if (!filePath || !(await fileExists(filePath))) continue;
+    await runNpm(["run", "blackroom:ledger", "--", "--delete-confirmed", "--reservation", entry.reservationId, "--file", filePath]);
+  }
+}
+
+async function recoverConfirmedCleanup(): Promise<void> {
+  const ledger = await readJson<any>(ledgerPath, { entries: [] });
+  for (const entry of ledger.entries || []) {
+    if (entry.status !== "confirmed" || !entry.metricoolId) continue;
+    await ensureSourceRecorded(entry);
+    await deleteConfirmedMedia(entry);
+  }
+}
+
+async function publishOneReservedEntry(): Promise<boolean> {
+  if (!remoteToken || remoteToken.length < 32) throw new Error("BLACKROOM_REMOTE_CONTROL_TOKEN is required for Metricool publishing");
+  const queue = await readJson<any>(queuePath, {});
+  if (queue.enabled !== true) return false;
+  await recoverConfirmedCleanup();
+  const ledger = await readJson<any>(ledgerPath, { entries: [] });
+  const entry = selectPublishableBlackRoomReservation(queue, ledger.entries || []);
+  if (!entry) return false;
+  const renderInfo = await stat(entry.renderPath).catch(() => null);
+  if (!renderInfo?.isFile() || renderInfo.size <= 0 || renderInfo.size > 500 * 1024 * 1024) throw new Error(`Reserved render is missing or too large: ${entry.reservationId}`);
+  const { stdout: probeOutput } = await execFileAsync(process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe", [
+    "-v", "error", "-show_entries", "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt", "-of", "json", entry.renderPath,
+  ], { maxBuffer: 4_000_000 });
+  validateBlackRoomRenderProbe(JSON.parse(probeOutput), Number(entry.durationSeconds));
+  const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
+  if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
+  const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
+  const upload = await remoteJson(`${remoteUrl}/api/blackroom-agent/media/${encodeURIComponent(entry.reservationId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${remoteToken}`,
+      "Content-Type": "application/octet-stream",
+      "Content-Length": String(renderInfo.size),
+    },
+    body: createReadStream(entry.renderPath) as any,
+    duplex: "half",
+  }, 15 * 60_000);
+  const preScheduleQueue = await readJson<any>(queuePath, {});
+  if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
+    throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
+  }
+  const scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      uploadId: upload.uploadId,
+      reservationId: entry.reservationId,
+      caption: entry.caption,
+      publicationDateTime,
+      timezone: queue.timezone || "America/New_York",
+    }),
+  });
+  const metricoolId = String(scheduled?.receipt?.metricoolId || "").trim();
+  if (!scheduled?.receipt?.verified || !metricoolId) throw new Error("Metricool bridge returned no verified receipt");
+  await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", metricoolId]);
+  const postScheduleQueue = await readJson<any>(queuePath, {});
+  if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
+    await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; cleanup deferred because BlackRoom is paused`);
+    return true;
+  }
+  await ensureSourceRecorded(entry);
+  await deleteConfirmedMedia(entry);
+  const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
+  const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
+  if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
+  await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; local media deleted`);
+  return true;
 }
 
 async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
@@ -146,7 +260,25 @@ async function main(): Promise<void> {
     while (true) {
       const queue = await readJson<{ enabled?: boolean; jobs?: Array<{ status?: string; notBefore?: string }> }>(queuePath, {});
       if (!shouldRunBlackRoomWorker(queue)) break;
-      await runCodex(state);
+      try {
+        const publishedExisting = await publishOneReservedEntry();
+        if (!publishedExisting) {
+          await runCodex(state);
+          const publishedNew = await publishOneReservedEntry();
+          if (!publishedNew) throw new Error(state.lastError || "Codex finished without reserving a BlackRoom video");
+        }
+        state.lastError = null;
+        await writeJson(statePath, state);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        state.lastError = message;
+        await appendLog(`publisher error: ${message}`);
+        await writeJson(statePath, state);
+        if (error instanceof BlackRoomPublishPausedError) continue;
+        const ledger = await readJson<any>(ledgerPath, { entries: [] });
+        const reserved = (ledger.entries || []).find((candidate: any) => candidate.status === "reserved");
+        if (reserved?.jobId) await runNpm(["run", "blackroom:agent", "--", "--retry", "--job", reserved.jobId, "--error", message]).catch(() => undefined);
+      }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
   } finally { await stop(false); }

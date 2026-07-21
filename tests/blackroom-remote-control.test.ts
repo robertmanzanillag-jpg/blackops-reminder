@@ -7,6 +7,7 @@ import {
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
 } from "../server/blackroom-remote-control";
+import { isPublicApiPath } from "../server/user-context";
 
 test("remote command increments its monotonic generation", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
@@ -37,6 +38,12 @@ test("device authentication rejects missing, short, placeholder, and incorrect t
   assert.equal(hasValidBlackRoomRemoteToken(undefined, token), false);
   assert.equal(hasValidBlackRoomRemoteToken("Bearer wrong", token), false);
   assert.equal(hasValidBlackRoomRemoteToken("Bearer your-token", "your-token"), false);
+});
+
+test("token-protected BlackRoom bridge paths bypass cookie auth for the local worker", () => {
+  assert.equal(isPublicApiPath("/api/blackroom-agent/metricool/schedule"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1/extra"), false);
 });
 
 test("offline paused panel keeps Play available so the command can be queued", () => {

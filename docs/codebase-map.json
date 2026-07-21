@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-21T04:42:44.879Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control",
+  "generatedAt": "2026-07-21T07:29:13.147Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-runtime",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -95,13 +95,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 462,
-    "filesIndexed": 383,
-    "imports": 1412,
-    "routes": 465,
-    "symbols": 7744
+    "filesVisible": 464,
+    "filesIndexed": 385,
+    "imports": 1425,
+    "routes": 468,
+    "symbols": 7860
   },
   "directories": {
+    "server": {
+      "files": 113,
+      "indexed": 109,
+      "kinds": {
+        "server": 113
+      }
+    },
+    "tests": {
+      "files": 74,
+      "indexed": 71,
+      "kinds": {
+        "test": 74
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -180,13 +194,6 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 112,
-      "indexed": 108,
-      "kinds": {
-        "server": 112
-      }
-    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -206,13 +213,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 73,
-      "indexed": 70,
-      "kinds": {
-        "test": 73
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3991,38 +3991,71 @@
         "../server/blackroom-daily-queue",
         "../server/blackroom-local-worker",
         "node:child_process",
+        "node:fs",
         "node:fs/promises",
-        "node:path"
+        "node:path",
+        "node:util"
       ],
       "exports": [],
       "symbols": [
+        "BlackRoomPublishPausedError",
         "appendLog",
         "child",
         "codexPath",
+        "confirmed",
+        "data",
+        "deleteConfirmedMedia",
         "ended",
+        "ensureSourceRecorded",
+        "entry",
+        "execFileAsync",
+        "existing",
         "existingPid",
         "exitCode",
         "exitPromise",
+        "fileExists",
         "handle",
+        "job",
+        "ledger",
+        "ledgerPath",
         "lockPath",
         "lockStat",
         "logPath",
         "main",
         "maxRunMs",
+        "message",
+        "metricoolId",
         "outcome",
         "output",
         "pollMs",
+        "postScheduleQueue",
+        "preScheduleQueue",
         "projectDir",
+        "publicationDateTime",
+        "publishOneReservedEntry",
+        "publishedExisting",
+        "publishedNew",
         "queue",
         "queuePath",
         "readJson",
+        "recoverConfirmedCleanup",
+        "refreshedLedger",
+        "remoteJson",
+        "remoteToken",
+        "remoteUrl",
+        "renderInfo",
+        "reserved",
+        "response",
         "runCodex",
+        "runNpm",
+        "scheduled",
         "startedAt",
         "state",
         "statePath",
         "stop",
         "temporary",
         "terminateChildGroup",
+        "upload",
         "waitForChildExit",
         "writeJson"
       ],
@@ -6616,9 +6649,16 @@
       "kind": "server",
       "imports": [
         "./blackroom-daily-queue",
+        "./blackroom-metricool-bridge",
         "./blackroom-remote-control",
         "express",
-        "node:crypto"
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:stream",
+        "node:stream/promises"
       ],
       "exports": [
         "blackRoomPage",
@@ -6626,22 +6666,43 @@
         "registerBlackRoomControlRoutes"
       ],
       "symbols": [
+        "BLACKROOM_UPLOAD_MAX_BYTES",
+        "BLACKROOM_UPLOAD_TTL_MS",
         "blackRoomPage",
+        "blackRoomUploadDir",
+        "blackRoomUploads",
+        "bytes",
+        "cleanupExpiredBlackRoomUploads",
         "current",
+        "declaredSize",
+        "error",
         "expectedBuffer",
+        "filePath",
         "hasValidBlackRoomRemoteToken",
         "ids",
+        "info",
+        "limiter",
         "localQueue",
+        "publicOrigin",
+        "receipt",
+        "receiveBlackRoomUpload",
         "registerBlackRoomControlRoutes",
         "remote",
         "remoteView",
+        "removeBlackRoomUpload",
+        "reservationId",
         "state",
         "supplied",
         "suppliedBuffer",
-        "token"
+        "token",
+        "upload",
+        "uploadId"
       ],
       "routes": [
         "/api/blackroom-agent",
+        "/api/blackroom-agent/media/:reservationId",
+        "/api/blackroom-agent/media/:uploadId",
+        "/api/blackroom-agent/metricool/schedule",
         "/api/blackroom-agent/pause",
         "/api/blackroom-agent/remote",
         "/api/blackroom-agent/start",
@@ -6849,29 +6910,105 @@
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
+        "isBlackRoomJobPublishable",
+        "nextBlackRoomPublicationDateTime",
         "reserveBlackRoomLedgerEntry",
+        "selectPublishableBlackRoomReservation",
         "shouldRunBlackRoomWorker",
-        "updateBlackRoomLedgerEntry"
+        "updateBlackRoomLedgerEntry",
+        "validateBlackRoomRenderProbe"
       ],
       "symbols": [
         "BLACKROOM_WORKER_LEDGER_PATH",
         "BLACKROOM_WORKER_LOCK_PATH",
         "BLACKROOM_WORKER_STATE_PATH",
+        "addUtcCalendarDay",
         "allowedRoots",
         "assertSafeConfirmedDeletion",
+        "audio",
         "buildBlackRoomCodexArgs",
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
+        "currentLocal",
+        "durationSeconds",
         "entry",
+        "formatName",
+        "height",
+        "isBlackRoomJobPublishable",
+        "job",
         "ledgerPath",
+        "nextBlackRoomPublicationDateTime",
+        "parts",
         "queuePath",
         "reserveBlackRoomLedgerEntry",
         "resolvedFile",
         "resolvedProject",
+        "selectPublishableBlackRoomReservation",
         "shouldRunBlackRoomWorker",
         "timestamp",
-        "updateBlackRoomLedgerEntry"
+        "updateBlackRoomLedgerEntry",
+        "validateBlackRoomRenderProbe",
+        "value",
+        "values",
+        "video",
+        "width"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-metricool-bridge.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "BLACKROOM_METRICOOL_BLOG_ID",
+        "BLACKROOM_TIMEZONE",
+        "BlackRoomMetricoolReceipt",
+        "BlackRoomMetricoolScheduleInput",
+        "buildMetricoolTikTokPayload",
+        "extractMetricoolMediaId",
+        "findVerifiedMetricoolPost",
+        "scheduleBlackRoomMetricoolPost"
+      ],
+      "symbols": [
+        "BLACKROOM_METRICOOL_BLOG_ID",
+        "BLACKROOM_TIMEZONE",
+        "FetchLike",
+        "blogId",
+        "buildMetricoolTikTokPayload",
+        "data",
+        "date",
+        "dateTime",
+        "env",
+        "existing",
+        "existingId",
+        "existingMatch",
+        "extractMetricoolMediaId",
+        "fetcher",
+        "findVerifiedMetricoolPost",
+        "headers",
+        "id",
+        "matched",
+        "mediaId",
+        "metricoolJson",
+        "normalizeUrl",
+        "normalized",
+        "objects",
+        "payload",
+        "publication",
+        "record",
+        "requiredEnv",
+        "scheduleBlackRoomMetricoolPost",
+        "scheduled",
+        "schedulerUrl",
+        "text",
+        "timezone",
+        "token",
+        "userId",
+        "value",
+        "verification",
+        "verifyUrl",
+        "visit"
       ],
       "routes": []
     },
@@ -13444,11 +13581,37 @@
       "exports": [],
       "symbols": [
         "args",
+        "entries",
         "entry",
         "ledger",
+        "legacy",
         "mediaDetails",
+        "now",
         "project",
-        "prompt"
+        "prompt",
+        "queue",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-metricool-bridge.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-metricool-bridge",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "href",
+        "input",
+        "method",
+        "mockFetch",
+        "payload",
+        "post",
+        "receipt",
+        "verifications"
       ],
       "routes": []
     },
@@ -13458,6 +13621,7 @@
       "imports": [
         "../server/blackroom-control-routes",
         "../server/blackroom-remote-control",
+        "../server/user-context",
         "node:assert/strict",
         "node:test"
       ],
@@ -14930,6 +15094,7 @@
     "tests/blackroom-daily-queue.test.ts",
     "tests/blackroom-links.test.ts",
     "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-metricool-bridge.test.ts",
     "tests/blackroom-remote-control.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
