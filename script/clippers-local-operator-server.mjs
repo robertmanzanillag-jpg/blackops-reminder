@@ -9,6 +9,7 @@ const root = process.cwd();
 const workspaceRoot = process.env.CLIPPERS_WORKSPACE_ROOT || path.join(root, "clippers_workspace");
 const reportsDir = path.join(workspaceRoot, "reports");
 const scheduledDir = path.join(workspaceRoot, "scheduled");
+const quarantineDir = path.join(workspaceRoot, "quarantine");
 const batchEvidenceCsvPath = path.join(scheduledDir, "metricool-100-batch-evidence-imports", "metricool-batch-01-evidence-import.csv");
 const batchEvidenceLockPath = `${batchEvidenceCsvPath}.lock`;
 const masterEvidenceCsvPath = path.join(workspaceRoot, "evidence-drop", "metricool-100-approval-evidence-import.csv");
@@ -110,6 +111,7 @@ const clipperPageTitles = new Map([
   ["Clippers Real Clip Acquisition", ["Preparar", "Preparar clips"]],
   ["Clippers Real Clip Intake", ["Preparar", "Cargar archivos reales"]],
   ["Clippers Real Clip Intake Validation", ["Preparar", "Validar clips"]],
+  ["Clippers Human Review Queue", ["Preparar", "Revisar candidatos"]],
   ["Clippers Source-drop Import", ["Preparar", "Enviar clips a Metricool"]],
   ["Clippers TikTok Batch Now", ["Metricool", "Programar en Metricool"]],
   ["Clippers TikTok Public Metrics Now", ["Optimizar", "Registrar resultados"]],
@@ -129,6 +131,7 @@ const clipperPageGuides = new Map([
   ["Clippers Real Clip Acquisition", "Mira que le falta a cada candidato y completa URL, permiso, evidencia y archivo en el orden correcto."],
   ["Clippers Real Clip Intake", "Carga los MP4 reales aprobados para reemplazar los videos de prueba. No se publica nada desde esta pantalla."],
   ["Clippers Real Clip Intake Validation", "Comprueba que cada clip tenga archivo, URL exacta, creador y permiso antes de enviarlo a Metricool."],
+  ["Clippers Human Review Queue", "Reproduce los candidatos autorizados y revisa audio, contexto y material de terceros. Esta pantalla es de solo lectura y nunca desbloquea Metricool."],
   ["Clippers Source-drop Import", "Envia a la cola de Metricool solo los clips reales que superaron todas las validaciones."],
   ["Clippers TikTok Batch Now", "Programa en Metricool los clips aprobados y guarda la evidencia de la programacion."],
   ["Clippers TikTok Public Metrics Now", "Registra las vistas y resultados reales despues de publicar para que el sistema pueda mejorar."],
@@ -9766,6 +9769,176 @@ function scrubInternalPathsFromStatusValue(value) {
   return value;
 }
 
+function verifiedTwitchClipUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || !(hostname === "twitch.tv" || hostname.endsWith(".twitch.tv"))) return "";
+    const exactClipPath = /\/clip\//i.test(url.pathname)
+      || (hostname === "clips.twitch.tv" && url.pathname.split("/").filter(Boolean).length === 1);
+    return exactClipPath ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function buildHumanReviewQueue() {
+  const sources = [
+    {
+      creator: "sadlights",
+      directory: "sadlights-review",
+      manifest: "review-manifest.csv",
+      evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md",
+      normalize: (row) => ({
+        title: row.title,
+        sourceUrl: row.exact_source_url,
+        localFile: row.local_raw_file,
+        sourceAge: row.source_age,
+        sourceViews: row.source_views,
+        rightsStatus: row.creator_permission === "verified" ? "approved_blanket" : row.creator_permission,
+        audioReview: row.audio_review,
+        contextReview: row.context_review,
+        thirdPartyReview: row.gameplay_rights_review,
+        noAiRequired: row.no_ai_required === "yes",
+        status: row.status,
+        notes: "Creator requires human-only review, credit, context integrity, and a 12-hour publish delay.",
+      }),
+    },
+    {
+      creator: "ESP Leonidas",
+      directory: "esp-leonidas-review",
+      manifest: "review-manifest.csv",
+      evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/esp-leonidas-blanket-permission-2026-07-21.md",
+      normalize: (row) => ({
+        title: row.title,
+        sourceUrl: row.source_url,
+        localFile: row.local_file,
+        sourceAge: row.source_posted_at ? `Published ${row.source_posted_at}` : "",
+        sourceViews: row.historical_views,
+        rightsStatus: row.rights_status,
+        audioReview: row.audio_review,
+        contextReview: row.intake_status === "rejected_visual_policy_risk" ? "rejected" : "required",
+        thirdPartyReview: row.third_party_review,
+        noAiRequired: false,
+        status: row.intake_status,
+        notes: row.notes,
+      }),
+    },
+  ];
+  const rows = [];
+  for (const source of sources) {
+    const directoryPath = path.join(quarantineDir, source.directory);
+    const raw = await readText(path.join(directoryPath, source.manifest), "");
+    if (!raw) continue;
+    for (const manifestRow of parseCsv(raw).rows) {
+      const normalized = source.normalize(manifestRow);
+      const localFile = path.basename(String(normalized.localFile || ""));
+      const filePath = localFile ? path.join(directoryPath, localFile) : "";
+      const fileStat = filePath ? await stat(filePath).catch(() => null) : null;
+      rows.push({
+        id: `${source.directory}:${localFile || normalized.title || rows.length + 1}`,
+        creator: source.creator,
+        title: normalized.title || "Untitled clip",
+        sourceUrl: verifiedTwitchClipUrl(normalized.sourceUrl),
+        localFile,
+        mediaUrl: fileStat?.isFile()
+          ? `/clippers-workspace/quarantine/${encodeURIComponent(source.directory)}/${encodeURIComponent(localFile)}`
+          : "",
+        fileReady: Boolean(fileStat?.isFile()),
+        fileBytes: fileStat?.isFile() ? fileStat.size : 0,
+        evidenceUrl: source.evidenceUrl,
+        sourceAge: normalized.sourceAge || "Unknown",
+        sourceViews: normalized.sourceViews || "Unknown",
+        rightsStatus: normalized.rightsStatus || "review_required",
+        audioReview: normalized.audioReview || "required",
+        contextReview: normalized.contextReview || "required",
+        thirdPartyReview: normalized.thirdPartyReview || "required",
+        noAiRequired: normalized.noAiRequired === true,
+        status: normalized.status || "review_required",
+        notes: normalized.notes || "Human review required before intake.",
+        publishAllowed: false,
+      });
+    }
+  }
+  const rejectedRows = rows.filter((row) => /rejected/i.test(row.status) || row.contextReview === "rejected").length;
+  const reviewRequiredRows = rows.filter((row) => !/rejected/i.test(row.status) && row.contextReview !== "rejected").length;
+  return {
+    status: rows.length === 0 ? "no_review_candidates" : reviewRequiredRows > 0 ? "human_review_required" : "review_complete_no_approved_rows",
+    generatedAt: new Date().toISOString(),
+    readOnly: true,
+    metricoolApprovalRequired: true,
+    realPublishEnabled: false,
+    totals: {
+      rows: rows.length,
+      filesReady: rows.filter((row) => row.fileReady).length,
+      reviewRequired: reviewRequiredRows,
+      rejected: rejectedRows,
+      noAi: rows.filter((row) => row.noAiRequired).length,
+      publishAllowed: 0,
+    },
+    rows,
+  };
+}
+
+function humanReviewStatusLabel(row) {
+  if (/rejected/i.test(row.status) || row.contextReview === "rejected") return "Descartado";
+  if (!row.fileReady) return "Falta archivo";
+  return "Revisión humana pendiente";
+}
+
+function renderHumanReviewQueuePage(queue) {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clippers Human Review Queue</title>
+  <style>
+    .review-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid #29372f;border-bottom:1px solid #29372f;margin:22px 0 28px}
+    .review-stat{padding:16px;border-left:1px solid #29372f}.review-stat:first-child{border-left:0;padding-left:0}.review-stat strong{display:block;font-size:22px;margin-top:5px}
+    .review-list{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}.review-item{border-top:1px solid #29372f;padding:22px 0;min-width:0}
+    .review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.review-head h2{margin:0}.review-meta{color:#9eaca4;font-size:12px;margin-top:5px}
+    .review-status{border:1px solid #52635a;border-radius:999px;padding:5px 8px;font-size:11px;white-space:nowrap}.review-status.rejected{border-color:#74433e;color:#ff9d95}
+    video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806;margin:0 0 13px}
+    .review-checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin:13px 0}.review-check{font-size:12px;color:#c9d2cd}.review-check strong{color:#fff}
+    .review-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.review-links a{border:1px solid #29372f;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:12px}
+    .review-note{font-size:12px;color:#9eaca4;border-left:2px solid #52635a;padding-left:10px;margin-top:13px}
+    @media(max-width:800px){.review-summary{grid-template-columns:repeat(2,1fr)}.review-stat:nth-child(odd){border-left:0;padding-left:0}.review-list{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <h1>Revisión humana de clips</h1>
+  <p>Estos candidatos tienen archivos y evidencia, pero ninguno está autorizado para Metricool hasta completar audio, contexto y material de terceros. La página no guarda decisiones ni publica.</p>
+  <div class="review-summary">
+    <div class="review-stat"><span class="label">Candidatos</span><strong>${escapeHtml(queue.totals.rows)}</strong></div>
+    <div class="review-stat"><span class="label">Archivos</span><strong>${escapeHtml(queue.totals.filesReady)}/${escapeHtml(queue.totals.rows)}</strong></div>
+    <div class="review-stat"><span class="label">Por revisar</span><strong>${escapeHtml(queue.totals.reviewRequired)}</strong></div>
+    <div class="review-stat"><span class="label">Descartados</span><strong>${escapeHtml(queue.totals.rejected)}</strong></div>
+    <div class="review-stat"><span class="label">Sin IA</span><strong>${escapeHtml(queue.totals.noAi)}</strong></div>
+  </div>
+  <div class="actions"><a href="/api/clippers/real-clip-intake.html">Abrir intake después de aprobar</a><a href="/clippers">Volver al inicio</a></div>
+  <section class="review-list" aria-label="Candidatos en revisión">
+    ${queue.rows.map((row) => {
+      const rejected = /rejected/i.test(row.status) || row.contextReview === "rejected";
+      return `<article class="review-item">
+        <div class="review-head"><div><h2>${escapeHtml(row.title)}</h2><div class="review-meta">${escapeHtml(row.creator)} · ${escapeHtml(row.sourceAge)} · ${escapeHtml(row.sourceViews)} vistas históricas</div></div><span class="review-status${rejected ? " rejected" : ""}">${escapeHtml(humanReviewStatusLabel(row))}</span></div>
+        ${row.mediaUrl ? `<video controls preload="metadata" src="${escapeHtml(row.mediaUrl)}"></video>` : `<p class="review-note">Falta el archivo local.</p>`}
+        <div class="review-checks">
+          <div class="review-check"><strong>Derechos:</strong> ${escapeHtml(row.rightsStatus)}</div>
+          <div class="review-check"><strong>Audio:</strong> ${escapeHtml(row.audioReview)}</div>
+          <div class="review-check"><strong>Contexto:</strong> ${escapeHtml(row.contextReview)}</div>
+          <div class="review-check"><strong>Terceros:</strong> ${escapeHtml(row.thirdPartyReview)}</div>
+          <div class="review-check"><strong>IA:</strong> ${escapeHtml(row.noAiRequired ? "prohibida" : "no restringida")}</div>
+          <div class="review-check"><strong>Metricool:</strong> bloqueado</div>
+        </div>
+        <p class="review-note">${escapeHtml(row.notes)}</p>
+        <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a></div>
+      </article>`;
+    }).join("")}
+  </section>
+</main></body></html>`;
+}
+
 function renderHome(status) {
   const preflightTotal = Number(status.preflight.passed || 0) + Number(status.preflight.failed || 0);
   const nextExternalRepair = status.externalEvidenceValidation.nextRepair;
@@ -9896,6 +10069,7 @@ function renderHome(status) {
         <a class="secondary-link" href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a>
         <a class="secondary-link" href="/api/clippers/real-clip-exact-source-candidate.html">Guardar candidato</a>
         <a class="secondary-link" href="/api/clippers/real-clip-permission-crm.html">Gestionar permisos</a>
+        <a class="secondary-link" href="/api/clippers/human-review-queue.html">Revisar candidatos</a>
         <a class="secondary-link" href="/api/clippers/real-clip-acquisition-workbench.html">Preparar clips</a>
       </nav>
     </div>
@@ -10609,6 +10783,14 @@ const server = createServer(async (req, res) => {
     }
     if (parsed.pathname === "/api/clippers/status") {
       json(res, 200, await buildStatus());
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-queue.json" && req.method === "GET") {
+      json(res, 200, await buildHumanReviewQueue());
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-queue.html" && req.method === "GET") {
+      html(res, 200, renderHumanReviewQueuePage(await buildHumanReviewQueue()));
       return;
     }
     if (parsed.pathname === "/api/clippers/metricool-upload-checklist.csv" && req.method === "GET") {

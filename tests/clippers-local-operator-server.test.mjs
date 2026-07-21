@@ -187,6 +187,7 @@ async function resetTestWorkspace() {
   await rm(path.join(workspaceRoot, "symlink-outside-test"), { force: true });
   await rm(path.join(workspaceRoot, "symlink-dir-outside-test"), { force: true, recursive: true });
   await rm(path.join(workspaceRoot, "source-drop"), { force: true, recursive: true });
+  await rm(path.join(workspaceRoot, "quarantine"), { force: true, recursive: true });
   await rm(path.join(workspaceRoot, "evidence-drop"), { force: true, recursive: true });
   await Promise.all([...resetFileContents].map(async ([filePath, contents]) => {
     await mkdir(path.dirname(filePath), { recursive: true });
@@ -2943,6 +2944,53 @@ test("Clippers canonicalizes repurposed TikTok account names without changing Me
       for (const expectedName of expectedNames) assert.match(body, new RegExp(expectedName), pathname);
       assert.doesNotMatch(body, /Sports Daily Clips|Meme Radar/, pathname);
     }
+  });
+});
+
+test("Clippers human review queue exposes authorized files without unlocking Metricool", async () => {
+  const sadlightsDir = path.join(workspaceRoot, "quarantine", "sadlights-review");
+  const leonidasDir = path.join(workspaceRoot, "quarantine", "esp-leonidas-review");
+  await mkdir(sadlightsDir, { recursive: true });
+  await mkdir(leonidasDir, { recursive: true });
+  await writeFile(path.join(sadlightsDir, "sad.mp4"), Buffer.from("review-only-source"));
+  await writeFile(path.join(leonidasDir, "esp.mp4"), Buffer.from("review-only-source"));
+  await writeFile(path.join(sadlightsDir, "review-manifest.csv"), [
+    "title,exact_source_url,local_raw_file,vertical_intake_file,source_age,source_views,creator_permission,audio_review,context_review,gameplay_rights_review,no_ai_required,status",
+    '"Safe candidate","https://clips.twitch.tv/ExactClip","sad.mp4","","2 days","42","verified","required","required","required","yes","review_required"',
+  ].join("\n"));
+  await writeFile(path.join(leonidasDir, "review-manifest.csv"), [
+    "source_id,title,source_url,source_posted_at,historical_views,duration_seconds,local_file,rights_status,rights_evidence,visual_review,audio_review,third_party_review,recency_status,intake_status,publish_allowed,notes",
+    '1,"Rejected candidate","https://www.twitch.tv/esp_leonidas/clip/ExactClip","2026-07-01","12","8","esp.mp4","approved_blanket","proof","rejected_policy_risk","required","required","historical","rejected_visual_policy_risk","no","Visual policy risk requires rejection."',
+  ].join("\n"));
+
+  await withServer({ HOST: "127.0.0.1", PORT: "5578" }, async () => {
+    const homeResponse = await fetch("http://127.0.0.1:5578/clippers");
+    assert.equal(homeResponse.status, 200);
+    assert.match(await homeResponse.text(), /href="\/api\/clippers\/human-review-queue\.html">Revisar candidatos<\/a>/);
+
+    const jsonResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json");
+    assert.equal(jsonResponse.status, 200);
+    const queue = await jsonResponse.json();
+    assert.equal(queue.status, "human_review_required");
+    assert.equal(queue.readOnly, true);
+    assert.equal(queue.metricoolApprovalRequired, true);
+    assert.equal(queue.realPublishEnabled, false);
+    assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, rejected: 1, noAi: 1, publishAllowed: 0 });
+    assert.ok(queue.rows.every((row) => row.publishAllowed === false));
+    assert.equal(queue.rows.find((row) => row.creator === "sadlights").noAiRequired, true);
+    assert.equal(queue.rows.find((row) => row.creator === "sadlights").sourceUrl, "https://clips.twitch.tv/ExactClip");
+    assert.equal(queue.rows.find((row) => row.creator === "ESP Leonidas").status, "rejected_visual_policy_risk");
+
+    const htmlResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.html");
+    assert.equal(htmlResponse.status, 200);
+    const body = await htmlResponse.text();
+    assert.match(body, /Revisar candidatos/);
+    assert.match(body, /Safe candidate/);
+    assert.match(body, /Rejected candidate/);
+    assert.match(body, /IA:<\/strong> prohibida/);
+    assert.match(body, /Metricool:<\/strong> bloqueado/);
+    assert.match(body, /Descartado/);
+    assert.doesNotMatch(body, /ready to publish|listo para publicar/i);
   });
 });
 
