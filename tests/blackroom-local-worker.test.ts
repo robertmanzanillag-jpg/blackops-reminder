@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES,
+  BLACKROOM_FFPROBE_SHOW_ENTRIES,
   buildBlackRoomUploadChunks,
   assertSafeConfirmedDeletion,
   buildBlackRoomCodexArgs,
@@ -98,6 +99,7 @@ test("past BlackRoom slots roll forward while future slots keep their target dat
 });
 
 test("validates Metricool and TikTok compatible MP4 renders", () => {
+  assert.match(BLACKROOM_FFPROBE_SHOW_ENTRIES, /stream=.*duration.*channels/);
   const valid = {
     format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "30.02" },
     streams: [

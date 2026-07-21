@@ -16,6 +16,7 @@ export interface BlackRoomLocalWorkerState {
 }
 
 export const BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+export const BLACKROOM_FFPROBE_SHOW_ENTRIES = "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,channels";
 
 export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES): Array<{ index: number; start: number; end: number; size: number }> {
   if (!Number.isSafeInteger(totalBytes) || totalBytes <= 0 || !Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new Error("Invalid BlackRoom upload size");
