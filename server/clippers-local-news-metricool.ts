@@ -75,6 +75,24 @@ export interface ClipperLocalNewsMetricoolOptions {
   maxPerRun?: number;
 }
 
+export interface ClipperLocalNewsMetricoolReadiness {
+  status: "ready" | "partial" | "blocked";
+  configured: boolean;
+  connected: boolean;
+  blocker: string | null;
+  requiredConnections: number;
+  connectedConnections: number;
+  platforms: {
+    facebook: { required: number; connected: number; ready: boolean };
+    x: { required: number; connected: number; ready: boolean };
+  };
+  targets: Array<{
+    lane: ClipperLocalNewsLane;
+    platform: ClipperLocalNewsPlatform;
+    ready: boolean;
+  }>;
+}
+
 interface ProfileCandidate {
   label: string;
   blogId: string;
@@ -279,6 +297,78 @@ async function discoverProfiles(fetcher: typeof globalThis.fetch, token: string,
   }
 }
 
+const NEWS_LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; overrideKey: "METRICOOL_MIAMI_NEWS_BLOG_ID" | "METRICOOL_NY_NEWS_BLOG_ID" }> = {
+  "miami-news": {
+    label: "Miami News",
+    aliases: ["Miami News", "ynb4b6r6"],
+    overrideKey: "METRICOOL_MIAMI_NEWS_BLOG_ID",
+  },
+  "ny-news": {
+    label: "NY News",
+    aliases: ["NY News", "New York News"],
+    overrideKey: "METRICOOL_NY_NEWS_BLOG_ID",
+  },
+};
+
+export async function getClipperLocalNewsMetricoolReadiness(
+  options: Pick<ClipperLocalNewsMetricoolOptions, "env" | "fetch"> = {},
+): Promise<ClipperLocalNewsMetricoolReadiness> {
+  const env = options.env || process.env;
+  const token = env.METRICOOL_USER_TOKEN;
+  const userId = env.METRICOOL_USER_ID;
+  const blocked = (blocker: string): ClipperLocalNewsMetricoolReadiness => ({
+    status: "blocked",
+    configured: false,
+    connected: false,
+    blocker,
+    requiredConnections: 2,
+    connectedConnections: 0,
+    platforms: {
+      facebook: { required: 2, connected: 0, ready: false },
+      x: { required: 2, connected: 0, ready: false },
+    },
+    targets: (Object.keys(NEWS_LANE_CONFIG) as ClipperLocalNewsLane[]).flatMap((lane) => ([
+      { lane, platform: "facebook" as const, ready: false },
+      { lane, platform: "x" as const, ready: false },
+    ])),
+  });
+  if (!hasRealValue(token) || !hasRealValue(userId)) return blocked("configurar credenciales de Metricool");
+
+  const profiles = await discoverProfiles(options.fetch || globalThis.fetch, token, userId);
+  if (profiles === null) return blocked("no se pudo verificar Metricool");
+
+  const targets = (Object.keys(NEWS_LANE_CONFIG) as ClipperLocalNewsLane[]).flatMap((lane) => {
+    const config = NEWS_LANE_CONFIG[lane];
+    const override = env[config.overrideKey];
+    const profile = hasRealValue(override)
+      ? profiles.find((candidate) => candidate.blogId === override.trim())
+      : profiles.find((candidate) => config.aliases.includes(candidate.label));
+    return (["facebook", "x"] as ClipperLocalNewsPlatform[]).map((platform) => ({
+      lane,
+      platform,
+      ready: Boolean(profile && supportsProvider(profile, platform)),
+    }));
+  });
+  const connectedFor = (platform: ClipperLocalNewsPlatform) => targets.filter((target) => target.platform === platform && target.ready).length;
+  const facebookConnected = connectedFor("facebook");
+  const xConnected = connectedFor("x");
+  const facebookReady = facebookConnected === 2;
+  const xReady = xConnected === 2;
+  return {
+    status: facebookReady && xReady ? "ready" : facebookReady || xConnected > 0 ? "partial" : "blocked",
+    configured: true,
+    connected: facebookReady,
+    blocker: facebookReady ? null : "conectar Facebook para Miami News y New York News en Metricool",
+    requiredConnections: 2,
+    connectedConnections: facebookConnected,
+    platforms: {
+      facebook: { required: 2, connected: facebookConnected, ready: facebookReady },
+      x: { required: 2, connected: xConnected, ready: xReady },
+    },
+    targets,
+  };
+}
+
 export async function deliverClipperLocalNewsToMetricool(
   options: ClipperLocalNewsMetricoolOptions = {},
 ): Promise<ClipperLocalNewsMetricoolResult> {
@@ -329,18 +419,10 @@ export async function deliverClipperLocalNewsToMetricool(
       return eligible && !already.has(item.id);
     });
 
-    const laneConfig: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }> = {
-      "miami-news": {
-        label: "Miami News",
-        aliases: ["Miami News", "ynb4b6r6"],
-        override: env.METRICOOL_MIAMI_NEWS_BLOG_ID,
-      },
-      "ny-news": {
-        label: "NY News",
-        aliases: ["NY News", "New York News"],
-        override: env.METRICOOL_NY_NEWS_BLOG_ID,
-      },
-    };
+    const laneConfig = Object.fromEntries(
+      (Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>)
+        .map(([lane, config]) => [lane, { ...config, override: env[config.overrideKey] }]),
+    ) as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
     const needsDiscovery = (Object.keys(laneConfig) as ClipperLocalNewsLane[])
       .some((lane) => safeItems.some((item) => item.lane === lane) && !hasRealValue(laneConfig[lane].override));
     const profiles = needsDiscovery ? await discoverProfiles(options.fetch || globalThis.fetch, token, userId) : [];

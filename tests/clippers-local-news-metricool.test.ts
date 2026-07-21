@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { deliverClipperLocalNewsToMetricool } from "../server/clippers-local-news-metricool";
+import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness } from "../server/clippers-local-news-metricool";
 
 function item(overrides: Record<string, unknown> = {}) {
   return {
@@ -110,6 +110,50 @@ test("maps the live Metricool Facebook brand labels to the correct Miami and New
   assert.equal(result.status, "completed");
   assert.equal(result.scheduled, 2);
   assert.deepEqual(scheduledBlogIds, ["501", "502"]);
+});
+
+test("reports both Facebook news accounts ready while X remains independently pending", async () => {
+  const readiness = await getClipperLocalNewsMetricoolReadiness({
+    env: credentials,
+    fetch: async () => new Response(JSON.stringify({ profiles: [
+      { blogId: 501, label: "ynb4b6r6", networks: ["facebook", "tiktok"] },
+      { blogId: 502, label: "New York News", networks: ["facebook"] },
+    ] }), { status: 200 }),
+  });
+
+  assert.equal(readiness.status, "partial");
+  assert.equal(readiness.connected, true);
+  assert.equal(readiness.blocker, null);
+  assert.deepEqual(readiness.platforms.facebook, { required: 2, connected: 2, ready: true });
+  assert.deepEqual(readiness.platforms.x, { required: 2, connected: 0, ready: false });
+  assert.equal(readiness.targets.filter((target) => target.platform === "facebook" && target.ready).length, 2);
+  assert.equal(readiness.targets.filter((target) => target.platform === "x" && target.ready).length, 0);
+});
+
+test("readiness blocks safely without credentials and never performs discovery", async () => {
+  let fetched = false;
+  const readiness = await getClipperLocalNewsMetricoolReadiness({
+    env: {},
+    fetch: async () => { fetched = true; throw new Error("should not fetch"); },
+  });
+
+  assert.equal(readiness.status, "blocked");
+  assert.equal(readiness.connected, false);
+  assert.equal(readiness.connectedConnections, 0);
+  assert.equal(fetched, false);
+});
+
+test("readiness does not treat a blog id override as proof of an unverified provider", async () => {
+  const readiness = await getClipperLocalNewsMetricoolReadiness({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "501" },
+    fetch: async () => new Response(JSON.stringify({ profiles: [
+      { blogId: 501, label: "renamed-miami", networks: ["facebook"] },
+      { blogId: 502, label: "New York News", networks: ["facebook"] },
+    ] }), { status: 200 }),
+  });
+
+  assert.equal(readiness.platforms.facebook.ready, true);
+  assert.equal(readiness.platforms.x.ready, false);
 });
 
 test("filters high/critical and approval-required queue items even if their flags conflict", async () => {

@@ -324,6 +324,10 @@ interface ClipperLocalNewsStatus {
     requiredConnections?: number;
     connectedConnections?: number;
     optionalConnectors?: string[];
+    platforms?: {
+      facebook?: { required?: number; connected?: number; ready?: boolean };
+      x?: { required?: number; connected?: number; ready?: boolean };
+    };
   };
   nextStep?: string;
 }
@@ -12602,9 +12606,21 @@ export default function ClippersPage() {
                 </div>
               </div>
 
-              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-3 text-xs leading-5 text-amber-100/90">
-                <span className="font-semibold">Único bloqueo externo:</span>{" "}
-                {localNews?.metricool?.blocker || (localNews?.metricool?.connected ? "ninguno" : "conectar los perfiles Miami News y NY News en Metricool para X/Facebook")}
+              <div className={cn(
+                "mt-3 rounded-md border p-3 text-xs leading-5",
+                localNews?.metricool?.platforms?.facebook?.ready
+                  ? "border-emerald-300/20 bg-emerald-950/15 text-emerald-100/85"
+                  : "border-amber-300/20 bg-amber-950/10 text-amber-100/90",
+              )} data-testid="clippers-local-news-metricool-readiness">
+                <span className="font-semibold">Facebook:</span>{" "}
+                {localNews?.metricool?.platforms?.facebook?.ready
+                  ? `listo para Miami y New York (${localNews.metricool.platforms.facebook.connected ?? 2}/${localNews.metricool.platforms.facebook.required ?? 2})`
+                  : localNews?.metricool?.blocker || "verificando las dos conexiones en Metricool"}
+                <span className="ml-2 text-zinc-400">
+                  X: {localNews?.metricool?.platforms?.x?.ready
+                    ? "listo"
+                    : `${localNews?.metricool?.platforms?.x?.connected ?? 0}/${localNews?.metricool?.platforms?.x?.required ?? 2} conectado; no bloquea Facebook`}
+                </span>
               </div>
               <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3 text-xs leading-5 text-emerald-100/80" data-testid="clippers-local-news-evidence-gate">
                 Publicado con evidencia: <span className="font-semibold text-emerald-100">{formatNumber(localNewsPublishedWithEvidence)}</span>. Los items en cola, auto-eligible o scheduled no cuentan como publicados; solo una URL pública comprobada y métricas registradas cierran el ciclo.
