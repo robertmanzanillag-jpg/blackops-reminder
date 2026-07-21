@@ -135,6 +135,24 @@ const agents = [
     bubblePosition: "right-[22%] top-[38%]",
   },
   {
+    id: "ai-media-studio-agent",
+    name: "AI Media Studio Agent",
+    role: "Videos AI y launch gates",
+    href: "/ai-media-studio-agent",
+    icon: Clapperboard,
+    station: "Media Studio",
+    status: "Coordinando",
+    activity: "Dirigiendo roster, scripts, HeyGen, ingest, QA y approvals para el lanzamiento 5×10",
+    shortAction: "Media Agent",
+    mode: "working",
+    color: "from-emerald-200 to-cyan-400",
+    outfit: "bg-emerald-500",
+    hair: "bg-zinc-950",
+    skin: "bg-amber-100",
+    position: "left-[59%] top-[22%]",
+    bubblePosition: "left-[48%] top-[4%]",
+  },
+  {
     id: "code",
     name: "Code",
     role: "Cambios locales",
@@ -440,6 +458,7 @@ const defaultOfficeRooms: OfficeRoom[] = [
   { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
   { id: "kong", label: "Kong", x: 29, y: 19, w: 22, h: 45 },
   { id: "deals", label: "Deals + Websites", x: 54, y: 27, w: 10, h: 29 },
+  { id: "media-studio", label: "Media Studio", x: 54, y: 19, w: 10, h: 7 },
   { id: "dev", label: "Dev + GitHub", x: 65, y: 19, w: 25, h: 43 },
   { id: "finance", label: "Finance", x: 10, y: 52, w: 18, h: 25 },
   { id: "dropshipping-lab", label: "Dropshipping Lab", x: 46, y: 58, w: 18, h: 20 },
@@ -456,6 +475,8 @@ const officeRoomConnections: OfficeRoomConnection[] = [
   { from: "reception", to: "kong" },
   { from: "reception", to: "finance" },
   { from: "kong", to: "deals" },
+  { from: "kong", to: "media-studio" },
+  { from: "media-studio", to: "dev" },
   { from: "kong", to: "meeting" },
   { from: "deals", to: "dropshipping-lab" },
   { from: "deals", to: "dev" },
@@ -482,6 +503,7 @@ const defaultAgentLocations: AgentLocationMap = {
   revenue: "deals",
   dropshipping: "dropshipping-lab",
   "marketing-cmo": "marketing-hq",
+  "ai-media-studio-agent": "media-studio",
   code: "dev",
   github: "dev",
   "claude-reviewer": "dev",
@@ -592,6 +614,15 @@ function buildAgentReply(contact: OfficeContact, message: string): string {
     }
     return `${opener}Soy el CMO global: manejo Dropshipping, Revenue, Radio, Clippers, Kong y futuros clientes como una agencia interna. Cada cliente tiene budget, cuentas, metricas, calendario y approvals separados.`;
   }
+  if (contact.id === "ai-media-studio-agent") {
+    if (text.includes("avatar") || text.includes("heygen") || text.includes("video")) {
+      return `${opener}El objetivo inicial es 5–10 avatares y 10 videos por avatar. Puedo organizar roster, scripts, proveedor, ingest y QA; no genero ni gasto hasta que staging, sandbox y approval humano pasen.`;
+    }
+    if (text.includes("falta") || text.includes("bloque") || text.includes("estado") || text.includes("pr")) {
+      return `${opener}Mi control pane separa trabajo terminado, en curso, listo, bloqueado y backlog con owner, PR, evidencia y merge gate. Abre mi area para ver el estado exacto.`;
+    }
+    return `${opener}Soy el agente dedicado de AI Media Studio. Coordino producto, runtime, HeyGen, almacenamiento, QA y lanzamiento; mantengo gasto, deploy y migraciones bloqueados hasta aprobacion.`;
+  }
   if (contact.name === "Code") {
     return `${opener}Lo reviso como problema tecnico.${text.includes("repo objetivo") ? " Voy a trabajar con el repo objetivo que seleccionaste, no con todos a la vez." : ""} Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
   }
@@ -639,6 +670,7 @@ function buildAgentGreeting(contact: OfficeContact): string {
   if (contact.name === "CEO") return "Estoy aqui. Dime que decision o problema quieres ordenar y lo bajo a prioridades.";
   if (contact.id === "dropshipping") return "Dropshipping CEO activo. Empiezo sin stock: producto viral, proveedor, margen, contenido draft y approvals para dinero/publicacion.";
   if (contact.id === "marketing-cmo") return "Marketing HQ global activo. Manejo clientes internos separados, skills fuertes, learning loop, analytics y safety antes de publicar o gastar.";
+  if (contact.id === "ai-media-studio-agent") return "AI Media Studio Agent activo. Coordino el plan de 5–10 avatares × 10 videos con PRs, evidencia, QA y approvals; nada gasta ni despliega sin tu permiso.";
   if (contact.name === "Code") return "Listo. Cuentame que quieres cambiar o que esta fallando y lo reviso como trabajo de codigo.";
   if (contact.name === "GitHub") return "Estoy mirando el lado de repos, PRs y branches. Dime que repo o cambio quieres revisar.";
   if (contact.id === "claude-reviewer") return "Estoy listo para doble chequeo. Pasame el PR, diff o repo objetivo y reviso riesgos, tests faltantes y puntos que Codex debe corregir.";
@@ -677,6 +709,12 @@ const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string
     { from: "marketing-cmo", to: "dropshipping", text: "Recibo cada cliente con su marca, budget, canales, metricas y approvals; no mezclo datos entre proyectos." },
     { from: "legal", to: "marketing-cmo", text: "Reviso claims, copyright, marcas, politicas de plataforma y promesas antes de publicar." },
     { from: "control", to: "marketing-cmo", text: "Autoposting, ads, contacto externo y uso de credenciales quedan bloqueados por cliente hasta aprobacion clara." },
+  ],
+  "ai-media-studio-agent": [
+    { from: "ai-media-studio-agent", to: "code", text: "PR-first: convierto cada gate del media engine en un cambio acotado con owner y evidencia." },
+    { from: "claude-reviewer", to: "ai-media-studio-agent", text: "Reviso cada diff de runtime, proveedor y almacenamiento antes de que pase a App QA." },
+    { from: "app-qa", to: "ai-media-studio-agent", text: "No autorizo lanzamiento si rutas, APIs, errores o clicks del Studio tienen warnings." },
+    { from: "control", to: "ai-media-studio-agent", text: "HeyGen, migraciones, gasto y deploy permanecen bloqueados hasta aprobacion humana explicita." },
   ],
   code: [
     { from: "code", to: "github", text: "Tengo cambios locales. Necesito contexto de ramas y PRs antes de publicar." },
@@ -752,6 +790,7 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "revenue", text: "Traigo deals validados: fuente, margen, oferta y website necesario." },
   { from: "dropshipping", text: "Traigo productos virales validados por margen, supplier, shipping y contenido draft." },
   { from: "marketing-cmo", text: "Yo manejo marketing global como agencia interna: cada cliente con su calendario, metricas, skills y learning loop." },
+  { from: "ai-media-studio-agent", text: "Yo coordino el media engine: primero PR y QA, luego staging, un sandbox aprobado y finalmente el canary 5×10." },
   { from: "cybersecurity", text: "Yo reviso superficie de ataque: apps, dominios, HTTPS, incidents y Telegram alerts." },
   { from: "app-qa", text: "Yo convierto el app en mapa vivo: paginas, botones esperados, APIs, errores e ideas de mejora." },
 ];

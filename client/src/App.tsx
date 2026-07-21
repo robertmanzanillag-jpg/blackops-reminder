@@ -29,6 +29,7 @@ const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"))
 const AppQaAgentPage = lazy(() => import("@/pages/app-qa-agent"));
 const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
 const AiMediaStudioPage = lazy(() => import("@/pages/ai-media-studio"));
+const AiMediaStudioAgentPage = lazy(() => import("@/pages/ai-media-studio-agent"));
 
 type AuthMe = {
   authenticated: boolean;
@@ -190,6 +191,7 @@ function Router() {
           <Route path="/app-qa-agent" component={AppQaAgentPage} />
           <Route path="/legal-compliance" component={LegalCompliancePage} />
           <Route path="/ai-media-studio" component={AiMediaStudioPage} />
+          <Route path="/ai-media-studio-agent" component={AiMediaStudioAgentPage} />
           <Route path="/automations" component={AutomationManagerPage} />
           <Route path="/code-agent" component={CodeAgentPage} />
           <Route path="/github-agent" component={GitHubAgentPage} />
