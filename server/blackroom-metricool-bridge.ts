@@ -38,6 +38,13 @@ function objects(value: unknown): Record<string, any>[] {
 }
 
 export function extractMetricoolMediaId(value: unknown): string {
+  if (typeof value === "string") {
+    const normalizedUrl = value.trim();
+    try {
+      const parsed = new URL(normalizedUrl);
+      if (["http:", "https:"].includes(parsed.protocol)) return normalizedUrl;
+    } catch { /* handled below */ }
+  }
   for (const record of objects(value)) {
     const mediaId = record.mediaId ?? record.media_id;
     if (typeof mediaId === "string" || typeof mediaId === "number") return String(mediaId);
@@ -45,6 +52,20 @@ export function extractMetricoolMediaId(value: unknown): string {
   const data = value && typeof value === "object" ? (value as Record<string, any>).data : null;
   if (data && !Array.isArray(data) && (typeof data.id === "string" || typeof data.id === "number")) return String(data.id);
   throw new Error("Metricool did not return a mediaId");
+}
+
+async function metricoolMediaId(response: Response): Promise<string> {
+  if (!response.ok) throw new Error(`Metricool media normalization failed with HTTP ${response.status}`);
+  const raw = (await response.text()).trim();
+  if (!raw) throw new Error("Metricool media normalization returned an empty response");
+  if (/^application\/json\b/i.test(response.headers.get("content-type") || "") || /^[\[{]/.test(raw)) {
+    try { return extractMetricoolMediaId(JSON.parse(raw)); }
+    catch (error) {
+      if (error instanceof SyntaxError) throw new Error("Metricool media normalization returned invalid JSON");
+      throw error;
+    }
+  }
+  return extractMetricoolMediaId(raw);
 }
 
 export function buildMetricoolTikTokPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
@@ -120,8 +141,7 @@ export async function scheduleBlackRoomMetricoolPost(
     return { metricoolId: String(existingId), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
   }
   const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
-  const normalized = await metricoolJson(await fetcher(normalizeUrl, { headers, signal: AbortSignal.timeout(120_000) }), "media normalization");
-  const mediaId = extractMetricoolMediaId(normalized);
+  const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers, signal: AbortSignal.timeout(120_000) }));
   const payload = buildMetricoolTikTokPayload(input, mediaId);
   const scheduled = await metricoolJson(await fetcher(schedulerUrl, {
     method: "POST",

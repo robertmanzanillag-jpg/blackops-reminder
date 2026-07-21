@@ -17,6 +17,8 @@ const input = {
 test("extracts normalized media ids without accepting unrelated top-level ids", () => {
   assert.equal(extractMetricoolMediaId({ data: { mediaId: "media-123" } }), "media-123");
   assert.equal(extractMetricoolMediaId({ data: { id: 456 } }), "456");
+  assert.equal(extractMetricoolMediaId(input.mediaUrl), input.mediaUrl);
+  assert.throws(() => extractMetricoolMediaId("not-a-media-url"), /mediaId/);
   assert.throws(() => extractMetricoolMediaId({ id: "request-1" }), /mediaId/);
 });
 
@@ -45,7 +47,7 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
       const verifications = calls.filter((call) => call.method === "GET" && call.url.includes("/scheduler/posts"));
       return Response.json(verifications.length === 1 ? { data: [] } : { data: [{ id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } }] });
     }
-    if (href.includes("/normalize/")) return Response.json({ data: { mediaId: "media-123" } });
+    if (href.includes("/normalize/")) return new Response(input.mediaUrl, { headers: { "Content-Type": "text/plain; charset=ISO-8859-1" } });
     if (method === "POST") return Response.json({ id: 991 });
     return Response.json({ data: [] });
   };
@@ -55,7 +57,7 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
   });
   assert.deepEqual(receipt, { metricoolId: "991", publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true });
   assert.equal(calls.length, 4);
-  assert.deepEqual(calls[2].body.media, { mediaId: "media-123" });
+  assert.deepEqual(calls[2].body.media, { mediaId: input.mediaUrl });
 });
 
 test("returns an existing exact post before uploading media or creating a duplicate", async () => {
