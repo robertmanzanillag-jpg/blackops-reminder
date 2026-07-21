@@ -12,7 +12,7 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | PR4 owned assets | `codex/ai-media-studio-quality`, stacked on PR #71 | Ready for GitHub review | Owned render ingest/delivery passed independent checker and static App QA; production reader/storage/signer, live migration and deployment remain absent |
 | PR5–PR8 hardening | PRs #75, #77, #80 and #82 | Ready for GitHub review | Governance, account-scoped provider identity, production asset adapters and tenant/platform publishing-account isolation passed local gates; migrations remain unapplied |
 | PR9 OAuth control plane | PR #83, `codex/ai-media-studio-social-oauth-foundation`, stacked on PR #82 | Ready for GitHub review | Durable one-time state, PKCE/vault ports and unverified credential lifecycle passed local gates; no live connector or route |
-| PR10 managed OAuth vault | PR #84, `codex/ai-media-studio-managed-oauth-vault`, stacked on PR #83 | Checker review | Internal S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition pass local code/test gates; routes, token exchange, refresh/revocation, sandbox proof and deployment remain absent |
+| PR10 managed OAuth vault | PR #84, `codex/ai-media-studio-managed-oauth-vault`, stacked on PR #83 | Checker findings | Internal S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition pass code/test and static App QA gates. Before readiness, resolve or explicitly split the checker findings for platform-specific PKCE allocation, authorized-flow verifier deletion, and DB redirect defense-in-depth. Routes, token exchange, refresh/revocation, sandbox proof and deployment remain absent |
 
 ## PR2 — durable core and owned media
 

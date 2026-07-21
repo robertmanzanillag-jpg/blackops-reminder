@@ -117,6 +117,11 @@ Files intentionally out of scope for the first PR10 code slice:
 
 ## Current blockers / not done
 
+- Independent checker findings recorded after the GitHub checkpoint:
+  - The PR9 start service still allocates a PKCE verifier for TikTok/Meta even though the PR10 authorization manifests omit PKCE for those web flows. This is inert while routes remain unmounted, but must be reconciled before a live connector to avoid needless secret objects.
+  - An `authorized` consume deliberately retains the verifier for the future token exchange, while the current S3 adapter enforces read expiry but cannot itself prove physical deletion. The callback-safe exchange slice must read and delete immediately in a `finally` path and require a dedicated non-versioned bucket lifecycle as the last-resort cleanup boundary.
+  - The database redirect check enforces HTTPS only; the trusted runtime policy additionally rejects credentials, query/fragment, non-default ports, localhost and IP literals. All writes currently pass through stricter server validation, but a reviewed migration should add equivalent database defense-in-depth before live OAuth.
+- Static App QA passed because PR10 adds no route, UI, timer, worker or automatic network call. The checker findings above keep the slice out of merge/deploy-ready state.
 - OAuth routes remain intentionally absent.
 - Provider token exchange, refresh, revocation, sandbox account connection, and token vaulting remain future slices.
 - No database migration for PR10 is planned in this first code slice.
