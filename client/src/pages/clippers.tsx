@@ -284,7 +284,23 @@ interface ClipperLocalNewsStatus {
       facebookRoutinePerLane?: number;
       xPerLane?: number;
       xRoutinePerLane?: number;
+      facebookRelevantMax?: number;
+      adaptive?: string;
     };
+    committee?: {
+      reviewed?: number;
+      unanimous?: number;
+      quarantined?: number;
+      rejected?: number;
+      roles?: Array<"source_verifier" | "safety_editor" | "monetization_editor">;
+    };
+  };
+  monetization?: {
+    targetUsd?: number;
+    revenueUsd?: number;
+    remainingUsd?: number;
+    progressPct?: number;
+    bySection?: Partial<Record<"traffic" | "weather" | "breaking" | "public_safety" | "local", { posts?: number; reach?: number; engagement?: number; revenueUsd?: number }>>;
   };
   totals?: {
     lanes?: number;
@@ -12567,15 +12583,15 @@ export default function ClippersPage() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">{localNewsEditorial?.owner || "Local News CEO"}</p>
-                    <p className="mt-1 text-sm font-medium text-white">Mesa editorial profesional · Facebook acepta noticias solo con texto</p>
+                    <p className="mt-1 text-sm font-medium text-white">Mesa editorial multiagente · Facebook acepta noticias solo con texto</p>
                     <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-400">
-                      El CEO clasifica, atribuye y programa tráfico, cierres, tiempo y última hora. Noticias sensibles esperan revisión humana; una foto nunca es requisito para Facebook.
+                      Fuente, seguridad y monetización revisan cada historia por separado. Las sensibles solo se publican con consenso; si faltan pruebas o hay conflicto, el comité las aísla automáticamente.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">{formatNumber(localNewsEditorial?.textOnlyFacebook ?? 0)} texto Facebook</Badge>
                     <Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-100">{formatNumber(localNewsEditorial?.cadenceHeld ?? 0)} retenidos por cadencia</Badge>
-                    <Badge className="border border-red-300/25 bg-red-300/10 text-red-100">{formatNumber(localNewsEditorial?.reviewRequired ?? localNewsReviewRequired)} revisión</Badge>
+                    <Badge className="border border-red-300/25 bg-red-300/10 text-red-100">{formatNumber(localNewsEditorial?.committee?.quarantined ?? localNewsEditorial?.reviewRequired ?? localNewsReviewRequired)} aisladas</Badge>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -12594,8 +12610,52 @@ export default function ClippersPage() {
                   <p>Duplicados evitados: <span className="font-medium text-zinc-200">{formatNumber(localNewsEditorial?.duplicates ?? 0)}</span></p>
                 </div>
                 <p className="mt-3 text-[11px] leading-4 text-zinc-500">
-                  Cadencia: máximo {localNewsEditorial?.cadence?.facebookPerLane ?? 6} Facebook por ciudad cada {localNewsEditorial?.cadence?.windowMinutes ?? 60} minutos; rutina limitada a {localNewsEditorial?.cadence?.facebookRoutinePerLane ?? 2}. El exceso se difiere automáticamente, sin pedir aprobación.
+                  Cadencia adaptativa: {localNewsEditorial?.cadence?.facebookPerLane ?? 6} Facebook base y hasta {localNewsEditorial?.cadence?.facebookRelevantMax ?? 10} por ciudad/hora cuando hay noticias relevantes o rendimiento observado; rutina limitada a {localNewsEditorial?.cadence?.facebookRoutinePerLane ?? 2}. El exceso se difiere automáticamente.
                 </p>
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                <div className="rounded-md border border-cyan-300/20 bg-cyan-950/10 p-3" data-testid="clippers-local-news-review-committee">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Comité automático 3/3</p>
+                    <Badge className="border border-cyan-300/20 bg-cyan-300/10 text-cyan-100">{formatNumber(localNewsEditorial?.committee?.unanimous ?? 0)} consenso unánime</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {[
+                      ["Fuente", "Confirma conector, autoridad y evidencia"],
+                      ["Seguridad", "Protege menores, víctimas y datos privados"],
+                      ["Monetización", "Evita spam, bait y contenido explotador"],
+                    ].map(([role, description]) => (
+                      <div key={role} className="rounded border border-white/10 bg-black/25 px-3 py-2">
+                        <p className="text-xs font-medium text-white">{role}</p>
+                        <p className="mt-1 text-[11px] leading-4 text-zinc-500">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-zinc-400">
+                    Revisadas: {formatNumber(localNewsEditorial?.committee?.reviewed ?? 0)} · Aisladas: {formatNumber(localNewsEditorial?.committee?.quarantined ?? 0)} · Rechazadas: {formatNumber(localNewsEditorial?.committee?.rejected ?? 0)}
+                  </p>
+                </div>
+                <div className="rounded-md border border-emerald-300/20 bg-emerald-950/10 p-3" data-testid="clippers-local-news-10k-goal">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">Meta de monetización</p>
+                      <p className="mt-1 text-2xl font-semibold text-white">{formatMoney(localNews?.monetization?.revenueUsd ?? 0)} / {formatMoney(localNews?.monetization?.targetUsd ?? 10000)}</p>
+                    </div>
+                    <Badge className="border border-emerald-300/20 bg-emerald-300/10 text-emerald-100">{(localNews?.monetization?.progressPct ?? 0).toFixed(2)}%</Badge>
+                  </div>
+                  <div
+                    className="mt-3 h-2 overflow-hidden rounded-full bg-black/40"
+                    role="progressbar"
+                    aria-label="Progreso hacia diez mil dólares"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.min(100, Math.max(0, localNews?.monetization?.progressPct ?? 0))}
+                  >
+                    <div className="h-full rounded-full bg-emerald-300" style={{ width: `${Math.min(100, Math.max(0, localNews?.monetization?.progressPct ?? 0))}%` }} />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-zinc-400">Faltan {formatMoney(localNews?.monetization?.remainingUsd ?? 10000)} en ingresos observados. La elegibilidad externa de Meta se comprueba por separado; este panel nunca inventa acceso, alcance ni ganancias.</p>
+                </div>
               </div>
 
               <div className="mt-4 grid gap-3 lg:grid-cols-2">

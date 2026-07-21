@@ -7,6 +7,7 @@ import type {
   ClipperLocalNewsPlatform,
   ClipperLocalNewsStatus,
 } from "./clippers-local-news-agent";
+import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "./clippers-local-news-review-committee";
 
 const METRICOOL_API = "https://app.metricool.com";
 const TIME_ZONE = "America/New_York";
@@ -15,6 +16,14 @@ const MAX_PER_RUN = 50;
 const MIN_SPACING_MS = 2 * 60_000;
 const STALE_LOCK_MS = 10 * 60_000;
 
+const committeeVerdictSchema = z.object({
+  role: z.enum(["source_verifier", "safety_editor", "monetization_editor"]),
+  verdict: z.enum(["approve", "quarantine", "reject"]),
+  reasons: z.array(z.string()).max(100),
+  evidence: z.array(z.string()).max(100),
+  checkedAt: z.string().datetime(),
+}).passthrough();
+
 const queueItemSchema = z.object({
   id: z.string().min(1).max(500),
   eventId: z.string().min(1).max(500),
@@ -22,12 +31,18 @@ const queueItemSchema = z.object({
   platform: z.enum(["x", "facebook"]),
   copy: z.string().min(1).max(20_000),
   risk: z.enum(["low", "medium", "high", "critical"]),
-  status: z.enum(["approval_required", "auto_eligible"]),
+  status: z.enum(["approval_required", "auto_eligible", "quarantined", "rejected"]),
   approvalRequired: z.boolean(),
   autoEligible: z.boolean(),
   published: z.literal(false),
   createdAt: z.string().datetime(),
   notBefore: z.string().datetime().nullable().optional(),
+  verdicts: z.array(committeeVerdictSchema).max(3).optional(),
+  evidence: z.array(z.string()).max(500).optional(),
+  consensus: z.enum(["unanimous_approve", "not_unanimous"]).optional(),
+  publishDecision: z.enum(["auto_publish", "quarantine", "reject"]).optional(),
+  checkedAt: z.string().datetime().optional(),
+  reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).passthrough();
 
 const queueFileSchema = z.object({
@@ -51,6 +66,25 @@ const ledgerSchema = z.object({
 
 type QueueItem = z.infer<typeof queueItemSchema>;
 type Ledger = z.infer<typeof ledgerSchema>;
+
+const COMMITTEE_ROLES = ["source_verifier", "safety_editor", "monetization_editor"] as const;
+
+function hasCompleteCommitteeApproval(item: QueueItem): boolean {
+  if (item.publishDecision !== "auto_publish" || item.consensus !== "unanimous_approve" || !item.reviewHash || !item.checkedAt) return false;
+  if (!item.verdicts || item.verdicts.length !== COMMITTEE_ROLES.length || !item.evidence) return false;
+  const roles = new Set(item.verdicts.map((verdict) => verdict.role));
+  if (!COMMITTEE_ROLES.every((role) => roles.has(role)) || item.verdicts.some((verdict) => verdict.verdict !== "approve")) return false;
+  const expectedCopyHash = `copyHash=${hashLocalNewsReviewValue(item.copy)}`;
+  if (!item.evidence.includes(expectedCopyHash)) return false;
+  const expectedReviewHash = hashLocalNewsQueueReview({ copy: item.copy, platform: item.platform, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
+  if (item.reviewHash !== expectedReviewHash) return false;
+  if (item.risk === "high" || item.risk === "critical") {
+    const connectorEvidence = item.evidence.find((entry) => entry.startsWith("connector="));
+    const claimHashEvidence = item.evidence.find((entry) => entry.startsWith("claimHash="));
+    if (!connectorEvidence || connectorEvidence === "connector=none" || !claimHashEvidence || claimHashEvidence === "claimHash=none") return false;
+  }
+  return true;
+}
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
 
@@ -414,10 +448,12 @@ export async function deliverClipperLocalNewsToMetricool(
     const now = options.now || (() => new Date());
     const fetchedNow = now();
     const safeItems = queue.filter((item) => {
-      const eligible = item.status === "auto_eligible"
+      const baseEligible = item.status === "auto_eligible"
         && item.autoEligible
-        && !item.approvalRequired
-        && (item.risk === "low" || item.risk === "medium");
+        && !item.approvalRequired;
+      const committeeFieldsPresent = Boolean(item.publishDecision || item.consensus || item.reviewHash || item.verdicts?.length);
+      const committeeEligible = committeeFieldsPresent ? hasCompleteCommitteeApproval(item) : item.risk === "low" || item.risk === "medium";
+      const eligible = baseEligible && committeeEligible;
       if (!eligible) result.filtered += 1;
       else result.eligible += 1;
       if (eligible && already.has(item.id)) result.alreadyScheduled += 1;
