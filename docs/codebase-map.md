@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T04:48:02.682Z
+Generated: 2026-07-21T05:16:08.779Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 624 | 539 | 2143 | 487 | 10032 |
+| 631 | 546 | 2174 | 487 | 10152 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,13 +30,13 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 113 | 109 | test:113 |
+| `tests` | 116 | 112 | test:116 |
+| `server/ai-media-studio` | 95 | 94 | server:95 |
 | `server` | 96 | 92 | server:96 |
-| `server/ai-media-studio` | 92 | 91 | server:92 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs` | 12 | 11 | docs:12 |
-| `docs/ai-media-studio` | 8 | 8 | docs:8 |
+| `docs/ai-media-studio` | 9 | 9 | docs:9 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `shared` | 7 | 7 | shared:7 |
 | `client/public` | 13 | 2 | other:13 |
@@ -78,8 +78,10 @@ Package: `rest-express`
 - `tests/ai-media-studio-governance.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
+- `tests/ai-media-studio-oauth-authorization-url.test.ts`
 - `tests/ai-media-studio-oauth-crypto.test.ts`
 - `tests/ai-media-studio-oauth-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-s3-kms-vault.test.ts`
 - `tests/ai-media-studio-oauth-service.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
@@ -97,6 +99,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts`
 - `tests/ai-media-studio-pr9-oauth-migration.test.ts`
 - `tests/ai-media-studio-production-asset-runtime.test.ts`
+- `tests/ai-media-studio-production-oauth-runtime.test.ts`
 - `tests/ai-media-studio-publishing-accounts.test.ts`
 - `tests/ai-media-studio-publishing-drizzle.test.ts`
 - `tests/ai-media-studio-publishing.test.ts`
