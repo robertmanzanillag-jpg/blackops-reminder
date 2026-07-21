@@ -370,6 +370,9 @@ export default function AssistantPage() {
           sawTerminalAssistantEvent = true;
           setAssistantStatus("");
         }
+        if (data.blackRoomControlled) {
+          queryClient.invalidateQueries({ queryKey: ["/api/blackroom-agent"] });
+        }
         if (
           data.taskCreated ||
           data.radioUpdated ||
@@ -389,10 +392,10 @@ export default function AssistantPage() {
           queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
           updateAssistantMessage();
         }
-        if (data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError) {
+        if (data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.blackRoomAgentError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError) {
           sawTerminalAssistantEvent = true;
           setAssistantStatus("");
-          assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError}`;
+          assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.blackRoomAgentError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError}`;
           updateAssistantMessage();
         }
         if (data.approvalRequired && data.pendingAction) {
@@ -763,6 +766,11 @@ export default function AssistantPage() {
                 {isRecording ? <Mic className="h-3.5 w-3.5 text-red-300" /> : <Clock3 className="h-3.5 w-3.5" />}
                 {isRecording ? "Grabando nota de voz. Toca detener para enviarla." : "Enter envia, Shift + Enter crea una nueva linea."}
               </div>
+              {!isRecording && !isTranscribing && (
+                <p className="mt-1 text-xs text-zinc-600" data-testid="text-blackroom-chat-help">
+                  BlackRoom: prueba “sube 3 videos más hoy”, “activa el agente por 2 semanas” o “¿cómo va la cola de BlackRoom?”.
+                </p>
+              )}
             </div>
           </div>
         </main>

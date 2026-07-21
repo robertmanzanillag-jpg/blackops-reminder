@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-20T09:29:21.660Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio",
+  "generatedAt": "2026-07-21T22:10:13.605Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-root-sync",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -48,7 +48,8 @@
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
     "test:revenue-public-scout-connector": "node --import tsx --test tests/revenue-engine-public-scout-connector.test.ts",
     "test:revenue-money-readiness-cli": "node --import tsx --test tests/revenue-engine-money-readiness-cli.test.ts",
-    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation",
+    "test:revenue-stripe": "node --import tsx --test tests/revenue-stripe.test.ts",
+    "test:ceo-assistant": "npm run test:auth && npm run test:local-auth && npm run test:local-auth-cli && npm run test:session && npm run test:db-config && npm run test:env-loader && npm run test:rate-limit && npm run test:ownership && npm run test:code-agent-security && npm run test:github-client-security && npm run test:developer-health-inventory && npm run test:developer-autopilot && npm run test:app-qa-agent && npm run test:google-drive-oauth && npm run test:blackroom-links && npm run test:readiness && npm run test:readiness-cli && npm run test:telegram-config-cli && npm run test:telegram-webhook-cli && npm run test:scheduler && npm run test:ceo && npm run test:ceo-brief-cli && npm run test:ceo-doctor-cli && npm run test:ceo-db-check-cli && npm run test:ceo-backup-check-cli && npm run test:ceo-smoke-cli && npm run test:ceo-go-live-cli && npm run test:ceo-operational-health && npm run test:automation-registry && npm run test:ceo-operability && npm run test:telegram && npm run test:assistant-chat && npm run test:migration && npm run test:conversation && npm run test:revenue-stripe",
     "auth:create-user": "node --import tsx script/create-local-user.ts",
     "ceo:send-brief": "node --import tsx script/send-ceo-brief.ts",
     "ceo:smoke": "node --import tsx script/ceo-smoke.ts",
@@ -65,6 +66,15 @@
     "revenue:money-readiness": "node --import tsx script/revenue-engine-money-readiness.ts",
     "developer-health:import-known": "node --import tsx script/import-developer-health-inventory.ts",
     "metricool:plan": "node --import tsx script/metricool-plan.ts",
+    "blackroom:agent": "node --import tsx script/blackroom-daily-agent.ts",
+    "blackroom:control": "node script/blackroom-control-server.mjs",
+    "blackroom:worker": "node --import tsx script/blackroom-local-worker.ts",
+    "blackroom:ledger": "node --import tsx script/blackroom-worker-ledger.ts",
+    "blackroom:install-local": "zsh script/install-blackroom-local-worker-launch-agent.sh",
+    "test:blackroom-agent": "node --import tsx --test tests/blackroom-daily-queue.test.ts",
+    "test:blackroom-content": "node --import tsx --test tests/blackroom-content-agent.test.ts",
+    "test:blackroom-worker": "node --import tsx --test tests/blackroom-local-worker.test.ts",
+    "test:blackroom-remote": "node --import tsx --test tests/blackroom-remote-control.test.ts tests/blackroom-remote-sync.test.mjs",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
@@ -85,20 +95,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 452,
-    "filesIndexed": 383,
-    "imports": 1482,
-    "routes": 467,
-    "symbols": 7575
+    "filesVisible": 510,
+    "filesIndexed": 431,
+    "imports": 1602,
+    "routes": 482,
+    "symbols": 8326
   },
   "directories": {
     ".": {
-      "files": 26,
-      "indexed": 18,
+      "files": 35,
+      "indexed": 19,
       "kinds": {
-        "other": 17,
-        "docs": 8,
+        "other": 23,
+        "docs": 11,
         "package": 1
+      }
+    },
+    ".agents/memory": {
+      "files": 5,
+      "indexed": 5,
+      "kinds": {
+        "docs": 5
       }
     },
     ".agents/skills": {
@@ -109,9 +126,9 @@
         "other": 1
       }
     },
-    ".upm": {
+    "bin": {
       "files": 1,
-      "indexed": 1,
+      "indexed": 0,
       "kinds": {
         "other": 1
       }
@@ -124,22 +141,22 @@
       }
     },
     "client/public": {
-      "files": 13,
+      "files": 14,
       "indexed": 2,
       "kinds": {
-        "other": 13
+        "other": 14
       }
     },
     "client/src": {
-      "files": 122,
-      "indexed": 120,
+      "files": 126,
+      "indexed": 124,
       "kinds": {
         "other": 13,
-        "client-component": 21,
+        "client-component": 22,
         "ui-component": 55,
         "client-hook": 3,
         "client-lib": 7,
-        "client-page": 23
+        "client-page": 26
       }
     },
     "docs/ai-media-studio": {
@@ -151,16 +168,16 @@
     },
     "docs": {
       "files": 12,
-      "indexed": 12,
+      "indexed": 11,
       "kinds": {
         "docs": 12
       }
     },
     "script": {
-      "files": 37,
-      "indexed": 35,
+      "files": 44,
+      "indexed": 41,
       "kinds": {
-        "script": 37
+        "script": 44
       }
     },
     "scripts": {
@@ -171,10 +188,10 @@
       }
     },
     "server": {
-      "files": 96,
-      "indexed": 92,
+      "files": 116,
+      "indexed": 112,
       "kinds": {
-        "server": 96
+        "server": 116
       }
     },
     "server/ai-media-studio": {
@@ -185,10 +202,10 @@
       }
     },
     "server/replit_integrations": {
-      "files": 8,
-      "indexed": 8,
+      "files": 9,
+      "indexed": 9,
       "kinds": {
-        "server": 8
+        "server": 9
       }
     },
     "shared": {
@@ -206,10 +223,10 @@
       }
     },
     "tests": {
-      "files": 69,
-      "indexed": 66,
+      "files": 82,
+      "indexed": 79,
       "kinds": {
-        "test": 69
+        "test": 82
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -223,7 +240,7 @@
   },
   "files": [
     {
-      "path": ".agents/skills/codebase-overview/SKILL.md",
+      "path": ".agents/memory/drive-oauth-autoscale.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -231,8 +248,40 @@
       "routes": []
     },
     {
-      "path": ".upm/store.json",
-      "kind": "other",
+      "path": ".agents/memory/MEMORY.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/nix-pip-fix.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/pr15-deploy.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/yt-dlp-impersonate.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/skills/codebase-overview/SKILL.md",
+      "kind": "docs",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -280,6 +329,14 @@
     },
     {
       "path": "CLAUDE.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "click-path-audit.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -354,6 +411,7 @@
         "Projects",
         "PromoVideoPage",
         "RadioPage",
+        "RevenueEngineAdvancedPage",
         "RevenueEnginePage",
         "Router",
         "ToolsPage",
@@ -389,8 +447,17 @@
         "/promo-video",
         "/radio",
         "/revenue-engine",
+        "/revenue-engine/advanced",
         "/tools"
       ]
+    },
+    {
+      "path": "client/src/components/._dashboard-assistant-chat.tsx",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
     },
     {
       "path": "client/src/components/assistant-chat.tsx",
@@ -2833,6 +2900,22 @@
       "routes": []
     },
     {
+      "path": "client/src/pages/._assistant.tsx",
+      "kind": "client-page",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/pages/._dropshipping-ceo.tsx",
+      "kind": "client-page",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "client/src/pages/agents-office.tsx",
       "kind": "client-page",
       "imports": [
@@ -3883,6 +3966,56 @@
       "routes": []
     },
     {
+      "path": "client/src/pages/revenue-engine-simple.tsx",
+      "kind": "client-page",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/input",
+        "@/components/ui/textarea",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "RevenueEngineSimplePage"
+      ],
+      "symbols": [
+        "OutreachDraft",
+        "OutreachOutcome",
+        "RevenueSnapshot",
+        "ViewId",
+        "approvalReady",
+        "approveMutation",
+        "busy",
+        "calls",
+        "confirmed",
+        "counts",
+        "data",
+        "drafts",
+        "filteredDrafts",
+        "greeting",
+        "matchesView",
+        "money",
+        "normalized",
+        "outcome",
+        "outcomeLabel",
+        "outcomeMutation",
+        "pipelineEstimated",
+        "postJson",
+        "professionalDraft",
+        "refresh",
+        "replies",
+        "response",
+        "selected",
+        "sendMutation",
+        "sent",
+        "snapshotQuery",
+        "updateMutation"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/pages/tools.tsx",
       "kind": "client-page",
       "imports": [
@@ -3905,6 +4038,14 @@
     {
       "path": "components.json",
       "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "design-qa.md",
+      "kind": "docs",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -3988,14 +4129,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.json",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
@@ -4071,22 +4204,6 @@
       "routes": []
     },
     {
-      "path": "package 2.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "package-lock 2.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "package.json",
       "kind": "package",
       "imports": [],
@@ -4116,6 +4233,229 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-control-server.mjs",
+      "kind": "script",
+      "imports": [
+        "./blackroom-remote-sync.mjs",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:http",
+        "node:path",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "actual",
+        "allowedHosts",
+        "args",
+        "authorized",
+        "child",
+        "command",
+        "controlToken",
+        "current",
+        "currentWorker",
+        "data",
+        "deadline",
+        "execFileAsync",
+        "expected",
+        "fetchSite",
+        "host",
+        "next",
+        "npmPath",
+        "origin",
+        "page",
+        "plan",
+        "port",
+        "projectDir",
+        "queue",
+        "raw",
+        "readBody",
+        "recoverWorker",
+        "remoteLoop",
+        "remotePollMs",
+        "remoteRequest",
+        "remoteToken",
+        "remoteUrl",
+        "response",
+        "send",
+        "serializedCommand",
+        "server",
+        "start",
+        "state",
+        "stopWorker",
+        "syncRemoteControl",
+        "url",
+        "wakeWorker",
+        "weeks",
+        "workerState",
+        "workerStatePath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-daily-agent.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-chat",
+        "../server/blackroom-daily-queue"
+      ],
+      "exports": [],
+      "symbols": [
+        "Command",
+        "argument",
+        "command",
+        "commands",
+        "created",
+        "durationSeconds",
+        "encoded",
+        "index",
+        "inline",
+        "jobId",
+        "main",
+        "queuePath",
+        "recovered",
+        "result",
+        "selectedCommand",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-local-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "../server/blackroom-local-worker",
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "BlackRoomPublishPausedError",
+        "appendLog",
+        "child",
+        "chunks",
+        "codexPath",
+        "confirmed",
+        "data",
+        "deleteConfirmedMedia",
+        "ended",
+        "ensureSourceRecorded",
+        "entry",
+        "execFileAsync",
+        "existing",
+        "existingPid",
+        "exitCode",
+        "exitPromise",
+        "fileExists",
+        "handle",
+        "initialized",
+        "job",
+        "ledger",
+        "ledgerPath",
+        "lockPath",
+        "lockStat",
+        "logPath",
+        "loudness",
+        "main",
+        "maxRunMs",
+        "message",
+        "metricoolId",
+        "outcome",
+        "output",
+        "pollMs",
+        "postScheduleQueue",
+        "preScheduleQueue",
+        "projectDir",
+        "publicationDateTime",
+        "publishOneReservedEntry",
+        "publishedExisting",
+        "publishedNew",
+        "queue",
+        "queuePath",
+        "readJson",
+        "recoverConfirmedCleanup",
+        "refreshedLedger",
+        "remoteJson",
+        "remoteToken",
+        "remoteUrl",
+        "renderInfo",
+        "reserved",
+        "response",
+        "runCodex",
+        "runNpm",
+        "scheduled",
+        "startedAt",
+        "state",
+        "statePath",
+        "stop",
+        "temporary",
+        "terminateChildGroup",
+        "upload",
+        "uploadBlackRoomRender",
+        "waitForChildExit",
+        "writeJson"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-remote-sync.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "planBlackRoomRemoteSync"
+      ],
+      "symbols": [
+        "desiredEnabled",
+        "generation",
+        "planBlackRoomRemoteSync"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-worker-ledger.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "../server/blackroom-local-worker",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [],
+      "symbols": [
+        "acquireLock",
+        "arg",
+        "durationSeconds",
+        "entry",
+        "existingPid",
+        "format",
+        "handle",
+        "index",
+        "language",
+        "ledger",
+        "ledgerPath",
+        "lock",
+        "lockPath",
+        "lockStat",
+        "main",
+        "projectDir",
+        "queue",
+        "queuePath",
+        "readLedger",
+        "renderPathInput",
+        "safePath",
+        "sourcePathInput",
+        "temporary",
+        "usedSourceVideoIds",
+        "writeLedger"
+      ],
       "routes": []
     },
     {
@@ -5448,6 +5788,43 @@
       "routes": []
     },
     {
+      "path": "script/radio-local-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/local-youtube-queue",
+        "../server/radio-youtube-command"
+      ],
+      "exports": [],
+      "symbols": [
+        "ESTIMATED_COST_USD",
+        "applyDefaultCookieSource",
+        "body",
+        "chatId",
+        "clipCount",
+        "config",
+        "done",
+        "errorMessage",
+        "failed",
+        "finalQueue",
+        "getTelegramChatIdForUser",
+        "hasAnyChunk",
+        "hasCookiesB64",
+        "hasCookiesFromBrowser",
+        "hasCookiesPath",
+        "main",
+        "pending",
+        "processEntry",
+        "queue",
+        "res",
+        "result",
+        "sendTelegramNotification",
+        "summary",
+        "telegramMsg",
+        "token"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/radio-local-youtube-worker.ts",
       "kind": "script",
       "imports": [
@@ -5645,6 +6022,70 @@
         "yStart",
         "yy"
       ],
+      "routes": []
+    },
+    {
+      "path": "server/._dropshipping-ceo.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._local-auth.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._radio-video-edit-agent.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._radio-youtube-command.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._rate-limit.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._routes.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._user-context.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/._youtube-downloader.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -6461,6 +6902,7 @@
         "./ai-cost-notifications",
         "./ai-cost-policy",
         "./ai-router",
+        "./blackroom-chat-service",
         "./blackroom-links",
         "./ceo-briefing",
         "./ceo-conversation-history",
@@ -6472,6 +6914,7 @@
         "./openai-client",
         "./promo-video-agent",
         "./radio-youtube-command",
+        "./single-user-owner",
         "./storage",
         "./trust-executor",
         "./trust-policy",
@@ -6493,8 +6936,6 @@
         "userAlreadyApprovedExecution"
       ],
       "symbols": [
-        "APPROVED_SHARED_CONNECTOR_OWNER_IDS",
-        "APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES",
         "APP_HELP_CONTEXT",
         "ASSISTANT_TIMEZONE",
         "AssistantConversationHistoryMessage",
@@ -6641,7 +7082,6 @@
         "isAllDayEvent",
         "isBlackRoom",
         "isCacheableCheapScoutRequest",
-        "isConfiguredSingleUserOwner",
         "isOwnerUser",
         "isWebsiteTarget",
         "key",
@@ -6747,7 +7187,6 @@
         "updateInvestmentRegex",
         "url",
         "usage",
-        "user",
         "userAlreadyApprovedExecution",
         "userFacingError",
         "userId",
@@ -6818,6 +7257,387 @@
         "startedAt",
         "target",
         "targetDay"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-chat-service.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-chat",
+        "./blackroom-remote-control"
+      ],
+      "exports": [
+        "executeBlackRoomChatMessage",
+        "formatBlackRoomChatStatus",
+        "looksLikeBlackRoomAssistantRequest "
+      ],
+      "symbols": [
+        "activity",
+        "current",
+        "device",
+        "deviceQueue",
+        "executeBlackRoomChatMessage",
+        "formatBlackRoomChatStatus",
+        "parsed",
+        "queue",
+        "remote",
+        "reply",
+        "totals"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-chat.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "BlackRoomChatResult",
+        "BlackRoomRemoteCommand",
+        "looksLikeBlackRoomAssistantRequest",
+        "parseBlackRoomChatCommand"
+      ],
+      "symbols": [
+        "available",
+        "current",
+        "first",
+        "localDate",
+        "looksLikeBlackRoomAssistantRequest",
+        "match",
+        "namesBlackRoom",
+        "normalized",
+        "now",
+        "number",
+        "parseBlackRoomChatCommand",
+        "parts",
+        "raw",
+        "remainingNinetyMinuteSlots",
+        "samples",
+        "sourceUrl",
+        "text",
+        "timezone",
+        "url",
+        "wantsPause",
+        "weeks",
+        "youtubeUrl"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-content-agent.ts",
+      "kind": "server",
+      "imports": [
+        "./youtube-downloader.ts"
+      ],
+      "exports": [
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_RENDER_DIRECTORY",
+        "BLACKROOM_SOURCE_DIRECTORY",
+        "BlackRoomAgentConfig",
+        "BlackRoomDownloadJob",
+        "BlackRoomDuration",
+        "BlackRoomFormatScore",
+        "BlackRoomMetricoolDraft",
+        "BlackRoomPerformanceRecord",
+        "BlackRoomPlatform",
+        "BlackRoomRenderJob",
+        "BlackRoomVideoFormat",
+        "BlackRoomYoutubeVideo",
+        "buildBlackRoomAutopilotPlan",
+        "buildBlackRoomDownloadJobs",
+        "buildBlackRoomMetricoolDrafts",
+        "buildBlackRoomRenderJobs",
+        "listBlackRoomYoutubeVideos",
+        "sanitizeBlackRoomAgentConfig",
+        "scoreBlackRoomFormats"
+      ],
+      "symbols": [
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_RENDER_DIRECTORY",
+        "BLACKROOM_SOURCE_DIRECTORY",
+        "FetchLike",
+        "addDraft",
+        "aggregates",
+        "allocations",
+        "apiKey",
+        "asCount",
+        "availableVideos",
+        "averageEngagement",
+        "averageGrowthRate",
+        "averageRetention",
+        "averageWatchSeconds",
+        "buildBlackRoomAutopilotPlan",
+        "buildBlackRoomDownloadJobs",
+        "buildBlackRoomMetricoolDrafts",
+        "buildBlackRoomRenderJobs",
+        "channelId",
+        "channelPayload",
+        "clampInteger",
+        "compatibleIndex",
+        "confidence",
+        "config",
+        "count",
+        "detail",
+        "deterministicShuffle",
+        "distributeSlots",
+        "drafts",
+        "duration",
+        "equalWeight",
+        "exploration",
+        "fallback",
+        "fetcher",
+        "id",
+        "ids",
+        "inputPath",
+        "listBlackRoomYoutubeVideos",
+        "match",
+        "matches",
+        "observedScore",
+        "order",
+        "outputPath",
+        "outputTemplate",
+        "page",
+        "params",
+        "parseIsoDurationSeconds",
+        "parsed",
+        "payload",
+        "platform",
+        "platforms",
+        "priorScore",
+        "randomizedVideos",
+        "rankedDurations",
+        "raw",
+        "recordAverageWatchSeconds",
+        "recordEngagement",
+        "recordGrowthRate",
+        "recordRetention",
+        "remaining",
+        "remainingVideos",
+        "response",
+        "sanitizeBlackRoomAgentConfig",
+        "scheduledAt",
+        "score",
+        "scoreBlackRoomFormats",
+        "scores",
+        "slot",
+        "slots",
+        "snippet",
+        "stableHash",
+        "stableOffset",
+        "startSeconds",
+        "statistics",
+        "target",
+        "thumbnailUrl",
+        "totalScore",
+        "uploadsPlaylistId",
+        "usedSourceVideoIds",
+        "video",
+        "videosById",
+        "views",
+        "watchTimeScore",
+        "weights",
+        "youtubeJson"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-control-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-chat-service",
+        "./blackroom-daily-queue",
+        "./blackroom-metricool-bridge",
+        "./blackroom-remote-control",
+        "./single-user-owner",
+        "./user-context",
+        "express",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:stream",
+        "node:stream/promises"
+      ],
+      "exports": [
+        "BLACKROOM_PUBLIC_MEDIA_PATHS",
+        "blackRoomPage",
+        "hasValidBlackRoomRemoteToken",
+        "parseBlackRoomMediaRange",
+        "registerBlackRoomControlRoutes"
+      ],
+      "symbols": [
+        "BLACKROOM_PUBLIC_MEDIA_PATHS",
+        "BLACKROOM_UPLOAD_CHUNK_BYTES",
+        "BLACKROOM_UPLOAD_MAX_BYTES",
+        "BLACKROOM_UPLOAD_TTL_MS",
+        "BlackRoomUpload",
+        "blackRoomPage",
+        "blackRoomUploadDir",
+        "blackRoomUploads",
+        "bytes",
+        "cleanupExpiredBlackRoomUploads",
+        "current",
+        "declaredSize",
+        "end",
+        "error",
+        "expectedBuffer",
+        "expectedChunks",
+        "filePath",
+        "hasValidBlackRoomRemoteToken",
+        "ids",
+        "index",
+        "info",
+        "limiter",
+        "localQueue",
+        "match",
+        "message",
+        "parseBlackRoomMediaRange",
+        "partPath",
+        "publicOrigin",
+        "range",
+        "receipt",
+        "receiveBlackRoomUpload",
+        "receiveBlackRoomUploadChunk",
+        "registerBlackRoomControlRoutes",
+        "remote",
+        "remoteView",
+        "removeBlackRoomUpload",
+        "requestedEnd",
+        "reservationId",
+        "result",
+        "serveBlackRoomMedia",
+        "start",
+        "state",
+        "status",
+        "suffixLength",
+        "supplied",
+        "suppliedBuffer",
+        "token",
+        "totalBytes",
+        "totalChunks",
+        "upload",
+        "uploadId"
+      ],
+      "routes": [
+        "/api/blackroom-agent",
+        "/api/blackroom-agent/chat",
+        "/api/blackroom-agent/media/:reservationId",
+        "/api/blackroom-agent/media/chunked",
+        "/api/blackroom-agent/media/chunked/:uploadId/:index",
+        "/api/blackroom-agent/media/chunked/:uploadId/complete",
+        "/api/blackroom-agent/metricool/schedule",
+        "/api/blackroom-agent/pause",
+        "/api/blackroom-agent/remote",
+        "/api/blackroom-agent/start",
+        "/blackroom"
+      ]
+    },
+    {
+      "path": "server/blackroom-daily-queue.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-chat",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_DEFAULT_BUFFER_DAYS",
+        "BLACKROOM_DEFAULT_INTERVAL_MINUTES",
+        "BLACKROOM_DEFAULT_POSTS_PER_DAY",
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_QUEUE_PATH",
+        "BLACKROOM_QUEUE_VERSION",
+        "BlackRoomDailyJob",
+        "BlackRoomDailyJobStatus",
+        "BlackRoomExperimentDuration",
+        "BlackRoomQueueState",
+        "BlackRoomSourceUsage",
+        "applyBlackRoomRemoteCommands",
+        "buildRotatingSlots",
+        "claimNextBlackRoomJob",
+        "completeBlackRoomJob",
+        "createBlackRoomQueueState",
+        "ensureBlackRoomScheduleBuffer",
+        "pauseBlackRoomAgent",
+        "readBlackRoomQueue",
+        "recordBlackRoomSourceUsage",
+        "recoverInterruptedBlackRoomJobs",
+        "retryBlackRoomJob",
+        "startBlackRoomAgent",
+        "summarizeBlackRoomQueue",
+        "withBlackRoomQueueLock",
+        "writeBlackRoomQueue"
+      ],
+      "symbols": [
+        "BLACKROOM_DEFAULT_BUFFER_DAYS",
+        "BLACKROOM_DEFAULT_INTERVAL_MINUTES",
+        "BLACKROOM_DEFAULT_POSTS_PER_DAY",
+        "BLACKROOM_DURATION_VARIANTS",
+        "BLACKROOM_QUEUE_PATH",
+        "BLACKROOM_QUEUE_VERSION",
+        "addCalendarDays",
+        "added",
+        "appendFutureSameDaySlots",
+        "applied",
+        "applyBlackRoomRemoteCommands",
+        "buildFutureSameDaySlots",
+        "buildRotatingSlots",
+        "claimNextBlackRoomJob",
+        "completeBlackRoomJob",
+        "count",
+        "createBlackRoomQueueState",
+        "createDailyJob",
+        "createdAdHoc",
+        "currentMinutes",
+        "deadline",
+        "delayMinutes",
+        "ensureBlackRoomScheduleBuffer",
+        "existing",
+        "existingPid",
+        "first",
+        "intervalMinutes",
+        "iso",
+        "job",
+        "jobs",
+        "lastExisting",
+        "localDate",
+        "lockPath",
+        "lockStat",
+        "minutes",
+        "minutesToTime",
+        "noonUtc",
+        "normalized",
+        "normalizedWeeks",
+        "parsed",
+        "parts",
+        "pauseBlackRoomAgent",
+        "posts",
+        "previous",
+        "readBlackRoomQueue",
+        "recordBlackRoomSourceUsage",
+        "recoverInterruptedBlackRoomJobs",
+        "resizeJob",
+        "retryBlackRoomJob",
+        "seed",
+        "slots",
+        "startBlackRoomAgent",
+        "startMinutes",
+        "summarizeBlackRoomQueue",
+        "target",
+        "targetDate",
+        "temporaryPath",
+        "timestamp",
+        "timezone",
+        "today",
+        "totals",
+        "value",
+        "videoId",
+        "withBlackRoomQueueLock",
+        "writeBlackRoomQueue",
+        "youtubeVideoId"
       ],
       "routes": []
     },
@@ -6913,6 +7733,211 @@
         "value",
         "year",
         "yearText"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-local-worker.ts",
+      "kind": "server",
+      "imports": [
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_FFPROBE_SHOW_ENTRIES",
+        "BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES",
+        "BLACKROOM_WORKER_LEDGER_PATH",
+        "BLACKROOM_WORKER_LOCK_PATH",
+        "BLACKROOM_WORKER_STATE_PATH",
+        "BlackRoomLedgerEntry",
+        "BlackRoomLedgerStatus",
+        "BlackRoomLocalWorkerState",
+        "BlackRoomWorkerLedger",
+        "assertSafeConfirmedDeletion",
+        "buildBlackRoomCodexArgs",
+        "buildBlackRoomUploadChunks",
+        "buildBlackRoomWorkerPrompt",
+        "createBlackRoomLocalWorkerState",
+        "createBlackRoomWorkerLedger",
+        "isBlackRoomJobPublishable",
+        "nextBlackRoomPublicationDateTime",
+        "reserveBlackRoomLedgerEntry",
+        "selectPublishableBlackRoomReservation",
+        "shouldRunBlackRoomWorker",
+        "updateBlackRoomLedgerEntry",
+        "validateBlackRoomAudioLoudness",
+        "validateBlackRoomRenderProbe"
+      ],
+      "symbols": [
+        "BLACKROOM_FFPROBE_SHOW_ENTRIES",
+        "BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES",
+        "BLACKROOM_WORKER_LEDGER_PATH",
+        "BLACKROOM_WORKER_LOCK_PATH",
+        "BLACKROOM_WORKER_STATE_PATH",
+        "addUtcCalendarDay",
+        "allowedRoots",
+        "assertSafeConfirmedDeletion",
+        "audio",
+        "audioChannels",
+        "audioDurationSeconds",
+        "buildBlackRoomCodexArgs",
+        "buildBlackRoomUploadChunks",
+        "buildBlackRoomWorkerPrompt",
+        "createBlackRoomLocalWorkerState",
+        "createBlackRoomWorkerLedger",
+        "currentLocal",
+        "durationSeconds",
+        "end",
+        "entry",
+        "formatName",
+        "height",
+        "isBlackRoomJobPublishable",
+        "job",
+        "ledgerPath",
+        "maxVolumeDb",
+        "meanVolumeDb",
+        "nextBlackRoomPublicationDateTime",
+        "parseDb",
+        "parts",
+        "queuePath",
+        "reserveBlackRoomLedgerEntry",
+        "resolvedFile",
+        "resolvedProject",
+        "selectPublishableBlackRoomReservation",
+        "shouldRunBlackRoomWorker",
+        "timestamp",
+        "updateBlackRoomLedgerEntry",
+        "validateBlackRoomAudioLoudness",
+        "validateBlackRoomRenderProbe",
+        "value",
+        "values",
+        "video",
+        "width"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-metricool-bridge.ts",
+      "kind": "server",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_METRICOOL_BLOG_ID",
+        "BLACKROOM_TIMEZONE",
+        "BlackRoomMetricoolReceipt",
+        "BlackRoomMetricoolScheduleInput",
+        "buildMetricoolTikTokPayload",
+        "extractMetricoolMediaId",
+        "findVerifiedMetricoolPost",
+        "postMetricoolJsonBytes",
+        "scheduleBlackRoomMetricoolPost"
+      ],
+      "symbols": [
+        "BLACKROOM_METRICOOL_BLOG_ID",
+        "BLACKROOM_TIMEZONE",
+        "FetchLike",
+        "blogId",
+        "body",
+        "buildMetricoolTikTokPayload",
+        "curlConfig",
+        "data",
+        "date",
+        "dateTime",
+        "detail",
+        "env",
+        "escapedToken",
+        "existing",
+        "existingId",
+        "existingMatch",
+        "extractMetricoolMediaId",
+        "failStream",
+        "fetcher",
+        "findVerifiedMetricoolPost",
+        "finish",
+        "headers",
+        "id",
+        "matched",
+        "mediaId",
+        "metricoolJson",
+        "metricoolMediaId",
+        "normalizeHeaders",
+        "normalizeUrl",
+        "normalizedUrl",
+        "objects",
+        "output",
+        "parsed",
+        "payload",
+        "payloadBytes",
+        "payloadDirectory",
+        "payloadPath",
+        "postMetricoolJsonBytes",
+        "publication",
+        "raw",
+        "record",
+        "requiredEnv",
+        "scheduleBlackRoomMetricoolPost",
+        "scheduled",
+        "scheduledResponse",
+        "schedulerUrl",
+        "separator",
+        "serializedPayload",
+        "spawnCurl",
+        "status",
+        "target",
+        "text",
+        "timeout",
+        "timezone",
+        "token",
+        "userId",
+        "value",
+        "verification",
+        "verifyUrl",
+        "visit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-remote-control.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-chat",
+        "@shared/schema",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
+        "BlackRoomRemoteControlState",
+        "BlackRoomRemoteDeviceStatus",
+        "appendBlackRoomRemoteCommand",
+        "createBlackRoomRemoteControlState",
+        "initializeBlackRoomRemoteControlPersistence",
+        "isBlackRoomRemoteDeviceOnline",
+        "mutateBlackRoomRemoteControl",
+        "readBlackRoomRemoteControl",
+        "recordBlackRoomRemoteHeartbeat",
+        "setBlackRoomRemoteCommand"
+      ],
+      "symbols": [
+        "BLACKROOM_REMOTE_CONTROL_ID",
+        "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
+        "appendBlackRoomRemoteCommand",
+        "createBlackRoomRemoteControlState",
+        "createdAt",
+        "database",
+        "db",
+        "initializeBlackRoomRemoteControlPersistence",
+        "isBlackRoomRemoteDeviceOnline",
+        "mutateBlackRoomRemoteControl",
+        "normalizeRemoteControlState",
+        "parsed",
+        "readBlackRoomRemoteControl",
+        "recordBlackRoomRemoteHeartbeat",
+        "seenAt",
+        "setBlackRoomRemoteCommand",
+        "state"
       ],
       "routes": []
     },
@@ -9247,6 +10272,8 @@
       "kind": "server",
       "imports": [
         "./app-qa-agent",
+        "./blackroom-control-routes",
+        "./blackroom-remote-control",
         "./cybersecurity-agent",
         "./health-check",
         "./local-auth",
@@ -9478,6 +10505,44 @@
         "/api/auth/me",
         "/api/auth/register"
       ]
+    },
+    {
+      "path": "server/local-youtube-queue.ts",
+      "kind": "server",
+      "imports": [
+        "./radio-youtube-command",
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "LocalYoutubeQueueEntry",
+        "LocalYoutubeQueueStatus",
+        "enqueueLocalYoutubeAction",
+        "formatQueuedMessage",
+        "getLocalYoutubeQueue",
+        "getLocalYoutubeQueueEntry",
+        "getPendingLocalYoutubeQueue",
+        "updateLocalYoutubeQueueEntry"
+      ],
+      "symbols": [
+        "configured",
+        "dataDir",
+        "enqueueLocalYoutubeAction",
+        "entries",
+        "formatQueuedMessage",
+        "getLocalYoutubeQueue",
+        "getLocalYoutubeQueueEntry",
+        "getPendingLocalYoutubeQueue",
+        "idx",
+        "queuePath",
+        "raw",
+        "readQueue",
+        "resolveQueuePath",
+        "updateLocalYoutubeQueueEntry",
+        "writeQueue"
+      ],
+      "routes": []
     },
     {
       "path": "server/local-youtube-worker-queue.ts",
@@ -10770,6 +11835,14 @@
       "routes": []
     },
     {
+      "path": "server/replit_integrations/chat/._storage.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "server/replit_integrations/chat/index.ts",
       "kind": "server",
       "imports": [
@@ -10970,6 +12043,100 @@
       "routes": []
     },
     {
+      "path": "server/revenue-stripe-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./push-notifications",
+        "./revenue-engine",
+        "./revenue-stripe",
+        "./storage",
+        "./telegram",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerRevenueStripeRoutes"
+      ],
+      "symbols": [
+        "accountId",
+        "botToken",
+        "channels",
+        "checks",
+        "claimed",
+        "closeResult",
+        "enabledTelegramOwners",
+        "event",
+        "existing",
+        "expectedAccountId",
+        "message",
+        "notified",
+        "notifyRevenuePayment",
+        "payment",
+        "processingAgeMs",
+        "push",
+        "rawBody",
+        "registerRevenueStripeRoutes",
+        "resolveRevenueOwnerUserId",
+        "shouldCloseOpportunity",
+        "signature",
+        "telegram",
+        "telegramConfig",
+        "userId",
+        "webhookSecret"
+      ],
+      "routes": [
+        "/api/stripe/revenue-readiness",
+        "/api/stripe/revenue-webhook"
+      ]
+    },
+    {
+      "path": "server/revenue-stripe.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "RevenueStripeEventPayload",
+        "RevenueStripePayment",
+        "assertRevenueStripeAccount",
+        "extractRevenueStripePayment",
+        "formatRevenueDealNotification",
+        "verifyRevenueStripeWebhook"
+      ],
+      "symbols": [
+        "STRIPE_SIGNATURE_TOLERANCE_SECONDS",
+        "SUPPORTED_PAYMENT_EVENTS",
+        "amountCents",
+        "assertRevenueStripeAccount",
+        "cleanString",
+        "clientEmail",
+        "clientName",
+        "currency",
+        "customerDetails",
+        "declaredAccount",
+        "entries",
+        "expected",
+        "extractRevenueStripePayment",
+        "formatMoney",
+        "formatRevenueDealNotification",
+        "leftBuffer",
+        "metadata",
+        "object",
+        "objectId",
+        "objectMetadata",
+        "parseStripeSignature",
+        "payload",
+        "paymentIntent",
+        "paymentStatus",
+        "rightBuffer",
+        "safeHexEqual",
+        "signatures",
+        "timestamp",
+        "verifyRevenueStripeWebhook"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/routes.ts",
       "kind": "server",
       "imports": [
@@ -11005,6 +12172,7 @@
         "./radio-template-agent",
         "./reminder-scheduler",
         "./revenue-engine",
+        "./revenue-stripe-routes",
         "./storage",
         "./telegram-routes",
         "./trust-executor",
@@ -11677,6 +12845,7 @@
         "/api/revenue-engine/money-sprint/public-candidates",
         "/api/revenue-engine/outreach-drafts",
         "/api/revenue-engine/outreach-drafts/approve",
+        "/api/revenue-engine/outreach-drafts/update",
         "/api/revenue-engine/outreach-outcome",
         "/api/revenue-engine/outreach-send",
         "/api/revenue-engine/plan",
@@ -11872,6 +13041,24 @@
         "/api/shopify/oauth/start",
         "/api/shopify/oauth/status"
       ]
+    },
+    {
+      "path": "server/single-user-owner.ts",
+      "kind": "server",
+      "imports": [
+        "./storage",
+        "./user-context"
+      ],
+      "exports": [
+        "isConfiguredSingleUserOwner"
+      ],
+      "symbols": [
+        "APPROVED_SINGLE_USER_OWNER_IDS",
+        "APPROVED_SINGLE_USER_OWNER_USERNAMES",
+        "isConfiguredSingleUserOwner",
+        "user"
+      ],
+      "routes": []
     },
     {
       "path": "server/static.ts",
@@ -12967,6 +14154,7 @@
         "InsertPriceAlert",
         "InsertPushSubscription",
         "InsertRadioTemplateAsset",
+        "InsertRevenueStripeEvent",
         "InsertScheduledReminder",
         "InsertTask",
         "InsertTelegramConfig",
@@ -12993,6 +14181,7 @@
         "PushSubscription",
         "RadioTemplateAsset",
         "RevenueEngineState",
+        "RevenueStripeEvent",
         "RiskLevel",
         "ScheduledReminder",
         "Task",
@@ -13019,6 +14208,7 @@
         "auditLogs",
         "automationDefinitions",
         "automationRuns",
+        "blackRoomRemoteControl",
         "canvaOAuthTokens",
         "conversations",
         "djContacts",
@@ -13077,6 +14267,7 @@
         "pushSubscriptions",
         "radioTemplateAssets",
         "revenueEngineState",
+        "revenueStripeEvents",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -13101,6 +14292,7 @@
         "auditLogs",
         "automationDefinitions",
         "automationRuns",
+        "blackRoomRemoteControl",
         "canvaOAuthTokens",
         "conversations",
         "djContacts",
@@ -13159,6 +14351,7 @@
         "pushSubscriptions",
         "radioTemplateAssets",
         "revenueEngineState",
+        "revenueStripeEvents",
         "scheduledReminders",
         "tasks",
         "telegramConfig",
@@ -13171,6 +14364,38 @@
         "weeklyTasks",
         "yearlyGoals"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/._dropshipping-ceo.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._radio-youtube-command.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._rate-limit.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/._user-context.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -13453,7 +14678,9 @@
       "exports": [],
       "symbols": [
         "agentRules",
+        "approvalHandler",
         "assistantPage",
+        "blackRoomHandler",
         "bridge",
         "continuation",
         "dashboard",
@@ -13501,6 +14728,86 @@
       "routes": []
     },
     {
+      "path": "tests/blackroom-chat.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-chat",
+        "../server/blackroom-chat-service",
+        "../server/blackroom-remote-control",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "late",
+        "now",
+        "pause",
+        "request",
+        "result",
+        "start",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-content-agent.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-content-agent.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "fetcher",
+        "first",
+        "input",
+        "jobs",
+        "parsed",
+        "partial",
+        "plan",
+        "scores",
+        "second",
+        "sourceVideos",
+        "url",
+        "video",
+        "videos"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-daily-queue.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "claimed",
+        "commands",
+        "completed",
+        "directory",
+        "finalState",
+        "late",
+        "lockPath",
+        "migrated",
+        "mutate",
+        "now",
+        "overnight",
+        "queuePath",
+        "retried",
+        "state",
+        "targetDate",
+        "today"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/blackroom-links.test.ts",
       "kind": "test",
       "imports": [
@@ -13510,12 +14817,114 @@
       ],
       "exports": [],
       "symbols": [
+        "candidate",
+        "expectedCountdownDate",
         "method",
+        "now",
         "originalBaseUrl",
         "originalFetch",
         "performance",
         "result",
         "snapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-local-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-local-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "args",
+        "entries",
+        "entry",
+        "ledger",
+        "legacy",
+        "mediaDetails",
+        "now",
+        "project",
+        "prompt",
+        "queue",
+        "totalBytes",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-metricool-bridge.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-metricool-bridge",
+        "node:assert/strict",
+        "node:events",
+        "node:http",
+        "node:stream",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "cases",
+        "child",
+        "error",
+        "href",
+        "input",
+        "method",
+        "mockFetch",
+        "payload",
+        "post",
+        "receipt",
+        "received",
+        "response",
+        "server",
+        "spawnProcess",
+        "streams",
+        "token",
+        "verifications"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-remote-control.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-control-routes",
+        "../server/blackroom-remote-control",
+        "../server/single-user-owner",
+        "../server/user-context",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "desired",
+        "now",
+        "pausing",
+        "remoteOnline",
+        "script",
+        "state",
+        "synced",
+        "token"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-remote-sync.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-remote-sync.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "pause",
+        "play",
+        "stalePlay"
       ],
       "routes": []
     },
@@ -14038,6 +15447,7 @@
         "appQaGateRoute",
         "appQaGateRouteEnd",
         "appQaGateRouteStart",
+        "appSource",
         "automationRequest",
         "autopilotIndex",
         "baseWorkspace",
@@ -14351,6 +15761,38 @@
       "routes": []
     },
     {
+      "path": "tests/local-youtube-queue.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/local-youtube-queue",
+        "../server/radio-youtube-command",
+        "node:assert/strict",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "COUNT",
+        "all",
+        "done",
+        "e1",
+        "e2",
+        "entry",
+        "found",
+        "msg",
+        "notFound",
+        "pending",
+        "processedAt",
+        "processing",
+        "queuePath",
+        "result",
+        "tmpQueuePath"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/local-youtube-worker-queue.test.ts",
       "kind": "test",
       "imports": [
@@ -14607,6 +16049,37 @@
       "routes": []
     },
     {
+      "path": "tests/revenue-stripe.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/revenue-stripe",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "event",
+        "message",
+        "payload",
+        "payment",
+        "paymentIntent",
+        "paymentIntentEvent",
+        "secret",
+        "signature",
+        "signed",
+        "signedPayload",
+        "timestamp",
+        "unbound",
+        "unboundEvent",
+        "unpaid",
+        "unpaidEvent",
+        "unrelated",
+        "unrelatedEvent"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/session-config.test.ts",
       "kind": "test",
       "imports": [
@@ -14816,6 +16289,14 @@
       "routes": []
     },
     {
+      "path": "threat_model.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "tsconfig.ai-media-studio.json",
       "kind": "other",
       "imports": [],
@@ -14900,6 +16381,10 @@
     "vite.config.ts"
   ],
   "tests": [
+    "tests/._dropshipping-ceo.test.ts",
+    "tests/._radio-youtube-command.test.ts",
+    "tests/._rate-limit.test.ts",
+    "tests/._user-context.test.ts",
     "tests/ai-cost-notifications.test.ts",
     "tests/ai-media-studio-backend.test.ts",
     "tests/ai-media-studio-persistence.test.ts",
@@ -14911,7 +16396,13 @@
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
     "tests/automation-registry.test.ts",
+    "tests/blackroom-chat.test.ts",
+    "tests/blackroom-content-agent.test.ts",
+    "tests/blackroom-daily-queue.test.ts",
     "tests/blackroom-links.test.ts",
+    "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-metricool-bridge.test.ts",
+    "tests/blackroom-remote-control.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
     "tests/ceo-briefing.test.ts",
@@ -14943,6 +16434,7 @@
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
     "tests/local-auth.test.ts",
+    "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
     "tests/metricool-tracking.test.ts",
@@ -14956,6 +16448,7 @@
     "tests/revenue-engine-public-scout-connector.test.ts",
     "tests/revenue-engine-state-store.test.ts",
     "tests/revenue-engine.test.ts",
+    "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/telegram-chat-flow.test.ts",

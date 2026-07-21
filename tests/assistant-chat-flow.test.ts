@@ -168,6 +168,20 @@ test("BlackOps chat loads local Claude skills into web and Telegram prompts", ()
   assert.match(designSkill, /Canva/);
 });
 
+test("main assistant routes BlackRoom controls before generic approval handling", () => {
+  const source = readFileSync("server/assistant.ts", "utf8");
+  const blackRoomHandler = source.indexOf("looksLikeBlackRoomAssistantRequest(message)");
+  const approvalHandler = source.indexOf("executeSinglePendingApprovalFromChat(userId, message)");
+  assert.ok(blackRoomHandler >= 0);
+  assert.ok(approvalHandler > blackRoomHandler);
+  assert.match(source, /executeBlackRoomChatMessage\(message\)/);
+  assert.match(source, /blackRoomAgentError/);
+  const assistantPage = readFileSync("client/src/pages/assistant.tsx", "utf8");
+  assert.match(assistantPage, /text-blackroom-chat-help/);
+  assert.match(assistantPage, /sube 3 videos más hoy/);
+  assert.match(assistantPage, /cómo va la cola de BlackRoom/);
+});
+
 test("BlackOps chat enforces cheap-first AI cost policy", () => {
   const policy = readFileSync("server/ai-cost-policy.ts", "utf8");
   const webAssistant = readFileSync("server/assistant.ts", "utf8");
