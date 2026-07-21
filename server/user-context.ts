@@ -25,9 +25,15 @@ const PUBLIC_API_PATHS = [
   "/api/canva/oauth/callback",
   "/api/zoho/callback",
   "/api/blackroom-agent/remote",
+  "/api/blackroom-agent/metricool/schedule",
 ];
 
-const PUBLIC_API_PATTERNS: RegExp[] = [];
+// These device endpoints remain protected by the BlackRoom bearer token in
+// their route handlers. They must bypass browser-session auth so the signed
+// local worker and Metricool can exchange media without a user cookie.
+const PUBLIC_API_PATTERNS: RegExp[] = [
+  /^\/api\/blackroom-agent\/media\/[^/]+$/,
+];
 
 function cleanUserId(value: unknown): string | null {
   if (typeof value !== "string") return null;

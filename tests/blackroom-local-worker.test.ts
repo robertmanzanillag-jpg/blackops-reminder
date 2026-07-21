@@ -6,9 +6,13 @@ import {
   buildBlackRoomWorkerPrompt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
+  nextBlackRoomPublicationDateTime,
+  isBlackRoomJobPublishable,
   reserveBlackRoomLedgerEntry,
+  selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   updateBlackRoomLedgerEntry,
+  validateBlackRoomRenderProbe,
 } from "../server/blackroom-local-worker";
 
 const mediaDetails = {
@@ -21,6 +25,25 @@ test("worker only runs for an enabled actionable queue", () => {
   assert.equal(shouldRunBlackRoomWorker({ enabled: true, jobs: [{ status: "completed" }] }), false);
   assert.equal(shouldRunBlackRoomWorker({ enabled: true, jobs: [{ status: "retry" }] }), true);
   assert.equal(shouldRunBlackRoomWorker({ enabled: true, jobs: [{ status: "retry", notBefore: "2026-07-21T00:00:00.000Z" }] }, new Date("2026-07-20T23:00:00.000Z")), false);
+});
+
+test("publishing gate honors pause and skips stale reservations", () => {
+  const queue = {
+    enabled: true,
+    jobs: [
+      { id: "completed-job", status: "completed" },
+      { id: "active-job", status: "retry", notBefore: "2026-07-21T00:00:00.000Z" },
+    ],
+  };
+  const entries = [
+    { status: "reserved", jobId: "missing-job", reservationId: "stale-1" },
+    { status: "reserved", jobId: "completed-job", reservationId: "stale-2" },
+    { status: "reserved", jobId: "active-job", reservationId: "ready" },
+  ];
+  const now = new Date("2026-07-21T01:00:00.000Z");
+  assert.equal(selectPublishableBlackRoomReservation(queue, entries, now)?.reservationId, "ready");
+  assert.equal(isBlackRoomJobPublishable({ ...queue, enabled: false }, "active-job", now), false);
+  assert.equal(selectPublishableBlackRoomReservation({ ...queue, enabled: false }, entries, now), null);
 });
 
 test("worker state starts stopped and recoverable", () => {
@@ -38,20 +61,40 @@ test("uses only Codex exec flags supported by the installed noninteractive CLI",
   assert.equal(args.at(-1), "-");
 });
 
-test("prompt contains posting and deletion safety gates", () => {
+test("prompt stops after rendering and reservation so deterministic publisher owns Metricool", () => {
   const prompt = buildBlackRoomWorkerPrompt("/tmp/blackroom-project");
-  assert.match(prompt, /EXACTAMENTE un post/);
-  assert.match(prompt, /confirmaci[oó]n inequívoca de Metricool/i);
-  assert.match(prompt, /No borres archivos directamente/);
-  assert.match(prompt, /blackroom:ledger -- --delete-confirmed/);
-  assert.match(prompt, /No resuelvas CAPTCHA/);
+  assert.match(prompt, /EXACTAMENTE un video/);
+  assert.match(prompt, /no abras Chrome ni intentes entrar en Metricool/i);
+  assert.match(prompt, /Termina justo después de que la reserva/i);
+  assert.match(prompt, /No confirmes, no marques uncertain, no borres archivos/i);
+  assert.match(prompt, /no resuelvas CAPTCHA/i);
   assert.match(prompt, /Nunca repitas video fuente/);
   assert.match(prompt, /No abras ni navegues YouTube con Chrome/);
   assert.match(prompt, /\/opt\/homebrew\/bin\/yt-dlp/);
-  assert.match(prompt, /Chrome se reserva para Metricool/);
   assert.match(prompt, /No descargues el set completo/);
   assert.match(prompt, /--download-sections/);
   assert.match(prompt, /tiempos absolutos del set original/);
+  assert.match(prompt, /debajo de 500 MB/);
+  assert.match(prompt, /cercano a 5 Mbps/);
+});
+
+test("past BlackRoom slots roll forward while future slots keep their target date", () => {
+  const now = new Date("2026-07-21T07:00:00.000Z"); // 03:00 in New York.
+  assert.equal(nextBlackRoomPublicationDateTime("2026-07-21", "05:00", "America/New_York", now), "2026-07-21T05:00:00");
+  assert.equal(nextBlackRoomPublicationDateTime("2026-07-21", "00:30", "America/New_York", now), "2026-07-22T00:30:00");
+});
+
+test("validates Metricool and TikTok compatible MP4 renders", () => {
+  const valid = {
+    format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "30.02" },
+    streams: [
+      { codec_type: "video", codec_name: "h264", pix_fmt: "yuv420p", width: 1080, height: 1920 },
+      { codec_type: "audio", codec_name: "aac" },
+    ],
+  };
+  assert.deepEqual(validateBlackRoomRenderProbe(valid, 30), { durationSeconds: 30.02, width: 1080, height: 1920 });
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [{ ...valid.streams[0], codec_name: "hevc" }, valid.streams[1]] }, 30), /H\.264/);
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, format: { ...valid.format, duration: "25" } }, 30), /duration/);
 });
 
 test("ledger blocks duplicate slots and source videos", () => {
@@ -89,6 +132,9 @@ test("safe deletion requires confirmed Metricool receipt and exact media path", 
   updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "confirmed", metricoolId: "metricool-123" });
   assert.equal(assertSafeConfirmedDeletion(project, entry, entry.renderPath), entry.renderPath);
   assert.throws(() => assertSafeConfirmedDeletion(project, entry, `${project}/package.json`), /not part of this reservation/);
+
+  const legacy = { ...entry, renderPath: `${project}/clippers_workspace/blackroom/renders/legacy.mp4` };
+  assert.equal(assertSafeConfirmedDeletion(project, legacy, legacy.renderPath), legacy.renderPath);
 });
 
 test("ledger rejects a source already recorded in queue history", () => {

@@ -1,5 +1,11 @@
-import type { Express } from "express";
-import { timingSafeEqual } from "node:crypto";
+import { type Express } from "express";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, stat, unlink } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { BLACKROOM_QUEUE_PATH, pauseBlackRoomAgent, readBlackRoomQueue, startBlackRoomAgent, summarizeBlackRoomQueue, withBlackRoomQueueLock, writeBlackRoomQueue } from "./blackroom-daily-queue";
 import {
   isBlackRoomRemoteDeviceOnline,
@@ -9,6 +15,43 @@ import {
   setBlackRoomRemoteCommand,
   type BlackRoomRemoteControlState,
 } from "./blackroom-remote-control";
+import { scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
+
+const BLACKROOM_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+const BLACKROOM_UPLOAD_TTL_MS = 30 * 60_000;
+const blackRoomUploadDir = path.join(os.tmpdir(), "blackroom-metricool-uploads");
+const blackRoomUploads = new Map<string, { filePath: string; reservationId: string; expiresAt: number }>();
+
+async function removeBlackRoomUpload(uploadId: string): Promise<void> {
+  const upload = blackRoomUploads.get(uploadId);
+  if (!upload) return;
+  blackRoomUploads.delete(uploadId);
+  await unlink(upload.filePath).catch(() => undefined);
+}
+
+function cleanupExpiredBlackRoomUploads(): void {
+  for (const [uploadId, upload] of blackRoomUploads) {
+    if (upload.expiresAt <= Date.now()) void removeBlackRoomUpload(uploadId);
+  }
+}
+
+async function receiveBlackRoomUpload(request: NodeJS.ReadableStream, filePath: string): Promise<number> {
+  let bytes = 0;
+  const limiter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > BLACKROOM_UPLOAD_MAX_BYTES) {
+        const error = new Error("BlackRoom upload exceeds Metricool's 500 MB limit") as Error & { status?: number };
+        error.status = 413;
+        callback(error);
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+  await pipeline(request, limiter, createWriteStream(filePath, { flags: "wx" }));
+  return bytes;
+}
 
 export function hasValidBlackRoomRemoteToken(authorization: string | undefined, configuredToken = process.env.BLACKROOM_REMOTE_CONTROL_TOKEN): boolean {
   const token = String(configuredToken || "").trim();
@@ -80,5 +123,57 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       }));
       res.json({ control: remoteView(remote) });
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to record device heartbeat" }); }
+  });
+  app.put("/api/blackroom-agent/media/:reservationId", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    const reservationId = String(req.params.reservationId || "").trim();
+    if (!reservationId || reservationId.length > 300 || !req.is("application/octet-stream")) {
+      return res.status(400).json({ error: "A reservation id and MP4 body are required" });
+    }
+    const declaredSize = Number(req.get("content-length") || 0);
+    if (declaredSize > BLACKROOM_UPLOAD_MAX_BYTES) return res.status(413).json({ error: "BlackRoom upload exceeds Metricool's 500 MB limit" });
+    cleanupExpiredBlackRoomUploads();
+    const uploadId = randomUUID();
+    const filePath = path.join(blackRoomUploadDir, `${uploadId}.mp4`);
+    try {
+      await mkdir(blackRoomUploadDir, { recursive: true });
+      const bytes = await receiveBlackRoomUpload(req, filePath);
+      if (bytes === 0) { await unlink(filePath).catch(() => undefined); return res.status(400).json({ error: "MP4 body is empty" }); }
+      blackRoomUploads.set(uploadId, { filePath, reservationId, expiresAt: Date.now() + BLACKROOM_UPLOAD_TTL_MS });
+      const publicOrigin = `${req.protocol}://${req.get("host")}`;
+      res.status(201).json({ uploadId, mediaUrl: `${publicOrigin}/api/blackroom-agent/media/${uploadId}` });
+    } catch (error: any) {
+      await unlink(filePath).catch(() => undefined);
+      res.status(error?.status || 500).json({ error: error?.message || "BlackRoom upload failed" });
+    }
+  });
+  app.get("/api/blackroom-agent/media/:uploadId", async (req, res) => {
+    cleanupExpiredBlackRoomUploads();
+    const upload = blackRoomUploads.get(String(req.params.uploadId || ""));
+    if (!upload) return res.status(404).end();
+    const info = await stat(upload.filePath).catch(() => null);
+    if (!info?.isFile()) { await removeBlackRoomUpload(String(req.params.uploadId || "")); return res.status(404).end(); }
+    res.status(200).set({ "Content-Type": "video/mp4", "Content-Length": String(info.size), "Cache-Control": "public, max-age=300" });
+    createReadStream(upload.filePath).pipe(res);
+  });
+  app.post("/api/blackroom-agent/metricool/schedule", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    const uploadId = String(req.body?.uploadId || "");
+    const reservationId = String(req.body?.reservationId || "");
+    const upload = blackRoomUploads.get(uploadId);
+    if (!upload || upload.reservationId !== reservationId) return res.status(404).json({ error: "BlackRoom upload not found" });
+    try {
+      const publicOrigin = `${req.protocol}://${req.get("host")}`;
+      const receipt = await scheduleBlackRoomMetricoolPost({
+        caption: String(req.body?.caption || ""),
+        publicationDateTime: String(req.body?.publicationDateTime || ""),
+        timezone: String(req.body?.timezone || "America/New_York"),
+        mediaUrl: `${publicOrigin}/api/blackroom-agent/media/${uploadId}`,
+      });
+      await removeBlackRoomUpload(uploadId);
+      res.status(201).json({ receipt });
+    } catch (error: any) {
+      res.status(502).json({ error: error.message || "Metricool scheduling failed" });
+    }
   });
 }
