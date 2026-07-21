@@ -38,11 +38,11 @@ test("finds exact caption and schedule evidence", () => {
 });
 
 test("normalizes media, schedules, then verifies before returning a receipt", async () => {
-  const calls: Array<{ url: string; method: string; body?: any }> = [];
+  const calls: Array<{ url: string; method: string; body?: any; headers?: HeadersInit }> = [];
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     const href = String(url);
     const method = init.method || "GET";
-    calls.push({ url: href, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({ url: href, method, body: init.body ? JSON.parse(String(init.body)) : undefined, headers: init.headers });
     if (method === "GET" && href.includes("/scheduler/posts")) {
       const verifications = calls.filter((call) => call.method === "GET" && call.url.includes("/scheduler/posts"));
       return Response.json(verifications.length === 1 ? { data: [] } : { data: [{ id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } }] });
@@ -58,6 +58,8 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
   assert.deepEqual(receipt, { metricoolId: "991", publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true });
   assert.equal(calls.length, 4);
   assert.deepEqual(calls[2].body.media, { mediaId: input.mediaUrl });
+  assert.match(calls[2].url, /integrationSource=MCP/);
+  assert.equal((calls[2].headers as Record<string, string>).accept, "application/json");
 });
 
 test("returns an existing exact post before uploading media or creating a duplicate", async () => {
