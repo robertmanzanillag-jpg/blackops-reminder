@@ -211,6 +211,8 @@ test("schedules an unconfirmed reservation without making it uncertain", () => {
   assert.equal(entry.status, "reserved");
   assert.equal(entry.publicationDateTime, "2026-07-21T20:45:00");
   assert.throws(() => scheduleBlackRoomLedgerEntry(entry, "tonight"), /invalid Metricool publication date/);
+  assert.throws(() => scheduleBlackRoomLedgerEntry(entry, "2026-13-40T25:99:99"), /invalid Metricool publication date/);
+  assert.throws(() => scheduleBlackRoomLedgerEntry(entry, "2026-02-30T20:45:00"), /invalid Metricool publication date/);
 });
 
 test("safe deletion requires confirmed Metricool receipt and exact media path", () => {

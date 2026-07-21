@@ -32,6 +32,12 @@ export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
 export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
 export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
 
+function isValidBlackRoomPublicationDateTime(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 19) === value;
+}
+
 export interface BlackRoomLedgerEntry {
   reservationId: string;
   jobId: string;
@@ -81,7 +87,7 @@ export function markBlackRoomNetworkUncertain(
   publicationDateTime: string,
 ): BlackRoomLedgerEntry {
   if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(publicationDateTime)) throw new Error("invalid Metricool publication date");
+  if (!isValidBlackRoomPublicationDateTime(publicationDateTime)) throw new Error("invalid Metricool publication date");
   entry.networkAttempts ||= {};
   entry.networkReceipts ||= {};
   entry.networkAttempts[network] = "uncertain";
@@ -301,7 +307,7 @@ export function updateBlackRoomLedgerEntry(
     throw new Error("complete Metricool receipts are required for confirmation");
   }
   if (update.status === "uncertain" && update.publicationDateTime
-    && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(update.publicationDateTime)) {
+    && !isValidBlackRoomPublicationDateTime(update.publicationDateTime)) {
     throw new Error("invalid Metricool publication date");
   }
   entry.status = update.status;
@@ -319,7 +325,7 @@ export function scheduleBlackRoomLedgerEntry(
   now = new Date(),
 ): BlackRoomLedgerEntry {
   if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(publicationDateTime)) {
+  if (!isValidBlackRoomPublicationDateTime(publicationDateTime)) {
     throw new Error("invalid Metricool publication date");
   }
   entry.publicationDateTime = publicationDateTime;
