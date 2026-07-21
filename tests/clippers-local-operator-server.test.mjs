@@ -581,6 +581,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /First publish/);
       assert.match(home, /Earliest deadline/);
       assert.match(home, /Cuentas listas/);
+      assert.match(home, /2 cuentas listas para Metricool/);
       assert.match(home, /TikTok \+ Metricool MVP/);
       assert.match(home, /TikTok batch by account/);
       assert.match(home, /Accounts 2 · Clips 10 · Upload files 10\/10 · Missing scheduled proof 10/);
@@ -3037,6 +3038,17 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(twitchAlias.displayName, "DisplayAlias");
     assert.ok(twitchAlias.outreachHandleKeys.includes("displayalias"));
     assert.ok(campaign.premiumRows.every((row) => row.canPublish === false));
+  });
+});
+
+test("Clippers dashboard labels the two ready Metricool lanes consistently", async () => {
+  await withServer({ HOST: "127.0.0.1", PORT: "5551" }, async () => {
+    const homeResponse = await fetch("http://127.0.0.1:5551/clippers");
+    assert.equal(homeResponse.status, 200);
+    const home = await homeResponse.text();
+    assert.match(home, /2 cuentas listas para Metricool/);
+    assert.doesNotMatch(home, /Conexión pendiente de confirmar/);
+    assert.match(home, /Aprobación manual/);
   });
 });
 

@@ -10593,7 +10593,9 @@ function renderHome(status) {
   const nextExternalRepairIsActive = nextExternalRepair && !nextExternalRepair.deferredForMetricoolMvp;
   const realClipIntakeBlocked = status.realClipIntakeValidation?.status && !realClipIntakeReadyForScheduling(status.realClipIntakeValidation.status);
   const dashboardAction = status.nextBestAction || status.streamerGrowthCeo?.nextAction;
-  const routingConfirmed = status.streamerGrowthCeo?.routingConfirmation?.confirmed === true;
+  const metricoolReadyLanes = Number(status.metricoolMvp?.activeReadyLanes || 0);
+  const metricoolTargetLanes = Number(status.metricoolMvp?.activeTargetLanes || 0);
+  const metricoolAccountsReady = metricoolTargetLanes > 0 && metricoolReadyLanes >= metricoolTargetLanes;
   const baselineKnown = status.streamerGrowthCeo?.progressKnown === true;
   const realClipsReady = Number(status.realClipIntakeValidation?.readyRows || 0);
   const realClipsTotal = Number(status.realClipIntakeValidation?.totalRows || 0);
@@ -10706,7 +10708,7 @@ function renderHome(status) {
 <main>
   <nav class="topbar" aria-label="Navegación principal">
     <a class="brand" href="/clippers">Clippers</a>
-    <div class="top-status"><span class="dot${routingConfirmed ? "" : " pending"}" aria-hidden="true"></span><span>${escapeHtml(routingConfirmed ? "2 cuentas confirmadas en Metricool" : "Conexión pendiente de confirmar")}</span><span class="badge">Aprobación manual</span></div>
+    <div class="top-status"><span class="dot${metricoolAccountsReady ? "" : " pending"}" aria-hidden="true"></span><span>${escapeHtml(metricoolAccountsReady ? `${metricoolReadyLanes} cuentas listas para Metricool` : "Conexión pendiente de confirmar")}</span><span class="badge">Aprobación manual</span></div>
   </nav>
   <header class="hero">
     <div class="hero-copy">
