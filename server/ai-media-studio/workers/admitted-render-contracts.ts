@@ -89,6 +89,39 @@ export interface AdmittedRenderProvider {
   }): Promise<AdmittedReconciliationOutcome>;
 }
 
+/**
+ * Provider-authoritative state observed for an already accepted render. This is
+ * intentionally separate from submission reconciliation: a provider job id is
+ * required, and an absence/error can only produce `unknown`.
+ */
+export type AdmittedTerminalObservation =
+  | { kind: "processing"; observedAt: string; evidenceDigest: Sha256Digest }
+  | {
+    kind: "completed";
+    observedAt: string;
+    /** Durable provider identity; unlike a signed delivery URL this is stable. */
+    remoteArtifactRef: string;
+    sourceUrl: string;
+    sourceUrlPolicy: "ephemeral_refresh_via_provider_get";
+    mediaType: "video/mp4";
+    durationSeconds?: number;
+    evidenceDigest: Sha256Digest;
+  }
+  | {
+    kind: "failed";
+    observedAt: string;
+    failureCode?: string;
+    failureMessageDigest?: Sha256Digest;
+    evidenceDigest: Sha256Digest;
+  }
+  | { kind: "unknown"; observedAt: string; evidenceDigest: Sha256Digest };
+
+export interface AdmittedTerminalProvider {
+  observeTerminal(context: ExactAdmittedProviderCapability & {
+    providerJobId: string;
+  }): Promise<AdmittedTerminalObservation>;
+}
+
 export interface AdmittedProviderResolver {
   resolve(authorization: AdmittedAuthorizedIdentity): Promise<{
     provider: AdmittedRenderProvider;

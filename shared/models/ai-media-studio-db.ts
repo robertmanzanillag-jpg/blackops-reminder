@@ -1226,6 +1226,9 @@ export const aiMediaRenderJobs = pgTable(
     workHandoffDigest: text("work_handoff_digest"),
     sealedRequestDigest: text("sealed_request_digest"),
     providerCredentialVersion: integer("provider_credential_version"),
+    providerTerminalState: text("provider_terminal_state"),
+    providerTerminalEvidenceDigest: text("provider_terminal_evidence_digest"),
+    providerTerminalObservedAt: timestamp("provider_terminal_observed_at", { withTimezone: true }),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1320,6 +1323,13 @@ export const aiMediaRenderJobs = pgTable(
       "ai_media_render_jobs_governance_evidence_ck",
       sql`(${table.governanceProfileId} IS NULL AND ${table.governanceEvidenceDigest} IS NULL) OR (${table.governanceProfileId} IS NOT NULL AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')`,
     ),
+    providerTerminalCheck: check("ai_media_render_jobs_provider_terminal_ck", sql`(
+      (${table.providerTerminalState} IS NULL AND ${table.providerTerminalEvidenceDigest} IS NULL
+        AND ${table.providerTerminalObservedAt} IS NULL)
+      OR (${table.providerTerminalState} IN ('completed','failed')
+        AND ${table.providerTerminalEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND isfinite(${table.providerTerminalObservedAt}))
+    )`),
     admissionHeldCheck: check("ai_media_render_jobs_admission_held_ck", sql`(
       (${table.budgetReservationId} IS NULL
         AND ${table.dailyPlanSlotId} IS NULL AND ${table.slotAttempt} IS NULL
@@ -1712,6 +1722,11 @@ export const aiMediaAssetIngestJobs = pgTable(
       "ai_media_asset_ingest_jobs_attempts_ck",
       sql`${table.attempts} >= 0 AND ${table.maxAttempts} > 0 AND ${table.leaseRecoveries} >= 0 AND ${table.maxLeaseRecoveries} > 0`,
     ),
+    exactRenderFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId, aiMediaRenderJobs.id],
+      name: "ai_media_asset_ingest_jobs_exact_render_fk",
+    }).onUpdate("no action").onDelete("restrict"),
   }),
 );
 
@@ -2088,6 +2103,9 @@ export const aiMediaOutbox = pgTable(
     deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     lastError: text("last_error"),
+    providerTerminalState: text("provider_terminal_state"),
+    providerTerminalEvidenceDigest: text("provider_terminal_evidence_digest"),
+    providerTerminalObservedAt: timestamp("provider_terminal_observed_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => ({
@@ -2119,6 +2137,13 @@ export const aiMediaOutbox = pgTable(
       table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
       table.renderJobId, table.workHandoffDigest,
     ),
+    providerTerminalCheck: check("ai_media_outbox_provider_terminal_ck", sql`(
+      (${table.providerTerminalState} IS NULL AND ${table.providerTerminalEvidenceDigest} IS NULL
+        AND ${table.providerTerminalObservedAt} IS NULL)
+      OR (${table.providerTerminalState} IN ('completed','failed')
+        AND ${table.providerTerminalEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND isfinite(${table.providerTerminalObservedAt}))
+    )`),
     heldCheck: check("ai_media_outbox_held_ck", sql`(
       (${table.budgetReservationId} IS NULL AND ${table.renderJobId} IS NULL
         AND ${table.workHandoffDigest} IS NULL AND ${table.sealedRequestDigest} IS NULL)
@@ -2236,6 +2261,9 @@ export const aiMediaDailyPlanSlots = pgTable(
     status: text("status").notNull().default("preview"),
     slotDigest: text("slot_digest").notNull(),
     stateVersion: integer("state_version").notNull().default(1),
+    providerTerminalState: text("provider_terminal_state"),
+    providerTerminalEvidenceDigest: text("provider_terminal_evidence_digest"),
+    providerTerminalObservedAt: timestamp("provider_terminal_observed_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => ({
@@ -2270,6 +2298,13 @@ export const aiMediaDailyPlanSlots = pgTable(
       AND ${table.slotDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.status} IN ('preview','planned','reserved','committed','released','expired','blocked',
         'queued','submitted','reconciling','completed','failed','cancelled')
+    )`),
+    providerTerminalCheck: check("ai_media_daily_plan_slots_provider_terminal_ck", sql`(
+      (${table.providerTerminalState} IS NULL AND ${table.providerTerminalEvidenceDigest} IS NULL
+        AND ${table.providerTerminalObservedAt} IS NULL)
+      OR (${table.providerTerminalState} IN ('completed','failed')
+        AND ${table.providerTerminalEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND isfinite(${table.providerTerminalObservedAt}))
     )`),
     exactPlanFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.dailyPlanId, table.providerAccountId,
@@ -3348,6 +3383,11 @@ export const aiMediaProviderSubmissionAttempts = pgTable(
     exactIdentityUnique: uniqueIndex("ai_media_provider_submission_attempts_exact_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
     ),
+    terminalIdentityUnique: uniqueIndex("ai_media_provider_submission_attempts_terminal_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.renderJobId, table.dispatchOutboxId, table.dailyPlanSlotId, table.providerAccountId,
+      table.providerKey, table.providerCredentialVersion, table.providerJobId, table.sendAuthorizationDigest,
+    ),
     lifecycleCheck: check("ai_media_provider_submission_attempts_ck", sql`(
       ${table.state} IN ('claimed','authorized','confirmed','ambiguous','reconciled_no_submit')
       AND ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
@@ -3472,6 +3512,150 @@ export const aiMediaProviderSubmissionEvents = pgTable(
   }),
 );
 
+/** Durable fenced polling state for provider jobs whose submission was confirmed. */
+export const aiMediaProviderTerminalChecks = pgTable(
+  "ai_media_provider_terminal_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    submissionAttemptId: uuid("submission_attempt_id").notNull(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    renderJobId: uuid("render_job_id").notNull(),
+    dispatchOutboxId: uuid("dispatch_outbox_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    providerJobId: text("provider_job_id").notNull(),
+    sendAuthorizationDigest: text("send_authorization_digest").notNull(),
+    state: text("state").notNull(),
+    fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull().default(0n),
+    claimCount: integer("claim_count").notNull().default(0),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    actorUserId: text("actor_user_id").notNull(),
+    ...auditColumns(),
+  },
+  (table) => ({
+    attemptUnique: uniqueIndex("ai_media_provider_terminal_checks_attempt_uq").on(
+      table.ownerUserId, table.workspaceId, table.submissionAttemptId,
+    ),
+    claimIdx: index("ai_media_provider_terminal_checks_claim_idx").on(
+      table.ownerUserId, table.workspaceId, table.state, table.leaseExpiresAt, table.createdAt,
+    ),
+    identityUnique: uniqueIndex("ai_media_provider_terminal_checks_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id,
+    ),
+    lifecycleCheck: check("ai_media_provider_terminal_checks_ck", sql`(
+      ${table.state} IN ('pending','leased','terminal')
+      AND ${table.fencingToken}>=0 AND ${table.claimCount}>=0
+      AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+      AND ${table.providerCredentialVersion}>=1
+      AND length(btrim(${table.providerJobId})) BETWEEN 1 AND 500
+      AND ${table.sendAuthorizationDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND ((${table.state}='leased')=(${table.leaseToken} IS NOT NULL))
+      AND ((${table.leaseToken} IS NULL)=(${table.leaseOwner} IS NULL))
+      AND ((${table.leaseToken} IS NULL)=(${table.leaseExpiresAt} IS NULL))
+      AND (${table.leaseExpiresAt} IS NULL OR isfinite(${table.leaseExpiresAt}))
+      AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
+    )`),
+    exactAttemptFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.submissionAttemptId,
+        table.budgetReservationId, table.renderJobId, table.dispatchOutboxId,
+        table.dailyPlanSlotId, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.providerJobId, table.sendAuthorizationDigest],
+      foreignColumns: [aiMediaProviderSubmissionAttempts.ownerUserId,
+        aiMediaProviderSubmissionAttempts.workspaceId, aiMediaProviderSubmissionAttempts.id,
+        aiMediaProviderSubmissionAttempts.budgetReservationId,
+        aiMediaProviderSubmissionAttempts.renderJobId,
+        aiMediaProviderSubmissionAttempts.dispatchOutboxId,
+        aiMediaProviderSubmissionAttempts.dailyPlanSlotId,
+        aiMediaProviderSubmissionAttempts.providerAccountId,
+        aiMediaProviderSubmissionAttempts.providerKey,
+        aiMediaProviderSubmissionAttempts.providerCredentialVersion,
+        aiMediaProviderSubmissionAttempts.providerJobId,
+        aiMediaProviderSubmissionAttempts.sendAuthorizationDigest],
+      name: "ai_media_provider_terminal_checks_attempt_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+/** One immutable provider-authoritative terminal event per accepted submission. */
+export const aiMediaProviderTerminalEvents = pgTable(
+  "ai_media_provider_terminal_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    terminalCheckId: uuid("terminal_check_id").notNull(),
+    submissionAttemptId: uuid("submission_attempt_id").notNull(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    renderJobId: uuid("render_job_id").notNull(),
+    dispatchOutboxId: uuid("dispatch_outbox_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    providerJobId: text("provider_job_id").notNull(),
+    sendAuthorizationDigest: text("send_authorization_digest").notNull(),
+    terminalState: text("terminal_state").notNull(),
+    remoteArtifactRef: text("remote_artifact_ref"),
+    remoteUrl: text("remote_url"),
+    expectedMimeType: text("expected_mime_type"),
+    providerEvidenceDigest: text("provider_evidence_digest").notNull(),
+    boundEvidenceDigest: text("bound_evidence_digest").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    attemptUnique: uniqueIndex("ai_media_provider_terminal_events_attempt_uq").on(
+      table.ownerUserId, table.workspaceId, table.submissionAttemptId,
+    ),
+    lifecycleCheck: check("ai_media_provider_terminal_events_ck", sql`(
+      ${table.terminalState} IN ('completed','failed')
+      AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+      AND ${table.providerCredentialVersion}>=1
+      AND length(btrim(${table.providerJobId})) BETWEEN 1 AND 500
+      AND ${table.sendAuthorizationDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.providerEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.boundEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND isfinite(${table.observedAt}) AND isfinite(${table.createdAt})
+      AND ((${table.terminalState}='completed' AND length(btrim(${table.remoteArtifactRef})) BETWEEN 1 AND 1000
+        AND ${table.remoteUrl} ~ '^https://[^[:space:]@/]+(:[0-9]+)?/[^[:space:]#]+([?][^[:space:]#]*)?$'
+        AND ${table.expectedMimeType}='video/mp4')
+        OR (${table.terminalState}='failed' AND ${table.remoteArtifactRef} IS NULL
+          AND ${table.remoteUrl} IS NULL AND ${table.expectedMimeType} IS NULL))
+    )`),
+    exactCheckFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.terminalCheckId],
+      foreignColumns: [aiMediaProviderTerminalChecks.ownerUserId,
+        aiMediaProviderTerminalChecks.workspaceId, aiMediaProviderTerminalChecks.id],
+      name: "ai_media_provider_terminal_events_check_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactAttemptFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.submissionAttemptId,
+        table.budgetReservationId, table.renderJobId, table.dispatchOutboxId,
+        table.dailyPlanSlotId, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.providerJobId, table.sendAuthorizationDigest],
+      foreignColumns: [aiMediaProviderSubmissionAttempts.ownerUserId,
+        aiMediaProviderSubmissionAttempts.workspaceId, aiMediaProviderSubmissionAttempts.id,
+        aiMediaProviderSubmissionAttempts.budgetReservationId,
+        aiMediaProviderSubmissionAttempts.renderJobId,
+        aiMediaProviderSubmissionAttempts.dispatchOutboxId,
+        aiMediaProviderSubmissionAttempts.dailyPlanSlotId,
+        aiMediaProviderSubmissionAttempts.providerAccountId,
+        aiMediaProviderSubmissionAttempts.providerKey,
+        aiMediaProviderSubmissionAttempts.providerCredentialVersion,
+        aiMediaProviderSubmissionAttempts.providerJobId,
+        aiMediaProviderSubmissionAttempts.sendAuthorizationDigest],
+      name: "ai_media_provider_terminal_events_attempt_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
 export const aiMediaStudioTables = {
   influencers: aiMediaInfluencers,
   scripts: aiMediaScripts,
@@ -3505,6 +3689,8 @@ export const aiMediaStudioTables = {
   workActivations: aiMediaWorkActivations,
   providerSubmissionAttempts: aiMediaProviderSubmissionAttempts,
   providerSubmissionEvents: aiMediaProviderSubmissionEvents,
+  providerTerminalChecks: aiMediaProviderTerminalChecks,
+  providerTerminalEvents: aiMediaProviderTerminalEvents,
   sourceItems: aiMediaSourceItems,
   orchestrationRuns: aiMediaOrchestrationRuns,
   outbox: aiMediaOutbox,
