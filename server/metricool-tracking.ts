@@ -4,6 +4,7 @@ export type MetricoolNetwork =
   | "youtube"
   | "pinterest"
   | "facebook"
+  | "twitter"
   | "linkedin";
 
 export type MetricoolBrandPlan = {
@@ -97,19 +98,19 @@ export const METRICOOL_BRAND_PLAN: MetricoolBrandPlan[] = [
   },
   {
     id: "winner-account-1",
-    name: "Winner Account 1",
-    ownerAgent: "Marketing Command Center",
-    status: "optional",
-    networks: ["tiktok", "instagram", "youtube"],
-    notes: "Reserved for the first new account created from whichever niche, format, or offer performs best.",
+    name: "Miami News",
+    ownerAgent: "Clippers",
+    status: "ready_to_connect",
+    networks: ["facebook", "twitter"],
+    notes: "Local Miami news brand for Facebook and X/Twitter publishing through Metricool after connection and approval gates are ready.",
   },
   {
     id: "winner-account-2",
-    name: "Winner Account 2",
-    ownerAgent: "Marketing Command Center",
-    status: "optional",
-    networks: ["tiktok", "instagram", "youtube"],
-    notes: "Reserved for the second winner after performance data shows a repeatable content lane.",
+    name: "NY News",
+    ownerAgent: "Clippers",
+    status: "ready_to_connect",
+    networks: ["facebook", "twitter"],
+    notes: "Local New York news brand for Facebook and X/Twitter publishing through Metricool after connection and approval gates are ready.",
   },
   {
     id: "winner-account-3",
@@ -132,6 +133,7 @@ function emptyNetworkCounts(): Record<MetricoolNetwork, number> {
     youtube: 0,
     pinterest: 0,
     facebook: 0,
+    twitter: 0,
     linkedin: 0,
   };
 }
@@ -177,7 +179,7 @@ export function getMetricoolTrackingPlan(brands = METRICOOL_BRAND_PLAN): Metrico
     setupActions: [
       "Create the Metricool account and plan with at least 10 brands.",
       "Create one Metricool brand per business/content brand listed in this plan.",
-      "Keep Winner Account 1-3 as reserved brands until performance data decides their exact niche.",
+      "Keep Winner Account 3 reserved until performance data decides its exact niche.",
       "Connect each social profile inside its matching Metricool brand.",
       "Add METRICOOL_USER_TOKEN and METRICOOL_USER_ID only through local secrets or deployment secret manager.",
       "Run the Metricool MCP health check before enabling automatic scheduling.",

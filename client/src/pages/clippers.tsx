@@ -51,7 +51,7 @@ type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
 type ClipperAgentStatus = "active" | "waiting" | "review_required";
 type ClipperPlatform = "tiktok" | "instagram" | "youtube";
-type MetricoolNetwork = ClipperPlatform | "pinterest" | "facebook" | "linkedin";
+type MetricoolNetwork = ClipperPlatform | "pinterest" | "facebook" | "linkedin" | "twitter";
 type ClipperPlatformConnectionStatus = "not_created" | "created" | "needs_oauth" | "needs_review" | "ready";
 type ClipperPermissionStatus = "missing" | "requested" | "approved" | "blocked";
 type ClipperReadinessStatus = "ready" | "missing" | "partial";
@@ -184,6 +184,156 @@ type ClipperOperationalReadinessStatus = "blocked" | "metricool_mvp_ready_with_b
 type ClipperExternalCloseoutPackStatus = "blocked_external_actions" | "ready_for_final_review";
 type ClipperExternalCloseoutEvidenceImportStatus = "blocked_invalid_evidence" | "import_applied" | "partial_import_applied" | "ready_to_apply" | "partial_ready_to_apply" | "empty";
 type ClipperExternalGoLiveAuditGateStatus = "blocked" | "verified";
+
+type ClipperLocalNewsLaneId = "miami-news" | "ny-news" | string;
+type ClipperLocalNewsPlatform = "x" | "facebook";
+type ClipperLocalNewsReviewStatus = "auto_eligible" | "review_required" | "blocked" | "queued" | "published" | string;
+
+interface ClipperLocalNewsSource {
+  id: string;
+  name: string;
+  lane?: ClipperLocalNewsLaneId;
+  url?: string;
+  kind?: string;
+  status?: string;
+  enabled?: boolean;
+  active?: boolean;
+  configurable?: boolean;
+}
+
+interface ClipperLocalNewsLane {
+  id?: ClipperLocalNewsLaneId;
+  name?: string;
+  label?: string;
+  city?: string;
+  status?: string;
+  active?: number;
+  resolved?: number;
+  queued?: number;
+  sourceIds?: string[];
+  sources?: ClipperLocalNewsSource[];
+  totals?: {
+    sources?: number;
+    activeSources?: number;
+    queued?: number;
+    xQueued?: number;
+    facebookQueued?: number;
+    autoEligible?: number;
+    reviewRequired?: number;
+  };
+}
+
+interface ClipperLocalNewsQueueItem {
+  id: string;
+  lane?: ClipperLocalNewsLaneId;
+  platform?: ClipperLocalNewsPlatform;
+  status?: ClipperLocalNewsReviewStatus;
+  title?: string;
+  publishedUrl?: string | null;
+  metricsRecordedAt?: string | null;
+}
+
+interface ClipperLocalNewsQueueSummary {
+  items?: ClipperLocalNewsQueueItem[];
+  total?: number;
+  approvalRequired?: number;
+  x?: number;
+  facebook?: number;
+  xQueued?: number;
+  facebookQueued?: number;
+  autoEligible?: number;
+  reviewRequired?: number;
+  published?: number;
+  totals?: {
+    queued?: number;
+    x?: number;
+    facebook?: number;
+    autoEligible?: number;
+    reviewRequired?: number;
+    published?: number;
+  };
+}
+
+interface ClipperLocalNewsStatus {
+  generatedAt?: string;
+  rootDir?: string;
+  workspaceDir?: string;
+  status?: string;
+  bootstrapped?: boolean;
+  scheduleMinutes?: number;
+  lastRunAt?: string | null;
+  lanes?: ClipperLocalNewsLane[] | Record<string, ClipperLocalNewsLane>;
+  sources?: ClipperLocalNewsSource[];
+  queue?: ClipperLocalNewsQueueSummary | ClipperLocalNewsQueueItem[];
+  totals?: {
+    lanes?: number;
+    sources?: number;
+    activeSources?: number;
+    configurableSources?: number;
+    queued?: number;
+    xQueued?: number;
+    facebookQueued?: number;
+    autoEligible?: number;
+    reviewRequired?: number;
+    published?: number;
+  };
+  lastRun?: {
+    id?: string;
+    status?: string;
+    startedAt?: string;
+    completedAt?: string;
+    generatedAt?: string;
+    discovered?: number;
+    queued?: number;
+    autoEligible?: number;
+    reviewRequired?: number;
+    error?: string | null;
+  } | null;
+  events?: { total: number; active: number; resolved: number };
+  metrics?: {
+    total: number;
+    impressions: number;
+    engagements: number;
+    clicks: number;
+    shares: number;
+    revenueUsd?: number;
+    costUsd?: number;
+    profitUsd?: number;
+  };
+  connectors?: Array<{
+    id: string;
+    lane: ClipperLocalNewsLaneId;
+    configured: boolean;
+    requiresKey: boolean;
+    public: boolean;
+  }>;
+  coverage?: {
+    weather: string;
+    miamiTraffic: string;
+    nyTraffic: string;
+    roadCoverageComplete: boolean;
+    note: string;
+  };
+  artifacts?: Record<string, string>;
+  guardrails?: string[];
+  metricool?: {
+    status?: string;
+    configured?: boolean;
+    connected?: boolean;
+    blocker?: string | null;
+    requiredConnections?: number;
+    connectedConnections?: number;
+    optionalConnectors?: string[];
+  };
+  nextStep?: string;
+}
+
+interface ClipperLocalNewsResponse {
+  localNews?: ClipperLocalNewsStatus;
+  status?: ClipperLocalNewsStatus | string;
+  message?: string;
+  error?: string;
+}
 
 interface ClipperPlatformAccount {
   platform: ClipperPlatform;
@@ -4551,6 +4701,8 @@ interface ClipperMetricoolPublishingChannel {
   metricoolSource: "live" | "cache" | "plan";
   networks: MetricoolNetwork[];
   connectedNetworks: MetricoolNetwork[];
+  connectedProfileHandles?: Partial<Record<MetricoolNetwork, string>>;
+  connectedProfileUrls?: Partial<Record<MetricoolNetwork, string>>;
   accountStatus: ClipperAccountStatus;
   dailyClipTarget: number;
   weeklyViewsGoal: number;
@@ -7074,13 +7226,20 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
+  if (!value) return "Sin ejecutar";
   return new Intl.DateTimeFormat("es-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function normalizeClipperLocalNewsStatus(data: ClipperLocalNewsResponse | ClipperLocalNewsStatus) {
+  if ("localNews" in data && data.localNews) return data.localNews;
+  if ("status" in data && typeof data.status === "object" && data.status) return data.status;
+  return data as ClipperLocalNewsStatus;
 }
 
 function platformLabel(platform: string) {
@@ -7711,6 +7870,23 @@ export default function ClippersPage() {
   const { data: status, isLoading, refetch } = useQuery<ClipperStatus>({
     queryKey: ["/api/clippers/status"],
   });
+  const {
+    data: localNews,
+    isLoading: isLocalNewsLoading,
+    isError: isLocalNewsError,
+  } = useQuery<ClipperLocalNewsStatus>({
+    queryKey: ["/api/clippers/local-news/status"],
+    queryFn: async () => {
+      const response = await fetch("/api/clippers/local-news/status");
+      const data = await response.json() as ClipperLocalNewsResponse | ClipperLocalNewsStatus;
+      if (!response.ok) {
+        const message = "error" in data ? data.error : "message" in data ? data.message : undefined;
+        throw new Error(message || "No pude leer Local News Autopilot");
+      }
+      return normalizeClipperLocalNewsStatus(data);
+    },
+    refetchInterval: 30_000,
+  });
   const { data: accountPermissionReadiness } = useQuery<ClipperAccountPermissionReadinessSummary | null>({
     queryKey: ["/api/clippers/account-permission-readiness"],
     queryFn: async () => {
@@ -7948,6 +8124,59 @@ export default function ClippersPage() {
       });
     }
   };
+
+  const localNewsBootstrapMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/local-news/bootstrap", { method: "POST" });
+      const data = await response.json() as ClipperLocalNewsResponse | ClipperLocalNewsStatus;
+      if (!response.ok) {
+        const message = "error" in data ? data.error : undefined;
+        throw new Error(message || "No pude preparar Local News Autopilot");
+      }
+      return normalizeClipperLocalNewsStatus(data);
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/local-news/status"], data);
+      void queryClient.invalidateQueries({ queryKey: ["/api/clippers/local-news/status"] });
+      toast({
+        title: "Local News preparado",
+        description: "Miami News y NY News quedaron configurados; publicar sigue sujeto a evidencia y revisión.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "No pude preparar Local News", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const localNewsRunCycleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/clippers/local-news/run-cycle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json() as ClipperLocalNewsResponse | ClipperLocalNewsStatus;
+      if (!response.ok) {
+        const message = "error" in data ? data.error : undefined;
+        throw new Error(message || "No pude ejecutar el ciclo Local News");
+      }
+      return normalizeClipperLocalNewsStatus(data);
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/clippers/local-news/status"], data);
+      void queryClient.invalidateQueries({ queryKey: ["/api/clippers/local-news/status"] });
+      const queue = data.queue && !Array.isArray(data.queue) ? data.queue : null;
+      const queued = data.totals?.queued ?? queue?.total ?? 0;
+      const review = data.totals?.reviewRequired ?? queue?.reviewRequired ?? queue?.approvalRequired ?? 0;
+      toast({
+        title: "Ciclo Local News completado",
+        description: `${queued} en cola; ${review} requieren revisión. Nada se cuenta publicado sin evidencia y métricas.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Falló el ciclo Local News", description: error.message, variant: "destructive" });
+    },
+  });
 
   const runMutation = useMutation({
     mutationFn: async () => {
@@ -11263,10 +11492,75 @@ export default function ClippersPage() {
     && (metricoolExecutionQueue?.totals.queuedForApproval || 0) > 0
     && (metricoolExecutionQueue?.totals.readyToSend || 0) === 0
     && metricoolExecutionQueue.realPublishEnabled === false;
+  const localNewsLanes = localNews?.lanes
+    ? Array.isArray(localNews.lanes)
+      ? localNews.lanes
+      : Object.entries(localNews.lanes).map(([id, lane]) => ({ ...lane, id: lane.id || id }))
+    : [];
+  const localNewsSources = localNews?.sources
+    || localNews?.connectors?.map((connector) => ({
+      id: connector.id,
+      name: connector.id,
+      lane: connector.lane,
+      status: connector.configured ? "active" : "needs_configuration",
+      active: connector.configured,
+      configurable: true,
+    }))
+    || localNewsLanes.flatMap((lane) => lane.sources || []);
+  const localNewsQueueSummary = localNews?.queue && !Array.isArray(localNews.queue) ? localNews.queue : null;
+  const localNewsQueueItems = Array.isArray(localNews?.queue) ? localNews.queue : localNewsQueueSummary?.items || [];
+  const localNewsActiveSources = localNewsSources.filter((source) => source.active ?? source.enabled ?? source.status === "active");
+  const localNewsConfigurableSources = localNewsSources.filter((source) => source.configurable !== false);
+  const localNewsXQueued = localNews?.totals?.xQueued
+    ?? localNewsQueueSummary?.xQueued
+    ?? localNewsQueueSummary?.x
+    ?? localNewsQueueSummary?.totals?.x
+    ?? (localNewsQueueSummary?.total !== undefined ? Math.ceil(localNewsQueueSummary.total / 2) : undefined)
+    ?? localNewsQueueItems.filter((item) => item.platform === "x").length;
+  const localNewsFacebookQueued = localNews?.totals?.facebookQueued
+    ?? localNewsQueueSummary?.facebookQueued
+    ?? localNewsQueueSummary?.facebook
+    ?? localNewsQueueSummary?.totals?.facebook
+    ?? (localNewsQueueSummary?.total !== undefined ? Math.floor(localNewsQueueSummary.total / 2) : undefined)
+    ?? localNewsQueueItems.filter((item) => item.platform === "facebook").length;
+  const localNewsAutoEligible = localNews?.totals?.autoEligible
+    ?? localNewsQueueSummary?.autoEligible
+    ?? localNewsQueueSummary?.totals?.autoEligible
+    ?? localNewsQueueItems.filter((item) => item.status === "auto_eligible").length;
+  const localNewsReviewRequired = localNews?.totals?.reviewRequired
+    ?? localNewsQueueSummary?.reviewRequired
+    ?? localNewsQueueSummary?.approvalRequired
+    ?? localNewsQueueSummary?.totals?.reviewRequired
+    ?? localNewsQueueItems.filter((item) => item.status === "review_required").length;
+  const localNewsPublishedWithEvidence = localNews?.totals?.published
+    ?? localNewsQueueSummary?.published
+    ?? localNewsQueueSummary?.totals?.published
+    ?? localNewsQueueItems.filter((item) => item.status === "published" && item.publishedUrl && item.metricsRecordedAt).length;
+  const localNewsLaneCards = [
+    { id: "miami-news", label: "Miami News", match: "miami news" },
+    { id: "ny-news", label: "NY News", match: "ny news" },
+  ].map((expected) => {
+    const lane = localNewsLanes.find((candidate) => {
+      const identity = `${candidate.id} ${candidate.name || ""} ${candidate.label || ""} ${candidate.city || ""}`.toLowerCase().replace(/[-_]+/g, " ");
+      return identity.includes(expected.match);
+    });
+    const laneSources = lane?.sources || localNewsSources.filter((source) => source.lane === lane?.id || source.lane === expected.id);
+    const laneItems = localNewsQueueItems.filter((item) => item.lane === lane?.id || item.lane === expected.id);
+    return {
+      id: expected.id,
+      label: lane?.label || lane?.name || expected.label,
+      status: lane?.status || (lane ? (localNews?.bootstrapped ? "active" : "configured") : "pending bootstrap"),
+      sources: lane?.totals?.activeSources ?? laneSources.filter((source) => source.active ?? source.enabled ?? source.status === "active").length,
+      xQueued: lane?.totals?.xQueued ?? (lane?.queued !== undefined ? Math.ceil(lane.queued / 2) : laneItems.filter((item) => item.platform === "x").length),
+      facebookQueued: lane?.totals?.facebookQueued ?? (lane?.queued !== undefined ? Math.floor(lane.queued / 2) : laneItems.filter((item) => item.platform === "facebook").length),
+    };
+  });
   const metricoolBridgeByAccountPlatform = new Map<string, {
     brandName: string;
     blogId: string | null;
     publishGate: ClipperMetricoolPublishingChannel["publishGate"];
+    handle: string;
+    profileUrl: string;
   }>();
   (metricoolPublishing?.channels || []).forEach((channel) => {
     channel.connectedNetworks.forEach((network) => {
@@ -11275,6 +11569,8 @@ export default function ClippersPage() {
           brandName: channel.metricoolBrandName,
           blogId: channel.metricoolBlogId,
           publishGate: channel.publishGate,
+          handle: channel.connectedProfileHandles?.[network] || "",
+          profileUrl: channel.connectedProfileUrls?.[network] || "",
         });
       }
     });
@@ -12176,6 +12472,146 @@ export default function ClippersPage() {
             </Button>
           </div>
         </header>
+
+        <section
+          className="rounded-lg border border-sky-300/20 bg-sky-950/10 p-4"
+          aria-labelledby="local-news-autopilot-title"
+          data-testid="clippers-local-news-autopilot"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="border border-sky-300/30 bg-sky-300/10 text-sky-100">Local News Autopilot</Badge>
+                <Badge className="border border-zinc-700 bg-zinc-900 text-zinc-300">Miami + NY</Badge>
+                <Badge className="border border-amber-300/30 bg-amber-300/10 text-amber-100">evidence-gated</Badge>
+              </div>
+              <h2 id="local-news-autopilot-title" className="mt-2 text-lg font-semibold text-white">Noticias locales para X y Facebook</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">
+                Descubre y prepara historias por ciudad. Auto-eligible significa apto para programación automática en Metricool, no publicado; review required siempre espera revisión humana.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => localNewsBootstrapMutation.mutate()}
+                disabled={localNewsBootstrapMutation.isPending || localNewsRunCycleMutation.isPending}
+                className="border-sky-300/30 bg-transparent text-sky-100 hover:bg-sky-300/10"
+                data-testid="bootstrap-clippers-local-news-button"
+              >
+                {localNewsBootstrapMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderOpen className="mr-2 h-4 w-4" />}
+                Preparar lanes
+              </Button>
+              <Button
+                type="button"
+                onClick={() => localNewsRunCycleMutation.mutate()}
+                disabled={localNewsRunCycleMutation.isPending || localNewsBootstrapMutation.isPending}
+                className="bg-sky-200 text-zinc-950 hover:bg-sky-100"
+                data-testid="run-clippers-local-news-cycle-button"
+              >
+                {localNewsRunCycleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                Ejecutar ciclo
+              </Button>
+            </div>
+          </div>
+
+          {isLocalNewsLoading ? (
+            <div className="mt-4 flex items-center gap-2 text-sm text-zinc-400" role="status">
+              <Loader2 className="h-4 w-4 animate-spin" /> Cargando estado de Local News…
+            </div>
+          ) : isLocalNewsError ? (
+            <div className="mt-4 rounded-md border border-amber-300/20 bg-amber-950/10 p-3 text-sm text-amber-100" role="status">
+              El módulo todavía no responde. Usa “Preparar lanes” cuando el servicio esté disponible.
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {localNewsLaneCards.map((lane) => (
+                  <div key={lane.id} className="rounded-md border border-white/10 bg-black/25 p-3" data-testid={`clippers-local-news-lane-${lane.id}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">{lane.label}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{lane.sources} fuentes activas</p>
+                      </div>
+                      <Badge className="border border-white/10 bg-white/5 text-zinc-300">{lane.status}</Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                      <div className="rounded border border-white/10 bg-zinc-950/60 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">X queue</p>
+                        <p className="mt-1 text-lg font-semibold text-sky-100">{formatNumber(lane.xQueued)}</p>
+                      </div>
+                      <div className="rounded border border-white/10 bg-zinc-950/60 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">Facebook queue</p>
+                        <p className="mt-1 text-lg font-semibold text-blue-100">{formatNumber(lane.facebookQueued)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ["X en cola", localNewsXQueued, "text-sky-100"],
+                  ["Facebook en cola", localNewsFacebookQueued, "text-blue-100"],
+                  ["Auto-eligible", localNewsAutoEligible, "text-emerald-100"],
+                  ["Review required", localNewsReviewRequired, "text-amber-100"],
+                ].map(([label, value, tone]) => (
+                  <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 p-3">
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                    <p className={cn("mt-1 text-xl font-semibold", String(tone))}>{formatNumber(Number(value))}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Dinero observado y registrado de Local News">
+                {[
+                  ["Revenue registrado", localNews?.metrics?.revenueUsd ?? 0, "text-emerald-100"],
+                  ["Cost registrado", localNews?.metrics?.costUsd ?? 0, "text-amber-100"],
+                  ["Profit observado", localNews?.metrics?.profitUsd ?? 0, "text-sky-100"],
+                ].map(([label, value, tone]) => (
+                  <div key={String(label)} className="rounded-md border border-white/10 bg-black/25 px-3 py-2" data-testid={`clippers-local-news-money-${String(label).split(" ")[0].toLowerCase()}`}>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+                    <p className={cn("mt-1 text-lg font-semibold", String(tone))}>{formatMoney(Number(value))}</p>
+                  </div>
+                ))}
+                <p className="sm:col-span-3 text-[11px] leading-4 text-zinc-500">Solo importes observados y registrados; no se infieren ingresos, costos ni ganancias.</p>
+              </div>
+
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+                <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Fuentes activas / configurables</p>
+                    <Badge className="border border-white/10 bg-white/5 text-zinc-300">
+                      {localNews?.totals?.activeSources ?? localNewsActiveSources.length} activas · {localNews?.totals?.configurableSources ?? localNewsConfigurableSources.length} configurables
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(localNewsActiveSources.length > 0 ? localNewsActiveSources : localNewsConfigurableSources).slice(0, 8).map((source) => (
+                      <Badge key={source.id} className="border border-sky-300/15 bg-sky-300/5 text-sky-100">{source.name}</Badge>
+                    ))}
+                    {localNewsSources.length === 0 && <span className="text-xs text-zinc-500">Pendientes de bootstrap.</span>}
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Última corrida</p>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-white">{formatDate(localNews?.lastRun?.completedAt || localNews?.lastRun?.startedAt || localNews?.lastRun?.generatedAt || localNews?.lastRunAt)}</p>
+                    <Badge className="border border-white/10 bg-white/5 text-zinc-300">{localNews?.lastRun?.status || (localNews?.lastRunAt ? "completed" : "not_run")}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">{localNews?.nextStep || "Prepara los lanes y ejecuta el primer ciclo."}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-3 text-xs leading-5 text-amber-100/90">
+                <span className="font-semibold">Único bloqueo externo:</span>{" "}
+                {localNews?.metricool?.blocker || (localNews?.metricool?.connected ? "ninguno" : "conectar los perfiles Miami News y NY News en Metricool para X/Facebook")}
+              </div>
+              <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3 text-xs leading-5 text-emerald-100/80" data-testid="clippers-local-news-evidence-gate">
+                Publicado con evidencia: <span className="font-semibold text-emerald-100">{formatNumber(localNewsPublishedWithEvidence)}</span>. Los items en cola, auto-eligible o scheduled no cuentan como publicados; solo una URL pública comprobada y métricas registradas cierran el ciclo.
+              </div>
+            </>
+          )}
+        </section>
 
         {intakeRefreshSweep && (
           <div className="rounded-md border border-violet-300/20 bg-violet-950/20 p-3" data-testid="clippers-intake-refresh-sweep-global-result">
@@ -22206,6 +22642,11 @@ export default function ClippersPage() {
                           <p className="mt-1 text-emerald-100/75">
                             {metricoolBridge.brandName}{metricoolBridge.blogId ? ` · blogId ${metricoolBridge.blogId}` : ""} · {metricoolBridge.publishGate}
                           </p>
+                          {metricoolBridge.profileUrl && (
+                            <a className="mt-1 block text-cyan-200 underline underline-offset-2" href={metricoolBridge.profileUrl} target="_blank" rel="noreferrer">
+                              {metricoolBridge.handle ? `@${metricoolBridge.handle}` : metricoolBridge.profileUrl}
+                            </a>
+                          )}
                           {platformAccount.status !== "ready" && (
                             <p className="mt-1 text-amber-100/90">Cuenta social full-go-live sigue pendiente; esto solo desbloquea revision manual por Metricool.</p>
                           )}
