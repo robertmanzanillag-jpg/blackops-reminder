@@ -3074,6 +3074,8 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(captcha.requiresHumanVerification, true);
     assert.equal(captcha.priority, "human_action_required");
     assert.equal(captcha.outreachStatus, "not_sent");
+    assert.equal(campaign.humanActionRequiredRows, 1);
+    assert.equal(campaign.totalResearchPoolRows, 6);
     assert.equal(campaign.premiumRows.some((row) => row.handle === "SearchPageMustFail"), false);
     assert.equal(campaign.premiumRows.some((row) => row.handle === "WrongCreator"), false);
     assert.ok(campaign.premiumRows.some((row) => row.handle === "foo-bar"));
