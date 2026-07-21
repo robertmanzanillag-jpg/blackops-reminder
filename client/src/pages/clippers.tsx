@@ -265,6 +265,27 @@ interface ClipperLocalNewsStatus {
   lanes?: ClipperLocalNewsLane[] | Record<string, ClipperLocalNewsLane>;
   sources?: ClipperLocalNewsSource[];
   queue?: ClipperLocalNewsQueueSummary | ClipperLocalNewsQueueItem[];
+  editorial?: {
+    owner?: string;
+    operatingMode?: string;
+    sections?: Partial<Record<"traffic" | "weather" | "breaking" | "public_safety" | "local", { events?: number; queued?: number }>>;
+    urgency?: Partial<Record<"routine" | "developing" | "breaking", number>>;
+    autoSafe?: number;
+    reviewRequired?: number;
+    cadenceHeld?: number;
+    textOnlyFacebook?: number;
+    duplicates?: number;
+    revisions?: number;
+    corrections?: number;
+    resolvedRevisions?: number;
+    cadence?: {
+      windowMinutes?: number;
+      facebookPerLane?: number;
+      facebookRoutinePerLane?: number;
+      xPerLane?: number;
+      xRoutinePerLane?: number;
+    };
+  };
   totals?: {
     lanes?: number;
     sources?: number;
@@ -324,6 +345,10 @@ interface ClipperLocalNewsStatus {
     requiredConnections?: number;
     connectedConnections?: number;
     optionalConnectors?: string[];
+    platforms?: {
+      facebook?: { required?: number; connected?: number; ready?: boolean };
+      x?: { required?: number; connected?: number; ready?: boolean };
+    };
   };
   nextStep?: string;
 }
@@ -11536,6 +11561,19 @@ export default function ClippersPage() {
     ?? localNewsQueueSummary?.published
     ?? localNewsQueueSummary?.totals?.published
     ?? localNewsQueueItems.filter((item) => item.status === "published" && item.publishedUrl && item.metricsRecordedAt).length;
+  const localNewsEditorial = localNews?.editorial;
+  const localNewsEditorialSections = ([
+    ["traffic", "Tráfico"],
+    ["weather", "Tiempo"],
+    ["breaking", "Última hora"],
+    ["public_safety", "Seguridad pública"],
+    ["local", "Local"],
+  ] as const).map(([id, label]) => ({
+    id,
+    label,
+    events: localNewsEditorial?.sections?.[id]?.events ?? 0,
+    queued: localNewsEditorial?.sections?.[id]?.queued ?? 0,
+  }));
   const localNewsLaneCards = [
     { id: "miami-news", label: "Miami News", match: "miami news" },
     { id: "ny-news", label: "NY News", match: "ny news" },
@@ -12525,6 +12563,41 @@ export default function ClippersPage() {
             </div>
           ) : (
             <>
+              <div className="mt-4 rounded-md border border-violet-300/20 bg-violet-950/15 p-3" data-testid="clippers-local-news-editorial-ceo">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-200">{localNewsEditorial?.owner || "Local News CEO"}</p>
+                    <p className="mt-1 text-sm font-medium text-white">Mesa editorial profesional · Facebook acepta noticias solo con texto</p>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-400">
+                      El CEO clasifica, atribuye y programa tráfico, cierres, tiempo y última hora. Noticias sensibles esperan revisión humana; una foto nunca es requisito para Facebook.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">{formatNumber(localNewsEditorial?.textOnlyFacebook ?? 0)} texto Facebook</Badge>
+                    <Badge className="border border-amber-300/25 bg-amber-300/10 text-amber-100">{formatNumber(localNewsEditorial?.cadenceHeld ?? 0)} retenidos por cadencia</Badge>
+                    <Badge className="border border-red-300/25 bg-red-300/10 text-red-100">{formatNumber(localNewsEditorial?.reviewRequired ?? localNewsReviewRequired)} revisión</Badge>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  {localNewsEditorialSections.map((section) => (
+                    <div key={section.id} className="rounded border border-white/10 bg-black/25 px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{section.label}</p>
+                      <p className="mt-1 text-sm font-medium text-white">{formatNumber(section.queued)} en cola</p>
+                      <p className="text-[11px] text-zinc-500">{formatNumber(section.events)} eventos</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2 lg:grid-cols-4">
+                  <p>Auto-safe: <span className="font-medium text-emerald-100">{formatNumber(localNewsEditorial?.autoSafe ?? localNewsAutoEligible)}</span></p>
+                  <p>Updates: <span className="font-medium text-sky-100">{formatNumber(localNewsEditorial?.revisions ?? 0)}</span></p>
+                  <p>Correcciones/resueltos: <span className="font-medium text-violet-100">{formatNumber((localNewsEditorial?.corrections ?? 0) + (localNewsEditorial?.resolvedRevisions ?? 0))}</span></p>
+                  <p>Duplicados evitados: <span className="font-medium text-zinc-200">{formatNumber(localNewsEditorial?.duplicates ?? 0)}</span></p>
+                </div>
+                <p className="mt-3 text-[11px] leading-4 text-zinc-500">
+                  Cadencia: máximo {localNewsEditorial?.cadence?.facebookPerLane ?? 6} Facebook por ciudad cada {localNewsEditorial?.cadence?.windowMinutes ?? 60} minutos; rutina limitada a {localNewsEditorial?.cadence?.facebookRoutinePerLane ?? 2}. El exceso se difiere automáticamente, sin pedir aprobación.
+                </p>
+              </div>
+
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 {localNewsLaneCards.map((lane) => (
                   <div key={lane.id} className="rounded-md border border-white/10 bg-black/25 p-3" data-testid={`clippers-local-news-lane-${lane.id}`}>
@@ -12602,9 +12675,21 @@ export default function ClippersPage() {
                 </div>
               </div>
 
-              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-950/10 p-3 text-xs leading-5 text-amber-100/90">
-                <span className="font-semibold">Único bloqueo externo:</span>{" "}
-                {localNews?.metricool?.blocker || (localNews?.metricool?.connected ? "ninguno" : "conectar los perfiles Miami News y NY News en Metricool para X/Facebook")}
+              <div className={cn(
+                "mt-3 rounded-md border p-3 text-xs leading-5",
+                localNews?.metricool?.platforms?.facebook?.ready
+                  ? "border-emerald-300/20 bg-emerald-950/15 text-emerald-100/85"
+                  : "border-amber-300/20 bg-amber-950/10 text-amber-100/90",
+              )} data-testid="clippers-local-news-metricool-readiness">
+                <span className="font-semibold">Facebook:</span>{" "}
+                {localNews?.metricool?.platforms?.facebook?.ready
+                  ? `listo para Miami y New York (${localNews.metricool.platforms.facebook.connected ?? 2}/${localNews.metricool.platforms.facebook.required ?? 2})`
+                  : localNews?.metricool?.blocker || "verificando las dos conexiones en Metricool"}
+                <span className="ml-2 text-zinc-400">
+                  X: {localNews?.metricool?.platforms?.x?.ready
+                    ? "listo"
+                    : `${localNews?.metricool?.platforms?.x?.connected ?? 0}/${localNews?.metricool?.platforms?.x?.required ?? 2} conectado; no bloquea Facebook`}
+                </span>
               </div>
               <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3 text-xs leading-5 text-emerald-100/80" data-testid="clippers-local-news-evidence-gate">
                 Publicado con evidencia: <span className="font-semibold text-emerald-100">{formatNumber(localNewsPublishedWithEvidence)}</span>. Los items en cola, auto-eligible o scheduled no cuentan como publicados; solo una URL pública comprobada y métricas registradas cierran el ciclo.
