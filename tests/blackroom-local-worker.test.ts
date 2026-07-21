@@ -90,6 +90,10 @@ test("prompt stops after rendering and reservation so deterministic publisher ow
   assert.match(prompt, /tiempos absolutos del set original/);
   assert.match(prompt, /debajo de 500 MB/);
   assert.match(prompt, /cercano a 5 Mbps/);
+  assert.match(prompt, /TikTok @blackroom\.clipss, la página de clips de Facebook y YouTube Shorts/);
+  assert.match(prompt, /evidencia inequívoca de Metricool para TikTok, Facebook/);
+  assert.match(prompt, /enlace exacto del video completo de YouTube/);
+  assert.match(prompt, /verticales de hasta 178 segundos también se publican como Shorts/);
 });
 
 test("past BlackRoom slots roll forward while future slots keep their target date", () => {

@@ -4,6 +4,11 @@ import { createServer } from "node:http";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 import {
+  BLACKROOM_FACEBOOK_MAIN_URL,
+  blackRoomMetricoolNetworks,
+  buildBlackRoomFacebookCaption,
+  buildMetricoolFacebookPayload,
+  buildMetricoolYouTubeShortPayload,
   buildMetricoolTikTokPayload,
   extractMetricoolMediaId,
   findVerifiedMetricoolPost,
@@ -15,6 +20,9 @@ const input = {
   caption: "REDAX flips the pressure switch. #BlackRoomRadio",
   publicationDateTime: "2026-07-22T05:00:00",
   timezone: "America/New_York",
+  sourceVideoId: "abc123xyz01",
+  durationSeconds: 30,
+  videoFormat: "vertical" as const,
   mediaUrl: "https://robplanner.replit.app/api/blackroom-agent/media/upload-1",
 };
 
@@ -33,6 +41,35 @@ test("builds a TikTok-only auto-publish payload", () => {
   assert.equal(payload.autoPublish, true);
   assert.equal(payload.publicationDate.timezone, "America/New_York");
   assert.equal(payload.tiktokData.privacyOption, "PUBLIC_TO_EVERYONE");
+});
+
+test("builds a separate Facebook payload with a bilingual main-page funnel CTA", () => {
+  const english = buildMetricoolFacebookPayload(input, "media-123");
+  const spanish = buildMetricoolFacebookPayload({ ...input, language: "es" }, "media-123");
+  assert.deepEqual(english.providers, [{ network: "facebook" }]);
+  assert.equal("tiktokData" in english, false);
+  assert.equal(english.facebookData.type, "REEL");
+  assert.equal(buildMetricoolFacebookPayload({ ...input, durationSeconds: 120 }, "media-123").facebookData.type, "POST");
+  assert.equal(buildMetricoolFacebookPayload({ ...input, videoFormat: "horizontal" }, "media-123").facebookData.type, "POST");
+  assert.match(english.text, /Watch the full set on YouTube: https:\/\/www\.youtube\.com\/watch\?v=abc123xyz01/);
+  assert.match(english.text, /Follow the full BlackRoom experience/);
+  assert.match(spanish.text, /Mira el set completo en YouTube/);
+  assert.match(spanish.text, /Sigue la experiencia completa de BlackRoom/);
+  assert.ok(english.text.endsWith(BLACKROOM_FACEBOOK_MAIN_URL));
+  assert.equal(buildMetricoolTikTokPayload(input, "media-123").text.includes(BLACKROOM_FACEBOOK_MAIN_URL), false);
+});
+
+test("builds YouTube Shorts only for eligible vertical clips", () => {
+  const payload = buildMetricoolYouTubeShortPayload(input, "media-123");
+  assert.deepEqual(payload.providers, [{ network: "youtube" }]);
+  assert.equal(payload.youtubeData.type, "short");
+  assert.equal(payload.youtubeData.privacy, "public");
+  assert.equal(payload.youtubeData.category, "MUSIC");
+  assert.equal(payload.youtubeData.madeForKids, false);
+  assert.deepEqual(blackRoomMetricoolNetworks(input), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, videoFormat: "horizontal" }), ["tiktok", "facebook"]);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, durationSeconds: 300 }), ["tiktok", "facebook"]);
+  assert.throws(() => buildMetricoolYouTubeShortPayload({ ...input, videoFormat: "horizontal" }, "media-123"), /vertical clip/);
 });
 
 test("sends Metricool scheduler JSON as exact UTF-8 bytes", async () => {
@@ -157,19 +194,32 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
     calls.push({ url: href, method, body: init.body ? JSON.parse(String(init.body)) : undefined, headers: init.headers });
     if (method === "GET" && href.includes("/scheduler/posts")) {
       const verifications = calls.filter((call) => call.method === "GET" && call.url.includes("/scheduler/posts"));
-      return Response.json(verifications.length === 1 ? { data: [] } : { data: [{ id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } }] });
+      const tiktok = { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
+      const facebook = { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } };
+      const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
+      return Response.json({ data: verifications.length === 1 ? [] : verifications.length === 2 ? [tiktok] : verifications.length === 3 ? [tiktok, facebook] : [tiktok, facebook, youtube] });
     }
     if (href.includes("/normalize/")) return new Response(input.mediaUrl, { headers: { "Content-Type": "text/plain; charset=ISO-8859-1" } });
-    if (method === "POST") return Response.json({ id: 991 });
+    if (method === "POST") return Response.json({ id: 990 + calls.filter((call) => call.method === "POST").length });
     return Response.json({ data: [] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
     env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
     fetch: mockFetch as typeof fetch,
   });
-  assert.deepEqual(receipt, { metricoolId: "991", publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true });
-  assert.equal(calls.length, 4);
+  assert.deepEqual(receipt, {
+    metricoolId: "991",
+    platformReceipts: { tiktok: "991", facebook: "992", youtube: "993" },
+    publicationDateTime: input.publicationDateTime,
+    caption: input.caption,
+    verified: true,
+  });
+  assert.equal(calls.length, 8);
   assert.deepEqual(calls[2].body.media, { mediaId: input.mediaUrl });
+  assert.deepEqual(calls[2].body.providers, [{ network: "tiktok" }]);
+  assert.deepEqual(calls[4].body.providers, [{ network: "facebook" }]);
+  assert.deepEqual(calls[6].body.providers, [{ network: "youtube" }]);
+  assert.equal(calls[6].body.youtubeData.type, "short");
   assert.match(calls[2].url, /integrationSource=MCP/);
   assert.equal((calls[2].headers as Record<string, string>).accept, "application/json");
   assert.equal((calls[2].headers as Record<string, string>)["content-length"], String(Buffer.byteLength(JSON.stringify(calls[2].body), "utf8")));
@@ -181,14 +231,42 @@ test("returns an existing exact post before uploading media or creating a duplic
   const calls: string[] = [];
   const mockFetch = async (url: string | URL | Request) => {
     calls.push(String(url));
-    return Response.json({ data: [{ id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } }] });
+    return Response.json({ data: [
+      { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } },
+    ] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
     env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
     fetch: mockFetch as typeof fetch,
   });
   assert.equal(receipt.metricoolId, "991");
+  assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
   assert.equal(calls.length, 1);
+});
+
+test("retries only the missing Facebook post after TikTok was already confirmed", async () => {
+  const calls: Array<{ method: string; body?: any }> = [];
+  const tiktok = { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
+  const facebook = { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } };
+  const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
+  const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
+    const method = init.method || "GET";
+    calls.push({ method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    if (String(url).includes("/normalize/")) return new Response(input.mediaUrl);
+    if (method === "POST") return Response.json({ id: 992 });
+    const gets = calls.filter((call) => call.method === "GET").length;
+    return Response.json({ data: gets === 1 ? [tiktok, youtube] : [tiktok, facebook, youtube] });
+  };
+  const receipt = await scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+  });
+  const posts = calls.filter((call) => call.method === "POST");
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body.providers, [{ network: "facebook" }]);
+  assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
 });
 
 test("refuses to confirm when the verification response does not contain the post", async () => {
@@ -201,7 +279,7 @@ test("refuses to confirm when the verification response does not contain the pos
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
     env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
     fetch: mockFetch as typeof fetch,
-  }), /unequivocal scheduled-post evidence/);
+  }), /unequivocal tiktok scheduled-post evidence/);
 });
 
 test("includes a bounded upstream validation message without leaking auth", async () => {

@@ -181,16 +181,27 @@ async function publishOneReservedEntry(): Promise<boolean> {
       uploadId: upload.uploadId,
       reservationId: entry.reservationId,
       caption: entry.caption,
+      language: entry.language,
+      sourceVideoId: entry.videoId,
+      durationSeconds: entry.durationSeconds,
+      videoFormat: entry.format,
       publicationDateTime,
       timezone: queue.timezone || "America/New_York",
     }),
   });
   const metricoolId = String(scheduled?.receipt?.metricoolId || "").trim();
-  if (!scheduled?.receipt?.verified || !metricoolId) throw new Error("Metricool bridge returned no verified receipt");
-  await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", metricoolId]);
+  const tiktokId = String(scheduled?.receipt?.platformReceipts?.tiktok || "").trim();
+  const facebookId = String(scheduled?.receipt?.platformReceipts?.facebook || "").trim();
+  const youtubeId = String(scheduled?.receipt?.platformReceipts?.youtube || "").trim();
+  const youtubeShortRequired = entry.format === "vertical" && Number(entry.durationSeconds) >= 3 && Number(entry.durationSeconds) <= 178;
+  if (!scheduled?.receipt?.verified || !metricoolId || !tiktokId || !facebookId || (youtubeShortRequired && !youtubeId)) {
+    throw new Error("Metricool bridge returned incomplete TikTok, Facebook, or YouTube Shorts receipts");
+  }
+  const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}${youtubeId ? `|youtube:${youtubeId}` : ""}`;
+  await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
-    await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; cleanup deferred because BlackRoom is paused`);
+    await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; cleanup deferred because BlackRoom is paused`);
     return true;
   }
   await ensureSourceRecorded(entry);
@@ -198,7 +209,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
   if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
-  await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; local media deleted`);
+  await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; local media deleted`);
   return true;
 }
 

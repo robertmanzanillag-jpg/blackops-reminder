@@ -95,6 +95,9 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /Habla con el agente/);
   assert.match(blackRoomPage, /\/api\/blackroom-agent\/chat/);
   assert.match(blackRoomPage, /sube 3 videos más hoy/);
+  assert.match(blackRoomPage, /TikTok \+ Facebook \+ YouTube Shorts/);
+  assert.match(blackRoomPage, /facebook\.com\/profile\.php\?id=61568193332044/);
+  assert.match(blackRoomPage, /confirmar todos los destinos requeridos/);
   const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
   assert.doesNotThrow(() => new Function(script));
 });

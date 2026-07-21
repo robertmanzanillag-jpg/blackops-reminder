@@ -5,6 +5,9 @@ import { join } from "node:path";
 
 export const BLACKROOM_METRICOOL_BLOG_ID = 6585226;
 export const BLACKROOM_TIMEZONE = "America/New_York";
+export const BLACKROOM_FACEBOOK_MAIN_URL = "https://www.facebook.com/profile.php?id=61568193332044";
+export const BLACKROOM_METRICOOL_NETWORKS = ["tiktok", "facebook", "youtube"] as const;
+export type BlackRoomMetricoolNetwork = (typeof BLACKROOM_METRICOOL_NETWORKS)[number];
 
 export interface BlackRoomMetricoolScheduleInput {
   caption: string;
@@ -12,6 +15,10 @@ export interface BlackRoomMetricoolScheduleInput {
   mediaUrl: string;
   blogId?: number;
   timezone?: string;
+  language?: "en" | "es";
+  sourceVideoId: string;
+  durationSeconds: number;
+  videoFormat: "vertical" | "horizontal";
 }
 
 export interface BlackRoomMetricoolReceipt {
@@ -19,6 +26,7 @@ export interface BlackRoomMetricoolReceipt {
   publicationDateTime: string;
   caption: string;
   verified: true;
+  platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>>;
 }
 
 type FetchLike = typeof fetch;
@@ -167,9 +175,45 @@ async function metricoolMediaId(response: Response): Promise<string> {
   return extractMetricoolMediaId(raw);
 }
 
-export function buildMetricoolTikTokPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
+export function blackRoomYoutubeWatchUrl(sourceVideoId: string): string {
+  const videoId = sourceVideoId.trim();
+  if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw new Error("Invalid BlackRoom YouTube videoId");
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+export function buildBlackRoomFacebookCaption(
+  caption: string,
+  sourceVideoId: string,
+  language: "en" | "es" = "en",
+): string {
+  const fullVideo = language === "es" ? "Mira el set completo en YouTube" : "Watch the full set on YouTube";
+  const callToAction = language === "es"
+    ? "Sigue la experiencia completa de BlackRoom"
+    : "Follow the full BlackRoom experience";
+  return `${caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(sourceVideoId)}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+}
+
+export function buildBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
+  const fullVideo = input.language === "es" ? "Set completo" : "Full set";
+  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n#Shorts #BlackRoom`;
+}
+
+export function blackRoomMetricoolNetworks(input: BlackRoomMetricoolScheduleInput): BlackRoomMetricoolNetwork[] {
+  const isShort = input.videoFormat === "vertical"
+    && Number.isFinite(input.durationSeconds)
+    && input.durationSeconds >= 3
+    && input.durationSeconds <= 178;
+  return isShort ? ["tiktok", "facebook", "youtube"] : ["tiktok", "facebook"];
+}
+
+export function buildMetricoolPayload(
+  input: BlackRoomMetricoolScheduleInput,
+  mediaId: string,
+  network: BlackRoomMetricoolNetwork,
+  caption = input.caption,
+) {
   const timezone = input.timezone || BLACKROOM_TIMEZONE;
-  return {
+  const payload: Record<string, any> = {
     autoPublish: true,
     descendants: [],
     draft: false,
@@ -177,12 +221,13 @@ export function buildMetricoolTikTokPayload(input: BlackRoomMetricoolScheduleInp
     hasNotReadNotes: false,
     media: { mediaId },
     mediaAltText: [],
-    providers: [{ network: "tiktok" }],
+    providers: [{ network }],
     publicationDate: { dateTime: input.publicationDateTime, timezone },
     shortener: false,
     smartLinkData: { ids: [] },
-    text: input.caption,
-    tiktokData: {
+    text: caption,
+  };
+  if (network === "tiktok") payload.tiktokData = {
       disableComment: false,
       disableDuet: false,
       disableStitch: false,
@@ -192,8 +237,40 @@ export function buildMetricoolTikTokPayload(input: BlackRoomMetricoolScheduleInp
       title: "",
       autoAddMusic: false,
       photoCoverIndex: 0,
-    },
+    };
+  if (network === "facebook") payload.facebookData = {
+    type: input.videoFormat === "vertical" && input.durationSeconds >= 3 && input.durationSeconds <= 90 ? "REEL" : "POST",
+    title: caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100) || "BlackRoom DJ clip",
   };
+  if (network === "youtube") payload.youtubeData = {
+    title: caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100) || "BlackRoom DJ Short",
+    type: "short",
+    privacy: "public",
+    tags: ["BlackRoom", "DJ", "Music", "Shorts"],
+    category: "MUSIC",
+    madeForKids: false,
+  };
+  return payload;
+}
+
+export function buildMetricoolTikTokPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
+  return buildMetricoolPayload(input, mediaId, "tiktok");
+}
+
+export function buildMetricoolFacebookPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
+  return buildMetricoolPayload(
+    input,
+    mediaId,
+    "facebook",
+    buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId, input.language),
+  );
+}
+
+export function buildMetricoolYouTubeShortPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
+  if (!blackRoomMetricoolNetworks(input).includes("youtube")) {
+    throw new Error("BlackRoom YouTube Shorts require a vertical clip between 3 and 178 seconds");
+  }
+  return buildMetricoolPayload(input, mediaId, "youtube", buildBlackRoomYouTubeCaption(input));
 }
 
 export function findVerifiedMetricoolPost(value: unknown, caption: string, publicationDateTime: string): Record<string, any> | null {
@@ -242,33 +319,62 @@ export async function scheduleBlackRoomMetricoolPost(
   const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
   const verifyUrl = `${schedulerUrl}&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59&timezone=${timezone}&extendedRange=false`;
   const existing = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "duplicate preflight");
-  const existingMatch = findVerifiedMetricoolPost(existing, input.caption, input.publicationDateTime);
-  if (existingMatch) {
-    const existingId = existingMatch.id ?? existingMatch.uuid;
-    if (existingId == null || String(existingId).trim() === "") throw new Error("Existing Metricool post has no identifier");
-    return { metricoolId: String(existingId), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
+  const captions: Record<BlackRoomMetricoolNetwork, string> = {
+    tiktok: input.caption,
+    facebook: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId, input.language),
+    youtube: buildBlackRoomYouTubeCaption(input),
+  };
+  const requiredNetworks = blackRoomMetricoolNetworks(input);
+  const platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {};
+  const missingNetworks: BlackRoomMetricoolNetwork[] = [];
+  for (const network of requiredNetworks) {
+    const existingMatch = findVerifiedMetricoolPost(existing, captions[network], input.publicationDateTime);
+    const existingId = existingMatch?.id ?? existingMatch?.uuid;
+    if (existingId == null || String(existingId).trim() === "") missingNetworks.push(network);
+    else platformReceipts[network] = String(existingId);
+  }
+  if (!missingNetworks.length) {
+    return {
+      metricoolId: platformReceipts.tiktok!,
+      platformReceipts,
+      publicationDateTime: input.publicationDateTime,
+      caption: input.caption,
+      verified: true,
+    };
   }
   const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
   const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
-  const payload = buildMetricoolTikTokPayload(input, mediaId);
-  const serializedPayload = JSON.stringify(payload);
-  // Metricool has parsed Node fetch and node:https scheduler bodies as empty
-  // in production. Replit curl is verified against the same endpoint and sends
-  // the JSON intact. The auth header travels through fd 3, never process args.
-  const scheduledResponse = options.fetch
-    ? await fetcher(schedulerUrl, {
-        method: "POST",
-        headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
-        body: serializedPayload,
-        signal: AbortSignal.timeout(120_000),
-      })
-    : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
-  const scheduled = await metricoolJson(scheduledResponse, "post scheduling");
+  for (const network of missingNetworks) {
+    const payload = buildMetricoolPayload(input, mediaId, network, captions[network]);
+    const serializedPayload = JSON.stringify(payload);
+    // Metricool has parsed Node fetch and node:https scheduler bodies as empty
+    // in production. Replit curl is verified against the same endpoint and sends
+    // the JSON intact. Auth is provided through curl config on stdin.
+    const scheduledResponse = options.fetch
+      ? await fetcher(schedulerUrl, {
+          method: "POST",
+          headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
+          body: serializedPayload,
+          signal: AbortSignal.timeout(120_000),
+        })
+      : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
+    const scheduled = await metricoolJson(scheduledResponse, `${network} post scheduling`);
 
-  const verification = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "post verification");
-  const matched = findVerifiedMetricoolPost(verification, input.caption, input.publicationDateTime);
-  if (!matched) throw new Error("Metricool did not return unequivocal scheduled-post evidence");
-  const id = matched.id ?? matched.uuid ?? scheduled?.id ?? scheduled?.uuid;
-  if (id == null || String(id).trim() === "") throw new Error("Metricool scheduled post has no identifier");
-  return { metricoolId: String(id), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
+    const verification = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), `${network} post verification`);
+    const matched = findVerifiedMetricoolPost(verification, captions[network], input.publicationDateTime);
+    if (!matched) throw new Error(`Metricool did not return unequivocal ${network} scheduled-post evidence`);
+    const id = matched.id ?? matched.uuid ?? scheduled?.id ?? scheduled?.uuid;
+    if (id == null || String(id).trim() === "") throw new Error(`Metricool scheduled ${network} post has no identifier`);
+    platformReceipts[network] = String(id);
+  }
+  if (requiredNetworks.some((network) => !platformReceipts[network])) {
+    throw new Error("Metricool did not confirm every BlackRoom network");
+  }
+  return {
+    metricoolId: platformReceipts.tiktok!,
+    platformReceipts,
+    publicationDateTime: input.publicationDateTime,
+    caption: input.caption,
+    verified: true,
+  };
 }
