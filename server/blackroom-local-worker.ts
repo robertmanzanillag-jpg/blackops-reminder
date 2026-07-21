@@ -29,6 +29,8 @@ export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLAC
 }
 
 export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
+export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
+export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
 
 export interface BlackRoomLedgerEntry {
   reservationId: string;
@@ -46,11 +48,76 @@ export interface BlackRoomLedgerEntry {
   sourcePath: string;
   status: BlackRoomLedgerStatus;
   metricoolId: string | null;
+  publicationDateTime: string | null;
+  networkAttempts: Partial<Record<BlackRoomReceiptNetwork, BlackRoomNetworkAttemptStatus>>;
+  networkReceipts: Partial<Record<BlackRoomReceiptNetwork, string>>;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface BlackRoomWorkerLedger { version: 1; entries: BlackRoomLedgerEntry[] }
+
+export function requiredBlackRoomReceiptNetworks(
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
+): Array<"tiktok" | "facebook" | "youtube"> {
+  const youtubeShort = entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178;
+  return youtubeShort ? ["tiktok", "facebook", "youtube"] : ["tiktok", "facebook"];
+}
+
+export function hasCompleteBlackRoomMetricoolReceipt(
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds" | "metricoolId">,
+): boolean {
+  const receipts = new Map<string, string>();
+  for (const part of String(entry.metricoolId || "").split("|")) {
+    const match = part.match(/^(tiktok|facebook|youtube):([^|\s]+)$/);
+    if (match) receipts.set(match[1], match[2]);
+  }
+  return requiredBlackRoomReceiptNetworks(entry).every((network) => Boolean(receipts.get(network)));
+}
+
+export function markBlackRoomNetworkUncertain(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+  publicationDateTime: string,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(publicationDateTime)) throw new Error("invalid Metricool publication date");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  entry.networkAttempts[network] = "uncertain";
+  entry.publicationDateTime = publicationDateTime;
+  entry.updatedAt = new Date().toISOString();
+  return entry;
+}
+
+export function confirmBlackRoomNetworkReceipt(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+  metricoolId: string,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  const id = metricoolId.trim();
+  if (!id || /[|\s]/.test(id)) throw new Error("valid Metricool network receipt is required");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  entry.networkAttempts[network] = "confirmed";
+  entry.networkReceipts[network] = id;
+  entry.updatedAt = new Date().toISOString();
+  return entry;
+}
+
+export function resetBlackRoomNetworkAttempt(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  delete entry.networkAttempts[network];
+  delete entry.networkReceipts[network];
+  entry.updatedAt = new Date().toISOString();
+  return entry;
+}
 
 export function createBlackRoomWorkerLedger(): BlackRoomWorkerLedger {
   return { version: 1, entries: [] };
@@ -110,7 +177,8 @@ export function selectPublishableBlackRoomReservation<T extends { status?: strin
   entries: T[],
   now = new Date(),
 ): T | null {
-  return entries.find((entry) => entry.status === "reserved" && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now)) || null;
+  return entries.find((entry) => ["reserved", "uncertain"].includes(String(entry.status || ""))
+    && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now)) || null;
 }
 
 function addUtcCalendarDay(date: string): string {
@@ -181,7 +249,7 @@ export function validateBlackRoomAudioLoudness(output: string): { meanVolumeDb: 
 
 export function reserveBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
-  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "createdAt" | "updatedAt">,
+  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "publicationDateTime" | "networkAttempts" | "networkReceipts" | "createdAt" | "updatedAt">,
   usedSourceVideoIds: Iterable<string> = [],
   now = new Date(),
 ): BlackRoomLedgerEntry {
@@ -200,6 +268,9 @@ export function reserveBlackRoomLedgerEntry(
     reservationId: `${input.jobId}:${input.slot}:${input.videoId}`,
     status: "reserved",
     metricoolId: null,
+    publicationDateTime: null,
+    networkAttempts: {},
+    networkReceipts: {},
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -210,21 +281,32 @@ export function reserveBlackRoomLedgerEntry(
 export function updateBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
   reservationId: string,
-  update: { status: "confirmed"; metricoolId: string } | { status: "uncertain" },
+  update: { status: "confirmed"; metricoolId: string } | { status: "uncertain"; publicationDateTime?: string },
   now = new Date(),
 ): BlackRoomLedgerEntry {
   const entry = ledger.entries.find((candidate) => candidate.reservationId === reservationId);
   if (!entry) throw new Error("reservation not found");
   if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
-  if (update.status === "confirmed" && !update.metricoolId.trim()) throw new Error("metricoolId is required for confirmation");
+  if (update.status === "confirmed" && !hasCompleteBlackRoomMetricoolReceipt({ ...entry, metricoolId: update.metricoolId.trim() })) {
+    throw new Error("complete Metricool receipts are required for confirmation");
+  }
+  if (update.status === "uncertain" && update.publicationDateTime
+    && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(update.publicationDateTime)) {
+    throw new Error("invalid Metricool publication date");
+  }
   entry.status = update.status;
   entry.metricoolId = update.status === "confirmed" ? update.metricoolId.trim() : null;
+  if (update.status === "uncertain" && update.publicationDateTime) {
+    entry.publicationDateTime = update.publicationDateTime;
+  }
   entry.updatedAt = now.toISOString();
   return entry;
 }
 
 export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoomLedgerEntry, filePath: string): string {
-  if (entry.status !== "confirmed" || !entry.metricoolId) throw new Error("Metricool confirmation is required before deletion");
+  if (entry.status !== "confirmed" || !hasCompleteBlackRoomMetricoolReceipt(entry)) {
+    throw new Error("complete Metricool confirmations are required before deletion");
+  }
   const resolvedProject = path.resolve(projectDir);
   const resolvedFile = path.resolve(filePath);
   const allowedRoots = [
@@ -244,7 +326,7 @@ export function buildBlackRoomWorkerPrompt(projectDir: string): string {
   const ledgerPath = path.join(projectDir, BLACKROOM_WORKER_LEDGER_PATH);
   return `Eres el editor local de BlackRoom. Prepara y reserva EXACTAMENTE un video pendiente y termina. Usa shell para YouTube/edición; no abras Chrome ni intentes entrar en Metricool. El proceso determinista que te invoca se encarga de subir, verificar y limpiar después. Escribe archivos solo dentro de ${projectDir}.
 
-Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss.
+Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss, la página de clips de Facebook y YouTube Shorts. Facebook llevará un CTA separado hacia la página principal; el publicador determinista lo añade sin poner ese enlace en TikTok. Los cortes verticales de hasta 178 segundos también se publican como Shorts; los horizontales y los de 5/10 minutos no se fuerzan como Shorts.
 
 Estado persistente:
 - Cola: ${queuePath}
@@ -258,8 +340,8 @@ Reglas obligatorias:
 5. Prueba 15, 30, 60, 120, 300 y 600 segundos conforme a requirements. El corte debe incluir un drop cerca del principio. No inventes que un video corto soporta una duración mayor.
 6. No descargues el set completo. Elige primero una ventana aleatoria suficientemente larga para el formato (duración objetivo + 90 s de margen; para 5/10 min usa +180 s), sin solapar segmentos usados. Descarga solo esa ventana en la mayor calidad disponible mediante /opt/homebrew/bin/yt-dlp con --download-sections "*INICIO-FIN" y --force-keyframes-at-cuts. Analiza el audio de esa ventana con /opt/homebrew/bin/ffmpeg y sitúa un aumento fuerte/drop dentro de los primeros segundos del corte final. Guarda una sola fuente parcial bajo clippers_workspace/blackroom/sources y el render final bajo clippers_workspace/blackroom/rendered; registra en el ledger los tiempos absolutos del set original. Renderiza a 1080p con /opt/homebrew/bin/ffmpeg como MP4 H.264 y AAC 128 kbps, y usa -movflags +faststart. Mantén el video entre 5 y 25 Mbps; para 5/10 minutos usa un objetivo cercano a 5 Mbps para que el MP4 final quede inequívocamente debajo de 500 MB. Si ffmpeg falla o el archivo queda vacío, incompleto o supera 500 MB, borra solo ese render fallido y vuelve a renderizar antes de reservar. Verifica duración, codecs, pixel format, resolución y tamaño con /opt/homebrew/bin/ffprobe y mide el render final con ffmpeg volumedetect; no reserves si la pista AAC no cubre el clip completo, no tiene canales, es silenciosa o su volumen máximo está por debajo de -30 dBFS. No uses Chrome.
 7. Antes de reservar la fuente, vuelve a leer cola y ledger. Reserva exclusivamente con npm run blackroom:ledger -- --reserve --job ID --slot HH:MM --video ID --dj NOMBRE --language en|es --format vertical|horizontal --duration SEGUNDOS --segment-start SEGUNDO --segment-end SEGUNDO --caption TEXTO --render RUTA --source RUTA. Si falla, no publiques. No escribas el ledger directamente.
-8. Termina justo después de que la reserva se haya escrito correctamente. No confirmes, no marques uncertain, no borres archivos, no registres sourceHistory y no cambies el estado final del lote; el publicador determinista hará esas acciones después de obtener evidencia inequívoca de Metricool.
-9. No añadas link de YouTube en el caption, no resuelvas CAPTCHA, no introduzcas contraseñas y no cambies ajustes de ninguna cuenta.
+8. Termina justo después de que la reserva se haya escrito correctamente. No confirmes, no marques uncertain, no borres archivos, no registres sourceHistory y no cambies el estado final del lote; el publicador determinista hará esas acciones después de obtener evidencia inequívoca de Metricool para TikTok, Facebook y, cuando el formato califique, YouTube Shorts.
+9. No añadas links en el caption que generas: TikTok queda sin enlaces y el publicador determinista añadirá solamente al caption de Facebook el enlace exacto del video completo de YouTube y el enlace de la página principal. No resuelvas CAPTCHA, no introduzcas contraseñas y no cambies ajustes de ninguna cuenta.
 10. Deja en el ledger: jobId, slot, videoId, DJ, idioma, formato, duración, segmento, ruta de render, caption, estado reserved y timestamps.
 
 No afirmes que el post fue subido o programado. Al final devuelve un resumen compacto de la reserva y las rutas verificadas.`;

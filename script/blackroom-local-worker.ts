@@ -15,6 +15,8 @@ import {
   shouldRunBlackRoomWorker,
   validateBlackRoomRenderProbe,
   validateBlackRoomAudioLoudness,
+  hasCompleteBlackRoomMetricoolReceipt,
+  requiredBlackRoomReceiptNetworks,
   buildBlackRoomUploadChunks,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
@@ -85,7 +87,11 @@ async function runNpm(args: string[]): Promise<void> {
 async function remoteJson(url: string, init: RequestInit & { duplex?: "half" }, timeoutMs = 180_000): Promise<any> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`) as Error & { uncertain?: boolean };
+    error.uncertain = data.uncertain === true;
+    throw error;
+  }
   return data;
 }
 
@@ -115,7 +121,7 @@ async function deleteConfirmedMedia(entry: any): Promise<void> {
 async function recoverConfirmedCleanup(): Promise<void> {
   const ledger = await readJson<any>(ledgerPath, { entries: [] });
   for (const entry of ledger.entries || []) {
-    if (entry.status !== "confirmed" || !entry.metricoolId) continue;
+    if (entry.status !== "confirmed" || !hasCompleteBlackRoomMetricoolReceipt(entry)) continue;
     await ensureSourceRecorded(entry);
     await deleteConfirmedMedia(entry);
   }
@@ -168,29 +174,74 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
-  const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
-  const upload = await uploadBlackRoomRender(entry, renderInfo.size);
-  const preScheduleQueue = await readJson<any>(queuePath, {});
-  if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
-    throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
+  const publicationDateTime = String(entry.publicationDateTime || "")
+    || nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  const networks = requiredBlackRoomReceiptNetworks(entry);
+  // A legacy whole-reservation uncertainty has no per-network state. Treat every
+  // required network as verification-only so an upgrade can never duplicate it.
+  if (entry.status === "uncertain" && !Object.keys(entry.networkAttempts).length) {
+    for (const network of networks) entry.networkAttempts[network] = "uncertain";
   }
-  const scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      uploadId: upload.uploadId,
-      reservationId: entry.reservationId,
-      caption: entry.caption,
-      publicationDateTime,
-      timezone: queue.timezone || "America/New_York",
-    }),
-  });
-  const metricoolId = String(scheduled?.receipt?.metricoolId || "").trim();
-  if (!scheduled?.receipt?.verified || !metricoolId) throw new Error("Metricool bridge returned no verified receipt");
-  await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", metricoolId]);
+  for (const network of networks) {
+    if (entry.networkReceipts[network]) continue;
+    const verifyOnly = entry.networkAttempts[network] === "uncertain";
+    const upload = verifyOnly ? null : await uploadBlackRoomRender(entry, renderInfo.size);
+    const preScheduleQueue = await readJson<any>(queuePath, {});
+    if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
+      throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
+    }
+    if (!verifyOnly) {
+      // Persist intent for this exact network before its POST. A crash may leave
+      // only this network uncertain; later networks remain safely not_attempted.
+      await runNpm(["run", "blackroom:ledger", "--", "--network-uncertain", "--reservation", entry.reservationId,
+        "--network", network, "--publication-date-time", publicationDateTime]);
+      entry.networkAttempts[network] = "uncertain";
+      entry.publicationDateTime = publicationDateTime;
+    }
+    let scheduled: any;
+    try {
+      scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(upload ? { uploadId: upload.uploadId } : {}),
+          verifyOnly,
+          network,
+          reservationId: entry.reservationId,
+          caption: entry.caption,
+          language: entry.language,
+          sourceVideoId: entry.videoId,
+          durationSeconds: entry.durationSeconds,
+          videoFormat: entry.format,
+          publicationDateTime,
+          timezone: queue.timezone || "America/New_York",
+        }),
+      });
+    } catch (error) {
+      if (!(error as Error & { uncertain?: boolean })?.uncertain) {
+        await runNpm(["run", "blackroom:ledger", "--", "--network-reset", "--reservation", entry.reservationId,
+          "--network", network]).catch(() => undefined);
+        delete entry.networkAttempts[network];
+      }
+      throw error;
+    }
+    const networkId = String(scheduled?.receipt?.platformReceipts?.[network] || scheduled?.receipt?.metricoolId || "").trim();
+    if (!scheduled?.receipt?.verified || !networkId) throw new Error(`Metricool bridge returned no verified ${network} receipt`);
+    await runNpm(["run", "blackroom:ledger", "--", "--network-confirm", "--reservation", entry.reservationId,
+      "--network", network, "--metricool-id", networkId]);
+    entry.networkAttempts[network] = "confirmed";
+    entry.networkReceipts[network] = networkId;
+  }
+  const tiktokId = String(entry.networkReceipts.tiktok || "");
+  const facebookId = String(entry.networkReceipts.facebook || "");
+  const youtubeId = String(entry.networkReceipts.youtube || "");
+  const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}${youtubeId ? `|youtube:${youtubeId}` : ""}`;
+  await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
-    await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; cleanup deferred because BlackRoom is paused`);
+    await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; cleanup deferred because BlackRoom is paused`);
     return true;
   }
   await ensureSourceRecorded(entry);
@@ -198,7 +249,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
   if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
-  await appendLog(`Metricool confirmed ${entry.reservationId} as ${metricoolId}; local media deleted`);
+  await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; local media deleted`);
   return true;
 }
 
