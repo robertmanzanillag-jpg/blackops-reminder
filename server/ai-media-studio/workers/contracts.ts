@@ -17,6 +17,7 @@ export interface RenderWorkItem<TPayload = unknown> {
   leaseToken?: string;
   leaseExpiresAtMs?: number;
   providerSubmissionId?: string;
+  providerAccountId?: string;
   lastError?: string;
   deadLetteredAtMs?: number;
 }
@@ -76,6 +77,7 @@ export interface RenderWorkRepository<TPayload = unknown> {
     workId: string;
     leaseToken: string;
     providerSubmissionId: string;
+    providerAccountId: string;
     nowMs: number;
   }): Promise<RenderWorkItem<TPayload> | undefined>;
   recordFailure(input: {
@@ -93,6 +95,7 @@ export interface RenderWorkRepository<TPayload = unknown> {
 
 export interface ProviderSubmission {
   providerSubmissionId: string;
+  providerAccountId: string;
 }
 
 export interface RenderSubmissionProvider<TPayload = unknown> {

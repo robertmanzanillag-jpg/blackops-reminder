@@ -24,6 +24,8 @@ export interface MediaGenerationJob {
   progress: number;
   stage?: string;
   providerName?: string;
+  /** Server-only identity of the provider account that owns this submission. */
+  providerAccountId?: string;
   influencerName?: string;
   providerJobId?: string;
   /** Private provider URL retained only until it is copied into owned storage. */
@@ -52,6 +54,8 @@ export interface MediaGenerationJob {
 export interface ProviderWebhookEvent {
   eventId: string;
   providerKey: string;
+  /** Trusted account scope resolved from server configuration, never request headers. */
+  providerAccountId: string;
   providerJobId: string;
   status: Exclude<MediaJobStatus, "pending" | "cancelled">;
   occurredAt: string;

@@ -31,6 +31,7 @@ export function mapRenderJobRow(row: AiMediaRenderJobRow): MediaGenerationJob {
     progress: row.progress,
     stage: row.stage,
     providerName: row.providerKey ?? undefined,
+    providerAccountId: row.providerAccountId ?? undefined,
     providerJobId: row.providerJobId ?? undefined,
     outputUrl: row.outputUrl ?? undefined,
     outputAssetId: row.outputMediaAssetId ?? undefined,

@@ -19,12 +19,14 @@ export class VideoProviderRenderAdapter implements RenderSubmissionProvider<Gene
   async submit(
     payload: GenerationRequest,
     context: { workId: string; tenantId: string; attempt: number; idempotencyKey: string },
-  ): Promise<{ providerSubmissionId: string }> {
+  ): Promise<{ providerSubmissionId: string; providerAccountId: string }> {
     const status = await this.provider.status();
     if (!status.configured) throw new PermanentRenderFailure(`Video provider ${this.key} is not configured`);
-    const submission = await this.provider.submit(payload, { idempotencyKey: context.idempotencyKey });
+    const providerAccountId = this.provider.providerAccountId?.trim();
+    if (!providerAccountId) throw new PermanentRenderFailure(`Video provider ${this.key} has no account identity`);
+    const submission = await this.provider.submit(payload, { idempotencyKey: context.idempotencyKey, providerAccountId });
     if (!submission.providerJobId) throw new Error(`Video provider ${this.key} returned no job id`);
-    return { providerSubmissionId: submission.providerJobId };
+    return { providerSubmissionId: submission.providerJobId, providerAccountId };
   }
 }
 

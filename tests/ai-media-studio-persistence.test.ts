@@ -52,13 +52,16 @@ test("provider accounts persist only a secret reference", () => {
     schemaSource.indexOf("export const aiMediaProviderResources"),
   );
   assert.match(providerAccountBlock, /secretRef: text\("secret_ref"\)/);
+  assert.match(providerAccountBlock, /webhookSecretRef: text\("webhook_secret_ref"\)/);
+  assert.match(providerAccountBlock, /webhookPreviousSecretRef: text\("webhook_previous_secret_ref"\)/);
+  assert.match(providerAccountBlock, /webhookPreviousSecretExpiresAt: timestamp\("webhook_previous_secret_expires_at"/);
   assert.doesNotMatch(providerAccountBlock, /text\("(?:secret|api_key|access_token|refresh_token|password|credential)"\)/);
 });
 
 test("critical delivery paths have unique idempotency constraints", () => {
   for (const indexName of [
     "ai_media_render_jobs_owner_workspace_idempotency_uq",
-    "ai_media_webhook_events_provider_event_uq",
+    "ai_media_webhook_events_provider_account_event_uq",
     "ai_media_cost_ledger_owner_workspace_idempotency_uq",
     "ai_media_outbox_owner_workspace_idempotency_uq",
   ]) {
@@ -75,7 +78,7 @@ test("render rows map to the existing repository domain contract", () => {
     workspaceId: "workspace-1",
     generationId: "9f62adab-0cac-46d6-8a52-9109952ab65e",
     projectId: null,
-    providerAccountId: null,
+    providerAccountId: "00000000-0000-4000-8000-000000000050",
     providerKey: "fake",
     providerJobId: "provider-job-1",
     idempotencyKey: "request-1",
@@ -112,6 +115,7 @@ test("render rows map to the existing repository domain contract", () => {
 
   assert.equal(mapped.status, "completed");
   assert.equal(mapped.providerName, "fake");
+  assert.equal(mapped.providerAccountId, "00000000-0000-4000-8000-000000000050");
   assert.equal(mapped.actualCostUsd, 0.12);
   assert.equal(mapped.influencerName, "Ava");
   assert.equal(mapped.outputAssetId, "cae78fd4-d7c0-4a80-af54-20f6b50a2260");

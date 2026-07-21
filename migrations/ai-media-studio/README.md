@@ -1,11 +1,11 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover the incremental PR2, PR3, PR4, and PR5 schema deltas after the
+These SQL files cover the incremental PR2, PR3, PR4, PR5, and PR6 schema deltas after the
 PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
 local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
 `npm run db:push` for the reviewed SQL and release sequence below. Apply the
-deltas strictly in PR2 -> PR3 -> PR4 -> PR5 order.
+deltas strictly in PR2 -> PR3 -> PR4 -> PR5 -> PR6 order.
 
 ## Required release sequence
 
@@ -117,3 +117,36 @@ snapshot columns. Roll application code back first with writers/workers drained.
 For multiple deltas, use PR5 before PR4 before PR3 before PR2 after a fresh
 verified backup. Destructive evidence purging requires a separate retention
 approval, reviewed migration, and recovery rehearsal.
+
+## PR6 provider-account identity release
+
+`20260720_pr6_provider_identity_forward.sql` is the additive PR6 delta and has
+not been applied to any database. It scopes provider submissions and webhook
+events to the exact provider account, adds tenant/provider composite foreign
+keys, and replaces global provider job/event uniqueness with account-scoped
+definitions. It also permits multiple accounts for the same provider in one
+tenant and stores only opaque webhook endpoint and secret references, including
+a bounded previous-secret rotation window. It never stores secret material.
+
+Apply PR6 only after PR5 passes its staging gates. Drain render and webhook
+writers first, take and verify a restorable backup, and run the checked-in SQL
+with an operator-reviewed PostgreSQL invocation. The migration deterministically
+backfills identity only through an exact tenant/provider account or render job.
+It aborts on unresolved submitted jobs, unmatched parked callbacks, cross-tenant
+references, or within-account duplicates; reconcile those records explicitly
+and retry from the untouched transaction instead of assigning a guessed account.
+
+Before enabling live callbacks, prove on staging that:
+
+1. The same provider job/event id on two accounts remains isolated and same-account duplicates fail.
+2. Cross-tenant and provider-mismatched account references are rejected by PostgreSQL.
+3. Parked callbacks can only be claimed by their exact provider account and job.
+4. Endpoint lookup resolves one account and active opaque secret reference; previous-secret acceptance expires at the recorded deadline.
+5. Full checker and App QA gates pass, followed by Robert's explicit approval before any Replit/production deployment.
+
+The PR6 rollback is intentionally data preserving and does not restore the old
+global uniqueness or one-account-per-provider rule, because valid PR6 rows may
+conflict with those assumptions. It retains all account identity, endpoint
+references, rotation metadata, composite constraints, indexes, and rows. Roll
+application code back only to a revision that understands account-scoped
+identity; otherwise roll forward after correcting the release issue.

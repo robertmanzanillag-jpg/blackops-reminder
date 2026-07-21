@@ -139,9 +139,12 @@ test("classifies public callback and webhook paths", () => {
   assert.equal(isPublicApiPath("/api/canva/oauth/callback"), true);
   assert.equal(isPublicApiPath("/api/zoho/callback"), true);
   assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/heygen"), true);
+  assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/heygen/accounts/endpoint_123456789012345"), true);
   assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/future_provider-2"), true);
+  assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/heygen/accounts/short"), false);
   assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/heygen/extra"), false);
   assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/HeyGen"), false);
+  assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers/HeyGen/accounts/endpoint_123456789012345"), false);
   assert.equal(isPublicApiPath("/api/ai-media-studio/webhooks/providers"), false);
   assert.equal(isPublicApiPath("/api/ai-media-studio/jobs"), false);
   assert.equal(isPublicApiPath("/api/shopify/oauth/callback"), false);
@@ -166,19 +169,35 @@ test("auth middleware allows public API callbacks without user context", () => {
   });
 });
 
-test("auth middleware only bypasses user auth for the exact media provider webhook", () => {
+test("auth middleware only bypasses user auth for exact media provider webhook endpoints", () => {
   withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => {
     let nextCalled = false;
     requireAppUser(
       requestWithHeader(undefined, {
-        path: "/api/ai-media-studio/webhooks/providers/heygen",
-        originalUrl: "/api/ai-media-studio/webhooks/providers/heygen?delivery=retry",
+        path: "/api/ai-media-studio/webhooks/providers/heygen/accounts/endpoint_123456789012345",
+        originalUrl: "/api/ai-media-studio/webhooks/providers/heygen/accounts/endpoint_123456789012345?delivery=retry",
       }),
       {} as any,
       () => { nextCalled = true; },
     );
 
     assert.equal(nextCalled, true);
+    nextCalled = false;
+    requireAppUser(
+      requestWithHeader(undefined, {
+        path: "/api/ai-media-studio/webhooks/providers/heygen/accounts/short",
+        originalUrl: "/api/ai-media-studio/webhooks/providers/heygen/accounts/short?delivery=retry",
+      }),
+      {
+        status(code: number) {
+          assert.equal(code, 401);
+          return this;
+        },
+        json() {},
+      } as any,
+      () => { nextCalled = true; },
+    );
+    assert.equal(nextCalled, false);
   });
 });
 

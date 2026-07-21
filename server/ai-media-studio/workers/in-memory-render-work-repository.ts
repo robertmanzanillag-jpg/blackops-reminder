@@ -85,12 +85,14 @@ export class InMemoryRenderWorkRepository<TPayload = unknown> implements RenderW
     workId: string;
     leaseToken: string;
     providerSubmissionId: string;
+    providerAccountId: string;
     nowMs: number;
   }): Promise<RenderWorkItem<TPayload> | undefined> {
     const item = this.activeLease(input.workId, input.leaseToken, input.nowMs);
     if (!item) return undefined;
     item.state = "submitted";
     item.providerSubmissionId = input.providerSubmissionId;
+    item.providerAccountId = input.providerAccountId;
     item.updatedAtMs = input.nowMs;
     this.clearLease(item);
     return copy(item);

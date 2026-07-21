@@ -31,7 +31,7 @@ The deterministic 10,000-job rehearsal exercises arithmetic and fake-provider as
 
 Foundation DTOs live in `shared/ai-media-studio.ts`; PR3 publishing, analytics, source, and policy DTOs live in `shared/ai-media-studio-operations.ts`. Frontend and backend must import those definitions rather than creating provider-specific response types.
 
-The authenticated API root remains `/api/ai-media-studio`. The existing provider callback `/api/ai-media-studio/webhooks/providers/:providerKey` is public only for reachability and still requires verified provider HMAC. PR3 adds mounted routes for publishing previews/jobs/connections, analytics summaries/attribution, sources, and the read-only automation policy. Mounted code is not deployment evidence: no real connector, migration, or external post is enabled.
+The authenticated API root remains `/api/ai-media-studio`. Provider callbacks use `/api/ai-media-studio/webhooks/providers/:providerKey/accounts/:endpointKey`; the route is public only for reachability, resolves the opaque endpoint to exactly one tenant/provider account, and requires verified raw-body provider HMAC. Production does not use the legacy provider-only callback or process-global webhook secrets. PR3 adds mounted routes for publishing previews/jobs/connections, analytics summaries/attribution, sources, and the read-only automation policy. Mounted code is not deployment evidence: no real connector, migration, or external post is enabled.
 
 ## Release guardrails
 

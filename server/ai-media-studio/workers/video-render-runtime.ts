@@ -90,10 +90,12 @@ export function createVideoRenderWorkerHooks(
 ): RenderWorkerHooks<GenerationRequest> {
   const projectSubmission = async (item: Parameters<NonNullable<RenderWorkerHooks<GenerationRequest>["onSubmitted"]>>[0]) => {
     if (!item.providerSubmissionId) throw new Error("Submitted render work has no provider job id");
+    if (!item.providerAccountId) throw new Error("Submitted render work has no provider account id");
     await mediaService.recordDurableSubmission({
       ownerUserId: item.tenantId,
       jobId: item.id,
       providerKey: item.providerKey,
+      providerAccountId: item.providerAccountId,
       providerJobId: item.providerSubmissionId,
       attempt: item.attempt,
       submittedAt: new Date(item.updatedAtMs).toISOString(),

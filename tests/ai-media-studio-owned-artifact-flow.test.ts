@@ -12,7 +12,10 @@ import {
   InMemoryInfluencerRepository,
 } from "../server/ai-media-studio/core/in-memory-core-repositories";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
-import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
+import {
+  FAKE_VIDEO_PROVIDER_ACCOUNT_ID,
+  FakeVideoProvider,
+} from "../server/ai-media-studio/providers/fake-video-provider";
 import { createAiMediaStudioRuntime } from "../server/ai-media-studio/routes";
 
 test("provider completion becomes a tenant-owned canonical asset only after bounded worker ingest", async () => {
@@ -43,7 +46,7 @@ test("provider completion becomes a tenant-owned canonical asset only after boun
     influencerId: "emily-food", script: "A finished owned render.", voiceId: "voice-emily-en",
     language: "en-US", aspectRatio: "9:16", idempotencyKey: "owned-artifact-flow-001",
   });
-  await runtime.service.ingestWebhook("fake", {
+  await runtime.service.ingestWebhook("fake", FAKE_VIDEO_PROVIDER_ACCOUNT_ID, {
     event_id: "provider-completed-1", occurred_at: "2026-07-20T20:00:00.000Z",
     data: { provider_job_id: job.providerJobId, status: "completed", video_url: "https://cdn.example.com/private-render.mp4" },
   });

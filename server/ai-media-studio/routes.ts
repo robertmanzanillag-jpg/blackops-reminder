@@ -77,7 +77,18 @@ import {
 } from "./providers/heygen-video-provider";
 import { DeterministicScriptService } from "./script-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
-import { verifyHeyGenWebhook } from "./webhook-security";
+import {
+  deriveVerifiedWebhookEnvelope,
+  verifyHeyGenWebhookWithRotation,
+} from "./webhook-security";
+import {
+  createDrizzleProviderWebhookAccountResolver,
+  createEnvironmentSecretReferenceResolver,
+  isResolvedWebhookAccountValid,
+  isSafeProviderKey,
+  isSafeProviderWebhookEndpointKey,
+  type ProviderWebhookAccountResolver,
+} from "./provider-webhooks";
 import {
   createDefaultDurableRepository,
   MediaStudioPersistenceUnavailableError,
@@ -125,6 +136,8 @@ export interface AiMediaStudioDependencies {
   providers?: VideoProvider[];
   defaultProviderKey?: string;
   webhookSecrets?: Record<string, string | undefined>;
+  /** Resolves an opaque public endpoint to server-only tenant/account secret material. */
+  resolveProviderWebhookAccount?: ProviderWebhookAccountResolver;
   heygenResourceMap?: HeyGenResourceMap;
   allowedAssetHosts?: ReadonlySet<string>;
   runtimeEnvironment?: string;
@@ -233,6 +246,18 @@ function createDefaultDurableAssetIngestRepository(): AssetIngestRepository {
 function configuredDatabase(value: string | undefined): boolean {
   const databaseUrl = value?.trim();
   return Boolean(databaseUrl && !/^(change[-_ ]?me|replace[-_ ]?me|your[-_ ]|example|placeholder)/iu.test(databaseUrl));
+}
+
+function createDefaultProviderWebhookAccountResolver(workspaceId: string): ProviderWebhookAccountResolver {
+  let pending: Promise<ProviderWebhookAccountResolver> | undefined;
+  return async (input) => {
+    pending ??= import("../db").then(({ db }) => createDrizzleProviderWebhookAccountResolver({
+      db,
+      workspaceId,
+      resolveSecretRef: createEnvironmentSecretReferenceResolver(),
+    }));
+    return (await pending)(input);
+  };
 }
 
 function createDefaultDurableGovernanceRepository(): GovernanceRepository {
@@ -483,6 +508,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     workspaceId: dependencies.workspaceId,
     seedDefaults: dependencies.seedCoreDefaults,
   });
+  const resolveProviderWebhookAccount = dependencies.resolveProviderWebhookAccount
+    ?? (configuredDatabase(databaseUrl)
+      ? createDefaultProviderWebhookAccountResolver(core.workspaceId)
+      : undefined);
   const governanceSelection = selectGovernanceRepository(
     dependencies,
     explicitHarness && !dependencies.governanceRepository ? "test" : runtimeEnvironment,
@@ -504,11 +533,25 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const repository = persistence.repository;
   const queue = dependencies.queue ?? new InMemoryMediaJobQueue();
   const resources = dependencies.heygenResourceMap ?? parseHeyGenResourceMap(process.env.AI_MEDIA_STUDIO_HEYGEN_RESOURCES_JSON);
-  const providers = dependencies.providers ?? [
-    new FakeVideoProvider(),
-    new HeyGenVideoProvider({ apiKey: process.env.HEYGEN_API_KEY, resolveResources: createHeyGenResourceResolver(resources) }),
-  ];
-  const defaultProviderKey = dependencies.defaultProviderKey ?? (process.env.AI_MEDIA_STUDIO_HEYGEN_ENABLED === "true" ? "heygen" : "fake");
+  const heyGenProvider = new HeyGenVideoProvider({
+    apiKey: process.env.HEYGEN_API_KEY,
+    providerAccountId: process.env.HEYGEN_PROVIDER_ACCOUNT_ID,
+    resolveResources: createHeyGenResourceResolver(resources),
+  });
+  const providers = dependencies.providers
+    ?? (environment === "development" || environment === "test"
+      ? [new FakeVideoProvider(), heyGenProvider]
+      : [heyGenProvider]);
+  if (environment === "production" && providers.some((provider) => provider.key === "fake")) {
+    throw new Error("Fake video provider is not allowed in production");
+  }
+  const defaultProviderKey = dependencies.defaultProviderKey
+    ?? (environment === "development" || environment === "test"
+      ? process.env.AI_MEDIA_STUDIO_HEYGEN_ENABLED === "true" ? "heygen" : "fake"
+      : "heygen");
+  if (environment === "production" && defaultProviderKey === "fake") {
+    throw new Error("Fake video provider is not allowed in production");
+  }
   const seedGovernance = dependencies.seedGovernanceDefaults
     ?? (!governanceSelection.status.durable && governanceSelection.status.available && (explicitHarness || environment === "development" || environment === "test"));
   const governanceSeeds = new Map<string, Promise<void>>();
@@ -1121,18 +1164,65 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.cancelJob(getCurrentUserId(req), req.params.id)) }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`, requireJobs, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey/accounts/:endpointKey`, requireJobs, asyncRoute(async (req, res) => {
     const requestWithRawBody = req as Request & { rawBody?: unknown };
     const rawBody = Buffer.isBuffer(requestWithRawBody.rawBody) ? requestWithRawBody.rawBody : Buffer.alloc(0);
     const providerKey = req.params.providerKey;
-    const secret = dependencies.webhookSecrets?.[providerKey] ?? (providerKey === "heygen" ? process.env.HEYGEN_WEBHOOK_SECRET : process.env.AI_MEDIA_STUDIO_WEBHOOK_SECRET);
-    if (!verifyHeyGenWebhook({ rawBody, secret, signature: req.get("Heygen-Signature") ?? undefined, timestamp: req.get("Heygen-Timestamp") ?? undefined })) {
+    const endpointKey = req.params.endpointKey;
+    if (!isSafeProviderKey(providerKey) || !isSafeProviderWebhookEndpointKey(endpointKey)) {
+      res.status(404).json({ error: "Webhook endpoint not found" });
+      return;
+    }
+    if (!resolveProviderWebhookAccount) {
+      res.status(503).json({ error: "Webhook endpoint unavailable" });
+      return;
+    }
+    const account = await resolveProviderWebhookAccount({ providerKey, endpointKey });
+    if (!account || !isResolvedWebhookAccountValid(account, { providerKey, endpointKey, workspaceId: core.workspaceId })) {
+      res.status(404).json({ error: "Webhook endpoint not found" });
+      return;
+    }
+    if (!verifyHeyGenWebhookWithRotation({
+      rawBody,
+      signature: req.get("Heygen-Signature") ?? undefined,
+      secrets: account.secrets,
+    })) {
       res.status(401).json({ error: "Invalid webhook signature" });
       return;
     }
-    const result = await service.ingestWebhook(providerKey, req.body, req.get("Heygen-Event-Id") ?? undefined, req.get("Heygen-Timestamp") ?? undefined);
+    const envelope = deriveVerifiedWebhookEnvelope(req.body, rawBody);
+    const authenticatedPayload = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? { ...req.body, event_id: envelope.eventId, occurred_at: envelope.occurredAt }
+      : req.body;
+    const result = await service.ingestWebhook(providerKey, account.providerAccountId, authenticatedPayload, envelope.eventId);
     res.status(202).json(result);
   }));
+
+  // Compatibility harness only. Production never resolves a provider-only URL
+  // or process-global secret because that cannot identify a tenant account.
+  if ((environment === "development" || environment === "test") && dependencies.webhookSecrets) {
+    router.post(`${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`, requireJobs, asyncRoute(async (req, res) => {
+      const requestWithRawBody = req as Request & { rawBody?: unknown };
+      const rawBody = Buffer.isBuffer(requestWithRawBody.rawBody) ? requestWithRawBody.rawBody : Buffer.alloc(0);
+      const providerKey = req.params.providerKey;
+      const secret = dependencies.webhookSecrets?.[providerKey];
+      const providerAccountId = providers.find((provider) => provider.key === providerKey)?.providerAccountId;
+      if (!secret || !providerAccountId || !verifyHeyGenWebhookWithRotation({
+        rawBody,
+        signature: req.get("Heygen-Signature") ?? undefined,
+        secrets: [{ value: secret, state: "active" }],
+      })) {
+        res.status(401).json({ error: "Invalid webhook signature" });
+        return;
+      }
+      const envelope = deriveVerifiedWebhookEnvelope(req.body, rawBody);
+      const authenticatedPayload = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? { ...req.body, event_id: envelope.eventId, occurred_at: envelope.occurredAt }
+        : req.body;
+      const result = await service.ingestWebhook(providerKey, providerAccountId, authenticatedPayload, envelope.eventId);
+      res.status(202).json(result);
+    }));
+  }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof GovernanceGateError) {

@@ -10,6 +10,7 @@ import {
 } from "../server/ai-media-studio/workers";
 
 interface Payload { sequence: number }
+const PROVIDER_ACCOUNT_ID = "00000000-0000-4000-8000-0000000000c1";
 
 class MutableClock {
   constructor(private value: number) {}
@@ -54,7 +55,7 @@ test("two workers cannot claim or submit the same active lease", async () => {
     async submit(_payload, context) {
       calls.push(context.workId);
       await gate;
-      return { providerSubmissionId: "provider-1" };
+      return { providerSubmissionId: "provider-1", providerAccountId: PROVIDER_ACCOUNT_ID };
     },
   };
   const first = worker("worker-a", repository, provider).runNext();
@@ -74,7 +75,7 @@ test("the required submission gate runs immediately before and can block the pro
     key: "video",
     async submit() {
       events.push("provider");
-      return { providerSubmissionId: "must-not-submit" };
+      return { providerSubmissionId: "must-not-submit", providerAccountId: PROVIDER_ACCOUNT_ID };
     },
   };
   const renderWorker = worker("governed-worker", repository, provider, new MutableClock(1_000), {
@@ -102,6 +103,7 @@ test("an expired lease is recovered after restart with the same provider idempot
     workId: "recover-me",
     leaseToken: crashedClaim.leaseToken,
     providerSubmissionId: "stale-result",
+    providerAccountId: PROVIDER_ACCOUNT_ID,
     nowMs: clock.now(),
   }), undefined, "an expired fencing token cannot commit a provider result");
   const recovered: string[] = [];
@@ -110,7 +112,7 @@ test("an expired lease is recovered after restart with the same provider idempot
     key: "video",
     async submit(_payload, context) {
       keys.push(context.idempotencyKey);
-      return { providerSubmissionId: "provider-stable-result" };
+      return { providerSubmissionId: "provider-stable-result", providerAccountId: PROVIDER_ACCOUNT_ID };
     },
   };
   const restarted = worker("restarted-worker", repository, provider, clock, {
@@ -196,6 +198,7 @@ test("retry uses exponential delay then sends bounded attempts to dead letter", 
   });
   const first = await renderWorker.runNext();
   assert.equal(first.outcome, "retry_scheduled");
+  assert.equal(first.item.lastError, "Render provider submission failed");
   assert.equal(first.item.attempt, 2);
   assert.equal(first.item.availableAtMs, 10_100);
   assert.equal((await renderWorker.runNext()).outcome, "idle");
@@ -224,6 +227,19 @@ test("a permanent provider/configuration failure dead-letters immediately", asyn
   assert.equal((await renderWorker.runNext()).outcome, "dead_letter");
 });
 
+test("a provider response without account identity dead-letters without persisting raw details", async () => {
+  const repository = new InMemoryRenderWorkRepository<Payload>();
+  await repository.enqueue({ id: "missing-account", tenantId: "tenant", providerKey: "video", payload: { sequence: 1 }, maxAttempts: 9 }, 1_000);
+  const provider: RenderSubmissionProvider<Payload> = {
+    key: "video",
+    async submit() { return { providerSubmissionId: "private-ref", providerAccountId: "" }; },
+  };
+  const result = await worker("worker", repository, provider).runNext();
+  assert.equal(result.outcome, "dead_letter");
+  assert.equal(result.item.lastError, "Provider returned no account identity");
+  assert.equal(result.item.providerSubmissionId, undefined);
+});
+
 test("1,000 jobs are claimed and submitted exactly once across concurrent workers", async () => {
   const clock = new MutableClock(50_000);
   const repository = new InMemoryRenderWorkRepository<Payload>();
@@ -243,7 +259,7 @@ test("1,000 jobs are claimed and submitted exactly once across concurrent worker
       assert.equal(seen.has(payload.sequence), false, `duplicate payload ${payload.sequence}`);
       seen.add(payload.sequence);
       assert.equal(context.idempotencyKey, providerIdempotencyKey(context.workId, 1));
-      return { providerSubmissionId: `${key}-${payload.sequence}` };
+      return { providerSubmissionId: `${key}-${payload.sequence}`, providerAccountId: PROVIDER_ACCOUNT_ID };
     },
   });
   const providers = [0, 1, 2, 3].map((index) => makeProvider(`provider-${index}`));
