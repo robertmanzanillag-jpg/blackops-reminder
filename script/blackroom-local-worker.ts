@@ -15,6 +15,7 @@ import {
   shouldRunBlackRoomWorker,
   validateBlackRoomRenderProbe,
   validateBlackRoomAudioLoudness,
+  hasCompleteBlackRoomMetricoolReceipt,
   buildBlackRoomUploadChunks,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
@@ -85,7 +86,11 @@ async function runNpm(args: string[]): Promise<void> {
 async function remoteJson(url: string, init: RequestInit & { duplex?: "half" }, timeoutMs = 180_000): Promise<any> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`) as Error & { uncertain?: boolean };
+    error.uncertain = data.uncertain === true;
+    throw error;
+  }
   return data;
 }
 
@@ -115,7 +120,7 @@ async function deleteConfirmedMedia(entry: any): Promise<void> {
 async function recoverConfirmedCleanup(): Promise<void> {
   const ledger = await readJson<any>(ledgerPath, { entries: [] });
   for (const entry of ledger.entries || []) {
-    if (entry.status !== "confirmed" || !entry.metricoolId) continue;
+    if (entry.status !== "confirmed" || !hasCompleteBlackRoomMetricoolReceipt(entry)) continue;
     await ensureSourceRecorded(entry);
     await deleteConfirmedMedia(entry);
   }
@@ -168,27 +173,39 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
-  const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
-  const upload = await uploadBlackRoomRender(entry, renderInfo.size);
+  const publicationDateTime = String(entry.publicationDateTime || "")
+    || nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
+  const verifyOnly = entry.status === "uncertain";
+  const upload = verifyOnly ? null : await uploadBlackRoomRender(entry, renderInfo.size);
   const preScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
     throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
   }
-  const scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      uploadId: upload.uploadId,
-      reservationId: entry.reservationId,
-      caption: entry.caption,
-      language: entry.language,
-      sourceVideoId: entry.videoId,
-      durationSeconds: entry.durationSeconds,
-      videoFormat: entry.format,
-      publicationDateTime,
-      timezone: queue.timezone || "America/New_York",
-    }),
-  });
+  if (!verifyOnly) {
+    // Persist the exact schedule and switch to verification-only recovery before
+    // the external POST. A process crash can therefore never replay the POST.
+    await runNpm(["run", "blackroom:ledger", "--", "--uncertain", "--reservation", entry.reservationId,
+      "--publication-date-time", publicationDateTime]);
+  }
+  let scheduled: any;
+  try {
+    scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(upload ? { uploadId: upload.uploadId } : {}),
+        verifyOnly,
+        reservationId: entry.reservationId,
+        caption: entry.caption,
+        language: entry.language,
+        sourceVideoId: entry.videoId,
+        durationSeconds: entry.durationSeconds,
+        videoFormat: entry.format,
+        publicationDateTime,
+        timezone: queue.timezone || "America/New_York",
+      }),
+    });
+  } catch (error) { throw error; }
   const metricoolId = String(scheduled?.receipt?.metricoolId || "").trim();
   const tiktokId = String(scheduled?.receipt?.platformReceipts?.tiktok || "").trim();
   const facebookId = String(scheduled?.receipt?.platformReceipts?.facebook || "").trim();

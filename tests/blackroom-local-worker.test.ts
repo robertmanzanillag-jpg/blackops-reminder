@@ -56,6 +56,7 @@ test("publishing gate honors pause and skips stale reservations", () => {
   ];
   const now = new Date("2026-07-21T01:00:00.000Z");
   assert.equal(selectPublishableBlackRoomReservation(queue, entries, now)?.reservationId, "ready");
+  assert.equal(selectPublishableBlackRoomReservation(queue, [{ status: "uncertain", jobId: "active-job", reservationId: "verify-only" }], now)?.reservationId, "verify-only");
   assert.equal(isBlackRoomJobPublishable({ ...queue, enabled: false }, "active-job", now), false);
   assert.equal(selectPublishableBlackRoomReservation({ ...queue, enabled: false }, entries, now), null);
 });
@@ -147,6 +148,20 @@ test("ledger blocks duplicate slots and source videos", () => {
   }), /source video already reserved/);
 });
 
+test("uncertain reservations persist their exact Metricool schedule for verification-only recovery", () => {
+  const ledger = createBlackRoomWorkerLedger();
+  const entry = reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-1", slot: "00:30", videoId: "video-1",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/a.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/a.mp4",
+  });
+  updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "uncertain", publicationDateTime: "2026-07-22T00:30:00" });
+  assert.equal(entry.status, "uncertain");
+  assert.equal(entry.publicationDateTime, "2026-07-22T00:30:00");
+  assert.throws(() => updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "uncertain", publicationDateTime: "tomorrow" }), /invalid Metricool publication date/);
+});
+
 test("safe deletion requires confirmed Metricool receipt and exact media path", () => {
   const project = "/tmp/project";
   const ledger = createBlackRoomWorkerLedger();
@@ -156,13 +171,17 @@ test("safe deletion requires confirmed Metricool receipt and exact media path", 
     renderPath: `${project}/clippers_workspace/blackroom/rendered/a.mp4`,
     sourcePath: `${project}/clippers_workspace/blackroom/sources/a.mp4`,
   });
-  assert.throws(() => assertSafeConfirmedDeletion(project, entry, entry.renderPath), /confirmation is required/);
-  updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "confirmed", metricoolId: "metricool-123" });
+  assert.throws(() => assertSafeConfirmedDeletion(project, entry, entry.renderPath), /confirmations are required/);
+  assert.throws(() => updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "confirmed", metricoolId: "metricool-123" }), /complete Metricool receipts/);
+  updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "confirmed", metricoolId: "tiktok:991|facebook:992|youtube:993" });
   assert.equal(assertSafeConfirmedDeletion(project, entry, entry.renderPath), entry.renderPath);
   assert.throws(() => assertSafeConfirmedDeletion(project, entry, `${project}/package.json`), /not part of this reservation/);
 
   const legacy = { ...entry, renderPath: `${project}/clippers_workspace/blackroom/renders/legacy.mp4` };
   assert.equal(assertSafeConfirmedDeletion(project, legacy, legacy.renderPath), legacy.renderPath);
+
+  const historicalSingleNetwork = { ...entry, metricoolId: "991", renderPath: `${project}/clippers_workspace/blackroom/renders/old.mp4` };
+  assert.throws(() => assertSafeConfirmedDeletion(project, historicalSingleNetwork, historicalSingleNetwork.renderPath), /complete Metricool confirmations/);
 });
 
 test("ledger rejects a source already recorded in queue history", () => {

@@ -31,6 +31,14 @@ export interface BlackRoomMetricoolReceipt {
 
 type FetchLike = typeof fetch;
 
+export class BlackRoomMetricoolUncertainError extends Error {
+  readonly uncertain = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "BlackRoomMetricoolUncertainError";
+  }
+}
+
 export async function postMetricoolJsonBytes(
   url: string,
   token: string,
@@ -297,7 +305,13 @@ async function metricoolJson(response: Response, operation: string): Promise<any
 
 export async function scheduleBlackRoomMetricoolPost(
   input: BlackRoomMetricoolScheduleInput,
-  options: { env?: NodeJS.ProcessEnv; fetch?: FetchLike } = {},
+  options: {
+    env?: NodeJS.ProcessEnv;
+    fetch?: FetchLike;
+    verifyOnly?: boolean;
+    verificationAttempts?: number;
+    verificationIntervalMs?: number;
+  } = {},
 ): Promise<BlackRoomMetricoolReceipt> {
   const env = options.env || process.env;
   const fetcher = options.fetch || fetch;
@@ -342,6 +356,9 @@ export async function scheduleBlackRoomMetricoolPost(
       verified: true,
     };
   }
+  if (options.verifyOnly) {
+    throw new BlackRoomMetricoolUncertainError(`Metricool verification is still pending for ${missingNetworks.join(", ")}`);
+  }
   const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
   const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   for (const network of missingNetworks) {
@@ -350,19 +367,44 @@ export async function scheduleBlackRoomMetricoolPost(
     // Metricool has parsed Node fetch and node:https scheduler bodies as empty
     // in production. Replit curl is verified against the same endpoint and sends
     // the JSON intact. Auth is provided through curl config on stdin.
-    const scheduledResponse = options.fetch
-      ? await fetcher(schedulerUrl, {
-          method: "POST",
-          headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
-          body: serializedPayload,
-          signal: AbortSignal.timeout(120_000),
-        })
-      : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
-    const scheduled = await metricoolJson(scheduledResponse, `${network} post scheduling`);
+    let scheduled: any;
+    try {
+      const scheduledResponse = options.fetch
+        ? await fetcher(schedulerUrl, {
+            method: "POST",
+            headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
+            body: serializedPayload,
+            signal: AbortSignal.timeout(120_000),
+          })
+        : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
+      scheduled = await metricoolJson(scheduledResponse, `${network} post scheduling`);
+    } catch (error) {
+      if (error instanceof Error && /post scheduling failed with HTTP 4\d\d/.test(error.message)) throw error;
+      throw new BlackRoomMetricoolUncertainError(
+        `Metricool ${network} scheduling outcome is uncertain: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
-    const verification = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), `${network} post verification`);
-    const matched = findVerifiedMetricoolPost(verification, captions[network], input.publicationDateTime);
-    if (!matched) throw new Error(`Metricool did not return unequivocal ${network} scheduled-post evidence`);
+    let matched: Record<string, any> | null = null;
+    const verificationAttempts = Math.max(1, Math.min(12, options.verificationAttempts ?? 6));
+    const verificationIntervalMs = Math.max(0, Math.min(10_000, options.verificationIntervalMs ?? 2_000));
+    try {
+      for (let attempt = 0; attempt < verificationAttempts && !matched; attempt += 1) {
+        if (attempt && verificationIntervalMs) await new Promise((resolve) => setTimeout(resolve, verificationIntervalMs));
+        const verification = await metricoolJson(
+          await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }),
+          `${network} post verification`,
+        );
+        matched = findVerifiedMetricoolPost(verification, captions[network], input.publicationDateTime);
+      }
+    } catch (error) {
+      throw new BlackRoomMetricoolUncertainError(
+        `Metricool ${network} verification outcome is uncertain: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (!matched) {
+      throw new BlackRoomMetricoolUncertainError(`Metricool ${network} post was submitted but verification is still pending`);
+    }
     const id = matched.id ?? matched.uuid ?? scheduled?.id ?? scheduled?.uuid;
     if (id == null || String(id).trim() === "") throw new Error(`Metricool scheduled ${network} post has no identifier`);
     platformReceipts[network] = String(id);

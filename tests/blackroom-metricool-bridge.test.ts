@@ -279,7 +279,23 @@ test("refuses to confirm when the verification response does not contain the pos
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
     env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
     fetch: mockFetch as typeof fetch,
-  }), /unequivocal tiktok scheduled-post evidence/);
+    verificationAttempts: 1,
+    verificationIntervalMs: 0,
+  }), /submitted but verification is still pending/);
+});
+
+test("verification-only recovery never POSTs a possibly accepted network twice", async () => {
+  const calls: string[] = [];
+  const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
+    calls.push(init.method || "GET");
+    return Response.json({ data: [] });
+  };
+  await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+    verifyOnly: true,
+  }), /verification is still pending/);
+  assert.deepEqual(calls, ["GET"]);
 });
 
 test("includes a bounded upstream validation message without leaking auth", async () => {

@@ -46,11 +46,30 @@ export interface BlackRoomLedgerEntry {
   sourcePath: string;
   status: BlackRoomLedgerStatus;
   metricoolId: string | null;
+  publicationDateTime: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface BlackRoomWorkerLedger { version: 1; entries: BlackRoomLedgerEntry[] }
+
+export function requiredBlackRoomReceiptNetworks(
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
+): Array<"tiktok" | "facebook" | "youtube"> {
+  const youtubeShort = entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178;
+  return youtubeShort ? ["tiktok", "facebook", "youtube"] : ["tiktok", "facebook"];
+}
+
+export function hasCompleteBlackRoomMetricoolReceipt(
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds" | "metricoolId">,
+): boolean {
+  const receipts = new Map<string, string>();
+  for (const part of String(entry.metricoolId || "").split("|")) {
+    const match = part.match(/^(tiktok|facebook|youtube):([^|\s]+)$/);
+    if (match) receipts.set(match[1], match[2]);
+  }
+  return requiredBlackRoomReceiptNetworks(entry).every((network) => Boolean(receipts.get(network)));
+}
 
 export function createBlackRoomWorkerLedger(): BlackRoomWorkerLedger {
   return { version: 1, entries: [] };
@@ -110,7 +129,8 @@ export function selectPublishableBlackRoomReservation<T extends { status?: strin
   entries: T[],
   now = new Date(),
 ): T | null {
-  return entries.find((entry) => entry.status === "reserved" && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now)) || null;
+  return entries.find((entry) => ["reserved", "uncertain"].includes(String(entry.status || ""))
+    && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now)) || null;
 }
 
 function addUtcCalendarDay(date: string): string {
@@ -181,7 +201,7 @@ export function validateBlackRoomAudioLoudness(output: string): { meanVolumeDb: 
 
 export function reserveBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
-  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "createdAt" | "updatedAt">,
+  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "publicationDateTime" | "createdAt" | "updatedAt">,
   usedSourceVideoIds: Iterable<string> = [],
   now = new Date(),
 ): BlackRoomLedgerEntry {
@@ -200,6 +220,7 @@ export function reserveBlackRoomLedgerEntry(
     reservationId: `${input.jobId}:${input.slot}:${input.videoId}`,
     status: "reserved",
     metricoolId: null,
+    publicationDateTime: null,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -210,21 +231,32 @@ export function reserveBlackRoomLedgerEntry(
 export function updateBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
   reservationId: string,
-  update: { status: "confirmed"; metricoolId: string } | { status: "uncertain" },
+  update: { status: "confirmed"; metricoolId: string } | { status: "uncertain"; publicationDateTime?: string },
   now = new Date(),
 ): BlackRoomLedgerEntry {
   const entry = ledger.entries.find((candidate) => candidate.reservationId === reservationId);
   if (!entry) throw new Error("reservation not found");
   if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
-  if (update.status === "confirmed" && !update.metricoolId.trim()) throw new Error("metricoolId is required for confirmation");
+  if (update.status === "confirmed" && !hasCompleteBlackRoomMetricoolReceipt({ ...entry, metricoolId: update.metricoolId.trim() })) {
+    throw new Error("complete Metricool receipts are required for confirmation");
+  }
+  if (update.status === "uncertain" && update.publicationDateTime
+    && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(update.publicationDateTime)) {
+    throw new Error("invalid Metricool publication date");
+  }
   entry.status = update.status;
   entry.metricoolId = update.status === "confirmed" ? update.metricoolId.trim() : null;
+  if (update.status === "uncertain" && update.publicationDateTime) {
+    entry.publicationDateTime = update.publicationDateTime;
+  }
   entry.updatedAt = now.toISOString();
   return entry;
 }
 
 export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoomLedgerEntry, filePath: string): string {
-  if (entry.status !== "confirmed" || !entry.metricoolId) throw new Error("Metricool confirmation is required before deletion");
+  if (entry.status !== "confirmed" || !hasCompleteBlackRoomMetricoolReceipt(entry)) {
+    throw new Error("complete Metricool confirmations are required before deletion");
+  }
   const resolvedProject = path.resolve(projectDir);
   const resolvedFile = path.resolve(filePath);
   const allowedRoots = [

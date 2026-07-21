@@ -89,6 +89,9 @@ test("offline paused panel keeps Play available so the command can be queued", (
   const synced = false;
   const pausing = !desired && remoteOnline && !synced;
   assert.equal(desired || pausing, false);
+  assert.match(blackRoomPage, /async function run\(path,opt,priority=false\)/);
+  assert.match(blackRoomPage, /pause\.onclick=\(\)=>run\('\/api\/blackroom-agent\/pause',\{method:'POST'\},true\)/);
+  assert.match(blackRoomPage, /generation===requestGeneration/);
 });
 
 test("BlackRoom panel exposes the chat controls", () => {

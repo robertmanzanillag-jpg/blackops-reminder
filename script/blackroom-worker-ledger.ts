@@ -86,7 +86,10 @@ async function main(): Promise<void> {
       result = updateBlackRoomLedgerEntry(ledger, arg("--reservation") || "", { status: "confirmed", metricoolId: arg("--metricool-id") || "" });
       await writeLedger(ledger);
     } else if (process.argv.includes("--uncertain")) {
-      result = updateBlackRoomLedgerEntry(ledger, arg("--reservation") || "", { status: "uncertain" });
+      result = updateBlackRoomLedgerEntry(ledger, arg("--reservation") || "", {
+        status: "uncertain",
+        publicationDateTime: arg("--publication-date-time"),
+      });
       await writeLedger(ledger);
     } else if (process.argv.includes("--delete-confirmed")) {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
