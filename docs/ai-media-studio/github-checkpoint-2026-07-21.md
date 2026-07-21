@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR21 authenticated authority issuers
 
-- Branch: `codex/ai-media-studio-authority-issuers`, stacked on draft PR #103.
+- Branch: `codex/ai-media-studio-authority-issuers`, draft PR #104, stacked on draft PR #103.
 - Scope: server-only, capability-separated policy, kill-switch, content approval, human launch approval, sandbox, maximum-quote and snapshot issuers; append-only Drizzle persistence; shared authority/governance locks; and an isolated PostgreSQL test harness.
 - Trust boundary: authenticated principals and adapter attestations are injected branded server dependencies. Human commands cannot select actor/source/time/revision/provider/governance/country/money/digests. The service and repository are absent from routes and public barrels.
 - PostgreSQL evidence: a fresh socket-only PostgreSQL 16.14 cluster applied the exact checked-in PR19 then PR20 forward SQL over a minimal test-only prerequisite schema; 7/7 integration checks covered schema controls, tenant rejection, immutability, exact reservation authority, concurrent revision/idempotency conflicts, retained evidence and fail-closed reapplication. No user database, `DATABASE_URL`, `db:push` or Homebrew cluster was touched.
