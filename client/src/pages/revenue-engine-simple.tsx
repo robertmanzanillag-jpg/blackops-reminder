@@ -318,7 +318,7 @@ export default function RevenueEngineSimplePage() {
         </div>
       </header>
 
-      <nav className="border-b border-white/10" aria-label="Email status">
+      <nav className="border-b border-white/10" aria-label="Revenue workflow">
         <div className="mx-auto grid max-w-[1500px] grid-cols-2 px-4 sm:grid-cols-4 lg:grid-cols-7 lg:px-8">
           {views.map(({ id, label, icon: Icon }) => (
             <button
