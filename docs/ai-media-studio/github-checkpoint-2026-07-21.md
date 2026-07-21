@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR30 staging rehearsal runbook
+
+- Branch: `codex/ai-media-studio-staging-rehearsal-runbook`, stacked on draft PR #116. This is documentation/static validation only; it does not authorize or perform a database connection.
+- Runbook: `docs/ai-media-studio/staging-rehearsal-runbook.md` defines named approvals, immutable evidence, read-only preflight, backup/isolated restore, one-file-at-a-time forward order, restart with provider workers off, exact reverse order, stop conditions and the separately approved one-video handoff.
+- SQL inventory: all 19 checked-in forward files and all 19 rollback files are listed in exact order and compared to the migration directory by a static test. `db:push` and inferred SQL are forbidden.
+- Critical audit result: the chain is NO-GO. PR14 explicitly requires validated PR13 OAuth controls, but no PR13 SQL artifact exists here. PR16 is also documented as Drizzle-only with no reviewed forward/rollback SQL. PR1 baseline, the named staging target, restorable backup, maintenance window and separate DB principals/capabilities are also unproven/unapproved.
+- Current evidence: static runbook/inventory/approval tests pass 3/3 and the combined runbook/control regression set passes 8/8. The full AI Media Studio suite passes 669 with 0 failures and 24 PostgreSQL-only skips out of 693. A dedicated SQL auditor independently confirmed the available 19-file order, PR13/PR16 stops, PostgreSQL 16/pgcrypto and exact PR26 role prerequisites. Independent checker and App QA rechecks are clean at P0=P1=P2=0.
+- Safety boundary: no database was opened, no backup was taken, no role/capability was created, no SQL was applied, no service restarted, no credential touched, no provider/storage call made, no money spent and no deployment requested.
+
 ## Active local checkpoint: PR29 inert HeyGen V3 production composition
 
 - Branch: `codex/ai-media-studio-production-composition`, draft PR #116, stacked on draft PR #115. Initial checkpoint commit: `948a1a6c`; no merge or deployment is implied.
