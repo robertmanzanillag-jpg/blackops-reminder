@@ -100,3 +100,14 @@ test("includes a bounded upstream validation message without leaking auth", asyn
     fetch: mockFetch as typeof fetch,
   }), (error: Error) => error.message.includes("invalid tiktokData") && !error.message.includes("super-secret-value"));
 });
+
+test("includes a bounded media-normalization error without leaking auth", async () => {
+  const mockFetch = async (url: string | URL | Request) => {
+    if (String(url).includes("/scheduler/posts")) return Response.json({ data: [] });
+    return new Response(JSON.stringify({ error: "could not fetch public MP4", token: "super-secret-value" }), { status: 500 });
+  };
+  await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+  }), (error: Error) => error.message.includes("could not fetch public MP4") && !error.message.includes("super-secret-value"));
+});
