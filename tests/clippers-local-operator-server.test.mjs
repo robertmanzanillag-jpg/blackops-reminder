@@ -4142,6 +4142,7 @@ test("Clippers permission CRM blocks stale approval claims when local evidence i
   await writeFile(crmPath, [
     "metricool_queue_item_id,category,account_name,exact_video_or_post_url,creator_or_rights_holder,outreach_channel,outreach_status,permission_status,evidence_link,operator_notes,updated_at",
     "7129d59b5f5e,sports,Streamer Highlights,https://www.twitch.tv/example/clip/ExactClipSlug,example,email,responded,approved,/clippers-workspace/evidence-drop/streamer-permissions/missing-proof.md,Legacy row incorrectly claimed permission despite missing proof.,2026-07-21T08:55:00Z",
+    "53467d8f7dad,memes,Streamer Reactions,https://www.twitch.tv/example/clip/AnotherExactClip,example,email,responded,approved,https://example.com/unverified-proof,Legacy row incorrectly claimed permission using remote-only proof.,2026-07-21T08:56:00Z",
     "",
   ].join("\n"));
 
@@ -4150,12 +4151,17 @@ test("Clippers permission CRM blocks stale approval claims when local evidence i
     assert.equal(response.status, 200);
     const crm = await response.json();
     const row = crm.rows.find((candidate) => candidate.queueItemId === "7129d59b5f5e");
+    const remoteProofRow = crm.rows.find((candidate) => candidate.queueItemId === "53467d8f7dad");
     assert.equal(crm.approvedRows, 0);
-    assert.equal(crm.invalidEvidenceRows, 1);
+    assert.equal(crm.invalidEvidenceRows, 2);
     assert.equal(row.recordedPermissionStatus, "approved");
     assert.equal(row.permissionStatus, "blocked_invalid_evidence");
     assert.match(row.evidenceValidationStatus, /missing|invalid|blocked/);
     assert.equal(row.canUseForIntake, false);
+    assert.equal(remoteProofRow.recordedPermissionStatus, "approved");
+    assert.equal(remoteProofRow.permissionStatus, "blocked_invalid_evidence");
+    assert.equal(remoteProofRow.evidenceValidationStatus, "approved_permission_requires_local_evidence_file");
+    assert.equal(remoteProofRow.canUseForIntake, false);
   });
 });
 

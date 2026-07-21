@@ -6264,8 +6264,11 @@ async function buildRealClipPermissionCrm(status) {
     const crm = latest.get(row.queueItemId) || {};
     const recordedPermissionStatus = crm.permission_status || "not_requested";
     const claimsApproval = recordedPermissionStatus === "approved" || recordedPermissionStatus === "owned_source";
-    const evidenceValidation = claimsApproval
-      ? await realClipEvidenceStatus(crm.evidence_link || "")
+    const evidenceLink = crm.evidence_link || "";
+    const evidenceValidation = claimsApproval && /^https:\/\//i.test(evidenceLink)
+      ? { ok: false, status: "approved_permission_requires_local_evidence_file" }
+      : claimsApproval
+      ? await realClipEvidenceStatus(evidenceLink)
       : { ok: false, status: "not_required_for_current_status" };
     const permissionStatus = claimsApproval && !evidenceValidation.ok
       ? "blocked_invalid_evidence"
@@ -6284,7 +6287,7 @@ async function buildRealClipPermissionCrm(status) {
       permissionStatus,
       recordedPermissionStatus,
       evidenceValidationStatus: evidenceValidation.status,
-      evidenceLink: crm.evidence_link || "",
+      evidenceLink,
       updatedAt: crm.updated_at || "",
       crmRecorded: Boolean(crm.metricool_queue_item_id),
       canUseForIntake: false,
