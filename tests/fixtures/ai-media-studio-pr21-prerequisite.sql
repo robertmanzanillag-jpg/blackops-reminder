@@ -42,6 +42,8 @@ CREATE TABLE ai_media_scripts (
   id uuid PRIMARY KEY,
   owner_user_id text NOT NULL,
   workspace_id text NOT NULL,
+  source_type text NOT NULL DEFAULT 'manual',
+  source_item_id uuid,
   language text NOT NULL
 );
 
@@ -70,6 +72,24 @@ CREATE TABLE ai_media_governance_profiles (
 );
 CREATE UNIQUE INDEX ai_media_governance_profiles_owner_workspace_id_uq
   ON ai_media_governance_profiles(owner_user_id, workspace_id, id);
+
+CREATE TABLE ai_media_source_items (
+  id uuid PRIMARY KEY,
+  owner_user_id text NOT NULL,
+  workspace_id text NOT NULL,
+  source_type text NOT NULL,
+  external_id text NOT NULL,
+  content_hash text NOT NULL,
+  status text NOT NULL,
+  rights_status text NOT NULL,
+  moderation_status text NOT NULL,
+  CONSTRAINT ai_media_source_items_fixture_state_ck CHECK (
+    content_hash ~ '^sha256:[0-9a-f]{64}$'
+    AND status IN ('discovered','accepted','processing','ready','rejected','archived')
+    AND rights_status IN ('unknown','owned','licensed','restricted','rejected')
+    AND moderation_status IN ('pending','approved','rejected')
+  )
+);
 
 CREATE TABLE ai_media_render_jobs (
   id uuid PRIMARY KEY,

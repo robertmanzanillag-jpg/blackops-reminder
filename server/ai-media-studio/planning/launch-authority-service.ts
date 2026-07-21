@@ -5,6 +5,7 @@ import {
   LaunchAuthorityServiceError,
   type AuthorizedLaunchAuthorityWrite,
   type CreateLaunchAuthoritySnapshotCommand,
+  type DeclareLaunchIntentCommand,
   type LaunchAuthorityApprovalDecision,
   type LaunchAuthorityAuthenticationContext,
   type LaunchAuthorityCapability,
@@ -26,6 +27,7 @@ export const LAUNCH_AUTHORITY_OPERATIONS = [
   "revise_kill_switch",
   "record_content_approval",
   "record_human_launch_approval",
+  "declare_launch_intent",
   "record_sandbox_attestation",
   "record_maximum_quote_attestation",
   "create_authority_snapshot",
@@ -43,6 +45,7 @@ const CAPABILITIES = new Set<string>(LAUNCH_AUTHORITY_CAPABILITIES);
 
 export type LaunchAuthorityCommand = ReviseLaunchAdmissionPolicyCommand | ReviseLaunchKillSwitchCommand
   | RecordContentApprovalCommand | RecordHumanLaunchApprovalCommand
+  | DeclareLaunchIntentCommand
   | RecordSandboxAttestationCommand | RecordMaximumQuoteAttestationCommand
   | CreateLaunchAuthoritySnapshotCommand;
 
@@ -57,6 +60,7 @@ const METHOD_POLICY: Readonly<Record<LaunchAuthorityOperation, MethodPolicy>> = 
   revise_kill_switch: { capability: "kill_switch:revise", principalKinds: ["user"], receiptKind: "kill_switch" },
   record_content_approval: { capability: "content:decide", principalKinds: ["user", "workload"], receiptKind: "content_approval" },
   record_human_launch_approval: { capability: "human_launch:decide", principalKinds: ["user"], receiptKind: "human_launch_approval" },
+  declare_launch_intent: { capability: "launch_intent:declare", principalKinds: ["user"], receiptKind: "launch_intent" },
   record_sandbox_attestation: { capability: "sandbox:attest", principalKinds: ["workload"], receiptKind: "sandbox_proof" },
   record_maximum_quote_attestation: { capability: "quote:attest", principalKinds: ["workload"], receiptKind: "maximum_quote" },
   create_authority_snapshot: { capability: "snapshot:create", principalKinds: ["workload"], receiptKind: "authority_snapshot" },
@@ -118,6 +122,12 @@ export class LaunchAuthorityService {
     const normalized = normalizeApproval(command);
     return this.execute("record_human_launch_approval", context, normalized,
       (input) => this.dependencies.repository.recordHumanLaunchApproval(input));
+  }
+
+  declareLaunchIntent(context: LaunchAuthorityAuthenticationContext, command: DeclareLaunchIntentCommand) {
+    const normalized = normalizeLaunchIntent(command);
+    return this.execute("declare_launch_intent", context, normalized,
+      (input) => this.dependencies.repository.declareLaunchIntent(input));
   }
 
   recordSandboxAttestation(context: LaunchAuthorityAuthenticationContext, command: RecordSandboxAttestationCommand) {
@@ -212,34 +222,25 @@ function normalizeApproval<T extends RecordContentApprovalCommand | RecordHumanL
   return Object.freeze({ ...normalizeSlotCommand(input), decision }) as T;
 }
 
+function normalizeLaunchIntent(input: DeclareLaunchIntentCommand): DeclareLaunchIntentCommand {
+  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "governanceUse", "governanceTerritory",
+    "contentCountry", "idempotencyKey"]);
+  const slot = normalizeSlotCommand(input);
+  const governanceUse = boundedText(input.governanceUse, 1, 80);
+  const governanceTerritory = boundedText(input.governanceTerritory, 1, 80);
+  const contentCountry = boundedText(input.contentCountry, 2, 2);
+  if (!COUNTRY.test(contentCountry)) throw denied("INVALID_REQUEST");
+  return Object.freeze({ ...slot, governanceUse, governanceTerritory, contentCountry });
+}
+
 function normalizeSandbox(input: RecordSandboxAttestationCommand): RecordSandboxAttestationCommand {
-  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "attestation", "idempotencyKey"]);
-  assertExactKeys(input.attestation, ["attestationId", "decision", "sourceEvidenceDigest"]);
-  if (!(["passed", "failed", "revoked"] as const).includes(input.attestation.decision)) throw denied("INVALID_REQUEST");
-  const attestation = Object.freeze({
-    attestationId: opaqueId(input.attestation.attestationId, "attestationId"),
-    decision: input.attestation.decision,
-    sourceEvidenceDigest: digest(input.attestation.sourceEvidenceDigest),
-  }) as typeof input.attestation;
-  return Object.freeze({ ...normalizeSlotCommand(input), attestation });
+  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "attestationHandle", "idempotencyKey"]);
+  return Object.freeze({ ...normalizeSlotCommand(input), attestationHandle: attestationHandle(input.attestationHandle) });
 }
 
 function normalizeQuote(input: RecordMaximumQuoteAttestationCommand): RecordMaximumQuoteAttestationCommand {
-  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "attestation", "idempotencyKey"]);
-  assertExactKeys(input.attestation, ["attestationId", "decision", "maximumQuoteMicroUsd", "currency", "sourceEvidenceDigest"]);
-  const common = {
-    attestationId: opaqueId(input.attestation.attestationId, "attestationId"),
-    sourceEvidenceDigest: digest(input.attestation.sourceEvidenceDigest),
-  };
-  if (!(["quoted", "declined", "revoked"] as const).includes(input.attestation.decision)
-    || input.attestation.currency !== "USD") throw denied("INVALID_REQUEST");
-  const attestation = Object.freeze({
-    ...common,
-    decision: input.attestation.decision,
-    maximumQuoteMicroUsd: money(input.attestation.maximumQuoteMicroUsd, false),
-    currency: "USD" as const,
-  }) as typeof input.attestation;
-  return Object.freeze({ ...normalizeSlotCommand(input), attestation });
+  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "attestationHandle", "idempotencyKey"]);
+  return Object.freeze({ ...normalizeSlotCommand(input), attestationHandle: attestationHandle(input.attestationHandle) });
 }
 
 function normalizeSnapshot(input: CreateLaunchAuthoritySnapshotCommand): CreateLaunchAuthoritySnapshotCommand {
@@ -318,6 +319,12 @@ function opaqueId(input: unknown, _field: string): string {
 
 function idempotency(input: unknown): string {
   return opaqueId(input, "idempotencyKey");
+}
+
+function attestationHandle(input: unknown): string {
+  if (typeof input !== "string" || input.length < 32 || input.length > 200
+    || !/^[A-Za-z0-9_-]+$/u.test(input)) throw denied("INVALID_REQUEST");
+  return input;
 }
 
 function digest(input: unknown): `sha256:${string}` {

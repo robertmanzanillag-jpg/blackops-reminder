@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T12:25:10.963Z
+Generated: 2026-07-21T13:11:10.853Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 705 | 601 | 2420 | 489 | 11579 |
+| 710 | 604 | 2430 | 489 | 11665 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 152 | 150 | ui-component:55, other:43, client-page:23, client-component:21 |
-| `tests` | 147 | 140 | test:147 |
-| `server/ai-media-studio` | 121 | 117 | server:121 |
+| `tests` | 149 | 142 | test:149 |
+| `server/ai-media-studio` | 122 | 118 | server:122 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 27 | 1 | other:26, docs:1 |
+| `migrations/ai-media-studio` | 29 | 1 | other:28, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `tests/fixtures` | 1 | 0 | test:1 |
@@ -91,6 +91,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-launch-authority-drizzle.test.ts`
 - `tests/ai-media-studio-launch-authority-service.test.ts`
+- `tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts`
 - `tests/ai-media-studio-oauth-authorization-saga.test.ts`
 - `tests/ai-media-studio-oauth-authorization-url.test.ts`
 - `tests/ai-media-studio-oauth-aws-vault-preflight.test.ts`
@@ -123,6 +124,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr20-launch-authority-migration.test.ts`
 - `tests/ai-media-studio-pr21-postgres-integration.test.ts`
+- `tests/ai-media-studio-pr22-launch-intent-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`

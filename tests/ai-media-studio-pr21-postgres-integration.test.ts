@@ -16,6 +16,7 @@ const ids = {
   avatar: "10000000-0000-4000-8000-000000000003",
   voice: "10000000-0000-4000-8000-000000000004",
   script: "10000000-0000-4000-8000-000000000005",
+  sourceItem: "10000000-0000-4000-8000-000000000013",
   variant: "10000000-0000-4000-8000-000000000006",
   governance: "10000000-0000-4000-8000-000000000007",
   plan: "10000000-0000-4000-8000-000000000008",
@@ -29,6 +30,9 @@ const ids = {
   quoteEvidence: "10000000-0000-4000-8000-000000000010",
   snapshot: "10000000-0000-4000-8000-000000000011",
   reservation: "10000000-0000-4000-8000-000000000012",
+  launchIntent: "10000000-0000-4000-8000-000000000014",
+  launchIntent2: "10000000-0000-4000-8000-000000000015",
+  launchIntent4: "10000000-0000-4000-8000-000000000016",
 } as const;
 
 function digest(character: string): string {
@@ -86,6 +90,14 @@ const pr20Rollback = readFileSync(new URL(
   "../migrations/ai-media-studio/20260721_pr20_launch_authorities_rollback.sql",
   import.meta.url,
 ), "utf8");
+const pr22Forward = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr22_launch_intents_forward.sql",
+  import.meta.url,
+), "utf8");
+const pr22Rollback = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr22_launch_intents_rollback.sql",
+  import.meta.url,
+), "utf8");
 
 async function seedAuthorityGraph(): Promise<void> {
   await pool.query(`
@@ -99,8 +111,12 @@ async function seedAuthorityGraph(): Promise<void> {
       ('${ids.voice}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','voice','active');
     INSERT INTO ai_media_influencers (id,owner_user_id,workspace_id,status)
     VALUES ('${ids.influencer}','${OWNER}','${WORKSPACE}','active');
-    INSERT INTO ai_media_scripts (id,owner_user_id,workspace_id,language)
-    VALUES ('${ids.script}','${OWNER}','${WORKSPACE}','en');
+    INSERT INTO ai_media_source_items
+      (id,owner_user_id,workspace_id,source_type,external_id,content_hash,status,rights_status,moderation_status)
+    VALUES ('${ids.sourceItem}','${OWNER}','${WORKSPACE}','rss','source-pr21','${digest("9")}',
+      'ready','owned','approved');
+    INSERT INTO ai_media_scripts (id,owner_user_id,workspace_id,source_type,source_item_id,language)
+    VALUES ('${ids.script}','${OWNER}','${WORKSPACE}','rss','${ids.sourceItem}','en');
     INSERT INTO ai_media_script_variants (id,owner_user_id,workspace_id,script_id,checksum,status)
     VALUES ('${ids.variant}','${OWNER}','${WORKSPACE}','${ids.script}','${"1".repeat(64)}','approved');
     INSERT INTO ai_media_governance_profiles
@@ -139,26 +155,47 @@ async function seedAuthorityGraph(): Promise<void> {
        reserved_micro_usd,committed_micro_usd,policy_digest,policy_version,state_version,created_at,updated_at)
     VALUES ('${ids.bucket}','${OWNER}','${WORKSPACE}',(statement_timestamp() AT TIME ZONE 'UTC')::date,'UTC',
       'USD',5000000,0,0,'${digest("7")}',1,1,statement_timestamp(),statement_timestamp());
+    INSERT INTO ai_media_launch_intents
+      (id,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,slot_attempt,provider_account_id,
+       provider_key,provider_credential_version,plan_digest,slot_digest,source_roster_key,source_roster_digest,
+       source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,source_item_id,
+       source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+       governance_territory,content_country,launch_subject_digest,launch_intent_digest,actor_user_id,
+       input_digest,idempotency_key)
+    VALUES ('${ids.launchIntent}','${OWNER}','${WORKSPACE}','${ids.plan}','${ids.slot}',1,'${ids.account}',
+      'heygen',1,'${digest("5")}','${digest("6")}','launch-roster','${digest("3")}','member-pr21',
+      '${ids.script}','${ids.variant}','${"1".repeat(64)}','rss','${ids.sourceItem}','${digest("9")}',
+      '${ids.governance}','${digest("2")}','marketing','WORLDWIDE','US','${digest("0")}',
+      '${digest("9")}','actor-pr21','${digest("8")}','launch-intent-pr21-attempt-1');
   `);
 
   const evidence = [
-    [ids.contentEvidence, "content_approval", "approved", null, null, digest("c"), "content-pr21-revision-1"],
-    [ids.humanEvidence, "human_launch_approval", "approved", null, null, digest("d"), "human-pr21-revision-1"],
-    [ids.sandboxEvidence, "sandbox_proof", "passed", null, null, digest("e"), "sandbox-pr21-revision-1"],
-    [ids.quoteEvidence, "maximum_quote", "quoted", "1250000", "USD", digest("f"), "quote-pr21-revision-1"],
+    [ids.contentEvidence, "content_approval", "approved", null, null, null, null,
+      digest("c"), "content-pr21-revision-1"],
+    [ids.humanEvidence, "human_launch_approval", "approved", null, null, null, null,
+      digest("d"), "human-pr21-revision-1"],
+    [ids.sandboxEvidence, "sandbox_proof", "passed", null, null, "sandbox-attestation-pr21", digest("6"),
+      digest("e"), "sandbox-pr21-revision-1"],
+    [ids.quoteEvidence, "maximum_quote", "quoted", "1250000", "USD", "maximum-quote-attestation-pr21", digest("7"),
+      digest("f"), "quote-pr21-revision-1"],
   ] as const;
-  for (const [id, kind, decision, amount, currency, evidenceDigest, idempotencyKey] of evidence) {
+  for (const [id, kind, decision, amount, currency, sourceAttestationId, sourceEvidenceDigest,
+    evidenceDigest, idempotencyKey] of evidence) {
     await pool.query(`
       INSERT INTO ai_media_launch_evidence
         (id,owner_user_id,workspace_id,daily_plan_slot_id,provider_account_id,provider_key,
          provider_credential_version,slot_attempt,script_variant_id,script_variant_checksum,
          governance_profile_id,governance_evidence_digest,governance_use,governance_territory,
-         content_country,launch_subject_digest,evidence_kind,decision,amount_micro_usd,currency,revision,
-         valid_from,expires_at,actor_user_id,source_kind,evidence_digest,input_digest,idempotency_key)
-      VALUES ($1,$2,$3,$4,$5,'heygen',1,1,$6,$7,$8,$9,'marketing','WORLDWIDE','US',$10,$11,$12,$13,$14,1,
-        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour','actor-pr21','pr21-test',$15,$16,$17)
+         content_country,launch_subject_digest,launch_intent_id,launch_intent_digest,
+         evidence_kind,decision,amount_micro_usd,currency,revision,
+         valid_from,expires_at,actor_user_id,source_kind,source_attestation_id,source_evidence_digest,
+         evidence_digest,input_digest,idempotency_key)
+      VALUES ($1,$2,$3,$4,$5,'heygen',1,1,$6,$7,$8,$9,'marketing','WORLDWIDE','US',$10,$11,$12,$13,$14,$15,$16,1,
+        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour','actor-pr21','pr21-test',
+        $17,$18,$19,$20,$21)
     `, [id, OWNER, WORKSPACE, ids.slot, ids.account, ids.variant, "1".repeat(64), ids.governance,
-      digest("2"), digest("0"), kind, decision, amount, currency, evidenceDigest, digest("1"), idempotencyKey]);
+      digest("2"), digest("0"), ids.launchIntent, digest("9"), kind, decision, amount, currency,
+      sourceAttestationId, sourceEvidenceDigest, evidenceDigest, digest("1"), idempotencyKey]);
   }
 
   await pool.query(`
@@ -167,6 +204,7 @@ async function seedAuthorityGraph(): Promise<void> {
        provider_account_id,provider_key,provider_credential_version,slot_attempt,script_variant_id,
        script_variant_checksum,governance_profile_id,governance_evidence_digest,governance_use,
        governance_territory,content_country,launch_subject_digest,content_approval_evidence_id,
+       launch_intent_id,launch_intent_digest,
        content_approval_evidence_digest,human_launch_approval_evidence_id,human_launch_approval_evidence_digest,
        sandbox_evidence_id,sandbox_evidence_digest,maximum_quote_evidence_id,maximum_quote_evidence_digest,
        policy_revision_id,policy_revision,policy_digest,kill_switch_revision_id,kill_switch_revision,
@@ -174,7 +212,8 @@ async function seedAuthorityGraph(): Promise<void> {
        authority_digest,input_digest,idempotency_key)
     VALUES ('${ids.snapshot}','${OWNER}','${WORKSPACE}','${ids.plan}','${digest("5")}','${ids.slot}',
       '${digest("6")}','${ids.account}','heygen',1,1,'${ids.variant}','${"1".repeat(64)}','${ids.governance}',
-      '${digest("2")}','marketing','WORLDWIDE','US','${digest("0")}','${ids.contentEvidence}','${digest("c")}',
+      '${digest("2")}','marketing','WORLDWIDE','US','${digest("0")}','${ids.contentEvidence}',
+      '${ids.launchIntent}','${digest("9")}','${digest("c")}',
       '${ids.humanEvidence}','${digest("d")}','${ids.sandboxEvidence}','${digest("e")}',
       '${ids.quoteEvidence}','${digest("f")}','${ids.policy}',1,'${digest("7")}','${ids.killSwitch}',1,
       '${digest("a")}',1250000,'USD',clock_timestamp()-interval '1 minute',clock_timestamp()+interval '30 minutes',
@@ -219,6 +258,7 @@ before(async () => {
   await pool.query(prerequisite);
   await pool.query(pr19Forward);
   await pool.query(pr20Forward);
+  await pool.query(pr22Forward);
   await seedAuthorityGraph();
 });
 
@@ -245,15 +285,15 @@ integrationTest("PR21 runs only on the owned socket-only PostgreSQL 16 database"
   assert.ok(result.rows[0].socket_directories.includes(TEMP_PREFIX));
 });
 
-integrationTest("real PostgreSQL installs the exact PR19 and PR20 schema controls", async () => {
+integrationTest("real PostgreSQL installs the exact PR19, PR20, and PR22 schema controls", async () => {
   const tables = await pool.query<{ table_name: string }>(`
     SELECT table_name FROM information_schema.tables
     WHERE table_schema='public' AND table_name IN (
       'ai_media_daily_plans','ai_media_daily_plan_slots','ai_media_budget_buckets','ai_media_budget_reservations',
       'ai_media_admission_policy_revisions','ai_media_kill_switch_revisions','ai_media_launch_evidence',
-      'ai_media_launch_authority_snapshots') ORDER BY table_name
+      'ai_media_launch_authority_snapshots','ai_media_launch_intents') ORDER BY table_name
   `);
-  assert.equal(tables.rowCount, 8);
+  assert.equal(tables.rowCount, 9);
 
   const controls = await pool.query<{ constraint_name: string }>(`
     SELECT conname AS constraint_name FROM pg_constraint
@@ -261,9 +301,11 @@ integrationTest("real PostgreSQL installs the exact PR19 and PR20 schema control
       'ai_media_budget_reservations_authority_snapshot_fk',
       'ai_media_launch_authority_snapshots_exact_slot_fk',
       'ai_media_launch_authority_snapshots_content_evidence_fk',
-      'ai_media_launch_evidence_previous_fk')
+      'ai_media_launch_evidence_previous_fk',
+      'ai_media_launch_evidence_launch_intent_fk',
+      'ai_media_launch_authority_snapshots_launch_intent_fk')
   `);
-  assert.equal(controls.rowCount, 4);
+  assert.equal(controls.rowCount, 6);
 
   const triggers = await pool.query<{ trigger_name: string }>(`
     SELECT tgname AS trigger_name FROM pg_trigger
@@ -273,9 +315,10 @@ integrationTest("real PostgreSQL installs the exact PR19 and PR20 schema control
       'ai_media_admission_policy_revisions_immutable_guard',
       'ai_media_kill_switch_revisions_immutable_guard',
       'ai_media_launch_evidence_immutable_guard',
-      'ai_media_launch_authority_snapshots_immutable_guard')
+      'ai_media_launch_authority_snapshots_immutable_guard',
+      'ai_media_launch_intents_immutable_guard')
   `);
-  assert.equal(triggers.rowCount, 6);
+  assert.equal(triggers.rowCount, 7);
 });
 
 integrationTest("tenant and immutable authority constraints fail closed in PostgreSQL", async () => {
@@ -284,10 +327,12 @@ integrationTest("tenant and immutable authority constraints fail closed in Postg
       (owner_user_id,workspace_id,daily_plan_slot_id,provider_account_id,provider_key,provider_credential_version,
        slot_attempt,script_variant_id,script_variant_checksum,governance_profile_id,governance_evidence_digest,
        governance_use,governance_territory,content_country,launch_subject_digest,evidence_kind,decision,revision,
+       launch_intent_id,launch_intent_digest,
        valid_from,expires_at,actor_user_id,source_kind,evidence_digest,input_digest,idempotency_key)
     VALUES ('other-owner','${WORKSPACE}','${ids.slot}','${ids.account}','heygen',1,1,'${ids.variant}',
       '${"1".repeat(64)}','${ids.governance}','${digest("2")}','marketing','WORLDWIDE','US','${digest("0")}',
-      'content_approval','approved',1,clock_timestamp(),clock_timestamp()+interval '1 hour','actor-pr21',
+      'content_approval','approved',1,'${ids.launchIntent}','${digest("9")}',
+      clock_timestamp(),clock_timestamp()+interval '1 hour','actor-pr21',
       'pr21-test','${digest("6")}','${digest("7")}','cross-tenant-pr21')
   `), "23503");
 
@@ -298,6 +343,10 @@ integrationTest("tenant and immutable authority constraints fail closed in Postg
   await expectDatabaseError(() => pool.query(
     "DELETE FROM ai_media_launch_authority_snapshots WHERE id=$1",
     [ids.snapshot],
+  ), "P0001");
+  await expectDatabaseError(() => pool.query(
+    "UPDATE ai_media_launch_intents SET actor_user_id='rewritten' WHERE id=$1",
+    [ids.launchIntent],
   ), "P0001");
   await expectDatabaseError(() => pool.query(
     "UPDATE ai_media_admission_policy_revisions SET state='disabled' WHERE id=$1",
@@ -371,16 +420,130 @@ integrationTest("concurrent revision append allows one canonical successor", asy
   assert.equal(canonical.rows[0].count, "1");
 });
 
+integrationTest("launch intents enforce exact source content and one canonical row per slot attempt", async () => {
+  const columns = `(id,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,slot_attempt,
+    provider_account_id,provider_key,provider_credential_version,plan_digest,slot_digest,source_roster_key,
+    source_roster_digest,source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,
+    source_item_id,source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+    governance_territory,content_country,launch_subject_digest,launch_intent_digest,actor_user_id,
+    input_digest,idempotency_key)`;
+  await expectDatabaseError(() => pool.query(`
+    INSERT INTO ai_media_launch_intents ${columns}
+    SELECT '40000000-0000-4000-8000-000000000001',owner_user_id,workspace_id,daily_plan_id,
+      daily_plan_slot_id,4,provider_account_id,provider_key,provider_credential_version,plan_digest,slot_digest,
+      source_roster_key,source_roster_digest,source_member_key,script_id,script_variant_id,
+      script_variant_checksum,source_type,source_item_id,$1,governance_profile_id,governance_evidence_digest,
+      governance_use,governance_territory,content_country,launch_subject_digest,$2,actor_user_id,$3,
+      'launch-intent-wrong-source-hash'
+    FROM ai_media_launch_intents WHERE id=$4
+  `, ["8".repeat(64), digest("6"), digest("5"), ids.launchIntent]), "23514");
+
+  const matchingBeforeRefresh = await pool.query<{ count: string }>(`
+    SELECT count(*)::text AS count FROM ai_media_launch_intents intents
+    JOIN ai_media_source_items sources
+      ON sources.owner_user_id=intents.owner_user_id AND sources.workspace_id=intents.workspace_id
+      AND sources.id=intents.source_item_id AND sources.source_type=intents.source_type
+      AND sources.content_hash=intents.source_content_hash
+      AND sources.status IN ('accepted','ready') AND sources.rights_status IN ('owned','licensed')
+      AND sources.moderation_status='approved'
+    WHERE intents.id=$1
+  `, [ids.launchIntent]);
+  assert.equal(matchingBeforeRefresh.rows[0].count, "1");
+  await pool.query("UPDATE ai_media_source_items SET content_hash=$1 WHERE id=$2", [digest("8"), ids.sourceItem]);
+  const matchingAfterRefresh = await pool.query<{ count: string }>(`
+    SELECT count(*)::text AS count FROM ai_media_launch_intents intents
+    JOIN ai_media_source_items sources
+      ON sources.owner_user_id=intents.owner_user_id AND sources.workspace_id=intents.workspace_id
+      AND sources.id=intents.source_item_id AND sources.source_type=intents.source_type
+      AND sources.content_hash=intents.source_content_hash
+    WHERE intents.id=$1
+  `, [ids.launchIntent]);
+  assert.equal(matchingAfterRefresh.rows[0].count, "0");
+  await pool.query("UPDATE ai_media_source_items SET content_hash=$1 WHERE id=$2", [digest("9"), ids.sourceItem]);
+
+  const statement = `
+    INSERT INTO ai_media_launch_intents ${columns}
+    SELECT $1,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,3,provider_account_id,provider_key,
+      provider_credential_version,plan_digest,slot_digest,source_roster_key,source_roster_digest,
+      source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,source_item_id,
+      source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+      governance_territory,content_country,launch_subject_digest,$2,actor_user_id,$3,$4
+    FROM ai_media_launch_intents WHERE id=$5
+  `;
+  const contenders = [
+    ["40000000-0000-4000-8000-000000000002", digest("4"), digest("3"), "launch-intent-contender-a"],
+    ["40000000-0000-4000-8000-000000000003", digest("2"), digest("1"), "launch-intent-contender-b"],
+  ] as const;
+  const results = await Promise.all(contenders.map(([id, intentDigest, inputDigest, key]) =>
+    transactionInsert(statement, [id, intentDigest, inputDigest, key, ids.launchIntent])));
+  assert.deepEqual([...results].sort(), ["23505", "committed"]);
+});
+
+integrationTest("runtime evidence requires safe source attestation audit fields by kind", async () => {
+  await pool.query(`
+    INSERT INTO ai_media_launch_intents
+      (id,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,slot_attempt,provider_account_id,
+       provider_key,provider_credential_version,plan_digest,slot_digest,source_roster_key,source_roster_digest,
+       source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,source_item_id,
+       source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+       governance_territory,content_country,launch_subject_digest,launch_intent_digest,actor_user_id,
+       input_digest,idempotency_key)
+    SELECT '${ids.launchIntent4}',owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,4,
+      provider_account_id,provider_key,provider_credential_version,plan_digest,slot_digest,source_roster_key,
+      source_roster_digest,source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,
+      source_item_id,source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+      governance_territory,content_country,launch_subject_digest,'${digest("6")}',actor_user_id,
+      '${digest("5")}','launch-intent-pr21-attempt-4'
+    FROM ai_media_launch_intents WHERE id='${ids.launchIntent}'
+  `);
+  const evidenceColumns = `(id,owner_user_id,workspace_id,daily_plan_slot_id,provider_account_id,provider_key,
+    provider_credential_version,slot_attempt,script_variant_id,script_variant_checksum,governance_profile_id,
+    governance_evidence_digest,governance_use,governance_territory,content_country,launch_subject_digest,
+    launch_intent_id,launch_intent_digest,evidence_kind,decision,revision,valid_from,expires_at,actor_user_id,
+    source_kind,source_attestation_id,source_evidence_digest,evidence_digest,input_digest,idempotency_key)`;
+  const selectEvidence = `SELECT $1,owner_user_id,workspace_id,daily_plan_slot_id,provider_account_id,
+    provider_key,provider_credential_version,4,script_variant_id,script_variant_checksum,governance_profile_id,
+    governance_evidence_digest,governance_use,governance_territory,content_country,launch_subject_digest,
+    $2,$3,$4,$5,1,valid_from,expires_at,actor_user_id,source_kind,$6,$7,$8,$9,$10
+    FROM ai_media_launch_evidence WHERE id=$11`;
+  await expectDatabaseError(() => pool.query(
+    `INSERT INTO ai_media_launch_evidence ${evidenceColumns} ${selectEvidence}`,
+    ["50000000-0000-4000-8000-000000000001", ids.launchIntent4, digest("6"), "sandbox_proof",
+      "passed", null, null, digest("4"), digest("3"), "sandbox-missing-attestation", ids.sandboxEvidence],
+  ), "23514");
+  await expectDatabaseError(() => pool.query(
+    `INSERT INTO ai_media_launch_evidence ${evidenceColumns} ${selectEvidence}`,
+    ["50000000-0000-4000-8000-000000000002", ids.launchIntent4, digest("6"), "human_launch_approval",
+      "approved", "unsafe attestation", digest("2"), digest("1"), digest("0"),
+      "human-forbidden-attestation", ids.humanEvidence],
+  ), "23514");
+});
+
 integrationTest("concurrent evidence writes enforce one durable idempotency binding", async () => {
+  await pool.query(`
+    INSERT INTO ai_media_launch_intents
+      (id,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,slot_attempt,provider_account_id,
+       provider_key,provider_credential_version,plan_digest,slot_digest,source_roster_key,source_roster_digest,
+       source_member_key,script_id,script_variant_id,script_variant_checksum,source_type,source_item_id,
+       source_content_hash,governance_profile_id,governance_evidence_digest,governance_use,
+       governance_territory,content_country,launch_subject_digest,launch_intent_digest,actor_user_id,
+       input_digest,idempotency_key)
+    VALUES ('${ids.launchIntent2}','${OWNER}','${WORKSPACE}','${ids.plan}','${ids.slot}',2,'${ids.account}',
+      'heygen',1,'${digest("5")}','${digest("6")}','launch-roster','${digest("3")}','member-pr21',
+      '${ids.script}','${ids.variant}','${"1".repeat(64)}','rss','${ids.sourceItem}','${digest("9")}',
+      '${ids.governance}','${digest("2")}','marketing','WORLDWIDE','US','${digest("0")}',
+      '${digest("8")}','actor-pr21','${digest("7")}','launch-intent-pr21-attempt-2')
+  `);
   const statement = `
     INSERT INTO ai_media_launch_evidence
       (id,owner_user_id,workspace_id,daily_plan_slot_id,provider_account_id,provider_key,
        provider_credential_version,slot_attempt,script_variant_id,script_variant_checksum,
        governance_profile_id,governance_evidence_digest,governance_use,governance_territory,content_country,
-       launch_subject_digest,evidence_kind,decision,revision,valid_from,expires_at,actor_user_id,source_kind,
+       launch_subject_digest,launch_intent_id,launch_intent_digest,evidence_kind,decision,revision,
+       valid_from,expires_at,actor_user_id,source_kind,
        evidence_digest,input_digest,idempotency_key)
-    VALUES ($1,$2,$3,$4,$5,'heygen',1,2,$6,$7,$8,$9,'marketing','WORLDWIDE','US',$10,$11,'approved',1,
-      clock_timestamp(),clock_timestamp()+interval '1 hour','actor-pr21','pr21-test',$12,$13,$14)
+    VALUES ($1,$2,$3,$4,$5,'heygen',1,2,$6,$7,$8,$9,'marketing','WORLDWIDE','US',$10,$11,$12,$13,'approved',1,
+      clock_timestamp(),clock_timestamp()+interval '1 hour','actor-pr21','pr21-test',$14,$15,$16)
   `;
   const sharedIdempotencyKey = "evidence-pr21-shared-idempotency";
   const contenders = [
@@ -389,7 +552,8 @@ integrationTest("concurrent evidence writes enforce one durable idempotency bind
   ] as const;
   const results = await Promise.all(contenders.map(([id, kind, evidenceDigest, inputDigest]) =>
     transactionInsert(statement, [id, OWNER, WORKSPACE, ids.slot, ids.account, ids.variant, "1".repeat(64),
-      ids.governance, digest("2"), digest("0"), kind, evidenceDigest, inputDigest, sharedIdempotencyKey])));
+      ids.governance, digest("2"), digest("0"), ids.launchIntent2, digest("8"), kind,
+      evidenceDigest, inputDigest, sharedIdempotencyKey])));
   assert.deepEqual([...results].sort(), ["23505", "committed"]);
   const durableBinding = await pool.query<{ count: string }>(`
     SELECT count(*)::text AS count FROM ai_media_launch_evidence
@@ -404,6 +568,7 @@ integrationTest("application-only rollbacks preserve evidence and repeated forwa
   );
   await pool.query(pr20Rollback);
   await pool.query(pr19Rollback);
+  await pool.query(pr22Rollback);
   const afterRollback = await pool.query<{ count: string }>(
     "SELECT count(*)::text AS count FROM ai_media_launch_evidence",
   );
@@ -413,6 +578,7 @@ integrationTest("application-only rollbacks preserve evidence and repeated forwa
   try {
     await assertReapplicationFails(client, pr19Forward);
     await assertReapplicationFails(client, pr20Forward);
+    await assertReapplicationFails(client, pr22Forward);
   } finally {
     client.release();
   }
