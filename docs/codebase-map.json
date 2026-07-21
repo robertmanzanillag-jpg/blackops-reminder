@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T18:52:56.186Z",
+  "generatedAt": "2026-07-21T18:59:34.619Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -93,37 +93,11 @@
     "symbols": 12247
   },
   "directories": {
-    "client/src": {
-      "files": 153,
-      "indexed": 151,
-      "kinds": {
-        "client-page": 24,
-        "other": 43,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7
-      }
-    },
     "server/ai-media-studio": {
       "files": 132,
       "indexed": 127,
       "kinds": {
         "server": 132
-      }
-    },
-    "shared": {
-      "files": 9,
-      "indexed": 9,
-      "kinds": {
-        "shared": 9
-      }
-    },
-    "tests": {
-      "files": 163,
-      "indexed": 156,
-      "kinds": {
-        "test": 163
       }
     },
     ".agents/skills": {
@@ -162,6 +136,18 @@
       "indexed": 2,
       "kinds": {
         "other": 13
+      }
+    },
+    "client/src": {
+      "files": 153,
+      "indexed": 151,
+      "kinds": {
+        "other": 43,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
       }
     },
     "docs/ai-media-studio": {
@@ -214,11 +200,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 9,
+      "indexed": 9,
+      "kinds": {
+        "shared": 9
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 163,
+      "indexed": 156,
+      "kinds": {
+        "test": 163
       }
     },
     "tests/fixtures": {
