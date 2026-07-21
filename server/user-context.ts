@@ -34,6 +34,7 @@ const PUBLIC_API_PATHS = [
 const PUBLIC_API_PATTERNS: RegExp[] = [
   /^\/api\/blackroom-agent\/media\/[^/]+$/,
   /^\/api\/blackroom-agent\/media\/chunked\/[^/]+\/(?:\d+|complete)$/,
+  /^\/api\/public\/local-news(?:\/[^/]+)?$/,
 ];
 
 function cleanUserId(value: unknown): string | null {

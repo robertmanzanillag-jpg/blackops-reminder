@@ -29,6 +29,7 @@ const MarketingCommandCenterPage = lazy(() => import("@/pages/marketing-command-
 const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"));
 const AppQaAgentPage = lazy(() => import("@/pages/app-qa-agent"));
 const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
+const LocalNewsPublicPage = lazy(() => import("@/pages/local-news-public"));
 
 type AuthMe = {
   authenticated: boolean;
@@ -57,7 +58,7 @@ function getLocalPreviewAuth(): AuthMe | null {
   }
 }
 
-function Router() {
+function AuthenticatedRouter() {
   const hasLocalPreviewAuth = Boolean(getLocalPreviewAuth());
   const { data: auth, isLoading } = useQuery<AuthMe>({
     queryKey: ["auth-me"],
@@ -143,8 +144,27 @@ function Router() {
   );
 }
 
+function Router() {
+  const isPublicNewsRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/news");
+  return (
+    <Suspense fallback={isPublicNewsRoute ? <PublicPageLoading /> : <PageLoading />}>
+      <Switch>
+        <Route path="/news/article/:slug" component={LocalNewsPublicPage} />
+        <Route path="/news/miami" component={LocalNewsPublicPage} />
+        <Route path="/news/new-york" component={LocalNewsPublicPage} />
+        <Route path="/news" component={LocalNewsPublicPage} />
+        <Route component={AuthenticatedRouter} />
+      </Switch>
+    </Suspense>
+  );
+}
+
 function PageLoading() {
   return <div className="flex min-h-screen items-center justify-center bg-black text-sm text-zinc-400">Cargando modulo...</div>;
+}
+
+function PublicPageLoading() {
+  return <div className="flex min-h-screen items-center justify-center bg-[#fbfaf6] text-sm font-semibold uppercase tracking-[0.14em] text-[#17395c]">Loading Metro Current…</div>;
 }
 
 function App() {
