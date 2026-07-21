@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 import {
   buildMetricoolTikTokPayload,
   extractMetricoolMediaId,
   findVerifiedMetricoolPost,
+  postMetricoolJsonBytes,
   scheduleBlackRoomMetricoolPost,
 } from "../server/blackroom-metricool-bridge";
 
@@ -29,6 +31,40 @@ test("builds a TikTok-only auto-publish payload", () => {
   assert.equal(payload.autoPublish, true);
   assert.equal(payload.publicationDate.timezone, "America/New_York");
   assert.equal(payload.tiktokData.privacyOption, "PUBLIC_TO_EVERYONE");
+});
+
+test("sends Metricool scheduler JSON as exact UTF-8 bytes", async () => {
+  const received = await new Promise<{ body: string; headers: Record<string, string | string[] | undefined> }>((resolve, reject) => {
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      request.on("end", () => {
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end('{"id":991}');
+        server.close();
+        resolve({ body: Buffer.concat(chunks).toString("utf8"), headers: request.headers });
+      });
+    });
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", async () => {
+      const address = server.address();
+      if (!address || typeof address === "string") return reject(new Error("Test server did not bind"));
+      try {
+        const response = await postMetricoolJsonBytes(
+          `http://127.0.0.1:${address.port}/scheduler`,
+          "valid-token-that-is-long-enough",
+          JSON.stringify({ text: "Café", providers: [{ network: "tiktok" }] }),
+        );
+        assert.equal(response.status, 201);
+      } catch (error) {
+        server.close();
+        reject(error);
+      }
+    });
+  });
+  assert.deepEqual(JSON.parse(received.body), { text: "Café", providers: [{ network: "tiktok" }] });
+  assert.equal(received.headers["content-type"], "application/json; charset=utf-8");
+  assert.equal(received.headers["content-length"], String(Buffer.byteLength(received.body, "utf8")));
 });
 
 test("finds exact caption and schedule evidence", () => {
