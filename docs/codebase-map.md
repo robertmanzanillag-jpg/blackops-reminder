@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T14:38:44.226Z
+Generated: 2026-07-21T16:07:15.423Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -10,11 +10,12 @@ Package: `rest-express`
 - Does not index SQL files or filenames that look like dumps, backups, credentials, secrets, or tokens.
 - On macOS, skips iCloud placeholders marked dataless instead of blocking while their contents download.
 - Use this map to narrow exploration; verify behavior in source files before editing.
+- Omitted 1 macOS dataless file(s); hydrate them and regenerate for a complete local index.
 
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 719 | 609 | 2463 | 489 | 11828 |
+| 727 | 614 | 2485 | 489 | 11929 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +31,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 152 | 150 | ui-component:55, other:43, client-page:23, client-component:21 |
-| `tests` | 152 | 145 | test:152 |
-| `server/ai-media-studio` | 124 | 120 | server:124 |
+| `tests` | 154 | 147 | test:154 |
+| `server/ai-media-studio` | 128 | 123 | server:128 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -44,7 +45,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 33 | 1 | other:32, docs:1 |
+| `migrations/ai-media-studio` | 35 | 1 | other:34, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `tests/fixtures` | 1 | 0 | test:1 |
@@ -65,6 +66,7 @@ Package: `rest-express`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-media-studio-admitted-render-worker.test.ts`
 - `tests/ai-media-studio-analytics.test.ts`
 - `tests/ai-media-studio-asset-delivery-client.test.ts`
 - `tests/ai-media-studio-asset-ingest-drizzle.test.ts`
@@ -128,6 +130,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr22-launch-intent-migration.test.ts`
 - `tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts`
 - `tests/ai-media-studio-pr24-held-activation-migration.test.ts`
+- `tests/ai-media-studio-pr25-admitted-worker-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`

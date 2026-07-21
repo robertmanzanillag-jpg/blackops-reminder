@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T14:38:44.226Z",
+  "generatedAt": "2026-07-21T16:07:15.423Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,33 +86,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 719,
-    "filesIndexed": 609,
-    "imports": 2463,
+    "filesVisible": 727,
+    "filesIndexed": 614,
+    "imports": 2485,
     "routes": 489,
-    "symbols": 11828
+    "symbols": 11929
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 33,
+      "files": 35,
       "indexed": 1,
       "kinds": {
-        "other": 32,
+        "other": 34,
         "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 124,
-      "indexed": 120,
+      "files": 128,
+      "indexed": 123,
       "kinds": {
-        "server": 124
+        "server": 128
       }
     },
     "tests": {
-      "files": 152,
-      "indexed": 145,
+      "files": 154,
+      "indexed": 147,
       "kinds": {
-        "test": 152
+        "test": 154
       }
     },
     ".agents/skills": {
@@ -11494,6 +11494,57 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/workers/admitted-render-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts"
+      ],
+      "exports": [
+        "AdmittedAuthorizedIdentity",
+        "AdmittedProviderResolver",
+        "AdmittedReconciliationClaim",
+        "AdmittedReconciliationOutcome",
+        "AdmittedRenderProvider",
+        "AdmittedRenderRepository",
+        "AdmittedSendAuthorization",
+        "AdmittedSubmissionClaim",
+        "AdmittedSubmissionIdentity",
+        "AdmittedSubmissionState",
+        "AdmittedSubmitOutcome",
+        "ExactAdmittedProviderCapability",
+        "ExactNegativeSubmissionFinality"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/admitted-render-worker.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/contracts",
+        "./admitted-render-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "AdmittedRenderWorker",
+        "AdmittedWorkerResult"
+      ],
+      "symbols": [
+        "AdmittedRenderWorker",
+        "assertExactCapability",
+        "assertExactNegativeFinality",
+        "attempt",
+        "authorization",
+        "claim",
+        "classification",
+        "committed",
+        "errorDigest",
+        "released"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/workers/contracts.ts",
       "kind": "server",
       "imports": [],
@@ -11514,6 +11565,88 @@
         "RenderWorkerHooks"
       ],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/drizzle-admitted-render-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/authority-locks",
+        "../planning/contracts",
+        "./admitted-render-contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "AdmittedRenderDatabase",
+        "AdmittedRenderTransactionalDatabase",
+        "DrizzleAdmittedRenderRepository"
+      ],
+      "symbols": [
+        "DIGEST",
+        "DrizzleAdmittedRenderRepository",
+        "ExecuteResult",
+        "UUID",
+        "attempt",
+        "authorizationDigest",
+        "authorizationFrom",
+        "authorizedAt",
+        "authorizedIdentityFrom",
+        "big",
+        "boundEvidence",
+        "boundedProviderId",
+        "bucket",
+        "candidate",
+        "candidates",
+        "canonical",
+        "claimFrom",
+        "commitEvidenceDigest",
+        "current",
+        "dbDigest",
+        "dbUuid",
+        "deferConsistency",
+        "eventActor",
+        "eventDigest",
+        "evidence",
+        "fence",
+        "first",
+        "gate",
+        "hash",
+        "identityFrom",
+        "inputDigest",
+        "iso",
+        "job",
+        "jobStage",
+        "lease",
+        "leaseToken",
+        "lockedClaim",
+        "nextSequence",
+        "observedAt",
+        "optionalProviderId",
+        "outbox",
+        "outboxState",
+        "positive",
+        "rec",
+        "render",
+        "reservation",
+        "reservationState",
+        "row",
+        "rows",
+        "sameClaim",
+        "sameNegativeFinality",
+        "scriptContent",
+        "sealedRequestDigest",
+        "sequence",
+        "slot",
+        "slotState",
+        "source",
+        "sourceBinding",
+        "sourceType",
+        "subject",
+        "text",
+        "timestampColumn",
+        "withRequest"
+      ],
       "routes": []
     },
     {
@@ -18683,6 +18816,8 @@
         "aiMediaProviderAccountCredentialBindings",
         "aiMediaProviderAccounts",
         "aiMediaProviderResources",
+        "aiMediaProviderSubmissionAttempts",
+        "aiMediaProviderSubmissionEvents",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
@@ -18727,6 +18862,8 @@
         "aiMediaProviderAccountCredentialBindings",
         "aiMediaProviderAccounts",
         "aiMediaProviderResources",
+        "aiMediaProviderSubmissionAttempts",
+        "aiMediaProviderSubmissionEvents",
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
@@ -19062,6 +19199,29 @@
         "cost",
         "notice",
         "previous"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-admitted-render-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/admitted-render-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "digest",
+        "durableRepository",
+        "durableResolver",
+        "reconciliation",
+        "repository",
+        "resolver",
+        "restartedWorker",
+        "worker"
       ],
       "routes": []
     },
@@ -21001,6 +21161,8 @@
         "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
         "../server/ai-media-studio/planning/drizzle-held-work-activation-repository",
         "../server/ai-media-studio/planning/held-work-activation-domain",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/drizzle-admitted-render-repository",
         "drizzle-orm",
         "drizzle-orm/pg-core",
         "node:assert/strict",
@@ -21025,14 +21187,19 @@
         "activationRepository",
         "admission",
         "admissionRepository",
+        "admittedDb",
+        "admittedRepository",
         "afterRollback",
         "assertReapplicationFails",
+        "authorization",
         "authorizedActivation",
         "beforeCount",
         "canonical",
+        "claim",
         "claimable",
         "client",
         "columns",
+        "committed",
         "compiled",
         "contenders",
         "controls",
@@ -21042,6 +21209,7 @@
         "evidence",
         "evidenceColumns",
         "expectDatabaseError",
+        "finality",
         "handoffDigest",
         "harness",
         "hash",
@@ -21066,7 +21234,12 @@
         "pr23Rollback",
         "pr24Forward",
         "pr24Rollback",
+        "pr25Forward",
+        "pr25Rollback",
         "prerequisite",
+        "reconciliation",
+        "released",
+        "releasedLeaseEvent",
         "repository",
         "requestJson",
         "requireSafeTestDatabaseUrl",
@@ -21085,10 +21258,12 @@
         "state",
         "statement",
         "tables",
+        "terminalEvent",
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "transactionInsert",
         "triggers",
+        "unknownReconciliation",
         "unsigned",
         "unsignedActivation",
         "unsignedAdmission"
@@ -21151,6 +21326,26 @@
         "columns",
         "config",
         "forward",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr25-admitted-worker-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/models/ai-media-studio-db",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "config",
+        "forward",
+        "lifecycle",
+        "lifecycleSql",
         "rollback"
       ],
       "routes": []
@@ -23481,6 +23676,7 @@
   ],
   "tests": [
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-media-studio-admitted-render-worker.test.ts",
     "tests/ai-media-studio-analytics.test.ts",
     "tests/ai-media-studio-asset-delivery-client.test.ts",
     "tests/ai-media-studio-asset-ingest-drizzle.test.ts",
@@ -23544,6 +23740,7 @@
     "tests/ai-media-studio-pr22-launch-intent-migration.test.ts",
     "tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts",
     "tests/ai-media-studio-pr24-held-activation-migration.test.ts",
+    "tests/ai-media-studio-pr25-admitted-worker-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
@@ -23632,7 +23829,9 @@
     "tests/user-context.test.ts",
     "tests/user-migration-plan.test.ts"
   ],
-  "skippedDatalessFiles": [],
+  "skippedDatalessFiles": [
+    "server/ai-media-studio/planning/launch-authority-contracts 3.ts"
+  ],
   "guardrails": [
     "Generated locally from Git-visible files only: tracked files plus untracked files that are not ignored.",
     "Skips credentials/, secrets/, .env files, node_modules/, build outputs, media folders, and large data exports.",

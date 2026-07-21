@@ -2,6 +2,16 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR25 dedicated admitted worker
+
+- Branch: `codex/ai-media-studio-admitted-worker`, stacked on draft PR #107; ready to preserve as an inert draft checkpoint.
+- Scope: a provider-neutral admitted-worker contract, dedicated Drizzle repository, append-only submission-attempt/event ledgers, guarded forward/rollback SQL, and an orchestration loop with no timer or runtime composition.
+- Money and submission boundary: claim leases without spending; authorization revalidates the full current database authority graph and atomically moves the exact reservation from reserved to committed before returning the sealed request and persisted provider idempotency key. The injected provider port can be called only once per authorization. Every uncertain outcome is permanently non-retriable and enters reconciliation.
+- Refund boundary: only an exact provider capability carrying linearizable negative-finality evidence may prove that an idempotency key was not accepted and can never be accepted later. Timeout, HTTP status, eventual absence and ordinary 404 responses can never release committed funds. No HeyGen implementation of that capability exists.
+- Evidence: 7 focused worker/migration checks, the full AI Media Studio suite with 596 passed and 13 PostgreSQL-only cases skipped, isolated PostgreSQL 16 with 13/13 passed, TypeScript, production build, generated codebase map and diff hygiene passed. Independent security review is P0-P2 clean and App QA passed with no PR25-specific warning or failure. Six unrelated iCloud `dataless` duplicate `.ts` placeholders were temporarily renamed and restored intact so TypeScript could complete; none belongs to or will be staged with PR25.
+- Safety boundary: no route, public barrel, timer, runtime composition, real provider adapter, network request, migration application, real reservation/commit, credit spend, publication, secret change or deployment is enabled. Production remains gated on least-privilege SQL roles/functions, additional real-PostgreSQL concurrency/revocation/crash races, independent HeyGen reconciliation-contract evidence, a small approved sandbox and Robert's explicit spend/deployment approval.
+- Launch shape remains 5–10 configured avatars with exactly 10 planned videos each (50–100 slots); PR25 does not generate those videos or change the onboarding UI.
+
 ## Active checkpoint: PR24 fenced held-work activation
 
 - Branch: `codex/ai-media-studio-held-activation`, draft PR #107, stacked on draft PR #106; preserved as an inert GitHub checkpoint.

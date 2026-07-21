@@ -1234,7 +1234,9 @@ export const aiMediaRenderJobs = pgTable(
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
     leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseFencing: bigint("lease_fencing", { mode: "bigint" }).notNull().default(0n),
     deadLetterAt: timestamp("dead_letter_at", { withTimezone: true }),
     ...auditColumns(),
   },
@@ -1345,9 +1347,22 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ((${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL)
           OR (${table.sourceItemId} IS NOT NULL AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
-        AND ${table.stage} IN ('admission_held','queued') AND ${table.status}='pending'
-        AND ${table.attempts}=0 AND ${table.retryCount}=0 AND ${table.providerJobId} IS NULL
-        AND ${table.leaseOwner} IS NULL AND ${table.leaseExpiresAt} IS NULL
+        AND ${table.stage} IN ('admission_held','queued','leased','submitted','reconciling','failed')
+        AND ${table.retryCount}=0
+        AND ((${table.stage} IN ('admission_held','queued') AND ${table.status}='pending'
+          AND ${table.attempts}=0 AND ${table.providerJobId} IS NULL
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)
+        OR (${table.stage}='leased' AND ${table.status}='rendering' AND ${table.providerJobId} IS NULL
+          AND ${table.attempts} IN (0,1)
+          AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL
+          AND ${table.leaseExpiresAt} IS NOT NULL)
+        OR (${table.stage}='submitted' AND ${table.status}='rendering' AND ${table.attempts}=1
+          AND ${table.providerJobId} IS NOT NULL AND ${table.leaseOwner} IS NULL
+          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)
+        OR (${table.stage} IN ('reconciling','failed') AND ${table.attempts}=1
+          AND ${table.providerJobId} IS NULL AND ${table.leaseOwner} IS NULL
+          AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL))
+        AND ${table.leaseFencing}>=0
         AND isfinite(${table.availableAt}) AND isfinite(${table.queuedAt})
         AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
       ))
@@ -3185,6 +3200,14 @@ export const aiMediaWorkActivations = pgTable(
     reservationUnique: uniqueIndex("ai_media_work_activations_reservation_uq").on(
       table.ownerUserId, table.workspaceId, table.budgetReservationId,
     ),
+    submissionAttemptIdentityUnique: uniqueIndex("ai_media_work_activations_submission_attempt_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.renderJobId, table.dispatchOutboxId, table.dailyPlanSlotId, table.slotAttempt,
+      table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+      table.providerIdempotencyKey, table.scriptVariantChecksum, table.authoritySnapshotId,
+      table.authorityDigest, table.launchIntentId, table.launchIntentDigest,
+      table.admissionDigest, table.workHandoffDigest, table.sealedRequestDigest,
+    ),
     lifecycleCheck: check("ai_media_work_activations_ck", sql`(
       ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
       AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
@@ -3253,6 +3276,202 @@ export const aiMediaWorkActivations = pgTable(
   }),
 );
 
+/**
+ * Current, exactly-once provider submission attempt for admitted render work.
+ * The PR25 SQL migration owns the monotonic transition and deferred
+ * cross-table guards which cannot be expressed by Drizzle's table DSL.
+ */
+export const aiMediaProviderSubmissionAttempts = pgTable(
+  "ai_media_provider_submission_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    workActivationId: uuid("work_activation_id").notNull(),
+    renderJobId: uuid("render_job_id").notNull(),
+    dispatchOutboxId: uuid("dispatch_outbox_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    slotAttempt: integer("slot_attempt").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    providerIdempotencyKey: text("provider_idempotency_key").notNull(),
+    avatarExternalResourceId: text("avatar_external_resource_id").notNull(),
+    voiceExternalResourceId: text("voice_external_resource_id").notNull(),
+    scriptVariantChecksum: text("script_variant_checksum").notNull(),
+    authoritySnapshotId: uuid("authority_snapshot_id").notNull(),
+    workHandoffDigest: text("work_handoff_digest").notNull(),
+    sealedRequestDigest: text("sealed_request_digest").notNull(),
+    authorityDigest: text("authority_digest").notNull(),
+    launchIntentId: uuid("launch_intent_id").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
+    admissionDigest: text("admission_digest").notNull(),
+    state: text("state").notNull(),
+    fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull(),
+    claimCount: integer("claim_count").notNull().default(1),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    reconciliationLeaseToken: uuid("reconciliation_lease_token"),
+    reconciliationLeaseOwner: text("reconciliation_lease_owner"),
+    reconciliationLeaseExpiresAt: timestamp("reconciliation_lease_expires_at", { withTimezone: true }),
+    reconciliationFencingToken: bigint("reconciliation_fencing_token", { mode: "bigint" }).notNull().default(0n),
+    commitEvidenceDigest: text("commit_evidence_digest"),
+    sendAuthorizationDigest: text("send_authorization_digest"),
+    confirmedEvidenceDigest: text("confirmed_evidence_digest"),
+    ambiguityEvidenceDigest: text("ambiguity_evidence_digest"),
+    reconciliationEvidenceDigest: text("reconciliation_evidence_digest"),
+    providerJobId: text("provider_job_id"),
+    providerRequestId: text("provider_request_id"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull(),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    ambiguousAt: timestamp("ambiguous_at", { withTimezone: true }),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    actorUserId: text("actor_user_id").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    ...auditColumns(),
+  },
+  (table) => ({
+    reservationUnique: uniqueIndex("ai_media_provider_submission_attempts_reservation_uq").on(
+      table.ownerUserId, table.workspaceId, table.budgetReservationId,
+    ),
+    providerIdempotencyUnique: uniqueIndex("ai_media_provider_submission_attempts_provider_idempotency_uq").on(
+      table.providerAccountId, table.providerKey, table.providerIdempotencyKey,
+    ),
+    providerJobUnique: uniqueIndex("ai_media_provider_submission_attempts_provider_job_uq")
+      .on(table.providerAccountId, table.providerKey, table.providerJobId)
+      .where(sql`${table.providerJobId} IS NOT NULL`),
+    dueIdx: index("ai_media_provider_submission_attempts_due_idx").on(
+      table.state, table.leaseExpiresAt, table.createdAt,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_provider_submission_attempts_exact_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+    ),
+    lifecycleCheck: check("ai_media_provider_submission_attempts_ck", sql`(
+      ${table.state} IN ('claimed','authorized','confirmed','ambiguous','reconciled_no_submit')
+      AND ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
+      AND ${table.fencingToken}>=1 AND ${table.claimCount}>=1
+      AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+      AND length(btrim(${table.providerIdempotencyKey})) BETWEEN 8 AND 200
+      AND length(btrim(${table.avatarExternalResourceId})) BETWEEN 1 AND 500
+      AND length(btrim(${table.voiceExternalResourceId})) BETWEEN 1 AND 500
+      AND (${table.providerJobId} IS NULL OR length(btrim(${table.providerJobId})) BETWEEN 1 AND 500)
+      AND (${table.providerRequestId} IS NULL OR length(btrim(${table.providerRequestId})) BETWEEN 1 AND 500)
+      AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
+      AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.authorityDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.admissionDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ((${table.state} IN ('claimed','authorized')) = (${table.leaseToken} IS NOT NULL))
+      AND ((${table.leaseToken} IS NULL)=(${table.leaseOwner} IS NULL))
+      AND ((${table.leaseToken} IS NULL)=(${table.leaseExpiresAt} IS NULL))
+      AND ${table.reconciliationFencingToken}>=0
+      AND ((${table.reconciliationLeaseToken} IS NULL)=(${table.reconciliationLeaseOwner} IS NULL))
+      AND ((${table.reconciliationLeaseToken} IS NULL)=(${table.reconciliationLeaseExpiresAt} IS NULL))
+      AND (${table.reconciliationLeaseToken} IS NULL OR ${table.state}='ambiguous')
+      AND (${table.state}<>'authorized' OR (${table.authorizedAt} IS NOT NULL
+        AND ${table.commitEvidenceDigest} IS NOT NULL AND ${table.sendAuthorizationDigest} IS NOT NULL))
+      AND (${table.state}<>'confirmed' OR (${table.authorizedAt} IS NOT NULL
+        AND ${table.confirmedAt} IS NOT NULL AND ${table.providerJobId} IS NOT NULL
+        AND ${table.confirmedEvidenceDigest} IS NOT NULL))
+      AND (${table.state}<>'ambiguous' OR (${table.authorizedAt} IS NOT NULL
+        AND ${table.ambiguousAt} IS NOT NULL AND ${table.ambiguityEvidenceDigest} IS NOT NULL))
+      AND (${table.state}<>'reconciled_no_submit' OR (${table.authorizedAt} IS NOT NULL
+        AND ${table.reconciledAt} IS NOT NULL AND ${table.reconciliationEvidenceDigest} IS NOT NULL
+        AND ${table.providerJobId} IS NULL AND ${table.providerRequestId} IS NULL))
+      AND isfinite(${table.claimedAt}) AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
+      AND (${table.leaseExpiresAt} IS NULL OR isfinite(${table.leaseExpiresAt}))
+      AND (${table.reconciliationLeaseExpiresAt} IS NULL OR isfinite(${table.reconciliationLeaseExpiresAt}))
+      AND (${table.authorizedAt} IS NULL OR isfinite(${table.authorizedAt}))
+      AND (${table.confirmedAt} IS NULL OR isfinite(${table.confirmedAt}))
+      AND (${table.ambiguousAt} IS NULL OR isfinite(${table.ambiguousAt}))
+      AND (${table.reconciledAt} IS NULL OR isfinite(${table.reconciledAt}))
+    )`),
+    exactActivationFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.workActivationId,
+        table.budgetReservationId, table.renderJobId, table.dispatchOutboxId, table.dailyPlanSlotId,
+        table.slotAttempt, table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+        table.providerIdempotencyKey, table.scriptVariantChecksum, table.authoritySnapshotId,
+        table.authorityDigest, table.launchIntentId, table.launchIntentDigest, table.admissionDigest,
+        table.workHandoffDigest, table.sealedRequestDigest],
+      foreignColumns: [aiMediaWorkActivations.ownerUserId, aiMediaWorkActivations.workspaceId,
+        aiMediaWorkActivations.id, aiMediaWorkActivations.budgetReservationId,
+        aiMediaWorkActivations.renderJobId, aiMediaWorkActivations.dispatchOutboxId,
+        aiMediaWorkActivations.dailyPlanSlotId, aiMediaWorkActivations.slotAttempt,
+        aiMediaWorkActivations.providerAccountId, aiMediaWorkActivations.providerKey,
+        aiMediaWorkActivations.providerCredentialVersion, aiMediaWorkActivations.providerIdempotencyKey,
+        aiMediaWorkActivations.scriptVariantChecksum, aiMediaWorkActivations.authoritySnapshotId,
+        aiMediaWorkActivations.authorityDigest, aiMediaWorkActivations.launchIntentId,
+        aiMediaWorkActivations.launchIntentDigest, aiMediaWorkActivations.admissionDigest,
+        aiMediaWorkActivations.workHandoffDigest, aiMediaWorkActivations.sealedRequestDigest],
+      name: "ai_media_provider_submission_attempts_exact_activation_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactReservationFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.budgetReservationId,
+        table.renderJobId, table.dispatchOutboxId, table.workHandoffDigest,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+        table.authorityDigest, table.admissionDigest, table.providerIdempotencyKey],
+      foreignColumns: [aiMediaBudgetReservations.ownerUserId, aiMediaBudgetReservations.workspaceId,
+        aiMediaBudgetReservations.id, aiMediaBudgetReservations.renderJobId,
+        aiMediaBudgetReservations.dispatchOutboxId, aiMediaBudgetReservations.workHandoffDigest,
+        aiMediaBudgetReservations.dailyPlanSlotId, aiMediaBudgetReservations.attempt,
+        aiMediaBudgetReservations.providerAccountId, aiMediaBudgetReservations.providerKey,
+        aiMediaBudgetReservations.providerCredentialVersion, aiMediaBudgetReservations.scriptVariantChecksum,
+        aiMediaBudgetReservations.authoritySnapshotId, aiMediaBudgetReservations.authorityDigest,
+        aiMediaBudgetReservations.admissionDigest, aiMediaBudgetReservations.providerIdempotencyKey],
+      name: "ai_media_provider_submission_attempts_exact_reservation_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+/** Append-only evidence for every claim, authorization and external outcome. */
+export const aiMediaProviderSubmissionEvents = pgTable(
+  "ai_media_provider_submission_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    submissionAttemptId: uuid("submission_attempt_id").notNull(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    sequence: integer("sequence").notNull(),
+    eventKind: text("event_kind").notNull(),
+    fencingToken: bigint("fencing_token", { mode: "bigint" }).notNull(),
+    reconciliationFencingToken: bigint("reconciliation_fencing_token", { mode: "bigint" }),
+    evidenceDigest: text("evidence_digest").notNull(),
+    providerJobId: text("provider_job_id"),
+    providerRequestId: text("provider_request_id"),
+    actorUserId: text("actor_user_id").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    sequenceUnique: uniqueIndex("ai_media_provider_submission_events_sequence_uq").on(
+      table.ownerUserId, table.workspaceId, table.submissionAttemptId, table.sequence,
+    ),
+    lifecycleCheck: check("ai_media_provider_submission_events_ck", sql`(
+      ${table.sequence}>=1 AND ${table.fencingToken}>=1
+      AND ${table.eventKind} IN ('claimed','reclaimed','authorized','confirmed','ambiguous','reconciliation_claimed','reconciliation_released','reconciled_no_submit')
+      AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ((${table.eventKind} IN ('reconciliation_claimed','reconciliation_released','reconciled_no_submit'))=(${table.reconciliationFencingToken} IS NOT NULL))
+      AND (${table.providerJobId} IS NULL OR length(btrim(${table.providerJobId})) BETWEEN 1 AND 500)
+      AND (${table.providerRequestId} IS NULL OR length(btrim(${table.providerRequestId})) BETWEEN 1 AND 500)
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND isfinite(${table.observedAt}) AND isfinite(${table.createdAt})
+    )`),
+    exactAttemptFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.submissionAttemptId,
+        table.budgetReservationId],
+      foreignColumns: [aiMediaProviderSubmissionAttempts.ownerUserId,
+        aiMediaProviderSubmissionAttempts.workspaceId, aiMediaProviderSubmissionAttempts.id,
+        aiMediaProviderSubmissionAttempts.budgetReservationId],
+      name: "ai_media_provider_submission_events_exact_attempt_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
 export const aiMediaStudioTables = {
   influencers: aiMediaInfluencers,
   scripts: aiMediaScripts,
@@ -3284,6 +3503,8 @@ export const aiMediaStudioTables = {
   launchAuthoritySnapshots: aiMediaLaunchAuthoritySnapshots,
   budgetReservations: aiMediaBudgetReservations,
   workActivations: aiMediaWorkActivations,
+  providerSubmissionAttempts: aiMediaProviderSubmissionAttempts,
+  providerSubmissionEvents: aiMediaProviderSubmissionEvents,
   sourceItems: aiMediaSourceItems,
   orchestrationRuns: aiMediaOrchestrationRuns,
   outbox: aiMediaOutbox,

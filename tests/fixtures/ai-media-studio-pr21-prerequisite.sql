@@ -23,6 +23,7 @@ CREATE TABLE ai_media_provider_resources (
   provider_account_id uuid NOT NULL,
   provider_key text NOT NULL,
   resource_type text NOT NULL,
+  external_resource_id text NOT NULL,
   status text NOT NULL DEFAULT 'active'
 );
 CREATE UNIQUE INDEX ai_media_provider_resources_owner_workspace_id_uq
