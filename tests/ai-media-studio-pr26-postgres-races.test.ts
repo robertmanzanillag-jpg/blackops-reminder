@@ -62,6 +62,7 @@ const forwards=["20260721_pr19_daily_admission_forward.sql","20260721_pr20_launc
   "20260721_pr22_launch_intents_forward.sql","20260721_pr23_admission_held_handoff_forward.sql",
   "20260721_pr24_held_activation_forward.sql","20260721_pr25_admitted_worker_forward.sql",
   "20260721_pr26_db_capability_forward.sql"].map(migration);
+const pr26Rollback=migration("20260721_pr26_db_capability_rollback.sql");
 
 class RoleSession{
   readonly pool:Pool;private client?:PoolClient;pid=0;
@@ -84,7 +85,7 @@ function postgresRepositoryDb():DailyAdmissionTransactionalDatabase&HeldWorkActi
     }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}}
 };}
 
-async function installSchema():Promise<void>{
+async function installSchema(provisionCapabilities=true):Promise<void>{
   await adminPool.query(`DO $roles$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='ai_media_admitted_fn_owner') THEN
       CREATE ROLE ai_media_admitted_fn_owner NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
@@ -98,7 +99,7 @@ async function installSchema():Promise<void>{
   await adminPool.query("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public");
   await adminPool.query(prerequisite);for(const forward of forwards)await adminPool.query(forward);
   await seedAuthorityGraph();
-  await adminPool.query(`INSERT INTO public.ai_media_admitted_worker_capabilities
+  if(provisionCapabilities)await adminPool.query(`INSERT INTO public.ai_media_admitted_worker_capabilities
     (id,database_principal,owner_user_id,workspace_id,lane,accounting_time_zone,worker_id,allowed_operations,
      max_lease_ms,max_batch_size,valid_from,expires_at,evidence_digest)
     VALUES ($1,$2,$3,$4,'submit','UTC','submit-worker',ARRAY['claim','authorize','expire_authorized',
@@ -110,11 +111,11 @@ async function installSchema():Promise<void>{
     [ids.submitCapability,SUBMIT_LOGIN,OWNER,WORKSPACE,digest("1"),ids.reconcileCapability,RECONCILE_LOGIN,digest("2")]);
 }
 
-async function resetOwnedSchema():Promise<void>{
+async function resetOwnedSchema(provisionCapabilities=true):Promise<void>{
   await adminPool.query("DROP SCHEMA IF EXISTS ai_media_worker_api CASCADE");
   await adminPool.query("DROP EXTENSION IF EXISTS pgcrypto CASCADE");
   await adminPool.query("DROP SCHEMA public CASCADE;CREATE SCHEMA public AUTHORIZATION postgres");
-  await installSchema();
+  await installSchema(provisionCapabilities);
 }
 
 async function seedAuthorityGraph():Promise<void>{await adminPool.query(`
@@ -335,10 +336,21 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
       [ids.submitCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
         row.send_authorization_digest,row.lease_token,null,digest("3")]);
     assert.deepEqual(ambiguous.rows,[{applied:true}]);
+    const firstClaim=await reconciler.query<{reconciliation_lease_token:string;reconciliation_fencing_token:string}>(
+      "SELECT * FROM ai_media_worker_api.claim_reconciliation_v1($1,$2,$3,$4,$5)",
+      [ids.reconcileCapability,OWNER,WORKSPACE,"reconcile-worker",60_000]);
+    assert.equal(firstClaim.rowCount,1);
+    const unknownRelease=await reconciler.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.release_reconciliation_unknown_v1($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [ids.reconcileCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
+        row.send_authorization_digest,firstClaim.rows[0].reconciliation_lease_token,
+        firstClaim.rows[0].reconciliation_fencing_token]);
+    assert.deepEqual(unknownRelease.rows,[{applied:true}]);
     const claimed=await reconciler.query<{reconciliation_lease_token:string;reconciliation_fencing_token:string}>(
       "SELECT * FROM ai_media_worker_api.claim_reconciliation_v1($1,$2,$3,$4,$5)",
       [ids.reconcileCapability,OWNER,WORKSPACE,"reconcile-worker",60_000]);
     assert.equal(claimed.rowCount,1);const reconciliation=claimed.rows[0];
+    assert.equal(reconciliation.reconciliation_fencing_token,"2");
     const barrier=await adminPool.connect(),left=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE),
       right=new RoleSession(RECONCILE_LOGIN,RECONCILE_ROLE);await left.connect();await right.connect();
     try{
@@ -408,4 +420,36 @@ integrationTest("confirmed provider terminal evidence releases active capacity o
       WHERE capacity.budget_reservation_id=$1`,[work.reservationId]);
     assert.deepEqual(ledger.rows[0],{state:"released",release_kind:"provider_terminal",version:"2",committed:"1250000"});
   }finally{await submit.close();await reconcile.close();}
+});
+
+integrationTest("live PR26 rollback preserves evidence, then removes only an unused capability surface",async()=>{
+  const before=await adminPool.query<{capabilities:string;capacity:string}>(`SELECT
+    (SELECT count(*)::text FROM ai_media_admitted_worker_capabilities) capabilities,
+    (SELECT count(*)::text FROM ai_media_submission_capacity_leases) capacity`);
+  assert.deepEqual(before.rows[0],{capabilities:"2",capacity:"1"});
+  const guardedClient=await adminPool.connect();try{
+    await assert.rejects(guardedClient.query(pr26Rollback),(error:unknown)=>
+      typeof error==="object"&&error!==null&&"code" in error&&error.code==="P0001");
+    await guardedClient.query("ROLLBACK");
+  }finally{guardedClient.release();}
+  const preserved=await adminPool.query<{capabilities:string;capacity:string;api_schema:boolean}>(`SELECT
+    (SELECT count(*)::text FROM ai_media_admitted_worker_capabilities) capabilities,
+    (SELECT count(*)::text FROM ai_media_submission_capacity_leases) capacity,
+    to_regnamespace('ai_media_worker_api') IS NOT NULL api_schema`);
+  assert.deepEqual(preserved.rows[0],{capabilities:"2",capacity:"1",api_schema:true});
+
+  await resetOwnedSchema(false);
+  await adminPool.query(pr26Rollback);
+  const rollback=await adminPool.query<{capability_table:boolean;capacity_table:boolean;api_schema:boolean;
+    submit_table_access:boolean;public_create:boolean;legacy_definer:boolean;legacy_owner:string}>(`SELECT
+    to_regclass('public.ai_media_admitted_worker_capabilities') IS NOT NULL capability_table,
+    to_regclass('public.ai_media_submission_capacity_leases') IS NOT NULL capacity_table,
+    to_regnamespace('ai_media_worker_api') IS NOT NULL api_schema,
+    has_table_privilege('${SUBMIT_ROLE}','public.ai_media_provider_submission_attempts','SELECT,INSERT,UPDATE,DELETE') submit_table_access,
+    has_schema_privilege('${SUBMIT_ROLE}','public','CREATE') public_create,
+    procedure.prosecdef legacy_definer,owner.rolname legacy_owner
+    FROM pg_proc procedure JOIN pg_roles owner ON owner.oid=procedure.proowner
+    WHERE procedure.oid='public.ai_media_assert_pr25_consistency()'::regprocedure`);
+  assert.deepEqual(rollback.rows[0],{capability_table:false,capacity_table:false,api_schema:false,
+    submit_table_access:false,public_create:false,legacy_definer:true,legacy_owner:"ai_media_admitted_fn_owner"});
 });

@@ -19,11 +19,6 @@ import {
   type HeldWorkActivationTransactionalDatabase,
 } from "../server/ai-media-studio/planning/drizzle-held-work-activation-repository";
 import type { TrustedActivationPrincipal } from "../server/ai-media-studio/planning/held-work-activation-domain";
-import {
-  DrizzleAdmittedRenderRepository,
-  type AdmittedRenderTransactionalDatabase,
-} from "../server/ai-media-studio/workers/drizzle-admitted-render-repository";
-import type { ExactNegativeSubmissionFinality } from "../server/ai-media-studio/workers/admitted-render-contracts";
 
 const TEMP_PREFIX = "ams-pr21-pg-";
 const TEST_DATABASE_NAME = "ams_pr21_test";
@@ -503,7 +498,7 @@ integrationTest("the real admission repository atomically creates one exact non-
   assert.match(String(held.work_handoff_digest), /^sha256:[0-9a-f]{64}$/u);
 });
 
-integrationTest("real admission, activation, claim, and PR25 authorization commit exactly once", async () => {
+integrationTest("real PR25 admission and activation remain inert before the PR26 capability surface", async () => {
   const client = await pool.connect();
   const dialect = new PgDialect();
   const sharedDb: DailyAdmissionTransactionalDatabase & HeldWorkActivationTransactionalDatabase = {
@@ -585,62 +580,13 @@ integrationTest("real admission, activation, claim, and PR25 authorization commi
       await assert.rejects(client.query(statement,[...params]));
       await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
     }
-    const admittedDb=sharedDb as AdmittedRenderTransactionalDatabase;
-    const admittedRepository=new DrizzleAdmittedRenderRepository(admittedDb,{workspaceId:WORKSPACE,accountingTimeZone:"UTC"});
-    const claim=await admittedRepository.claim({workerId:"worker-pr25-real",leaseDurationMs:60_000});
-    assert.ok(claim);
-    assert.match(claim.providerIdempotencyKey,/^admit:[0-9a-f]{64}$/u);
-    const authorization=await admittedRepository.authorize(claim);
-    assert.ok(authorization);
-    assert.equal(authorization.providerAccountId,ids.account);
-    const committed=await client.query<{state:string;submission_state:string;render_stage:string;render_attempts:number;
-      outbox_status:string;slot_status:string;reserved_micro_usd:string;committed_micro_usd:string}>(`
-      SELECT reservation.state,reservation.submission_state,job.stage render_stage,job.attempts render_attempts,
-        outbox.status outbox_status,slot.status slot_status,bucket.reserved_micro_usd::text,
-        bucket.committed_micro_usd::text FROM ai_media_budget_reservations reservation
-      JOIN ai_media_render_jobs job ON job.id=reservation.render_job_id
-      JOIN ai_media_outbox outbox ON outbox.id=reservation.dispatch_outbox_id
-      JOIN ai_media_daily_plan_slots slot ON slot.id=reservation.daily_plan_slot_id
-      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
-      WHERE reservation.id=$1`,[admission.reservation.id]);
-    assert.deepEqual(committed.rows[0],{state:"committed",submission_state:"dispatching",render_stage:"leased",
-      render_attempts:1,outbox_status:"leased",slot_status:"committed",reserved_micro_usd:"0",committed_micro_usd:"1250000"});
-    assert.equal(await admittedRepository.markAmbiguous({...authorization,evidenceDigest:digest("8") as `sha256:${string}`}),true);
-    await client.query("SAVEPOINT ambiguous_reopen");
-    await assert.rejects(client.query(`UPDATE ai_media_budget_reservations SET submission_state='dispatching'
-      WHERE id=$1 AND submission_state='ambiguous'`,[admission.reservation.id]));
-    await client.query("ROLLBACK TO SAVEPOINT ambiguous_reopen");
-    const unknownReconciliation=await admittedRepository.claimAmbiguous({workerId:"reconciler-pr25-unknown",leaseDurationMs:60_000});
-    assert.ok(unknownReconciliation);
-    assert.equal(await admittedRepository.releaseUnknownReconciliation(unknownReconciliation),true);
-    const releasedLeaseEvent=await client.query<{event_kind:string;actor_user_id:string}>(`
-      SELECT event_kind,actor_user_id FROM ai_media_provider_submission_events
-      WHERE submission_attempt_id=$1 ORDER BY sequence DESC LIMIT 1`,[unknownReconciliation.id]);
-    assert.deepEqual(releasedLeaseEvent.rows[0],{event_kind:"reconciliation_released",actor_user_id:"reconciler-pr25-unknown"});
-    const reconciliation=await admittedRepository.claimAmbiguous({workerId:"reconciler-pr25-real",leaseDurationMs:60_000});
-    assert.ok(reconciliation);
-    const finality={scope:reconciliation.scope,providerAccountId:reconciliation.providerAccountId,
-      providerKey:reconciliation.providerKey,providerCredentialVersion:reconciliation.providerCredentialVersion,
-      authorizationDigest:reconciliation.authorizationDigest,providerIdempotencyKey:reconciliation.providerIdempotencyKey,
-      guarantee:"linearizable_not_accepted_and_cannot_later_accept",observedAt:new Date().toISOString(),
-      evidenceDigest:digest("9") as `sha256:${string}`} as unknown as ExactNegativeSubmissionFinality;
-    assert.equal(await admittedRepository.markReconciledNoSubmit({...reconciliation,
-      finality}),true);
-    assert.equal(await admittedRepository.markReconciledNoSubmit({...reconciliation,
-      finality}),false,"stale reconciliation fence cannot refund twice");
-    const released=await client.query<{state:string;submission_state:string;committed_micro_usd:string}>(`
-      SELECT reservation.state,reservation.submission_state,bucket.committed_micro_usd::text
-      FROM ai_media_budget_reservations reservation JOIN ai_media_budget_buckets bucket
-        ON bucket.id=reservation.budget_bucket_id WHERE reservation.id=$1`,[admission.reservation.id]);
-    assert.deepEqual(released.rows[0],{state:"released",submission_state:"reconciled_no_submit",committed_micro_usd:"0"});
-    const terminalEvent=await client.query<{actor_user_id:string}>(`SELECT actor_user_id
-      FROM ai_media_provider_submission_events WHERE submission_attempt_id=$1
-      ORDER BY sequence DESC LIMIT 1`,[reconciliation.id]);
-    assert.equal(terminalEvent.rows[0]?.actor_user_id,"reconciler-pr25-real");
-    await client.query("SAVEPOINT rollback_guard");
-    await assert.rejects(client.query(pr25Rollback),(error:unknown)=>
-      typeof error==="object"&&error!==null&&"code" in error&&error.code==="P0001");
-    await client.query("ROLLBACK TO SAVEPOINT rollback_guard");
+    // Claim/authorize/outcome coverage moved to the real PR26 suite because the
+    // production repository is now function-only and PR25 deliberately has no
+    // executable worker capability surface. This boundary must remain inert.
+    const attempts=await client.query<{count:string}>(`
+      SELECT count(*)::text count FROM ai_media_provider_submission_attempts
+      WHERE owner_user_id=$1 AND workspace_id=$2`,[OWNER,WORKSPACE]);
+    assert.equal(attempts.rows[0].count,"0");
   } finally {
     await client.query("ROLLBACK");
     client.release();
