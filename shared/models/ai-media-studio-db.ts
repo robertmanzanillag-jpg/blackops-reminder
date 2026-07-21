@@ -107,6 +107,12 @@ export const aiMediaScripts = pgTable(
     archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => ({
+    launchIntentIdentityUnique: uniqueIndex("ai_media_scripts_launch_intent_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.sourceType,
+    ),
+    launchSourceIdentityUnique: uniqueIndex("ai_media_scripts_launch_source_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.sourceType, table.sourceItemId,
+    ),
     ownerWorkspaceUpdatedIdx: index("ai_media_scripts_owner_workspace_updated_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -145,6 +151,9 @@ export const aiMediaScriptVariants = pgTable(
     ),
     authorityIdentityUnique: uniqueIndex("ai_media_script_variants_authority_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.checksum,
+    ),
+    launchIntentIdentityUnique: uniqueIndex("ai_media_script_variants_launch_intent_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.scriptId, table.checksum,
     ),
   }),
 );
@@ -1855,6 +1864,9 @@ export const aiMediaSourceItems = pgTable(
       table.workspaceId,
       table.contentHash,
     ),
+    launchIntentIdentityUnique: uniqueIndex("ai_media_source_items_launch_intent_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.sourceType,
+    ),
     ownerWorkspaceModerationIdx: index("ai_media_source_items_owner_workspace_moderation_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -2006,6 +2018,10 @@ export const aiMediaDailyPlans = pgTable(
       table.ownerUserId, table.workspaceId, table.id, table.providerAccountId,
       table.providerKey, table.providerCredentialVersion, table.planDigest,
     ),
+    launchIntentIdentityUnique: uniqueIndex("ai_media_daily_plans_launch_intent_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.providerAccountId, table.providerKey,
+      table.providerCredentialVersion, table.sourceRosterKey, table.sourceRosterDigest, table.planDigest,
+    ),
     tenantDayIdx: index("ai_media_daily_plans_tenant_day_idx").on(
       table.ownerUserId, table.workspaceId, table.planDate, table.status,
     ),
@@ -2066,6 +2082,11 @@ export const aiMediaDailyPlanSlots = pgTable(
     authorityIdentityUnique: uniqueIndex("ai_media_daily_plan_slots_authority_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.dailyPlanId, table.providerAccountId,
       table.providerKey, table.providerCredentialVersion, table.scriptVariantId, table.slotDigest,
+    ),
+    launchIntentIdentityUnique: uniqueIndex("ai_media_daily_plan_slots_launch_intent_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanId, table.providerAccountId,
+      table.providerKey, table.providerCredentialVersion, table.sourceMemberKey,
+      table.scriptVariantId, table.slotDigest,
     ),
     tenantStatusIdx: index("ai_media_daily_plan_slots_tenant_status_idx").on(
       table.ownerUserId, table.workspaceId, table.dailyPlanId, table.status, table.videoNumber,
@@ -2269,6 +2290,148 @@ export const aiMediaKillSwitchRevisions = pgTable(
   }),
 );
 
+export const aiMediaLaunchIntents = pgTable(
+  "ai_media_launch_intents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    dailyPlanId: uuid("daily_plan_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    slotAttempt: integer("slot_attempt").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    planDigest: text("plan_digest").notNull(),
+    slotDigest: text("slot_digest").notNull(),
+    sourceRosterKey: text("source_roster_key").notNull(),
+    sourceRosterDigest: text("source_roster_digest").notNull(),
+    sourceMemberKey: text("source_member_key").notNull(),
+    scriptId: uuid("script_id").notNull(),
+    scriptVariantId: uuid("script_variant_id").notNull(),
+    scriptVariantChecksum: text("script_variant_checksum").notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceItemId: uuid("source_item_id"),
+    sourceContentHash: text("source_content_hash"),
+    governanceProfileId: uuid("governance_profile_id").notNull(),
+    governanceEvidenceDigest: text("governance_evidence_digest").notNull(),
+    governanceUse: text("governance_use").notNull(),
+    governanceTerritory: text("governance_territory").notNull(),
+    contentCountry: text("content_country").notNull(),
+    launchSubjectDigest: text("launch_subject_digest").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    slotAttemptUnique: uniqueIndex("ai_media_launch_intents_slot_attempt_uq").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.slotAttempt,
+    ),
+    idempotencyUnique: uniqueIndex("ai_media_launch_intents_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_launch_intents_exact_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanId, table.dailyPlanSlotId,
+      table.slotAttempt, table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+      table.planDigest, table.slotDigest, table.scriptId, table.scriptVariantId,
+      table.scriptVariantChecksum, table.governanceProfileId, table.governanceEvidenceDigest,
+      table.governanceUse, table.governanceTerritory, table.contentCountry,
+      table.launchSubjectDigest, table.launchIntentDigest,
+    ),
+    evidenceIdentityUnique: uniqueIndex("ai_media_launch_intents_evidence_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
+      table.providerAccountId, table.providerKey, table.providerCredentialVersion, table.scriptVariantId,
+      table.scriptVariantChecksum, table.governanceProfileId, table.governanceEvidenceDigest,
+      table.governanceUse, table.governanceTerritory, table.contentCountry,
+      table.launchSubjectDigest, table.launchIntentDigest,
+    ),
+    snapshotIdentityUnique: uniqueIndex("ai_media_launch_intents_snapshot_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanId, table.dailyPlanSlotId,
+      table.slotAttempt, table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+      table.planDigest, table.slotDigest, table.scriptVariantId, table.scriptVariantChecksum,
+      table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
+      table.governanceTerritory, table.contentCountry, table.launchSubjectDigest, table.launchIntentDigest,
+    ),
+    lifecycleCheck: check("ai_media_launch_intents_ck", sql`(
+      ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
+      AND ${table.planDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.slotDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.sourceRosterDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.sourceRosterKey})) BETWEEN 1 AND 200
+      AND length(btrim(${table.sourceMemberKey})) BETWEEN 1 AND 200
+      AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
+      AND length(btrim(${table.sourceType})) BETWEEN 1 AND 80
+      AND ((${table.sourceType}='manual' AND ${table.sourceItemId} IS NULL
+          AND ${table.sourceContentHash} IS NULL)
+        OR (${table.sourceType}<>'manual' AND ${table.sourceItemId} IS NOT NULL
+          AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
+      AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.governanceUse})) BETWEEN 1 AND 80
+      AND length(btrim(${table.governanceTerritory})) BETWEEN 1 AND 80
+      AND ${table.contentCountry} ~ '^[A-Z]{2}$'
+      AND ${table.launchSubjectDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+    )`),
+    exactPlanFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanId, table.providerAccountId,
+        table.providerKey, table.providerCredentialVersion, table.sourceRosterKey,
+        table.sourceRosterDigest, table.planDigest],
+      foreignColumns: [aiMediaDailyPlans.ownerUserId, aiMediaDailyPlans.workspaceId, aiMediaDailyPlans.id,
+        aiMediaDailyPlans.providerAccountId, aiMediaDailyPlans.providerKey,
+        aiMediaDailyPlans.providerCredentialVersion, aiMediaDailyPlans.sourceRosterKey,
+        aiMediaDailyPlans.sourceRosterDigest, aiMediaDailyPlans.planDigest],
+      name: "ai_media_launch_intents_exact_plan_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactSlotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.dailyPlanId,
+        table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+        table.sourceMemberKey, table.scriptVariantId, table.slotDigest],
+      foreignColumns: [aiMediaDailyPlanSlots.ownerUserId, aiMediaDailyPlanSlots.workspaceId,
+        aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.dailyPlanId, aiMediaDailyPlanSlots.providerAccountId,
+        aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion,
+        aiMediaDailyPlanSlots.sourceMemberKey, aiMediaDailyPlanSlots.scriptVariantId,
+        aiMediaDailyPlanSlots.slotDigest],
+      name: "ai_media_launch_intents_exact_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    scriptFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.scriptId, table.sourceType],
+      foreignColumns: [aiMediaScripts.ownerUserId, aiMediaScripts.workspaceId,
+        aiMediaScripts.id, aiMediaScripts.sourceType],
+      name: "ai_media_launch_intents_script_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    scriptSourceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.scriptId, table.sourceType, table.sourceItemId],
+      foreignColumns: [aiMediaScripts.ownerUserId, aiMediaScripts.workspaceId,
+        aiMediaScripts.id, aiMediaScripts.sourceType, aiMediaScripts.sourceItemId],
+      name: "ai_media_launch_intents_script_source_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    scriptVariantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.scriptVariantId,
+        table.scriptId, table.scriptVariantChecksum],
+      foreignColumns: [aiMediaScriptVariants.ownerUserId, aiMediaScriptVariants.workspaceId,
+        aiMediaScriptVariants.id, aiMediaScriptVariants.scriptId, aiMediaScriptVariants.checksum],
+      name: "ai_media_launch_intents_script_variant_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    sourceItemFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.sourceItemId, table.sourceType],
+      foreignColumns: [aiMediaSourceItems.ownerUserId, aiMediaSourceItems.workspaceId,
+        aiMediaSourceItems.id, aiMediaSourceItems.sourceType],
+      name: "ai_media_launch_intents_source_item_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    governanceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.governanceProfileId,
+        table.governanceEvidenceDigest],
+      foreignColumns: [aiMediaGovernanceProfiles.ownerUserId, aiMediaGovernanceProfiles.workspaceId,
+        aiMediaGovernanceProfiles.id, aiMediaGovernanceProfiles.evidenceDigest],
+      name: "ai_media_launch_intents_governance_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
 export const aiMediaLaunchEvidence = pgTable(
   "ai_media_launch_evidence",
   {
@@ -2287,6 +2450,8 @@ export const aiMediaLaunchEvidence = pgTable(
     governanceTerritory: text("governance_territory").notNull(),
     contentCountry: text("content_country").notNull(),
     launchSubjectDigest: text("launch_subject_digest").notNull(),
+    launchIntentId: uuid("launch_intent_id").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
     evidenceKind: text("evidence_kind").notNull(),
     decision: text("decision").notNull(),
     amountMicroUsd: numeric("amount_micro_usd", { precision: 20, scale: 0 }),
@@ -2298,6 +2463,8 @@ export const aiMediaLaunchEvidence = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     actorUserId: text("actor_user_id").notNull(),
     sourceKind: text("source_kind").notNull(),
+    sourceAttestationId: text("source_attestation_id"),
+    sourceEvidenceDigest: text("source_evidence_digest"),
     evidenceDigest: text("evidence_digest").notNull(),
     inputDigest: text("input_digest").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -2312,14 +2479,15 @@ export const aiMediaLaunchEvidence = pgTable(
       table.ownerUserId, table.workspaceId, table.idempotencyKey,
     ),
     exactIdentityUnique: uniqueIndex("ai_media_launch_evidence_exact_identity_uq").on(
-      table.ownerUserId, table.workspaceId, table.id, table.revision, table.evidenceDigest,
+      table.ownerUserId, table.workspaceId, table.id, table.revision,
+      table.launchIntentId, table.launchIntentDigest, table.evidenceDigest,
     ),
     snapshotIdentityUnique: uniqueIndex("ai_media_launch_evidence_snapshot_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
       table.providerAccountId, table.providerKey, table.providerCredentialVersion, table.scriptVariantId,
       table.scriptVariantChecksum, table.governanceProfileId, table.governanceEvidenceDigest,
       table.governanceUse, table.governanceTerritory, table.contentCountry,
-      table.launchSubjectDigest, table.evidenceDigest,
+      table.launchSubjectDigest, table.launchIntentId, table.launchIntentDigest, table.evidenceDigest,
     ),
     previousIdentityUnique: uniqueIndex("ai_media_launch_evidence_previous_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.slotAttempt,
@@ -2333,6 +2501,7 @@ export const aiMediaLaunchEvidence = pgTable(
       AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
       AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.launchSubjectDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.contentCountry} ~ '^[A-Z]{2}$'
       AND length(btrim(${table.governanceUse})) BETWEEN 1 AND 80
       AND length(btrim(${table.governanceTerritory})) BETWEEN 1 AND 80
@@ -2350,6 +2519,14 @@ export const aiMediaLaunchEvidence = pgTable(
       AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+    )`),
+    sourceAttestationCheck: check("ai_media_launch_evidence_source_attestation_ck", sql`(
+      ((${table.evidenceKind} IN ('sandbox_proof','maximum_quote')
+        AND ${table.sourceAttestationId} IS NOT NULL AND ${table.sourceEvidenceDigest} IS NOT NULL
+        AND ${table.sourceAttestationId} ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{7,199}$'
+        AND ${table.sourceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')
+      OR (${table.evidenceKind} IN ('content_approval','human_launch_approval')
+        AND ${table.sourceAttestationId} IS NULL AND ${table.sourceEvidenceDigest} IS NULL))
     )`),
     exactSlotFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.providerAccountId,
@@ -2371,6 +2548,23 @@ export const aiMediaLaunchEvidence = pgTable(
       foreignColumns: [aiMediaGovernanceProfiles.ownerUserId, aiMediaGovernanceProfiles.workspaceId,
         aiMediaGovernanceProfiles.id, aiMediaGovernanceProfiles.evidenceDigest],
       name: "ai_media_launch_evidence_governance_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    launchIntentFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.launchIntentId,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.scriptVariantId, table.scriptVariantChecksum,
+        table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
+        table.governanceTerritory, table.contentCountry, table.launchSubjectDigest,
+        table.launchIntentDigest],
+      foreignColumns: [aiMediaLaunchIntents.ownerUserId, aiMediaLaunchIntents.workspaceId,
+        aiMediaLaunchIntents.id, aiMediaLaunchIntents.dailyPlanSlotId, aiMediaLaunchIntents.slotAttempt,
+        aiMediaLaunchIntents.providerAccountId, aiMediaLaunchIntents.providerKey,
+        aiMediaLaunchIntents.providerCredentialVersion, aiMediaLaunchIntents.scriptVariantId,
+        aiMediaLaunchIntents.scriptVariantChecksum, aiMediaLaunchIntents.governanceProfileId,
+        aiMediaLaunchIntents.governanceEvidenceDigest, aiMediaLaunchIntents.governanceUse,
+        aiMediaLaunchIntents.governanceTerritory, aiMediaLaunchIntents.contentCountry,
+        aiMediaLaunchIntents.launchSubjectDigest, aiMediaLaunchIntents.launchIntentDigest],
+      name: "ai_media_launch_evidence_launch_intent_fk",
     }).onUpdate("no action").onDelete("restrict"),
     previousEvidenceFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
@@ -2403,6 +2597,8 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
     governanceTerritory: text("governance_territory").notNull(),
     contentCountry: text("content_country").notNull(),
     launchSubjectDigest: text("launch_subject_digest").notNull(),
+    launchIntentId: uuid("launch_intent_id").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
     contentApprovalEvidenceId: uuid("content_approval_evidence_id").notNull(),
     contentApprovalEvidenceDigest: text("content_approval_evidence_digest").notNull(),
     humanLaunchApprovalEvidenceId: uuid("human_launch_approval_evidence_id").notNull(),
@@ -2437,6 +2633,11 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
     exactIdentityUnique: uniqueIndex("ai_media_launch_authority_snapshots_exact_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
       table.admissionDigest, table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+      table.scriptVariantChecksum, table.launchIntentId, table.launchIntentDigest, table.authorityDigest,
+    ),
+    reservationIdentityUnique: uniqueIndex("ai_media_launch_authority_snapshots_reservation_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
+      table.admissionDigest, table.providerAccountId, table.providerKey, table.providerCredentialVersion,
       table.scriptVariantChecksum, table.authorityDigest,
     ),
     lifecycleCheck: check("ai_media_launch_authority_snapshots_ck", sql`(
@@ -2445,6 +2646,7 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
       AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
       AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.launchSubjectDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
       AND ${table.contentCountry} ~ '^[A-Z]{2}$'
       AND length(btrim(${table.governanceUse})) BETWEEN 1 AND 80
       AND length(btrim(${table.governanceTerritory})) BETWEEN 1 AND 80
@@ -2499,13 +2701,32 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         aiMediaGovernanceProfiles.id, aiMediaGovernanceProfiles.evidenceDigest],
       name: "ai_media_launch_authority_snapshots_governance_fk",
     }).onUpdate("no action").onDelete("restrict"),
+    launchIntentFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.launchIntentId, table.dailyPlanId,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.planDigest, table.slotDigest, table.scriptVariantId,
+        table.scriptVariantChecksum, table.governanceProfileId, table.governanceEvidenceDigest,
+        table.governanceUse, table.governanceTerritory, table.contentCountry,
+        table.launchSubjectDigest, table.launchIntentDigest],
+      foreignColumns: [aiMediaLaunchIntents.ownerUserId, aiMediaLaunchIntents.workspaceId,
+        aiMediaLaunchIntents.id, aiMediaLaunchIntents.dailyPlanId, aiMediaLaunchIntents.dailyPlanSlotId,
+        aiMediaLaunchIntents.slotAttempt, aiMediaLaunchIntents.providerAccountId,
+        aiMediaLaunchIntents.providerKey, aiMediaLaunchIntents.providerCredentialVersion,
+        aiMediaLaunchIntents.planDigest, aiMediaLaunchIntents.slotDigest,
+        aiMediaLaunchIntents.scriptVariantId, aiMediaLaunchIntents.scriptVariantChecksum,
+        aiMediaLaunchIntents.governanceProfileId, aiMediaLaunchIntents.governanceEvidenceDigest,
+        aiMediaLaunchIntents.governanceUse, aiMediaLaunchIntents.governanceTerritory,
+        aiMediaLaunchIntents.contentCountry, aiMediaLaunchIntents.launchSubjectDigest,
+        aiMediaLaunchIntents.launchIntentDigest],
+      name: "ai_media_launch_authority_snapshots_launch_intent_fk",
+    }).onUpdate("no action").onDelete("restrict"),
     contentEvidenceFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.contentApprovalEvidenceId,
         table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
         table.providerCredentialVersion, table.scriptVariantId, table.scriptVariantChecksum,
         table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
         table.governanceTerritory, table.contentCountry, table.launchSubjectDigest,
-        table.contentApprovalEvidenceDigest],
+        table.launchIntentId, table.launchIntentDigest, table.contentApprovalEvidenceDigest],
       foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
         aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId, aiMediaLaunchEvidence.slotAttempt,
         aiMediaLaunchEvidence.providerAccountId, aiMediaLaunchEvidence.providerKey,
@@ -2513,7 +2734,8 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         aiMediaLaunchEvidence.scriptVariantChecksum, aiMediaLaunchEvidence.governanceProfileId,
         aiMediaLaunchEvidence.governanceEvidenceDigest, aiMediaLaunchEvidence.governanceUse,
         aiMediaLaunchEvidence.governanceTerritory, aiMediaLaunchEvidence.contentCountry,
-        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.evidenceDigest],
+        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.launchIntentId,
+        aiMediaLaunchEvidence.launchIntentDigest, aiMediaLaunchEvidence.evidenceDigest],
       name: "ai_media_launch_authority_snapshots_content_evidence_fk",
     }).onDelete("restrict"),
     humanEvidenceFk: foreignKey({
@@ -2522,7 +2744,7 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         table.providerCredentialVersion, table.scriptVariantId, table.scriptVariantChecksum,
         table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
         table.governanceTerritory, table.contentCountry, table.launchSubjectDigest,
-        table.humanLaunchApprovalEvidenceDigest],
+        table.launchIntentId, table.launchIntentDigest, table.humanLaunchApprovalEvidenceDigest],
       foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
         aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId, aiMediaLaunchEvidence.slotAttempt,
         aiMediaLaunchEvidence.providerAccountId, aiMediaLaunchEvidence.providerKey,
@@ -2530,7 +2752,8 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         aiMediaLaunchEvidence.scriptVariantChecksum, aiMediaLaunchEvidence.governanceProfileId,
         aiMediaLaunchEvidence.governanceEvidenceDigest, aiMediaLaunchEvidence.governanceUse,
         aiMediaLaunchEvidence.governanceTerritory, aiMediaLaunchEvidence.contentCountry,
-        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.evidenceDigest],
+        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.launchIntentId,
+        aiMediaLaunchEvidence.launchIntentDigest, aiMediaLaunchEvidence.evidenceDigest],
       name: "ai_media_launch_authority_snapshots_human_evidence_fk",
     }).onDelete("restrict"),
     sandboxEvidenceFk: foreignKey({
@@ -2539,7 +2762,7 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         table.providerCredentialVersion, table.scriptVariantId, table.scriptVariantChecksum,
         table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
         table.governanceTerritory, table.contentCountry, table.launchSubjectDigest,
-        table.sandboxEvidenceDigest],
+        table.launchIntentId, table.launchIntentDigest, table.sandboxEvidenceDigest],
       foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
         aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId, aiMediaLaunchEvidence.slotAttempt,
         aiMediaLaunchEvidence.providerAccountId, aiMediaLaunchEvidence.providerKey,
@@ -2547,7 +2770,8 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         aiMediaLaunchEvidence.scriptVariantChecksum, aiMediaLaunchEvidence.governanceProfileId,
         aiMediaLaunchEvidence.governanceEvidenceDigest, aiMediaLaunchEvidence.governanceUse,
         aiMediaLaunchEvidence.governanceTerritory, aiMediaLaunchEvidence.contentCountry,
-        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.evidenceDigest],
+        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.launchIntentId,
+        aiMediaLaunchEvidence.launchIntentDigest, aiMediaLaunchEvidence.evidenceDigest],
       name: "ai_media_launch_authority_snapshots_sandbox_evidence_fk",
     }).onDelete("restrict"),
     quoteEvidenceFk: foreignKey({
@@ -2556,7 +2780,7 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         table.providerCredentialVersion, table.scriptVariantId, table.scriptVariantChecksum,
         table.governanceProfileId, table.governanceEvidenceDigest, table.governanceUse,
         table.governanceTerritory, table.contentCountry, table.launchSubjectDigest,
-        table.maximumQuoteEvidenceDigest],
+        table.launchIntentId, table.launchIntentDigest, table.maximumQuoteEvidenceDigest],
       foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
         aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId, aiMediaLaunchEvidence.slotAttempt,
         aiMediaLaunchEvidence.providerAccountId, aiMediaLaunchEvidence.providerKey,
@@ -2564,7 +2788,8 @@ export const aiMediaLaunchAuthoritySnapshots = pgTable(
         aiMediaLaunchEvidence.scriptVariantChecksum, aiMediaLaunchEvidence.governanceProfileId,
         aiMediaLaunchEvidence.governanceEvidenceDigest, aiMediaLaunchEvidence.governanceUse,
         aiMediaLaunchEvidence.governanceTerritory, aiMediaLaunchEvidence.contentCountry,
-        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.evidenceDigest],
+        aiMediaLaunchEvidence.launchSubjectDigest, aiMediaLaunchEvidence.launchIntentId,
+        aiMediaLaunchEvidence.launchIntentDigest, aiMediaLaunchEvidence.evidenceDigest],
       name: "ai_media_launch_authority_snapshots_quote_evidence_fk",
     }).onDelete("restrict"),
     policyFk: foreignKey({
@@ -2765,6 +2990,7 @@ export const aiMediaStudioTables = {
   budgetBuckets: aiMediaBudgetBuckets,
   admissionPolicyRevisions: aiMediaAdmissionPolicyRevisions,
   killSwitchRevisions: aiMediaKillSwitchRevisions,
+  launchIntents: aiMediaLaunchIntents,
   launchEvidence: aiMediaLaunchEvidence,
   launchAuthoritySnapshots: aiMediaLaunchAuthoritySnapshots,
   budgetReservations: aiMediaBudgetReservations,

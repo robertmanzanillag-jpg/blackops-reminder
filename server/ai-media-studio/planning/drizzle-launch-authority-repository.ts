@@ -8,23 +8,26 @@ import {
   aiMediaGovernanceProfiles,
   aiMediaInfluencers,
   aiMediaKillSwitchRevisions,
+  aiMediaLaunchIntents,
   aiMediaLaunchAuthoritySnapshots,
   aiMediaLaunchEvidence,
   aiMediaProviderAccounts,
   aiMediaProviderResources,
   aiMediaScripts,
   aiMediaScriptVariants,
+  aiMediaSourceItems,
 } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
 import {
   type AuthorizedLaunchAuthorityWrite,
   type CreateLaunchAuthoritySnapshotCommand,
+  type DeclareLaunchIntentCommand,
   type LaunchAuthorityCapability,
   type LaunchAuthorityReceipt,
   type LaunchAuthorityRepository,
   type LaunchAuthoritySnapshotReceipt,
   type LaunchAuthorityValidityPolicy,
-  type LaunchSubjectResolver,
+  type LaunchRuntimeAttestationVerifier,
   type RecordContentApprovalCommand,
   type RecordHumanLaunchApprovalCommand,
   type RecordMaximumQuoteAttestationCommand,
@@ -51,7 +54,7 @@ type Row = Record<string, unknown>;
 type Digest = `sha256:${string}`;
 type EvidenceKind = "content_approval" | "human_launch_approval" | "sandbox_proof" | "maximum_quote";
 type AnyAuthorityCommand = ReviseLaunchAdmissionPolicyCommand | ReviseLaunchKillSwitchCommand
-  | RecordContentApprovalCommand | RecordHumanLaunchApprovalCommand | RecordSandboxAttestationCommand
+  | RecordContentApprovalCommand | RecordHumanLaunchApprovalCommand | DeclareLaunchIntentCommand | RecordSandboxAttestationCommand
   | RecordMaximumQuoteAttestationCommand | CreateLaunchAuthoritySnapshotCommand;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -67,6 +70,7 @@ const OPERATION_CAPABILITY = {
   revise_kill_switch: "kill_switch:revise",
   record_content_approval: "content:decide",
   record_human_launch_approval: "human_launch:decide",
+  declare_launch_intent: "launch_intent:declare",
   record_sandbox_attestation: "sandbox:attest",
   record_maximum_quote_attestation: "quote:attest",
   create_authority_snapshot: "snapshot:create",
@@ -77,6 +81,7 @@ const OPERATION_PRINCIPAL_KINDS = {
   revise_kill_switch: ["user"],
   record_content_approval: ["user", "workload"],
   record_human_launch_approval: ["user"],
+  declare_launch_intent: ["user"],
   record_sandbox_attestation: ["workload"],
   record_maximum_quote_attestation: ["workload"],
   create_authority_snapshot: ["workload"],
@@ -200,7 +205,7 @@ function expiryFrom(now: Date, seconds: number): Date {
 }
 
 export interface DrizzleLaunchAuthorityRepositoryOptions {
-  subjectResolver: LaunchSubjectResolver;
+  runtimeAttestationVerifier: LaunchRuntimeAttestationVerifier;
   validityPolicy: LaunchAuthorityValidityPolicy;
 }
 
@@ -317,35 +322,155 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     assertAuthorized("record_content_approval", input);
     const sourceKind = input.principal.kind === "user" ? "authenticated_human" : "authenticated_workload";
     return this.appendEvidence(input, "content_approval", input.command.decision, sourceKind,
-      input.principal.authenticationEvidenceDigest ?? null, null, null, null);
+      null, null, null, null);
   }
 
   async recordHumanLaunchApproval(input: AuthorizedLaunchAuthorityWrite<RecordHumanLaunchApprovalCommand>) {
     assertAuthorized("record_human_launch_approval", input);
     return this.appendEvidence(input, "human_launch_approval", input.command.decision, "authenticated_human",
-      input.principal.authenticationEvidenceDigest ?? null, null, null, null);
+      null, null, null, null);
+  }
+
+  async declareLaunchIntent(input: AuthorizedLaunchAuthorityWrite<DeclareLaunchIntentCommand>) {
+    assertAuthorized("declare_launch_intent", input);
+    const { command, principal } = input;
+    validSlotCommand(command);
+    const governanceUse = safe(command.governanceUse, "governanceUse", 80);
+    const governanceTerritory = safe(command.governanceTerritory, "governanceTerritory", 80);
+    if (!COUNTRY.test(command.contentCountry)) throw invalid("contentCountry is invalid");
+    return this.db.transaction(async (tx) => {
+      await lockAuthorityIdempotency(tx, command.scope, "launch-intent", command.idempotencyKey);
+      const replay = await this.byIdempotency(tx, aiMediaLaunchIntents, command.scope, command.idempotencyKey);
+      if (replay) { assertReplay(replay, input.inputDigest); return receipt(replay, "launch_intent", true); }
+      await lockAuthorityWorkspace(tx, command.scope);
+      const existingIntent = rows(await tx.execute(sql`SELECT id FROM ${aiMediaLaunchIntents}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND daily_plan_slot_id=${command.dailyPlanSlotId} AND slot_attempt=${command.slotAttempt}
+        LIMIT 2 FOR UPDATE`));
+      if (existingIntent.length !== 0) throw denied();
+      const slotRows = rows(await tx.execute(sql`
+        SELECT influencer_id FROM ${aiMediaDailyPlanSlots}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND id=${command.dailyPlanSlotId} LIMIT 2
+      `));
+      if (slotRows.length !== 1) throw denied();
+      const influencerId = uuid(String(value(slotRows[0], "influencerId", "influencer_id")), "influencerId");
+      await lockGovernanceProfile(tx, command.scope, influencerId);
+      const { id, now } = await this.identity(tx);
+      const facts = rows(await tx.execute(sql`
+        SELECT plans.id AS daily_plan_id,plans.plan_digest,plans.source_roster_key,plans.source_roster_digest,
+          slots.id AS daily_plan_slot_id,slots.slot_digest,slots.source_member_key,slots.provider_account_id,
+          slots.provider_key,slots.provider_credential_version,variants.id AS script_variant_id,
+          variants.checksum AS script_variant_checksum,scripts.id AS script_id,scripts.source_type,
+          scripts.source_item_id,sources.content_hash AS source_content_hash,
+          governance.id AS governance_profile_id,governance.evidence_digest AS governance_evidence_digest
+        FROM ${aiMediaDailyPlans} plans
+        INNER JOIN ${aiMediaDailyPlanSlots} slots ON slots.owner_user_id=plans.owner_user_id
+          AND slots.workspace_id=plans.workspace_id AND slots.daily_plan_id=plans.id
+          AND slots.provider_account_id=plans.provider_account_id AND slots.provider_key=plans.provider_key
+          AND slots.provider_credential_version=plans.provider_credential_version
+        INNER JOIN ${aiMediaProviderAccounts} accounts ON accounts.owner_user_id=slots.owner_user_id
+          AND accounts.workspace_id=slots.workspace_id AND accounts.id=slots.provider_account_id
+          AND accounts.provider_key=slots.provider_key
+        INNER JOIN ${aiMediaInfluencers} influencers ON influencers.owner_user_id=slots.owner_user_id
+          AND influencers.workspace_id=slots.workspace_id AND influencers.id=slots.influencer_id
+        INNER JOIN ${aiMediaProviderResources} avatars ON avatars.owner_user_id=slots.owner_user_id
+          AND avatars.workspace_id=slots.workspace_id AND avatars.id=slots.avatar_resource_id
+          AND avatars.provider_account_id=slots.provider_account_id AND avatars.provider_key=slots.provider_key
+          AND avatars.resource_type='avatar'
+        INNER JOIN ${aiMediaProviderResources} voices ON voices.owner_user_id=slots.owner_user_id
+          AND voices.workspace_id=slots.workspace_id AND voices.id=slots.voice_resource_id
+          AND voices.provider_account_id=slots.provider_account_id AND voices.provider_key=slots.provider_key
+          AND voices.resource_type='voice'
+        INNER JOIN ${aiMediaScriptVariants} variants ON variants.owner_user_id=slots.owner_user_id
+          AND variants.workspace_id=slots.workspace_id AND variants.id=slots.script_variant_id
+        INNER JOIN ${aiMediaScripts} scripts ON scripts.owner_user_id=variants.owner_user_id
+          AND scripts.workspace_id=variants.workspace_id AND scripts.id=variants.script_id
+          AND scripts.influencer_id=slots.influencer_id AND scripts.current_variant_id=variants.id
+        LEFT JOIN ${aiMediaSourceItems} sources ON sources.owner_user_id=scripts.owner_user_id
+          AND sources.workspace_id=scripts.workspace_id AND sources.id=scripts.source_item_id
+          AND sources.source_type=scripts.source_type
+        INNER JOIN ${aiMediaGovernanceProfiles} governance ON governance.owner_user_id=slots.owner_user_id
+          AND governance.workspace_id=slots.workspace_id AND governance.influencer_id=slots.influencer_id
+        WHERE plans.owner_user_id=${command.scope.ownerUserId} AND plans.workspace_id=${command.scope.workspaceId}
+          AND slots.id=${command.dailyPlanSlotId} AND plans.status='planned' AND slots.status='planned'
+          AND plans.plan_date=(${now} AT TIME ZONE plans.accounting_time_zone)::date
+          AND variants.status='approved' AND variants.checksum IS NOT NULL AND scripts.status='approved'
+          AND ((scripts.source_type='manual' AND scripts.source_item_id IS NULL)
+            OR (scripts.source_type<>'manual' AND sources.id IS NOT NULL AND sources.content_hash IS NOT NULL
+              AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
+              AND sources.rights_status IN ('owned','licensed')))
+          AND accounts.credential_version=slots.provider_credential_version
+          AND accounts.status IN ('active','connected') AND accounts.credential_status='active'
+          AND (accounts.credential_expires_at IS NULL OR accounts.credential_expires_at>${now})
+          AND influencers.status='active' AND influencers.archived_at IS NULL
+          AND avatars.status='active' AND voices.status='active'
+          AND governance.state='active' AND governance.revoked_at IS NULL
+          AND governance.valid_from<=${now} AND governance.expires_at>${now}
+          AND governance.allowed_uses @> jsonb_build_array(${governanceUse})
+          AND (governance.territories @> jsonb_build_array(${governanceTerritory})
+            OR governance.territories @> '["WORLDWIDE"]'::jsonb)
+          AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer
+            WHERE newer.owner_user_id=governance.owner_user_id AND newer.workspace_id=governance.workspace_id
+              AND newer.influencer_id=governance.influencer_id AND newer.version>governance.version)
+          AND ${command.slotAttempt}=COALESCE((SELECT MAX(previous.attempt)+1 FROM ${aiMediaBudgetReservations} previous
+            WHERE previous.owner_user_id=slots.owner_user_id AND previous.workspace_id=slots.workspace_id
+              AND previous.daily_plan_slot_id=slots.id),1)
+        FOR UPDATE OF plans,slots,accounts,influencers,avatars,voices,variants,scripts,governance
+      `));
+      if (facts.length !== 1) throw denied();
+      const row = facts[0];
+      if (String(value(row, "sourceType", "source_type")) !== "manual") {
+        const lockedSource = rows(await tx.execute(sql`SELECT id FROM ${aiMediaSourceItems}
+          WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+            AND id=${value(row, "sourceItemId", "source_item_id")}
+            AND source_type=${value(row, "sourceType", "source_type")}
+            AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
+            AND status IN ('accepted','ready') AND moderation_status='approved'
+            AND rights_status IN ('owned','licensed') FOR UPDATE`));
+        if (lockedSource.length !== 1) throw denied();
+      }
+      const base = subjectFromLaunchRow(row, command.scope, command.slotAttempt, governanceUse,
+        governanceTerritory, command.contentCountry, id, digest("pending"));
+      const launchIntentDigest = digest({ domain: "ai-media-launch-intent-v1", id,
+        subject: launchFacts(base), actorUserId: principal.subjectId,
+        inputDigest: input.inputDigest, createdAt: now.toISOString() });
+      const subjectWithIntent = { ...base, launchIntentDigest };
+      const launchSubjectDigest = deriveLaunchSubjectDigest(subjectWithIntent);
+      const subject = { ...subjectWithIntent, launchSubjectDigest };
+      const inserted = rows(await tx.execute(sql`
+        INSERT INTO ${aiMediaLaunchIntents} (id,owner_user_id,workspace_id,daily_plan_id,daily_plan_slot_id,
+          slot_attempt,provider_account_id,provider_key,provider_credential_version,plan_digest,slot_digest,
+          source_roster_key,source_roster_digest,source_member_key,script_id,script_variant_id,
+          script_variant_checksum,source_type,source_item_id,source_content_hash,governance_profile_id,
+          governance_evidence_digest,governance_use,governance_territory,content_country,
+          launch_subject_digest,launch_intent_digest,actor_user_id,input_digest,idempotency_key,created_at)
+        VALUES (${id},${command.scope.ownerUserId},${command.scope.workspaceId},${subject.dailyPlanId},
+          ${subject.dailyPlanSlotId},${subject.slotAttempt},${subject.providerAccountId},${subject.providerKey},
+          ${subject.providerCredentialVersion},${subject.planDigest},${subject.slotDigest},${subject.sourceRosterKey},
+          ${subject.sourceRosterDigest},${subject.sourceMemberKey},${subject.scriptId},${subject.scriptVariantId},
+          ${subject.scriptVariantChecksum},${subject.sourceType},${subject.sourceItemId},${subject.sourceContentHash},
+          ${subject.governanceProfileId},${subject.governanceEvidenceDigest},${subject.governanceUse},
+          ${subject.governanceTerritory},${subject.contentCountry},${subject.launchSubjectDigest},
+          ${subject.launchIntentDigest},${principal.subjectId},${input.inputDigest},${command.idempotencyKey},${now})
+        ON CONFLICT (owner_user_id,workspace_id,idempotency_key) DO NOTHING RETURNING *
+      `))[0];
+      if (inserted) return receipt(inserted, "launch_intent", false);
+      return this.racedReceipt(tx, aiMediaLaunchIntents, command.scope, command.idempotencyKey,
+        input.inputDigest, "launch_intent");
+    });
   }
 
   async recordSandboxAttestation(input: AuthorizedLaunchAuthorityWrite<RecordSandboxAttestationCommand>) {
     assertAuthorized("record_sandbox_attestation", input);
-    safe(input.command.attestation.attestationId, "attestationId", 200);
-    validDigest(input.command.attestation.sourceEvidenceDigest, "sourceEvidenceDigest");
-    return this.appendEvidence(input, "sandbox_proof", input.command.attestation.decision, "sandbox_adapter",
-      input.command.attestation.sourceEvidenceDigest, input.command.attestation.attestationId, null, null);
+    safe(input.command.attestationHandle, "attestationHandle", 200);
+    return this.appendEvidence(input, "sandbox_proof", null, "sandbox_adapter", null, null, null, null);
   }
 
   async recordMaximumQuoteAttestation(input: AuthorizedLaunchAuthorityWrite<RecordMaximumQuoteAttestationCommand>) {
     assertAuthorized("record_maximum_quote_attestation", input);
-    const attestation = input.command.attestation;
-    safe(attestation.attestationId, "attestationId", 200);
-    validDigest(attestation.sourceEvidenceDigest, "sourceEvidenceDigest");
-    if (attestation.currency !== "USD" || attestation.maximumQuoteMicroUsd === undefined) {
-      throw invalid("Maximum-quote attestation is incomplete");
-    }
-    microUsd(attestation.maximumQuoteMicroUsd, false);
-    return this.appendEvidence(input, "maximum_quote", attestation.decision, "provider_quote_adapter",
-      attestation.sourceEvidenceDigest, attestation.attestationId,
-      attestation.maximumQuoteMicroUsd ?? null, attestation.currency ?? null);
+    safe(input.command.attestationHandle, "attestationHandle", 200);
+    return this.appendEvidence(input, "maximum_quote", null, "provider_quote_adapter", null, null, null, null);
   }
 
   async createAuthoritySnapshot(
@@ -359,12 +484,11 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       const replay = await this.byIdempotency(tx, aiMediaLaunchAuthoritySnapshots, command.scope, command.idempotencyKey);
       if (replay) { assertReplay(replay, input.inputDigest); return snapshotReceipt(replay, true); }
       await lockAuthorityWorkspace(tx, command.scope);
-      const resolved = await this.resolveSubject(command);
-      const influencerId = await this.influencerForSubject(tx, command.scope, command.dailyPlanSlotId, resolved);
+      const influencerId = await this.influencerForSlot(tx, command.scope, command.dailyPlanSlotId);
       await lockGovernanceProfile(tx, command.scope, influencerId);
       const identity = await this.identity(tx);
       const { id, now } = identity;
-      const subject = await this.lockExactSubject(tx, resolved, now);
+      const subject = await this.lockExactSubject(tx, command, now);
 
       const policy = rows(await tx.execute(sql`
         SELECT * FROM ${aiMediaAdmissionPolicyRevisions}
@@ -440,7 +564,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           id,owner_user_id,workspace_id,daily_plan_id,plan_digest,daily_plan_slot_id,slot_digest,
           provider_account_id,provider_key,provider_credential_version,slot_attempt,script_variant_id,
           script_variant_checksum,governance_profile_id,governance_evidence_digest,governance_use,
-          governance_territory,content_country,launch_subject_digest,content_approval_evidence_id,
+          governance_territory,content_country,launch_subject_digest,launch_intent_id,launch_intent_digest,
+          content_approval_evidence_id,
           content_approval_evidence_digest,human_launch_approval_evidence_id,
           human_launch_approval_evidence_digest,sandbox_evidence_id,sandbox_evidence_digest,
           maximum_quote_evidence_id,maximum_quote_evidence_digest,policy_revision_id,policy_revision,
@@ -452,7 +577,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           ${subject.providerKey},${subject.providerCredentialVersion},${subject.slotAttempt},
           ${subject.scriptVariantId},${subject.scriptVariantChecksum},${subject.governanceProfileId},
           ${subject.governanceEvidenceDigest},${subject.governanceUse},${subject.governanceTerritory},
-          ${subject.contentCountry},${subject.launchSubjectDigest},${evidenceBinding.contentApproval.id},
+          ${subject.contentCountry},${subject.launchSubjectDigest},${subject.launchIntentId},
+          ${subject.launchIntentDigest},${evidenceBinding.contentApproval.id},
           ${evidenceBinding.contentApproval.digest},${evidenceBinding.humanLaunchApproval.id},
           ${evidenceBinding.humanLaunchApproval.digest},${evidenceBinding.sandbox.id},
           ${evidenceBinding.sandbox.digest},${evidenceBinding.maximumQuote.id},
@@ -474,7 +600,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     | RecordSandboxAttestationCommand | RecordMaximumQuoteAttestationCommand>(
     input: AuthorizedLaunchAuthorityWrite<T>,
     kind: EvidenceKind,
-    decision: string,
+    decision: string | null,
     sourceKind: "authenticated_human" | "authenticated_workload" | "sandbox_adapter" | "provider_quote_adapter",
     sourceEvidenceDigest: Digest | null,
     sourceAttestationId: string | null,
@@ -483,18 +609,33 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
   ): Promise<LaunchAuthorityReceipt> {
     const { command, principal } = input;
     validSlotCommand(command);
-    assertEvidenceDecision(kind, decision, amountMicroUsd, currency);
+    if (decision !== null) assertEvidenceDecision(kind, decision, amountMicroUsd, currency);
     return this.db.transaction(async (tx) => {
       await lockAuthorityIdempotency(tx, command.scope, kind, command.idempotencyKey);
       const replay = await this.byIdempotency(tx, aiMediaLaunchEvidence, command.scope, command.idempotencyKey);
       if (replay) { assertReplay(replay, input.inputDigest); return receipt(replay, kind, true); }
       await lockAuthorityWorkspace(tx, command.scope);
-      const resolved = await this.resolveSubject(command);
-      const influencerId = await this.influencerForSubject(tx, command.scope, command.dailyPlanSlotId, resolved);
+      const influencerId = await this.influencerForSlot(tx, command.scope, command.dailyPlanSlotId);
       await lockGovernanceProfile(tx, command.scope, influencerId);
       const identity = await this.identity(tx);
       const { id, now } = identity;
-      const subject = await this.lockExactSubject(tx, resolved, now);
+      const subject = await this.lockExactSubject(tx, command, now);
+      if (kind === "sandbox_proof" || kind === "maximum_quote") {
+        const runtimeCommand = command as unknown as RecordSandboxAttestationCommand | RecordMaximumQuoteAttestationCommand;
+        const verified = await this.options.runtimeAttestationVerifier.verify({
+          kind, attestationHandle: runtimeCommand.attestationHandle, scope: command.scope,
+          principal, subject, databaseNow: now, idempotencyKey: command.idempotencyKey,
+        });
+        if (!verified || verified.kind !== kind) throw denied();
+        decision = verified.decision;
+        sourceEvidenceDigest = validDigest(verified.sourceEvidenceDigest, "sourceEvidenceDigest");
+        sourceAttestationId = safe(verified.attestationId, "attestationId", 200, 8);
+        if (verified.kind === "maximum_quote") {
+          amountMicroUsd = microUsd(verified.maximumQuoteMicroUsd, false);
+          currency = verified.currency;
+        }
+        assertEvidenceDecision(kind, decision, amountMicroUsd, currency);
+      }
       const previous = rows(await tx.execute(sql`
         SELECT * FROM ${aiMediaLaunchEvidence}
         WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
@@ -517,17 +658,19 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           id,owner_user_id,workspace_id,daily_plan_slot_id,slot_attempt,provider_account_id,provider_key,
           provider_credential_version,script_variant_id,script_variant_checksum,governance_profile_id,
           governance_evidence_digest,governance_use,governance_territory,content_country,
-          launch_subject_digest,evidence_kind,decision,amount_micro_usd,currency,revision,
+          launch_subject_digest,launch_intent_id,launch_intent_digest,evidence_kind,decision,amount_micro_usd,currency,revision,
           previous_evidence_id,previous_evidence_revision,valid_from,expires_at,actor_user_id,source_kind,
-          evidence_digest,input_digest,idempotency_key,created_at)
+          source_attestation_id,source_evidence_digest,evidence_digest,input_digest,idempotency_key,created_at)
         VALUES (${id},${subject.scope.ownerUserId},${subject.scope.workspaceId},${subject.dailyPlanSlotId},
           ${subject.slotAttempt},${subject.providerAccountId},${subject.providerKey},
           ${subject.providerCredentialVersion},${subject.scriptVariantId},${subject.scriptVariantChecksum},
           ${subject.governanceProfileId},${subject.governanceEvidenceDigest},${subject.governanceUse},
-          ${subject.governanceTerritory},${subject.contentCountry},${subject.launchSubjectDigest},${kind},
+          ${subject.governanceTerritory},${subject.contentCountry},${subject.launchSubjectDigest},
+          ${subject.launchIntentId},${subject.launchIntentDigest},${kind},
           ${decision},${amountMicroUsd}::numeric,${currency},${revision},${previousEvidenceId},
           ${previousEvidenceRevision},${now},${expiresAt},${principal.subjectId},${sourceKind},
-          ${evidenceDigest},${input.inputDigest},${command.idempotencyKey},${now})
+          ${sourceAttestationId},${sourceEvidenceDigest},${evidenceDigest},${input.inputDigest},
+          ${command.idempotencyKey},${now})
         ON CONFLICT (owner_user_id,workspace_id,idempotency_key) DO NOTHING RETURNING *
       `))[0];
       if (inserted) return receipt(inserted, kind, false);
@@ -536,28 +679,15 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     });
   }
 
-  private async resolveSubject(command: { scope: TenantScope; dailyPlanSlotId: string; slotAttempt: number }): Promise<TrustedLaunchSubject> {
-    const resolved = await this.options.subjectResolver.resolve(command);
-    if (!resolved) throw denied();
-    validateTrustedSubject(resolved);
-    if (!sameScope(resolved.scope, command.scope) || resolved.dailyPlanSlotId !== command.dailyPlanSlotId
-      || resolved.slotAttempt !== command.slotAttempt) throw denied();
-    return resolved;
-  }
-
-  private async influencerForSubject(
+  private async influencerForSlot(
     tx: LaunchAuthorityDatabase,
     scope: TenantScope,
     slotId: string,
-    subject: TrustedLaunchSubject,
   ): Promise<string> {
     const found = rows(await tx.execute(sql`
       SELECT influencer_id FROM ${aiMediaDailyPlanSlots}
       WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-        AND id=${slotId} AND daily_plan_id=${subject.dailyPlanId}
-        AND provider_account_id=${subject.providerAccountId} AND provider_key=${subject.providerKey}
-        AND provider_credential_version=${subject.providerCredentialVersion}
-      LIMIT 2
+        AND id=${slotId} LIMIT 2
     `));
     if (found.length !== 1) throw denied();
     return uuid(String(value(found[0], "influencerId", "influencer_id")), "influencerId");
@@ -565,26 +695,31 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
 
   private async lockExactSubject(
     tx: LaunchAuthorityDatabase,
-    expected: TrustedLaunchSubject,
+    command: { scope: TenantScope; dailyPlanSlotId: string; slotAttempt: number },
     now: Date,
   ): Promise<LockedLaunchSubject> {
     const result = rows(await tx.execute(sql`
-      SELECT plans.id AS daily_plan_id,plans.plan_digest,plans.plan_date::text,plans.accounting_time_zone,
+      SELECT intents.*,plans.plan_date::text,plans.accounting_time_zone,
         ((plans.plan_date+1)::timestamp AT TIME ZONE plans.accounting_time_zone) AS plan_expires_at,
-        slots.id AS daily_plan_slot_id,slots.slot_digest,slots.influencer_id,
-        slots.provider_account_id,slots.provider_key,slots.provider_credential_version,
-        variants.id AS script_variant_id,variants.checksum AS script_variant_checksum,scripts.language,
-        governance.id AS governance_profile_id,governance.evidence_digest AS governance_evidence_digest,
+        slots.influencer_id,scripts.language,
         governance.expires_at AS governance_expires_at,accounts.credential_expires_at
-      FROM ${aiMediaDailyPlans} plans
+      FROM ${aiMediaLaunchIntents} intents
+      INNER JOIN ${aiMediaDailyPlans} plans
+        ON plans.owner_user_id=intents.owner_user_id AND plans.workspace_id=intents.workspace_id
+        AND plans.id=intents.daily_plan_id AND plans.plan_digest=intents.plan_digest
+        AND plans.provider_account_id=intents.provider_account_id AND plans.provider_key=intents.provider_key
+        AND plans.provider_credential_version=intents.provider_credential_version
+        AND plans.source_roster_key=intents.source_roster_key AND plans.source_roster_digest=intents.source_roster_digest
       INNER JOIN ${aiMediaDailyPlanSlots} slots
-        ON slots.owner_user_id=plans.owner_user_id AND slots.workspace_id=plans.workspace_id
-        AND slots.daily_plan_id=plans.id AND slots.provider_account_id=plans.provider_account_id
-        AND slots.provider_key=plans.provider_key
-        AND slots.provider_credential_version=plans.provider_credential_version
+        ON slots.owner_user_id=intents.owner_user_id AND slots.workspace_id=intents.workspace_id
+        AND slots.id=intents.daily_plan_slot_id AND slots.daily_plan_id=intents.daily_plan_id
+        AND slots.provider_account_id=intents.provider_account_id AND slots.provider_key=intents.provider_key
+        AND slots.provider_credential_version=intents.provider_credential_version
+        AND slots.source_member_key=intents.source_member_key AND slots.script_variant_id=intents.script_variant_id
+        AND slots.slot_digest=intents.slot_digest
       INNER JOIN ${aiMediaProviderAccounts} accounts
         ON accounts.owner_user_id=slots.owner_user_id AND accounts.workspace_id=slots.workspace_id
-        AND accounts.id=slots.provider_account_id AND accounts.provider_key=slots.provider_key
+        AND accounts.id=intents.provider_account_id AND accounts.provider_key=intents.provider_key
       INNER JOIN ${aiMediaInfluencers} influencers
         ON influencers.owner_user_id=slots.owner_user_id AND influencers.workspace_id=slots.workspace_id
         AND influencers.id=slots.influencer_id
@@ -598,50 +733,70 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         AND voices.provider_key=slots.provider_key AND voices.resource_type='voice'
       INNER JOIN ${aiMediaScriptVariants} variants
         ON variants.owner_user_id=slots.owner_user_id AND variants.workspace_id=slots.workspace_id
-        AND variants.id=slots.script_variant_id
+        AND variants.id=intents.script_variant_id AND variants.script_id=intents.script_id
+        AND variants.checksum=intents.script_variant_checksum
       INNER JOIN ${aiMediaScripts} scripts
         ON scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
-        AND scripts.id=variants.script_id AND scripts.influencer_id=slots.influencer_id
+        AND scripts.id=intents.script_id AND scripts.influencer_id=slots.influencer_id
+        AND scripts.source_type=intents.source_type AND scripts.current_variant_id=intents.script_variant_id
+      LEFT JOIN ${aiMediaSourceItems} sources
+        ON sources.owner_user_id=intents.owner_user_id AND sources.workspace_id=intents.workspace_id
+        AND sources.id=intents.source_item_id AND sources.source_type=intents.source_type
+        AND sources.content_hash=intents.source_content_hash
       INNER JOIN ${aiMediaGovernanceProfiles} governance
         ON governance.owner_user_id=slots.owner_user_id AND governance.workspace_id=slots.workspace_id
-        AND governance.id=${expected.governanceProfileId} AND governance.influencer_id=slots.influencer_id
-      WHERE plans.owner_user_id=${expected.scope.ownerUserId} AND plans.workspace_id=${expected.scope.workspaceId}
-        AND plans.id=${expected.dailyPlanId} AND plans.plan_digest=${expected.planDigest}
+        AND governance.id=intents.governance_profile_id AND governance.influencer_id=slots.influencer_id
+        AND governance.evidence_digest=intents.governance_evidence_digest
+      WHERE intents.owner_user_id=${command.scope.ownerUserId} AND intents.workspace_id=${command.scope.workspaceId}
+        AND intents.daily_plan_slot_id=${command.dailyPlanSlotId} AND intents.slot_attempt=${command.slotAttempt}
         AND plans.status='planned' AND plans.plan_date=(${now} AT TIME ZONE plans.accounting_time_zone)::date
-        AND slots.id=${expected.dailyPlanSlotId} AND slots.slot_digest=${expected.slotDigest}
-        AND slots.status='planned' AND slots.provider_account_id=${expected.providerAccountId}
-        AND slots.provider_key=${expected.providerKey}
-        AND slots.provider_credential_version=${expected.providerCredentialVersion}
-        AND slots.script_variant_id=${expected.scriptVariantId}
-        AND variants.checksum=${expected.scriptVariantChecksum} AND variants.status='approved'
-        AND scripts.status='approved'
-        AND accounts.credential_version=${expected.providerCredentialVersion}
+        AND slots.status='planned' AND variants.status='approved' AND scripts.status='approved'
+        AND ((intents.source_type='manual' AND intents.source_item_id IS NULL AND intents.source_content_hash IS NULL)
+          OR (intents.source_type<>'manual' AND sources.id IS NOT NULL
+            AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
+            AND sources.rights_status IN ('owned','licensed')))
+        AND accounts.credential_version=intents.provider_credential_version
         AND accounts.status IN ('active','connected') AND accounts.credential_status='active'
         AND (accounts.credential_expires_at IS NULL OR accounts.credential_expires_at>${now})
         AND influencers.status='active' AND influencers.archived_at IS NULL
         AND avatars.status='active' AND voices.status='active'
-        AND governance.evidence_digest=${expected.governanceEvidenceDigest}
         AND governance.state='active' AND governance.revoked_at IS NULL
         AND governance.valid_from<=${now} AND governance.expires_at>${now}
-        AND governance.allowed_uses @> jsonb_build_array(${expected.governanceUse})
-        AND (governance.territories @> jsonb_build_array(${expected.governanceTerritory})
+        AND governance.allowed_uses @> jsonb_build_array(intents.governance_use)
+        AND (governance.territories @> jsonb_build_array(intents.governance_territory)
           OR governance.territories @> '["WORLDWIDE"]'::jsonb)
         AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer
           WHERE newer.owner_user_id=governance.owner_user_id AND newer.workspace_id=governance.workspace_id
             AND newer.influencer_id=governance.influencer_id AND newer.version>governance.version)
-        AND ${expected.slotAttempt}=COALESCE((SELECT MAX(previous.attempt)+1
+        AND intents.slot_attempt=COALESCE((SELECT MAX(previous.attempt)+1
           FROM ${aiMediaBudgetReservations} previous
           WHERE previous.owner_user_id=slots.owner_user_id AND previous.workspace_id=slots.workspace_id
             AND previous.daily_plan_slot_id=slots.id),1)
-      FOR UPDATE OF plans,slots,accounts,influencers,avatars,voices,variants,scripts,governance
+      FOR UPDATE OF intents,plans,slots,accounts,influencers,avatars,voices,variants,scripts,governance
     `));
     if (result.length !== 1) throw denied();
     const row = result[0];
-    const subject: TrustedLaunchSubject = expected;
+    if (String(value(row, "sourceType", "source_type")) !== "manual") {
+      const lockedSource = rows(await tx.execute(sql`SELECT id FROM ${aiMediaSourceItems}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND id=${value(row, "sourceItemId", "source_item_id")}
+          AND source_type=${value(row, "sourceType", "source_type")}
+          AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
+          AND status IN ('accepted','ready') AND moderation_status='approved'
+          AND rights_status IN ('owned','licensed') FOR UPDATE`));
+      if (lockedSource.length !== 1) throw denied();
+    }
+    const subject = subjectFromLaunchRow(row, command.scope, command.slotAttempt,
+      String(value(row, "governanceUse", "governance_use")),
+      String(value(row, "governanceTerritory", "governance_territory")),
+      String(value(row, "contentCountry", "content_country")),
+      String(value(row, "id", "id")), String(value(row, "launchIntentDigest", "launch_intent_digest")));
+    validateTrustedSubject(subject as TrustedLaunchSubject);
     const derivedDigest = deriveLaunchSubjectDigest(subject);
-    if (derivedDigest !== subject.launchSubjectDigest) throw denied();
+    if (derivedDigest !== String(value(row, "launchSubjectDigest", "launch_subject_digest"))) throw denied();
     return {
       ...subject,
+      launchSubjectDigest: derivedDigest,
       influencerId: uuid(String(value(row, "influencerId", "influencer_id")), "influencerId"),
       language: safe(String(row.language), "language", 35),
       accountingTimeZone: validTimeZone(String(value(row, "accountingTimeZone", "accounting_time_zone"))),
@@ -655,7 +810,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
   private async byIdempotency(
     tx: LaunchAuthorityDatabase,
     table: typeof aiMediaAdmissionPolicyRevisions | typeof aiMediaKillSwitchRevisions
-      | typeof aiMediaLaunchEvidence | typeof aiMediaLaunchAuthoritySnapshots,
+      | typeof aiMediaLaunchIntents | typeof aiMediaLaunchEvidence | typeof aiMediaLaunchAuthoritySnapshots,
     scope: TenantScope,
     idempotencyKey: string,
   ): Promise<Row | undefined> {
@@ -666,7 +821,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
 
   private async racedReceipt(
     tx: LaunchAuthorityDatabase,
-    table: typeof aiMediaAdmissionPolicyRevisions | typeof aiMediaKillSwitchRevisions | typeof aiMediaLaunchEvidence,
+    table: typeof aiMediaAdmissionPolicyRevisions | typeof aiMediaKillSwitchRevisions
+      | typeof aiMediaLaunchIntents | typeof aiMediaLaunchEvidence,
     scope: TenantScope,
     idempotencyKey: string,
     inputDigest: Digest,
@@ -690,6 +846,48 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
   }
 }
 
+function subjectFromLaunchRow(
+  row: Row,
+  scope: TenantScope,
+  slotAttempt: number,
+  governanceUse: string,
+  governanceTerritory: string,
+  contentCountry: string,
+  launchIntentId: string,
+  launchIntentDigest: string,
+): TrustedLaunchSubject {
+  return {
+    scope,
+    dailyPlanId: uuid(String(value(row, "dailyPlanId", "daily_plan_id")), "dailyPlanId"),
+    dailyPlanSlotId: uuid(String(value(row, "dailyPlanSlotId", "daily_plan_slot_id")), "dailyPlanSlotId"),
+    slotAttempt: positiveInteger(slotAttempt, "slotAttempt"),
+    planDigest: validDigest(String(value(row, "planDigest", "plan_digest")), "planDigest"),
+    slotDigest: validDigest(String(value(row, "slotDigest", "slot_digest")), "slotDigest"),
+    sourceRosterKey: safe(String(value(row, "sourceRosterKey", "source_roster_key")), "sourceRosterKey", 200),
+    sourceRosterDigest: validDigest(String(value(row, "sourceRosterDigest", "source_roster_digest")), "sourceRosterDigest"),
+    sourceMemberKey: safe(String(value(row, "sourceMemberKey", "source_member_key")), "sourceMemberKey", 200),
+    providerAccountId: uuid(String(value(row, "providerAccountId", "provider_account_id")), "providerAccountId"),
+    providerKey: safe(String(value(row, "providerKey", "provider_key")), "providerKey", 80),
+    providerCredentialVersion: positiveInteger(Number(value(row, "providerCredentialVersion", "provider_credential_version")), "providerCredentialVersion"),
+    scriptId: uuid(String(value(row, "scriptId", "script_id")), "scriptId"),
+    scriptVariantId: uuid(String(value(row, "scriptVariantId", "script_variant_id")), "scriptVariantId"),
+    scriptVariantChecksum: String(value(row, "scriptVariantChecksum", "script_variant_checksum")),
+    sourceType: safe(String(value(row, "sourceType", "source_type")), "sourceType", 80),
+    sourceItemId: value(row, "sourceItemId", "source_item_id") == null ? null
+      : uuid(String(value(row, "sourceItemId", "source_item_id")), "sourceItemId"),
+    sourceContentHash: value(row, "sourceContentHash", "source_content_hash") == null ? null
+      : String(value(row, "sourceContentHash", "source_content_hash")),
+    governanceProfileId: uuid(String(value(row, "governanceProfileId", "governance_profile_id")), "governanceProfileId"),
+    governanceEvidenceDigest: validDigest(String(value(row, "governanceEvidenceDigest", "governance_evidence_digest")), "governanceEvidenceDigest"),
+    governanceUse: safe(governanceUse, "governanceUse", 80),
+    governanceTerritory: safe(governanceTerritory, "governanceTerritory", 80),
+    contentCountry,
+    launchIntentId: uuid(launchIntentId, "launchIntentId"),
+    launchIntentDigest: validDigest(launchIntentDigest, "launchIntentDigest"),
+    launchSubjectDigest: digest("temporary-launch-subject"),
+  } as TrustedLaunchSubject;
+}
+
 interface LockedLaunchSubject extends TrustedLaunchSubject {
   influencerId: string;
   language: string;
@@ -706,11 +904,22 @@ export function deriveLaunchSubjectDigest(subject: Omit<TrustedLaunchSubject, "l
 
 function publicSubject(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest"> | TrustedLaunchSubject) {
   return {
+    ...launchFacts(subject),
+    launchIntentId: subject.launchIntentId, launchIntentDigest: subject.launchIntentDigest,
+  };
+}
+
+function launchFacts(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest"> | TrustedLaunchSubject) {
+  return {
     scope: subject.scope, dailyPlanId: subject.dailyPlanId, dailyPlanSlotId: subject.dailyPlanSlotId,
     slotAttempt: subject.slotAttempt, planDigest: subject.planDigest, slotDigest: subject.slotDigest,
+    sourceRosterKey: subject.sourceRosterKey, sourceRosterDigest: subject.sourceRosterDigest,
+    sourceMemberKey: subject.sourceMemberKey,
     providerAccountId: subject.providerAccountId, providerKey: subject.providerKey,
-    providerCredentialVersion: subject.providerCredentialVersion, scriptVariantId: subject.scriptVariantId,
-    scriptVariantChecksum: subject.scriptVariantChecksum, governanceProfileId: subject.governanceProfileId,
+    providerCredentialVersion: subject.providerCredentialVersion, scriptId: subject.scriptId,
+    scriptVariantId: subject.scriptVariantId, scriptVariantChecksum: subject.scriptVariantChecksum,
+    sourceType: subject.sourceType, sourceItemId: subject.sourceItemId, sourceContentHash: subject.sourceContentHash,
+    governanceProfileId: subject.governanceProfileId,
     governanceEvidenceDigest: subject.governanceEvidenceDigest, governanceUse: subject.governanceUse,
     governanceTerritory: subject.governanceTerritory, contentCountry: subject.contentCountry,
   };
@@ -719,15 +928,26 @@ function publicSubject(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest"
 function validateTrustedSubject(subject: TrustedLaunchSubject): void {
   validScope(subject.scope);
   for (const [field, id] of [["dailyPlanId", subject.dailyPlanId], ["dailyPlanSlotId", subject.dailyPlanSlotId],
-    ["providerAccountId", subject.providerAccountId], ["scriptVariantId", subject.scriptVariantId],
-    ["governanceProfileId", subject.governanceProfileId]] as const) uuid(id, field);
+    ["providerAccountId", subject.providerAccountId], ["scriptId", subject.scriptId],
+    ["scriptVariantId", subject.scriptVariantId], ["governanceProfileId", subject.governanceProfileId],
+    ["launchIntentId", subject.launchIntentId]] as const) uuid(id, field);
   positiveInteger(subject.slotAttempt, "slotAttempt");
   positiveInteger(subject.providerCredentialVersion, "providerCredentialVersion");
   safe(subject.providerKey, "providerKey", 80);
   validDigest(subject.planDigest, "planDigest"); validDigest(subject.slotDigest, "slotDigest");
+  safe(subject.sourceRosterKey, "sourceRosterKey", 200); safe(subject.sourceMemberKey, "sourceMemberKey", 200);
+  validDigest(subject.sourceRosterDigest, "sourceRosterDigest");
   validDigest(subject.governanceEvidenceDigest, "governanceEvidenceDigest");
   validDigest(subject.launchSubjectDigest, "launchSubjectDigest");
+  validDigest(subject.launchIntentDigest, "launchIntentDigest");
   if (!RAW_SHA256.test(subject.scriptVariantChecksum)) throw invalid("scriptVariantChecksum is invalid");
+  safe(subject.sourceType, "sourceType", 80);
+  if (subject.sourceType === "manual") {
+    if (subject.sourceItemId !== null || subject.sourceContentHash !== null) throw invalid("manual source binding is invalid");
+  } else {
+    uuid(String(subject.sourceItemId), "sourceItemId");
+    validDigest(String(subject.sourceContentHash), "sourceContentHash");
+  }
   safe(subject.governanceUse, "governanceUse", 80);
   safe(subject.governanceTerritory, "governanceTerritory", 80);
   if (!COUNTRY.test(subject.contentCountry)) throw invalid("contentCountry is invalid");
@@ -774,6 +994,8 @@ function assertEvidenceAdmits(evidence: Map<EvidenceKind, Row>, subject: LockedL
   for (const [kind, row] of evidence) {
     if (String(value(row, "evidenceKind", "evidence_kind")) !== kind || String(row.decision) !== expected.get(kind)
       || String(value(row, "launchSubjectDigest", "launch_subject_digest")) !== subject.launchSubjectDigest
+      || String(value(row, "launchIntentId", "launch_intent_id")) !== subject.launchIntentId
+      || String(value(row, "launchIntentDigest", "launch_intent_digest")) !== subject.launchIntentDigest
       || String(value(row, "dailyPlanSlotId", "daily_plan_slot_id")) !== subject.dailyPlanSlotId
       || Number(value(row, "slotAttempt", "slot_attempt")) !== subject.slotAttempt
       || String(value(row, "providerAccountId", "provider_account_id")) !== subject.providerAccountId

@@ -11,6 +11,7 @@ import {
   aiMediaProviderResources,
   aiMediaScripts,
   aiMediaScriptVariants,
+  aiMediaSourceItems,
 } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
 import type { Sha256Digest } from "./contracts";
@@ -18,6 +19,7 @@ import { lockAuthorityWorkspace, lockGovernanceProfile } from "./authority-locks
 
 const AUTHORITY_SNAPSHOTS = sql.raw('"ai_media_launch_authority_snapshots"');
 const LAUNCH_EVIDENCE = sql.raw('"ai_media_launch_evidence"');
+const LAUNCH_INTENTS = sql.raw('"ai_media_launch_intents"');
 const POLICY_REVISIONS = sql.raw('"ai_media_admission_policy_revisions"');
 const KILL_SWITCH_REVISIONS = sql.raw('"ai_media_kill_switch_revisions"');
 
@@ -305,24 +307,45 @@ export class DrizzleDailyAdmissionRepository {
 
       const gateRows = resultRows(await tx.execute(sql`
         SELECT snapshots.id AS authority_snapshot_id, snapshots.authority_digest,
-          snapshots.slot_attempt, quotes.amount_micro_usd, snapshots.admission_digest
+          snapshots.slot_attempt, quotes.amount_micro_usd, snapshots.admission_digest,
+          intents.source_type, intents.source_item_id, intents.source_content_hash
         FROM ${AUTHORITY_SNAPSHOTS} snapshots
+        INNER JOIN ${LAUNCH_INTENTS} intents
+          ON intents.owner_user_id=snapshots.owner_user_id AND intents.workspace_id=snapshots.workspace_id
+          AND intents.id=snapshots.launch_intent_id AND intents.launch_intent_digest=snapshots.launch_intent_digest
+          AND intents.daily_plan_id=snapshots.daily_plan_id AND intents.daily_plan_slot_id=snapshots.daily_plan_slot_id
+          AND intents.slot_attempt=snapshots.slot_attempt AND intents.plan_digest=snapshots.plan_digest
+          AND intents.slot_digest=snapshots.slot_digest AND intents.provider_account_id=snapshots.provider_account_id
+          AND intents.provider_key=snapshots.provider_key
+          AND intents.provider_credential_version=snapshots.provider_credential_version
+          AND intents.script_variant_id=snapshots.script_variant_id
+          AND intents.script_variant_checksum=snapshots.script_variant_checksum
+          AND intents.governance_profile_id=snapshots.governance_profile_id
+          AND intents.governance_evidence_digest=snapshots.governance_evidence_digest
+          AND intents.governance_use=snapshots.governance_use
+          AND intents.governance_territory=snapshots.governance_territory
+          AND intents.content_country=snapshots.content_country
+          AND intents.launch_subject_digest=snapshots.launch_subject_digest
         INNER JOIN ${LAUNCH_EVIDENCE} content
           ON content.owner_user_id=snapshots.owner_user_id AND content.workspace_id=snapshots.workspace_id
           AND content.id=snapshots.content_approval_evidence_id
           AND content.evidence_digest=snapshots.content_approval_evidence_digest
+          AND content.launch_intent_id=intents.id AND content.launch_intent_digest=intents.launch_intent_digest
         INNER JOIN ${LAUNCH_EVIDENCE} human
           ON human.owner_user_id=snapshots.owner_user_id AND human.workspace_id=snapshots.workspace_id
           AND human.id=snapshots.human_launch_approval_evidence_id
           AND human.evidence_digest=snapshots.human_launch_approval_evidence_digest
+          AND human.launch_intent_id=intents.id AND human.launch_intent_digest=intents.launch_intent_digest
         INNER JOIN ${LAUNCH_EVIDENCE} sandbox
           ON sandbox.owner_user_id=snapshots.owner_user_id AND sandbox.workspace_id=snapshots.workspace_id
           AND sandbox.id=snapshots.sandbox_evidence_id
           AND sandbox.evidence_digest=snapshots.sandbox_evidence_digest
+          AND sandbox.launch_intent_id=intents.id AND sandbox.launch_intent_digest=intents.launch_intent_digest
         INNER JOIN ${LAUNCH_EVIDENCE} quotes
           ON quotes.owner_user_id=snapshots.owner_user_id AND quotes.workspace_id=snapshots.workspace_id
           AND quotes.id=snapshots.maximum_quote_evidence_id
           AND quotes.evidence_digest=snapshots.maximum_quote_evidence_digest
+          AND quotes.launch_intent_id=intents.id AND quotes.launch_intent_digest=intents.launch_intent_digest
         INNER JOIN ${POLICY_REVISIONS} policy
           ON policy.owner_user_id=snapshots.owner_user_id AND policy.workspace_id=snapshots.workspace_id
           AND policy.id=snapshots.policy_revision_id AND policy.revision=snapshots.policy_revision
@@ -337,6 +360,8 @@ export class DrizzleDailyAdmissionRepository {
           AND plans.provider_account_id=snapshots.provider_account_id
           AND plans.provider_key=snapshots.provider_key
           AND plans.provider_credential_version=snapshots.provider_credential_version
+          AND plans.source_roster_key=intents.source_roster_key
+          AND plans.source_roster_digest=intents.source_roster_digest
         INNER JOIN ${aiMediaDailyPlanSlots} slots
           ON slots.owner_user_id=snapshots.owner_user_id AND slots.workspace_id=snapshots.workspace_id
           AND slots.id=snapshots.daily_plan_slot_id AND slots.daily_plan_id=snapshots.daily_plan_id
@@ -345,6 +370,7 @@ export class DrizzleDailyAdmissionRepository {
           AND slots.provider_key=snapshots.provider_key
           AND slots.provider_credential_version=snapshots.provider_credential_version
           AND slots.script_variant_id=snapshots.script_variant_id
+          AND slots.source_member_key=intents.source_member_key
         INNER JOIN ${aiMediaBudgetBuckets} buckets
           ON buckets.owner_user_id=snapshots.owner_user_id AND buckets.workspace_id=snapshots.workspace_id
         INNER JOIN ${aiMediaProviderAccounts} accounts
@@ -371,7 +397,12 @@ export class DrizzleDailyAdmissionRepository {
           AND variants.id=snapshots.script_variant_id AND variants.checksum=snapshots.script_variant_checksum
         INNER JOIN ${aiMediaScripts} scripts
           ON scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
-          AND scripts.id=variants.script_id
+          AND scripts.id=intents.script_id AND scripts.id=variants.script_id
+          AND scripts.source_type=intents.source_type AND scripts.current_variant_id=intents.script_variant_id
+        LEFT JOIN ${aiMediaSourceItems} sources
+          ON sources.owner_user_id=intents.owner_user_id AND sources.workspace_id=intents.workspace_id
+          AND sources.id=intents.source_item_id AND sources.source_type=intents.source_type
+          AND sources.content_hash=intents.source_content_hash
         WHERE snapshots.owner_user_id=${request.scope.ownerUserId}
           AND snapshots.workspace_id=${request.scope.workspaceId}
           AND snapshots.id=${request.authoritySnapshotId}
@@ -397,6 +428,12 @@ export class DrizzleDailyAdmissionRepository {
           AND influencers.status='active' AND influencers.archived_at IS NULL
           AND avatars.status='active' AND voices.status='active'
           AND variants.status='approved'
+          AND scripts.status='approved'
+          AND ((intents.source_type='manual' AND intents.source_item_id IS NULL
+              AND intents.source_content_hash IS NULL)
+            OR (intents.source_type<>'manual' AND sources.id IS NOT NULL
+              AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
+              AND sources.rights_status IN ('owned','licensed')))
           AND governance.state='active' AND governance.revoked_at IS NULL
           AND governance.valid_from<=clock_timestamp() AND governance.expires_at>clock_timestamp()
           AND governance.allowed_uses @> jsonb_build_array(snapshots.governance_use)
@@ -501,11 +538,38 @@ export class DrizzleDailyAdmissionRepository {
             WHERE previous.owner_user_id=slots.owner_user_id
               AND previous.workspace_id=slots.workspace_id
               AND previous.daily_plan_slot_id=slots.id),1)
-        FOR UPDATE OF snapshots, content, human, sandbox, quotes, policy, kill,
+        FOR UPDATE OF snapshots, content, human, sandbox, quotes, policy, kill, intents,
           plans, slots, buckets, accounts, governance, influencers, avatars, voices, variants, scripts
       `));
       if (gateRows.length !== 1) {
         throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Exact durable launch authority did not admit this slot");
+      }
+
+      const boundIntent = gateRows[0];
+      const sourceType = String(value(boundIntent, "sourceType", "source_type"));
+      const sourceItemId = value(boundIntent, "sourceItemId", "source_item_id");
+      const sourceContentHash = value(boundIntent, "sourceContentHash", "source_content_hash");
+      if (sourceType === "manual") {
+        if (sourceItemId !== null || sourceContentHash !== null) {
+          throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Manual launch intent has an invalid source binding");
+        }
+      } else {
+        if (!sourceType || sourceItemId === null || sourceItemId === undefined
+          || sourceContentHash === null || sourceContentHash === undefined
+          || !SHA256.test(String(sourceContentHash))) {
+          throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Launch intent source binding is incomplete");
+        }
+        const lockedSources = resultRows(await tx.execute(sql`
+          SELECT id FROM ${aiMediaSourceItems}
+          WHERE owner_user_id=${request.scope.ownerUserId} AND workspace_id=${request.scope.workspaceId}
+            AND id=${sourceItemId} AND source_type=${sourceType} AND content_hash=${sourceContentHash}
+            AND status IN ('accepted','ready') AND moderation_status='approved'
+            AND rights_status IN ('owned','licensed')
+          FOR UPDATE
+        `));
+        if (lockedSources.length !== 1) {
+          throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Exact durable source is no longer launchable");
+        }
       }
 
       const createdRows = resultRows(await tx.execute(sql`
@@ -522,18 +586,38 @@ export class DrizzleDailyAdmissionRepository {
             snapshots.policy_digest, snapshots.kill_switch_evidence_digest,
             snapshots.sandbox_evidence_digest, fresh_clock.observed_at
           FROM ${AUTHORITY_SNAPSHOTS} snapshots
+          INNER JOIN ${LAUNCH_INTENTS} intents ON intents.id=snapshots.launch_intent_id
+            AND intents.owner_user_id=snapshots.owner_user_id AND intents.workspace_id=snapshots.workspace_id
+            AND intents.launch_intent_digest=snapshots.launch_intent_digest
+            AND intents.daily_plan_id=snapshots.daily_plan_id AND intents.daily_plan_slot_id=snapshots.daily_plan_slot_id
+            AND intents.slot_attempt=snapshots.slot_attempt AND intents.plan_digest=snapshots.plan_digest
+            AND intents.slot_digest=snapshots.slot_digest AND intents.provider_account_id=snapshots.provider_account_id
+            AND intents.provider_key=snapshots.provider_key
+            AND intents.provider_credential_version=snapshots.provider_credential_version
+            AND intents.script_variant_id=snapshots.script_variant_id
+            AND intents.script_variant_checksum=snapshots.script_variant_checksum
+            AND intents.governance_profile_id=snapshots.governance_profile_id
+            AND intents.governance_evidence_digest=snapshots.governance_evidence_digest
+            AND intents.governance_use=snapshots.governance_use
+            AND intents.governance_territory=snapshots.governance_territory
+            AND intents.content_country=snapshots.content_country
+            AND intents.launch_subject_digest=snapshots.launch_subject_digest
           INNER JOIN ${LAUNCH_EVIDENCE} content ON content.id=snapshots.content_approval_evidence_id
             AND content.owner_user_id=snapshots.owner_user_id AND content.workspace_id=snapshots.workspace_id
             AND content.evidence_digest=snapshots.content_approval_evidence_digest
+            AND content.launch_intent_id=intents.id AND content.launch_intent_digest=intents.launch_intent_digest
           INNER JOIN ${LAUNCH_EVIDENCE} human ON human.id=snapshots.human_launch_approval_evidence_id
             AND human.owner_user_id=snapshots.owner_user_id AND human.workspace_id=snapshots.workspace_id
             AND human.evidence_digest=snapshots.human_launch_approval_evidence_digest
+            AND human.launch_intent_id=intents.id AND human.launch_intent_digest=intents.launch_intent_digest
           INNER JOIN ${LAUNCH_EVIDENCE} sandbox ON sandbox.id=snapshots.sandbox_evidence_id
             AND sandbox.owner_user_id=snapshots.owner_user_id AND sandbox.workspace_id=snapshots.workspace_id
             AND sandbox.evidence_digest=snapshots.sandbox_evidence_digest
+            AND sandbox.launch_intent_id=intents.id AND sandbox.launch_intent_digest=intents.launch_intent_digest
           INNER JOIN ${LAUNCH_EVIDENCE} quotes ON quotes.id=snapshots.maximum_quote_evidence_id
             AND quotes.owner_user_id=snapshots.owner_user_id AND quotes.workspace_id=snapshots.workspace_id
             AND quotes.evidence_digest=snapshots.maximum_quote_evidence_digest
+            AND quotes.launch_intent_id=intents.id AND quotes.launch_intent_digest=intents.launch_intent_digest
           INNER JOIN ${POLICY_REVISIONS} policy ON policy.id=snapshots.policy_revision_id
             AND policy.owner_user_id=snapshots.owner_user_id AND policy.workspace_id=snapshots.workspace_id
             AND policy.revision=snapshots.policy_revision AND policy.policy_digest=snapshots.policy_digest
@@ -546,10 +630,13 @@ export class DrizzleDailyAdmissionRepository {
             AND plans.plan_digest=snapshots.plan_digest AND plans.provider_account_id=snapshots.provider_account_id
             AND plans.provider_key=snapshots.provider_key
             AND plans.provider_credential_version=snapshots.provider_credential_version
+            AND plans.source_roster_key=intents.source_roster_key
+            AND plans.source_roster_digest=intents.source_roster_digest
           INNER JOIN ${aiMediaDailyPlanSlots} slots ON slots.id=snapshots.daily_plan_slot_id
             AND slots.owner_user_id=snapshots.owner_user_id AND slots.workspace_id=snapshots.workspace_id
             AND slots.daily_plan_id=snapshots.daily_plan_id AND slots.slot_digest=snapshots.slot_digest
             AND slots.script_variant_id=snapshots.script_variant_id
+            AND slots.source_member_key=intents.source_member_key
           INNER JOIN ${aiMediaBudgetBuckets} buckets
             ON buckets.owner_user_id=snapshots.owner_user_id AND buckets.workspace_id=snapshots.workspace_id
           INNER JOIN ${aiMediaProviderAccounts} accounts ON accounts.id=snapshots.provider_account_id
@@ -575,6 +662,11 @@ export class DrizzleDailyAdmissionRepository {
             AND variants.checksum=snapshots.script_variant_checksum
           INNER JOIN ${aiMediaScripts} scripts ON scripts.id=variants.script_id
             AND scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
+            AND scripts.id=intents.script_id AND scripts.source_type=intents.source_type
+            AND scripts.current_variant_id=intents.script_variant_id
+          LEFT JOIN ${aiMediaSourceItems} sources ON sources.owner_user_id=intents.owner_user_id
+            AND sources.workspace_id=intents.workspace_id AND sources.id=intents.source_item_id
+            AND sources.source_type=intents.source_type AND sources.content_hash=intents.source_content_hash
           CROSS JOIN fresh_clock
           WHERE snapshots.id=${request.authoritySnapshotId}
             AND snapshots.owner_user_id=${request.scope.ownerUserId}
@@ -609,6 +701,12 @@ export class DrizzleDailyAdmissionRepository {
             AND (governance.territories @> jsonb_build_array(snapshots.governance_territory)
               OR governance.territories @> '["WORLDWIDE"]'::jsonb)
             AND variants.status='approved'
+            AND scripts.status='approved'
+            AND ((intents.source_type='manual' AND intents.source_item_id IS NULL
+                AND intents.source_content_hash IS NULL)
+              OR (intents.source_type<>'manual' AND sources.id IS NOT NULL
+                AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
+                AND sources.rights_status IN ('owned','licensed')))
             AND content.evidence_kind='content_approval' AND content.decision='approved'
             AND human.evidence_kind='human_launch_approval' AND human.decision='approved'
             AND sandbox.evidence_kind='sandbox_proof' AND sandbox.decision='passed'

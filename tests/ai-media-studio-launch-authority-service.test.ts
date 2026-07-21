@@ -5,6 +5,7 @@ import {
   LaunchAuthorityServiceError,
   type AuthorizedLaunchAuthorityWrite,
   type CreateLaunchAuthoritySnapshotCommand,
+  type DeclareLaunchIntentCommand,
   type LaunchAuthorityCapability,
   type LaunchAuthorityPrincipalAuthenticator,
   type LaunchAuthorityReceipt,
@@ -17,8 +18,6 @@ import {
   type ReviseLaunchAdmissionPolicyCommand,
   type ReviseLaunchKillSwitchCommand,
   type TrustedLaunchAuthorityPrincipal,
-  type TrustedMaximumQuoteAttestation,
-  type TrustedSandboxAttestation,
 } from "../server/ai-media-studio/planning/launch-authority-contracts";
 import {
   LAUNCH_AUTHORITY_OPERATIONS,
@@ -29,7 +28,6 @@ import {
 const scope = Object.freeze({ ownerUserId: "owner-1", workspaceId: "workspace-1" }) satisfies TenantScope;
 const slotId = "22222222-2222-4222-8222-222222222222";
 const receiptId = "99999999-9999-4999-8999-999999999999";
-const sourceEvidenceDigest = `sha256:${"d".repeat(64)}` as const;
 const authEvidenceDigest = `sha256:${"e".repeat(64)}` as const;
 
 function principal(
@@ -46,19 +44,8 @@ function principal(
   } as TrustedLaunchAuthorityPrincipal;
 }
 
-const sandboxAttestation = {
-  attestationId: "sandbox-run-0001",
-  decision: "passed",
-  sourceEvidenceDigest,
-} as TrustedSandboxAttestation;
-
-const quoteAttestation = {
-  attestationId: "provider-quote-0001",
-  decision: "quoted",
-  maximumQuoteMicroUsd: "1250000",
-  currency: "USD",
-  sourceEvidenceDigest,
-} as TrustedMaximumQuoteAttestation;
+const sandboxAttestationHandle = `lar_${"s".repeat(43)}`;
+const quoteAttestationHandle = `lar_${"q".repeat(43)}`;
 
 const policyCommand: ReviseLaunchAdmissionPolicyCommand = {
   scope,
@@ -85,12 +72,22 @@ const humanCommand: RecordHumanLaunchApprovalCommand = {
   scope, dailyPlanSlotId: slotId, slotAttempt: 1, decision: "approved", idempotencyKey: "human-launch-approval-0001",
 };
 
+const launchIntentCommand: DeclareLaunchIntentCommand = {
+  scope,
+  dailyPlanSlotId: slotId,
+  slotAttempt: 1,
+  governanceUse: "commercial_social_video",
+  governanceTerritory: "US",
+  contentCountry: "US",
+  idempotencyKey: "launch-intent-0001",
+};
+
 const sandboxCommand: RecordSandboxAttestationCommand = {
-  scope, dailyPlanSlotId: slotId, slotAttempt: 1, attestation: sandboxAttestation, idempotencyKey: "sandbox-attestation-0001",
+  scope, dailyPlanSlotId: slotId, slotAttempt: 1, attestationHandle: sandboxAttestationHandle, idempotencyKey: "sandbox-attestation-0001",
 };
 
 const quoteCommand: RecordMaximumQuoteAttestationCommand = {
-  scope, dailyPlanSlotId: slotId, slotAttempt: 1, attestation: quoteAttestation, idempotencyKey: "quote-attestation-0001",
+  scope, dailyPlanSlotId: slotId, slotAttempt: 1, attestationHandle: quoteAttestationHandle, idempotencyKey: "quote-attestation-0001",
 };
 
 const snapshotCommand: CreateLaunchAuthoritySnapshotCommand = {
@@ -109,6 +106,7 @@ function repository(captured: Captured[], receiptOverride?: Partial<LaunchAuthor
     reviseKillSwitch: (input) => receipt("reviseKillSwitch", "kill_switch", input),
     recordContentApproval: (input) => receipt("recordContentApproval", "content_approval", input),
     recordHumanLaunchApproval: (input) => receipt("recordHumanLaunchApproval", "human_launch_approval", input),
+    declareLaunchIntent: (input) => receipt("declareLaunchIntent", "launch_intent", input),
     recordSandboxAttestation: (input) => receipt("recordSandboxAttestation", "sandbox_proof", input),
     recordMaximumQuoteAttestation: (input) => receipt("recordMaximumQuoteAttestation", "maximum_quote", input),
     createAuthoritySnapshot: async (input) => {
@@ -136,6 +134,7 @@ test("separate authority methods enforce the exact capability and principal-kind
     { capability: "kill_switch:revise", kind: "user", method: "reviseKillSwitch", command: killCommand },
     { capability: "content:decide", kind: "user", method: "recordContentApproval", command: contentCommand },
     { capability: "human_launch:decide", kind: "user", method: "recordHumanLaunchApproval", command: humanCommand },
+    { capability: "launch_intent:declare", kind: "user", method: "declareLaunchIntent", command: launchIntentCommand },
     { capability: "sandbox:attest", kind: "workload", method: "recordSandboxAttestation", command: sandboxCommand },
     { capability: "quote:attest", kind: "workload", method: "recordMaximumQuoteAttestation", command: quoteCommand },
     { capability: "snapshot:create", kind: "workload", method: "createAuthoritySnapshot", command: snapshotCommand },
@@ -218,7 +217,34 @@ test("human and content inputs reject all caller self-certification fields", asy
   assert.deepEqual(Object.keys(contentCommand).sort(), ["dailyPlanSlotId", "decision", "idempotencyKey", "scope", "slotAttempt"]);
 });
 
-test("trusted attestations remain narrow and quote money is exact positive integer micro-USD", async () => {
+test("launch intent is human-only and exposes only governance selections over a server-resolved slot", async () => {
+  const captured: Captured[] = [];
+  const userService = new LaunchAuthorityService({
+    repository: repository(captured),
+    authenticator: authenticator(async () => principal("launch_intent:declare", "user")),
+  });
+  await userService.declareLaunchIntent({}, launchIntentCommand);
+  assert.deepEqual(Object.keys(captured[0].input.command).sort(), [
+    "contentCountry", "dailyPlanSlotId", "governanceTerritory", "governanceUse", "idempotencyKey", "scope", "slotAttempt",
+  ]);
+  for (const forbidden of ["providerAccountId", "scriptVariantId", "sourceRosterKey", "sourceMemberKey",
+    "launchIntentId", "launchIntentDigest", "launchSubjectDigest", "validFrom", "createdAt"]) {
+    assert.throws(() => userService.declareLaunchIntent({}, { ...launchIntentCommand, [forbidden]: "spoofed" } as any),
+      (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "INVALID_REQUEST");
+  }
+  for (const field of ["governanceUse", "governanceTerritory"] as const) {
+    assert.throws(() => userService.declareLaunchIntent({}, { ...launchIntentCommand, [field]: "x".repeat(81) }),
+      (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "INVALID_REQUEST");
+  }
+  const workloadService = new LaunchAuthorityService({
+    repository: repository([]),
+    authenticator: authenticator(async () => principal("launch_intent:declare", "workload")),
+  });
+  await assert.rejects(workloadService.declareLaunchIntent({}, launchIntentCommand),
+    (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "FORBIDDEN");
+});
+
+test("runtime evidence commands accept only bounded opaque attestation handles", async () => {
   const captured: Captured[] = [];
   const service = new LaunchAuthorityService({
     repository: repository(captured),
@@ -226,16 +252,18 @@ test("trusted attestations remain narrow and quote money is exact positive integ
   });
   await service.recordSandboxAttestation({}, sandboxCommand);
   await service.recordMaximumQuoteAttestation({}, quoteCommand);
-  assert.deepEqual(Object.keys(captured[0].input.command.attestation).sort(), ["attestationId", "decision", "sourceEvidenceDigest"]);
-  assert.deepEqual(Object.keys(captured[1].input.command.attestation).sort(), [
-    "attestationId", "currency", "decision", "maximumQuoteMicroUsd", "sourceEvidenceDigest",
+  assert.deepEqual(Object.keys(captured[0].input.command).sort(), [
+    "attestationHandle", "dailyPlanSlotId", "idempotencyKey", "scope", "slotAttempt",
+  ]);
+  assert.deepEqual(Object.keys(captured[1].input.command).sort(), [
+    "attestationHandle", "dailyPlanSlotId", "idempotencyKey", "scope", "slotAttempt",
   ]);
 
-  for (const invalid of ["0", "01", "1.5", "-1", "9000000000000001"]) {
+  for (const invalid of ["short", "contains spaces".repeat(4), `x${"a".repeat(200)}`]) {
     assert.throws(
       () => service.recordMaximumQuoteAttestation({}, {
         ...quoteCommand,
-        attestation: { ...quoteAttestation, maximumQuoteMicroUsd: invalid } as TrustedMaximumQuoteAttestation,
+        attestationHandle: invalid,
       }),
       (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "INVALID_REQUEST",
     );
@@ -285,6 +313,7 @@ test("service surface has no generic issue-evidence or activation method", () =>
   const methods = Object.getOwnPropertyNames(LaunchAuthorityService.prototype).filter((name) => name !== "constructor").sort();
   assert.deepEqual(methods, [
     "createAuthoritySnapshot",
+    "declareLaunchIntent",
     "execute",
     "recordContentApproval",
     "recordHumanLaunchApproval",

@@ -2,7 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Active local checkpoint: PR21 authenticated authority issuers
+## Active local checkpoint: PR22 exact launch intent and runtime attestations
+
+- Branch: `codex/ai-media-studio-launch-intent-attestations`, stacked on draft PR #104.
+- Scope: immutable tenant/slot/attempt launch intents bind exact current plan, roster member, provider credential, approved script/source and governance facts. Evidence, snapshots and both admission guards require the same intent identity.
+- Runtime boundary: sandbox and maximum-quote commands carry only opaque handles. Verification occurs after the exact subject is locked and PostgreSQL time is read. The bundled process-local issuer/verifier is least-privilege reference/test composition only and is not durable across restarts or suitable for distributed production.
+- Source boundary: non-manual sources require a canonical content hash, accepted/ready state, approved moderation and owned/licensed rights. Admission locks the exact source row through its final guard; a content refresh remains allowed but invalidates the stale intent. Runtime attestation ID/digest fields remain in append-only evidence for audit reconstruction.
+- Safety boundary: migration artifacts are unapplied and the repository remains absent from routes/public barrels/runtime composition. No HeyGen call, render job, outbox work, credit spend, post, migration application, secret change or deployment is enabled.
+- Verification evidence: 43 focused checks, the full AI Media Studio suite (576 passed, 9 PostgreSQL-only skipped), isolated PostgreSQL 16 (9/9), TypeScript, production build, generated codebase map and diff hygiene pass before the final review cycle.
+- Remaining gates: production RBAC/authenticator composition, durable distributed runtime attestation verification, budget-bucket provisioning, production-scale counters, staging-copy migration/restart rehearsal, a separately approved small HeyGen sandbox, and Robert's explicit spend/deployment approval.
+
+## Preserved checkpoint: PR21 authenticated authority issuers
 
 - Branch: `codex/ai-media-studio-authority-issuers`, draft PR #104, stacked on draft PR #103.
 - Scope: server-only, capability-separated policy, kill-switch, content approval, human launch approval, sandbox, maximum-quote and snapshot issuers; append-only Drizzle persistence; shared authority/governance locks; and an isolated PostgreSQL test harness.

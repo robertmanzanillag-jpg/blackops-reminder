@@ -5,6 +5,7 @@ export const LAUNCH_AUTHORITY_CAPABILITIES = [
   "kill_switch:revise",
   "content:decide",
   "human_launch:decide",
+  "launch_intent:declare",
   "sandbox:attest",
   "quote:attest",
   "snapshot:create",
@@ -14,8 +15,8 @@ export type LaunchAuthorityCapability = (typeof LAUNCH_AUTHORITY_CAPABILITIES)[n
 export type LaunchAuthorityPrincipalKind = "user" | "workload";
 
 declare const trustedLaunchAuthorityPrincipalBrand: unique symbol;
-declare const trustedSandboxAttestationBrand: unique symbol;
-declare const trustedMaximumQuoteAttestationBrand: unique symbol;
+declare const verifiedSandboxAttestationBrand: unique symbol;
+declare const verifiedMaximumQuoteAttestationBrand: unique symbol;
 
 /**
  * Minted only by a server-owned authenticator. HTTP/body DTOs must never carry
@@ -44,25 +45,29 @@ export interface LaunchAuthorityPrincipalAuthenticator {
  * A sandbox adapter may attest a result, but cannot select the tenant, slot,
  * provider account, governance subject, timestamps, revision, or digest.
  */
-export interface TrustedSandboxAttestation {
+export interface VerifiedSandboxAttestation {
+  readonly kind: "sandbox_proof";
   readonly attestationId: string;
   readonly decision: "passed" | "failed" | "revoked";
   readonly sourceEvidenceDigest: `sha256:${string}`;
-  readonly [trustedSandboxAttestationBrand]: true;
+  readonly [verifiedSandboxAttestationBrand]: true;
 }
 
 /**
  * A quote adapter is the only input boundary allowed to carry provider-priced
  * micro-USD. Browser/human commands never accept money.
  */
-export interface TrustedMaximumQuoteAttestation {
+export interface VerifiedMaximumQuoteAttestation {
+  readonly kind: "maximum_quote";
   readonly attestationId: string;
   readonly decision: "quoted" | "declined" | "revoked";
   readonly maximumQuoteMicroUsd: string;
   readonly currency: "USD";
   readonly sourceEvidenceDigest: `sha256:${string}`;
-  readonly [trustedMaximumQuoteAttestationBrand]: true;
+  readonly [verifiedMaximumQuoteAttestationBrand]: true;
 }
+
+export type VerifiedLaunchRuntimeAttestation = VerifiedSandboxAttestation | VerifiedMaximumQuoteAttestation;
 
 declare const trustedLaunchSubjectBrand: unique symbol;
 
@@ -77,26 +82,47 @@ export interface TrustedLaunchSubject {
   readonly slotAttempt: number;
   readonly planDigest: `sha256:${string}`;
   readonly slotDigest: `sha256:${string}`;
+  readonly sourceRosterKey: string;
+  readonly sourceRosterDigest: `sha256:${string}`;
+  readonly sourceMemberKey: string;
   readonly providerAccountId: string;
   readonly providerKey: string;
   readonly providerCredentialVersion: number;
   readonly scriptVariantId: string;
   readonly scriptVariantChecksum: string;
+  readonly scriptId: string;
+  readonly sourceType: string;
+  readonly sourceItemId: string | null;
+  readonly sourceContentHash: string | null;
   readonly governanceProfileId: string;
   readonly governanceEvidenceDigest: `sha256:${string}`;
   readonly governanceUse: string;
   readonly governanceTerritory: string;
   readonly contentCountry: string;
+  readonly launchIntentId: string;
+  readonly launchIntentDigest: `sha256:${string}`;
   readonly launchSubjectDigest: `sha256:${string}`;
   readonly [trustedLaunchSubjectBrand]: true;
 }
 
-export interface LaunchSubjectResolver {
-  resolve(input: Readonly<{
-    scope: TenantScope;
-    dailyPlanSlotId: string;
-    slotAttempt: number;
-  }>): Promise<TrustedLaunchSubject | undefined>;
+export interface VerifyLaunchRuntimeAttestationInput {
+  readonly kind: "sandbox_proof" | "maximum_quote";
+  readonly attestationHandle: string;
+  readonly scope: TenantScope;
+  readonly principal: TrustedLaunchAuthorityPrincipal;
+  readonly subject: TrustedLaunchSubject;
+  /** Fresh database time read in the same transaction after locking subject rows. */
+  readonly databaseNow: Date;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Runtime adapters exchange only opaque handles with authority commands. The
+ * repository invokes this verifier after locking the exact durable subject and
+ * reading DB time; callers can never submit a trusted attestation object.
+ */
+export interface LaunchRuntimeAttestationVerifier {
+  verify(input: Readonly<VerifyLaunchRuntimeAttestationInput>): Promise<VerifiedLaunchRuntimeAttestation | undefined>;
 }
 
 /** DB time owns valid-from; this policy contributes only bounded durations. */
@@ -146,11 +172,21 @@ export interface RecordHumanLaunchApprovalCommand {
   idempotencyKey: string;
 }
 
+export interface DeclareLaunchIntentCommand {
+  scope: TenantScope;
+  dailyPlanSlotId: string;
+  slotAttempt: number;
+  governanceUse: string;
+  governanceTerritory: string;
+  contentCountry: string;
+  idempotencyKey: string;
+}
+
 export interface RecordSandboxAttestationCommand {
   scope: TenantScope;
   dailyPlanSlotId: string;
   slotAttempt: number;
-  attestation: TrustedSandboxAttestation;
+  attestationHandle: string;
   idempotencyKey: string;
 }
 
@@ -158,7 +194,7 @@ export interface RecordMaximumQuoteAttestationCommand {
   scope: TenantScope;
   dailyPlanSlotId: string;
   slotAttempt: number;
-  attestation: TrustedMaximumQuoteAttestation;
+  attestationHandle: string;
   idempotencyKey: string;
 }
 
@@ -171,7 +207,7 @@ export interface CreateLaunchAuthoritySnapshotCommand {
 
 export interface LaunchAuthorityReceipt {
   id: string;
-  kind: "policy" | "kill_switch" | "content_approval" | "human_launch_approval"
+  kind: "policy" | "kill_switch" | "content_approval" | "human_launch_approval" | "launch_intent"
     | "sandbox_proof" | "maximum_quote" | "authority_snapshot";
   inputDigest: `sha256:${string}`;
   replayed: boolean;
@@ -199,6 +235,7 @@ export interface LaunchAuthorityRepository {
   reviseKillSwitch(input: AuthorizedLaunchAuthorityWrite<ReviseLaunchKillSwitchCommand>): Promise<LaunchAuthorityReceipt>;
   recordContentApproval(input: AuthorizedLaunchAuthorityWrite<RecordContentApprovalCommand>): Promise<LaunchAuthorityReceipt>;
   recordHumanLaunchApproval(input: AuthorizedLaunchAuthorityWrite<RecordHumanLaunchApprovalCommand>): Promise<LaunchAuthorityReceipt>;
+  declareLaunchIntent(input: AuthorizedLaunchAuthorityWrite<DeclareLaunchIntentCommand>): Promise<LaunchAuthorityReceipt>;
   recordSandboxAttestation(input: AuthorizedLaunchAuthorityWrite<RecordSandboxAttestationCommand>): Promise<LaunchAuthorityReceipt>;
   recordMaximumQuoteAttestation(input: AuthorizedLaunchAuthorityWrite<RecordMaximumQuoteAttestationCommand>): Promise<LaunchAuthorityReceipt>;
   createAuthoritySnapshot(input: AuthorizedLaunchAuthorityWrite<CreateLaunchAuthoritySnapshotCommand>): Promise<LaunchAuthoritySnapshotReceipt>;

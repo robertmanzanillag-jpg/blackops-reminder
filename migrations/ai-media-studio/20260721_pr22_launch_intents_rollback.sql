@@ -1,0 +1,6 @@
+-- AI Media Studio PR22 rollback is application-only and data preserving.
+-- Do not drop launch intents, authority columns, exact constraints, indexes, or immutable evidence.
+-- Retain source attestation identifiers and evidence digests with their immutable launch evidence.
+-- Disable PR22 writers, retain every intent/evidence/snapshot row, and roll application code back only
+-- to a revision compatible with the retained additive schema. Correct the release and roll forward.
+-- This file intentionally contains no executable destructive SQL, DELETE, TRUNCATE, or DROP.

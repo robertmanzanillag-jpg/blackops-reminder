@@ -4,9 +4,11 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type {
   AuthorizedLaunchAuthorityWrite,
   CreateLaunchAuthoritySnapshotCommand,
+  DeclareLaunchIntentCommand,
   LaunchAuthorityCapability,
   RecordContentApprovalCommand,
   RecordMaximumQuoteAttestationCommand,
+  RecordSandboxAttestationCommand,
   TrustedLaunchAuthorityPrincipal,
   TrustedLaunchSubject,
 } from "../server/ai-media-studio/planning/launch-authority-contracts";
@@ -38,6 +40,8 @@ const ids = {
   sandbox: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
   quote: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   created: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  intent: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  script: "ffffffff-ffff-4fff-8fff-ffffffffffff",
 } as const;
 const now = new Date("2026-07-21T12:00:00.000Z");
 const expires = new Date("2026-07-21T12:20:00.000Z");
@@ -53,15 +57,26 @@ function trustedPrincipal(capability: LaunchAuthorityCapability, kind: "user" | 
 const subjectBase = {
   scope, dailyPlanId: ids.plan, dailyPlanSlotId: ids.slot, slotAttempt: 1,
   planDigest: digest("1"), slotDigest: digest("2"), providerAccountId: ids.account,
+  sourceRosterKey: "roster-1", sourceRosterDigest: digest("0"), sourceMemberKey: "member-1",
   providerKey: "heygen", providerCredentialVersion: 3, scriptVariantId: ids.variant,
-  scriptVariantChecksum: "3".repeat(64), governanceProfileId: ids.governance,
+  scriptId: ids.script, scriptVariantChecksum: "3".repeat(64), sourceType: "manual",
+  sourceItemId: null, sourceContentHash: null, governanceProfileId: ids.governance,
   governanceEvidenceDigest: digest("4"), governanceUse: "paid_ads", governanceTerritory: "US",
   contentCountry: "US",
 };
 const subject = {
   ...subjectBase,
-  launchSubjectDigest: deriveLaunchSubjectDigest(subjectBase as never),
+  launchIntentId: ids.intent, launchIntentDigest: digest("f"),
+  launchSubjectDigest: deriveLaunchSubjectDigest({ ...subjectBase,
+    launchIntentId: ids.intent, launchIntentDigest: digest("f") } as never),
 } as unknown as TrustedLaunchSubject;
+
+test("launch subject digest binds the durable launch intent identity", () => {
+  assert.notEqual(deriveLaunchSubjectDigest({ ...subject, launchIntentId: ids.created } as never),
+    subject.launchSubjectDigest);
+  assert.notEqual(deriveLaunchSubjectDigest({ ...subject, launchIntentDigest: digest("a") } as never),
+    subject.launchSubjectDigest);
+});
 
 type Rendered = ReturnType<PgDialect["sqlToQuery"]>;
 function makeDb(handler: (call: number, query: Rendered) => { rows: unknown[] }) {
@@ -79,6 +94,10 @@ function makeDb(handler: (call: number, query: Rendered) => { rows: unknown[] })
 
 const sqlText = (query: Rendered) => query.sql.replace(/\s+/gu, " ").trim();
 const allText = (calls: Rendered[]) => calls.map(sqlText).join(" ");
+const options = (ttl = 600) => ({
+  runtimeAttestationVerifier: { async verify() { return undefined; } },
+  validityPolicy: { ttlSeconds: () => ttl },
+});
 
 function authorized<T>(operation: LaunchAuthorityOperation, command: T, principal: TrustedLaunchAuthorityPrincipal) {
   return {
@@ -91,10 +110,17 @@ function subjectRow(overrides: Record<string, unknown> = {}) {
   return {
     daily_plan_id: ids.plan, daily_plan_slot_id: ids.slot, plan_digest: subject.planDigest,
     slot_digest: subject.slotDigest, plan_date: "2026-07-21", accounting_time_zone: "UTC",
+    id: ids.intent, launch_intent_digest: subject.launchIntentDigest,
+    launch_subject_digest: subject.launchSubjectDigest,
+    source_roster_key: subject.sourceRosterKey, source_roster_digest: subject.sourceRosterDigest,
+    source_member_key: subject.sourceMemberKey, script_id: ids.script, source_type: "manual",
+    source_item_id: null, source_content_hash: null,
     plan_expires_at: new Date("2026-07-22T00:00:00.000Z"), influencer_id: ids.influencer,
     provider_account_id: ids.account, provider_key: "heygen", provider_credential_version: 3,
     script_variant_id: ids.variant, script_variant_checksum: subject.scriptVariantChecksum, language: "en",
     governance_profile_id: ids.governance, governance_evidence_digest: subject.governanceEvidenceDigest,
+    governance_use: subject.governanceUse, governance_territory: subject.governanceTerritory,
+    content_country: subject.contentCountry,
     governance_expires_at: new Date("2026-07-21T13:00:00.000Z"), credential_expires_at: null,
     ...overrides,
   };
@@ -113,6 +139,7 @@ function evidenceRow(kind: "content_approval" | "human_launch_approval" | "sandb
     governance_evidence_digest: subject.governanceEvidenceDigest, governance_use: subject.governanceUse,
     governance_territory: subject.governanceTerritory, content_country: subject.contentCountry,
     launch_subject_digest: subject.launchSubjectDigest, evidence_kind: kind, decision,
+    launch_intent_id: ids.intent, launch_intent_digest: subject.launchIntentDigest,
     amount_micro_usd: kind === "maximum_quote" ? "1250000" : null,
     currency: kind === "maximum_quote" ? "USD" : null, revision: 1,
     evidence_digest: digest(kind === "content_approval" ? "5" : kind === "human_launch_approval" ? "6"
@@ -131,9 +158,7 @@ test("policy revision uses DB time, exact chain, shared lock order, and server-d
   const input = authorized("revise_policy", command, principal);
   const harness = makeDb((call) => call === 4 ? { rows: [{ generated_id: ids.created, database_now: now }] }
     : call === 6 ? { rows: [{ id: ids.created, input_digest: input.inputDigest }] } : { rows: [] });
-  const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { return undefined; } }, validityPolicy: { ttlSeconds: () => 600 },
-  });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
   const result = await repository.revisePolicy(input);
   assert.equal(result.replayed, false);
   assert.equal(harness.calls.length, 6);
@@ -155,10 +180,7 @@ test("exact policy replay returns before workspace lock and a different valid co
   const input = authorized("revise_policy", command, principal);
   const harness = makeDb((call) => call === 2
     ? { rows: [{ id: ids.policy, input_digest: input.inputDigest }] } : { rows: [] });
-  const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { throw new Error("must not resolve"); } },
-    validityPolicy: { ttlSeconds: () => 600 },
-  });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
   assert.equal((await repository.revisePolicy(input)).replayed, true);
   assert.equal(harness.calls.length, 2);
 
@@ -166,10 +188,7 @@ test("exact policy replay returns before workspace lock and a different valid co
   const conflicting = authorized("revise_policy", changedCommand, principal);
   const conflictHarness = makeDb((call) => call === 2
     ? { rows: [{ id: ids.policy, input_digest: input.inputDigest }] } : { rows: [] });
-  const conflictRepository = new DrizzleLaunchAuthorityRepository(conflictHarness.db, {
-    subjectResolver: { async resolve() { throw new Error("must not resolve"); } },
-    validityPolicy: { ttlSeconds: () => 600 },
-  });
+  const conflictRepository = new DrizzleLaunchAuthorityRepository(conflictHarness.db, options());
   await assert.rejects(conflictRepository.revisePolicy(conflicting),
     (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "IDEMPOTENCY_CONFLICT");
   assert.equal(conflictHarness.calls.length, 2);
@@ -182,12 +201,50 @@ test("repository enforces the exact authenticated principal kind as well as capa
     allowedTimeZones: ["UTC"], idempotencyKey: "policy-wrong-principal-kind" };
   const input = authorized("revise_policy", command, principal);
   const harness = makeDb(() => ({ rows: [] }));
-  const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { return undefined; } }, validityPolicy: { ttlSeconds: () => 600 },
-  });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
   await assert.rejects(repository.revisePolicy(input),
     (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
   assert.equal(harness.calls.length, 0);
+});
+
+test("human launch intent derives and freezes the exact current database subject", async () => {
+  const principal = trustedPrincipal("launch_intent:declare", "user");
+  const command: DeclareLaunchIntentCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    governanceUse: "paid_ads", governanceTerritory: "US", contentCountry: "US",
+    idempotencyKey: "launch-intent-declare-0001" };
+  const input = authorized("declare_launch_intent", command, principal);
+  const harness = makeDb((call) => {
+    if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 7) return { rows: [{ generated_id: ids.intent, database_now: now }] };
+    if (call === 8) return { rows: [subjectRow()] };
+    if (call === 9) return { rows: [{ id: ids.intent, input_digest: input.inputDigest }] };
+    return { rows: [] };
+  });
+  const result = await new DrizzleLaunchAuthorityRepository(harness.db, options()).declareLaunchIntent(input);
+  assert.equal(result.kind, "launch_intent");
+  assert.match(sqlText(harness.calls[7]), /source_roster_key.*source_member_key.*current_variant_id/i);
+  assert.match(sqlText(harness.calls[7]), /not exists.*newer.*version>governance\.version/i);
+  assert.match(sqlText(harness.calls[7]), /sources\.status in \('accepted','ready'\).*rights_status in \('owned','licensed'\)/i);
+  const insert = sqlText(harness.calls[8]);
+  assert.match(insert, /insert into .*ai_media_launch_intents/i);
+  assert.match(insert, /launch_subject_digest,launch_intent_digest,actor_user_id,input_digest/i);
+  assert.doesNotMatch(JSON.stringify(command), /planDigest|providerAccountId|scriptVariantId|sourceItemId/i);
+});
+
+test("opaque runtime handle denies when the injected verifier cannot authenticate it", async () => {
+  const principal = trustedPrincipal("sandbox:attest", "workload");
+  const command: RecordSandboxAttestationCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    attestationHandle: "forged-sandbox-handle", idempotencyKey: "sandbox-forged-handle-0001" };
+  const input = authorized("record_sandbox_attestation", command, principal);
+  const harness = makeDb((call) => {
+    if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
+    if (call === 7) return { rows: [subjectRow()] };
+    return { rows: [] };
+  });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).recordSandboxAttestation(input),
+    (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
+  assert.equal(harness.calls.length, 7, "verification denies before evidence-chain read or insert");
 });
 
 test("content evidence derives exact subject and chain after workspace plus governance locks", async () => {
@@ -203,9 +260,7 @@ test("content evidence derives exact subject and chain after workspace plus gove
     if (call === 9) return { rows: [{ id: ids.created, input_digest: input.inputDigest }] };
     return { rows: [] };
   });
-  const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { return subject; } }, validityPolicy: { ttlSeconds: () => 600 },
-  });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
   assert.equal((await repository.recordContentApproval(input)).kind, "content_approval");
   assert.ok(harness.calls[2].params.some((value) => String(value).includes("daily-admission:workspace")));
   assert.ok(harness.calls[4].params.some((value) => String(value).includes("ai-media-governance:profile")));
@@ -217,6 +272,8 @@ test("content evidence derives exact subject and chain after workspace plus gove
   assert.doesNotMatch(previous, /launch_subject_digest/i);
   const insert = sqlText(harness.calls[8]);
   assert.ok(harness.calls[8].params.includes("authenticated_workload"));
+  assert.ok(!harness.calls[8].params.includes(principal.authenticationEvidenceDigest),
+    "human/workload authentication evidence is actor-bound in evidenceDigest, not persisted as runtime attestation evidence");
   assert.doesNotMatch(insert, /render_jobs|outbox|provider.*submit/i);
 });
 
@@ -224,8 +281,7 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
   const principal = trustedPrincipal("quote:attest", "workload");
   const command = {
     scope, dailyPlanSlotId: ids.slot, slotAttempt: 1, idempotencyKey: "maximum-quote-0001",
-    attestation: { attestationId: "quote-attestation-1", decision: "quoted" as const,
-      maximumQuoteMicroUsd: "1250000", currency: "USD" as const, sourceEvidenceDigest: digest("a") },
+    attestationHandle: "quote-attestation-handle-1",
   } as unknown as RecordMaximumQuoteAttestationCommand;
   const input = authorized("record_maximum_quote_attestation", command, principal);
   const harness = makeDb((call) => {
@@ -236,10 +292,14 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
     return { rows: [] };
   });
   const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { return subject; } }, validityPolicy: { ttlSeconds: () => 600 },
+    runtimeAttestationVerifier: { async verify() { return {
+      kind: "maximum_quote" as const, attestationId: "quote-attestation-1", decision: "quoted" as const,
+      maximumQuoteMicroUsd: "1250000", currency: "USD" as const, sourceEvidenceDigest: digest("a"),
+    } as never; } }, validityPolicy: { ttlSeconds: () => 600 },
   });
   await repository.recordMaximumQuoteAttestation(input);
   const insert = harness.calls[8];
+  assert.match(sqlText(insert), /source_attestation_id,source_evidence_digest,evidence_digest/i);
   assert.ok(insert.params.includes("maximum_quote"));
   assert.ok(insert.params.includes("provider_quote_adapter"));
   assert.ok(insert.params.includes("1250000"));
@@ -271,9 +331,7 @@ test("snapshot chooses latest whole chains, validates gates, and derives bounded
       authority_digest: digest("d"), admission_digest: digest("e") }] };
     return { rows: [] };
   });
-  const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
-    subjectResolver: { async resolve() { return subject; } }, validityPolicy: { ttlSeconds: () => 300 },
-  });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options(300));
   const result = await repository.createAuthoritySnapshot(input);
   assert.equal(result.replayed, false);
   for (const query of harness.calls.slice(9, 13)) {

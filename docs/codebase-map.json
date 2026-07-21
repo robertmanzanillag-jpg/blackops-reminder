@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T12:25:10.963Z",
+  "generatedAt": "2026-07-21T13:11:10.853Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,39 +86,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 705,
-    "filesIndexed": 601,
-    "imports": 2420,
+    "filesVisible": 710,
+    "filesIndexed": 604,
+    "imports": 2430,
     "routes": 489,
-    "symbols": 11579
+    "symbols": 11665
   },
   "directories": {
-    "script": {
-      "files": 39,
-      "indexed": 37,
+    "migrations/ai-media-studio": {
+      "files": 29,
+      "indexed": 1,
       "kinds": {
-        "script": 39
+        "other": 28,
+        "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 121,
-      "indexed": 117,
+      "files": 122,
+      "indexed": 118,
       "kinds": {
-        "server": 121
+        "server": 122
       }
     },
     "tests": {
-      "files": 147,
-      "indexed": 140,
+      "files": 149,
+      "indexed": 142,
       "kinds": {
-        "test": 147
-      }
-    },
-    "tests/fixtures": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "test": 1
+        "test": 149
       }
     },
     ".agents/skills": {
@@ -185,12 +179,11 @@
         "docs": 12
       }
     },
-    "migrations/ai-media-studio": {
-      "files": 27,
-      "indexed": 1,
+    "script": {
+      "files": 39,
+      "indexed": 37,
       "kinds": {
-        "other": 26,
-        "docs": 1
+        "script": 39
       }
     },
     "scripts": {
@@ -226,6 +219,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests/fixtures": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "test": 1
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -9747,10 +9747,12 @@
         "ExecuteResult",
         "KILL_SWITCH_REVISIONS",
         "LAUNCH_EVIDENCE",
+        "LAUNCH_INTENTS",
         "POLICY_REVISIONS",
         "SAFE",
         "SHA256",
         "UUID",
+        "boundIntent",
         "budgetDate",
         "canonical",
         "canonicalDate",
@@ -9769,6 +9771,7 @@
         "invalid",
         "invariant",
         "isoInput",
+        "lockedSources",
         "matches",
         "parsed",
         "positiveInteger",
@@ -9783,6 +9786,9 @@
         "rows",
         "safeString",
         "sha256",
+        "sourceContentHash",
+        "sourceItemId",
+        "sourceType",
         "stableProviderIdempotencyKey",
         "state",
         "submissionState",
@@ -9841,8 +9847,8 @@
         "assertKillSwitchOpen",
         "assertPolicyAdmits",
         "assertReplay",
-        "attestation",
         "authorityDigest",
+        "base",
         "baseExpiry",
         "canonicalJson",
         "conflict",
@@ -9862,12 +9868,16 @@
         "evidenceBinding",
         "evidenceDigest",
         "evidenceIdentity",
+        "existingIntent",
         "expected",
         "expiresAt",
         "expiry",
         "expiryCandidates",
         "expiryFrom",
+        "facts",
         "found",
+        "governanceTerritory",
+        "governanceUse",
         "human",
         "identity",
         "influencerId",
@@ -9878,6 +9888,10 @@
         "killBinding",
         "killExpiry",
         "languages",
+        "launchFacts",
+        "launchIntentDigest",
+        "launchSubjectDigest",
+        "lockedSource",
         "microUsd",
         "normalized",
         "normalizedStrings",
@@ -9903,19 +9917,22 @@
         "replay",
         "requiredDate",
         "requiredExpiry",
-        "resolved",
         "result",
         "resultRows",
         "revision",
         "row",
         "rows",
+        "runtimeCommand",
         "safe",
         "sameScope",
         "sandbox",
+        "slotRows",
         "snapshotReceipt",
         "sourceKind",
         "stringArray",
         "subject",
+        "subjectFromLaunchRow",
+        "subjectWithIntent",
         "tenant",
         "timeZones",
         "total",
@@ -9928,6 +9945,7 @@
         "validTimeZone",
         "validateTrustedSubject",
         "value",
+        "verified",
         "zones"
       ],
       "routes": []
@@ -9952,6 +9970,7 @@
       "exports": [
         "AuthorizedLaunchAuthorityWrite",
         "CreateLaunchAuthoritySnapshotCommand",
+        "DeclareLaunchIntentCommand",
         "LAUNCH_AUTHORITY_CAPABILITIES",
         "LaunchAuthorityApprovalDecision",
         "LaunchAuthorityAuthenticationContext",
@@ -9965,7 +9984,7 @@
         "LaunchAuthorityServiceErrorCode",
         "LaunchAuthoritySnapshotReceipt",
         "LaunchAuthorityValidityPolicy",
-        "LaunchSubjectResolver",
+        "LaunchRuntimeAttestationVerifier",
         "RecordContentApprovalCommand",
         "RecordHumanLaunchApprovalCommand",
         "RecordMaximumQuoteAttestationCommand",
@@ -9974,8 +9993,10 @@
         "ReviseLaunchKillSwitchCommand",
         "TrustedLaunchAuthorityPrincipal",
         "TrustedLaunchSubject",
-        "TrustedMaximumQuoteAttestation",
-        "TrustedSandboxAttestation"
+        "VerifiedLaunchRuntimeAttestation",
+        "VerifiedMaximumQuoteAttestation",
+        "VerifiedSandboxAttestation",
+        "VerifyLaunchRuntimeAttestationInput"
       ],
       "symbols": [
         "LAUNCH_AUTHORITY_CAPABILITIES",
@@ -10011,16 +10032,18 @@
         "UUID",
         "assertExactKeys",
         "assertPrincipal",
-        "attestation",
+        "attestationHandle",
         "boundedInteger",
         "boundedText",
         "budget",
         "canonical",
         "canonicalJson",
-        "common",
+        "contentCountry",
         "dailyPlanSlotId",
         "denied",
         "digest",
+        "governanceTerritory",
+        "governanceUse",
         "idempotency",
         "idempotencyKey",
         "inputDigest",
@@ -10029,6 +10052,7 @@
         "money",
         "normalizeApproval",
         "normalizeKillSwitch",
+        "normalizeLaunchIntent",
         "normalizePolicy",
         "normalizeQuote",
         "normalizeSandbox",
@@ -10045,12 +10069,65 @@
         "receipt",
         "record",
         "scope",
+        "slot",
         "slotAttempt",
         "snapshot",
         "tenant",
         "total",
         "uuid",
         "values"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/launch-runtime-attestation-verifier.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./launch-authority-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "MintMaximumQuoteAttestationInput",
+        "MintSandboxAttestationInput",
+        "ProcessLocalLaunchRuntimeAttestationFacets",
+        "ProcessLocalMaximumQuoteAttestationIssuer",
+        "ProcessLocalSandboxAttestationIssuer",
+        "RuntimeAttestationBinding",
+        "createProcessLocalLaunchRuntimeAttestationFacets"
+      ],
+      "symbols": [
+        "Digest",
+        "FrozenEnvelope",
+        "MAX_LIFETIME_MS",
+        "MAX_MICRO_USD",
+        "MONEY",
+        "ProcessLocalLaunchRuntimeAttestationRegistry",
+        "RuntimeKind",
+        "SAFE_ID",
+        "SHA256",
+        "amount",
+        "assertExactKeys",
+        "attestation",
+        "canonical",
+        "canonicalJson",
+        "createProcessLocalLaunchRuntimeAttestationFacets",
+        "envelope",
+        "fingerprint",
+        "fingerprintPrincipal",
+        "fingerprintSubject",
+        "lifetime",
+        "microUsd",
+        "now",
+        "quoteIssuer",
+        "record",
+        "registry",
+        "safeId",
+        "sandboxIssuer",
+        "sourceDigest",
+        "validDatabaseTime",
+        "validateBinding",
+        "verifier"
       ],
       "routes": []
     },
@@ -18460,6 +18537,7 @@
         "aiMediaKillSwitchRevisions",
         "aiMediaLaunchAuthoritySnapshots",
         "aiMediaLaunchEvidence",
+        "aiMediaLaunchIntents",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthCredentialArtifacts",
@@ -18502,6 +18580,7 @@
         "aiMediaKillSwitchRevisions",
         "aiMediaLaunchAuthoritySnapshots",
         "aiMediaLaunchEvidence",
+        "aiMediaLaunchIntents",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthCredentialArtifacts",
@@ -19045,7 +19124,8 @@
         "read",
         "routes",
         "service",
-        "studioBarrel"
+        "studioBarrel",
+        "verifier"
       ],
       "routes": []
     },
@@ -19379,6 +19459,8 @@
         "reservationRow",
         "result",
         "scope",
+        "sourceHash",
+        "sourceLock",
         "unsigned",
         "valid"
       ],
@@ -19775,6 +19857,7 @@
         "lockedSubject",
         "makeDb",
         "now",
+        "options",
         "policy",
         "previous",
         "principal",
@@ -19812,15 +19895,44 @@
         "methods",
         "mismatched",
         "principal",
-        "quoteAttestation",
+        "quoteAttestationHandle",
         "receipt",
         "receiptId",
         "repository",
-        "sandboxAttestation",
+        "sandboxAttestationHandle",
         "scope",
         "service",
         "slotId",
-        "sourceEvidenceDigest"
+        "userService",
+        "workloadService"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/launch-authority-contracts",
+        "../server/ai-media-studio/planning/launch-runtime-attestation-verifier",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "alteredPrincipal",
+        "alteredSubject",
+        "base",
+        "digest",
+        "exact",
+        "expiresAt",
+        "facets",
+        "handle",
+        "manualSubject",
+        "principal",
+        "result",
+        "scope",
+        "subject",
+        "validFrom"
       ],
       "routes": []
     },
@@ -20723,14 +20835,18 @@
         "beforeCount",
         "canonical",
         "client",
+        "columns",
         "contenders",
         "controls",
         "digest",
         "durableBinding",
         "evidence",
+        "evidenceColumns",
         "expectDatabaseError",
         "ids",
         "integrationTest",
+        "matchingAfterRefresh",
+        "matchingBeforeRefresh",
         "parsed",
         "pool",
         "postgresHarnessEnabled",
@@ -20738,6 +20854,8 @@
         "pr19Rollback",
         "pr20Forward",
         "pr20Rollback",
+        "pr22Forward",
+        "pr22Rollback",
         "prerequisite",
         "requireSafeTestDatabaseUrl",
         "resolvedRoot",
@@ -20746,6 +20864,7 @@
         "results",
         "retained",
         "seedAuthorityGraph",
+        "selectEvidence",
         "sharedIdempotencyKey",
         "socketDirectory",
         "statement",
@@ -20754,6 +20873,25 @@
         "testTemporaryDirectory",
         "transactionInsert",
         "triggers"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr22-launch-intent-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "constraint",
+        "executable",
+        "forward",
+        "fragment",
+        "rollback",
+        "start"
       ],
       "routes": []
     },
@@ -23108,6 +23246,7 @@
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
+    "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
     "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
@@ -23140,6 +23279,7 @@
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",
     "tests/ai-media-studio-pr21-postgres-integration.test.ts",
+    "tests/ai-media-studio-pr22-launch-intent-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
