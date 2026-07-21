@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR22 exact launch intent and runtime attestations
 
-- Branch: `codex/ai-media-studio-launch-intent-attestations`, stacked on draft PR #104.
+- Branch: `codex/ai-media-studio-launch-intent-attestations`, draft PR #105, stacked on draft PR #104.
 - Scope: immutable tenant/slot/attempt launch intents bind exact current plan, roster member, provider credential, approved script/source and governance facts. Evidence, snapshots and both admission guards require the same intent identity.
 - Runtime boundary: sandbox and maximum-quote commands carry only opaque handles. Verification occurs after the exact subject is locked and PostgreSQL time is read. The bundled process-local issuer/verifier is least-privilege reference/test composition only and is not durable across restarts or suitable for distributed production.
 - Source boundary: non-manual sources require a canonical content hash, accepted/ready state, approved moderation and owned/licensed rights. Admission locks the exact source row through its final guard; a content refresh remains allowed but invalidates the stale intent. Runtime attestation ID/digest fields remain in append-only evidence for audit reconstruction.
