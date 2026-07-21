@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T07:50:13.429Z
+Generated: 2026-07-21T08:25:27.847Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 655 | 562 | 2235 | 487 | 10564 |
+| 664 | 569 | 2261 | 487 | 10727 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 125 | 120 | test:125 |
-| `server/ai-media-studio` | 103 | 101 | server:103 |
+| `tests` | 129 | 124 | test:129 |
+| `server/ai-media-studio` | 106 | 104 | server:106 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 21 | 1 | other:20, docs:1 |
+| `migrations/ai-media-studio` | 23 | 1 | other:22, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 
@@ -83,6 +83,9 @@ Package: `rest-express`
 - `tests/ai-media-studio-oauth-aws-vault-preflight.test.ts`
 - `tests/ai-media-studio-oauth-crypto.test.ts`
 - `tests/ai-media-studio-oauth-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-provider-connection-contracts.test.ts`
+- `tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-vault.test.ts`
@@ -99,6 +102,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr11-oauth-policy-migration.test.ts`
 - `tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts`
 - `tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts`
+- `tests/ai-media-studio-pr15-provider-connection-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`

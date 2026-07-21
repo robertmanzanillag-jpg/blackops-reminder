@@ -214,3 +214,18 @@ staging. It does not start a worker or make an AWS/provider call.
 The rollback is application-only and intentionally preserves obligation, fencing,
 dead-letter and deletion evidence. Do not drop the table as part of an application
 rollback; correct the release and roll forward after review.
+
+## PR15 provider-connection stages release
+
+`20260721_pr15_provider_connection_stages_forward.sql` is an additive, unapplied
+migration for staged provider connection attempts, discovered target candidates and
+immutable explicit target selections. Apply it only after the relation-exact PR12 and
+PR14 controls are present and validated. The migration does not backfill any account
+as selected, store a token or vault reference, mount a route, start a worker, activate
+an account or make a provider call.
+
+Before release, rehearse the forward SQL on a restorable staging copy and prove exact
+tenant/actor/account/platform/session provenance, scope containment, stale-fence
+rejection, zero-target terminalization, singleton confirmation and multi-target exact
+selection. The rollback is application-only and retains all attempt, candidate,
+selection and terminal evidence; correct the release and roll forward.

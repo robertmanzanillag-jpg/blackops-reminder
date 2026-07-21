@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T07:50:13.429Z",
+  "generatedAt": "2026-07-21T08:25:27.847Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,33 +85,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 655,
-    "filesIndexed": 562,
-    "imports": 2235,
+    "filesVisible": 664,
+    "filesIndexed": 569,
+    "imports": 2261,
     "routes": 487,
-    "symbols": 10564
+    "symbols": 10727
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 21,
+      "files": 23,
       "indexed": 1,
       "kinds": {
-        "other": 20,
+        "other": 22,
         "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 103,
-      "indexed": 101,
+      "files": 106,
+      "indexed": 104,
       "kinds": {
-        "server": 103
+        "server": 106
       }
     },
     "tests": {
-      "files": 125,
-      "indexed": 120,
+      "files": 129,
+      "indexed": 124,
       "kinds": {
-        "test": 125
+        "test": 129
       }
     },
     ".agents/skills": {
@@ -8095,6 +8095,76 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/drizzle-provider-connection-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "./provider-connection-contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleOAuthProviderConnectionRepository",
+        "OAuthProviderConnectionDatabase",
+        "OAuthProviderConnectionTransactionalDatabase"
+      ],
+      "symbols": [
+        "DrizzleOAuthProviderConnectionRepository",
+        "ExecuteResult",
+        "IN_PROGRESS",
+        "SAFE_VALUE",
+        "SHA256",
+        "advanced",
+        "attempt",
+        "attemptFromRows",
+        "attemptResult",
+        "attemptRow",
+        "candidate",
+        "candidateFromRow",
+        "candidateIds",
+        "candidateResult",
+        "candidateRows",
+        "candidates",
+        "claimed",
+        "clockRow",
+        "created",
+        "createdMs",
+        "current",
+        "databaseNow",
+        "databaseNowMs",
+        "date",
+        "digest",
+        "eligibilityDigest",
+        "failed",
+        "inProgress",
+        "inserted",
+        "iso",
+        "jsonArray",
+        "lockedResult",
+        "parseIso",
+        "parsed",
+        "replay",
+        "requiredSafe",
+        "result",
+        "resultRows",
+        "rows",
+        "safeDisplay",
+        "selectionDigest",
+        "selectionRows",
+        "source",
+        "stringArray",
+        "targetIdentities",
+        "targetIdentity",
+        "targetKindFor",
+        "terminal",
+        "terminalDigest",
+        "updated",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/drizzle-repository.ts",
       "kind": "server",
       "imports": [
@@ -8220,11 +8290,14 @@
         "./aws-vault-infrastructure-preflight",
         "./contracts",
         "./crypto",
+        "./drizzle-provider-connection-repository",
         "./drizzle-repository",
         "./drizzle-vault-cleanup-repository",
         "./in-memory",
         "./platform-manifests",
         "./production-runtime",
+        "./provider-connection-contracts",
+        "./provider-connection-in-memory",
         "./s3-kms-authorization-code-vault",
         "./s3-kms-envelope",
         "./s3-kms-pkce-vault",
@@ -8297,6 +8370,120 @@
         "value",
         "values",
         "vault"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/oauth/provider-connection-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-oauth",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "ClaimOAuthProviderConnectionStage",
+        "CreateOAuthProviderConnectionAttempt",
+        "MarkOAuthProviderExchangeComplete",
+        "OAUTH_PROVIDER_CONNECTION_CAPABILITIES",
+        "OAUTH_PROVIDER_CONNECTION_STAGES",
+        "OAUTH_PROVIDER_GRANT_FAMILIES",
+        "OAUTH_PROVIDER_SCOPE_ALLOWLISTS",
+        "OAUTH_PROVIDER_TARGET_KINDS",
+        "OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES",
+        "OAUTH_PROVIDER_VERIFIED_TASK_CAPABILITIES",
+        "OAuthProviderConnectionActionableStage",
+        "OAuthProviderConnectionAttempt",
+        "OAuthProviderConnectionCapability",
+        "OAuthProviderConnectionClaim",
+        "OAuthProviderConnectionError",
+        "OAuthProviderConnectionFailureCode",
+        "OAuthProviderConnectionFence",
+        "OAuthProviderConnectionInProgressStage",
+        "OAuthProviderConnectionRepository",
+        "OAuthProviderConnectionStage",
+        "OAuthProviderGrantFamily",
+        "OAuthProviderTargetCandidate",
+        "OAuthProviderTargetDto",
+        "OAuthProviderTargetKind",
+        "OAuthProviderTokenArtifactDescriptor",
+        "OAuthProviderTokenArtifactRole",
+        "OAuthProviderTokenLifetime",
+        "RecordOAuthProviderDiscovery",
+        "SelectOAuthProviderTarget",
+        "deriveOAuthProviderCapabilities",
+        "isCompatibleOAuthProviderTarget",
+        "toOAuthProviderTargetDto",
+        "validateOAuthProviderScopes",
+        "validateOAuthProviderTokenArtifacts"
+      ],
+      "symbols": [
+        "OAUTH_PROVIDER_CONNECTION_CAPABILITIES",
+        "OAUTH_PROVIDER_CONNECTION_STAGES",
+        "OAUTH_PROVIDER_GRANT_FAMILIES",
+        "OAUTH_PROVIDER_TARGET_KINDS",
+        "OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES",
+        "OAuthProviderConnectionError",
+        "allowlist",
+        "deriveOAuthProviderCapabilities",
+        "expiryMs",
+        "isCompatibleOAuthProviderTarget",
+        "isUniqueSafeList",
+        "nowMs",
+        "parseIso",
+        "parsed",
+        "revalidateMs",
+        "roles",
+        "taskMap",
+        "toOAuthProviderTargetDto",
+        "validateOAuthProviderScopes",
+        "validateOAuthProviderTokenArtifacts"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/oauth/provider-connection-in-memory.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./provider-connection-contracts"
+      ],
+      "exports": [
+        "InMemoryOAuthProviderConnectionRepository"
+      ],
+      "symbols": [
+        "InMemoryOAuthProviderConnectionRepository",
+        "MAX_CANDIDATES",
+        "SAFE",
+        "SHA256",
+        "actualScopes",
+        "advance",
+        "allowedScopes",
+        "attempt",
+        "candidate",
+        "candidateIds",
+        "candidates",
+        "clone",
+        "createdMs",
+        "displayText",
+        "exactList",
+        "expiresMs",
+        "hasFence",
+        "identityKey",
+        "immutableAllowlist",
+        "key",
+        "nowMs",
+        "parsed",
+        "progressStage",
+        "reclaim",
+        "required",
+        "requiredScopes",
+        "sameList",
+        "storageKey",
+        "targetKeys",
+        "targetKindFor",
+        "timestamp",
+        "updated",
+        "verifiedTasks"
       ],
       "routes": []
     },
@@ -17318,7 +17505,10 @@
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
+        "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthSessions",
+        "aiMediaOAuthTargetCandidates",
+        "aiMediaOAuthTargetSelections",
         "aiMediaOAuthVaultOperations",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
@@ -17346,7 +17536,10 @@
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
+        "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthSessions",
+        "aiMediaOAuthTargetCandidates",
+        "aiMediaOAuthTargetSelections",
         "aiMediaOAuthVaultOperations",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
@@ -18425,6 +18618,97 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-oauth-provider-connection-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "now"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/drizzle-provider-connection-repository",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "accountId",
+        "activated",
+        "activation",
+        "attemptId",
+        "attemptRow",
+        "awaiting",
+        "baseCandidate",
+        "bindingId",
+        "candidateId",
+        "candidateRow",
+        "claim",
+        "claimedRow",
+        "completed",
+        "created",
+        "dialect",
+        "discovery",
+        "exchange",
+        "execute",
+        "failed",
+        "insert",
+        "leaseToken",
+        "makeDb",
+        "mutation",
+        "normalized",
+        "rendered",
+        "replaySelection",
+        "replayed",
+        "repository",
+        "result",
+        "scope",
+        "selected",
+        "selection",
+        "sessionId",
+        "sql"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "../server/ai-media-studio/oauth/provider-connection-in-memory",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidates",
+        "claim",
+        "claimInput",
+        "command",
+        "completed",
+        "createInput",
+        "discovery",
+        "recorded",
+        "refresh",
+        "repository",
+        "scope",
+        "selected",
+        "stale",
+        "throughExchange",
+        "winner"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts",
       "kind": "test",
       "imports": [
@@ -18906,6 +19190,25 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "columnDefinitions",
+        "creates",
+        "forward",
+        "rollback",
+        "sql",
+        "uncommented"
+      ],
       "routes": []
     },
     {
@@ -21280,6 +21583,9 @@
     "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
     "tests/ai-media-studio-oauth-crypto.test.ts",
     "tests/ai-media-studio-oauth-drizzle.test.ts",
+    "tests/ai-media-studio-oauth-provider-connection-contracts.test.ts",
+    "tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts",
+    "tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-vault.test.ts",
@@ -21296,6 +21602,7 @@
     "tests/ai-media-studio-pr11-oauth-policy-migration.test.ts",
     "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
     "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
+    "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",

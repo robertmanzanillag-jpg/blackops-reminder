@@ -241,3 +241,44 @@ Evidence before GitHub preservation:
 - Independent checker found no remaining P0-P2; independent security review found no remaining P0-P3 after the crash/fencing and error-taxonomy fixes.
 - Static App QA passed with no PR14 findings. Existing bundle-size and local `yt-dlp` build messages are baseline/environment advisories, not PR14 deltas.
 - SQL and migration shape are tested statically but have not been executed against PostgreSQL; staging rehearsal remains mandatory.
+
+## PR15 checkpoint — provider connection stages
+
+GitHub PR: #94, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/94`.
+
+Branch: `codex/ai-media-studio-provider-connection-stages`, stacked on PR #92 (`codex/ai-media-studio-oauth-vault-operations`).
+
+Implemented:
+
+- Added provider-neutral durable stages for exchange, target discovery, explicit target selection and the later activation handoff.
+- Added exact target compatibility for TikTok users, YouTube channels, Facebook Pages and Instagram professional accounts. Zero targets terminalizes as not connectable; one or many targets always require explicit actor selection.
+- Added frozen grant scope allowlists, local verified-task capability derivation and safe role/lifetime descriptors without tokens, secrets, provider JSON or vault references.
+- Models Google refresh tokens without a reported expiry as revocation-bound with mandatory revalidation, and forbids treating a Meta grant-level User token as provider-non-expiring.
+- Added additive attempt/candidate/immutable-selection tables with exact tenant, actor, provider-account, platform, OAuth-session and discovered-candidate provenance.
+- Preserved DB-clock leases/fencing and data-preserving rollback policy. The migration is checked in but unapplied.
+
+Safety boundary: this staged path is not wired into the older callback saga or production runtime. It does not activate an account, mount a route, start a timer, call AWS/a provider, apply a migration, post content or deploy. Role-specific vault references/cleanup v2, activation/account CAS integration, real connectors, refresh/revoke and sandbox evidence remain later gates.
+
+Evidence at first local checkpoint before GitHub preservation:
+
+- Focused PR15 tests passed 31/31:
+  - provider connection contracts
+  - in-memory repository parity
+  - Drizzle repository SQL-shape/state transitions
+  - PR15 additive migration and data-preserving rollback
+  - durable table export/persistence coverage
+- `git diff --check` passed.
+- `npm run check` was started but intentionally interrupted after it produced no errors or diagnostics for more than 90 seconds, because Robert asked to preserve the work in GitHub before the session/credits ran out.
+- Independent domain maker reported its four-file slice passed focused tests, TypeScript and diff hygiene before handoff.
+- Independent persistence maker/reviewer evidence was still pending at this checkpoint, so PR15 must remain WIP/draft until full checker, security and App QA gates complete.
+
+Final PR15 hardening checkpoint:
+
+- Capabilities now require both a locally allowlisted verified task and its exact effective publishing scope; TikTok `video.upload` never grants direct-publish capability.
+- Meta exchange accepts only the expiring grant-level User descriptor. Discovery stores no Page token; activation/vault v2 must obtain and bind one operational artifact only after exact target selection.
+- Provider manifest revisions are resolved from the frozen local platform registry, candidate and selection evidence are append-only, and in-memory behavior matches global token-binding, bounded-lease and attempt-expiry controls.
+- Focused PR15/persistence tests pass 33/33. A targeted strict TypeScript compile of all changed server/shared modules passes, as do diff hygiene checks.
+- The full AI Media Studio run produced 449/461 passes inside the restricted sandbox; the 12 failures were only `listen EPERM` and all affected HTTP tests passed outside the sandbox, yielding 461/461 composed evidence before the final isolated hardening. The affected focused suite was rerun after hardening.
+- Production build exits successfully. Existing Vite chunk-size and unavailable local `yt-dlp` Python runtime warnings still block deployment under App QA policy; no deployment is requested.
+- Independent security re-review reports no remaining P0-P3. Static App QA reports no PR15 UI, route, timer, network, provider/AWS, posting, migration-apply or customer-visible regression.
+- Full-project `npm run check` remained abnormally long and was interrupted without diagnostics; the PR remains draft while that global gate lacks completed evidence.
