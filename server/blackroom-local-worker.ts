@@ -57,7 +57,19 @@ export function createBlackRoomLocalWorkerState(): BlackRoomLocalWorkerState {
 }
 
 export function buildBlackRoomCodexArgs(projectDir: string): string[] {
-  return ["exec", "--ephemeral", "--color", "never", "-s", "workspace-write", "-C", projectDir, "-"];
+  return [
+    "exec",
+    "--ephemeral",
+    "--color",
+    "never",
+    "-s",
+    "workspace-write",
+    "-c",
+    "sandbox_workspace_write.network_access=true",
+    "-C",
+    projectDir,
+    "-",
+  ];
 }
 
 export function shouldRunBlackRoomWorker(
@@ -129,7 +141,7 @@ export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoom
 export function buildBlackRoomWorkerPrompt(projectDir: string): string {
   const queuePath = path.join(projectDir, "clippers_workspace/blackroom/agent/queue.json");
   const ledgerPath = path.join(projectDir, BLACKROOM_WORKER_LEDGER_PATH);
-  return `Eres el trabajador local de BlackRoom. Procesa EXACTAMENTE un post pendiente y termina. Usa la sesión de Chrome del usuario y la habilidad chrome:control-chrome; usa shell solo dentro de ${projectDir}.
+  return `Eres el trabajador local de BlackRoom. Procesa EXACTAMENTE un post pendiente y termina. Usa shell para YouTube/edición y usa la sesión de Chrome del usuario con la habilidad chrome:control-chrome exclusivamente para Metricool; escribe archivos solo dentro de ${projectDir}.
 
 Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss.
 
@@ -140,10 +152,10 @@ Estado persistente:
 Reglas obligatorias:
 1. Lee la cola al empezar. Si enabled no es true, termina sin descargar, editar, subir ni cambiar trabajos. Vuelve a comprobar enabled justo antes de reservar y justo antes de subir; si está pausado, aborta.
 2. Procesa un solo slot no confirmado del primer lote queued/retry/processing. Mantén 10 posts diarios, 5 DJs distintos, horarios separados 90 minutos y cobertura de madrugada.
-3. Selecciona al azar un video del canal que no aparezca en sourceHistory ni en el ledger. Nunca repitas video fuente ni uses segmentos solapados.
+3. No abras ni navegues YouTube con Chrome. Obtén el inventario del canal y selecciona la fuente exclusivamente desde shell con /opt/homebrew/bin/yt-dlp contra https://www.youtube.com/@blackroom_us/videos (por ejemplo, primero --flat-playlist --dump-single-json y luego descarga una URL de video concreta). Selecciona al azar un video que no aparezca en sourceHistory ni en el ledger. Nunca repitas video fuente ni uses segmentos solapados.
 4. Alterna inglés/español y vertical/horizontal; el momento vertical debe ser diferente del horizontal para un mismo DJ.
 5. Prueba 15, 30, 60, 120, 300 y 600 segundos conforme a requirements. El corte debe incluir un drop cerca del principio. No inventes que un video corto soporta una duración mayor.
-6. Descarga con la mayor calidad disponible y renderiza MP4 H.264 + AAC compatible con Metricool/QuickTime. Verifica con ffprobe antes de subir.
+6. Descarga mediante /opt/homebrew/bin/yt-dlp con la mayor calidad disponible. Renderiza con /opt/homebrew/bin/ffmpeg a MP4 H.264 + AAC compatible con Metricool/QuickTime y verifica con /opt/homebrew/bin/ffprobe antes de subir. YouTube nunca se opera mediante Chrome; Chrome se reserva para Metricool.
 7. Antes de reservar la fuente, vuelve a leer cola y ledger. Reserva exclusivamente con npm run blackroom:ledger -- --reserve --job ID --slot HH:MM --video ID --dj NOMBRE --language en|es --format vertical|horizontal --duration SEGUNDOS --segment-start SEGUNDO --segment-end SEGUNDO --caption TEXTO --render RUTA --source RUTA. Si falla, no publiques. No escribas el ledger directamente.
 8. Programa el post en Metricool para TikTok, en el slot exacto, con caption natural en el idioma elegido. No añadas link de YouTube en el caption.
 9. Solo confirma con npm run blackroom:ledger -- --confirm --reservation ... --metricool-id ... y registra la fuente después de ver confirmación inequívoca de Metricool. Si se intentó subir pero no hay confirmación, usa --uncertain; ese slot queda bloqueado y no se repite.

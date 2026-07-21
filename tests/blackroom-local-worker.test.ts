@@ -34,6 +34,7 @@ test("uses only Codex exec flags supported by the installed noninteractive CLI",
   assert.deepEqual(args.slice(0, 3), ["exec", "--ephemeral", "--color"]);
   assert.equal(args.includes("-a"), false);
   assert.equal(args.includes("workspace-write"), true);
+  assert.ok(args.includes("sandbox_workspace_write.network_access=true"));
   assert.equal(args.at(-1), "-");
 });
 
@@ -45,6 +46,9 @@ test("prompt contains posting and deletion safety gates", () => {
   assert.match(prompt, /blackroom:ledger -- --delete-confirmed/);
   assert.match(prompt, /No resuelvas CAPTCHA/);
   assert.match(prompt, /Nunca repitas video fuente/);
+  assert.match(prompt, /No abras ni navegues YouTube con Chrome/);
+  assert.match(prompt, /\/opt\/homebrew\/bin\/yt-dlp/);
+  assert.match(prompt, /Chrome se reserva para Metricool/);
 });
 
 test("ledger blocks duplicate slots and source videos", () => {
