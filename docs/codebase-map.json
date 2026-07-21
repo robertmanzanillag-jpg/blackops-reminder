@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T19:30:04.860Z",
+  "generatedAt": "2026-07-21T19:45:44.482Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -90,7 +90,7 @@
     "filesIndexed": 633,
     "imports": 2579,
     "routes": 491,
-    "symbols": 12300
+    "symbols": 12299
   },
   "directories": {
     "server/ai-media-studio": {
@@ -22734,7 +22734,6 @@
         "migrationsReadme",
         "position",
         "pr12",
-        "pr13Stop",
         "pr14",
         "pr14Forward",
         "pr16Stop",

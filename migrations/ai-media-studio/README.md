@@ -15,8 +15,9 @@ this directory.
 
 Do not treat the per-delta notes below as an executable sequence. The sole
 current sequence authority is the preparation-only staging runbook linked
-above, and it is **NO-GO** because PR1 provenance is unproven, PR14 requires a
-missing PR13 SQL artifact, and PR16 has no reviewed forward/rollback SQL. No
+above, and it is **NO-GO** because PR1 provenance is unproven and PR16 has no
+reviewed forward/rollback SQL or complete relational invariants. PR13 is a
+reviewed schema-neutral adapter slice; PR14 verifies its PR12 database prerequisites. No
 database target, backup/restore, maintenance window, migration, restart, or
 deployment has been approved. Individual sections describe a delta's historical
 prerequisites and verification intent only.

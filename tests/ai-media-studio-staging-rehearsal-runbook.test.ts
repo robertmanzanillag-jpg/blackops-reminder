@@ -34,8 +34,8 @@ const migrationPrefixes = [
 test("staging runbook is no-go and names every available migration in exact forward/reverse order", () => {
   assert.match(runbook, /Status: \*\*NO-GO \/ preparation only\*\*/u);
   assert.match(runbook, /Nothing in this runbook authorizes a[\s\S]*database connection/u);
-  assert.match(runbook, /PR13[\s\S]*mandatory stops/u);
-  assert.match(runbook, /PR16[\s\S]*mandatory stops/u);
+  assert.match(runbook, /PR13's reviewed commit is schema-neutral/u);
+  assert.match(runbook, /PR16[\s\S]*mandatory stop/u);
   assert.doesNotMatch(runbook, /(?:drizzle-kit push|npm run db:push)[\s\S]{0,80}(?:use|run|execute) it/u);
 
   let previousForward = -1;
@@ -58,7 +58,7 @@ test("staging runbook is no-go and names every available migration in exact forw
   }
 });
 
-test("runbook inventory matches the SQL directory and keeps PR13/PR16 as explicit stops", () => {
+test("runbook inventory matches the SQL directory, proves PR13 schema-neutral and keeps PR16 as a stop", () => {
   const sqlFiles = readdirSync(migrationDirectoryUrl)
     .filter((name) => name.endsWith(".sql"))
     .sort();
@@ -68,15 +68,14 @@ test("runbook inventory matches the SQL directory and keeps PR13/PR16 as explici
   assert.deepEqual(sqlFiles, expected);
 
   const pr12 = runbook.indexOf("20260721_pr12_oauth_callback_saga_forward.sql");
-  const pr13Stop = runbook.indexOf("PR13 reviewed-SQL/baseline gate");
   const pr14 = runbook.indexOf("20260721_pr14_oauth_vault_operations_forward.sql");
   const pr16Stop = runbook.indexOf("PR16 reviewed-SQL decision gate");
   const pr19 = runbook.indexOf("20260721_pr19_daily_admission_forward.sql");
-  assert.ok(pr12 < pr13Stop && pr13Stop < pr14);
+  assert.ok(pr12 < pr14);
   assert.ok(pr14 < pr16Stop && pr16Stop < pr19);
-  assert.match(runbook, /PR14 explicitly requires validated PR13 OAuth controls/u);
-  assert.match(pr14Forward, /PR14 requires PR13 OAuth schema/u);
-  assert.match(pr14Forward, /PR14 requires validated PR13 controls/u);
+  assert.match(runbook, /PR14's database prerequisites are the validated PR12 OAuth saga/u);
+  assert.match(pr14Forward, /PR14 requires PR12 OAuth callback saga schema/u);
+  assert.match(pr14Forward, /PR14 requires validated PR12 OAuth saga and credential provenance controls/u);
   assert.match(migrationsReadme, /PR16 currently contains additive Drizzle schema declarations/u);
   assert.match(migrationsReadme, /does not yet contain reviewed forward\/rollback SQL/u);
   assert.match(runbook, /PR2 is a[\s\S]*delta, not an initial-schema migration/u);

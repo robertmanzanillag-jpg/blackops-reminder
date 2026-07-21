@@ -53,8 +53,9 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
-  assert.match(staging?.blockers.join(" ") ?? "", /PR1[\s\S]*PR13[\s\S]*PR16/u);
-  assert.match(staging?.nextAction ?? "", /PR1\/PR13\/PR16/u);
+  assert.match(staging?.blockers.join(" ") ?? "", /PR1[\s\S]*PR16/u);
+  assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR13/u);
+  assert.match(staging?.nextAction ?? "", /PR1[\s\S]*PR16/u);
 });
 
 test("agent API is authenticated, read-only and mounted separately from product actions", () => {

@@ -70,9 +70,9 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "No warning or failure remains in App QA",
     ],
     mergeGate: "Requires reviewed composition, staging database access and explicit approval before applying migrations.",
-    evidence: ["Draft PR #118", "PR30 no-go staging runbook prepared", "Exact 19-file forward/reverse inventory is statically tested", "Full AI Media Studio suite: 669 passed, 0 failed, 24 PostgreSQL-only skipped (693 total)", "Independent SQL checker and App QA recheck: P0=P1=P2=0"],
-    blockers: ["PR1 ai_media_* baseline and provenance are unproven", "PR13 OAuth SQL/baseline artifact is missing before PR14", "PR16 has no reviewed forward/rollback SQL", "Staging preflight and migration application are not authorized"],
-    nextAction: "Review the no-go runbook and resolve PR1/PR13/PR16 SQL provenance before requesting any staging access or approval.",
+    evidence: ["Draft PR #118", "PR30 no-go staging runbook prepared", "Exact 19-file forward/reverse inventory is statically tested", "Full AI Media Studio suite: 669 passed, 0 failed, 24 PostgreSQL-only skipped (693 total)", "Fresh SQL checker and App QA recheck: P0=P1=P2=0"],
+    blockers: ["PR1 ai_media_* baseline and provenance are unproven", "PR16 has no reviewed forward/rollback SQL and its relational invariants are incomplete", "Staging preflight and migration application are not authorized"],
+    nextAction: "Resolve PR1 provenance and split PR16 schema/repository hardening into reviewed PRs before requesting any forward staging rehearsal approval.",
   },
   {
     id: "ams-agent-one-video-sandbox",

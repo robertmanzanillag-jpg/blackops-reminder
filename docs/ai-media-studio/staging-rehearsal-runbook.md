@@ -12,7 +12,10 @@ blocked and not queued during this rehearsal.
 
 ## Current hard blockers
 
-Stop before opening any database connection while any item below remains true:
+Do not apply any forward migration while any item below remains true. A
+read-only catalog connection, backup, or isolated restore may happen only after
+its matching human-approval row below is explicitly approved, and may be used
+only to resolve that gate; this document itself grants no access.
 
 1. The stacked AI Media Studio PR series is still draft/unmerged or its exact
    commit chain has not been recorded for the rehearsal.
@@ -20,24 +23,29 @@ Stop before opening any database connection while any item below remains true:
    a production hostname is never an acceptable substitute.
 3. The PR1 `ai_media_*` baseline is not proven by catalog evidence. PR2 is a
    delta, not an initial-schema migration.
-4. PR14 explicitly requires validated PR13 OAuth controls, but no PR13
-   forward/rollback SQL exists in this directory. Stop after PR12 until the data
-   owner inventories a separately reviewed PR13 artifact or adds and reviews it.
-5. PR16 has Drizzle declarations but no reviewed forward/rollback SQL. Never
+4. PR16 has Drizzle declarations but no reviewed forward/rollback SQL. Its audit
+   also found unresolved relational invariants, so never
    bridge this gap with `drizzle-kit push`, `npm run db:push`, inferred SQL, or
    a production schema diff. A data owner must prove whether the later deltas
    require PR16 and either add reviewed SQL or document why it is not in the
    staging path.
-6. A fresh backup has not been restored successfully into an isolated database.
-7. PostgreSQL is older than 16 or `pgcrypto` is absent/untrusted.
-8. The three PR26 NOLOGIN/NOINHERIT roles and separate LOGIN principals have no
+5. A fresh backup has not been restored successfully into an isolated database.
+6. PostgreSQL is older than 16 or `pgcrypto` is absent/untrusted.
+7. The three PR26 NOLOGIN/NOINHERIT roles and separate LOGIN principals have no
    DBA-reviewed provisioning plan.
-9. Writers, webhooks, schedulers, generic render workers, admitted workers,
+8. Writers, webhooks, schedulers, generic render workers, admitted workers,
    terminal observers, asset-ingest workers, publishers, and cleanup workers
    cannot all be drained and kept off through the rehearsal.
-10. Robert has not explicitly approved the exact staging target, maintenance
+9. Robert has not explicitly approved the exact staging target, maintenance
    window, backup/restore plan, and operator. Replit/production approval is a
    separate later decision.
+
+PR13 is schema-neutral application infrastructure; an independent provenance
+audit confirmed its commit does not modify the schema or migration inventory.
+PR14's database prerequisites are the validated PR12 OAuth saga and provider
+credential-provenance controls. External S3/KMS/IAM readiness for PR13 remains
+a separate restart/runtime/sandbox gate and cannot be inferred from database
+rehearsal, but it does not block approved database-only preflight or migration.
 
 ## Human approvals
 
@@ -140,24 +148,23 @@ row repair, or catalog drift. Do not skip ahead and do not use glob order.
 7. `migrations/ai-media-studio/20260721_pr9_oauth_foundation_forward.sql`
 8. `migrations/ai-media-studio/20260721_pr11_oauth_policy_forward.sql`
 9. `migrations/ai-media-studio/20260721_pr12_oauth_callback_saga_forward.sql`
-10. **PR13 reviewed-SQL/baseline gate — currently missing; stop here.**
-11. `migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_forward.sql`
-12. `migrations/ai-media-studio/20260721_pr15_provider_connection_stages_forward.sql`
-13. **PR16 reviewed-SQL decision gate — currently missing; stop here.**
-14. `migrations/ai-media-studio/20260721_pr19_daily_admission_forward.sql`
-15. `migrations/ai-media-studio/20260721_pr20_launch_authorities_forward.sql`
-16. `migrations/ai-media-studio/20260721_pr22_launch_intents_forward.sql`
-17. `migrations/ai-media-studio/20260721_pr23_admission_held_handoff_forward.sql`
-18. `migrations/ai-media-studio/20260721_pr24_held_activation_forward.sql`
-19. `migrations/ai-media-studio/20260721_pr25_admitted_worker_forward.sql`
-20. `migrations/ai-media-studio/20260721_pr26_db_capability_forward.sql`
-21. `migrations/ai-media-studio/20260721_pr27_heygen_terminal_forward.sql`
+10. `migrations/ai-media-studio/20260721_pr14_oauth_vault_operations_forward.sql`
+11. `migrations/ai-media-studio/20260721_pr15_provider_connection_stages_forward.sql`
+12. **PR16 reviewed-SQL decision gate — currently missing; stop here.**
+13. `migrations/ai-media-studio/20260721_pr19_daily_admission_forward.sql`
+14. `migrations/ai-media-studio/20260721_pr20_launch_authorities_forward.sql`
+15. `migrations/ai-media-studio/20260721_pr22_launch_intents_forward.sql`
+16. `migrations/ai-media-studio/20260721_pr23_admission_held_handoff_forward.sql`
+17. `migrations/ai-media-studio/20260721_pr24_held_activation_forward.sql`
+18. `migrations/ai-media-studio/20260721_pr25_admitted_worker_forward.sql`
+19. `migrations/ai-media-studio/20260721_pr26_db_capability_forward.sql`
+20. `migrations/ai-media-studio/20260721_pr27_heygen_terminal_forward.sql`
 
 PR7, PR10, PR13, PR17, PR18, and PR21 have no standalone SQL file in this
 directory. That fact is not permission to infer or generate a migration. The
 operator must record the reviewed reason each is schema-neutral or covered by a
-later reviewed delta. PR13 is not schema-neutral for this manifest because PR14
-explicitly requires its validated controls. PR13 and PR16 are mandatory stops.
+later reviewed delta. PR13's reviewed commit is schema-neutral; PR14 verifies
+the PR12 database controls that its adapters consume. PR16 remains a mandatory stop.
 
 An approved operator invocation should be equivalent to the following shape,
 with the connection supplied by their private secret mechanism:
@@ -229,16 +236,15 @@ rollback explicitly says it is application-only or data preserving.
 9. **PR16 rollback decision gate — currently missing; stop here.**
 10. `20260721_pr15_provider_connection_stages_rollback.sql`
 11. `20260721_pr14_oauth_vault_operations_rollback.sql`
-12. **PR13 rollback/baseline gate — currently missing; stop here.**
-13. `20260721_pr12_oauth_callback_saga_rollback.sql`
-14. `20260721_pr11_oauth_policy_rollback.sql`
-15. `20260721_pr9_oauth_foundation_rollback.sql`
-16. `20260721_pr8_publishing_accounts_rollback.sql`
-17. `20260720_pr6_provider_identity_rollback.sql`
-18. `20260720_pr5_governance_rollback.sql`
-19. `20260720_pr4_assets_rollback.sql`
-20. `20260720_pr3_operations_rollback.sql`
-21. `20260720_pr2_core_rollback.sql`
+12. `20260721_pr12_oauth_callback_saga_rollback.sql`
+13. `20260721_pr11_oauth_policy_rollback.sql`
+14. `20260721_pr9_oauth_foundation_rollback.sql`
+15. `20260721_pr8_publishing_accounts_rollback.sql`
+16. `20260720_pr6_provider_identity_rollback.sql`
+17. `20260720_pr5_governance_rollback.sql`
+18. `20260720_pr4_assets_rollback.sql`
+19. `20260720_pr3_operations_rollback.sql`
+20. `20260720_pr2_core_rollback.sql`
 
 Do not assume rollback removes evidence or restores weakened uniqueness/foreign
 keys. Several reviewed rollback files deliberately preserve evidence and require
@@ -264,7 +270,7 @@ these occurs:
 
 - target identity is ambiguous or resembles production;
 - backup restore or hash verification fails;
-- PR1/PR13/PR16/schema provenance is incomplete;
+- PR1/PR16/schema provenance is incomplete;
 - a preflight detects orphan, duplicate, cross-tenant, unexpected role/grant,
   extension, trigger, function, constraint, or index state;
 - a SQL client returns nonzero, a transaction remains open/aborted, or a timeout
