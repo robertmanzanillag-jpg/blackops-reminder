@@ -14,6 +14,7 @@ import {
 } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
 import type { Sha256Digest } from "./contracts";
+import { lockAuthorityWorkspace, lockGovernanceProfile } from "./authority-locks";
 
 const AUTHORITY_SNAPSHOTS = sql.raw('"ai_media_launch_authority_snapshots"');
 const LAUNCH_EVIDENCE = sql.raw('"ai_media_launch_evidence"');
@@ -266,12 +267,33 @@ export class DrizzleDailyAdmissionRepository {
         )) AS global_concurrency_locked
       `);
 
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(hashtextextended(
-          'ai-media:daily-admission:workspace:' || ${request.scope.ownerUserId} || ':'
-          || ${request.scope.workspaceId}, 0
-        )) AS workspace_locked
-      `);
+      await lockAuthorityWorkspace(tx, request.scope);
+
+      // The governance repository serializes append-only revisions with this
+      // subject lock. Locking only the referenced row would not block a newer
+      // INSERT and could otherwise admit a superseded profile.
+      const governanceSubjectRows = resultRows(await tx.execute(sql`
+        SELECT slots.influencer_id
+        FROM ${AUTHORITY_SNAPSHOTS} snapshots
+        INNER JOIN ${aiMediaDailyPlanSlots} slots
+          ON slots.owner_user_id=snapshots.owner_user_id
+          AND slots.workspace_id=snapshots.workspace_id
+          AND slots.id=snapshots.daily_plan_slot_id
+          AND slots.daily_plan_id=snapshots.daily_plan_id
+        WHERE snapshots.owner_user_id=${request.scope.ownerUserId}
+          AND snapshots.workspace_id=${request.scope.workspaceId}
+          AND snapshots.id=${request.authoritySnapshotId}
+          AND snapshots.authority_digest=${request.authorityDigest}
+          AND snapshots.daily_plan_id=${request.planId}
+          AND snapshots.daily_plan_slot_id=${request.slotId}
+        LIMIT 2
+      `));
+      if (governanceSubjectRows.length !== 1) {
+        throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Exact durable launch authority did not admit this slot");
+      }
+      const influencerId = String(value(governanceSubjectRows[0], "influencerId", "influencer_id"));
+      if (!UUID.test(influencerId)) throw invariant("Authority snapshot returned an invalid governance subject");
+      await lockGovernanceProfile(tx, request.scope, influencerId);
 
       const clockRow = resultRows(await tx.execute(sql`
         SELECT observed_at AS database_now,

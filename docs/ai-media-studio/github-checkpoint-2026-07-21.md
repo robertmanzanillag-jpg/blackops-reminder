@@ -2,7 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Active local checkpoint: PR20 durable launch authorities
+## Active local checkpoint: PR21 authenticated authority issuers
+
+- Branch: `codex/ai-media-studio-authority-issuers`, draft PR #104, stacked on draft PR #103.
+- Scope: server-only, capability-separated policy, kill-switch, content approval, human launch approval, sandbox, maximum-quote and snapshot issuers; append-only Drizzle persistence; shared authority/governance locks; and an isolated PostgreSQL test harness.
+- Trust boundary: authenticated principals and adapter attestations are injected branded server dependencies. Human commands cannot select actor/source/time/revision/provider/governance/country/money/digests. The service and repository are absent from routes and public barrels.
+- PostgreSQL evidence: a fresh socket-only PostgreSQL 16.14 cluster applied the exact checked-in PR19 then PR20 forward SQL over a minimal test-only prerequisite schema; 7/7 integration checks covered schema controls, tenant rejection, immutability, exact reservation authority, concurrent revision/idempotency conflicts, retained evidence and fail-closed reapplication. No user database, `DATABASE_URL`, `db:push` or Homebrew cluster was touched.
+- Safety boundary: no migration was applied outside the disposable harness; no render job, outbox command, provider call, credit spend, post, secret change or deployment is enabled.
+- Review evidence: full AI Media Studio suite 558 passed with the seven PostgreSQL-only cases safely skipped, isolated PostgreSQL 7/7, focused integration 27/27, TypeScript, production build, diff hygiene, independent checker and static App QA pass. Security found no P0/P1 and approved only the inert checkpoint boundary.
+- Remaining gates: production RBAC/authenticator composition, runtime-minted sandbox/quote attestations (TypeScript brands are not authentication), a durable source of launch intent for governance use/territory/content country, budget-bucket provisioning, production-scale concurrency counters, staging-copy migration/restart rehearsal, sandbox generation and Robert's explicit spend/deployment approval.
+
+## Preserved checkpoint: PR20 durable launch authorities
 
 - Branch: `codex/ai-media-studio-durable-authorities`, draft PR #103, stacked on draft PR #102.
 - Scope: append-only workspace admission-policy and kill-switch revisions, exact per-slot approval/sandbox/maximum-quote evidence chains, immutable launch-authority snapshots, and reservation binding to the exact snapshot/digest.
