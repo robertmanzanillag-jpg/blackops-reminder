@@ -108,6 +108,29 @@ test("rejects reset curl streams without crashing the Node process", async () =>
   }
 });
 
+test("rejects a missing curl header stream without crashing", async () => {
+  const streams = [new PassThrough(), new PassThrough(), new PassThrough()];
+  const child = Object.assign(new EventEmitter(), {
+    stdin: streams[0],
+    stdout: streams[1],
+    stderr: streams[2],
+    stdio: streams,
+    kill: () => true,
+  });
+  const spawnProcess = (() => child) as unknown as typeof import("node:child_process").spawn;
+
+  await assert.rejects(
+    () => postMetricoolJsonBytes(
+      "https://app.metricool.com/api/v2/scheduler/posts",
+      "valid-token-that-is-long-enough",
+      JSON.stringify({ text: "audio first" }),
+      1_000,
+      spawnProcess,
+    ),
+    /header stream is unavailable/,
+  );
+});
+
 test("finds exact caption and schedule evidence", () => {
   const post = { id: 99, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
   assert.equal(findVerifiedMetricoolPost({ data: [post] }, input.caption, input.publicationDateTime), post);
