@@ -2955,6 +2955,10 @@ test("Clippers human review queue exposes authorized files without unlocking Met
   await mkdir(leonidasDir, { recursive: true });
   await writeFile(path.join(sadlightsDir, "sad.mp4"), Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_000)]));
   await writeFile(path.join(leonidasDir, "esp.mp4"), Buffer.from("review-only-source"));
+  const contactSheet = Buffer.alloc(1_200);
+  contactSheet.set([0xff, 0xd8, 0xff], 0);
+  contactSheet.set([0xff, 0xd9], contactSheet.length - 2);
+  await writeFile(path.join(sadlightsDir, "sad__contact-sheet.jpg"), contactSheet);
   await writeFile(path.join(sadlightsDir, "review-manifest.csv"), [
     "title,exact_source_url,local_raw_file,vertical_intake_file,source_age,source_views,creator_permission,audio_review,context_review,gameplay_rights_review,no_ai_required,status",
     '"Safe candidate","https://www.twitch.tv/sadlights/clip/ExactClip","sad.mp4","../../source-drop/memes/memes-real-53467d8f7dad.mp4","2 days","42","verified","required","required","required","yes","review_required"',
@@ -2984,8 +2988,10 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.equal(queue.realPublishEnabled, false);
     assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, approvedForIntake: 0, rejected: 1, noAi: 1, publishAllowed: 0 });
     assert.ok(queue.rows.every((row) => row.publishAllowed === false));
-    assert.equal(queue.rows.find((row) => row.creator === "sadlights").noAiRequired, true);
-    assert.equal(queue.rows.find((row) => row.creator === "sadlights").sourceUrl, "https://www.twitch.tv/sadlights/clip/ExactClip");
+    const sadlightsRow = queue.rows.find((row) => row.creator === "sadlights");
+    assert.equal(sadlightsRow.noAiRequired, true);
+    assert.equal(sadlightsRow.sourceUrl, "https://www.twitch.tv/sadlights/clip/ExactClip");
+    assert.equal(sadlightsRow.contactSheetUrl, "/clippers-workspace/quarantine/sadlights-review/sad__contact-sheet.jpg");
     assert.equal(queue.rows.find((row) => row.creator === "ESP Leonidas").status, "rejected_visual_policy_risk");
 
     const htmlResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.html");
@@ -2999,7 +3005,27 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(body, /Descartado/);
     assert.match(body, /action="\/api\/clippers\/human-review-decision"/);
     assert.match(body, /Aprobar para intake/);
+    assert.match(body, /Vista rápida · abre la imagen completa/);
+    assert.match(body, /sad__contact-sheet\.jpg/);
     assert.doesNotMatch(body, /ready to publish|listo para publicar/i);
+
+    const contactSheetResponse = await fetch("http://127.0.0.1:5578/clippers-workspace/quarantine/sadlights-review/sad__contact-sheet.jpg");
+    assert.equal(contactSheetResponse.status, 200);
+    assert.equal(contactSheetResponse.headers.get("content-type"), "image/jpeg");
+
+    const contactSheetPath = path.join(sadlightsDir, "sad__contact-sheet.jpg");
+    const outsideContactSheetPath = path.join(testWorkspaceParent, "outside-contact-sheet.jpg");
+    await writeFile(outsideContactSheetPath, contactSheet);
+    await rm(contactSheetPath, { force: true });
+    await symlink(outsideContactSheetPath, contactSheetPath);
+    const symlinkedContactQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(symlinkedContactQueue.rows.find((row) => row.creator === "sadlights").contactSheetUrl, "");
+    await rm(contactSheetPath, { force: true });
+    await rm(outsideContactSheetPath, { force: true });
+    await writeFile(contactSheetPath, Buffer.alloc(1_200));
+    const invalidContactQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(invalidContactQueue.rows.find((row) => row.creator === "sadlights").contactSheetUrl, "");
+    await writeFile(contactSheetPath, contactSheet);
 
     const baseDecision = {
       id: "sadlights-review:sad.mp4",

@@ -9490,6 +9490,8 @@ async function serveFile(res, filePath) {
     ".csv": "text/csv; charset=utf-8",
     ".md": "text/markdown; charset=utf-8",
     ".mp4": "video/mp4",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
   }[ext] || "application/octet-stream";
   res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
   const stream = createReadStream(fileRealPath);
@@ -9880,6 +9882,40 @@ function validPersistedHumanReviewDecision(decision, reviewRow) {
   return true;
 }
 
+async function verifiedHumanReviewContactSheet(directoryPath, directory, localFile) {
+  if (!localFile) return "";
+  const contactSheetName = `${path.parse(localFile).name}__contact-sheet.jpg`;
+  const contactSheetPath = path.join(directoryPath, contactSheetName);
+  const [quarantineStat, directoryStat, contactSheetStat] = await Promise.all([
+    lstat(quarantineDir).catch(() => null),
+    lstat(directoryPath).catch(() => null),
+    lstat(contactSheetPath).catch(() => null),
+  ]);
+  if (quarantineStat?.isSymbolicLink() || directoryStat?.isSymbolicLink() || contactSheetStat?.isSymbolicLink()) return "";
+  if (!contactSheetStat?.isFile() || contactSheetStat.size < 1_024 || contactSheetStat.size > 5 * 1024 * 1024) return "";
+  const file = await open(contactSheetPath, "r").catch(() => null);
+  if (!file) return "";
+  try {
+    const header = Buffer.alloc(3);
+    const footer = Buffer.alloc(2);
+    const [headerRead, footerRead] = await Promise.all([
+      file.read(header, 0, header.length, 0),
+      file.read(footer, 0, footer.length, contactSheetStat.size - footer.length),
+    ]);
+    const isJpeg = headerRead.bytesRead === 3
+      && footerRead.bytesRead === 2
+      && header[0] === 0xff
+      && header[1] === 0xd8
+      && header[2] === 0xff
+      && footer[0] === 0xff
+      && footer[1] === 0xd9;
+    if (!isJpeg) return "";
+  } finally {
+    await file.close().catch(() => {});
+  }
+  return `/clippers-workspace/quarantine/${encodeURIComponent(directory)}/${encodeURIComponent(contactSheetName)}`;
+}
+
 async function buildHumanReviewQueue() {
   const sources = [
     {
@@ -9937,6 +9973,9 @@ async function buildHumanReviewQueue() {
       const localFile = path.basename(String(normalized.localFile || ""));
       const filePath = localFile ? path.join(directoryPath, localFile) : "";
       const fileStat = filePath ? await stat(filePath).catch(() => null) : null;
+      const contactSheetUrl = fileStat?.isFile()
+        ? await verifiedHumanReviewContactSheet(directoryPath, source.directory, localFile)
+        : "";
       rows.push({
         id: `${source.directory}:${localFile || normalized.title || rows.length + 1}`,
         creator: source.creator,
@@ -9949,6 +9988,7 @@ async function buildHumanReviewQueue() {
         mediaUrl: fileStat?.isFile()
           ? `/clippers-workspace/quarantine/${encodeURIComponent(source.directory)}/${encodeURIComponent(localFile)}`
           : "",
+        contactSheetUrl,
         fileReady: Boolean(fileStat?.isFile()),
         fileBytes: fileStat?.isFile() ? fileStat.size : 0,
         evidenceUrl: source.evidenceUrl,
@@ -10354,6 +10394,7 @@ function renderHumanReviewQueuePage(queue) {
     .review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.review-head h2{margin:0}.review-meta{color:#9eaca4;font-size:12px;margin-top:5px}
     .review-status{border:1px solid #52635a;border-radius:999px;padding:5px 8px;font-size:11px;white-space:nowrap}.review-status.rejected{border-color:#74433e;color:#ff9d95}.review-status.approved{border-color:#3f765a;color:#a8efc6}
     video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806;margin:0 0 13px}
+    .review-preview{display:block;margin:0 0 13px}.review-preview span{display:block;color:#9eaca4;font-size:12px;margin-bottom:7px}.review-preview img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806}
     .review-checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin:13px 0}.review-check{font-size:12px;color:#c9d2cd}.review-check strong{color:#fff}
     .review-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.review-links a{border:1px solid #29372f;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:12px}
     .review-note{font-size:12px;color:#9eaca4;border-left:2px solid #52635a;padding-left:10px;margin-top:13px}
@@ -10384,6 +10425,7 @@ function renderHumanReviewQueuePage(queue) {
       const approved = row.humanDecision === "approved_for_intake" && !rejected;
       return `<article class="review-item">
         <div class="review-head"><div><h2>${escapeHtml(row.title)}</h2><div class="review-meta">${escapeHtml(row.creator)} · ${escapeHtml(row.sourceAge)} · ${escapeHtml(row.sourceViews)} vistas históricas</div></div><span class="review-status${rejected ? " rejected" : approved ? " approved" : ""}">${escapeHtml(humanReviewStatusLabel(row))}</span></div>
+        ${row.contactSheetUrl ? `<a class="review-preview" href="${escapeHtml(row.contactSheetUrl)}" target="_blank" rel="noopener noreferrer"><span>Vista rápida · abre la imagen completa</span><img loading="lazy" src="${escapeHtml(row.contactSheetUrl)}" alt="Seis fotogramas para revisar visualmente ${escapeHtml(row.title)}" /></a>` : ""}
         ${row.mediaUrl ? `<video controls preload="metadata" src="${escapeHtml(row.mediaUrl)}"></video>` : `<p class="review-note">Falta el archivo local.</p>`}
         <div class="review-checks">
           <div class="review-check"><strong>Derechos:</strong> ${escapeHtml(row.rightsStatus)}</div>
