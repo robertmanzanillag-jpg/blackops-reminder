@@ -8,6 +8,8 @@ export type BlackRoomRemoteCommand =
 export interface BlackRoomChatResult {
   reply: string;
   command: BlackRoomRemoteCommand | null;
+  control?: { enabled: boolean; weeks?: number };
+  statusRequested?: boolean;
 }
 
 function localDate(now: Date, timezone: string): string {
@@ -30,6 +32,23 @@ function remainingNinetyMinuteSlots(now: Date, timezone: string): number {
 
 function normalized(message: string): string {
   return message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export function looksLikeBlackRoomAssistantRequest(message: string): boolean {
+  const text = normalized(String(message || ""));
+  if (!text) return false;
+  const namesBlackRoom = /\bblack\s*room\b/.test(text);
+  if (/\bradio\b/.test(text)) return false;
+  if (namesBlackRoom && /\b(website|web|pagina|builder|links?|bio)\b/.test(text)) return false;
+  if (namesBlackRoom && /\b(estado|status|como va|cola)\b/.test(text)) return true;
+  if (namesBlackRoom && /\b(agente|videos?|posts?|publicaciones?|tiktok|metricool|djs?|contenido|analytics|analitica|clips?|cortes?)\b/.test(text)) return true;
+  if (namesBlackRoom && youtubeUrl(message) && /\b(clips?|cortes?|djs?|tiktok|metricool|videos?)\b/.test(text)) return true;
+  if (/\b(sube|publica|agenda|agrega)\b.*\b(videos?|posts?|publicaciones?)\b.*\b(mas|extra|hoy|por dia|al dia|x dia|diarios?|cada dia)\b/.test(text)) return true;
+  if (/\b(sube|publica|agenda|agrega)\s+\d{1,2}\b.*\b(hoy|por dia|al dia|x dia|diarios?|cada dia)\b/.test(text)) return true;
+  if (/\b(videos?|posts?|publicaciones?)\b.*\b(mas hoy|extra hoy|por dia|diarios?|cada dia)\b/.test(text)) return true;
+  if (/\b(play|inicia|activa|empieza|pausa|deten|para)\b.*\b(agente|videos?|contenido|tiktok|metricool)\b/.test(text)) return true;
+  return /\b(analytics|analitica|recomienda|conviene)\b/.test(text)
+    && /\b(videos?|posts?|tiktok|djs?|contenido)\b/.test(text);
 }
 
 function youtubeUrl(message: string): string | null {
@@ -57,6 +76,26 @@ export function parseBlackRoomChatCommand(
       command: { id: randomUUID(), type: "priority_source", url: sourceUrl, createdAt: now.toISOString() },
     };
   }
+  if (/\b(estado|status|como va|cuantos? hay)\b/.test(text) && /\b(black\s*room|agente|videos?|cola)\b/.test(text)) {
+    return { reply: "Estoy consultando el estado actual de BlackRoom.", command: null, statusRequested: true };
+  }
+  const weeks = Number(text.match(/\b([1-4])\s*semanas?\b/)?.[1]);
+  const wantsPause = /\b(pausa|pausar|deten|detener)\b/.test(text)
+    || /\bpara (?:el )?(?:agente|contenido|videos?)\b/.test(text);
+  if (wantsPause && /\b(black\s*room|agente|videos?|contenido|tiktok|metricool)\b/.test(text)) {
+    return {
+      reply: "Listo. Pausaré el agente de BlackRoom de forma segura. La cola y el historial quedan guardados para continuar después.",
+      command: null,
+      control: { enabled: false },
+    };
+  }
+  if (/\b(play|inicia|iniciar|activa|activar|empieza|comienza)\b/.test(text) && /\b(black\s*room|agente|videos?|contenido|tiktok|metricool)\b/.test(text)) {
+    return {
+      reply: `Listo. Activaré el agente de BlackRoom${Number.isFinite(weeks) ? ` para mantener ${weeks} semana${weeks === 1 ? "" : "s"} de contenido en cola` : ""}.`,
+      command: null,
+      control: { enabled: true, ...(Number.isFinite(weeks) ? { weeks } : {}) },
+    };
+  }
   const number = Number(text.match(/\b(\d{1,2})\b/)?.[1]);
   if (Number.isFinite(number) && (number < 1 || number > 20)) {
     return { reply: "La cantidad debe estar entre 1 y 20 videos para mantener una cadencia segura.", command: null };
@@ -71,7 +110,7 @@ export function parseBlackRoomChatCommand(
       command: { id: randomUUID(), type: "extra_posts", posts: number, targetDate: localDate(now, timezone), createdAt: now.toISOString() },
     };
   }
-  if (Number.isFinite(number) && /(por dia|diarios?|cada dia)/.test(text)) {
+  if (Number.isFinite(number) && /(por dia|al dia|x dia|diarios?|cada dia)/.test(text)) {
     return {
       reply: `Entendido. El objetivo automático será ${number} video${number === 1 ? "" : "s"} por día. Si los analytics no respaldan esa frecuencia, te lo señalaré sin ignorar tu orden.`,
       command: { id: randomUUID(), type: "daily_target", posts: number, createdAt: now.toISOString() },

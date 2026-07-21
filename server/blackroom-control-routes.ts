@@ -13,11 +13,12 @@ import {
   readBlackRoomRemoteControl,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
-  appendBlackRoomRemoteCommand,
   type BlackRoomRemoteControlState,
 } from "./blackroom-remote-control";
-import { parseBlackRoomChatCommand } from "./blackroom-chat";
+import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
 import { scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
+import { getCurrentUserId } from "./user-context";
+import { isConfiguredSingleUserOwner } from "./single-user-owner";
 
 const BLACKROOM_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
 const BLACKROOM_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
@@ -189,14 +190,9 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     try {
       const message = String(req.body?.message || "").trim();
       if (!message || message.length > 1_000) return res.status(400).json({ error: "Escribe un mensaje de hasta 1,000 caracteres." });
-      const current = await readBlackRoomRemoteControl();
-      const deviceQueue = current.device?.queue as { postsPerDay?: number; analytics?: { sampleCount?: number } } | undefined;
-      const parsed = parseBlackRoomChatCommand(message, {
-        analyticsSamples: Number(deviceQueue?.analytics?.sampleCount || 0),
-        currentPostsPerDay: Number(deviceQueue?.postsPerDay || 10),
-      });
-      const remote = await mutateBlackRoomRemoteControl((state) => appendBlackRoomRemoteCommand(state, { message, ...parsed }));
-      res.json({ reply: parsed.reply, command: parsed.command, remote: remoteView(remote) });
+      if (!await isConfiguredSingleUserOwner(getCurrentUserId(req))) return res.status(403).json({ error: "Solo el owner puede controlar el agente de BlackRoom." });
+      const result = await executeBlackRoomChatMessage(message);
+      res.json({ reply: result.reply, command: result.command, remote: remoteView(result.remote) });
     } catch (error: any) { res.status(500).json({ error: error.message || "No pude procesar la orden de BlackRoom" }); }
   });
   app.get("/api/blackroom-agent/remote", async (req, res) => {
