@@ -132,10 +132,12 @@ export async function scheduleBlackRoomMetricoolPost(
   if (!input.caption.trim() || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(input.publicationDateTime)) {
     throw new Error("Invalid Metricool caption or publication date");
   }
-  const headers = { "X-Mc-Auth": token, "Content-Type": "application/json" };
+  // Match Metricool's official MCP client exactly. Its scheduler route uses the
+  // MCP integration source and explicitly requests JSON in both directions.
+  const headers = { "X-Mc-Auth": token, "content-type": "application/json", accept: "application/json" };
   const date = input.publicationDateTime.slice(0, 10);
   const timezone = encodeURIComponent(input.timezone || BLACKROOM_TIMEZONE);
-  const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=BlackRoom`;
+  const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
   const verifyUrl = `${schedulerUrl}&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59&timezone=${timezone}&extendedRange=false`;
   const existing = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "duplicate preflight");
   const existingMatch = findVerifiedMetricoolPost(existing, input.caption, input.publicationDateTime);
@@ -149,7 +151,7 @@ export async function scheduleBlackRoomMetricoolPost(
   const payload = buildMetricoolTikTokPayload(input, mediaId);
   const scheduled = await metricoolJson(await fetcher(schedulerUrl, {
     method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(120_000),
   }), "post scheduling");
