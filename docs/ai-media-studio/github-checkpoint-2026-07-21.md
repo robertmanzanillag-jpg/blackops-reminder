@@ -271,3 +271,14 @@ Evidence at first local checkpoint before GitHub preservation:
 - `npm run check` was started but intentionally interrupted after it produced no errors or diagnostics for more than 90 seconds, because Robert asked to preserve the work in GitHub before the session/credits ran out.
 - Independent domain maker reported its four-file slice passed focused tests, TypeScript and diff hygiene before handoff.
 - Independent persistence maker/reviewer evidence was still pending at this checkpoint, so PR15 must remain WIP/draft until full checker, security and App QA gates complete.
+
+Final PR15 hardening checkpoint:
+
+- Capabilities now require both a locally allowlisted verified task and its exact effective publishing scope; TikTok `video.upload` never grants direct-publish capability.
+- Meta exchange accepts only the expiring grant-level User descriptor. Discovery stores no Page token; activation/vault v2 must obtain and bind one operational artifact only after exact target selection.
+- Provider manifest revisions are resolved from the frozen local platform registry, candidate and selection evidence are append-only, and in-memory behavior matches global token-binding, bounded-lease and attempt-expiry controls.
+- Focused PR15/persistence tests pass 33/33. A targeted strict TypeScript compile of all changed server/shared modules passes, as do diff hygiene checks.
+- The full AI Media Studio run produced 449/461 passes inside the restricted sandbox; the 12 failures were only `listen EPERM` and all affected HTTP tests passed outside the sandbox, yielding 461/461 composed evidence before the final isolated hardening. The affected focused suite was rerun after hardening.
+- Production build exits successfully. Existing Vite chunk-size and unavailable local `yt-dlp` Python runtime warnings still block deployment under App QA policy; no deployment is requested.
+- Independent security re-review reports no remaining P0-P3. Static App QA reports no PR15 UI, route, timer, network, provider/AWS, posting, migration-apply or customer-visible regression.
+- Full-project `npm run check` remained abnormally long and was interrupted without diagnostics; the PR remains draft while that global gate lacks completed evidence.

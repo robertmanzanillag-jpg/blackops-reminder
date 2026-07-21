@@ -199,11 +199,25 @@ export const OAUTH_PROVIDER_SCOPE_ALLOWLISTS: Readonly<Record<OAuthProviderGrant
   ]),
 });
 
+export const OAUTH_PROVIDER_MANIFEST_REVISIONS: Readonly<Record<AiMediaOAuthPlatform, string>> = Object.freeze({
+  tiktok: "tiktok-v2",
+  youtube_shorts: "google-youtube-v1",
+  facebook: "meta-graph-v23",
+  instagram: "meta-graph-v23",
+});
+
 export const OAUTH_PROVIDER_VERIFIED_TASK_CAPABILITIES: Readonly<Record<OAuthProviderTargetKind, Readonly<Record<string, readonly OAuthProviderConnectionCapability[]>>>> = Object.freeze({
-  tiktok_user: Object.freeze({ "video.publish": Object.freeze(["publish_video"]), "video.upload": Object.freeze(["publish_video"]) }),
-  youtube_channel: Object.freeze({ "youtube.upload": Object.freeze(["publish_video"]) }),
-  facebook_page: Object.freeze({ CREATE_CONTENT: Object.freeze(["publish_video"]), MODERATE: Object.freeze(["webhook_events"]), ANALYZE: Object.freeze(["read_analytics"]) }),
-  instagram_professional_account: Object.freeze({ instagram_content_publish: Object.freeze(["publish_video"]), instagram_manage_insights: Object.freeze(["read_analytics"]) }),
+  tiktok_user: Object.freeze({ "video.publish": Object.freeze(["publish_video"] as const) }),
+  youtube_channel: Object.freeze({ "youtube.upload": Object.freeze(["publish_video"] as const) }),
+  facebook_page: Object.freeze({ CREATE_CONTENT: Object.freeze(["publish_video"] as const) }),
+  instagram_professional_account: Object.freeze({ instagram_content_publish: Object.freeze(["publish_video"] as const) }),
+});
+
+const OAUTH_PROVIDER_TASK_SCOPE_REQUIREMENTS: Readonly<Record<OAuthProviderTargetKind, Readonly<Record<string, readonly string[]>>>> = Object.freeze({
+  tiktok_user: Object.freeze({ "video.publish": Object.freeze(["video.publish"]) }),
+  youtube_channel: Object.freeze({ "youtube.upload": Object.freeze(["https://www.googleapis.com/auth/youtube.upload"]) }),
+  facebook_page: Object.freeze({ CREATE_CONTENT: Object.freeze(["pages_manage_posts"]) }),
+  instagram_professional_account: Object.freeze({ instagram_content_publish: Object.freeze(["instagram_content_publish"]) }),
 });
 
 export function isCompatibleOAuthProviderTarget(
@@ -234,11 +248,17 @@ export function validateOAuthProviderScopes(
 export function deriveOAuthProviderCapabilities(
   kind: OAuthProviderTargetKind,
   verifiedTasks: readonly string[],
+  actualScopes: readonly string[],
 ): readonly OAuthProviderConnectionCapability[] {
-  if (!isUniqueSafeList(verifiedTasks, 50)) throw new OAuthProviderConnectionError();
+  if (!isUniqueSafeList(verifiedTasks, 50) || !isUniqueSafeList(actualScopes, 50)) throw new OAuthProviderConnectionError();
   const taskMap = OAUTH_PROVIDER_VERIFIED_TASK_CAPABILITIES[kind];
   if (verifiedTasks.some((task) => !(task in taskMap))) throw new OAuthProviderConnectionError();
-  return Object.freeze([...new Set(verifiedTasks.flatMap((task) => taskMap[task] ?? []))].sort()) as readonly OAuthProviderConnectionCapability[];
+  const scopeRequirements = OAUTH_PROVIDER_TASK_SCOPE_REQUIREMENTS[kind];
+  const capabilities = [...new Set(verifiedTasks.flatMap((task) =>
+    (scopeRequirements[task] ?? []).every((scope) => actualScopes.includes(scope)) ? taskMap[task] ?? [] : [],
+  ))].sort() as OAuthProviderConnectionCapability[];
+  if (capabilities.length === 0) throw new OAuthProviderConnectionError();
+  return Object.freeze(capabilities);
 }
 
 export function validateOAuthProviderTokenArtifacts(
@@ -260,17 +280,16 @@ export function validateOAuthProviderTokenArtifacts(
     } else if (artifact.lifetime.kind === "provider_non_expiring") {
       if (grantFamily !== "meta_facebook_login" || artifact.role !== "operational_access") throw new OAuthProviderConnectionError();
     } else if (artifact.lifetime.kind === "revocation_bound") {
-      const allowedRevocationBound = (grantFamily === "google_user" && artifact.role === "refresh")
-        || (grantFamily === "meta_facebook_login" && artifact.role === "operational_access");
+      const allowedRevocationBound = grantFamily === "google_user" && artifact.role === "refresh";
       if (!allowedRevocationBound) throw new OAuthProviderConnectionError();
     } else {
       throw new OAuthProviderConnectionError();
     }
   }
   if (grantFamily === "meta_facebook_login") {
-    if (!roles.has("operational_access") || roles.has("refresh")) throw new OAuthProviderConnectionError();
-    const grantArtifact = artifacts.find((artifact) => artifact.role === "grant_user_access");
-    if (grantArtifact && grantArtifact.lifetime.kind !== "expires_at") throw new OAuthProviderConnectionError();
+    if (roles.size !== 1 || !roles.has("grant_user_access") || artifacts[0]?.lifetime.kind !== "expires_at") {
+      throw new OAuthProviderConnectionError();
+    }
   } else if (roles.size !== 2 || !roles.has("operational_access") || !roles.has("refresh") || roles.has("grant_user_access")) {
     throw new OAuthProviderConnectionError();
   }

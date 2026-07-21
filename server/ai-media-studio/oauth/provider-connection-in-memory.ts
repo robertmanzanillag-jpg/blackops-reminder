@@ -1,6 +1,7 @@
 import type { TenantScope } from "../core/resource-domain";
 import {
   OAUTH_PROVIDER_SCOPE_ALLOWLISTS,
+  OAUTH_PROVIDER_MANIFEST_REVISIONS,
   OAuthProviderConnectionError,
   deriveOAuthProviderCapabilities,
   isCompatibleOAuthProviderTarget,
@@ -77,7 +78,11 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
 
   async create(input: CreateOAuthProviderConnectionAttempt): Promise<OAuthProviderConnectionAttempt> {
     const storageKey = key(input.scope, input.id);
-    if (this.attempts.has(storageKey)) throw new OAuthProviderConnectionError();
+    if (this.attempts.has(storageKey) || [...this.attempts.values()].some((attempt) =>
+      attempt.tokenBindingId === input.tokenBindingId || (attempt.scope.ownerUserId === input.scope.ownerUserId
+      && attempt.scope.workspaceId === input.scope.workspaceId && attempt.oauthSessionId === input.oauthSessionId))) {
+      throw new OAuthProviderConnectionError();
+    }
     const createdMs = timestamp(input.createdAt);
     if (timestamp(input.expiresAt) <= createdMs || !isCompatibleOAuthProviderTarget(input.platform, input.grantFamily, targetKindFor(input.platform))) {
       throw new OAuthProviderConnectionError();
@@ -85,6 +90,7 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     required(input.id); required(input.scope.ownerUserId); required(input.scope.workspaceId);
     required(input.actorUserId); required(input.providerAccountId); required(input.oauthSessionId);
     required(input.manifestRevision, 100); required(input.tokenBindingId);
+    if (input.manifestRevision !== OAUTH_PROVIDER_MANIFEST_REVISIONS[input.platform]) throw new OAuthProviderConnectionError();
     if (!Number.isSafeInteger(input.expectedCredentialVersion) || input.expectedCredentialVersion < 0
       || input.targetCredentialVersion !== input.expectedCredentialVersion + 1) throw new OAuthProviderConnectionError();
     const allowedScopes = exactList(input.allowedScopes);
@@ -142,7 +148,8 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     if (!attempt) return undefined;
     const nowMs = timestamp(input.now);
     const expiresMs = timestamp(input.leaseExpiresAt);
-    if (expiresMs <= nowMs || timestamp(attempt.expiresAt) <= nowMs) throw new OAuthProviderConnectionError();
+    if (expiresMs <= nowMs || expiresMs > nowMs + 5 * 60 * 1_000 || expiresMs > timestamp(attempt.expiresAt)
+      || timestamp(attempt.expiresAt) <= nowMs) throw new OAuthProviderConnectionError();
     required(input.leaseToken); required(input.leaseOwner);
     const progressStage = PROGRESS[input.stage];
     const reclaim = attempt.stage === progressStage && attempt.leaseExpiresAt !== null && timestamp(attempt.leaseExpiresAt) <= nowMs;
@@ -214,7 +221,7 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
         displayName: candidate.displayName,
         ...(candidate.parentTargetId === undefined ? {} : { parentTargetId: candidate.parentTargetId }),
         verifiedTasks,
-        capabilities: deriveOAuthProviderCapabilities(candidate.kind, verifiedTasks),
+        capabilities: deriveOAuthProviderCapabilities(candidate.kind, verifiedTasks, attempt.actualScopes),
         eligibilityDigest: candidate.eligibilityDigest,
         manifestRevision: candidate.manifestRevision,
         discoveredAt: candidate.discoveredAt,
@@ -232,14 +239,14 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     const attempt = this.attempts.get(storageKey);
     if (!attempt) return undefined;
     required(input.actorUserId); required(input.candidateId); required(input.targetId);
-    timestamp(input.now);
+    const nowMs = timestamp(input.now);
     if (attempt.selectedCandidateId !== null) {
       if (attempt.selectedCandidateId === input.candidateId && attempt.selectedTargetId === input.targetId
         && attempt.selectedTargetKind === input.targetKind && attempt.selectedByActorUserId === input.actorUserId
         && attempt.selectedStageVersion === input.expectedStageVersion) return clone(attempt);
       throw new OAuthProviderConnectionError();
     }
-    if (attempt.stage !== "awaiting_target" || attempt.stageVersion !== input.expectedStageVersion
+    if (timestamp(attempt.expiresAt) <= nowMs || attempt.stage !== "awaiting_target" || attempt.stageVersion !== input.expectedStageVersion
       || attempt.actorUserId !== input.actorUserId) return undefined;
     const candidate = attempt.candidates.find((item) => item.candidateId === input.candidateId);
     if (!candidate || candidate.targetId !== input.targetId || candidate.kind !== input.targetKind) throw new OAuthProviderConnectionError();

@@ -36,11 +36,22 @@ async function throughExchange(repository: InMemoryOAuthProviderConnectionReposi
 test("only one worker wins a pending-stage race", async () => {
   const repository = new InMemoryOAuthProviderConnectionRepository();
   await repository.create(createInput());
+  await assert.rejects(repository.claim({ ...claimInput("exchange_pending", "too-long"), leaseExpiresAt: "2026-07-21T12:06:00.001Z" }), OAuthProviderConnectionError);
   const [one, two] = await Promise.all([
     repository.claim(claimInput("exchange_pending", "one")),
     repository.claim(claimInput("exchange_pending", "two")),
   ]);
   assert.equal([one, two].filter(Boolean).length, 1);
+});
+
+test("attempt creation rejects duplicate session or token binding inside a tenant", async () => {
+  const repository = new InMemoryOAuthProviderConnectionRepository();
+  const first = createInput();
+  await repository.create(first);
+  await assert.rejects(repository.create({ ...createInput("attempt-2"), oauthSessionId: first.oauthSessionId }), OAuthProviderConnectionError);
+  await assert.rejects(repository.create({ ...createInput("attempt-3"), tokenBindingId: first.tokenBindingId }), OAuthProviderConnectionError);
+  await assert.rejects(repository.create({ ...createInput("attempt-4"), scope: { ownerUserId: "owner-2", workspaceId: "workspace-2" }, tokenBindingId: first.tokenBindingId }), OAuthProviderConnectionError);
+  await assert.rejects(repository.create({ ...createInput("attempt-5"), manifestRevision: "caller-invented-v99" }), OAuthProviderConnectionError);
 });
 
 test("an expired stage can be reclaimed and its stale fence cannot write", async () => {
@@ -89,6 +100,7 @@ test("selection is exact, immutable, and idempotent only for an exact retry", as
   ] });
   assert.ok(recorded);
   const command = { attemptId: "attempt-1", scope, actorUserId: "actor-1", expectedStageVersion: recorded.stageVersion, candidateId: "candidate-1", targetId: "target-1", targetKind: "tiktok_user" as const, now: "2026-07-21T12:04:00.000Z" };
+  assert.equal(await repository.selectTarget({ ...command, now: "2026-07-21T14:00:00.000Z" }), undefined);
   assert.deepEqual(await repository.selectTarget(command), await repository.selectTarget(command));
   await assert.rejects(repository.selectTarget({ ...command, targetId: "target-other" }), OAuthProviderConnectionError);
   await assert.rejects(repository.selectTarget({ ...command, expectedStageVersion: command.expectedStageVersion + 1 }), OAuthProviderConnectionError);

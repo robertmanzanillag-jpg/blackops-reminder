@@ -30,7 +30,7 @@ BEGIN
     RAISE EXCEPTION 'PR15 requires validated PR12/PR14 control %', missing_control;
   END IF;
   IF to_regclass('public.ai_media_oauth_sessions_provider_account_authorization_source_uq') IS NULL
-    OR to_regprocedure('public.ai_media_oauth_reject_target_selection_mutation()') IS NOT NULL
+    OR to_regprocedure('public.ai_media_oauth_reject_target_evidence_mutation()') IS NOT NULL
     OR to_regclass('public.ai_media_oauth_connection_attempts') IS NOT NULL
     OR to_regclass('public.ai_media_oauth_target_candidates') IS NOT NULL
     OR to_regclass('public.ai_media_oauth_target_selections') IS NOT NULL THEN
@@ -223,14 +223,17 @@ ALTER TABLE ai_media_oauth_target_selections ADD CONSTRAINT ai_media_oauth_targe
   ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
 ALTER TABLE ai_media_oauth_target_selections VALIDATE CONSTRAINT ai_media_oauth_target_selections_exact_candidate_fk;
 
-CREATE FUNCTION ai_media_oauth_reject_target_selection_mutation() RETURNS trigger
-LANGUAGE plpgsql SET search_path=pg_catalog AS $immutable_selection$
+CREATE FUNCTION ai_media_oauth_reject_target_evidence_mutation() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog AS $immutable_target_evidence$
 BEGIN
-  RAISE EXCEPTION 'OAuth target selections are immutable';
+  RAISE EXCEPTION 'OAuth target evidence is immutable';
 END;
-$immutable_selection$;
+$immutable_target_evidence$;
+CREATE TRIGGER ai_media_oauth_target_candidates_immutable
+  BEFORE UPDATE OR DELETE ON ai_media_oauth_target_candidates
+  FOR EACH ROW EXECUTE FUNCTION ai_media_oauth_reject_target_evidence_mutation();
 CREATE TRIGGER ai_media_oauth_target_selections_immutable
   BEFORE UPDATE OR DELETE ON ai_media_oauth_target_selections
-  FOR EACH ROW EXECUTE FUNCTION ai_media_oauth_reject_target_selection_mutation();
+  FOR EACH ROW EXECUTE FUNCTION ai_media_oauth_reject_target_evidence_mutation();
 
 COMMIT;

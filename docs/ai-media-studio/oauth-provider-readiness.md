@@ -11,7 +11,7 @@ This is the durable provider-connection gate for AI Media Studio. It records wha
 - Separate exchange, identity discovery/selection, activation, refresh, revoke and reconciliation into fenced durable stages. A token exchange that may have reached the provider is never retried automatically.
 - Refresh always writes a new token-binding/credential-version candidate. Account CAS activates it before old material is scheduled for deletion.
 
-PR15 implements the first six items as provider-neutral domain and persistence contracts through the explicit-selection handoff (`activation_pending`). It does not activate a provider account, store role-specific vault references, delete candidate tokens, mount a route, or call a provider. Refresh/revoke/reconciliation, vault schema v2 and final account CAS integration remain required before runtime wiring.
+PR15 implements the first six items as provider-neutral domain and persistence contracts through the explicit-selection handoff (`activation_pending`). Meta exchange retains only the expiring grant-level User artifact descriptor; discovery persists no Page token. A later activation worker must use the selected target to obtain and bind exactly one operational artifact through vault schema v2. PR15 does not activate a provider account, store role-specific vault references, delete candidate tokens, mount a route, or call a provider. Refresh/revoke/reconciliation, vault schema v2 and final account CAS integration remain required before runtime wiring.
 
 ## TikTok Web
 

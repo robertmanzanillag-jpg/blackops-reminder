@@ -10,6 +10,7 @@ import {
 import type { TenantScope } from "../core/resource-domain";
 import {
   OAUTH_PROVIDER_SCOPE_ALLOWLISTS,
+  OAUTH_PROVIDER_MANIFEST_REVISIONS,
   OAuthProviderConnectionError,
   deriveOAuthProviderCapabilities,
   isCompatibleOAuthProviderTarget,
@@ -180,7 +181,8 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
     for (const identity of [input.id, input.scope.ownerUserId, input.scope.workspaceId, input.actorUserId,
       input.providerAccountId, input.oauthSessionId, input.tokenBindingId]) requiredSafe(identity);
     requiredSafe(input.manifestRevision, 100);
-    if (!Number.isSafeInteger(input.expectedCredentialVersion) || input.expectedCredentialVersion < 0
+    if (input.manifestRevision !== OAUTH_PROVIDER_MANIFEST_REVISIONS[input.platform]
+      || !Number.isSafeInteger(input.expectedCredentialVersion) || input.expectedCredentialVersion < 0
       || input.targetCredentialVersion !== input.expectedCredentialVersion + 1
       || input.allowedScopes.some((scope) => !OAUTH_PROVIDER_SCOPE_ALLOWLISTS[input.grantFamily].includes(scope))) {
       throw new OAuthProviderConnectionError();
@@ -300,7 +302,7 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
             throw new OAuthProviderConnectionError();
           }
           candidateIds.add(candidate.candidateId); targetIdentities.add(targetIdentity);
-          return deriveOAuthProviderCapabilities(candidate.kind, candidate.verifiedTasks);
+          return deriveOAuthProviderCapabilities(candidate.kind, candidate.verifiedTasks, attempt.actualScopes);
         })(),
       }));
 

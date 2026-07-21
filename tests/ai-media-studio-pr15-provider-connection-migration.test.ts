@@ -54,6 +54,7 @@ test("candidate and selection rows carry exact source identity and exact immutab
   }
   assert.match(forward, /ai_media_oauth_target_selections_attempt_uq/u);
   assert.match(forward, /ai_media_oauth_target_selections_exact_candidate_fk/u);
+  assert.match(forward, /CREATE TRIGGER ai_media_oauth_target_candidates_immutable/u);
   assert.match(forward, /CREATE TRIGGER ai_media_oauth_target_selections_immutable/u);
   assert.match(forward, /BEFORE UPDATE OR DELETE/u);
   assert.match(forward, /FOREIGN KEY\(owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,oauth_session_id,attempt_id,[\s\S]*candidate_id,target_kind,target_external_id\)/u);
