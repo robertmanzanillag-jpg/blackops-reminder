@@ -9,6 +9,8 @@ import {
   appendBlackRoomRemoteCommand,
 } from "../server/blackroom-remote-control";
 import { isPublicApiPath } from "../server/user-context";
+import { DEFAULT_DEV_USER_ID } from "../server/user-context";
+import { isConfiguredSingleUserOwner } from "../server/single-user-owner";
 
 test("remote command increments its monotonic generation", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
@@ -17,6 +19,11 @@ test("remote command increments its monotonic generation", () => {
   assert.equal(state.desiredEnabled, true);
   assert.equal(state.weeks, 3);
   assert.equal(state.generation, 1);
+});
+
+test("BlackRoom shared controls accept only the configured owner", async () => {
+  assert.equal(await isConfiguredSingleUserOwner(DEFAULT_DEV_USER_ID), true);
+  assert.equal(await isConfiguredSingleUserOwner("not-the-owner"), false);
 });
 
 test("chat command is persisted and advances the remote generation", () => {

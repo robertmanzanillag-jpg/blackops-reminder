@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T07:29:13.147Z",
+  "generatedAt": "2026-07-21T21:09:01.731Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -95,25 +95,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 464,
-    "filesIndexed": 385,
-    "imports": 1425,
-    "routes": 468,
-    "symbols": 7860
+    "filesVisible": 468,
+    "filesIndexed": 389,
+    "imports": 1448,
+    "routes": 471,
+    "symbols": 7992
   },
   "directories": {
     "server": {
-      "files": 113,
-      "indexed": 109,
+      "files": 116,
+      "indexed": 112,
       "kinds": {
-        "server": 113
-      }
-    },
-    "tests": {
-      "files": 74,
-      "indexed": 71,
-      "kinds": {
-        "test": 74
+        "server": 116
       }
     },
     ".": {
@@ -213,6 +206,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 75,
+      "indexed": 72,
+      "kinds": {
+        "test": 75
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3963,6 +3963,7 @@
       "path": "script/blackroom-daily-agent.ts",
       "kind": "script",
       "imports": [
+        "../server/blackroom-chat",
         "../server/blackroom-daily-queue"
       ],
       "exports": [],
@@ -3970,8 +3971,10 @@
         "Command",
         "argument",
         "command",
+        "commands",
         "created",
         "durationSeconds",
+        "encoded",
         "index",
         "inline",
         "jobId",
@@ -4001,6 +4004,7 @@
         "BlackRoomPublishPausedError",
         "appendLog",
         "child",
+        "chunks",
         "codexPath",
         "confirmed",
         "data",
@@ -4015,12 +4019,14 @@
         "exitPromise",
         "fileExists",
         "handle",
+        "initialized",
         "job",
         "ledger",
         "ledgerPath",
         "lockPath",
         "lockStat",
         "logPath",
+        "loudness",
         "main",
         "maxRunMs",
         "message",
@@ -4056,6 +4062,7 @@
         "temporary",
         "terminateChildGroup",
         "upload",
+        "uploadBlackRoomRender",
         "waitForChildExit",
         "writeJson"
       ],
@@ -6167,6 +6174,7 @@
         "./ai-cost-notifications",
         "./ai-cost-policy",
         "./ai-router",
+        "./blackroom-chat-service",
         "./blackroom-links",
         "./ceo-briefing",
         "./ceo-conversation-history",
@@ -6178,6 +6186,7 @@
         "./openai-client",
         "./promo-video-agent",
         "./radio-youtube-command",
+        "./single-user-owner",
         "./storage",
         "./trust-executor",
         "./trust-policy",
@@ -6199,8 +6208,6 @@
         "userAlreadyApprovedExecution"
       ],
       "symbols": [
-        "APPROVED_SHARED_CONNECTOR_OWNER_IDS",
-        "APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES",
         "APP_HELP_CONTEXT",
         "ASSISTANT_TIMEZONE",
         "AssistantConversationHistoryMessage",
@@ -6347,7 +6354,6 @@
         "isAllDayEvent",
         "isBlackRoom",
         "isCacheableCheapScoutRequest",
-        "isConfiguredSingleUserOwner",
         "isOwnerUser",
         "isWebsiteTarget",
         "key",
@@ -6453,7 +6459,6 @@
         "updateInvestmentRegex",
         "url",
         "usage",
-        "user",
         "userAlreadyApprovedExecution",
         "userFacingError",
         "userId",
@@ -6524,6 +6529,71 @@
         "startedAt",
         "target",
         "targetDay"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-chat-service.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-chat",
+        "./blackroom-remote-control"
+      ],
+      "exports": [
+        "executeBlackRoomChatMessage",
+        "formatBlackRoomChatStatus",
+        "looksLikeBlackRoomAssistantRequest "
+      ],
+      "symbols": [
+        "activity",
+        "current",
+        "device",
+        "deviceQueue",
+        "executeBlackRoomChatMessage",
+        "formatBlackRoomChatStatus",
+        "parsed",
+        "queue",
+        "remote",
+        "reply",
+        "totals"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-chat.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "BlackRoomChatResult",
+        "BlackRoomRemoteCommand",
+        "looksLikeBlackRoomAssistantRequest",
+        "parseBlackRoomChatCommand"
+      ],
+      "symbols": [
+        "available",
+        "current",
+        "first",
+        "localDate",
+        "looksLikeBlackRoomAssistantRequest",
+        "match",
+        "namesBlackRoom",
+        "normalized",
+        "now",
+        "number",
+        "parseBlackRoomChatCommand",
+        "parts",
+        "raw",
+        "remainingNinetyMinuteSlots",
+        "samples",
+        "sourceUrl",
+        "text",
+        "timezone",
+        "url",
+        "wantsPause",
+        "weeks",
+        "youtubeUrl"
       ],
       "routes": []
     },
@@ -6648,9 +6718,12 @@
       "path": "server/blackroom-control-routes.ts",
       "kind": "server",
       "imports": [
+        "./blackroom-chat-service",
         "./blackroom-daily-queue",
         "./blackroom-metricool-bridge",
         "./blackroom-remote-control",
+        "./single-user-owner",
+        "./user-context",
         "express",
         "node:crypto",
         "node:fs",
@@ -6661,13 +6734,18 @@
         "node:stream/promises"
       ],
       "exports": [
+        "BLACKROOM_PUBLIC_MEDIA_PATHS",
         "blackRoomPage",
         "hasValidBlackRoomRemoteToken",
+        "parseBlackRoomMediaRange",
         "registerBlackRoomControlRoutes"
       ],
       "symbols": [
+        "BLACKROOM_PUBLIC_MEDIA_PATHS",
+        "BLACKROOM_UPLOAD_CHUNK_BYTES",
         "BLACKROOM_UPLOAD_MAX_BYTES",
         "BLACKROOM_UPLOAD_TTL_MS",
+        "BlackRoomUpload",
         "blackRoomPage",
         "blackRoomUploadDir",
         "blackRoomUploads",
@@ -6675,33 +6753,53 @@
         "cleanupExpiredBlackRoomUploads",
         "current",
         "declaredSize",
+        "end",
         "error",
         "expectedBuffer",
+        "expectedChunks",
         "filePath",
         "hasValidBlackRoomRemoteToken",
         "ids",
+        "index",
         "info",
         "limiter",
         "localQueue",
+        "match",
+        "message",
+        "parseBlackRoomMediaRange",
+        "partPath",
         "publicOrigin",
+        "range",
         "receipt",
         "receiveBlackRoomUpload",
+        "receiveBlackRoomUploadChunk",
         "registerBlackRoomControlRoutes",
         "remote",
         "remoteView",
         "removeBlackRoomUpload",
+        "requestedEnd",
         "reservationId",
+        "result",
+        "serveBlackRoomMedia",
+        "start",
         "state",
+        "status",
+        "suffixLength",
         "supplied",
         "suppliedBuffer",
         "token",
+        "totalBytes",
+        "totalChunks",
         "upload",
         "uploadId"
       ],
       "routes": [
         "/api/blackroom-agent",
+        "/api/blackroom-agent/chat",
         "/api/blackroom-agent/media/:reservationId",
-        "/api/blackroom-agent/media/:uploadId",
+        "/api/blackroom-agent/media/chunked",
+        "/api/blackroom-agent/media/chunked/:uploadId/:index",
+        "/api/blackroom-agent/media/chunked/:uploadId/complete",
         "/api/blackroom-agent/metricool/schedule",
         "/api/blackroom-agent/pause",
         "/api/blackroom-agent/remote",
@@ -6713,6 +6811,7 @@
       "path": "server/blackroom-daily-queue.ts",
       "kind": "server",
       "imports": [
+        "./blackroom-chat",
         "node:fs/promises",
         "node:path"
       ],
@@ -6728,6 +6827,7 @@
         "BlackRoomExperimentDuration",
         "BlackRoomQueueState",
         "BlackRoomSourceUsage",
+        "applyBlackRoomRemoteCommands",
         "buildRotatingSlots",
         "claimNextBlackRoomJob",
         "completeBlackRoomJob",
@@ -6751,23 +6851,34 @@
         "BLACKROOM_QUEUE_PATH",
         "BLACKROOM_QUEUE_VERSION",
         "addCalendarDays",
+        "added",
+        "appendFutureSameDaySlots",
+        "applied",
+        "applyBlackRoomRemoteCommands",
+        "buildFutureSameDaySlots",
         "buildRotatingSlots",
         "claimNextBlackRoomJob",
         "completeBlackRoomJob",
+        "count",
         "createBlackRoomQueueState",
         "createDailyJob",
+        "createdAdHoc",
+        "currentMinutes",
         "deadline",
         "delayMinutes",
         "ensureBlackRoomScheduleBuffer",
         "existing",
         "existingPid",
+        "first",
         "intervalMinutes",
         "iso",
         "job",
         "jobs",
+        "lastExisting",
         "localDate",
         "lockPath",
         "lockStat",
+        "minutes",
         "minutesToTime",
         "noonUtc",
         "normalized",
@@ -6776,13 +6887,18 @@
         "parts",
         "pauseBlackRoomAgent",
         "posts",
+        "previous",
         "readBlackRoomQueue",
         "recordBlackRoomSourceUsage",
         "recoverInterruptedBlackRoomJobs",
+        "resizeJob",
         "retryBlackRoomJob",
+        "seed",
+        "slots",
         "startBlackRoomAgent",
         "startMinutes",
         "summarizeBlackRoomQueue",
+        "target",
         "targetDate",
         "temporaryPath",
         "timestamp",
@@ -6792,7 +6908,8 @@
         "value",
         "videoId",
         "withBlackRoomQueueLock",
-        "writeBlackRoomQueue"
+        "writeBlackRoomQueue",
+        "youtubeVideoId"
       ],
       "routes": []
     },
@@ -6898,6 +7015,8 @@
         "node:path"
       ],
       "exports": [
+        "BLACKROOM_FFPROBE_SHOW_ENTRIES",
+        "BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES",
         "BLACKROOM_WORKER_LEDGER_PATH",
         "BLACKROOM_WORKER_LOCK_PATH",
         "BLACKROOM_WORKER_STATE_PATH",
@@ -6907,6 +7026,7 @@
         "BlackRoomWorkerLedger",
         "assertSafeConfirmedDeletion",
         "buildBlackRoomCodexArgs",
+        "buildBlackRoomUploadChunks",
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
@@ -6916,9 +7036,12 @@
         "selectPublishableBlackRoomReservation",
         "shouldRunBlackRoomWorker",
         "updateBlackRoomLedgerEntry",
+        "validateBlackRoomAudioLoudness",
         "validateBlackRoomRenderProbe"
       ],
       "symbols": [
+        "BLACKROOM_FFPROBE_SHOW_ENTRIES",
+        "BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES",
         "BLACKROOM_WORKER_LEDGER_PATH",
         "BLACKROOM_WORKER_LOCK_PATH",
         "BLACKROOM_WORKER_STATE_PATH",
@@ -6926,19 +7049,26 @@
         "allowedRoots",
         "assertSafeConfirmedDeletion",
         "audio",
+        "audioChannels",
+        "audioDurationSeconds",
         "buildBlackRoomCodexArgs",
+        "buildBlackRoomUploadChunks",
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
         "currentLocal",
         "durationSeconds",
+        "end",
         "entry",
         "formatName",
         "height",
         "isBlackRoomJobPublishable",
         "job",
         "ledgerPath",
+        "maxVolumeDb",
+        "meanVolumeDb",
         "nextBlackRoomPublicationDateTime",
+        "parseDb",
         "parts",
         "queuePath",
         "reserveBlackRoomLedgerEntry",
@@ -6948,6 +7078,7 @@
         "shouldRunBlackRoomWorker",
         "timestamp",
         "updateBlackRoomLedgerEntry",
+        "validateBlackRoomAudioLoudness",
         "validateBlackRoomRenderProbe",
         "value",
         "values",
@@ -6959,7 +7090,9 @@
     {
       "path": "server/blackroom-metricool-bridge.ts",
       "kind": "server",
-      "imports": [],
+      "imports": [
+        "node:child_process"
+      ],
       "exports": [
         "BLACKROOM_METRICOOL_BLOG_ID",
         "BLACKROOM_TIMEZONE",
@@ -6968,6 +7101,7 @@
         "buildMetricoolTikTokPayload",
         "extractMetricoolMediaId",
         "findVerifiedMetricoolPost",
+        "postMetricoolJsonBytes",
         "scheduleBlackRoomMetricoolPost"
       ],
       "symbols": [
@@ -6975,33 +7109,51 @@
         "BLACKROOM_TIMEZONE",
         "FetchLike",
         "blogId",
+        "body",
         "buildMetricoolTikTokPayload",
+        "child",
         "data",
         "date",
         "dateTime",
+        "detail",
         "env",
         "existing",
         "existingId",
         "existingMatch",
         "extractMetricoolMediaId",
+        "failStream",
         "fetcher",
         "findVerifiedMetricoolPost",
+        "finish",
         "headers",
         "id",
         "matched",
         "mediaId",
         "metricoolJson",
+        "metricoolMediaId",
+        "normalizeHeaders",
         "normalizeUrl",
-        "normalized",
+        "normalizedUrl",
         "objects",
+        "output",
+        "parsed",
         "payload",
+        "payloadBytes",
+        "postMetricoolJsonBytes",
         "publication",
+        "raw",
         "record",
         "requiredEnv",
         "scheduleBlackRoomMetricoolPost",
         "scheduled",
+        "scheduledResponse",
         "schedulerUrl",
+        "separator",
+        "serializedPayload",
+        "status",
+        "target",
         "text",
+        "timeout",
         "timezone",
         "token",
         "userId",
@@ -7016,6 +7168,7 @@
       "path": "server/blackroom-remote-control.ts",
       "kind": "server",
       "imports": [
+        "./blackroom-chat",
         "@shared/schema",
         "drizzle-orm"
       ],
@@ -7023,6 +7176,7 @@
         "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
         "BlackRoomRemoteControlState",
         "BlackRoomRemoteDeviceStatus",
+        "appendBlackRoomRemoteCommand",
         "createBlackRoomRemoteControlState",
         "initializeBlackRoomRemoteControlPersistence",
         "isBlackRoomRemoteDeviceOnline",
@@ -7034,7 +7188,9 @@
       "symbols": [
         "BLACKROOM_REMOTE_CONTROL_ID",
         "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
+        "appendBlackRoomRemoteCommand",
         "createBlackRoomRemoteControlState",
+        "createdAt",
         "database",
         "db",
         "initializeBlackRoomRemoteControlPersistence",
@@ -12151,6 +12307,24 @@
       ]
     },
     {
+      "path": "server/single-user-owner.ts",
+      "kind": "server",
+      "imports": [
+        "./storage",
+        "./user-context"
+      ],
+      "exports": [
+        "isConfiguredSingleUserOwner"
+      ],
+      "symbols": [
+        "APPROVED_SINGLE_USER_OWNER_IDS",
+        "APPROVED_SINGLE_USER_OWNER_USERNAMES",
+        "isConfiguredSingleUserOwner",
+        "user"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/static.ts",
       "kind": "server",
       "imports": [
@@ -13449,7 +13623,9 @@
       "exports": [],
       "symbols": [
         "agentRules",
+        "approvalHandler",
         "assistantPage",
+        "blackRoomHandler",
         "bridge",
         "continuation",
         "dashboard",
@@ -13497,6 +13673,28 @@
       "routes": []
     },
     {
+      "path": "tests/blackroom-chat.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-chat",
+        "../server/blackroom-chat-service",
+        "../server/blackroom-remote-control",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "late",
+        "now",
+        "pause",
+        "request",
+        "result",
+        "start",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/blackroom-content-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -13536,6 +13734,7 @@
       "exports": [],
       "symbols": [
         "claimed",
+        "commands",
         "completed",
         "directory",
         "finalState",
@@ -13547,7 +13746,9 @@
         "overnight",
         "queuePath",
         "retried",
-        "state"
+        "state",
+        "targetDate",
+        "today"
       ],
       "routes": []
     },
@@ -13561,7 +13762,10 @@
       ],
       "exports": [],
       "symbols": [
+        "candidate",
+        "expectedCountdownDate",
         "method",
+        "now",
         "originalBaseUrl",
         "originalFetch",
         "performance",
@@ -13590,6 +13794,7 @@
         "project",
         "prompt",
         "queue",
+        "totalBytes",
         "valid"
       ],
       "routes": []
@@ -13600,10 +13805,17 @@
       "imports": [
         "../server/blackroom-metricool-bridge",
         "node:assert/strict",
+        "node:events",
+        "node:http",
+        "node:stream",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "address",
+        "cases",
+        "child",
+        "error",
         "href",
         "input",
         "method",
@@ -13611,6 +13823,11 @@
         "payload",
         "post",
         "receipt",
+        "received",
+        "response",
+        "server",
+        "spawnProcess",
+        "streams",
         "verifications"
       ],
       "routes": []
@@ -13621,6 +13838,7 @@
       "imports": [
         "../server/blackroom-control-routes",
         "../server/blackroom-remote-control",
+        "../server/single-user-owner",
         "../server/user-context",
         "node:assert/strict",
         "node:test"
@@ -13631,6 +13849,7 @@
         "now",
         "pausing",
         "remoteOnline",
+        "script",
         "state",
         "synced",
         "token"
@@ -15090,6 +15309,7 @@
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
     "tests/automation-registry.test.ts",
+    "tests/blackroom-chat.test.ts",
     "tests/blackroom-content-agent.test.ts",
     "tests/blackroom-daily-queue.test.ts",
     "tests/blackroom-links.test.ts",

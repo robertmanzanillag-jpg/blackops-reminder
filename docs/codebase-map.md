@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T07:29:13.147Z
+Generated: 2026-07-21T21:09:01.731Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-runtime`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 464 | 385 | 1425 | 468 | 7860 |
+| 468 | 389 | 1448 | 471 | 7992 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 115 | 113 | ui-component:55, client-page:25, client-component:22, client-lib:7 |
-| `server` | 113 | 109 | server:113 |
-| `tests` | 74 | 71 | test:74 |
+| `server` | 116 | 112 | server:116 |
+| `tests` | 75 | 72 | test:75 |
 | `script` | 44 | 41 | script:44 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 12 | 11 | docs:12 |
@@ -48,7 +48,7 @@ Package: `rest-express`
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
-- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/:uploadId`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/blackroom`
+- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/blackroom`
 - `server/index.ts`: `/api/health`, `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
@@ -70,6 +70,7 @@ Package: `rest-express`
 - `tests/app-qa-agent.test.ts`
 - `tests/assistant-chat-flow.test.ts`
 - `tests/automation-registry.test.ts`
+- `tests/blackroom-chat.test.ts`
 - `tests/blackroom-content-agent.test.ts`
 - `tests/blackroom-daily-queue.test.ts`
 - `tests/blackroom-links.test.ts`
@@ -161,8 +162,8 @@ Package: `rest-express`
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
 - `script/blackroom-control-server.mjs` (script; 44 symbols, 7 imports)
-- `script/blackroom-daily-agent.ts` (script; 14 symbols, 1 imports)
-- `script/blackroom-local-worker.ts` (script; 60 symbols, 7 imports)
+- `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
+- `script/blackroom-local-worker.ts` (script; 64 symbols, 7 imports)
 - `script/blackroom-remote-sync.mjs` (script; 3 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 25 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
@@ -215,7 +216,7 @@ Package: `rest-express`
 - `server/ai-cost-policy.ts` (server; 35 symbols)
 - `server/ai-router.ts` (server; 13 symbols)
 - `server/app-qa-agent.ts` (server; 187 symbols, 11 imports)
-- `server/assistant.ts` (server; 280 symbols, 24 imports, 3 routes)
+- `server/assistant.ts` (server; 276 symbols, 26 imports, 3 routes)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

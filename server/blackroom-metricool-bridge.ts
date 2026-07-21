@@ -25,12 +25,13 @@ export async function postMetricoolJsonBytes(
   token: string,
   serializedPayload: string,
   timeoutMs = 120_000,
+  spawnProcess: typeof spawn = spawn,
 ): Promise<Response> {
   const target = new URL(url);
   if (!['http:', 'https:'].includes(target.protocol)) throw new Error("Invalid Metricool scheduler protocol");
   const payloadBytes = Buffer.from(serializedPayload, "utf8");
   return new Promise<Response>((resolve, reject) => {
-    const child = spawn("curl", [
+    const child = spawnProcess("curl", [
       "--silent",
       "--show-error",
       "--request", "POST",
@@ -56,7 +57,20 @@ export async function postMetricoolJsonBytes(
       child.kill("SIGKILL");
       finish(new Error("Metricool scheduler request timed out"));
     }, timeoutMs);
+    const failStream = (streamName: string, error: Error) => {
+      child.kill("SIGKILL");
+      const detail = error.message
+        .replace(token, "[redacted]")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+      finish(new Error(`Metricool scheduler ${streamName} stream failed${detail ? `: ${detail}` : ""}`));
+    };
     child.once("error", (error) => finish(error));
+    child.stdin.once("error", (error) => failStream("request", error));
+    child.stdout.once("error", (error) => failStream("response", error));
+    child.stderr.once("error", (error) => failStream("diagnostic", error));
+    child.stdio[3]?.once("error", (error) => failStream("header", error));
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.once("close", (code) => {
