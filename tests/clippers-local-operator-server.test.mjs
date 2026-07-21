@@ -3044,6 +3044,8 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
         campaignOwner: "Verified Platform",
         campaignStatus: "active",
         campaignPayout: "$1 per 1k views",
+        campaignTermsUrl: "https://clipping.net/policies/clipper-terms-and-conditions",
+        accountCreationStatus: "joined_terms_evidenced",
       },
       {
         handle: "SearchPageMustFail",
@@ -3091,6 +3093,9 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(verifiedCampaign.priority, "campaign_join_required");
     assert.equal(verifiedCampaign.permissionScope, "verified_campaign_materials_and_brief_only");
     assert.equal(verifiedCampaign.contentLane, "join_verified_campaign");
+    assert.equal(verifiedCampaign.accountCreationStatus, "legal_acceptance_required");
+    assert.equal(verifiedCampaign.legalAcceptanceRequired, true);
+    assert.equal(verifiedCampaign.campaignTermsUrl, "https://clipping.net/policies/clipper-terms-and-conditions");
     assert.equal(verifiedCampaign.canPublish, false);
     assert.equal(campaign.verifiedCampaignRows, 1);
     assert.match(campaign.nextAction, /Join and document the 1 verified campaign/);
@@ -3103,6 +3108,16 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(twitchAlias.displayName, "DisplayAlias");
     assert.ok(twitchAlias.outreachHandleKeys.includes("displayalias"));
     assert.ok(campaign.premiumRows.every((row) => row.canPublish === false));
+
+    const csvBody = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.csv`)).text();
+    assert.match(csvBody, /campaign_terms_url/);
+    assert.match(csvBody, /legal_acceptance_required/);
+    assert.match(csvBody, /,yes,join_verified_campaign,/);
+
+    const htmlBody = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.html`)).text();
+    assert.match(htmlBody, /alta: legal_acceptance_required/);
+    assert.match(htmlBody, />terminos<\/a>/);
+    assert.match(htmlBody, /publish: blocked/);
   });
 });
 

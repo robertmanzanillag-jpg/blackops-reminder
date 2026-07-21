@@ -7531,7 +7531,10 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
   const campaignOwner = firstCampaignValue(raw, ["campaignOwner", "campaign_owner", "campaignPlatform", "campaign_platform"]);
   const campaignStatus = firstCampaignValue(raw, ["campaignStatus", "campaign_status"]);
   const campaignPayout = firstCampaignValue(raw, ["campaignPayout", "campaign_payout", "payout", "reward"]);
+  const campaignTermsUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["campaignTermsUrl", "campaign_terms_url", "clipperTermsUrl", "clipper_terms_url"]));
   const campaignVerified = rightsPolicy === "verified_campaign_only" && Boolean(campaignUrl && policyEvidenceUrl);
+  // Research data may identify a signup route, but it cannot prove that Robert accepted terms.
+  const accountCreationStatus = campaignVerified ? "legal_acceptance_required" : "not_applicable";
   const hasVerifiedContact = Boolean((contactEmail || contactUrl) && contactEvidenceUrl);
   const priority = campaignVerified
     ? "campaign_join_required"
@@ -7569,7 +7572,10 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
     campaignOwner,
     campaignStatus,
     campaignPayout,
+    campaignTermsUrl,
     campaignVerified,
+    accountCreationStatus,
+    legalAcceptanceRequired: campaignVerified,
     risk: typeof raw?.risk === "object" && raw.risk
       ? [raw.risk.level, raw.risk.notes].filter(Boolean).join(": ")
       : [firstCampaignValue(raw, ["risk", "riskNote", "risk_note", "riesgo"]), firstCampaignValue(raw, ["riskNotes", "risk_notes"])].filter(Boolean).join(": "),
@@ -7737,7 +7743,7 @@ async function buildStreamer100Campaign() {
 function buildStreamer100CampaignCsv(campaign) {
   return renderCsv([
     "handle", "display_name", "creator_url", "platform", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
-    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "campaign_url", "campaign_owner", "campaign_status", "campaign_payout", "content_lane", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
+    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "campaign_url", "campaign_owner", "campaign_status", "campaign_payout", "campaign_terms_url", "account_creation_status", "legal_acceptance_required", "content_lane", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
     "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
     "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
   ], campaign.rows.map((row) => ({
@@ -7760,6 +7766,9 @@ function buildStreamer100CampaignCsv(campaign) {
     campaign_owner: workspaceSafeCsvText(row.campaignOwner),
     campaign_status: workspaceSafeCsvText(row.campaignStatus),
     campaign_payout: workspaceSafeCsvText(row.campaignPayout),
+    campaign_terms_url: workspaceSafeCsvText(row.campaignTermsUrl),
+    account_creation_status: workspaceSafeCsvText(row.accountCreationStatus),
+    legal_acceptance_required: row.legalAcceptanceRequired ? "yes" : "no",
     content_lane: workspaceSafeCsvText(row.contentLane),
     priority: workspaceSafeCsvText(row.priority),
     outreach_status: workspaceSafeCsvText(row.outreachStatus),
@@ -7782,7 +7791,7 @@ function buildStreamer100CampaignCsv(campaign) {
 }
 
 function renderStreamerCampaignRows(rows) {
-  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div>${row.campaignVerified ? `<div class="small"><a href="${escapeHtml(row.campaignUrl)}">abrir campana verificada</a> / ${escapeHtml(row.campaignOwner || "plataforma")} / ${escapeHtml(row.campaignPayout || "ver brief")}</div>` : ""}</td><td>${escapeHtml(row.priority)}<div class="small">lane: ${escapeHtml(row.contentLane)} / outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
+  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div>${row.campaignVerified ? `<div class="small"><a href="${escapeHtml(row.campaignUrl)}">abrir campana verificada</a> / ${escapeHtml(row.campaignOwner || "plataforma")} / ${escapeHtml(row.campaignPayout || "ver brief")}</div><div class="small">alta: ${escapeHtml(row.accountCreationStatus)}${row.campaignTermsUrl ? ` / <a href="${escapeHtml(row.campaignTermsUrl)}">terminos</a>` : ""}</div>` : ""}</td><td>${escapeHtml(row.priority)}<div class="small">lane: ${escapeHtml(row.contentLane)} / outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
 }
 
 function renderStreamer100CampaignPage(campaign) {
