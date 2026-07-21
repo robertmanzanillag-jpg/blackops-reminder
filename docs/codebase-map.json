@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T04:40:15.163Z",
+  "generatedAt": "2026-07-21T04:42:44.879Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control",
   "packageName": "rest-express",
   "scripts": {
@@ -99,7 +99,7 @@
     "filesIndexed": 383,
     "imports": 1412,
     "routes": 465,
-    "symbols": 7740
+    "symbols": 7744
   },
   "directories": {
     ".": {
@@ -6621,6 +6621,7 @@
         "node:crypto"
       ],
       "exports": [
+        "blackRoomPage",
         "hasValidBlackRoomRemoteToken",
         "registerBlackRoomControlRoutes"
       ],
@@ -13462,8 +13463,12 @@
       ],
       "exports": [],
       "symbols": [
+        "desired",
         "now",
+        "pausing",
+        "remoteOnline",
         "state",
+        "synced",
         "token"
       ],
       "routes": []

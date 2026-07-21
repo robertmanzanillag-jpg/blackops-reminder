@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasValidBlackRoomRemoteToken } from "../server/blackroom-control-routes";
+import { blackRoomPage, hasValidBlackRoomRemoteToken } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -37,4 +37,14 @@ test("device authentication rejects missing, short, placeholder, and incorrect t
   assert.equal(hasValidBlackRoomRemoteToken(undefined, token), false);
   assert.equal(hasValidBlackRoomRemoteToken("Bearer wrong", token), false);
   assert.equal(hasValidBlackRoomRemoteToken("Bearer your-token", "your-token"), false);
+});
+
+test("offline paused panel keeps Play available so the command can be queued", () => {
+  assert.match(blackRoomPage, /pausing=!desired&&remote\.online&&!synced/);
+  assert.match(blackRoomPage, /play\.hidden=desired\|\|pausing/);
+  const desired = false;
+  const remoteOnline = false;
+  const synced = false;
+  const pausing = !desired && remoteOnline && !synced;
+  assert.equal(desired || pausing, false);
 });

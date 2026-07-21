@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T04:40:15.163Z
+Generated: 2026-07-21T04:42:44.879Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 462 | 383 | 1412 | 465 | 7740 |
+| 462 | 383 | 1412 | 465 | 7744 |
 
 ## Entrypoints
 - `client/src/App.tsx`
