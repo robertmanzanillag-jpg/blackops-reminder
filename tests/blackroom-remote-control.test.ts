@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { blackRoomPage, hasValidBlackRoomRemoteToken } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomPage, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -57,7 +57,18 @@ test("device authentication rejects missing, short, placeholder, and incorrect t
 test("token-protected BlackRoom bridge paths bypass cookie auth for the local worker", () => {
   assert.equal(isPublicApiPath("/api/blackroom-agent/metricool/schedule"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1.mp4"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1/extra"), false);
+});
+
+test("public MP4 serving accepts browser and video-probe byte ranges", () => {
+  assert.equal(BLACKROOM_PUBLIC_MEDIA_PATHS[0], "/api/blackroom-agent/media/:uploadId.mp4");
+  assert.equal(parseBlackRoomMediaRange(undefined, 1_000), null);
+  assert.deepEqual(parseBlackRoomMediaRange("bytes=0-99", 1_000), { start: 0, end: 99 });
+  assert.deepEqual(parseBlackRoomMediaRange("bytes=900-", 1_000), { start: 900, end: 999 });
+  assert.deepEqual(parseBlackRoomMediaRange("bytes=-100", 1_000), { start: 900, end: 999 });
+  assert.equal(parseBlackRoomMediaRange("bytes=1000-", 1_000), false);
+  assert.equal(parseBlackRoomMediaRange("items=0-1", 1_000), false);
 });
 
 test("offline paused panel keeps Play available so the command can be queued", () => {

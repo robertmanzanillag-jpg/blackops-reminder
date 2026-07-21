@@ -55,8 +55,11 @@ export function extractMetricoolMediaId(value: unknown): string {
 }
 
 async function metricoolMediaId(response: Response): Promise<string> {
-  if (!response.ok) throw new Error(`Metricool media normalization failed with HTTP ${response.status}`);
   const raw = (await response.text()).trim();
+  if (!response.ok) {
+    const detail = raw.replace(/(token|authorization|x-mc-auth)["'\s:=]+[^,"'\s}]+/gi, "$1=[redacted]").replace(/\s+/g, " ").slice(0, 500);
+    throw new Error(`Metricool media normalization failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
   if (!raw) throw new Error("Metricool media normalization returned an empty response");
   if (/^application\/json\b/i.test(response.headers.get("content-type") || "") || /^[\[{]/.test(raw)) {
     try { return extractMetricoolMediaId(JSON.parse(raw)); }
