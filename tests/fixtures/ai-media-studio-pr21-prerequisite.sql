@@ -44,7 +44,10 @@ CREATE TABLE ai_media_scripts (
   workspace_id text NOT NULL,
   source_type text NOT NULL DEFAULT 'manual',
   source_item_id uuid,
-  language text NOT NULL
+  title text NOT NULL,
+  language text NOT NULL,
+  status text NOT NULL DEFAULT 'approved',
+  current_variant_id uuid
 );
 
 CREATE TABLE ai_media_script_variants (
@@ -52,6 +55,7 @@ CREATE TABLE ai_media_script_variants (
   owner_user_id text NOT NULL,
   workspace_id text NOT NULL,
   script_id uuid NOT NULL,
+  content text NOT NULL,
   checksum text NOT NULL,
   status text NOT NULL DEFAULT 'approved'
 );
@@ -94,15 +98,57 @@ CREATE TABLE ai_media_source_items (
 CREATE TABLE ai_media_render_jobs (
   id uuid PRIMARY KEY,
   owner_user_id text NOT NULL,
-  workspace_id text NOT NULL
+  workspace_id text NOT NULL,
+  provider_account_id uuid,
+  provider_key text,
+  provider_job_id text,
+  idempotency_key text NOT NULL,
+  title text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  stage text NOT NULL DEFAULT 'queued',
+  progress integer NOT NULL DEFAULT 0,
+  attempts integer NOT NULL DEFAULT 0,
+  retry_count integer NOT NULL DEFAULT 0,
+  max_attempts integer NOT NULL DEFAULT 3,
+  request jsonb NOT NULL,
+  result jsonb,
+  governance_profile_id uuid,
+  governance_evidence_digest text,
+  queued_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  available_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  lease_owner text,
+  lease_expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT transaction_timestamp()
 );
 CREATE UNIQUE INDEX ai_media_render_jobs_owner_workspace_id_uq
   ON ai_media_render_jobs(owner_user_id, workspace_id, id);
+CREATE UNIQUE INDEX ai_media_render_jobs_owner_workspace_idempotency_uq
+  ON ai_media_render_jobs(owner_user_id, workspace_id, idempotency_key);
 
 CREATE TABLE ai_media_outbox (
   id uuid PRIMARY KEY,
   owner_user_id text NOT NULL,
-  workspace_id text NOT NULL
+  workspace_id text NOT NULL,
+  idempotency_key text NOT NULL,
+  aggregate_type text NOT NULL,
+  aggregate_id text NOT NULL,
+  event_type text NOT NULL,
+  payload jsonb NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  attempts integer NOT NULL DEFAULT 0,
+  available_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  locked_at timestamptz,
+  lease_owner text,
+  lease_expires_at timestamptz,
+  fencing_token integer NOT NULL DEFAULT 0,
+  dead_letter_at timestamptz,
+  processed_at timestamptz,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT transaction_timestamp()
 );
+CREATE UNIQUE INDEX ai_media_outbox_owner_workspace_idempotency_uq
+  ON ai_media_outbox(owner_user_id, workspace_id, idempotency_key);
 
 COMMIT;

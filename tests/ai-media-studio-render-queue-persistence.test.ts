@@ -121,6 +121,22 @@ test("enqueue stores independent recovery metadata and maps snake_case PostgreSQ
   assert.ok(insert.params.some((value) => typeof value === "string" && value.includes("maxLeaseRecoveries")));
 });
 
+test("admission-held render work is represented honestly and remains outside claim candidates", async () => {
+  const fake = new FakeTransactionalDatabase((query) => {
+    if (query.text.startsWith("SELECT *")) return { rows: [row({ stage: "admission_held", attempts: 0 })] };
+    return { rows: [] };
+  });
+  const repository = new DrizzleRenderWorkRepository<Payload>(fake.asDrizzle(), {
+    workspaceId: "workspace-a", tenantId: "tenant-a", providerKeys: ["heygen"],
+  });
+  assert.equal((await repository.get("00000000-0000-4000-8000-000000000001"))?.state, "admission_held");
+  await repository.claimDue({ workerId: "worker-a", nowMs: 2_000, leaseDurationMs: 1_000, quotas: wideQuotas });
+  const claim = fake.queries.find((query) => query.text.includes("WITH active_leases AS MATERIALIZED"));
+  assert.ok(claim);
+  assert.match(claim.text, /stage IN \('queued', 'retry_wait'\)/i);
+  assert.doesNotMatch(claim.text, /stage IN \([^)]*admission_held/i);
+});
+
 test("concurrent claims serialize quota accounting and only one fake row is claimed", async () => {
   let claimed = false;
   const fake = new FakeTransactionalDatabase((query) => {
@@ -294,6 +310,7 @@ test("dead-letter listing and counts remain workspace, tenant, and provider scop
   assert.equal(deadLetters.length, 1);
   assert.equal(deadLetters[0].state, "dead_letter");
   assert.deepEqual(await repository.counts(), {
+    admission_held: 0,
     queued: 2,
     leased: 1,
     retry_wait: 0,

@@ -207,7 +207,7 @@ test("retry uses exponential delay then sends bounded attempts to dead letter", 
   assert.equal(calls, 2);
   assert.deepEqual(deadLetters, ["eventual-dead"]);
   assert.equal((await repository.listDeadLetters()).length, 1);
-  assert.deepEqual(await repository.counts(), { queued: 0, leased: 0, retry_wait: 0, submitted: 0, dead_letter: 1 });
+  assert.deepEqual(await repository.counts(), { admission_held: 0, queued: 0, leased: 0, retry_wait: 0, submitted: 0, dead_letter: 1 });
   assert.equal(retryDelayMs(3, { baseDelayMs: 100, maxDelayMs: 250, jitterRatio: 0.2 }, () => 1), 250);
 });
 
@@ -283,5 +283,5 @@ test("1,000 jobs are claimed and submitted exactly once across concurrent worker
   }
   assert.equal(submitted, 1_000);
   assert.equal(seen.size, 1_000);
-  assert.deepEqual(await repository.counts(), { queued: 0, leased: 0, retry_wait: 0, submitted: 1_000, dead_letter: 0 });
+  assert.deepEqual(await repository.counts(), { admission_held: 0, queued: 0, leased: 0, retry_wait: 0, submitted: 1_000, dead_letter: 0 });
 });

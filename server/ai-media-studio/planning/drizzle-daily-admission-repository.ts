@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import {
   aiMediaBudgetBuckets,
@@ -9,6 +9,8 @@ import {
   aiMediaInfluencers,
   aiMediaProviderAccounts,
   aiMediaProviderResources,
+  aiMediaRenderJobs,
+  aiMediaOutbox,
   aiMediaScripts,
   aiMediaScriptVariants,
   aiMediaSourceItems,
@@ -56,6 +58,9 @@ export interface DurableDailyAdmissionReservation {
   idempotencyKey: string;
   inputDigest: Sha256Digest;
   admissionDigest: Sha256Digest;
+  renderJobId: string;
+  dispatchOutboxId: string;
+  workHandoffDigest: Sha256Digest;
   reservedAt: string;
   expiresAt: string;
 }
@@ -67,8 +72,8 @@ export interface ReserveAndAdmitResult {
   accountingTimeZone: string;
   replayed: boolean;
   effects: {
-    renderJobCreated: false;
-    outboxCreated: false;
+    renderJobCreated: boolean;
+    outboxCreated: boolean;
     eventCreated: false;
     providerCalled: false;
   };
@@ -90,9 +95,15 @@ export class DailyAdmissionPersistenceError extends Error {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const SAFE = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u;
-const EFFECTS = Object.freeze({
+const REPLAY_EFFECTS = Object.freeze({
   renderJobCreated: false,
   outboxCreated: false,
+  eventCreated: false,
+  providerCalled: false,
+} as const);
+const CREATED_EFFECTS = Object.freeze({
+  renderJobCreated: true,
+  outboxCreated: true,
   eventCreated: false,
   providerCalled: false,
 } as const);
@@ -137,6 +148,9 @@ function reservationFromRow(row: Record<string, unknown>): DurableDailyAdmission
     idempotencyKey: safeString(String(value(row, "idempotencyKey", "idempotency_key")), "reservation.idempotencyKey", 200, 8),
     inputDigest: digest(String(value(row, "inputDigest", "input_digest")), "reservation.inputDigest"),
     admissionDigest: digest(String(value(row, "admissionDigest", "admission_digest")), "reservation.admissionDigest"),
+    renderJobId: uuid(String(value(row, "renderJobId", "render_job_id")), "reservation.renderJobId"),
+    dispatchOutboxId: uuid(String(value(row, "dispatchOutboxId", "dispatch_outbox_id")), "reservation.dispatchOutboxId"),
+    workHandoffDigest: digest(String(value(row, "workHandoffDigest", "work_handoff_digest")), "reservation.workHandoffDigest"),
     reservedAt: canonicalIso(value(row, "reservedAt", "reserved_at"), "reservedAt"),
     expiresAt: canonicalIso(value(row, "expiresAt", "expires_at"), "expiresAt"),
   };
@@ -150,12 +164,22 @@ function exactReplay(row: Record<string, unknown>, request: ReserveAndAdmitReque
     && reservation.expiresAt === request.reservationExpiresAt
     && String(value(row, "authoritySnapshotId", "authority_snapshot_id")) === request.authoritySnapshotId
     && String(value(row, "authorityDigest", "authority_digest")) === request.authorityDigest;
+  const exactHeldWork = String(value(row, "replayRenderStage", "replay_render_stage")) === "admission_held"
+    && String(value(row, "replayOutboxStatus", "replay_outbox_status")) === "held"
+    && String(value(row, "replayRenderHandoffDigest", "replay_render_handoff_digest")) === reservation.workHandoffDigest
+    && String(value(row, "replayOutboxHandoffDigest", "replay_outbox_handoff_digest")) === reservation.workHandoffDigest
+    && String(value(row, "replayRenderJobId", "replay_render_job_id")) === reservation.renderJobId
+    && String(value(row, "replayOutboxId", "replay_outbox_id")) === reservation.dispatchOutboxId
+    && value(row, "replayProviderJobId", "replay_provider_job_id") == null
+    && value(row, "replayRenderLeaseOwner", "replay_render_lease_owner") == null
+    && value(row, "replayOutboxLeaseOwner", "replay_outbox_lease_owner") == null;
   if (!matches) {
     throw new DailyAdmissionPersistenceError(
       "IDEMPOTENCY_CONFLICT",
       "Idempotency key is already bound to another authority snapshot or reservation request",
     );
   }
+  if (!exactHeldWork) throw invariant("Existing admission has no exact immutable held-work handoff");
   return reservation;
 }
 
@@ -206,10 +230,101 @@ function stableProviderIdempotencyKey(request: ReserveAndAdmitRequest): string {
   }))).slice("sha256:".length)}`;
 }
 
+interface HeldWorkSeal {
+  requestJson: Record<string, unknown>;
+  scriptContent: string;
+  scriptVariantChecksum: string;
+  sealedRequestDigest: Sha256Digest;
+  workHandoffDigest: Sha256Digest;
+}
+
+function heldWorkSeal(input: {
+  row: Record<string, unknown>;
+  request: ReserveAndAdmitRequest;
+  providerIdempotencyKey: string;
+  reservationId: string;
+  renderJobId: string;
+  dispatchOutboxId: string;
+}): HeldWorkSeal {
+  const dbUuid = (camel: string, snake: string): string => {
+    const result = String(value(input.row, camel, snake));
+    if (!UUID.test(result)) throw invariant(`Locked admission returned invalid ${snake}`);
+    return result;
+  };
+  const dbDigest = (camel: string, snake: string): Sha256Digest => {
+    const result = String(value(input.row, camel, snake));
+    if (!SHA256.test(result)) throw invariant(`Locked admission returned invalid ${snake}`);
+    return result as Sha256Digest;
+  };
+  const textValue = (camel: string, snake: string, min: number, max: number): string => {
+    const result = String(value(input.row, camel, snake));
+    if (result.trim().length < min || result.length > max) throw invariant(`Locked admission returned invalid ${snake}`);
+    return result;
+  };
+  const influencerId = dbUuid("influencerId", "influencer_id");
+  const voiceResourceId = dbUuid("voiceResourceId", "voice_resource_id");
+  const governanceProfileId = dbUuid("governanceProfileId", "governance_profile_id");
+  const governanceEvidenceDigest = dbDigest("governanceEvidenceDigest", "governance_evidence_digest");
+  const scriptContent = textValue("scriptContent", "script_content", 1, 20_000);
+  const language = textValue("scriptLanguage", "script_language", 1, 40);
+  const scriptVariantChecksum = String(value(input.row, "scriptVariantChecksum", "script_variant_checksum"));
+  const computedChecksum = createHash("sha256").update(scriptContent).digest("hex");
+  if (!/^[0-9a-f]{64}$/u.test(scriptVariantChecksum) || computedChecksum !== scriptVariantChecksum) {
+    throw invariant("Locked approved script content does not match its checksum");
+  }
+  const requestJson = canonicalJson({
+    influencerId,
+    script: scriptContent,
+    voiceId: voiceResourceId,
+    language,
+    aspectRatio: "9:16",
+    idempotencyKey: input.providerIdempotencyKey,
+    governance: { profileId: governanceProfileId, evidenceDigest: governanceEvidenceDigest },
+  }) as Record<string, unknown>;
+  const sealedRequestDigest = sha256(JSON.stringify(canonicalJson({
+    version: 1,
+    request: requestJson,
+    reservationId: input.reservationId,
+    renderJobId: input.renderJobId,
+    outboxId: input.dispatchOutboxId,
+    slotId: input.request.slotId,
+    slotAttempt: positiveInteger(Number(value(input.row, "slotAttempt", "slot_attempt")), "slotAttempt"),
+    authoritySnapshotId: input.request.authoritySnapshotId,
+    authorityDigest: input.request.authorityDigest,
+    launchIntentId: dbUuid("launchIntentId", "launch_intent_id"),
+    launchIntentDigest: dbDigest("launchIntentDigest", "launch_intent_digest"),
+    admissionDigest: dbDigest("admissionDigest", "admission_digest"),
+    providerAccountId: dbUuid("providerAccountId", "provider_account_id"),
+    providerKey: textValue("providerKey", "provider_key", 1, 80),
+    providerCredentialVersion: positiveInteger(Number(value(input.row, "providerCredentialVersion", "provider_credential_version")), "providerCredentialVersion"),
+    scriptVariantId: dbUuid("scriptVariantId", "script_variant_id"),
+    scriptVariantChecksum,
+    sourceItemId: value(input.row, "sourceItemId", "source_item_id") == null
+      ? null : dbUuid("sourceItemId", "source_item_id"),
+    sourceContentHash: value(input.row, "sourceContentHash", "source_content_hash") == null
+      ? null : dbDigest("sourceContentHash", "source_content_hash"),
+    avatarResourceId: dbUuid("avatarResourceId", "avatar_resource_id"),
+    voiceResourceId,
+  })));
+  const workHandoffDigest = sha256(JSON.stringify(canonicalJson({
+    version: 1,
+    reservationId: input.reservationId,
+    renderJobId: input.renderJobId,
+    outboxId: input.dispatchOutboxId,
+    sealedRequestDigest,
+    authorityDigest: input.request.authorityDigest,
+    launchIntentDigest: dbDigest("launchIntentDigest", "launch_intent_digest"),
+    admissionDigest: dbDigest("admissionDigest", "admission_digest"),
+  })));
+  return { requestJson, scriptContent, scriptVariantChecksum, sealedRequestDigest, workHandoffDigest };
+}
+
 /**
- * Reservation-only PR20 boundary. Every authority fact is derived from locked,
- * immutable database revisions. This repository cannot create jobs, outbox
- * commands, events, provider requests, or any external side effect.
+ * Inert PR23 admission boundary. Every authority fact is derived from locked,
+ * immutable database revisions. A successful transaction creates an exact
+ * reservation plus immutable held job/outbox evidence, but cannot activate
+ * either queue, commit spend, call a provider, emit an event, or cause any
+ * external side effect.
  */
 export class DrizzleDailyAdmissionRepository {
   private readonly accountingTimeZone: string;
@@ -225,6 +340,9 @@ export class DrizzleDailyAdmissionRepository {
   async reserveAndAdmit(input: ReserveAndAdmitRequest): Promise<ReserveAndAdmitResult> {
     const request = validateRequest(input, this.accountingTimeZone);
     const providerIdempotencyKey = stableProviderIdempotencyKey(request);
+    const reservationId = randomUUID();
+    const renderJobId = randomUUID();
+    const dispatchOutboxId = randomUUID();
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended(
@@ -236,12 +354,29 @@ export class DrizzleDailyAdmissionRepository {
       const replayRow = resultRows(await tx.execute(sql`
         SELECT reservations.*, buckets.budget_date::text AS replay_budget_date,
           buckets.accounting_time_zone AS replay_accounting_time_zone,
+          jobs.id AS replay_render_job_id, jobs.stage AS replay_render_stage,
+          jobs.work_handoff_digest AS replay_render_handoff_digest,
+          jobs.provider_job_id AS replay_provider_job_id, jobs.lease_owner AS replay_render_lease_owner,
+          outbox.id AS replay_outbox_id, outbox.status AS replay_outbox_status,
+          outbox.work_handoff_digest AS replay_outbox_handoff_digest,
+          outbox.lease_owner AS replay_outbox_lease_owner,
           clock_timestamp() AS database_now
         FROM ${aiMediaBudgetReservations} reservations
         INNER JOIN ${aiMediaBudgetBuckets} buckets
           ON buckets.owner_user_id=reservations.owner_user_id
           AND buckets.workspace_id=reservations.workspace_id
           AND buckets.id=reservations.budget_bucket_id AND buckets.currency=reservations.currency
+        INNER JOIN ${aiMediaRenderJobs} jobs
+          ON jobs.owner_user_id=reservations.owner_user_id
+          AND jobs.workspace_id=reservations.workspace_id
+          AND jobs.id=reservations.render_job_id
+          AND jobs.budget_reservation_id=reservations.id
+        INNER JOIN ${aiMediaOutbox} outbox
+          ON outbox.owner_user_id=reservations.owner_user_id
+          AND outbox.workspace_id=reservations.workspace_id
+          AND outbox.id=reservations.dispatch_outbox_id
+          AND outbox.budget_reservation_id=reservations.id
+          AND outbox.render_job_id=jobs.id
         WHERE reservations.owner_user_id=${request.scope.ownerUserId}
           AND reservations.workspace_id=${request.scope.workspaceId}
           AND reservations.idempotency_key=${request.idempotencyKey}
@@ -257,7 +392,7 @@ export class DrizzleDailyAdmissionRepository {
           budgetDate: canonicalDate(value(replayRow, "replayBudgetDate", "replay_budget_date")),
           accountingTimeZone: this.accountingTimeZone,
           replayed: true,
-          effects: EFFECTS,
+          effects: REPLAY_EFFECTS,
         };
       }
 
@@ -308,6 +443,13 @@ export class DrizzleDailyAdmissionRepository {
       const gateRows = resultRows(await tx.execute(sql`
         SELECT snapshots.id AS authority_snapshot_id, snapshots.authority_digest,
           snapshots.slot_attempt, quotes.amount_micro_usd, snapshots.admission_digest,
+          snapshots.launch_intent_id, snapshots.launch_intent_digest,
+          snapshots.provider_account_id, snapshots.provider_key, snapshots.provider_credential_version,
+          snapshots.governance_profile_id, snapshots.governance_evidence_digest,
+          slots.influencer_id, slots.avatar_resource_id, slots.voice_resource_id,
+          variants.script_id, variants.id AS script_variant_id,
+          variants.checksum AS script_variant_checksum, variants.content AS script_content,
+          scripts.title AS script_title, scripts.language AS script_language,
           intents.source_type, intents.source_item_id, intents.source_content_hash
         FROM ${AUTHORITY_SNAPSHOTS} snapshots
         INNER JOIN ${LAUNCH_INTENTS} intents
@@ -485,7 +627,7 @@ export class DrizzleDailyAdmissionRepository {
           AND ${request.reservationExpiresAt}::timestamptz<=quotes.expires_at
           AND policy.state='active' AND policy.valid_from<=clock_timestamp()
           AND (policy.expires_at IS NULL OR policy.expires_at>clock_timestamp())
-          AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone})
+          AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone}::text)
           AND policy.allowed_countries @> jsonb_build_array(snapshots.content_country)
           AND policy.allowed_languages @> jsonb_build_array(scripts.language)
           AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
@@ -572,14 +714,30 @@ export class DrizzleDailyAdmissionRepository {
         }
       }
 
+      const heldWork = heldWorkSeal({
+        row: boundIntent,
+        request,
+        providerIdempotencyKey,
+        reservationId,
+        renderJobId,
+        dispatchOutboxId,
+      });
+
       const createdRows = resultRows(await tx.execute(sql`
         WITH fresh_clock AS MATERIALIZED (
           SELECT observed_at, (observed_at AT TIME ZONE ${this.accountingTimeZone})::date AS budget_date
           FROM (SELECT clock_timestamp() AS observed_at) sampled_clock
         ), final_guard AS MATERIALIZED (
           SELECT buckets.id AS bucket_id, snapshots.slot_attempt, quotes.amount_micro_usd,
+            snapshots.id AS authority_snapshot_id, snapshots.authority_digest,
+            snapshots.launch_intent_id, snapshots.launch_intent_digest,
             snapshots.provider_account_id, snapshots.provider_key, snapshots.provider_credential_version,
             snapshots.script_variant_checksum, snapshots.admission_digest,
+            snapshots.daily_plan_slot_id, slots.influencer_id, slots.avatar_resource_id,
+            slots.voice_resource_id, variants.script_id, variants.id AS script_variant_id,
+            intents.source_item_id, intents.source_content_hash,
+            scripts.title AS script_title, scripts.language AS script_language,
+            variants.content AS script_content,
             snapshots.maximum_quote_evidence_digest AS quote_digest, quotes.expires_at AS quote_expires_at,
             snapshots.content_approval_evidence_digest, snapshots.human_launch_approval_evidence_digest,
             snapshots.governance_profile_id, snapshots.governance_evidence_digest,
@@ -702,6 +860,9 @@ export class DrizzleDailyAdmissionRepository {
               OR governance.territories @> '["WORLDWIDE"]'::jsonb)
             AND variants.status='approved'
             AND scripts.status='approved'
+            AND length(btrim(variants.content)) BETWEEN 1 AND 20000
+            AND variants.content=${heldWork.scriptContent}
+            AND variants.checksum=${heldWork.scriptVariantChecksum}
             AND ((intents.source_type='manual' AND intents.source_item_id IS NULL
                 AND intents.source_content_hash IS NULL)
               OR (intents.source_type<>'manual' AND sources.id IS NOT NULL
@@ -753,7 +914,7 @@ export class DrizzleDailyAdmissionRepository {
             AND ${request.reservationExpiresAt}::timestamptz<=quotes.expires_at
             AND policy.state='active' AND policy.valid_from<=fresh_clock.observed_at
             AND (policy.expires_at IS NULL OR policy.expires_at>fresh_clock.observed_at)
-            AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone})
+            AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone}::text)
             AND policy.allowed_countries @> jsonb_build_array(snapshots.content_country)
             AND policy.allowed_languages @> jsonb_build_array(scripts.language)
             AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
@@ -804,28 +965,37 @@ export class DrizzleDailyAdmissionRepository {
                 AND previous.daily_plan_slot_id=slots.id),1)
           FOR UPDATE OF snapshots, content, human, sandbox, quotes, policy, kill,
             plans, slots, buckets, accounts, governance, influencers, avatars, voices, variants, scripts
+        ), work_request AS MATERIALIZED (
+          SELECT final_guard.*,
+            ${reservationId}::uuid AS reservation_id,
+            ${renderJobId}::uuid AS render_job_id,
+            ${dispatchOutboxId}::uuid AS dispatch_outbox_id,
+            ${JSON.stringify(heldWork.requestJson)}::jsonb AS request_json,
+            ${heldWork.sealedRequestDigest} AS sealed_request_digest,
+            ${heldWork.workHandoffDigest} AS work_handoff_digest
+          FROM final_guard
         ), bucket_update AS (
           UPDATE ${aiMediaBudgetBuckets} buckets
-          SET reserved_micro_usd=buckets.reserved_micro_usd+final_guard.amount_micro_usd,
-            state_version=buckets.state_version+1, updated_at=final_guard.observed_at
-          FROM final_guard
-          WHERE buckets.id=final_guard.bucket_id
+          SET reserved_micro_usd=buckets.reserved_micro_usd+work_request.amount_micro_usd,
+            state_version=buckets.state_version+1, updated_at=work_request.observed_at
+          FROM work_request
+          WHERE buckets.id=work_request.bucket_id
             AND buckets.owner_user_id=${request.scope.ownerUserId}
             AND buckets.workspace_id=${request.scope.workspaceId} AND buckets.currency='USD'
             AND buckets.state_version=${request.expectedBucketStateVersion}
-            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+final_guard.amount_micro_usd<=buckets.limit_micro_usd
-          RETURNING buckets.id, final_guard.*
+            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+work_request.amount_micro_usd<=buckets.limit_micro_usd
+          RETURNING buckets.id, work_request.*
         ), reservation_insert AS (
           INSERT INTO ${aiMediaBudgetReservations} (
-            owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,
+            id,owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,
             provider_key,provider_credential_version,attempt,state,submission_state,amount_micro_usd,
             currency,idempotency_key,input_digest,admission_digest,authority_snapshot_id,authority_digest,
             script_variant_checksum,quote_digest,quote_expires_at,content_approval_digest,
             human_launch_approval_digest,governance_profile_id,governance_evidence_digest,policy_digest,
             kill_switch_evidence_digest,sandbox_evidence_digest,provider_idempotency_key,
-            render_job_id,dispatch_outbox_id,reserved_at,expires_at,created_at,updated_at
+            render_job_id,dispatch_outbox_id,work_handoff_digest,reserved_at,expires_at,created_at,updated_at
           )
-          SELECT ${request.scope.ownerUserId},${request.scope.workspaceId},${request.budgetBucketId},
+          SELECT bucket_update.reservation_id,${request.scope.ownerUserId},${request.scope.workspaceId},${request.budgetBucketId},
             ${request.slotId},bucket_update.provider_account_id,bucket_update.provider_key,
             bucket_update.provider_credential_version,bucket_update.slot_attempt,'reserved','not_started',
             bucket_update.amount_micro_usd,'USD',${request.idempotencyKey},${request.inputDigest},
@@ -834,23 +1004,69 @@ export class DrizzleDailyAdmissionRepository {
             bucket_update.content_approval_evidence_digest,bucket_update.human_launch_approval_evidence_digest,
             bucket_update.governance_profile_id,bucket_update.governance_evidence_digest,
             bucket_update.policy_digest,bucket_update.kill_switch_evidence_digest,
-            bucket_update.sandbox_evidence_digest,${providerIdempotencyKey},NULL,NULL,
+            bucket_update.sandbox_evidence_digest,${providerIdempotencyKey},bucket_update.render_job_id,
+            bucket_update.dispatch_outbox_id,bucket_update.work_handoff_digest,
             bucket_update.observed_at,${request.reservationExpiresAt}::timestamptz,
             bucket_update.observed_at,bucket_update.observed_at
           FROM bucket_update
+          RETURNING *
+        ), render_insert AS (
+          INSERT INTO ${aiMediaRenderJobs} (
+            id,owner_user_id,workspace_id,provider_account_id,provider_key,provider_credential_version,
+            idempotency_key,title,status,stage,progress,attempts,retry_count,max_attempts,request,
+            governance_profile_id,governance_evidence_digest,queued_at,available_at,created_at,updated_at,
+            budget_reservation_id,daily_plan_slot_id,slot_attempt,influencer_id,avatar_resource_id,
+            voice_resource_id,script_id,script_variant_id,source_item_id,source_content_hash,
+            authority_snapshot_id,authority_digest,launch_intent_id,launch_intent_digest,
+            admission_digest,script_variant_checksum,sealed_request_digest,work_handoff_digest
+          )
+          SELECT bucket_update.render_job_id,${request.scope.ownerUserId},${request.scope.workspaceId},
+            bucket_update.provider_account_id,bucket_update.provider_key,bucket_update.provider_credential_version,
+            ${providerIdempotencyKey},left(bucket_update.script_title,160),'pending','admission_held',0,0,0,3,
+            bucket_update.request_json,bucket_update.governance_profile_id,bucket_update.governance_evidence_digest,
+            bucket_update.observed_at,bucket_update.observed_at,bucket_update.observed_at,bucket_update.observed_at,
+            reservation.id,bucket_update.daily_plan_slot_id,bucket_update.slot_attempt,bucket_update.influencer_id,
+            bucket_update.avatar_resource_id,bucket_update.voice_resource_id,bucket_update.script_id,
+            bucket_update.script_variant_id,bucket_update.source_item_id,bucket_update.source_content_hash,
+            bucket_update.authority_snapshot_id,bucket_update.authority_digest,bucket_update.launch_intent_id,
+            bucket_update.launch_intent_digest,bucket_update.admission_digest,bucket_update.script_variant_checksum,
+            bucket_update.sealed_request_digest,bucket_update.work_handoff_digest
+          FROM bucket_update INNER JOIN reservation_insert reservation
+            ON reservation.id=bucket_update.reservation_id
+          RETURNING *
+        ), outbox_insert AS (
+          INSERT INTO ${aiMediaOutbox} (
+            id,owner_user_id,workspace_id,idempotency_key,aggregate_type,aggregate_id,event_type,payload,
+            status,attempts,available_at,fencing_token,created_at,updated_at,
+            budget_reservation_id,render_job_id,sealed_request_digest,work_handoff_digest
+          )
+          SELECT bucket_update.dispatch_outbox_id,${request.scope.ownerUserId},${request.scope.workspaceId},
+            ${providerIdempotencyKey}||':dispatch','render_job',render.id::text,'ai_media.render.dispatch',
+            jsonb_build_object('version',1,'renderJobId',render.id::text,
+              'reservationId',reservation.id::text,'sealedRequestDigest',bucket_update.sealed_request_digest,
+              'workHandoffDigest',bucket_update.work_handoff_digest),
+            'held',0,bucket_update.observed_at,0,bucket_update.observed_at,bucket_update.observed_at,
+            reservation.id,render.id,bucket_update.sealed_request_digest,bucket_update.work_handoff_digest
+          FROM bucket_update
+          INNER JOIN reservation_insert reservation ON reservation.id=bucket_update.reservation_id
+          INNER JOIN render_insert render ON render.id=bucket_update.render_job_id
           RETURNING *
         ), slot_update AS (
           UPDATE ${aiMediaDailyPlanSlots} slots
           SET status='reserved',state_version=state_version+1,updated_at=reservation.reserved_at
           FROM reservation_insert reservation
+          INNER JOIN outbox_insert outbox ON outbox.id=reservation.dispatch_outbox_id
           WHERE slots.id=${request.slotId} AND slots.owner_user_id=${request.scope.ownerUserId}
             AND slots.workspace_id=${request.scope.workspaceId} AND slots.daily_plan_id=${request.planId}
             AND slots.status='planned' AND slots.state_version=${request.expectedSlotStateVersion}
-            AND reservation.daily_plan_slot_id=slots.id
+            AND reservation.daily_plan_slot_id=slots.id AND outbox.render_job_id=reservation.render_job_id
           RETURNING slots.id
         )
         SELECT reservation_insert.*, reservation_insert.reserved_at AS database_now
-        FROM reservation_insert INNER JOIN slot_update ON slot_update.id=reservation_insert.daily_plan_slot_id
+        FROM reservation_insert
+        INNER JOIN render_insert ON render_insert.id=reservation_insert.render_job_id
+        INNER JOIN outbox_insert ON outbox_insert.id=reservation_insert.dispatch_outbox_id
+        INNER JOIN slot_update ON slot_update.id=reservation_insert.daily_plan_slot_id
       `));
       if (createdRows.length !== 1) throw invariant("Atomic reservation or slot CAS did not create exactly one row");
       return {
@@ -859,7 +1075,7 @@ export class DrizzleDailyAdmissionRepository {
         budgetDate,
         accountingTimeZone: this.accountingTimeZone,
         replayed: false,
-        effects: EFFECTS,
+        effects: CREATED_EFFECTS,
       };
     });
   }

@@ -78,7 +78,7 @@ function fencingTokenNumber(value: string): number | undefined {
 
 function state(raw: RawOutboxRow): OutboxState {
   const value = String(raw.status ?? "pending");
-  if (value === "pending" || value === "leased" || value === "retry_wait"
+  if (value === "held" || value === "pending" || value === "leased" || value === "retry_wait"
     || value === "dispatched" || value === "dead_letter") return value;
   if (raw.dead_letter_at ?? raw.deadLetterAt) return "dead_letter";
   if (raw.processed_at ?? raw.processedAt) return "dispatched";
@@ -317,7 +317,7 @@ export class DrizzleOutboxRepository<TPayload = unknown> implements OutboxReposi
         AND workspace_id = ${this.workspaceId}
       GROUP BY status
     `);
-    const counts: Record<OutboxState, number> = { pending: 0, leased: 0, retry_wait: 0, dispatched: 0, dead_letter: 0 };
+    const counts: Record<OutboxState, number> = { held: 0, pending: 0, leased: 0, retry_wait: 0, dispatched: 0, dead_letter: 0 };
     for (const row of rowsFrom<Record<string, unknown>>(result)) {
       const key = String(row.status) as OutboxState;
       if (key in counts) counts[key] = Number(row.count ?? 0);

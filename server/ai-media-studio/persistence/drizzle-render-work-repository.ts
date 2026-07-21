@@ -16,6 +16,7 @@ import type {
 const DEFAULT_WORKSPACE_ID = "personal";
 const PRACTICAL_UNLIMITED_QUOTA = 2_147_483_647;
 const QUEUE_STATES = new Set<RenderWorkState>([
+  "admission_held",
   "queued",
   "leased",
   "retry_wait",
@@ -550,6 +551,7 @@ export class DrizzleRenderWorkRepository<TPayload = unknown> implements RenderWo
 
   async counts(): Promise<Record<RenderWorkState, number>> {
     const result: Record<RenderWorkState, number> = {
+      admission_held: 0,
       queued: 0,
       leased: 0,
       retry_wait: 0,
@@ -560,7 +562,7 @@ export class DrizzleRenderWorkRepository<TPayload = unknown> implements RenderWo
       SELECT job.stage, count(*)::integer AS count
       FROM ${aiMediaRenderJobs} AS job
       WHERE job.workspace_id = ${this.workspaceId}
-        AND job.stage IN ('queued', 'leased', 'retry_wait', 'submitted', 'dead_letter')
+        AND job.stage IN ('admission_held', 'queued', 'leased', 'retry_wait', 'submitted', 'dead_letter')
         AND job.provider_key IS NOT NULL
         ${this.tenantScopeSql("job")}
         ${this.providerScopeSql("job")}

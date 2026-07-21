@@ -1,4 +1,4 @@
-export type OutboxState = "pending" | "leased" | "retry_wait" | "dispatched" | "dead_letter";
+export type OutboxState = "held" | "pending" | "leased" | "retry_wait" | "dispatched" | "dead_letter";
 
 export interface OutboxMessage<TPayload = unknown> {
   id: string;
@@ -127,7 +127,7 @@ export class InMemoryOutboxRepository<TPayload = unknown> implements OutboxRepos
 
   async listDeadLetters() { return [...this.messages.values()].filter((message) => message.state === "dead_letter").map(copy); }
   async counts() {
-    const result: Record<OutboxState, number> = { pending: 0, leased: 0, retry_wait: 0, dispatched: 0, dead_letter: 0 };
+    const result: Record<OutboxState, number> = { held: 0, pending: 0, leased: 0, retry_wait: 0, dispatched: 0, dead_letter: 0 };
     for (const message of this.messages.values()) result[message.state] += 1;
     return result;
   }
