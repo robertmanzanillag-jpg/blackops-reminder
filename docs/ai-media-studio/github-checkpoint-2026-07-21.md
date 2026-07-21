@@ -188,7 +188,9 @@ Next safe slice: implement separate envelope-encrypted S3/KMS authorization-code
 
 ## PR13 checkpoint — encrypted OAuth code and token vaults
 
-Branch: `codex/ai-media-studio-encrypted-oauth-vaults`, stacked on PR #88. GitHub PR number is added after creation.
+GitHub PR: #89, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/89`.
+
+Branch: `codex/ai-media-studio-encrypted-oauth-vaults`, stacked on PR #88.
 
 Implemented:
 
@@ -203,7 +205,7 @@ Evidence before GitHub preservation:
 
 - Adapter tests: 13/13 passed.
 - Adapter plus saga focused tests: 24/24 passed.
-- OAuth regression suite: 65/65 passed before the final hardening tests; the final full suite is recorded in the PR.
+- Full AI Media Studio suite: authoritative unrestricted run passed 414/414.
 - TypeScript and diff hygiene passed.
 - `npm audit --omit=dev --audit-level=high` reached the registry and reported 16 advisories (7 high, 7 moderate, 2 low). Every reported package already exists in the PR12 base lockfile and none is the new AWS KMS client; remediation requires a separate tested dependency PR, including breaking Drizzle/Google upgrades where indicated. This is not production-clearance evidence.
 - Independent checker and security recheck reported no remaining P0-P3 blockers.
