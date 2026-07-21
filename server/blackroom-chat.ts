@@ -41,12 +41,12 @@ export function looksLikeBlackRoomAssistantRequest(message: string): boolean {
   if (/\bradio\b/.test(text)) return false;
   if (namesBlackRoom && /\b(website|web|pagina|builder|links?|bio)\b/.test(text)) return false;
   if (namesBlackRoom && /\b(estado|status|como va|cola)\b/.test(text)) return true;
-  if (namesBlackRoom && /\b(agente|videos?|posts?|publicaciones?|tiktok|metricool|djs?|contenido|analytics|analitica|clips?|cortes?)\b/.test(text)) return true;
-  if (namesBlackRoom && youtubeUrl(message) && /\b(clips?|cortes?|djs?|tiktok|metricool|videos?)\b/.test(text)) return true;
+  if (namesBlackRoom && /\b(agente|videos?|posts?|publicaciones?|tiktok|facebook|youtube|shorts?|metricool|djs?|contenido|analytics|analitica|clips?|cortes?)\b/.test(text)) return true;
+  if (namesBlackRoom && youtubeUrl(message) && /\b(clips?|cortes?|djs?|tiktok|facebook|metricool|videos?)\b/.test(text)) return true;
   if (/\b(sube|publica|agenda|agrega)\b.*\b(videos?|posts?|publicaciones?)\b.*\b(mas|extra|hoy|por dia|al dia|x dia|diarios?|cada dia)\b/.test(text)) return true;
   if (/\b(sube|publica|agenda|agrega)\s+\d{1,2}\b.*\b(hoy|por dia|al dia|x dia|diarios?|cada dia)\b/.test(text)) return true;
   if (/\b(videos?|posts?|publicaciones?)\b.*\b(mas hoy|extra hoy|por dia|diarios?|cada dia)\b/.test(text)) return true;
-  if (/\b(play|inicia|activa|empieza|pausa|deten|para)\b.*\b(agente|videos?|contenido|tiktok|metricool)\b/.test(text)) return true;
+  if (/\b(play|inicia|activa|empieza|pausa|deten|para)\b.*\b(agente|videos?|contenido|tiktok|facebook|youtube|shorts?|metricool)\b/.test(text)) return true;
   return /\b(analytics|analitica|recomienda|conviene)\b/.test(text)
     && /\b(videos?|posts?|tiktok|djs?|contenido)\b/.test(text);
 }
@@ -82,14 +82,14 @@ export function parseBlackRoomChatCommand(
   const weeks = Number(text.match(/\b([1-4])\s*semanas?\b/)?.[1]);
   const wantsPause = /\b(pausa|pausar|deten|detener)\b/.test(text)
     || /\bpara (?:el )?(?:agente|contenido|videos?)\b/.test(text);
-  if (wantsPause && /\b(black\s*room|agente|videos?|contenido|tiktok|metricool)\b/.test(text)) {
+  if (wantsPause && /\b(black\s*room|agente|videos?|contenido|tiktok|facebook|metricool)\b/.test(text)) {
     return {
       reply: "Listo. Pausaré el agente de BlackRoom de forma segura. La cola y el historial quedan guardados para continuar después.",
       command: null,
       control: { enabled: false },
     };
   }
-  if (/\b(play|inicia|iniciar|activa|activar|empieza|comienza)\b/.test(text) && /\b(black\s*room|agente|videos?|contenido|tiktok|metricool)\b/.test(text)) {
+  if (/\b(play|inicia|iniciar|activa|activar|empieza|comienza)\b/.test(text) && /\b(black\s*room|agente|videos?|contenido|tiktok|facebook|metricool)\b/.test(text)) {
     return {
       reply: `Listo. Activaré el agente de BlackRoom${Number.isFinite(weeks) ? ` para mantener ${weeks} semana${weeks === 1 ? "" : "s"} de contenido en cola` : ""}.`,
       command: null,
