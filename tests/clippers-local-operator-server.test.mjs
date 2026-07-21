@@ -2799,11 +2799,11 @@ test("Streamer blanket approvals require complete scopes and a real local eviden
       clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission is required.", evidenceUrl: "https://creatorhq.com/policy" },
     }],
   })}\n`);
-  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
-  const writeOutreach = async (evidenceLink) => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names", "outreach_evidence_link"];
+  const writeOutreach = async (evidenceLink, outreachEvidenceLink = "https://creatorhq.com/unverified-send-proof") => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
     "Real Creator XYZ", "rights@creatorhq.com", "responded", "approved_blanket", "yes", "yes", "yes", "yes", evidenceLink,
     "Creator granted written blanket commercial TikTok permission with complete scope.", "2026-07-20T12:00:00Z",
-    "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
+    "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions", outreachEvidenceLink,
   ])}\n`);
   await writeOutreach("https://creatorhq.com/remote-proof");
 
@@ -2825,6 +2825,8 @@ test("Streamer blanket approvals require complete scopes and a real local eviden
     const localCampaign = await localResponse.json();
     assert.equal(localCampaign.rows[0].permissionStatus, "approved_blanket");
     assert.equal(localCampaign.blanketApprovedRows, 1);
+    assert.equal(localCampaign.rows[0].outreachEvidenceLink, "");
+    assert.equal(localCampaign.rows[0].outreachEvidenceStatus, "local_evidence_file_ready");
     assert.deepEqual(localCampaign.rows[0].restrictions, {
       noAi: true,
       minimumPublishDelayHours: 12,
@@ -2843,7 +2845,9 @@ test("Streamer campaign keeps 100 delivered requests ahead of unsent research ro
   const port = "5528";
   const researchDir = path.join(workspaceRoot, "research");
   const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
-  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at"];
+  const outreachEvidenceDir = path.join(workspaceRoot, "evidence-drop", "streamer-outreach");
+  const outreachEvidenceUrl = "/clippers-workspace/evidence-drop/streamer-outreach/gmail-batch.md";
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "outreach_evidence_link"];
   const streamers = Array.from({ length: 101 }, (_, index) => {
     const handle = `creator${String(index + 1).padStart(3, "0")}`;
     return {
@@ -2857,19 +2861,39 @@ test("Streamer campaign keeps 100 delivered requests ahead of unsent research ro
   });
   await mkdir(researchDir, { recursive: true });
   await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({ streamers })}\n`);
-  const outreachLines = streamers.slice(1).map((row) => renderTestCsvLine([
-    row.handle, row.contactEmail, "sent", "requested", "no", "no", "no", "no", "",
-    "Blanket commercial TikTok request delivered; awaiting written response.", "2026-07-21T08:31:51Z",
-  ]));
   await mkdir(path.dirname(outreachPath), { recursive: true });
-  await writeFile(outreachPath, `${renderTestCsvLine(header)}\n${outreachLines.join("\n")}\n`);
+  const writeOutreach = async (evidenceLink) => {
+    const outreachLines = streamers.slice(1).map((row) => renderTestCsvLine([
+      row.handle, row.contactEmail, "sent", "requested", "no", "no", "no", "no", "",
+      "Blanket commercial TikTok request delivered; awaiting written response.", "2026-07-21T08:31:51Z", evidenceLink,
+    ]));
+    await writeFile(outreachPath, `${renderTestCsvLine(header)}\n${outreachLines.join("\n")}\n`);
+  };
+  await writeOutreach("");
 
   await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const unverifiedCampaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(unverifiedCampaign.outreachSentRows, 0);
+    assert.equal(unverifiedCampaign.unverifiedOutreachRows, 99);
+    assert.equal(unverifiedCampaign.rows.every((row) => row.outreachStatus === "sent"), false);
+    assert.equal(unverifiedCampaign.rows.find((row) => row.handle === "creator001").outreachEvidenceStatus, "not_required");
+
+    await writeOutreach("https://example.com/unverified-send-proof");
+    const remoteEvidenceCampaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(remoteEvidenceCampaign.outreachSentRows, 0);
+    assert.equal(remoteEvidenceCampaign.unverifiedOutreachRows, 99);
+    assert.equal(remoteEvidenceCampaign.rows.every((row) => row.outreachEvidenceLink === ""), true);
+
+    await mkdir(outreachEvidenceDir, { recursive: true });
+    await writeFile(path.join(outreachEvidenceDir, "gmail-batch.md"), "Gmail displayed Message sent for this controlled permission batch and the sent-folder subject search returned every expected conversation. Sent outreach is not creator permission.\n");
+    await writeOutreach(outreachEvidenceUrl);
     const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
     assert.equal(campaign.rows.length, 100);
     assert.equal(campaign.outreachSentRows, 100);
+    assert.equal(campaign.unverifiedOutreachRows, 0);
     assert.equal(campaign.rows.some((row) => row.handle === "creator001"), false);
     assert.equal(campaign.rows.every((row) => row.outreachStatus === "sent"), true);
+    assert.equal(campaign.rows.every((row) => row.outreachEvidenceLink === outreachEvidenceUrl), true);
   });
 });
 
@@ -2986,10 +3010,13 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(queue.intakeTargets[0].targetMediaUrl, /^\/clippers-workspace\/source-drop\//);
     assert.equal(queue.metricoolApprovalRequired, true);
     assert.equal(queue.realPublishEnabled, false);
-    assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, approvedForIntake: 0, rejected: 1, noAi: 1, publishAllowed: 0 });
+    assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, approvedForIntake: 0, rejected: 1, noAi: 0, publishAllowed: 0 });
     assert.ok(queue.rows.every((row) => row.publishAllowed === false));
     const sadlightsRow = queue.rows.find((row) => row.creator === "sadlights");
-    assert.equal(sadlightsRow.noAiRequired, true);
+    assert.equal(sadlightsRow.noAiRequired, false);
+    assert.equal(sadlightsRow.restrictionsVerified, false);
+    assert.equal(sadlightsRow.rightsStatus, "review_required");
+    assert.equal(sadlightsRow.evidenceUrl, "");
     assert.equal(sadlightsRow.sourceUrl, "https://www.twitch.tv/sadlights/clip/ExactClip");
     assert.equal(sadlightsRow.contactSheetUrl, "/clippers-workspace/quarantine/sadlights-review/sad__contact-sheet.jpg");
     assert.equal(queue.rows.find((row) => row.creator === "ESP Leonidas").status, "rejected_visual_policy_risk");
@@ -3000,8 +3027,10 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(body, /Revisar candidatos/);
     assert.match(body, /Safe candidate/);
     assert.match(body, /Rejected candidate/);
-    assert.match(body, /IA:<\/strong> prohibida/);
+    assert.match(body, /IA:<\/strong> restricciones sin verificar/);
     assert.match(body, /Metricool:<\/strong> bloqueado/);
+    assert.match(body, /Sin evidencia externa de permiso/);
+    assert.doesNotMatch(body, /Evidencia de permiso/);
     assert.match(body, /Descartado/);
     assert.match(body, /action="\/api\/clippers\/human-review-decision"/);
     assert.match(body, /Aprobar para intake/);
@@ -3026,6 +3055,34 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     const invalidContactQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
     assert.equal(invalidContactQueue.rows.find((row) => row.creator === "sadlights").contactSheetUrl, "");
     await writeFile(contactSheetPath, contactSheet);
+
+    const researchDir = path.join(workspaceRoot, "research");
+    const permissionsDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+    const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+    const permissionEvidenceUrl = "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md";
+    await mkdir(researchDir, { recursive: true });
+    await mkdir(permissionsDir, { recursive: true });
+    await writeFile(path.join(researchDir, "streamer-cohort-indie.json"), `${JSON.stringify({
+      streamers: [{
+        handle: "sadlights",
+        twitchOfficialUrl: "https://www.twitch.tv/sadlights",
+        contact: { type: "business_email", value: "rights@sadlights.example", evidenceUrl: "https://sadlights.example/contact" },
+        clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission required.", evidenceUrl: "https://sadlights.example/policy" },
+      }],
+    })}\n`);
+    await writeFile(path.join(permissionsDir, "sadlights-blanket-permission-2026-07-21.md"), "Creator granted written blanket permission for commercial TikTok clips on both named accounts, with human-only editing, full-context review, creator credit, a twelve-hour delay, and removal on written request.\n");
+    const outreachHeader = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
+    await writeFile(outreachPath, `${renderTestCsvLine(outreachHeader)}\n${renderTestCsvLine([
+      "sadlights", "rights@sadlights.example", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionEvidenceUrl,
+      "Creator granted written blanket commercial TikTok permission with enforceable restrictions.", "2026-07-21T08:36:00Z",
+      "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
+    ])}\n`);
+    const verifiedPermissionQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    const verifiedPermissionRow = verifiedPermissionQueue.rows.find((row) => row.creator === "sadlights");
+    assert.equal(verifiedPermissionRow.rightsStatus, "approved_blanket");
+    assert.equal(verifiedPermissionRow.evidenceUrl, permissionEvidenceUrl);
+    assert.equal(verifiedPermissionRow.noAiRequired, true);
+    assert.equal(verifiedPermissionRow.restrictionsVerified, true);
 
     const baseDecision = {
       id: "sadlights-review:sad.mp4",
@@ -3096,6 +3153,13 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     const approved = await postDecision(baseDecision);
     assert.equal(approved.status, 303);
     assert.equal(approved.headers.get("location"), "/api/clippers/human-review-queue.html");
+    await mkdir(permissionsDir, { recursive: true });
+    await writeFile(path.join(permissionsDir, "sadlights-blanket-permission-2026-07-21.md"), "Creator granted written blanket permission for commercial TikTok clips on both named accounts, with human-only editing, full-context review, creator credit, a twelve-hour delay, and removal on written request.\n");
+    await writeFile(outreachPath, `${renderTestCsvLine(outreachHeader)}\n${renderTestCsvLine([
+      "sadlights", "rights@sadlights.example", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionEvidenceUrl,
+      "Creator granted written blanket commercial TikTok permission with enforceable restrictions.", "2026-07-21T08:36:00Z",
+      "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
+    ])}\n`);
 
     const updatedQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
     assert.equal(updatedQueue.status, "human_review_complete_for_intake");
@@ -3118,27 +3182,6 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(updatedBody, /Resultado vertical asociado/);
     assert.match(updatedBody, /name="finalOutputReviewed"/);
 
-    const researchDir = path.join(workspaceRoot, "research");
-    const permissionsDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
-    const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
-    const permissionEvidenceUrl = "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md";
-    await mkdir(researchDir, { recursive: true });
-    await mkdir(permissionsDir, { recursive: true });
-    await writeFile(path.join(researchDir, "streamer-cohort-indie.json"), `${JSON.stringify({
-      streamers: [{
-        handle: "sadlights",
-        twitchOfficialUrl: "https://www.twitch.tv/sadlights",
-        contact: { type: "business_email", value: "rights@sadlights.example", evidenceUrl: "https://sadlights.example/contact" },
-        clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission required.", evidenceUrl: "https://sadlights.example/policy" },
-      }],
-    })}\n`);
-    await writeFile(path.join(permissionsDir, "sadlights-blanket-permission-2026-07-21.md"), "Creator granted written blanket permission for commercial TikTok clips on both named accounts, with human-only editing, full-context review, creator credit, a twelve-hour delay, and removal on written request.\n");
-    const outreachHeader = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
-    await writeFile(outreachPath, `${renderTestCsvLine(outreachHeader)}\n${renderTestCsvLine([
-      "sadlights", "rights@sadlights.example", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionEvidenceUrl,
-      "Creator granted written blanket commercial TikTok permission with enforceable restrictions.", "2026-07-21T08:36:00Z",
-      "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
-    ])}\n`);
     const approvedQueueRow = updatedQueue.rows.find((row) => row.creator === "sadlights");
     const promotionTarget = updatedQueue.intakeTargets.find((row) => row.queueItemId === approvedQueueRow.suggestedQueueItemId);
     assert.ok(promotionTarget);

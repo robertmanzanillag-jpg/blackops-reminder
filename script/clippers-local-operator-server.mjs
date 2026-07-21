@@ -7510,6 +7510,8 @@ async function buildStreamer100Campaign() {
   const outreachByHandle = new Map(outreachRows.map((row) => [campaignHandleKey(row.handle), row]));
   const mergedRows = await Promise.all([...byHandle.values()].map(async (row) => {
     const outreach = outreachByHandle.get(campaignHandleKey(row.handle)) || {};
+    const claimedOutreachStatus = String(outreach.outreach_status || "not_sent").trim().toLowerCase();
+    const outreachEvidenceLink = String(outreach.outreach_evidence_link || "").trim();
     const requestedPermissionStatus = String(outreach.permission_status || "not_requested").trim().toLowerCase();
     const evidenceLink = String(outreach.evidence_link || "").trim();
     const scopeComplete = ["scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips"]
@@ -7518,11 +7520,36 @@ async function buildStreamer100Campaign() {
     const evidence = localEvidenceLink
       ? await realClipEvidenceStatus(evidenceLink)
       : { ok: false };
+    const localOutreachEvidenceLink = outreachEvidenceLink && !/^https?:\/\//i.test(outreachEvidenceLink);
+    const outreachEvidence = localOutreachEvidenceLink
+      ? await realClipEvidenceStatus(outreachEvidenceLink)
+      : { ok: false };
     const blanketApprovalValid = requestedPermissionStatus === "approved_blanket" && scopeComplete && evidence.ok;
     const permissionDenied = requestedPermissionStatus === "denied";
+    const responseEvidenceValid = ["approved_blanket", "denied"].includes(requestedPermissionStatus) && evidence.ok;
+    const outreachClaimVerified = ["sent", "delivered"].includes(claimedOutreachStatus)
+      ? outreachEvidence.ok
+      : claimedOutreachStatus === "responded"
+        ? responseEvidenceValid
+        : !["bounced", "failed"].includes(claimedOutreachStatus) || outreachEvidence.ok;
+    const outreachStatus = outreachClaimVerified
+      ? claimedOutreachStatus
+      : ["sent", "delivered", "responded", "bounced", "failed"].includes(claimedOutreachStatus)
+        ? "unverified_claim"
+        : claimedOutreachStatus;
+    const outreachEvidenceStatus = ["sent", "delivered"].includes(claimedOutreachStatus)
+      ? (outreachEvidence.status || "missing")
+      : claimedOutreachStatus === "responded"
+        ? (evidence.status || "missing")
+        : outreachStatus === "unverified_claim"
+          ? (outreachEvidence.status || evidence.status || "missing")
+          : "not_required";
     return {
       ...row,
-      outreachStatus: String(outreach.outreach_status || "not_sent").trim().toLowerCase(),
+      outreachStatus,
+      outreachClaimStatus: claimedOutreachStatus,
+      outreachEvidenceLink: outreachEvidence.ok ? outreachEvidenceLink : "",
+      outreachEvidenceStatus,
       permissionStatus: blanketApprovalValid
         ? "approved_blanket"
         : requestedPermissionStatus === "approved_blanket"
@@ -7564,6 +7591,7 @@ async function buildStreamer100Campaign() {
     responsesReceivedRows: rows.filter((row) => row.outreachStatus === "responded").length,
     blanketApprovedRows: rows.filter((row) => row.permissionStatus === "approved_blanket").length,
     deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
+    unverifiedOutreachRows: rows.filter((row) => row.outreachStatus === "unverified_claim").length,
     sourceFiles,
     rows,
     permissionLedgerRows,
@@ -7584,7 +7612,7 @@ async function buildStreamer100Campaign() {
 function buildStreamer100CampaignCsv(campaign) {
   return renderCsv([
     "handle", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
-    "contact_evidence_url", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "permission_status",
+    "contact_evidence_url", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
     "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
     "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
   ], campaign.rows.map((row) => ({
@@ -7601,6 +7629,8 @@ function buildStreamer100CampaignCsv(campaign) {
     policy_evidence_url: workspaceSafeCsvText(row.policyEvidenceUrl),
     priority: workspaceSafeCsvText(row.priority),
     outreach_status: workspaceSafeCsvText(row.outreachStatus),
+    outreach_claim_status: workspaceSafeCsvText(row.outreachClaimStatus),
+    outreach_evidence_link: workspaceSafeCsvText(row.outreachEvidenceLink),
     permission_status: workspaceSafeCsvText(row.permissionStatus),
     permission_scope: workspaceSafeCsvText(row.permissionScope),
     evidence_link: workspaceSafeCsvText(row.evidenceLink),
@@ -7640,7 +7670,7 @@ function renderStreamer100CampaignPage(campaign) {
   </div>
   <div class="card"><div class="label">Siguiente paso</div><p>${escapeHtml(campaign.nextAction)}</p></div>
   <div class="card"><div class="label">Candidatos</div><table><thead><tr><th>Streamer</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Prioridad</th></tr></thead><tbody>
-    ${campaign.rows.map((row) => `<tr><td><a href="${escapeHtml(row.twitchUrl)}">${escapeHtml(row.handle)}</a><div class="small">${escapeHtml([row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("")}
+    ${campaign.rows.map((row) => `<tr><td><a href="${escapeHtml(row.twitchUrl)}">${escapeHtml(row.handle)}</a><div class="small">${escapeHtml([row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("")}
   </tbody></table></div>
   <div class="card"><div class="label">Controles</div>${campaign.guardrails.map((item) => `<p class="small">${escapeHtml(item)}</p>`).join("")}</div>
 </main></body></html>`;
@@ -9917,13 +9947,14 @@ async function verifiedHumanReviewContactSheet(directoryPath, directory, localFi
 }
 
 async function buildHumanReviewQueue() {
+  const campaign = await buildStreamer100Campaign();
+  const permissionByHandle = new Map((campaign.permissionLedgerRows || []).map((row) => [campaignHandleKey(row.handle), row]));
   const sources = [
     {
       creator: "sadlights",
       creatorHandle: "sadlights",
       directory: "sadlights-review",
       manifest: "review-manifest.csv",
-      evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md",
       normalize: (row) => ({
         title: row.title,
         sourceUrl: row.exact_source_url,
@@ -9935,9 +9966,9 @@ async function buildHumanReviewQueue() {
         audioReview: row.audio_review,
         contextReview: row.context_review,
         thirdPartyReview: row.gameplay_rights_review,
-        noAiRequired: row.no_ai_required === "yes",
+        noAiRequired: false,
         status: row.status,
-        notes: "Creator requires human-only review, credit, context integrity, and a 12-hour publish delay.",
+        notes: "Exact Twitch candidate. Verify permission, audio, context, and third-party material before intake.",
       }),
     },
     {
@@ -9945,7 +9976,6 @@ async function buildHumanReviewQueue() {
       creatorHandle: "esp_leonidas",
       directory: "esp-leonidas-review",
       manifest: "review-manifest.csv",
-      evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/esp-leonidas-blanket-permission-2026-07-21.md",
       normalize: (row) => ({
         title: row.title,
         sourceUrl: row.source_url,
@@ -9976,6 +10006,8 @@ async function buildHumanReviewQueue() {
       const contactSheetUrl = fileStat?.isFile()
         ? await verifiedHumanReviewContactSheet(directoryPath, source.directory, localFile)
         : "";
+      const creatorPermission = permissionByHandle.get(campaignHandleKey(source.creatorHandle));
+      const blanketPermissionVerified = creatorPermission?.permissionStatus === "approved_blanket";
       rows.push({
         id: `${source.directory}:${localFile || normalized.title || rows.length + 1}`,
         creator: source.creator,
@@ -9991,14 +10023,15 @@ async function buildHumanReviewQueue() {
         contactSheetUrl,
         fileReady: Boolean(fileStat?.isFile()),
         fileBytes: fileStat?.isFile() ? fileStat.size : 0,
-        evidenceUrl: source.evidenceUrl,
+        evidenceUrl: blanketPermissionVerified ? creatorPermission.evidenceLink : "",
         sourceAge: normalized.sourceAge || "Unknown",
         sourceViews: normalized.sourceViews || "Unknown",
-        rightsStatus: normalized.rightsStatus || "review_required",
+        rightsStatus: blanketPermissionVerified ? "approved_blanket" : "review_required",
         audioReview: normalized.audioReview || "required",
         contextReview: normalized.contextReview || "required",
         thirdPartyReview: normalized.thirdPartyReview || "required",
-        noAiRequired: normalized.noAiRequired === true,
+        noAiRequired: blanketPermissionVerified && creatorPermission.restrictions?.noAi === true,
+        restrictionsVerified: blanketPermissionVerified,
         status: normalized.status || "review_required",
         notes: normalized.notes || "Human review required before intake.",
         publishAllowed: false,
@@ -10375,8 +10408,10 @@ async function promoteHumanReviewCandidate(input = {}, { skipLock = false } = {}
 
 function humanReviewStatusLabel(row) {
   if (humanReviewManifestRejected(row) || row.humanDecision === "rejected") return "Descartado";
+  if (row.humanDecision === "approved_for_intake" && row.rightsStatus !== "approved_blanket") return "Contenido revisado · falta permiso";
   if (row.humanDecision === "approved_for_intake") return "Aprobado para intake";
   if (!row.fileReady) return "Falta archivo";
+  if (row.rightsStatus !== "approved_blanket") return "Falta permiso verificado";
   return "Revisión humana pendiente";
 }
 
@@ -10432,7 +10467,7 @@ function renderHumanReviewQueuePage(queue) {
           <div class="review-check"><strong>Audio:</strong> ${escapeHtml(row.audioReview)}</div>
           <div class="review-check"><strong>Contexto:</strong> ${escapeHtml(row.contextReview)}</div>
           <div class="review-check"><strong>Terceros:</strong> ${escapeHtml(row.thirdPartyReview)}</div>
-          <div class="review-check"><strong>IA:</strong> ${escapeHtml(row.noAiRequired ? "prohibida" : "no restringida")}</div>
+          <div class="review-check"><strong>IA:</strong> ${escapeHtml(row.restrictionsVerified ? (row.noAiRequired ? "prohibida" : "sin restricción registrada") : "restricciones sin verificar")}</div>
           <div class="review-check"><strong>Metricool:</strong> bloqueado</div>
         </div>
         <p class="review-note">${escapeHtml(row.notes)}</p>
@@ -10440,7 +10475,7 @@ function renderHumanReviewQueuePage(queue) {
         ${approved && row.suggestedQueueItemId ? `<p class="review-note"><strong>Intake:</strong> ${escapeHtml(row.suggestedTargetStatus)}${row.suggestedTargetBlockers.length ? ` · ${escapeHtml(row.suggestedTargetBlockers.join(", "))}` : ""}</p>
         <video controls preload="metadata" src="${escapeHtml(queue.intakeTargets.find((target) => target.queueItemId === row.suggestedQueueItemId)?.targetMediaUrl || "")}"></video>
         <p class="review-note">Resultado vertical asociado. Revísalo completo antes de promover.</p>` : ""}
-        <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a></div>
+        <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}${row.evidenceUrl ? `<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a>` : `<span class="review-note">Sin evidencia externa de permiso</span>`}</div>
         ${humanReviewManifestRejected(row) ? "" : `<details class="review-form">
           <summary>${row.humanReviewComplete ? "Cambiar decisión" : "Registrar decisión"}</summary>
           <form method="post" action="/api/clippers/human-review-decision">
