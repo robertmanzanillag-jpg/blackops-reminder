@@ -798,7 +798,7 @@ export const aiMediaPublishingJobs = pgTable(
     ...tenantColumns(),
     videoId: uuid("video_id").references(() => aiMediaVideos.id, { onDelete: "cascade" }),
     mediaAssetId: uuid("media_asset_id").references(() => aiMediaMediaAssets.id, { onDelete: "set null" }),
-    providerAccountId: uuid("provider_account_id").references(() => aiMediaProviderAccounts.id, { onDelete: "set null" }),
+    providerAccountId: uuid("provider_account_id"),
     platform: text("platform").notNull(),
     mode: text("mode").notNull().default("manual"),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -846,6 +846,18 @@ export const aiMediaPublishingJobs = pgTable(
       table.reconciliationStatus,
       table.reconcileAfter,
     ),
+    providerAccountTenantPlatformFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.platform],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_publishing_jobs_provider_account_tenant_platform_fk",
+    })
+      .onUpdate("no action")
+      .onDelete("no action"),
     mediaReferenceCheck: check(
       "ai_media_publishing_jobs_media_reference_ck",
       sql`${table.videoId} IS NOT NULL OR ${table.mediaAssetId} IS NOT NULL`,
