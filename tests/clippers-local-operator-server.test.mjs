@@ -129,6 +129,9 @@ await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
   memesAccountName: "Streamer Reactions",
   sportsConnected: true,
   memesConnected: true,
+  publicProfileVerified: true,
+  sportsProfileUrl: "https://www.tiktok.com/@streamersclipusa",
+  memesProfileUrl: "https://www.tiktok.com/@streamersclips",
 }, null, 2)}\n`);
 const csrfToken = "local-operator-test-token";
 
@@ -192,6 +195,7 @@ async function resetTestWorkspace() {
   await rm(operatorAuditLogPath, { force: true });
   await rm(streamerGrowthMetricsPath, { force: true });
   await rm(path.join(workspaceRoot, "evidence-drop", "real-clip-permissions"), { force: true, recursive: true });
+  await rm(path.join(workspaceRoot, "research"), { force: true, recursive: true });
   await rm(path.join(testWorkspaceParent, "package.json"), { force: true });
 }
 
@@ -513,6 +517,7 @@ test("Clippers local operator server serves status and guarded workspace files",
         ["/api/clippers/real-clip-acquisition-workbench.html", "Preparar clips"],
         ["/api/clippers/tiktok-launch-authorization.html", "Revisar autorizacion de TikTok"],
         ["/api/clippers/streamer-growth-ceo.html", "Control de crecimiento a 10K"],
+        ["/api/clippers/streamer-100-campaign.html", "Campana de 100 streamers"],
         ["/api/clippers/go-live-gap-resolver.html", "Resolver bloqueos"],
         ["/api/clippers/next-metricool-action.html", "Proxima accion en Metricool"],
       ]) {
@@ -546,7 +551,29 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(streamerGrowthCeoHtml, /dos cuentas 100% streamers hasta 10K seguidores por cuenta/);
       assert.match(streamerGrowthCeoHtml, /Streamer Highlights/);
       assert.match(streamerGrowthCeoHtml, /Streamer Reactions/);
+      assert.match(streamerGrowthCeoHtml, /100 blanket approvals/);
       assert.match(streamerGrowthCeoHtml, /Human approval gates/);
+
+      const streamerCampaignResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+      assert.equal(streamerCampaignResponse.status, 200);
+      const streamerCampaign = await streamerCampaignResponse.json();
+      assert.equal(streamerCampaign.targetStreamers, 100);
+      assert.equal(streamerCampaign.blanketApprovedRows, 0);
+      assert.ok(streamerCampaign.rows.every((row) => row.canPublish === false));
+
+      const streamerCampaignCsvResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.csv`);
+      assert.equal(streamerCampaignCsvResponse.status, 200);
+      const streamerCampaignCsv = await streamerCampaignCsvResponse.text();
+      assert.match(streamerCampaignCsv, /^handle,twitch_url,cohort,language,country,category,contact_email/m);
+      assert.doesNotMatch(streamerCampaignCsv, /can_publish,yes/);
+
+      const permissionPacketsResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-permission-request-packets.json`);
+      assert.equal(permissionPacketsResponse.status, 200);
+      const permissionPackets = await permissionPacketsResponse.json();
+      assert.equal(permissionPackets.rows[0].permissionScope, "blanket_creator_tiktok_commercial");
+      assert.match(permissionPackets.rows[0].message, /blanket permission/i);
+      assert.match(permissionPackets.rows[0].message, /future clips/i);
+      assert.match(permissionPackets.rows[0].message, /monetize/i);
       assert.match(home, /Batch actual/);
       assert.match(home, /Next row/);
       assert.match(home, /First publish/);
@@ -2601,6 +2628,9 @@ test("Streamer Growth CEO trusts only measured Metricool follower data", async (
     measuredAt: new Date().toISOString(),
     sportsAccountName: "Streamer Highlights",
     memesAccountName: "Streamer Reactions",
+    publicProfileVerified: true,
+    sportsProfileUrl: "https://www.tiktok.com/@streamersclipusa",
+    memesProfileUrl: "https://www.tiktok.com/@streamersclips",
     sportsFollowers: 10_001,
     memesFollowers: 10_250,
     sportsViews30d: 120_000,
@@ -2622,6 +2652,13 @@ test("Streamer Growth CEO trusts only measured Metricool follower data", async (
     assert.equal(status.streamerGrowthCeo.monetizationGates.followers.met, true);
     assert.equal(status.streamerGrowthCeo.monetizationGates.views30d.met, true);
     assert.equal(status.streamerGrowthCeo.realPublishEnabled, false);
+
+    const wrongProfileMetrics = JSON.parse(await readFile(streamerGrowthMetricsPath, "utf8"));
+    wrongProfileMetrics.sportsProfileUrl = "https://www.tiktok.com/@someotheraccount";
+    await writeFile(streamerGrowthMetricsPath, `${JSON.stringify(wrongProfileMetrics, null, 2)}\n`);
+    status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
+    assert.equal(status.streamerGrowthCeo.currentFollowers, null);
+    assert.equal(status.streamerGrowthCeo.metricsSource, "metricool_not_imported");
 
     await writeFile(streamerGrowthMetricsPath, `${JSON.stringify({
       source: "metricool",
@@ -2694,6 +2731,27 @@ test("Streamer Growth CEO does not accept incomplete account routing confirmatio
   });
 });
 
+test("Streamer Growth CEO rejects routing proof for the wrong TikTok handles", async () => {
+  const port = "5571";
+  await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
+    source: "user_confirmed",
+    confirmedAt: new Date().toISOString(),
+    platform: "tiktok",
+    sportsAccountName: "Streamer Highlights",
+    memesAccountName: "Streamer Reactions",
+    sportsConnected: true,
+    memesConnected: true,
+    publicProfileVerified: true,
+    sportsProfileUrl: "https://www.tiktok.com/@unrelatedsportsclips",
+    memesProfileUrl: "https://www.tiktok.com/@unrelatedstreamerclips",
+  }, null, 2)}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.confirmed, false);
+  });
+});
+
 test("Streamer Growth CEO ignores follower and view claims in account routing proof", async () => {
   const port = "5562";
   await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
@@ -2704,6 +2762,9 @@ test("Streamer Growth CEO ignores follower and view claims in account routing pr
     memesAccountName: "Streamer Reactions",
     sportsConnected: true,
     memesConnected: true,
+    publicProfileVerified: true,
+    sportsProfileUrl: "https://www.tiktok.com/@streamersclipusa",
+    memesProfileUrl: "https://www.tiktok.com/@streamersclips",
     sportsFollowers: 999_999,
     memesFollowers: 999_999,
     sportsViews30d: 9_999_999,
@@ -2718,6 +2779,131 @@ test("Streamer Growth CEO ignores follower and view claims in account routing pr
     assert.equal(status.streamerGrowthCeo.progressKnown, false);
     assert.equal(status.streamerGrowthCeo.metricsSource, "metricool_not_imported");
     assert.equal(status.streamerGrowthCeo.nextAction.stage, "capture_metricool_baseline");
+  });
+});
+
+test("Streamer blanket approvals require complete scopes and a real local evidence file", async () => {
+  const port = "5527";
+  const researchDir = path.join(workspaceRoot, "research");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const evidenceDir = path.join(workspaceRoot, "evidence-drop", "real-clip-permissions");
+  const evidenceUrl = "/clippers-workspace/evidence-drop/real-clip-permissions/real-creator-xyz.md";
+  await mkdir(researchDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({
+    streamers: [{
+      handle: "RealCreatorXYZ",
+      twitchOfficialUrl: "https://www.twitch.tv/realcreatorxyz",
+      contact: { type: "management_email", value: "rights@creatorhq.com", evidenceUrl: "https://creatorhq.com/contact" },
+      clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission is required.", evidenceUrl: "https://creatorhq.com/policy" },
+    }],
+  })}\n`);
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
+  const writeOutreach = async (evidenceLink) => writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+    "Real Creator XYZ", "rights@creatorhq.com", "responded", "approved_blanket", "yes", "yes", "yes", "yes", evidenceLink,
+    "Creator granted written blanket commercial TikTok permission with complete scope.", "2026-07-20T12:00:00Z",
+    "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
+  ])}\n`);
+  await writeOutreach("https://creatorhq.com/remote-proof");
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const remoteResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+    assert.equal(remoteResponse.status, 200);
+    const remoteCampaign = await remoteResponse.json();
+    assert.equal(remoteCampaign.rows.length, 1, JSON.stringify(remoteCampaign));
+    assert.equal(remoteCampaign.rows[0].rightsPolicy, "request_required");
+    assert.equal(remoteCampaign.rows[0].permissionStatus, "approval_evidence_incomplete");
+    assert.equal(remoteCampaign.blanketApprovedRows, 0);
+    assert.equal(remoteCampaign.rows[0].canPublish, false);
+
+    await mkdir(evidenceDir, { recursive: true });
+    await writeFile(path.join(evidenceDir, "real-creator-xyz.md"), "Creator replied in writing and granted both TikTok pages commercial use of current and future stream clips, including vertical edits, captions, attribution rules, and revocation on written request.\n");
+    await writeOutreach(evidenceUrl);
+    const localResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`);
+    assert.equal(localResponse.status, 200);
+    const localCampaign = await localResponse.json();
+    assert.equal(localCampaign.rows[0].permissionStatus, "approved_blanket");
+    assert.equal(localCampaign.blanketApprovedRows, 1);
+    assert.deepEqual(localCampaign.rows[0].restrictions, {
+      noAi: true,
+      minimumPublishDelayHours: 12,
+      contextReviewRequired: true,
+      creatorCreditRequired: true,
+      allowedAccountNames: ["Streamer Highlights", "Streamer Reactions"],
+    });
+    assert.equal(localCampaign.rows[0].canPublish, false);
+    const status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
+    assert.equal(status.streamer100Campaign.blanketApprovedRows, 1);
+    assert.equal(status.streamerGrowthCeo.supply.allowlistedCreators, 1);
+  });
+});
+
+test("Streamer campaign keeps 100 delivered requests ahead of unsent research rows", async () => {
+  const port = "5528";
+  const researchDir = path.join(workspaceRoot, "research");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at"];
+  const streamers = Array.from({ length: 101 }, (_, index) => {
+    const handle = `creator${String(index + 1).padStart(3, "0")}`;
+    return {
+      handle,
+      twitchOfficialUrl: `https://www.twitch.tv/${handle}`,
+      contactEmail: `${handle}@example.com`,
+      publicContact: { type: "business_email", value: `${handle}@example.com`, evidenceUrl: `https://example.com/${handle}` },
+      clipPolicy: { summary: "Written commercial permission is required.", evidenceUrl: `https://example.com/${handle}/policy` },
+      rightsPolicy: "request_required",
+    };
+  });
+  await mkdir(researchDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({ streamers })}\n`);
+  const outreachLines = streamers.slice(1).map((row) => renderTestCsvLine([
+    row.handle, row.contactEmail, "sent", "requested", "no", "no", "no", "no", "",
+    "Blanket commercial TikTok request delivered; awaiting written response.", "2026-07-21T08:31:51Z",
+  ]));
+  await mkdir(path.dirname(outreachPath), { recursive: true });
+  await writeFile(outreachPath, `${renderTestCsvLine(header)}\n${outreachLines.join("\n")}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(campaign.rows.length, 100);
+    assert.equal(campaign.outreachSentRows, 100);
+    assert.equal(campaign.rows.some((row) => row.handle === "creator001"), false);
+    assert.equal(campaign.rows.every((row) => row.outreachStatus === "sent"), true);
+  });
+});
+
+test("Streamer campaign permanently excludes a creator with evidenced denial", async () => {
+  const port = "5540";
+  const researchDir = path.join(workspaceRoot, "research");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const evidenceDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const evidenceUrl = "/clippers-workspace/evidence-drop/streamer-permissions/creator-denial.md";
+  await mkdir(researchDir, { recursive: true });
+  await mkdir(evidenceDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({
+    streamers: [{
+      handle: "DeniedCreator",
+      twitchOfficialUrl: "https://www.twitch.tv/deniedcreator",
+      contactEmail: "rights@denied.example",
+      publicContact: { type: "business_email", value: "rights@denied.example", evidenceUrl: "https://denied.example/contact" },
+      clipPolicy: { summary: "Written commercial permission is required.", evidenceUrl: "https://denied.example/policy" },
+      rightsPolicy: "request_required",
+    }],
+  })}\n`);
+  await writeFile(path.join(evidenceDir, "creator-denial.md"), "The creator explicitly denied consent to edit, publish, distribute, or monetize their stream content on either TikTok account.\n");
+  const header = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at"];
+  await writeFile(outreachPath, `${renderTestCsvLine(header)}\n${renderTestCsvLine([
+    "Denied Creator", "rights@denied.example", "responded", "denied", "no", "no", "no", "no", evidenceUrl,
+    "Creator explicitly denied all editing and publication rights.", "2026-07-21T08:29:00Z",
+  ])}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(campaign.rows[0].permissionStatus, "denied");
+    assert.equal(campaign.rows[0].priority, "exclude");
+    assert.equal(campaign.rows[0].evidenceLink, evidenceUrl);
+    assert.equal(campaign.deniedRows, 1);
+    assert.equal(campaign.blanketApprovedRows, 0);
+    assert.equal(campaign.rows[0].canPublish, false);
   });
 });
 
@@ -2796,7 +2982,7 @@ test("Clippers real clip gap does not count upload pack files as real without so
   });
 });
 
-test("Clippers real clip intake validation accepts a rights-cleared local replacement row", async () => {
+test("Clippers real clip intake validation requires blanket approval beyond standalone rights evidence", async () => {
   const port = "5526";
   const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
   const replacementFileName = "sports-real-7129d59b5f5e.mp4";
@@ -2816,15 +3002,180 @@ test("Clippers real clip intake validation accepts a rights-cleared local replac
     const validation = await response.json();
     const readyRow = validation.rows.find((row) => row.queueItemId === "7129d59b5f5e");
     assert.equal(validation.status, "blocked");
-    assert.equal(validation.readyRows, 1);
-    assert.equal(validation.blockedRows, 9);
-    assert.equal(readyRow.status, "ready_for_source_drop_import");
-    assert.deepEqual(readyRow.blockers, []);
+    assert.equal(validation.readyRows, 0);
+    assert.equal(validation.blockedRows, 10);
+    assert.equal(readyRow.status, "blocked");
+    assert.deepEqual(readyRow.blockers, ["not_in_blanket_campaign"]);
     assert.equal(readyRow.exactUrlOk, true);
     assert.equal(readyRow.rightsStatus, "owned_or_permissioned");
     assert.equal(readyRow.evidenceLinkPresent, true);
     assert.equal(readyRow.notesOk, true);
     assert.doesNotMatch(JSON.stringify(validation), /\/Users\/|proof\.example\.com|1234567890123456789/);
+  });
+});
+
+test("Clippers real clip intake enforces blanket creator restrictions before approval", async () => {
+  const port = "5541";
+  const researchDir = path.join(workspaceRoot, "research");
+  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
+  const replacementFileName = "sports-real-7129d59b5f5e.mp4";
+  const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
+  const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const permissionDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const permissionUrl = "/clippers-workspace/evidence-drop/streamer-permissions/sadlights.md";
+  const currentSessionPacket = JSON.parse(await readFile(sessionPacketJsonPath, "utf8"));
+  const canonicalPublishAt = currentSessionPacket.rows.find((row) => row.metricoolQueueItemId === "7129d59b5f5e")?.publishAt;
+  assert.ok(canonicalPublishAt);
+  const originalStreamEndedAt = new Date(Date.parse(canonicalPublishAt) - 13 * 60 * 60_000).toISOString();
+  await mkdir(path.dirname(replacementPath), { recursive: true });
+  await mkdir(researchDir, { recursive: true });
+  await mkdir(permissionDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({
+    streamers: [{
+      handle: "sadlights",
+      twitchOfficialUrl: "https://www.twitch.tv/sadlights",
+      contactEmail: "rights@sadlights.example",
+      publicContact: { type: "business_email", value: "rights@sadlights.example", evidenceUrl: "https://sadlights.example/contact" },
+      clipPolicy: { summary: "Written commercial permission is required.", evidenceUrl: "https://sadlights.example/policy" },
+      rightsPolicy: "request_required",
+    }],
+  })}\n`);
+  await cp(sourceUploadFile, replacementPath);
+  await writeFile(path.join(permissionDir, "sadlights.md"), "sadlights granted written blanket permission for monetized TikTok posts, vertical edits, captions, future public clips, creator credit, and revocation on request.\n");
+  const outreachHeader = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
+  await writeFile(outreachPath, `${renderTestCsvLine(outreachHeader)}\n${renderTestCsvLine([
+    "sadlights", "rights@sadlights.example", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionUrl,
+    "Creator approved both TikTok accounts with enforceable restrictions.", "2026-07-21T08:36:00Z",
+    "yes", "12", "yes", "yes", "Streamer Highlights",
+  ])}\n`);
+  const manifestHeader = "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text";
+  const baseCells = [
+    "sports", "Permissioned streamer replacement", "https://www.twitch.tv/sadlights/clip/BadStupidOxCoolStoryBro-c8v3bRtVDT0y2HeF", "sadlights", "twitch",
+    replacementFileName, "owned_or_permissioned", permissionUrl, "high", "Creator permission and gameplay policy were reviewed before source-drop import.",
+  ];
+  await writeFile(manifestPath, `${manifestHeader}\n${renderTestCsvLine([...baseCells, "", "", "", "", ""])}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const blocked = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    const blockedRow = blocked.rows.find((row) => row.queueItemId === "7129d59b5f5e");
+    assert.equal(blockedRow.accountName, "Streamer Highlights");
+    assert.equal(blockedRow.creatorPermissionStatus, "approved_blanket");
+    assert.ok(blockedRow.blockers.includes("creator_no_ai_processing_not_verified"));
+    assert.ok(blockedRow.blockers.includes("creator_context_review_not_approved"));
+    assert.ok(blockedRow.blockers.includes("creator_credit_text_missing"));
+    assert.ok(blockedRow.blockers.includes("creator_minimum_publish_delay_not_verified"));
+
+    await writeFile(manifestPath, `${manifestHeader}\n${renderTestCsvLine([
+      ...baseCells.slice(0, 2),
+      "https://www.twitch.tv/anothercreator/clip/BadStupidOxCoolStoryBro-c8v3bRtVDT0y2HeF",
+      ...baseCells.slice(3),
+      "deterministic_ffmpeg_no_ai", originalStreamEndedAt, canonicalPublishAt, "approved", "Clip by @sadlights from the original Twitch stream.",
+    ])}\n`);
+    const mismatchedSource = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    const mismatchedSourceRow = mismatchedSource.rows.find((row) => row.queueItemId === "7129d59b5f5e");
+    assert.ok(mismatchedSourceRow.blockers.includes("source_url_creator_not_verified"));
+
+    const wrongPlannedPublishAt = new Date(Date.parse(canonicalPublishAt) + 5 * 60_000).toISOString();
+    await writeFile(manifestPath, `${manifestHeader}\n${renderTestCsvLine([
+      ...baseCells,
+      "deterministic_ffmpeg_no_ai", originalStreamEndedAt, wrongPlannedPublishAt, "approved", "credit",
+    ])}\n`);
+    const weakProof = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    const weakProofRow = weakProof.rows.find((row) => row.queueItemId === "7129d59b5f5e");
+    assert.ok(weakProofRow.blockers.includes("creator_credit_text_missing"));
+    assert.ok(weakProofRow.blockers.includes("creator_minimum_publish_delay_not_verified"));
+    assert.equal(weakProofRow.creatorRestrictionChecks.plannedPublishMatchesQueue, false);
+
+    await writeFile(manifestPath, `${manifestHeader}\n${renderTestCsvLine([
+      ...baseCells,
+      "deterministic_ffmpeg_no_ai", originalStreamEndedAt, canonicalPublishAt, "approved", "Clip by @sadlights - watch the original stream on Twitch.",
+    ])}\n`);
+    const ready = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    const readyRow = ready.rows.find((row) => row.queueItemId === "7129d59b5f5e");
+    assert.equal(readyRow.status, "ready_for_source_drop_import", JSON.stringify(readyRow));
+    assert.deepEqual(readyRow.blockers, []);
+    assert.equal(readyRow.creatorRestrictionChecks.minimumPublishDelayVerified, true);
+    assert.equal(readyRow.creatorRestrictionChecks.allowedAccount, true);
+  });
+});
+
+test("Clippers streamer intake blocks TikTok and YouTube creators outside the blanket campaign", async () => {
+  const port = "5572";
+  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
+  const replacementFileName = "sports-real-7129d59b5f5e.mp4";
+  const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
+  const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
+  const memesReplacementFileName = "memes-real-53467d8f7dad.mp4";
+  const memesReplacementPath = path.join(workspaceRoot, "source-drop", "memes", memesReplacementFileName);
+  const memesManifestPath = path.join(workspaceRoot, "source-drop", "memes", "source-drop-manifest.csv");
+  await mkdir(path.dirname(replacementPath), { recursive: true });
+  await mkdir(path.dirname(memesReplacementPath), { recursive: true });
+  await cp(sourceUploadFile, replacementPath);
+  await cp(sourceUploadFile, memesReplacementPath);
+  await writeFile(manifestPath, [
+    "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+    `sports,Unlisted TikTok streamer replacement,https://www.tiktok.com/@notallowlisted/video/1234567890123456789,@notallowlisted,tiktok,${replacementFileName},owned_or_permissioned,https://rights.receipts.local/unlisted-tiktok,high,Operator supplied a TikTok clip but the creator has no blanket campaign approval.`,
+    "",
+  ].join("\n"));
+  await writeFile(memesManifestPath, [
+    "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+    `memes,Unlisted YouTube streamer replacement,https://www.youtube.com/shorts/abcdefghijk,@notyoutubeallowlisted,youtube,${memesReplacementFileName},owned_or_permissioned,https://rights.receipts.local/unlisted-youtube,high,Operator supplied a YouTube clip but the creator has no blanket campaign approval.`,
+    "",
+  ].join("\n"));
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const validation = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    for (const queueItemId of ["7129d59b5f5e", "53467d8f7dad"]) {
+      const row = validation.rows.find((candidate) => candidate.queueItemId === queueItemId);
+      assert.equal(row.creatorPermissionStatus, "not_in_blanket_campaign");
+      assert.ok(row.blockers.includes("not_in_blanket_campaign"));
+      assert.equal(row.status, "blocked");
+    }
+  });
+});
+
+test("Clippers streamer intake resolves approved permissions beyond the top 100 campaign rows", async () => {
+  const port = "5573";
+  const researchDir = path.join(workspaceRoot, "research");
+  const permissionDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const permissionUrl = "/clippers-workspace/evidence-drop/streamer-permissions/zapproved.md";
+  const replacementFileName = "sports-real-7129d59b5f5e.mp4";
+  const replacementPath = path.join(workspaceRoot, "source-drop", "sports", replacementFileName);
+  const manifestPath = path.join(workspaceRoot, "source-drop", "sports", "source-drop-manifest.csv");
+  const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
+  const streamers = Array.from({ length: 100 }, (_, index) => ({
+    handle: `creator${String(index).padStart(3, "0")}`,
+    twitchOfficialUrl: `https://www.twitch.tv/creator${String(index).padStart(3, "0")}`,
+  }));
+  streamers.push({ handle: "zapproved", twitchOfficialUrl: "https://www.twitch.tv/zapproved" });
+  await mkdir(researchDir, { recursive: true });
+  await mkdir(permissionDir, { recursive: true });
+  await mkdir(path.dirname(replacementPath), { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-eu.json"), `${JSON.stringify({ streamers })}\n`);
+  await writeFile(path.join(permissionDir, "zapproved.md"), "zapproved granted written blanket permission for commercial TikTok edits of current and future public stream clips with revocation rights retained.\n");
+  await writeFile(outreachPath, [
+    "handle,outreach_status,permission_status,scope_tiktok,scope_commercial,scope_edits,scope_future_clips,evidence_link",
+    `zapproved,not_sent,approved_blanket,yes,yes,yes,yes,${permissionUrl}`,
+    "",
+  ].join("\n"));
+  await cp(sourceUploadFile, replacementPath);
+  await writeFile(manifestPath, [
+    "category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes",
+    `sports,Approved streamer replacement,https://www.twitch.tv/zapproved/clip/ZApprovedExactClip,zapproved,twitch,${replacementFileName},owned_or_permissioned,${permissionUrl},high,Blanket approval and the exact source clip were reviewed before intake.`,
+    "",
+  ].join("\n"));
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
+    assert.equal(campaign.rows.length, 100);
+    assert.equal(campaign.rows.some((row) => row.handle === "zapproved"), false);
+    const validation = await (await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`)).json();
+    const row = validation.rows.find((candidate) => candidate.queueItemId === "7129d59b5f5e");
+    assert.equal(row.creatorPermissionStatus, "approved_blanket");
+    assert.equal(row.status, "ready_for_source_drop_import");
+    assert.ok(!row.blockers.includes("not_in_blanket_campaign"));
   });
 });
 
@@ -2878,6 +3229,11 @@ test("Clippers real clip intake record endpoint writes manifest proof without fa
           creatorOrRightsHolder: "@creator",
           evidenceLink: "https://rights.receipts.local/creator-permission-letter",
           operatorNotes: "Creator permission recorded for this exact replacement before source-drop import.",
+          aiProcessing: "deterministic_ffmpeg_no_ai",
+          originalStreamEndedAt: "2026-07-20T00:00:00Z",
+          plannedPublishAt: "2026-07-20T12:00:00Z",
+          contextReviewStatus: "approved",
+          creditText: "Clip by @creator from the original public stream.",
         }),
       });
       assert.equal(goodResponse.status, 200);
@@ -2886,19 +3242,21 @@ test("Clippers real clip intake record endpoint writes manifest proof without fa
       assert.equal(good.metricoolQueueItemId, "7129d59b5f5e");
       assert.match(good.manifestUrl, /^\/clippers-workspace\/source-drop\/sports\/source-drop-manifest\.csv$/);
       assert.equal(good.rowStatus, "blocked");
-      assert.deepEqual(good.remainingBlockers, ["missing_source_file"]);
+      assert.deepEqual(good.remainingBlockers, ["missing_source_file", "not_in_blanket_campaign"]);
       assert.doesNotMatch(JSON.stringify(good), /\/Users\/|\/var\/folders/);
 
       const manifest = await readFile(manifestPath, "utf8");
       assert.match(manifest, /sports-real-7129d59b5f5e\.mp4/);
       assert.match(manifest, /owned_or_permissioned/);
+      assert.match(manifest, /ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text/);
+      assert.match(manifest, /deterministic_ffmpeg_no_ai,2026-07-20T00:00:00Z,2026-07-20T12:00:00Z,approved,Clip by @creator/);
 
       const validationResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`);
       assert.equal(validationResponse.status, 200);
       const validation = await validationResponse.json();
       const row = validation.rows.find((candidate) => candidate.queueItemId === "7129d59b5f5e");
       assert.equal(row.status, "blocked");
-      assert.deepEqual(row.blockers, ["missing_source_file"]);
+      assert.deepEqual(row.blockers, ["missing_source_file", "not_in_blanket_campaign"]);
       assert.equal(row.exactUrlOk, true);
       assert.equal(row.evidenceLinkPresent, true);
       assert.equal(row.notesOk, true);
@@ -2953,8 +3311,14 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     const templateResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-batch-template.csv`);
     assert.equal(templateResponse.status, 200);
     const templateCsv = await templateResponse.text();
-    assert.match(templateCsv, /^metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes/m);
+    assert.match(templateCsv, /^metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text/m);
     assert.match(templateCsv, /7129d59b5f5e/);
+    const [templateHeaderLine, templateDataLine] = templateCsv.trim().split("\n");
+    const templateHeader = parseTestCsvLine(templateHeaderLine);
+    const templateData = parseTestCsvLine(templateDataLine);
+    for (const field of ["ai_processing", "original_stream_ended_at", "planned_publish_at", "context_review_status", "credit_text"]) {
+      assert.equal(templateData[templateHeader.indexOf(field)], "");
+    }
 
     const invalidResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record-batch`, {
       method: "POST",
@@ -2971,6 +3335,20 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     assert.equal(invalid.error, "real_clip_intake_batch_invalid");
     assert.equal(invalid.errors[0].error, "exact_source_video_or_post_url_required");
     assert.doesNotMatch(await readFile(sportsManifestPath, "utf8"), /7129d59b5f5e|sports-real/);
+
+    const invalidMetadataResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record-batch`, {
+      method: "POST",
+      body: new URLSearchParams({
+        csrfToken,
+        realClipIntakeBatch: [
+          "metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text",
+          "7129d59b5f5e,https://www.tiktok.com/@creator/video/1234567890123456789,@creator,https://rights.receipts.local/creator-permission-letter,Creator permission recorded for this exact replacement before source-drop import.,made_up_mode,not-a-date,2026-07-20T12:00:00Z,maybe,credit",
+        ].join("\n"),
+      }),
+    });
+    assert.equal(invalidMetadataResponse.status, 400);
+    const invalidMetadata = await invalidMetadataResponse.json();
+    assert.equal(invalidMetadata.errors[0].error, "invalid_ai_processing");
 
     const validResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record-batch`, {
       method: "POST",
@@ -2990,7 +3368,7 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     assert.equal(valid.accepted, 2);
     assert.equal(valid.readyRows, 0);
     assert.equal(valid.blockedRows, 2);
-    assert.deepEqual(valid.rowResults.map((row) => row.remainingBlockers), [["missing_source_file"], ["missing_source_file"]]);
+    assert.deepEqual(valid.rowResults.map((row) => row.remainingBlockers), [["missing_source_file", "source_url_creator_not_verified", "not_in_blanket_campaign"], ["missing_source_file", "source_url_creator_not_verified", "not_in_blanket_campaign"]]);
     assert.doesNotMatch(JSON.stringify(valid), /\/Users\/|\/var\/folders|1234567890123456789|2234567890123456789/);
 
     const sportsManifest = await readFile(sportsManifestPath, "utf8");
@@ -3005,8 +3383,8 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     assert.equal(validationResponse.status, 200);
     const validation = await validationResponse.json();
     assert.equal(validation.readyRows, 0);
-    assert.equal(validation.rows.find((row) => row.queueItemId === "7129d59b5f5e").blockers.join(","), "missing_source_file");
-    assert.equal(validation.rows.find((row) => row.queueItemId === "53467d8f7dad").blockers.join(","), "missing_source_file");
+    assert.equal(validation.rows.find((row) => row.queueItemId === "7129d59b5f5e").blockers.join(","), "missing_source_file,source_url_creator_not_verified,not_in_blanket_campaign");
+    assert.equal(validation.rows.find((row) => row.queueItemId === "53467d8f7dad").blockers.join(","), "missing_source_file,source_url_creator_not_verified,not_in_blanket_campaign");
   });
 });
 
@@ -3858,7 +4236,22 @@ test("Clippers real clip intake validation rejects invalid manual evidence links
 
 test("Clippers source-drop Metricool refresh runs only after all intake rows are ready", async () => {
   const port = "5531";
+  const researchDir = path.join(workspaceRoot, "research");
+  const permissionDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+  const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+  const permissionUrl = "/clippers-workspace/evidence-drop/streamer-permissions/creator.md";
   const sourceUploadFile = path.join(workspaceRoot, "scheduled", "metricool-current-batch-upload-pack", "02_sport_sports-daily_7129d59b5f5e.mp4");
+  await mkdir(researchDir, { recursive: true });
+  await mkdir(permissionDir, { recursive: true });
+  await writeFile(path.join(researchDir, "streamer-cohort-indie.json"), `${JSON.stringify({
+    streamers: [{ handle: "creator", twitchOfficialUrl: "https://www.twitch.tv/creator" }],
+  })}\n`);
+  await writeFile(path.join(permissionDir, "creator.md"), "creator granted written blanket permission for commercial TikTok edits of current and future public stream clips with revocation rights retained.\n");
+  await writeFile(outreachPath, [
+    "handle,outreach_status,permission_status,scope_tiktok,scope_commercial,scope_edits,scope_future_clips,evidence_link",
+    `creator,responded,approved_blanket,yes,yes,yes,yes,${permissionUrl}`,
+    "",
+  ].join("\n"));
   const uploadPackReport = JSON.parse(await readFile(uploadPackReportJsonPath, "utf8"));
   const replacementRows = (uploadPackReport.rows || []).map((row) => {
     const queueId = row.queueItemId || row.metricoolQueueItemId;

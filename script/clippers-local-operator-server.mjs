@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFile, lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 
@@ -19,6 +19,8 @@ const externalEvidenceCsvPath = path.join(workspaceRoot, "evidence-drop", "exter
 const externalProofsDir = path.join(workspaceRoot, "evidence-drop", "external-closeout-proofs");
 const realClipPermissionCrmCsvPath = path.join(workspaceRoot, "evidence-drop", "real-clip-permission-outreach.csv");
 const realClipPermissionCrmLockPath = `${realClipPermissionCrmCsvPath}.lock`;
+const streamerResearchDir = path.join(workspaceRoot, "research");
+const streamerBlanketPermissionCsvPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
 const currentBatchWorkbookJsonPath = path.join(scheduledDir, "metricool-100-current-batch-workbook.json");
 const currentBatchUploadPackJsonPath = path.join(reportsDir, "clippers-metricool-current-batch-upload-pack.json");
 const requestedHost = process.env.HOST || "127.0.0.1";
@@ -104,6 +106,7 @@ const clipperPageTitles = new Map([
   ["Clippers Permission CRM", ["Permisos", "Gestionar permisos"]],
   ["Clippers Permission Outreach", ["Permisos", "Pedir permisos"]],
   ["Clippers Permission Request Packets", ["Permisos", "Mensajes para pedir permiso"]],
+  ["Clippers 100 Streamer Campaign", ["Permisos", "Campana de 100 streamers"]],
   ["Clippers Real Clip Acquisition", ["Preparar", "Preparar clips"]],
   ["Clippers Real Clip Intake", ["Preparar", "Cargar archivos reales"]],
   ["Clippers Real Clip Intake Validation", ["Preparar", "Validar clips"]],
@@ -122,6 +125,7 @@ const clipperPageGuides = new Map([
   ["Clippers Permission CRM", "Registra el contacto con cada creador y la evidencia de su respuesta. Nada pasa a Metricool sin prueba valida."],
   ["Clippers Permission Outreach", "Prepara y controla las solicitudes de permiso. Esta pantalla no envia mensajes ni aprueba clips por si sola."],
   ["Clippers Permission Request Packets", "Revisa los mensajes preparados para cada creador antes de enviarlos y guardar la respuesta en Permisos."],
+  ["Clippers 100 Streamer Campaign", "Investiga y prioriza 100 creadores para solicitar permiso general. Un candidato o un correo enviado nunca cuenta como autorizacion."],
   ["Clippers Real Clip Acquisition", "Mira que le falta a cada candidato y completa URL, permiso, evidencia y archivo en el orden correcto."],
   ["Clippers Real Clip Intake", "Carga los MP4 reales aprobados para reemplazar los videos de prueba. No se publica nada desde esta pantalla."],
   ["Clippers Real Clip Intake Validation", "Comprueba que cada clip tenga archivo, URL exacta, creador y permiso antes de enviarlo a Metricool."],
@@ -142,7 +146,7 @@ function polishClipperOperatorPage(body) {
     main{max-width:1120px!important;margin:0 auto!important;padding:0 24px 64px!important}
     .operator-nav{min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);margin-bottom:34px}
     .operator-brand{font-size:18px;font-weight:800;color:#fff!important;text-decoration:none}
-    .operator-nav-links{display:flex;align-items:center;gap:8px}.operator-nav-links a{color:#dce7e1!important;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:12px}
+    .operator-nav-links{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.operator-nav-links a{color:#dce7e1!important;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:12px}
     .operator-stage{font-size:11px;text-transform:uppercase;color:var(--green);font-weight:800;letter-spacing:.08em;margin-bottom:7px}
     main>h1{font-size:30px!important;line-height:1.15!important;margin:0 0 9px!important;letter-spacing:0!important}
     main>h1+p{max-width:760px;color:var(--muted)!important;margin-bottom:24px!important}
@@ -159,9 +163,9 @@ function polishClipperOperatorPage(body) {
     table{width:100%!important;border-collapse:collapse!important;margin-top:12px!important;font-size:13px!important;display:block!important;overflow-x:auto!important}thead,tbody{display:table;width:100%;min-width:720px;table-layout:fixed}th,td{border-top:1px solid var(--line)!important;padding:10px 8px!important;text-align:left!important;vertical-align:top!important;overflow-wrap:anywhere}th{color:var(--muted)!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:.05em!important}td{color:#edf4f0!important}
     code,pre,.caption,.note{background:#0d1410!important;border:1px solid var(--line)!important;border-radius:6px!important;color:#d9eee2!important}code{padding:2px 5px!important;overflow-wrap:anywhere}pre,.caption,.note{white-space:pre-wrap;word-break:break-word;padding:12px!important;max-width:100%;overflow:auto}.small,small{font-size:12px!important;color:var(--muted)!important}
     details{border-top:1px solid var(--line);padding:10px 0}summary{cursor:pointer;color:#dce7e1!important;font-weight:700}
-    @media(max-width:720px){main{padding:0 17px 48px!important}.operator-nav{margin-bottom:26px}.operator-nav-links{gap:5px}.operator-nav-links a{padding:7px 8px;font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.grid>.card,.grid>.card:first-child{padding:15px 11px!important;border-left:1px solid var(--line)!important}.grid>.card:nth-child(odd){border-left:0!important;padding-left:0!important}.actions{display:grid!important;grid-template-columns:1fr!important}.actions a,.actions button{width:100%!important}.clip-head,.row-head{flex-direction:column!important}main>h1{font-size:26px!important}}
+    @media(max-width:720px){main{padding:0 17px 48px!important}.operator-nav{align-items:flex-start;flex-direction:column;padding:14px 0;margin-bottom:26px}.operator-nav-links{justify-content:flex-start;gap:5px}.operator-nav-links a{padding:7px 8px;font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.grid>.card,.grid>.card:first-child{padding:15px 11px!important;border-left:1px solid var(--line)!important}.grid>.card:nth-child(odd){border-left:0!important;padding-left:0!important}.actions{display:grid!important;grid-template-columns:1fr!important}.actions a,.actions button{width:100%!important}.clip-head,.row-head{flex-direction:column!important}main>h1{font-size:26px!important}}
   </style>`;
-  const navigation = `<nav class="operator-nav" aria-label="Clippers"><a class="operator-brand" href="/clippers">Clippers</a><div class="operator-nav-links"><a href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a><a href="/api/clippers/real-clip-permission-crm.html">Permisos</a><a href="/api/clippers/real-clip-acquisition-workbench.html">Preparar</a></div></nav><div class="operator-stage">${escapeHtml(stage)}</div>`;
+  const navigation = `<nav class="operator-nav" aria-label="Clippers"><a class="operator-brand" href="/clippers">Clippers</a><div class="operator-nav-links"><a href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a><a href="/api/clippers/streamer-100-campaign.html">100 streamers</a><a href="/api/clippers/real-clip-permission-crm.html">Permisos</a><a href="/api/clippers/real-clip-acquisition-workbench.html">Preparar</a></div></nav><div class="operator-stage">${escapeHtml(stage)}</div>`;
   let polished = String(body)
     .replace("</head>", `${sharedStyles}</head>`)
     .replace(/<main>/i, `<main>${navigation}`)
@@ -3565,9 +3569,15 @@ function buildRealClipGapSummary(rows = [], uploadPackIntegrity = {}) {
     return {
       queueItemId: row.queueItemId || "",
       rank: row.rank || "",
+      accountId: row.accountId || "",
       brand: row.metricoolBrandName || "",
-      accountName: row.accountName || "",
+      accountName: row.accountId === "sports-daily"
+        ? "Streamer Highlights"
+        : row.accountId === "meme-radar"
+          ? "Streamer Reactions"
+          : row.accountName || "",
       platform: row.platform || "",
+      publishAt: row.publishAt || "",
       uploadFileName: row.uploadFileName || "",
       sourceFileName: row.sourceFileName || "",
       sourceMetadataPresent: Boolean(row.sourceFileName || row.sourcePath),
@@ -3680,8 +3690,10 @@ function buildRealClipIntakePack(status) {
         queueItemId: row.queueItemId || "",
         category,
         brand: row.brand || "",
+        accountId: row.accountId || "",
         accountName: row.accountName || "",
         platform: row.platform || "tiktok",
+        publishAt: row.publishAt || "",
         currentUploadFileName: row.uploadFileName || "",
         currentSourceKind: row.sourceKind || "",
         targetSourceDropFile: `source-drop/${category}/${targetFileName}`,
@@ -3693,6 +3705,11 @@ function buildRealClipIntakePack(status) {
         evidenceType: "<creator_permission|licensed_asset|owned_source|official_policy_allowlist|recreate_plan_approved>",
         evidenceLink: "<paste proof URL or local proof path>",
         notes: "Replace this starter row with a real source file, exact URL, rights proof, and 20+ character notes before import.",
+        aiProcessing: "",
+        originalStreamEndedAt: "",
+        plannedPublishAt: "",
+        contextReviewStatus: "",
+        creditText: "",
       };
     });
   const manifestRows = rows.map((row) => ({
@@ -3706,6 +3723,11 @@ function buildRealClipIntakePack(status) {
     evidence_link: safeCsvText(row.evidenceLink),
     priority: safeCsvText(row.order <= 10 ? "high" : "medium"),
     notes: safeCsvText(row.notes),
+    ai_processing: safeCsvText(row.aiProcessing),
+    original_stream_ended_at: safeCsvText(row.originalStreamEndedAt),
+    planned_publish_at: safeCsvText(row.plannedPublishAt),
+    context_review_status: safeCsvText(row.contextReviewStatus),
+    credit_text: safeCsvText(row.creditText),
   }));
   const manifestCsv = renderCsv([
     "category",
@@ -3718,6 +3740,11 @@ function buildRealClipIntakePack(status) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ], manifestRows);
   return {
     status: rows.length ? "needs_real_clip_intake" : "no_replacement_rows_needed",
@@ -3821,7 +3848,7 @@ function buildRealClipIntakeMarkdown(status) {
     "",
     "## Required Manifest Columns",
     "",
-    "`category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes`",
+    "`category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text`",
     "",
     "## Guardrails",
     "",
@@ -3971,6 +3998,32 @@ function sourcePlatformForExactUrl(value) {
   return "unknown";
 }
 
+function sourceUrlMatchesCreator(value, source) {
+  const expected = campaignHandleKey(source);
+  if (!expected) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (["tiktok.com", "m.tiktok.com"].includes(hostName)) {
+      const match = parsed.pathname.match(/^\/@([^/]+)\/video\/[0-9]+\/?$/i);
+      return Boolean(match && campaignHandleKey(match[1]) === expected);
+    }
+    if (["twitch.tv", "m.twitch.tv"].includes(hostName)) {
+      const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})\/clip\/[A-Za-z0-9_-]{4,120}\/?$/);
+      return Boolean(match && campaignHandleKey(match[1]) === expected);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function creditIdentifiesCreator(value, source) {
+  const credit = String(value || "").trim().toLowerCase();
+  const creator = campaignHandleKey(source);
+  return creator.length >= 3 && credit.length >= creator.length + 4 && campaignHandleKey(credit).includes(creator);
+}
+
 function concreteIntakeNotes(value) {
   return !validateOperatorNotes(value);
 }
@@ -4102,6 +4155,8 @@ function manifestRecordForTarget(manifestRows, targetFileName) {
 
 async function buildRealClipIntakeValidation(status) {
   const pack = buildRealClipIntakePack(status);
+  const streamerCampaign = await buildStreamer100Campaign();
+  const streamerPermissions = new Map((streamerCampaign.permissionLedgerRows || []).map((row) => [campaignHandleKey(row.handle), row]));
   const manifestCache = new Map();
   for (const category of new Set(pack.rows.map((row) => row.category))) {
     const manifestLocation = await sourceDropManifestLocation(category);
@@ -4121,6 +4176,47 @@ async function buildRealClipIntakeValidation(status) {
     const source = String(record?.source || record?.creator || record?.creator_or_rights_holder || "").trim();
     const evidenceLink = String(record?.evidence_link || record?.evidence || record?.proof_url || record?.proof || "").trim();
     const notes = String(record?.notes || "").trim();
+    const creatorPermission = streamerPermissions.get(campaignHandleKey(source));
+    const creatorRestrictions = creatorPermission?.restrictions || {};
+    const aiProcessing = String(record?.ai_processing || record?.aiProcessing || "").trim().toLowerCase();
+    const contextReviewStatus = String(record?.context_review_status || record?.contextReviewStatus || "").trim().toLowerCase();
+    const creditText = String(record?.credit_text || record?.creditText || "").trim();
+    const streamEndedAt = Date.parse(String(record?.original_stream_ended_at || record?.originalStreamEndedAt || "").trim());
+    const plannedPublishAt = Date.parse(String(record?.planned_publish_at || record?.plannedPublishAt || "").trim());
+    const canonicalPublishAt = Date.parse(String(intakeRow.publishAt || "").trim());
+    const allowedAccountNames = Array.isArray(creatorRestrictions.allowedAccountNames) ? creatorRestrictions.allowedAccountNames : [];
+    const requiredDelayMs = Math.max(0, Number(creatorRestrictions.minimumPublishDelayHours || 0)) * 60 * 60 * 1000;
+    const plannedPublishMatchesQueue = Number.isFinite(plannedPublishAt)
+      && Number.isFinite(canonicalPublishAt)
+      && Math.abs(plannedPublishAt - canonicalPublishAt) <= 60_000;
+    const minimumPublishDelayVerified = requiredDelayMs === 0 || (
+      Number.isFinite(streamEndedAt)
+      && Number.isFinite(canonicalPublishAt)
+      && plannedPublishMatchesQueue
+      && canonicalPublishAt - streamEndedAt >= requiredDelayMs
+    );
+    const restrictionBlockers = [
+      !creatorPermission ? "not_in_blanket_campaign" : null,
+      creatorPermission && creatorPermission.permissionStatus !== "approved_blanket" && creatorPermission.permissionStatus !== "denied"
+        ? "creator_blanket_permission_not_approved"
+        : null,
+      creatorPermission?.permissionStatus === "denied" ? "creator_permission_denied" : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.noAi && !["none", "ffmpeg_no_ai", "deterministic_ffmpeg_no_ai"].includes(aiProcessing)
+        ? "creator_no_ai_processing_not_verified"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.contextReviewRequired && contextReviewStatus !== "approved"
+        ? "creator_context_review_not_approved"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.creatorCreditRequired && !creditIdentifiesCreator(creditText, source)
+        ? "creator_credit_text_missing"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && allowedAccountNames.length && !allowedAccountNames.includes(intakeRow.accountName)
+        ? "creator_account_not_authorized"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && requiredDelayMs > 0 && !minimumPublishDelayVerified
+        ? "creator_minimum_publish_delay_not_verified"
+        : null,
+    ].filter(Boolean);
     const evidenceStatus = record ? await realClipEvidenceStatus(evidenceLink) : { ok: false, status: "evidence_link_missing" };
     const blockers = [
       fileStatus.ok ? null : fileStatus.status,
@@ -4129,9 +4225,13 @@ async function buildRealClipIntakeValidation(status) {
       record ? null : "manifest_row_missing",
       record && isExactSourceVideoOrPostUrl(url) ? null : "exact_source_video_or_post_url_missing",
       record && !hasStarterPlaceholder(source) ? null : "creator_or_source_missing",
+      record && !hasStarterPlaceholder(source) && isExactSourceVideoOrPostUrl(url) && !sourceUrlMatchesCreator(url, source)
+        ? "source_url_creator_not_verified"
+        : null,
       record && rightsStatus === "owned_or_permissioned" ? null : "rights_status_not_owned_or_permissioned",
       record && evidenceStatus.ok ? null : evidenceStatus.status,
       record && concreteIntakeNotes(notes) ? null : "operator_notes_not_concrete",
+      ...restrictionBlockers,
     ].filter(Boolean);
     return {
       order: intakeRow.order,
@@ -4152,6 +4252,16 @@ async function buildRealClipIntakeValidation(status) {
       evidenceLinkPresent: Boolean(record && evidenceStatus.ok),
       evidenceStatus: evidenceStatus.status,
       notesOk: Boolean(record && concreteIntakeNotes(notes)),
+      creatorPermissionStatus: creatorPermission?.permissionStatus || "not_in_blanket_campaign",
+      creatorRestrictions,
+      creatorRestrictionChecks: {
+        aiProcessing: aiProcessing || "missing",
+        contextReviewStatus: contextReviewStatus || "missing",
+        creditTextPresent: creditIdentifiesCreator(creditText, source),
+        allowedAccount: !allowedAccountNames.length || allowedAccountNames.includes(intakeRow.accountName),
+        plannedPublishMatchesQueue,
+        minimumPublishDelayVerified,
+      },
     };
   }));
   const readyRows = rows.filter((row) => row.status === "ready_for_source_drop_import").length;
@@ -4251,7 +4361,7 @@ function renderRealClipIntakeValidationPage(validation) {
     <div class="label">Batch exact URL + rights proof intake</div>
     <form method="post" action="/api/clippers/real-clip-intake/record-batch">
       <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
-      <textarea name="realClipIntakeBatch" rows="8" placeholder="metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes"></textarea>
+      <textarea name="realClipIntakeBatch" rows="8" placeholder="metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text"></textarea>
       <button type="submit">Validate and record batch</button>
     </form>
     <p class="small">If any row is invalid, nothing is written. This records manifest proof only; local MP4 files are still required.</p>
@@ -4277,6 +4387,23 @@ function renderRealClipIntakeValidationPage(validation) {
                 <input name="creatorOrRightsHolder" placeholder="@creator or rights holder" />
                 <input name="evidenceLink" placeholder="https://proof.example/permission or /clippers-workspace/evidence-drop/..." />
                 <textarea name="operatorNotes" placeholder="20+ chars. Describe permission/source proof without secrets."></textarea>
+                <select name="aiProcessing">
+                  <option value="">AI processing (leave blank if unrestricted)</option>
+                  <option value="none">None</option>
+                  <option value="ffmpeg_no_ai">FFmpeg, no AI</option>
+                  <option value="deterministic_ffmpeg_no_ai">Deterministic FFmpeg, no AI</option>
+                  <option value="ai_assisted">AI assisted</option>
+                </select>
+                <input name="originalStreamEndedAt" placeholder="Original stream ended at (ISO 8601, optional)" />
+                <input name="plannedPublishAt" placeholder="Planned publish at (ISO 8601, optional)" />
+                <select name="contextReviewStatus">
+                  <option value="">Context review (leave blank if unrestricted)</option>
+                  <option value="not_required">Not required</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <input name="creditText" maxlength="500" placeholder="Exact creator credit text (optional)" />
                 <button type="submit">Record intake proof</button>
               </form>
               <p class="small">This only updates the source-drop manifest. A local MP4 is still required before the row can become ready.</p>
@@ -4291,12 +4418,27 @@ function renderRealClipIntakeValidationPage(validation) {
 </html>`;
 }
 
+function validatedOptionalTimestamp(value, fieldName) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return { ok: true, value: "" };
+  const parsed = Date.parse(normalized);
+  if (!Number.isFinite(parsed) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) {
+    return { ok: false, error: `invalid_${fieldName}` };
+  }
+  return { ok: true, value: normalized, parsed };
+}
+
 function validateRealClipIntakeRecordInput(status, input = {}) {
   const metricoolQueueItemId = String(input.metricoolQueueItemId || "").trim();
   const exactVideoOrPostUrl = String(input.exactVideoOrPostUrl || "").trim();
   const creatorOrRightsHolder = String(input.creatorOrRightsHolder || "").trim();
   const evidenceLink = String(input.evidenceLink || "").trim();
   const operatorNotes = String(input.operatorNotes || "").trim();
+  const aiProcessing = String(input.aiProcessing || "").trim().toLowerCase();
+  const contextReviewStatus = String(input.contextReviewStatus || "").trim().toLowerCase();
+  const creditText = String(input.creditText || "").trim();
+  const originalStreamEndedAt = validatedOptionalTimestamp(input.originalStreamEndedAt, "original_stream_ended_at");
+  const plannedPublishAt = validatedOptionalTimestamp(input.plannedPublishAt, "planned_publish_at");
   if (!/^[a-z0-9_-]{6,80}$/i.test(metricoolQueueItemId)) {
     return { ok: false, statusCode: 400, error: "invalid_metricool_queue_item_id", metricoolQueueItemId };
   }
@@ -4315,6 +4457,20 @@ function validateRealClipIntakeRecordInput(status, input = {}) {
   }
   const notesError = validateOperatorNotes(operatorNotes);
   if (notesError) return { ok: false, statusCode: 400, error: notesError, metricoolQueueItemId };
+  if (aiProcessing && !["none", "ffmpeg_no_ai", "deterministic_ffmpeg_no_ai", "ai_assisted"].includes(aiProcessing)) {
+    return { ok: false, statusCode: 400, error: "invalid_ai_processing", metricoolQueueItemId };
+  }
+  if (!originalStreamEndedAt.ok) return { ok: false, statusCode: 400, error: originalStreamEndedAt.error, metricoolQueueItemId };
+  if (!plannedPublishAt.ok) return { ok: false, statusCode: 400, error: plannedPublishAt.error, metricoolQueueItemId };
+  if (originalStreamEndedAt.value && plannedPublishAt.value && plannedPublishAt.parsed < originalStreamEndedAt.parsed) {
+    return { ok: false, statusCode: 400, error: "planned_publish_at_before_original_stream_ended_at", metricoolQueueItemId };
+  }
+  if (contextReviewStatus && !["not_required", "pending", "approved", "rejected"].includes(contextReviewStatus)) {
+    return { ok: false, statusCode: 400, error: "invalid_context_review_status", metricoolQueueItemId };
+  }
+  if (creditText && (hasStarterPlaceholder(creditText) || creditText.length > 500 || secretTextPattern.test(creditText) || secretQueryParamPattern.test(creditText))) {
+    return { ok: false, statusCode: 400, error: "invalid_credit_text", metricoolQueueItemId };
+  }
   return {
     ok: true,
     statusCode: 200,
@@ -4324,6 +4480,11 @@ function validateRealClipIntakeRecordInput(status, input = {}) {
     creatorOrRightsHolder,
     evidenceLink,
     operatorNotes,
+    aiProcessing,
+    originalStreamEndedAt: originalStreamEndedAt.value,
+    plannedPublishAt: plannedPublishAt.value,
+    contextReviewStatus,
+    creditText,
   };
 }
 
@@ -4333,6 +4494,11 @@ const realClipIntakeBatchHeader = [
   "creator_or_rights_holder",
   "evidence_link",
   "operator_notes",
+  "ai_processing",
+  "original_stream_ended_at",
+  "planned_publish_at",
+  "context_review_status",
+  "credit_text",
 ];
 
 function realClipIntakeBatchTemplateCsv(status) {
@@ -4343,6 +4509,11 @@ function realClipIntakeBatchTemplateCsv(status) {
     creator_or_rights_holder: safeCsvText("<paste creator or rights holder>"),
     evidence_link: safeCsvText(evidenceTemplateUrl(row.queueItemId)),
     operator_notes: safeCsvText("Replace with 20+ chars describing the real permission/source evidence without secrets."),
+    ai_processing: "",
+    original_stream_ended_at: "",
+    planned_publish_at: "",
+    context_review_status: "",
+    credit_text: "",
   })));
 }
 
@@ -4353,6 +4524,11 @@ function normalizeRealClipIntakeBatchRow(row = {}) {
     creatorOrRightsHolder: row.creator_or_rights_holder || row.creatorOrRightsHolder || row.source || row.creator || "",
     evidenceLink: row.evidence_link || row.evidenceLink || row.proof_url || row.proof || "",
     operatorNotes: row.operator_notes || row.operatorNotes || row.notes || "",
+    aiProcessing: row.ai_processing || row.aiProcessing || "",
+    originalStreamEndedAt: row.original_stream_ended_at || row.originalStreamEndedAt || "",
+    plannedPublishAt: row.planned_publish_at || row.plannedPublishAt || "",
+    contextReviewStatus: row.context_review_status || row.contextReviewStatus || "",
+    creditText: row.credit_text || row.creditText || "",
   };
 }
 
@@ -4369,6 +4545,11 @@ function buildRealClipManifestRow(validated) {
     evidence_link: safeCsvText(validated.evidenceLink),
     priority: intakeRow.order <= 10 ? "high" : "medium",
     notes: safeCsvText(validated.operatorNotes),
+    ai_processing: safeCsvText(validated.aiProcessing),
+    original_stream_ended_at: safeCsvText(validated.originalStreamEndedAt),
+    planned_publish_at: safeCsvText(validated.plannedPublishAt),
+    context_review_status: safeCsvText(validated.contextReviewStatus),
+    credit_text: safeCsvText(validated.creditText),
   };
 }
 
@@ -4454,6 +4635,11 @@ async function recordRealClipIntakeManifestRow(input) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ];
   const manifestRead = await readTextForMutation(manifestPath, { allowMissing: true });
   if (!manifestRead.ok) {
@@ -4542,6 +4728,11 @@ async function recordRealClipIntakeManifestBatch(rawCsv) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ];
   const categoryGroups = new Map();
   for (const { validated } of validatedRows) {
@@ -6470,10 +6661,11 @@ async function buildRealClipPermissionRequestPackets(status) {
     const exactUrl = row.exactVideoOrPostUrl || "<exact source video URL>";
     const creator = row.creatorOrRightsHolder || "<creator>";
     const message = [
-      `Hi ${creator}, I run ${account} and would like permission to feature this exact source video: ${exactUrl}.`,
-      "We will not post it unless you approve in writing.",
-      "If approved, please reply with any credit, caption, tag, duration, or usage requirements.",
-      "If you do not want the original reposted, we can skip it or make a recreate-only version with our own assets.",
+      `Hi ${creator}, I run ${account}. This clip is a sample of the content we would like to feature: ${exactUrl}.`,
+      "We are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams on our TikTok accounts.",
+      "We will credit and tag your official account, follow any duration or caption requirements, remove a post on request, and stop future use if you revoke permission in writing.",
+      "Please confirm whether this covers TikTok, commercial/monetized use, edits, and future clips, and include any restrictions or required credit.",
+      "We will not post unless you approve in writing.",
     ].join(" ");
     return {
       order: row.order,
@@ -6490,6 +6682,7 @@ async function buildRealClipPermissionRequestPackets(status) {
       creatorOrRightsHolder: row.creatorOrRightsHolder,
       outreachChannel: "tiktok_dm",
       permissionStatusToRecord: "requested",
+      permissionScope: "blanket_creator_tiktok_commercial",
       evidenceTemplate: row.evidenceTemplate,
       message,
       crmRecordHint: sendable
@@ -6517,6 +6710,7 @@ async function buildRealClipPermissionRequestPackets(status) {
       "Do not send a permission request without an exact source video URL and identified creator/rightsholder.",
       "A sent request is not approval.",
       "Only written approval, owned source proof, license, official policy, or approved recreate plan can unlock intake.",
+      "Blanket creator approval may cover future clips, but every clip still needs an exact source URL, a real local source file, and the saved approval evidence.",
       "Never store passwords, cookies, tokens, or private sensitive screenshots as evidence.",
     ],
   };
@@ -6534,6 +6728,7 @@ function buildRealClipPermissionRequestPacketsCsv(packet) {
     "creator_or_rights_holder",
     "outreach_channel",
     "permission_status_to_record",
+    "permission_scope",
     "evidence_template",
     "message",
     "crm_record_hint",
@@ -6549,6 +6744,7 @@ function buildRealClipPermissionRequestPacketsCsv(packet) {
     creator_or_rights_holder: workspaceSafeCsvText(row.creatorOrRightsHolder),
     outreach_channel: workspaceSafeCsvText(row.outreachChannel),
     permission_status_to_record: workspaceSafeCsvText(row.permissionStatusToRecord),
+    permission_scope: workspaceSafeCsvText(row.permissionScope),
     evidence_template: workspaceSafeCsvText(row.evidenceTemplate),
     message: workspaceSafeCsvText(row.message),
     crm_record_hint: workspaceSafeCsvText(row.crmRecordHint),
@@ -6976,6 +7172,11 @@ function buildNextBestAction(status) {
   };
 }
 
+function exactTikTokProfileUrl(value, expectedHandle) {
+  const match = String(value || "").trim().match(/^https:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._-]{2,64})\/?$/i);
+  return Boolean(match && `@${match[1].toLowerCase()}` === String(expectedHandle || "").trim().toLowerCase());
+}
+
 function trustedStreamerGrowthMetrics(input) {
   const source = String(input?.source || "").trim().toLowerCase();
   const measuredAt = String(input?.measuredAt || "").trim();
@@ -6986,6 +7187,8 @@ function trustedStreamerGrowthMetrics(input) {
   const sportsAccountName = String(input?.sportsAccountName || "").trim();
   const memesAccountName = String(input?.memesAccountName || "").trim();
   const published30d = Number(input?.published30d);
+  const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
+  const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
   const measuredAtMs = Date.parse(measuredAt);
   const ageMs = Date.now() - measuredAtMs;
   const trusted = source === "metricool"
@@ -6995,7 +7198,12 @@ function trustedStreamerGrowthMetrics(input) {
     && memesFollowers >= 0
     && Number.isFinite(measuredAtMs)
     && ageMs >= 0
-    && ageMs <= 72 * 60 * 60_000;
+    && ageMs <= 72 * 60 * 60_000
+    && input?.publicProfileVerified === true
+    && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
+    && sportsAccountName.toLowerCase() === "streamer highlights"
+    && memesAccountName.toLowerCase() === "streamer reactions";
   return {
     trusted,
     source: trusted ? "metricool" : "metricool_not_imported",
@@ -7016,6 +7224,9 @@ function trustedStreamerGrowthMetrics(input) {
       && Number.isFinite(measuredAtMs)
       && ageMs >= 0
       && ageMs <= 72 * 60 * 60_000
+      && input?.publicProfileVerified === true
+      && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+      && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
       && sportsAccountName.toLowerCase() === "streamer highlights"
       && memesAccountName.toLowerCase() === "streamer reactions",
     accountNames: {
@@ -7038,12 +7249,17 @@ function trustedStreamerRoutingProof(input) {
   const sportsAccountName = String(input?.sportsAccountName || "").trim();
   const memesAccountName = String(input?.memesAccountName || "").trim();
   const platform = String(input?.platform || "").trim().toLowerCase();
+  const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
+  const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
   const confirmed = ["user_confirmed", "metricool_ui_verified"].includes(source)
     && Number.isFinite(confirmedAtMs)
     && confirmedAtMs <= Date.now() + 5 * 60_000
     && platform === "tiktok"
     && input?.sportsConnected === true
     && input?.memesConnected === true
+    && input?.publicProfileVerified === true
+    && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
     && sportsAccountName.toLowerCase() === "streamer highlights"
     && memesAccountName.toLowerCase() === "streamer reactions";
   return {
@@ -7054,12 +7270,352 @@ function trustedStreamerRoutingProof(input) {
       sportsConnection: confirmed ? sportsAccountName : "SPORT",
       memesConnection: confirmed ? memesAccountName : "memes",
     },
+    profileUrls: {
+      sportsConnection: confirmed ? sportsProfileUrl : "",
+      memesConnection: confirmed ? memesProfileUrl : "",
+    },
   };
+}
+
+function safeCampaignHttpsUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw || hasStarterPlaceholder(raw) || secretQueryParamPattern.test(raw)) return "";
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function exactTwitchChannelUrl(value) {
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe) return "";
+  try {
+    const parsed = new URL(safe);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (hostName !== "twitch.tv" || parsed.search || parsed.hash) return "";
+    const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})\/?$/);
+    return match ? `https://www.twitch.tv/${match[1]}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function campaignCandidateRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  for (const key of ["candidates", "streamers", "rows", "creators", "items"]) {
+    if (Array.isArray(payload[key])) return payload[key];
+  }
+  return [];
+}
+
+function firstCampaignValue(row, keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function firstCampaignArrayUrl(row, keys) {
+  for (const key of keys) {
+    const values = row?.[key];
+    if (!Array.isArray(values)) continue;
+    for (const value of values) {
+      const safe = safeCampaignHttpsUrl(value);
+      if (safe) return safe;
+    }
+  }
+  return "";
+}
+
+function normalizeCampaignEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email)
+    ? email
+    : "";
+}
+
+function campaignHandleKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+function streamerPermissionRestrictions(outreach = {}) {
+  const delay = Number.parseInt(String(outreach.min_publish_delay_hours || "").trim(), 10);
+  return {
+    noAi: String(outreach.no_ai || "").trim().toLowerCase() === "yes",
+    minimumPublishDelayHours: Number.isInteger(delay) && delay >= 0 && delay <= 720 ? delay : 0,
+    contextReviewRequired: String(outreach.context_review_required || "").trim().toLowerCase() === "yes",
+    creatorCreditRequired: String(outreach.creator_credit_required || "").trim().toLowerCase() === "yes",
+    allowedAccountNames: String(outreach.allowed_account_names || "")
+      .split("|")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  };
+}
+
+function campaignContactUrlFromEvidence(type, value) {
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe || !/(inquiry_form|official_(?:instagram|social|x)_profile|public_social_profile|business_email_or_(?:form|bluesky|marshmallow|twitter|vgen))/i.test(String(type || ""))) return "";
+  try {
+    const hostName = new URL(safe).hostname.replace(/^www\./, "").toLowerCase();
+    if (["twitchtracker.com", "betterbanned.com", "streamscharts.com", "twitchmetrics.net"].includes(hostName)) return "";
+    return safe;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
+  const twitchUrl = exactTwitchChannelUrl(firstCampaignValue(raw, ["twitchUrl", "twitch_url", "twitchOfficialUrl", "twitch_official_url", "twitchOfficial", "twitch_official", "officialTwitch", "official_twitch", "officialTwitchUrl", "official_twitch_url", "channelUrl", "channel_url"]));
+  const handleFromUrl = twitchUrl ? new URL(twitchUrl).pathname.split("/").filter(Boolean)[0] : "";
+  const rawHandle = firstCampaignValue(raw, ["handle", "handleExact", "handle_exact", "twitchHandle", "twitch_handle", "creator", "name"])
+    .replace(/^@/, "")
+    .trim();
+  const handle = /^[A-Za-z0-9_]{3,25}$/.test(rawHandle) ? rawHandle : handleFromUrl;
+  if (!handle || !twitchUrl) return null;
+  const nestedContact = raw?.publicContact && typeof raw.publicContact === "object"
+    ? raw.publicContact
+    : raw?.contact && typeof raw.contact === "object"
+      ? raw.contact
+      : {};
+  const nestedPolicy = raw?.clipPolicy && typeof raw.clipPolicy === "object" ? raw.clipPolicy : {};
+  const contactEvidenceUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["contactEvidenceUrl", "contact_evidence_url", "contactEvidence", "contact_evidence", "evidenceUrl", "evidence_url"]))
+    || firstCampaignArrayUrl(raw, ["contactEvidenceUrls", "contact_evidence_urls"])
+    || safeCampaignHttpsUrl(nestedContact.evidenceUrl);
+  const policyEvidenceUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["policyEvidenceUrl", "policy_evidence_url", "clipPolicyEvidenceUrl", "clip_policy_evidence_url", "clipsPolicyEvidenceUrl", "clips_policy_evidence_url", "rightsEvidenceUrl", "rights_evidence_url"]))
+    || firstCampaignArrayUrl(raw, ["clipPolicyEvidenceUrls", "clip_policy_evidence_urls"])
+    || safeCampaignHttpsUrl(nestedPolicy.evidenceUrl || nestedPolicy.creatorEvidenceUrl || nestedPolicy.platformEvidenceUrl);
+  const publicBusinessContact = firstCampaignValue(raw, ["publicBusinessContact", "public_business_contact"])
+    || String(nestedContact.value || "").trim();
+  const contactEmail = normalizeCampaignEmail(firstCampaignValue(raw, ["contactEmail", "contact_email", "businessEmail", "business_email", "email"]) || publicBusinessContact);
+  const contactUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["contactUrl", "contact_url", "businessContactUrl", "business_contact_url", "contactForm", "contact_form"]) || publicBusinessContact)
+    || campaignContactUrlFromEvidence(nestedContact.type, nestedContact.evidenceUrl);
+  const requestedPolicy = firstCampaignValue(raw, ["rightsPolicy", "rights_policy", "policyStatus", "policy_status"])
+    || String(nestedPolicy.rightsPolicy || nestedPolicy.rights_policy || "").trim();
+  const policySummary = firstCampaignValue(raw, ["policySummary", "policy_summary", "publicClipPolicy", "public_clip_policy", "publicClipsPolicy", "public_clips_policy", "policy"])
+    || String(nestedPolicy.summary || "").trim();
+  const rightsPolicy = requestedPolicy === "public_blanket_allow" && /(separate|direct|written|business|commercial).{0,50}(approval|permission|required|contact)|larger[- ]scale/i.test(policySummary)
+    ? "request_required"
+    : new Set(["public_blanket_allow", "request_required", "no_evidence", "forbidden"]).has(requestedPolicy)
+      ? requestedPolicy
+    : "no_evidence";
+  const hasVerifiedContact = Boolean((contactEmail || contactUrl) && contactEvidenceUrl);
+  const priority = rightsPolicy === "forbidden"
+    ? "exclude"
+    : hasVerifiedContact && rightsPolicy === "public_blanket_allow"
+      ? "policy_review_first"
+      : hasVerifiedContact
+        ? "outreach_ready"
+        : "needs_verified_contact";
+  return {
+    handle,
+    twitchUrl,
+    cohort,
+    sourceFile,
+    language: firstCampaignValue(raw, ["language", "idioma"])
+      || String(raw?.countryLanguage?.language || raw?.country_language?.language || "").trim(),
+    country: firstCampaignValue(raw, ["country", "pais", "region", "countryOrRegion", "country_or_region"])
+      || String(raw?.countryLanguage?.country || raw?.country_language?.country || "").trim(),
+    category: firstCampaignValue(raw, ["category", "niche", "categoria"]),
+    contactEmail,
+    contactUrl,
+    contactEvidenceUrl,
+    rightsPolicy,
+    policyEvidenceUrl,
+    policySummary,
+    risk: typeof raw?.risk === "object" && raw.risk
+      ? [raw.risk.level, raw.risk.notes].filter(Boolean).join(": ")
+      : [firstCampaignValue(raw, ["risk", "riskNote", "risk_note", "riesgo"]), firstCampaignValue(raw, ["riskNotes", "risk_notes"])].filter(Boolean).join(": "),
+    reasonToPrioritize: firstCampaignValue(raw, ["reasonToPrioritize", "reason_to_prioritize", "priorityReason", "priority_reason"]),
+    hasVerifiedContact,
+    priority,
+    permissionStatus: "not_requested",
+    canPublish: false,
+    permissionScope: "blanket_creator_tiktok_commercial",
+    outreachMessage: `Hi ${handle}, we run two TikTok streamer pages and are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams. We will credit/tag you, follow your restrictions, remove posts on request, and stop future use if permission is revoked. Please confirm TikTok, commercial use, edits, future clips, and required credit. We will not post without written approval.`,
+  };
+}
+
+async function buildStreamer100Campaign() {
+  const names = [
+    "streamer-cohort-en-na.json",
+    "streamer-cohort-es.json",
+    "streamer-cohort-eu.json",
+    "streamer-cohort-indie.json",
+  ];
+  const byHandle = new Map();
+  const sourceFiles = [];
+  for (const fileName of names) {
+    const filePath = path.join(streamerResearchDir, fileName);
+    let parsed;
+    try {
+      parsed = JSON.parse(await readFile(filePath, "utf8"));
+      sourceFiles.push(fileName);
+    } catch {
+      continue;
+    }
+    const cohort = fileName.replace(/^streamer-cohort-|\.json$/g, "");
+    for (const raw of campaignCandidateRows(parsed)) {
+      const row = normalizeStreamerCampaignRow(raw, cohort, fileName);
+      if (!row) continue;
+      const key = campaignHandleKey(row.handle);
+      const previous = byHandle.get(key);
+      if (!previous || (!previous.hasVerifiedContact && row.hasVerifiedContact)) byHandle.set(key, row);
+    }
+  }
+  const outreachRaw = await readText(streamerBlanketPermissionCsvPath, "");
+  const outreachRows = outreachRaw.trim() ? parseCsv(outreachRaw).rows : [];
+  const outreachByHandle = new Map(outreachRows.map((row) => [campaignHandleKey(row.handle), row]));
+  const mergedRows = await Promise.all([...byHandle.values()].map(async (row) => {
+    const outreach = outreachByHandle.get(campaignHandleKey(row.handle)) || {};
+    const requestedPermissionStatus = String(outreach.permission_status || "not_requested").trim().toLowerCase();
+    const evidenceLink = String(outreach.evidence_link || "").trim();
+    const scopeComplete = ["scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips"]
+      .every((key) => String(outreach[key] || "").trim().toLowerCase() === "yes");
+    const localEvidenceLink = evidenceLink && !/^https:\/\//i.test(evidenceLink);
+    const evidence = localEvidenceLink
+      ? await realClipEvidenceStatus(evidenceLink)
+      : { ok: false };
+    const blanketApprovalValid = requestedPermissionStatus === "approved_blanket" && scopeComplete && evidence.ok;
+    const permissionDenied = requestedPermissionStatus === "denied";
+    return {
+      ...row,
+      outreachStatus: String(outreach.outreach_status || "not_sent").trim().toLowerCase(),
+      permissionStatus: blanketApprovalValid
+        ? "approved_blanket"
+        : requestedPermissionStatus === "approved_blanket"
+          ? "approval_evidence_incomplete"
+          : requestedPermissionStatus,
+      evidenceLink: blanketApprovalValid || (permissionDenied && evidence.ok) ? evidenceLink : "",
+      updatedAt: String(outreach.updated_at || "").trim(),
+      restrictions: streamerPermissionRestrictions(outreach),
+      priority: permissionDenied ? "exclude" : row.priority,
+      canPublish: false,
+    };
+  }));
+  const priorityOrder = { policy_review_first: 0, outreach_ready: 1, needs_verified_contact: 2, exclude: 3 };
+  const outreachOrder = { sent: 0, responded: 0, delivered: 0, not_sent: 1, "": 1, bounced: 2, failed: 2 };
+  const permissionLedgerRows = mergedRows.sort((a, b) => {
+    const aOutreach = outreachOrder[a.outreachStatus] ?? 1;
+    const bOutreach = outreachOrder[b.outreachStatus] ?? 1;
+    if (aOutreach !== bOutreach) return aOutreach - bOutreach;
+    const aExcluded = a.priority === "exclude" ? 1 : 0;
+    const bExcluded = b.priority === "exclude" ? 1 : 0;
+    if (aExcluded !== bExcluded) return aExcluded - bExcluded;
+    return (priorityOrder[a.priority] - priorityOrder[b.priority])
+      || a.handle.localeCompare(b.handle);
+  });
+  const rows = permissionLedgerRows.slice(0, 100);
+  const contactableRows = rows.filter((row) => row.hasVerifiedContact && row.priority !== "exclude").length;
+  const excludedRows = rows.filter((row) => row.priority === "exclude").length;
+  return {
+    status: rows.length >= 100 ? "research_complete_outreach_review_required" : "building_100_streamer_research_pool",
+    generatedAt: new Date().toISOString(),
+    targetStreamers: 100,
+    researchedRows: rows.length,
+    remainingResearchRows: Math.max(0, 100 - rows.length),
+    contactableRows,
+    needsVerifiedContactRows: rows.filter((row) => row.priority === "needs_verified_contact").length,
+    publicPolicyReviewRows: rows.filter((row) => row.rightsPolicy === "public_blanket_allow").length,
+    excludedRows,
+    outreachSentRows: rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length,
+    responsesReceivedRows: rows.filter((row) => row.outreachStatus === "responded").length,
+    blanketApprovedRows: rows.filter((row) => row.permissionStatus === "approved_blanket").length,
+    deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
+    sourceFiles,
+    rows,
+    permissionLedgerRows,
+    nextAction: rows.length < 100
+      ? `Complete ${100 - rows.length} more verified streamer research rows.`
+      : rows.some((row) => row.permissionStatus === "approved_blanket")
+        ? "Use only approved creators for source review, enforce every creator restriction, and keep monitoring the remaining replies."
+        : `Review the ${contactableRows} verified contacts, send blanket permission outreach in controlled batches, and save every response as local evidence.`,
+    guardrails: [
+      "Research, public contact details, and sent outreach never count as permission.",
+      "A public clipping policy must explicitly cover the intended TikTok and commercial use before it can become allowlist evidence.",
+      "Blanket approval must be written, locally evidenced, and include TikTok, edits, monetization, future clips, credit, and revocation terms.",
+      "Each published clip still requires an exact source URL, a real local source file, and Metricool approval.",
+    ],
+  };
+}
+
+function buildStreamer100CampaignCsv(campaign) {
+  return renderCsv([
+    "handle", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
+    "contact_evidence_url", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "permission_status",
+    "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
+    "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
+  ], campaign.rows.map((row) => ({
+    handle: workspaceSafeCsvText(row.handle),
+    twitch_url: workspaceSafeCsvText(row.twitchUrl),
+    cohort: workspaceSafeCsvText(row.cohort),
+    language: workspaceSafeCsvText(row.language),
+    country: workspaceSafeCsvText(row.country),
+    category: workspaceSafeCsvText(row.category),
+    contact_email: workspaceSafeCsvText(row.contactEmail),
+    contact_url: workspaceSafeCsvText(row.contactUrl),
+    contact_evidence_url: workspaceSafeCsvText(row.contactEvidenceUrl),
+    rights_policy: workspaceSafeCsvText(row.rightsPolicy),
+    policy_evidence_url: workspaceSafeCsvText(row.policyEvidenceUrl),
+    priority: workspaceSafeCsvText(row.priority),
+    outreach_status: workspaceSafeCsvText(row.outreachStatus),
+    permission_status: workspaceSafeCsvText(row.permissionStatus),
+    permission_scope: workspaceSafeCsvText(row.permissionScope),
+    evidence_link: workspaceSafeCsvText(row.evidenceLink),
+    updated_at: workspaceSafeCsvText(row.updatedAt),
+    no_ai: row.restrictions?.noAi ? "yes" : "no",
+    min_publish_delay_hours: workspaceSafeCsvText(row.restrictions?.minimumPublishDelayHours || 0),
+    context_review_required: row.restrictions?.contextReviewRequired ? "yes" : "no",
+    creator_credit_required: row.restrictions?.creatorCreditRequired ? "yes" : "no",
+    allowed_account_names: workspaceSafeCsvText((row.restrictions?.allowedAccountNames || []).join("|")),
+    can_publish: "no",
+    risk: workspaceSafeCsvText(row.risk),
+    reason_to_prioritize: workspaceSafeCsvText(row.reasonToPrioritize),
+    outreach_message: workspaceSafeCsvText(row.outreachMessage),
+  })));
+}
+
+function renderStreamer100CampaignPage(campaign) {
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Clippers 100 Streamer Campaign</title></head>
+<body><main>
+  <h1>Clippers 100 Streamer Campaign</h1>
+  <p>Cartera verificable para conseguir permisos generales de clips comerciales en TikTok. Ninguna fila permite publicar hasta guardar aprobacion escrita.</p>
+  <div class="grid">
+    <div class="card"><div class="label">Investigados</div><div class="value">${escapeHtml(campaign.researchedRows)}/${escapeHtml(campaign.targetStreamers)}</div></div>
+    <div class="card"><div class="label">Contacto verificado</div><div class="value">${escapeHtml(campaign.contactableRows)}</div></div>
+    <div class="card"><div class="label">Solicitudes enviadas</div><div class="value">${escapeHtml(campaign.outreachSentRows)}</div></div>
+    <div class="card"><div class="label">Respuestas</div><div class="value">${escapeHtml(campaign.responsesReceivedRows)}</div></div>
+    <div class="card"><div class="label">Permiso general</div><div class="value">${escapeHtml(campaign.blanketApprovedRows)}</div></div>
+    <div class="card"><div class="label">Denegados</div><div class="value">${escapeHtml(campaign.deniedRows)}</div></div>
+    <div class="card"><div class="label">Publicables</div><div class="value">0</div></div>
+  </div>
+  <div class="actions">
+    ${link("/clippers", "Dashboard")}
+    ${link("/api/clippers/streamer-100-campaign.json", "JSON")}
+    ${link("/api/clippers/streamer-100-campaign.csv", "CSV")}
+    ${link("/api/clippers/real-clip-permission-crm.html", "Permission CRM")}
+  </div>
+  <div class="card"><div class="label">Siguiente paso</div><p>${escapeHtml(campaign.nextAction)}</p></div>
+  <div class="card"><div class="label">Candidatos</div><table><thead><tr><th>Streamer</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Prioridad</th></tr></thead><tbody>
+    ${campaign.rows.map((row) => `<tr><td><a href="${escapeHtml(row.twitchUrl)}">${escapeHtml(row.handle)}</a><div class="small">${escapeHtml([row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="card"><div class="label">Controles</div>${campaign.guardrails.map((item) => `<p class="small">${escapeHtml(item)}</p>`).join("")}</div>
+</main></body></html>`;
 }
 
 function buildStreamerGrowthCeo(status) {
   const targetFollowers = 10_000;
   const metrics = trustedStreamerGrowthMetrics(status.streamerGrowthMetrics);
+  const allowlistedCreators = Math.max(0, Number(status.streamer100Campaign?.blanketApprovedRows || 0));
   const routingProof = trustedStreamerRoutingProof(status.streamerGrowthRoutingProof);
   const rebrandConfirmed = metrics.rebrandConfirmed || routingProof.confirmed;
   const sportsMetricoolRows = Number(status.handoff?.sports || 0);
@@ -7094,11 +7650,16 @@ function buildStreamerGrowthCeo(status) {
     statusLabel = "baseline_required";
     title = "Import real SPORT and memes baselines from Metricool";
     detail = "Follower progress is unknown for both accounts. Do not report zero or estimate growth until Metricool provides measured follower counts and 30-day views for SPORT and memes.";
-  } else if (metrics.allowlistedCreators < 10) {
+  } else if ((metrics.followers || 0) >= targetFollowers) {
+    stage = "verify_monetization_eligibility";
+    statusLabel = "target_reached_review_required";
+    title = "Verify TikTok monetization eligibility after reaching 10K";
+    detail = "The follower target is met. Confirm real 30-day views, region, personal-account status, and original 60+ second content eligibility before counting revenue.";
+  } else if (allowlistedCreators < 100) {
     stage = "build_creator_allowlist";
     statusLabel = "building_supply";
-    title = "Build the first 10-streamer permission allowlist";
-    detail = `${metrics.allowlistedCreators}/10 verified creators are allowlisted. The CEO prepares outreach and evidence; sending remains approval-gated.`;
+    title = "Build the 100-streamer blanket permission allowlist";
+    detail = `${allowlistedCreators}/100 verified creators have written blanket permission for commercial TikTok clips. Research and outreach do not count as approval.`;
     primaryHref = "/api/clippers/real-clip-permission-crm.html";
     primaryAction = "Open permission CRM";
   } else if (metrics.weeklyCandidates < 500) {
@@ -7120,11 +7681,6 @@ function buildStreamerGrowthCeo(status) {
     statusLabel = "building_supply";
     title = "Queue the approved 100-clip streamer batch in Metricool";
     detail = `${metrics.weeklyMetricoolQueued}/100 rights-cleared drafts are in the Metricool approval queue. No queued row counts as published.`;
-  } else if ((metrics.followers || 0) >= targetFollowers) {
-    stage = "verify_monetization_eligibility";
-    statusLabel = "target_reached_review_required";
-    title = "Verify TikTok monetization eligibility after reaching 10K";
-    detail = "The follower target is met. Confirm real 30-day views, region, personal-account status, and original 60+ second content eligibility before counting revenue.";
   }
 
   return {
@@ -7177,7 +7733,7 @@ function buildStreamerGrowthCeo(status) {
       routingAccountsReady,
       sportsMetricoolRows,
       memesMetricoolRows,
-      allowlistedCreators: metrics.allowlistedCreators,
+      allowlistedCreators,
       weeklyCandidates: metrics.weeklyCandidates,
       weeklyRightsCleared: metrics.weeklyRightsCleared,
       weeklyDraftReady: metrics.weeklyDraftReady,
@@ -7335,7 +7891,7 @@ function renderStreamerGrowthCeoPage(ceo) {
   </div>
   <h2>Weekly operating targets</h2>
   <table><thead><tr><th>Stage</th><th>Current</th><th>Target</th></tr></thead><tbody>
-    <tr><td>Allowlisted creators</td><td>${escapeHtml(ceo.supply.allowlistedCreators)}</td><td>10 initial / 25-40 scale</td></tr>
+    <tr><td>Allowlisted creators</td><td>${escapeHtml(ceo.supply.allowlistedCreators)}</td><td>100 blanket approvals</td></tr>
     <tr><td>Exact scored candidates</td><td>${escapeHtml(ceo.supply.weeklyCandidates)}</td><td>${escapeHtml(ceo.weeklyTargets.scoredCandidates)}</td></tr>
     <tr><td>Rights-cleared sources</td><td>${escapeHtml(ceo.supply.weeklyRightsCleared)}</td><td>${escapeHtml(ceo.weeklyTargets.rightsClearedSources)}</td></tr>
     <tr><td>Final drafts</td><td>${escapeHtml(ceo.supply.weeklyDraftReady)}</td><td>${escapeHtml(ceo.weeklyTargets.finalClips)}</td></tr>
@@ -9116,6 +9672,7 @@ async function buildStatus() {
   status.externalEvidence = buildExternalEvidenceSummary(externalEvidenceCsv);
   status.externalEvidenceValidation = buildExternalEvidenceValidationSummary(externalEvidenceReport, externalCloseout);
   status.goalReadinessAudit = buildGoalReadinessAudit(status);
+  status.streamer100Campaign = await buildStreamer100Campaign();
   status.streamerGrowthCeo = buildStreamerGrowthCeo(status);
   status.nextBestAction = buildNextBestAction(status);
   status.goLiveGapResolver = buildGoLiveGapResolver(status);
@@ -9423,6 +9980,9 @@ function renderHome(status) {
     ${link("/api/clippers/streamer-growth-ceo.html", "Streamer Growth CEO")}
     ${link("/api/clippers/streamer-growth-ceo.json", "CEO growth JSON")}
     ${link("/api/clippers/streamer-growth-ceo.md", "CEO growth report")}
+    ${link("/api/clippers/streamer-100-campaign.html", "100 streamer campaign")}
+    ${link("/api/clippers/streamer-100-campaign.json", "100 streamer JSON")}
+    ${link("/api/clippers/streamer-100-campaign.csv", "100 streamer CSV")}
     ${link("/api/clippers/goal-gaps.json", "Goal gaps JSON")}
     ${link("/api/clippers/goal-gaps.md", "Goal gaps MD")}
     ${link("/api/clippers/real-clip-gap.json", "Real clip gap JSON")}
@@ -10227,6 +10787,18 @@ const server = createServer(async (req, res) => {
       html(res, 200, renderStreamerGrowthCeoPage(ceo));
       return;
     }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.json" && req.method === "GET") {
+      json(res, 200, await buildStreamer100Campaign());
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.csv" && req.method === "GET") {
+      csv(res, 200, buildStreamer100CampaignCsv(await buildStreamer100Campaign()), "clippers-100-streamer-campaign.csv");
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.html" && req.method === "GET") {
+      html(res, 200, renderStreamer100CampaignPage(await buildStreamer100Campaign()));
+      return;
+    }
     if (parsed.pathname === "/api/clippers/go-live-gap-resolver.json" && req.method === "GET") {
       const status = await buildStatus();
       json(res, 200, status.goLiveGapResolver || buildGoLiveGapResolver(status));
@@ -10360,6 +10932,11 @@ const server = createServer(async (req, res) => {
         creatorOrRightsHolder: form.get("creatorOrRightsHolder"),
         evidenceLink: form.get("evidenceLink"),
         operatorNotes: form.get("operatorNotes"),
+        aiProcessing: form.get("aiProcessing"),
+        originalStreamEndedAt: form.get("originalStreamEndedAt"),
+        plannedPublishAt: form.get("plannedPublishAt"),
+        contextReviewStatus: form.get("contextReviewStatus"),
+        creditText: form.get("creditText"),
       });
       const returnTo = safeReturnToPath(form.get("returnTo"));
       if (result.ok && returnTo) {
