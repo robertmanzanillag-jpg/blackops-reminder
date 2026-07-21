@@ -138,6 +138,9 @@ export async function scheduleBlackRoomMetricoolPost(
   // Match Metricool's official MCP client exactly. Its scheduler route uses the
   // MCP integration source and explicitly requests JSON in both directions.
   const headers = { "X-Mc-Auth": token, "content-type": "application/json", accept: "application/json" };
+  // The normalize endpoint can return a plain URL. Advertising JSON-only in
+  // Accept makes Metricool answer 500 "No acceptable representation".
+  const normalizeHeaders = { "X-Mc-Auth": token, accept: "*/*" };
   const date = input.publicationDateTime.slice(0, 10);
   const timezone = encodeURIComponent(input.timezone || BLACKROOM_TIMEZONE);
   const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
@@ -150,7 +153,7 @@ export async function scheduleBlackRoomMetricoolPost(
     return { metricoolId: String(existingId), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
   }
   const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
-  const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers, signal: AbortSignal.timeout(120_000) }));
+  const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   const payload = buildMetricoolTikTokPayload(input, mediaId);
   const scheduled = await metricoolJson(await fetcher(schedulerUrl, {
     method: "POST",
