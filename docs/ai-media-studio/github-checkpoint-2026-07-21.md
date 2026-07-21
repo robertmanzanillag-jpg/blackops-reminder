@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR16A provider activation integrity
 
-- Branch: `codex/ai-media-studio-pr16-schema-integrity`, stacked on draft PR #118. Draft PR creation is pending this checkpoint commit; no merge, migration or deployment is implied.
+- Branch: `codex/ai-media-studio-pr16-schema-integrity`, draft PR #121, stacked on draft PR #118. Initial checkpoint commit: `e7b2b7ab`; no merge, migration or deployment is implied.
 - Scope: one additive, unapplied forward/rollback pair binds provider account, attempt, exact selection, target, role-specific artifacts and cleanup obligations. A database-derived canonical authorization digest matches the TypeScript contract, non-retained cleanup stays actionable, and ambiguous/abandoned evidence remains immutable.
 - Provider proof: isolated PostgreSQL 16 accepts the exact TikTok role pair and the Meta `grant_user_access` exchange to one target `operational_access` artifact transformation. It rejects partial roles, altered scopes, arbitrary authorization digests, inert cleanup deadlines, contradictory lifecycle pairs and null/invalid token lifetimes.
 - Evidence: focused checker suite 36/36, PostgreSQL 16 harness 7/7, final full suite 674 passed/0 failed/31 skipped of 705, TypeScript and production build pass. Combined with the seven separately executed PR16A PostgreSQL cases, final evidence is 681 passed and 24 older PostgreSQL-only skips. Independent checker and App QA are P0=P1=P2=0.
