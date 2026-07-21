@@ -2,7 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Active local checkpoint: PR22 exact launch intent and runtime attestations
+## Active local checkpoint: PR23 immutable admitted-held work handoff
+
+- Branch: `codex/ai-media-studio-admitted-held-work`, draft PR #106, stacked on draft PR #105.
+- Scope: a successful exact daily admission now atomically creates one budget reservation, one render job at `stage='admission_held'`, and one outbox command at `status='held'`. The reservation, job and command freeze the exact tenant, slot/attempt, influencer, avatar, voice, script/source, provider credential, authority snapshot, launch intent and admission identities.
+- Sealing: PostgreSQL derives the provider-neutral generation request only from locked durable rows, verifies the approved script checksum, and binds the request plus reservation/job/outbox identities into `sealed_request_digest` and `work_handoff_digest` values. Exact tenant-scoped deferred FKs make the cyclic triplet all-or-nothing.
+- Non-activation guarantee: render and outbox claim SQL continue to select only `queued|retry_wait` and `pending|retry_wait`. Database triggers reject every update/delete while the rows are held; replay requires the exact untouched triplet and fails closed on a missing, leased, submitted or digest-mismatched artifact.
+- Safety boundary: PR23 remains unexported and unmounted. It does not activate a worker, call HeyGen, commit or spend budget, apply a migration, publish, change secrets or deploy. A later reviewed PR must replace the held triggers, revalidate every authority at database time, commit reserved budget immediately before provider submission and use the reservation idempotency identity.
+- Verification evidence: 25 focused checks, full AI Media Studio suite 582 passed with 11 isolated-PostgreSQL-only cases skipped, isolated socket-only PostgreSQL 16 harness 11/11, TypeScript, production build and diff hygiene passed. The PostgreSQL harness executes the real admission repository CTE, forces deferred constraints before rollback, and found three DB-only defects (a polymorphic trigger field, an untyped JSONB parameter and an undeclared digest dependency) that were corrected before checkpointing. Independent checker reports no P0–P2 findings; static App QA passes with no warnings.
+- Remaining gates: production RBAC/durable distributed attestation verification, bucket provisioning, migration rehearsal on a staging copy, activation/commit-before-submit design, a separately approved small HeyGen sandbox, and Robert's explicit spend/deployment approval.
+
+## Preserved checkpoint: PR22 exact launch intent and runtime attestations
 
 - Branch: `codex/ai-media-studio-launch-intent-attestations`, draft PR #105, stacked on draft PR #104.
 - Scope: immutable tenant/slot/attempt launch intents bind exact current plan, roster member, provider credential, approved script/source and governance facts. Evidence, snapshots and both admission guards require the same intent identity.

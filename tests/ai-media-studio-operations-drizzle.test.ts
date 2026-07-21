@@ -76,6 +76,25 @@ test("durable add is tenant/workspace idempotent and maps the existing scoped ro
   assert.ok(query.params.includes("workspace-a"));
 });
 
+test("held outbox work is represented honestly while claim SQL excludes it", async () => {
+  const fake = new FakeOutboxDatabase((query) => query.text.startsWith("WITH inserted AS")
+    ? { rows: [row({ status: "held" })] }
+    : { rows: [] });
+  const repository = new DrizzleOutboxRepository(fake.asDrizzle(), {
+    ownerUserId: "tenant-a", workspaceId: "workspace-a", maxAttempts: 3,
+  });
+  const message = await repository.add({
+    id: "00000000-0000-4000-8000-000000000001", topic: "ai_media.render.dispatch",
+    payload: { jobId: "job-1" }, maxAttempts: 3,
+  }, 1_000);
+  assert.equal(message.state, "held");
+  await repository.claim({ workerId: "worker-a", limit: 1, leaseDurationMs: 1_000, nowMs: 2_000 });
+  const claim = fake.queries.find((query) => query.text.startsWith("WITH candidate AS"));
+  assert.ok(claim);
+  assert.match(claim.text, /status IN \('pending', 'retry_wait'\)/i);
+  assert.doesNotMatch(claim.text, /status IN \([^)]*held/i);
+});
+
 test("concurrent claims use SKIP LOCKED and cannot escape tenant/workspace scope", async () => {
   let claimed = false;
   const fake = new FakeOutboxDatabase(async (query) => {

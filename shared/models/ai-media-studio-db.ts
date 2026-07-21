@@ -1207,6 +1207,25 @@ export const aiMediaRenderJobs = pgTable(
     ),
     governanceProfileId: uuid("governance_profile_id"),
     governanceEvidenceDigest: text("governance_evidence_digest"),
+    budgetReservationId: uuid("budget_reservation_id"),
+    dailyPlanSlotId: uuid("daily_plan_slot_id"),
+    slotAttempt: integer("slot_attempt"),
+    influencerId: uuid("influencer_id"),
+    avatarResourceId: uuid("avatar_resource_id"),
+    voiceResourceId: uuid("voice_resource_id"),
+    scriptId: uuid("script_id"),
+    scriptVariantId: uuid("script_variant_id"),
+    scriptVariantChecksum: text("script_variant_checksum"),
+    sourceItemId: uuid("source_item_id"),
+    sourceContentHash: text("source_content_hash"),
+    authoritySnapshotId: uuid("authority_snapshot_id"),
+    authorityDigest: text("authority_digest"),
+    launchIntentId: uuid("launch_intent_id"),
+    launchIntentDigest: text("launch_intent_digest"),
+    admissionDigest: text("admission_digest"),
+    workHandoffDigest: text("work_handoff_digest"),
+    sealedRequestDigest: text("sealed_request_digest"),
+    providerCredentialVersion: integer("provider_credential_version"),
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1255,6 +1274,16 @@ export const aiMediaRenderJobs = pgTable(
     deadLetterIdx: index("ai_media_render_jobs_dead_letter_idx").on(table.deadLetterAt),
     outputMediaAssetIdx: index("ai_media_render_jobs_output_media_asset_idx").on(table.outputMediaAssetId),
     governanceProfileIdx: index("ai_media_render_jobs_governance_profile_idx").on(table.governanceProfileId),
+    admissionHandoffUnique: uniqueIndex("ai_media_render_jobs_admission_handoff_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+      table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+      table.authorityDigest, table.admissionDigest, table.workHandoffDigest, table.idempotencyKey,
+    ),
+    outboxHandoffUnique: uniqueIndex("ai_media_render_jobs_outbox_handoff_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.workHandoffDigest, table.sealedRequestDigest,
+    ),
     governanceProfileTenantFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.governanceProfileId],
       foreignColumns: [
@@ -1282,6 +1311,93 @@ export const aiMediaRenderJobs = pgTable(
       "ai_media_render_jobs_governance_evidence_ck",
       sql`(${table.governanceProfileId} IS NULL AND ${table.governanceEvidenceDigest} IS NULL) OR (${table.governanceProfileId} IS NOT NULL AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')`,
     ),
+    admissionHeldCheck: check("ai_media_render_jobs_admission_held_ck", sql`(
+      (${table.stage}<>'admission_held' AND ${table.budgetReservationId} IS NULL
+        AND ${table.dailyPlanSlotId} IS NULL AND ${table.slotAttempt} IS NULL
+        AND ${table.influencerId} IS NULL AND ${table.avatarResourceId} IS NULL
+        AND ${table.voiceResourceId} IS NULL AND ${table.scriptId} IS NULL
+        AND ${table.scriptVariantId} IS NULL AND ${table.scriptVariantChecksum} IS NULL
+        AND ${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL
+        AND ${table.authoritySnapshotId} IS NULL AND ${table.authorityDigest} IS NULL
+        AND ${table.launchIntentId} IS NULL AND ${table.launchIntentDigest} IS NULL
+        AND ${table.admissionDigest} IS NULL AND ${table.workHandoffDigest} IS NULL
+        AND ${table.sealedRequestDigest} IS NULL AND ${table.providerCredentialVersion} IS NULL)
+      OR (${table.stage}='admission_held' AND (
+        ${table.budgetReservationId} IS NOT NULL AND ${table.dailyPlanSlotId} IS NOT NULL
+        AND ${table.slotAttempt}>=1 AND ${table.influencerId} IS NOT NULL
+        AND ${table.avatarResourceId} IS NOT NULL AND ${table.voiceResourceId} IS NOT NULL
+        AND ${table.scriptId} IS NOT NULL AND ${table.scriptVariantId} IS NOT NULL
+        AND ${table.authoritySnapshotId} IS NOT NULL AND ${table.launchIntentId} IS NOT NULL
+        AND ${table.providerAccountId} IS NOT NULL AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+        AND ${table.providerCredentialVersion}>=1
+        AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
+        AND ${table.authorityDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.admissionDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ((${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL)
+          OR (${table.sourceItemId} IS NOT NULL AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
+        AND ${table.status}='pending' AND ${table.attempts}=0 AND ${table.retryCount}=0
+        AND ${table.providerJobId} IS NULL
+        AND ${table.leaseOwner} IS NULL AND ${table.leaseExpiresAt} IS NULL
+        AND isfinite(${table.availableAt}) AND isfinite(${table.queuedAt})
+        AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
+      ))
+    )`),
+    handoffSlotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
+        table.providerAccountId, table.providerKey, table.providerCredentialVersion],
+      foreignColumns: [aiMediaDailyPlanSlots.ownerUserId, aiMediaDailyPlanSlots.workspaceId,
+        aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.providerAccountId,
+        aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion],
+      name: "ai_media_render_jobs_handoff_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    handoffInfluencerFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.influencerId],
+      foreignColumns: [aiMediaInfluencers.ownerUserId, aiMediaInfluencers.workspaceId, aiMediaInfluencers.id],
+      name: "ai_media_render_jobs_handoff_influencer_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    handoffAvatarFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey,
+        table.avatarResourceId],
+      foreignColumns: [aiMediaProviderResources.ownerUserId, aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.providerAccountId, aiMediaProviderResources.providerKey,
+        aiMediaProviderResources.id],
+      name: "ai_media_render_jobs_handoff_avatar_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    handoffVoiceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey,
+        table.voiceResourceId],
+      foreignColumns: [aiMediaProviderResources.ownerUserId, aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.providerAccountId, aiMediaProviderResources.providerKey,
+        aiMediaProviderResources.id],
+      name: "ai_media_render_jobs_handoff_voice_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    handoffScriptVariantFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.scriptVariantId,
+        table.scriptId, table.scriptVariantChecksum],
+      foreignColumns: [aiMediaScriptVariants.ownerUserId, aiMediaScriptVariants.workspaceId,
+        aiMediaScriptVariants.id, aiMediaScriptVariants.scriptId, aiMediaScriptVariants.checksum],
+      name: "ai_media_render_jobs_handoff_script_variant_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    handoffSnapshotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.authoritySnapshotId,
+        table.dailyPlanSlotId, table.slotAttempt, table.admissionDigest, table.providerAccountId,
+        table.providerKey, table.providerCredentialVersion, table.scriptVariantChecksum,
+        table.launchIntentId, table.launchIntentDigest, table.authorityDigest],
+      foreignColumns: [aiMediaLaunchAuthoritySnapshots.ownerUserId,
+        aiMediaLaunchAuthoritySnapshots.workspaceId, aiMediaLaunchAuthoritySnapshots.id,
+        aiMediaLaunchAuthoritySnapshots.dailyPlanSlotId, aiMediaLaunchAuthoritySnapshots.slotAttempt,
+        aiMediaLaunchAuthoritySnapshots.admissionDigest, aiMediaLaunchAuthoritySnapshots.providerAccountId,
+        aiMediaLaunchAuthoritySnapshots.providerKey,
+        aiMediaLaunchAuthoritySnapshots.providerCredentialVersion,
+        aiMediaLaunchAuthoritySnapshots.scriptVariantChecksum,
+        aiMediaLaunchAuthoritySnapshots.launchIntentId,
+        aiMediaLaunchAuthoritySnapshots.launchIntentDigest,
+        aiMediaLaunchAuthoritySnapshots.authorityDigest],
+      name: "ai_media_render_jobs_handoff_snapshot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
   }),
 );
 
@@ -1867,6 +1983,9 @@ export const aiMediaSourceItems = pgTable(
     launchIntentIdentityUnique: uniqueIndex("ai_media_source_items_launch_intent_identity_uq").on(
       table.ownerUserId, table.workspaceId, table.id, table.sourceType,
     ),
+    handoffTenantIdUnique: uniqueIndex("ai_media_source_items_handoff_tenant_id_uq").on(
+      table.ownerUserId, table.workspaceId, table.id,
+    ),
     ownerWorkspaceModerationIdx: index("ai_media_source_items_owner_workspace_moderation_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -1932,6 +2051,10 @@ export const aiMediaOutbox = pgTable(
     aggregateType: text("aggregate_type").notNull(),
     aggregateId: text("aggregate_id").notNull(),
     eventType: text("event_type").notNull(),
+    budgetReservationId: uuid("budget_reservation_id"),
+    renderJobId: uuid("render_job_id"),
+    workHandoffDigest: text("work_handoff_digest"),
+    sealedRequestDigest: text("sealed_request_digest"),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     status: text("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
@@ -1970,6 +2093,31 @@ export const aiMediaOutbox = pgTable(
     ),
     deadLetterIdx: index("ai_media_outbox_dead_letter_idx").on(table.deadLetterAt),
     aggregateIdx: index("ai_media_outbox_aggregate_idx").on(table.aggregateType, table.aggregateId, table.createdAt),
+    admissionHandoffUnique: uniqueIndex("ai_media_outbox_admission_handoff_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.renderJobId, table.workHandoffDigest,
+    ),
+    heldCheck: check("ai_media_outbox_held_ck", sql`(
+      (${table.status}<>'held' AND ${table.budgetReservationId} IS NULL AND ${table.renderJobId} IS NULL
+        AND ${table.workHandoffDigest} IS NULL AND ${table.sealedRequestDigest} IS NULL)
+      OR (${table.status}='held' AND (
+        ${table.budgetReservationId} IS NOT NULL AND ${table.renderJobId} IS NOT NULL
+        AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.attempts}=0 AND ${table.lockedAt} IS NULL AND ${table.leaseOwner} IS NULL
+        AND ${table.leaseExpiresAt} IS NULL AND ${table.processedAt} IS NULL
+        AND ${table.fencingToken}=0 AND ${table.deadLetterAt} IS NULL AND ${table.lastError} IS NULL
+        AND isfinite(${table.availableAt}) AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
+      ))
+    )`),
+    exactRenderJobFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId,
+        table.budgetReservationId, table.workHandoffDigest, table.sealedRequestDigest],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId,
+        aiMediaRenderJobs.id, aiMediaRenderJobs.budgetReservationId,
+        aiMediaRenderJobs.workHandoffDigest, aiMediaRenderJobs.sealedRequestDigest],
+      name: "ai_media_outbox_exact_render_job_fk",
+    }).onUpdate("no action").onDelete("restrict"),
   }),
 );
 
@@ -2843,6 +2991,7 @@ export const aiMediaBudgetReservations = pgTable(
     providerIdempotencyKey: text("provider_idempotency_key").notNull(),
     renderJobId: uuid("render_job_id"),
     dispatchOutboxId: uuid("dispatch_outbox_id"),
+    workHandoffDigest: text("work_handoff_digest"),
     reservedAt: timestamp("reserved_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     committedAt: timestamp("committed_at", { withTimezone: true }),
@@ -2919,6 +3068,12 @@ export const aiMediaBudgetReservations = pgTable(
       (${table.authoritySnapshotId} IS NULL) = (${table.authorityDigest} IS NULL)
       AND (${table.authorityDigest} IS NULL OR ${table.authorityDigest} ~ '^sha256:[0-9a-f]{64}$')
     )`),
+    workHandoffCheck: check("ai_media_budget_reservations_work_handoff_ck", sql`(
+      ((${table.renderJobId} IS NULL AND ${table.dispatchOutboxId} IS NULL
+          AND ${table.workHandoffDigest} IS NULL)
+        OR (${table.renderJobId} IS NOT NULL AND ${table.dispatchOutboxId} IS NOT NULL
+          AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'))
+    )`),
     exactBucketFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.budgetBucketId, table.currency],
       foreignColumns: [aiMediaBudgetBuckets.ownerUserId, aiMediaBudgetBuckets.workspaceId,
@@ -2940,14 +3095,26 @@ export const aiMediaBudgetReservations = pgTable(
       name: "ai_media_budget_reservations_governance_fk",
     }).onUpdate("no action").onDelete("restrict"),
     renderJobFk: foreignKey({
-      columns: [table.ownerUserId, table.workspaceId, table.renderJobId],
-      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId, aiMediaRenderJobs.id],
-      name: "ai_media_budget_reservations_render_job_fk",
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId, table.id,
+        table.dailyPlanSlotId, table.attempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+        table.authorityDigest, table.admissionDigest, table.workHandoffDigest,
+        table.providerIdempotencyKey],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId, aiMediaRenderJobs.id,
+        aiMediaRenderJobs.budgetReservationId, aiMediaRenderJobs.dailyPlanSlotId,
+        aiMediaRenderJobs.slotAttempt, aiMediaRenderJobs.providerAccountId, aiMediaRenderJobs.providerKey,
+        aiMediaRenderJobs.providerCredentialVersion, aiMediaRenderJobs.scriptVariantChecksum,
+        aiMediaRenderJobs.authoritySnapshotId, aiMediaRenderJobs.authorityDigest,
+        aiMediaRenderJobs.admissionDigest, aiMediaRenderJobs.workHandoffDigest,
+        aiMediaRenderJobs.idempotencyKey],
+      name: "ai_media_budget_reservations_exact_render_job_fk",
     }).onUpdate("no action").onDelete("restrict"),
     dispatchOutboxFk: foreignKey({
-      columns: [table.ownerUserId, table.workspaceId, table.dispatchOutboxId],
-      foreignColumns: [aiMediaOutbox.ownerUserId, aiMediaOutbox.workspaceId, aiMediaOutbox.id],
-      name: "ai_media_budget_reservations_dispatch_outbox_fk",
+      columns: [table.ownerUserId, table.workspaceId, table.dispatchOutboxId,
+        table.id, table.renderJobId, table.workHandoffDigest],
+      foreignColumns: [aiMediaOutbox.ownerUserId, aiMediaOutbox.workspaceId, aiMediaOutbox.id,
+        aiMediaOutbox.budgetReservationId, aiMediaOutbox.renderJobId, aiMediaOutbox.workHandoffDigest],
+      name: "ai_media_budget_reservations_exact_dispatch_outbox_fk",
     }).onUpdate("no action").onDelete("restrict"),
     authoritySnapshotFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.authoritySnapshotId,

@@ -63,7 +63,7 @@ test("outbox lease recovery consumes attempts and eventually dead-letters repeat
   assert.equal(first.message.attempt, 1);
   assert.equal(await repository.reconcileExpiredLeases(10), 1);
   assert.deepEqual(await repository.counts(), {
-    pending: 0, leased: 0, retry_wait: 1, dispatched: 0, dead_letter: 0,
+    held: 0, pending: 0, leased: 0, retry_wait: 1, dispatched: 0, dead_letter: 0,
   });
 
   const [second] = await repository.claim({ workerId: "worker-b", limit: 1, leaseDurationMs: 10, nowMs: 10 });

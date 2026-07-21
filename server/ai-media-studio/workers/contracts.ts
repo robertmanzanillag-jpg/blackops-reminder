@@ -1,4 +1,4 @@
-export type RenderWorkState = "queued" | "leased" | "retry_wait" | "submitted" | "dead_letter";
+export type RenderWorkState = "admission_held" | "queued" | "leased" | "retry_wait" | "submitted" | "dead_letter";
 
 export interface RenderWorkItem<TPayload = unknown> {
   id: string;

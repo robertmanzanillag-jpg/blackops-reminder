@@ -148,7 +148,7 @@ export class InMemoryRenderWorkRepository<TPayload = unknown> implements RenderW
   }
 
   async counts(): Promise<Record<RenderWorkState, number>> {
-    const result: Record<RenderWorkState, number> = { queued: 0, leased: 0, retry_wait: 0, submitted: 0, dead_letter: 0 };
+    const result: Record<RenderWorkState, number> = { admission_held: 0, queued: 0, leased: 0, retry_wait: 0, submitted: 0, dead_letter: 0 };
     for (const item of this.items.values()) result[item.state] += 1;
     return result;
   }

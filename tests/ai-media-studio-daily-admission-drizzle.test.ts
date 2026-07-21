@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -20,11 +21,52 @@ const ids = {
   reservation: "55555555-5555-4555-8555-555555555555",
   influencer: "66666666-6666-4666-8666-666666666666",
   source: "77777777-7777-4777-8777-777777777777",
+  renderJob: "88888888-8888-4888-8888-888888888888",
+  outbox: "99999999-9999-4999-8999-999999999999",
+  account: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  avatar: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  voice: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  script: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  variant: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  intent: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  governance: "12121212-1212-4212-8212-121212121212",
 } as const;
 const scope = { ownerUserId: "owner-1", workspaceId: "workspace-1" } as const;
 const databaseNow = new Date("2026-07-21T12:00:00.000Z");
 const authorityDigest = `sha256:${"a".repeat(64)}` as const;
 const admissionDigest = `sha256:${"b".repeat(64)}` as const;
+const workHandoffDigest = `sha256:${"d".repeat(64)}` as const;
+const scriptContent = "Approved launch script";
+
+function admissionGateRow(overrides: Record<string, unknown> = {}) {
+  return {
+    authority_snapshot_id: ids.snapshot,
+    authority_digest: authorityDigest,
+    slot_attempt: 3,
+    amount_micro_usd: "1250000",
+    admission_digest: admissionDigest,
+    launch_intent_id: ids.intent,
+    launch_intent_digest: `sha256:${"9".repeat(64)}`,
+    provider_account_id: ids.account,
+    provider_key: "heygen",
+    provider_credential_version: 1,
+    governance_profile_id: ids.governance,
+    governance_evidence_digest: `sha256:${"2".repeat(64)}`,
+    influencer_id: ids.influencer,
+    avatar_resource_id: ids.avatar,
+    voice_resource_id: ids.voice,
+    script_id: ids.script,
+    script_variant_id: ids.variant,
+    script_variant_checksum: createHash("sha256").update(scriptContent).digest("hex"),
+    script_content: scriptContent,
+    script_title: "Launch",
+    script_language: "en",
+    source_type: "manual",
+    source_item_id: null,
+    source_content_hash: null,
+    ...overrides,
+  };
+}
 
 function unsigned(overrides: Partial<UnsignedReserveAndAdmitRequest> = {}): UnsignedReserveAndAdmitRequest {
   return {
@@ -59,6 +101,9 @@ function reservationRow(input: ReserveAndAdmitRequest, overrides: Record<string,
     idempotency_key: input.idempotencyKey,
     input_digest: input.inputDigest,
     admission_digest: admissionDigest,
+    render_job_id: ids.renderJob,
+    dispatch_outbox_id: ids.outbox,
+    work_handoff_digest: workHandoffDigest,
     authority_snapshot_id: input.authoritySnapshotId,
     authority_digest: input.authorityDigest,
     reserved_at: databaseNow,
@@ -66,6 +111,15 @@ function reservationRow(input: ReserveAndAdmitRequest, overrides: Record<string,
     database_now: databaseNow,
     replay_budget_date: "2026-07-21",
     replay_accounting_time_zone: "America/New_York",
+    replay_render_job_id: ids.renderJob,
+    replay_render_stage: "admission_held",
+    replay_render_handoff_digest: workHandoffDigest,
+    replay_provider_job_id: null,
+    replay_render_lease_owner: null,
+    replay_outbox_id: ids.outbox,
+    replay_outbox_status: "held",
+    replay_outbox_handoff_digest: workHandoffDigest,
+    replay_outbox_lease_owner: null,
     ...overrides,
   };
 }
@@ -95,7 +149,7 @@ const normalized = (query: Rendered) => query.sql.replace(/\s+/gu, " ").trim();
 const assertCode = (code: DailyAdmissionPersistenceError["code"]) =>
   (error: unknown) => error instanceof DailyAdmissionPersistenceError && error.code === code;
 
-test("PR20 admission repository remains unexported and request has no self-certified authority", () => {
+test("PR23 admission repository remains unexported and request has no self-certified authority", () => {
   const barrel = readFileSync(new URL("../server/ai-media-studio/planning/index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(barrel, /drizzle-daily-admission-repository/u);
   const repository = new DrizzleDailyAdmissionRepository(makeDb(() => ({ rows: [] })).db, {
@@ -115,13 +169,12 @@ test("PR20 admission repository remains unexported and request has no self-certi
   ]) assert.ok(!keys.includes(forbidden), `${forbidden} must not be caller supplied`);
 });
 
-test("locks exact durable authority, derives money/provider facts, and writes no activation effects", async () => {
+test("locks exact durable authority and atomically writes immutable held work without activation", async () => {
   let input!: ReserveAndAdmitRequest;
   const harness = makeDb((call) => {
     if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 7) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 8) return { rows: [{ authority_snapshot_id: ids.snapshot, amount_micro_usd: "1250000",
-      source_type: "manual", source_item_id: null, source_content_hash: null }] };
+    if (call === 8) return { rows: [admissionGateRow()] };
     if (call === 9) return { rows: [reservationRow(input)] };
     return { rows: [] };
   });
@@ -134,7 +187,7 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   assert.equal(result.reservation.amountMicroUsd, "1250000");
   assert.equal(result.replayed, false);
   assert.deepEqual(result.effects, {
-    renderJobCreated: false, outboxCreated: false, eventCreated: false, providerCalled: false,
+    renderJobCreated: true, outboxCreated: true, eventCreated: false, providerCalled: false,
   });
 
   assert.match(normalized(harness.calls[2]), /global-concurrency/i);
@@ -166,13 +219,19 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   for (const alias of ["snapshots", "content", "human", "sandbox", "quotes", "policy", "kill"]) {
     assert.match(mutation, new RegExp(alias, "i"));
   }
-  assert.match(mutation, /reserved_micro_usd=buckets\.reserved_micro_usd\+final_guard\.amount_micro_usd/i);
+  assert.match(mutation, /reserved_micro_usd=buckets\.reserved_micro_usd\+work_request\.amount_micro_usd/i);
   assert.match(mutation, /authority_snapshot_id,authority_digest/i);
   assert.match(mutation, /provider_idempotency_key/i);
   assert.ok(harness.calls[8].params.some((value) => /^admit:[0-9a-f]{64}$/u.test(String(value))));
-  assert.match(mutation, /render_job_id,dispatch_outbox_id/i);
-  assert.match(mutation, /null,null/i);
-  assert.doesNotMatch(mutation, /insert into .*ai_media_render_jobs|insert into .*ai_media_outbox|insert into .*ai_media.*events?/i);
+  assert.match(mutation, /render_job_id,dispatch_outbox_id,work_handoff_digest/i);
+  assert.match(mutation, /insert into .*ai_media_render_jobs/i);
+  assert.match(mutation, /'pending','admission_held'/i);
+  assert.match(mutation, /insert into .*ai_media_outbox/i);
+  assert.match(mutation, /'ai_media\.render\.dispatch'.*'held'/i);
+  assert.match(mutation, /sealed_request_digest.*work_handoff_digest/i);
+  assert.doesNotMatch(mutation, /\bdigest\s*\(/i);
+  assert.match(mutation, /variants\.content=.*variants\.checksum=/i);
+  assert.doesNotMatch(mutation, /provider_job_id|provider\.submit|queued','pending/i);
 });
 
 test("locks the exact non-manual source after intent binding and before final guard", async () => {
@@ -181,8 +240,9 @@ test("locks the exact non-manual source after intent binding and before final gu
   const harness = makeDb((call) => {
     if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 7) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 8) return { rows: [{ authority_snapshot_id: ids.snapshot, amount_micro_usd: "1250000",
-      source_type: "rss", source_item_id: ids.source, source_content_hash: sourceHash }] };
+    if (call === 8) return { rows: [admissionGateRow({
+      source_type: "rss", source_item_id: ids.source, source_content_hash: sourceHash,
+    })] };
     if (call === 9) return { rows: [{ id: ids.source }] };
     if (call === 10) return { rows: [reservationRow(input)] };
     return { rows: [] };
@@ -252,6 +312,23 @@ test("exact snapshot-bound replay returns before authority locks or writes", asy
   assert.doesNotMatch(JSON.stringify(harness.calls), /launch_authority_snapshots|daily-admission:workspace/i);
 });
 
+test("replay fails closed when its held job or outbox handoff is missing or mutated", async () => {
+  let input!: ReserveAndAdmitRequest;
+  for (const corrupt of [
+    { replay_render_stage: "queued" },
+    { replay_outbox_status: "pending" },
+    { replay_outbox_handoff_digest: `sha256:${"e".repeat(64)}` },
+    { replay_provider_job_id: "unexpected-provider-job" },
+    { replay_render_lease_owner: "unexpected-worker" },
+  ]) {
+    const harness = makeDb((call) => call === 2 ? { rows: [reservationRow(input, corrupt)] } : { rows: [] });
+    const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
+    input = request(repository);
+    await assert.rejects(repository.reserveAndAdmit(input), assertCode("INVARIANT_VIOLATION"));
+    assert.equal(harness.calls.length, 2);
+  }
+});
+
 test("replay conflicts when authority snapshot or digest differs", async () => {
   let original!: ReserveAndAdmitRequest;
   const harness = makeDb((call) => call === 2 ? { rows: [reservationRow(original)] } : { rows: [] });
@@ -286,8 +363,7 @@ test("missing authority denies and a failed CAS cannot report admission", async 
   const cas = makeDb((call) => {
     if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 7) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 8) return { rows: [{ authority_snapshot_id: ids.snapshot,
-      source_type: "manual", source_item_id: null, source_content_hash: null }] };
+    if (call === 8) return { rows: [admissionGateRow()] };
     return { rows: [] };
   });
   const casRepository = new DrizzleDailyAdmissionRepository(cas.db, { accountingTimeZone: "America/New_York" });

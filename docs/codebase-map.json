@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T13:11:10.853Z",
+  "generatedAt": "2026-07-21T13:52:31.525Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,33 +86,26 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 710,
-    "filesIndexed": 604,
-    "imports": 2430,
+    "filesVisible": 713,
+    "filesIndexed": 605,
+    "imports": 2440,
     "routes": 489,
-    "symbols": 11665
+    "symbols": 11715
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 29,
+      "files": 31,
       "indexed": 1,
       "kinds": {
-        "other": 28,
+        "other": 30,
         "docs": 1
       }
     },
-    "server/ai-media-studio": {
-      "files": 122,
-      "indexed": 118,
-      "kinds": {
-        "server": 122
-      }
-    },
     "tests": {
-      "files": 149,
-      "indexed": 142,
+      "files": 150,
+      "indexed": 143,
       "kinds": {
-        "test": 149
+        "test": 150
       }
     },
     ".agents/skills": {
@@ -198,6 +191,13 @@
       "indexed": 92,
       "kinds": {
         "server": 96
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 122,
+      "indexed": 118,
+      "kinds": {
+        "server": 122
       }
     },
     "server/replit_integrations": {
@@ -9741,14 +9741,16 @@
       ],
       "symbols": [
         "AUTHORITY_SNAPSHOTS",
+        "CREATED_EFFECTS",
         "DailyAdmissionPersistenceError",
         "DrizzleDailyAdmissionRepository",
-        "EFFECTS",
         "ExecuteResult",
+        "HeldWorkSeal",
         "KILL_SWITCH_REVISIONS",
         "LAUNCH_EVIDENCE",
         "LAUNCH_INTENTS",
         "POLICY_REVISIONS",
+        "REPLAY_EFFECTS",
         "SAFE",
         "SHA256",
         "UUID",
@@ -9759,32 +9761,48 @@
         "canonicalIso",
         "canonicalJson",
         "clockRow",
+        "computedChecksum",
         "createdRows",
         "dailyAdmissionPersistenceInputDigest",
         "databaseMicroUsd",
         "date",
+        "dbDigest",
+        "dbUuid",
         "digest",
+        "dispatchOutboxId",
+        "exactHeldWork",
         "exactReplay",
         "gateRows",
+        "governanceEvidenceDigest",
+        "governanceProfileId",
         "governanceSubjectRows",
+        "heldWork",
+        "heldWorkSeal",
         "influencerId",
         "invalid",
         "invariant",
         "isoInput",
+        "language",
         "lockedSources",
         "matches",
         "parsed",
         "positiveInteger",
         "providerIdempotencyKey",
         "raw",
+        "renderJobId",
         "replayRow",
         "request",
+        "requestJson",
         "reservation",
         "reservationFromRow",
+        "reservationId",
         "result",
         "resultRows",
         "rows",
         "safeString",
+        "scriptContent",
+        "scriptVariantChecksum",
+        "sealedRequestDigest",
         "sha256",
         "sourceContentHash",
         "sourceItemId",
@@ -9792,10 +9810,13 @@
         "stableProviderIdempotencyKey",
         "state",
         "submissionState",
+        "textValue",
         "uuid",
         "validTimeZone",
         "validateRequest",
-        "value"
+        "value",
+        "voiceResourceId",
+        "workHandoffDigest"
       ],
       "routes": []
     },
@@ -19427,6 +19448,7 @@
         "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
         "drizzle-orm/pg-core",
         "node:assert/strict",
+        "node:crypto",
         "node:fs",
         "node:test"
       ],
@@ -19434,6 +19456,7 @@
       "symbols": [
         "Rendered",
         "admissionDigest",
+        "admissionGateRow",
         "assertCode",
         "authorityDigest",
         "barrel",
@@ -19459,10 +19482,12 @@
         "reservationRow",
         "result",
         "scope",
+        "scriptContent",
         "sourceHash",
         "sourceLock",
         "unsigned",
-        "valid"
+        "valid",
+        "workHandoffDigest"
       ],
       "routes": []
     },
@@ -20423,6 +20448,7 @@
         "CompiledQuery",
         "FakeOutboxDatabase",
         "QueryResponder",
+        "claim",
         "compiled",
         "entry",
         "failed",
@@ -20816,7 +20842,11 @@
       "path": "tests/ai-media-studio-pr21-postgres-integration.test.ts",
       "kind": "test",
       "imports": [
+        "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
         "node:assert/strict",
+        "node:crypto",
         "node:fs",
         "node:os",
         "node:path",
@@ -20827,6 +20857,8 @@
       "exports": [],
       "symbols": [
         "OWNER",
+        "SCRIPT_CHECKSUM",
+        "SCRIPT_CONTENT",
         "TEMP_PREFIX",
         "TEST_DATABASE_NAME",
         "WORKSPACE",
@@ -20834,15 +20866,22 @@
         "assertReapplicationFails",
         "beforeCount",
         "canonical",
+        "claimable",
         "client",
         "columns",
+        "compiled",
         "contenders",
         "controls",
+        "dialect",
         "digest",
         "durableBinding",
         "evidence",
         "evidenceColumns",
         "expectDatabaseError",
+        "handoffDigest",
+        "harness",
+        "held",
+        "heldControls",
         "ids",
         "integrationTest",
         "matchingAfterRefresh",
@@ -20856,13 +20895,20 @@
         "pr20Rollback",
         "pr22Forward",
         "pr22Rollback",
+        "pr23Client",
+        "pr23Forward",
+        "pr23Rollback",
         "prerequisite",
+        "repository",
         "requireSafeTestDatabaseUrl",
         "resolvedRoot",
         "resolvedSocket",
         "result",
         "results",
         "retained",
+        "rollbackAdmissionDatabase",
+        "rows",
+        "sealedDigest",
         "seedAuthorityGraph",
         "selectEvidence",
         "sharedIdempotencyKey",
@@ -20872,7 +20918,8 @@
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "transactionInsert",
-        "triggers"
+        "triggers",
+        "unsigned"
       ],
       "routes": []
     },
@@ -20892,6 +20939,28 @@
         "fragment",
         "rollback",
         "start"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/models/ai-media-studio-db",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "architecture",
+        "forward",
+        "jobs",
+        "outbox",
+        "reservation",
+        "reservationColumns",
+        "rollback"
       ],
       "routes": []
     },
@@ -21302,6 +21371,7 @@
         "FakeTransactionalDatabase",
         "Payload",
         "QueryResponder",
+        "claim",
         "claimSql",
         "compiled",
         "created",
@@ -23280,6 +23350,7 @@
     "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",
     "tests/ai-media-studio-pr21-postgres-integration.test.ts",
     "tests/ai-media-studio-pr22-launch-intent-migration.test.ts",
+    "tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
