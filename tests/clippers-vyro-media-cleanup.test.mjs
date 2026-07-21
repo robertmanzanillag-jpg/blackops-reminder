@@ -119,3 +119,29 @@ test("rejects symlinked proof files", async () => {
   assert.ok(result.rows[0].blockers.includes("metricool_local_proof_missing"));
   assert.ok((await stat(item.draftPath)).isFile());
 });
+
+test("duplicate source names cannot share one receipt to authorize cleanup", async () => {
+  const item = await fixture();
+  await writeFile(item.manifestPath, JSON.stringify({
+    account: "streamersclipusa",
+    campaignId: "mrbeast-x-joe-rogan-test",
+    clips: [
+      { sourceName: item.sourceName, targetPath: item.draftPath },
+      { sourceName: item.sourceName, targetPath: item.draftPath },
+    ],
+  }));
+  await writeFile(item.receiptsPath, JSON.stringify([{
+    sourceName: item.sourceName,
+    publishedPostUrl: item.publishedPostUrl,
+    publishedAt: "2026-07-21T18:00:00.000Z",
+    metricoolStatus: "published",
+    vyroSubmissionStatus: "submitted",
+    metricoolProofPath: item.metricoolProofPath,
+    vyroSubmissionProofPath: item.vyroSubmissionProofPath,
+  }]));
+  const result = await cleanupPublishedVyroMedia({ workspaceRoot: item.root, manifestPath: item.manifestPath, receiptsPath: item.receiptsPath, execute: true });
+  assert.equal(result.eligible, 0);
+  assert.equal(result.retained, 2);
+  assert.ok(result.rows.every((row) => row.blockers.includes("ambiguous_source_or_receipt_identity")));
+  assert.ok((await stat(item.draftPath)).isFile());
+});

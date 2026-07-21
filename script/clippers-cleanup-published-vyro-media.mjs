@@ -58,15 +58,23 @@ export async function cleanupPublishedVyroMedia({ workspaceRoot, manifestPath, r
   const draftsRoot = path.join(root, "drafts", "vyro");
   const ledgerPath = path.join(path.dirname(resolvedManifest), "cleanup-ledger.jsonl");
   const rows = [];
+  const sourceCounts = new Map();
+  for (const clip of manifest.clips) {
+    const sourceName = String(clip?.sourceName || "");
+    sourceCounts.set(sourceName, (sourceCounts.get(sourceName) || 0) + 1);
+  }
 
   for (const clip of manifest.clips) {
-    const receipt = receipts.find((item) => item?.sourceName === clip.sourceName);
+    const matchingReceipts = receipts.filter((item) => item?.sourceName === clip.sourceName);
+    const ambiguousIdentity = sourceCounts.get(String(clip.sourceName || "")) !== 1 || matchingReceipts.length !== 1;
+    const receipt = ambiguousIdentity ? null : matchingReceipts[0];
     const postMatch = exactTikTokPostPattern.exec(String(receipt?.publishedPostUrl || "").trim());
     const accountMatches = postMatch?.[1]?.toLowerCase() === String(manifest.account || "").toLowerCase();
     const metricoolProofReady = receipt && await localProofReady(root, receipt.metricoolProofPath, receipt.publishedPostUrl, "Metricool");
     const vyroProofReady = receipt && await localProofReady(root, receipt.vyroSubmissionProofPath, receipt.publishedPostUrl, String(manifest.campaignId || "Vyro"));
     const proofReady = Boolean(
       receipt
+      && !ambiguousIdentity
       && postMatch
       && accountMatches
       && receipt.metricoolStatus === "published"
@@ -90,6 +98,7 @@ export async function cleanupPublishedVyroMedia({ workspaceRoot, manifestPath, r
         status: "retained_missing_publish_proof",
         deleted: 0,
         blockers: [
+          ambiguousIdentity ? "ambiguous_source_or_receipt_identity" : null,
           !postMatch ? "exact_tiktok_url_missing" : null,
           postMatch && !accountMatches ? "tiktok_account_mismatch" : null,
           receipt?.metricoolStatus !== "published" ? "metricool_status_not_published" : null,
