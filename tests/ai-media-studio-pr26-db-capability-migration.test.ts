@@ -19,6 +19,7 @@ test("PR26 fails closed unless three distinct safe precreated roles and exact PR
   assert.match(forward,/server_version_num[\s\S]*160000/u);
   assert.match(forward,/to_regclass\('public\.ai_media_provider_submission_attempts'\)/u);
   assert.match(forward,/to_regprocedure\('public\.digest\(bytea,text\)'\)/u);
+  assert.match(forward,/pg_extension[\s\S]*dependency\.deptype='e'[\s\S]*extension_row\.extname='pgcrypto'/u);
   assert.doesNotMatch(forward,/CREATE ROLE|ALTER ROLE/iu);
 });
 
@@ -65,6 +66,10 @@ test("submit and reconcile have disjoint execute grants and executors have zero 
   assert.match(normalized,/REVOKE ALL ON TABLE .* FROM PUBLIC,ai_media_admitted_submit_executor,ai_media_admitted_reconcile_executor;/u);
   assert.doesNotMatch(submitGrant,/require_capability|finish_outcome|sha256|guard/u);
   assert.doesNotMatch(reconcileGrant,/require_capability|finish_outcome|sha256|guard/u);
+  assert.match(forward,/ALTER FUNCTION public\.ai_media_assert_pr25_consistency\(\) SECURITY DEFINER/u);
+  assert.match(forward,/ALTER FUNCTION public\.ai_media_assert_pr25_consistency\(\) SET search_path=pg_catalog/u);
+  assert.match(forward,/ALTER FUNCTION public\.ai_media_assert_pr25_consistency\(\) OWNER TO ai_media_admitted_fn_owner/u);
+  assert.match(forward,/REVOKE ALL ON FUNCTION public\.ai_media_assert_pr25_consistency\(\) FROM PUBLIC/u);
 });
 
 test("claim, expiration and reconciliation cannot escape exact owner plus workspace",()=>{

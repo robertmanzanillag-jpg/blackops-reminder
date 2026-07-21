@@ -14,7 +14,15 @@ BEGIN
     OR to_regclass('public.ai_media_admitted_worker_capabilities') IS NOT NULL
     OR to_regclass('public.ai_media_submission_capacity_leases') IS NOT NULL
     OR to_regnamespace('ai_media_worker_api') IS NOT NULL
-    OR to_regprocedure('public.digest(bytea,text)') IS NULL THEN
+    OR to_regprocedure('public.digest(bytea,text)') IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_depend dependency
+      JOIN pg_catalog.pg_extension extension_row ON extension_row.oid=dependency.refobjid
+      WHERE dependency.classid='pg_catalog.pg_proc'::regclass
+        AND dependency.objid=to_regprocedure('public.digest(bytea,text)')
+        AND dependency.refclassid='pg_catalog.pg_extension'::regclass
+        AND dependency.deptype='e' AND extension_row.extname='pgcrypto'
+    ) THEN
     RAISE EXCEPTION 'PR26 requires PostgreSQL 16, public pgcrypto.digest, exact PR25, and an unused PR26 surface';
   END IF;
   FOREACH role_name IN ARRAY ARRAY[
@@ -558,7 +566,7 @@ CREATE FUNCTION ai_media_worker_api.authorize_admitted_v1(
   sealed_request_digest text,fencing_token bigint,lease_token uuid,lease_expires_at timestamptz,
   send_authorization_digest text,commit_evidence_digest text,authorized_at timestamptz,request_json jsonb
 ) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET row_security=on AS $function$
-DECLARE authority record; subject uuid; source_binding record; gate record; attempt record;
+DECLARE authority record; subject uuid; source_binding record; gate record; authorized_attempt record;
   sampled_at timestamptz:=pg_catalog.clock_timestamp(); commit_digest text; authorization_digest text;
   active_total bigint; active_provider bigint; active_tenant bigint; changed_id uuid;
 BEGIN
@@ -849,18 +857,20 @@ BEGIN
   WHERE target.id=p_attempt_id AND target.owner_user_id=p_owner_user_id
     AND target.workspace_id=p_workspace_id AND target.budget_reservation_id=p_budget_reservation_id
     AND target.state='claimed' AND target.fencing_token=p_fencing_token AND target.lease_token=p_lease_token
-    AND target.lease_owner=authority.actor_user_id AND target.lease_expires_at>sampled_at RETURNING target.* INTO attempt;
+    AND target.lease_owner=authority.actor_user_id AND target.lease_expires_at>sampled_at
+  RETURNING target.* INTO authorized_attempt;
   IF NOT FOUND THEN RETURN; END IF;
   INSERT INTO public.ai_media_provider_submission_events(owner_user_id,workspace_id,submission_attempt_id,
     budget_reservation_id,sequence,event_kind,fencing_token,evidence_digest,actor_user_id,observed_at,created_at)
-  SELECT attempt.owner_user_id,attempt.workspace_id,attempt.id,attempt.budget_reservation_id,
-    COALESCE(pg_catalog.max(e.sequence),0)+1,'authorized',attempt.fencing_token,authorization_digest,
+  SELECT authorized_attempt.owner_user_id,authorized_attempt.workspace_id,authorized_attempt.id,
+    authorized_attempt.budget_reservation_id,COALESCE(pg_catalog.max(e.sequence),0)+1,
+    'authorized',authorized_attempt.fencing_token,authorization_digest,
     authority.actor_user_id,sampled_at,sampled_at FROM public.ai_media_provider_submission_events e
-  WHERE e.submission_attempt_id=attempt.id;
+  WHERE e.submission_attempt_id=authorized_attempt.id;
   INSERT INTO public.ai_media_submission_capacity_leases(owner_user_id,workspace_id,budget_reservation_id,
     provider_account_id,provider_key,submission_attempt_id,state,held_at,actor_user_id,created_at,updated_at)
-  VALUES(p_owner_user_id,p_workspace_id,p_budget_reservation_id,attempt.provider_account_id,
-    attempt.provider_key,p_attempt_id,'held',sampled_at,authority.actor_user_id,sampled_at,sampled_at);
+  VALUES(p_owner_user_id,p_workspace_id,p_budget_reservation_id,authorized_attempt.provider_account_id,
+    authorized_attempt.provider_key,p_attempt_id,'held',sampled_at,authority.actor_user_id,sampled_at,sampled_at);
   UPDATE public.ai_media_budget_buckets AS target SET reserved_micro_usd=target.reserved_micro_usd-gate.amount_micro_usd,
     committed_micro_usd=target.committed_micro_usd+gate.amount_micro_usd,state_version=target.state_version+1,updated_at=sampled_at
   WHERE target.id=gate.budget_bucket_id AND target.owner_user_id=p_owner_user_id
@@ -885,11 +895,14 @@ BEGIN
   WHERE target.id=gate.daily_plan_slot_id AND target.owner_user_id=p_owner_user_id
     AND target.workspace_id=p_workspace_id AND target.status='queued' RETURNING target.id INTO changed_id;
   IF changed_id IS NULL THEN RAISE EXCEPTION 'atomic slot commit failed'; END IF;
-  RETURN QUERY SELECT attempt.id,attempt.owner_user_id,attempt.workspace_id,attempt.budget_reservation_id,
-    attempt.render_job_id,attempt.provider_account_id,attempt.provider_key,attempt.provider_credential_version,
-    attempt.provider_idempotency_key,attempt.avatar_external_resource_id,attempt.voice_external_resource_id,
-    attempt.sealed_request_digest,attempt.fencing_token,attempt.lease_token,attempt.lease_expires_at,
-    attempt.send_authorization_digest,attempt.commit_evidence_digest,attempt.authorized_at,gate.request_json;
+  RETURN QUERY SELECT authorized_attempt.id,authorized_attempt.owner_user_id,authorized_attempt.workspace_id,
+    authorized_attempt.budget_reservation_id,authorized_attempt.render_job_id,
+    authorized_attempt.provider_account_id,authorized_attempt.provider_key,
+    authorized_attempt.provider_credential_version,authorized_attempt.provider_idempotency_key,
+    authorized_attempt.avatar_external_resource_id,authorized_attempt.voice_external_resource_id,
+    authorized_attempt.sealed_request_digest,authorized_attempt.fencing_token,authorized_attempt.lease_token,
+    authorized_attempt.lease_expires_at,authorized_attempt.send_authorization_digest,
+    authorized_attempt.commit_evidence_digest,authorized_attempt.authorized_at,gate.request_json;
 END
 $function$;
 
