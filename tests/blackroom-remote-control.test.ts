@@ -6,6 +6,7 @@ import {
   isBlackRoomRemoteDeviceOnline,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
+  appendBlackRoomRemoteCommand,
 } from "../server/blackroom-remote-control";
 import { isPublicApiPath } from "../server/user-context";
 
@@ -16,6 +17,19 @@ test("remote command increments its monotonic generation", () => {
   assert.equal(state.desiredEnabled, true);
   assert.equal(state.weeks, 3);
   assert.equal(state.generation, 1);
+});
+
+test("chat command is persisted and advances the remote generation", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomRemoteControlState(now);
+  appendBlackRoomRemoteCommand(state, {
+    message: "sube 3 videos más hoy",
+    reply: "Listo",
+    command: { id: "extra-3", type: "extra_posts", posts: 3, targetDate: "2026-07-21", createdAt: now.toISOString() },
+  }, now);
+  assert.equal(state.generation, 1);
+  assert.equal(state.commands.length, 1);
+  assert.deepEqual(state.chatHistory.map((message) => message.role), ["user", "assistant"]);
 });
 
 test("heartbeat reports the Mac online only inside the freshness window", () => {
@@ -54,4 +68,12 @@ test("offline paused panel keeps Play available so the command can be queued", (
   const synced = false;
   const pausing = !desired && remoteOnline && !synced;
   assert.equal(desired || pausing, false);
+});
+
+test("BlackRoom panel exposes the chat controls", () => {
+  assert.match(blackRoomPage, /Habla con el agente/);
+  assert.match(blackRoomPage, /\/api\/blackroom-agent\/chat/);
+  assert.match(blackRoomPage, /sube 3 videos más hoy/);
+  const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
+  assert.doesNotThrow(() => new Function(script));
 });

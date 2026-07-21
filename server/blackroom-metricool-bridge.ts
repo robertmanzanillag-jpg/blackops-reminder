@@ -109,8 +109,12 @@ export function findVerifiedMetricoolPost(value: unknown, caption: string, publi
 }
 
 async function metricoolJson(response: Response, operation: string): Promise<any> {
-  if (!response.ok) throw new Error(`Metricool ${operation} failed with HTTP ${response.status}`);
-  const value = await response.json().catch(() => null);
+  const raw = await response.text();
+  if (!response.ok) {
+    const detail = raw.replace(/(token|authorization|x-mc-auth)["'\s:=]+[^,"'\s}]+/gi, "$1=[redacted]").replace(/\s+/g, " ").trim().slice(0, 500);
+    throw new Error(`Metricool ${operation} failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
+  const value = raw ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : null;
   if (value == null) throw new Error(`Metricool ${operation} returned no JSON`);
   return value;
 }
