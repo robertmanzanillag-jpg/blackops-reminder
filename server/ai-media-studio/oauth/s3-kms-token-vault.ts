@@ -3,7 +3,7 @@ import { aiMediaOAuthPlatformSchema } from "../../../shared/ai-media-studio-oaut
 import { OAuthFlowError, type OAuthSafeTokenDescriptor, type OAuthSecretTokenBundle, type OAuthTokenSecretReader,
   type OAuthTokenVault, type OAuthTokenVaultContext, type OAuthTokenVaultRecord } from "./contracts";
 import {
-  assertExpectedBucketOwner, assertKmsKeyArn, canonicalContextBytes, decryptEnvelope, digestContext, encryptEnvelope,
+  assertExpectedBucketOwner, assertKmsKeyArn, boundedClient, canonicalContextBytes, decryptEnvelope, digestContext, encryptEnvelope,
   isExactS3KeyAbsence,
   MAX_ENVELOPE_BYTES,
   normalizedExactMetadata, normalizeEnvelopeKmsConfig, officialS3Endpoint, readBoundedBody, safeEqual, validBucket, vaultRejected,
@@ -101,7 +101,7 @@ function normalize(config:S3KmsTokenVaultConfig):Config {
   const partition=assertKmsKeyArn(config.kmsKeyArn,config.region);
   assertExpectedBucketOwner(config.kmsKeyArn,config.expectedBucketOwner);
   return {bucket:config.bucket,expectedBucketOwner:config.expectedBucketOwner,
-    s3:config.s3Client??new S3Client({region:config.region,endpoint:officialS3Endpoint(partition,config.region)}),
+    s3:boundedClient(config.s3Client??new S3Client({region:config.region,endpoint:officialS3Endpoint(partition,config.region)})),
     kms:normalizeEnvelopeKmsConfig(config)};
 }
 function validateContext(c:OAuthTokenVaultContext):OAuthTokenVaultContext {

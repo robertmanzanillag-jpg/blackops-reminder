@@ -473,6 +473,78 @@ export const aiMediaOAuthSessions = pgTable(
   }),
 );
 
+export const aiMediaOAuthVaultOperations = pgTable(
+  "ai_media_oauth_vault_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    platform: text("platform").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    kind: text("kind").notNull(),
+    reference: text("reference").notNull(),
+    tokenBindingId: uuid("token_binding_id"),
+    authorizationCodeDigest: text("authorization_code_digest"),
+    sourceExpiresAt: timestamp("source_expires_at", { withTimezone: true }),
+    targetCredentialVersion: integer("target_credential_version"),
+    state: text("state").notNull().default("scheduled"),
+    attempt: integer("attempt").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(8),
+    deletePass: integer("delete_pass").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
+    quiescentUntil: timestamp("quiescent_until", { withTimezone: true }).notNull(),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseFencing: integer("lease_fencing").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    kindReferenceUnique: uniqueIndex("ai_media_oauth_vault_operations_kind_reference_uq").on(table.kind, table.reference),
+    dueIdx: index("ai_media_oauth_vault_operations_due_idx").on(table.state, table.availableAt, table.quiescentUntil),
+    tenantDueIdx: index("ai_media_oauth_vault_operations_tenant_due_idx").on(table.ownerUserId, table.workspaceId, table.state, table.availableAt),
+    deadIdx: index("ai_media_oauth_vault_operations_dead_idx").on(table.deadLetteredAt).where(sql`${table.state} = 'dead_letter'`),
+    kindContextCheck: check("ai_media_oauth_vault_operations_kind_context_ck", sql`(
+      (${table.kind} = 'pkce_verifier'
+        AND ${table.reference} ~ '^vault://ai-media-studio/oauth-pkce/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND ${table.tokenBindingId} IS NULL AND ${table.authorizationCodeDigest} IS NULL
+        AND ${table.sourceExpiresAt} IS NOT NULL AND ${table.targetCredentialVersion} IS NULL)
+      OR (${table.kind} = 'authorization_code'
+        AND ${table.reference} ~ '^vault://ai-media-studio/oauth-code/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND ${table.tokenBindingId} IS NOT NULL AND ${table.authorizationCodeDigest} ~ '^[0-9a-f]{64}$'
+        AND ${table.sourceExpiresAt} IS NOT NULL AND ${table.targetCredentialVersion} IS NULL)
+      OR (${table.kind} = 'token_credential'
+        AND ${table.reference} ~ '^vault://ai-media-studio/oauth-token/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND ${table.tokenBindingId} IS NOT NULL AND ${table.authorizationCodeDigest} IS NULL
+        AND ${table.sourceExpiresAt} IS NULL AND ${table.targetCredentialVersion} > 0)
+    )`),
+    lifecycleCheck: check("ai_media_oauth_vault_operations_lifecycle_ck", sql`(
+      ${table.state} IN ('scheduled','leased','retry_wait','verify_wait','retained','completed','dead_letter')
+      AND ${table.attempt} BETWEEN 0 AND ${table.maxAttempts} AND ${table.maxAttempts} BETWEEN 1 AND 32
+      AND ${table.deletePass} BETWEEN 0 AND 2 AND ${table.leaseFencing} >= 0
+      AND ${table.quiescentUntil} >= ${table.createdAt}
+      AND ((${table.state} = 'leased') = (${table.leaseToken} IS NOT NULL))
+      AND ((${table.leaseToken} IS NULL) = (${table.leaseOwner} IS NULL))
+      AND ((${table.leaseToken} IS NULL) = (${table.leaseExpiresAt} IS NULL))
+      AND (${table.state} <> 'retained' OR ${table.kind} = 'token_credential')
+      AND (${table.state} <> 'verify_wait' OR ${table.deletePass} = 1)
+      AND (${table.state} <> 'completed' OR (${table.deletePass} = 2 AND ${table.completedAt} IS NOT NULL))
+      AND (${table.state} <> 'dead_letter' OR ${table.deadLetteredAt} IS NOT NULL)
+      AND (${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN ('vault_rejected','vault_timeout','lease_lost','invalid_obligation'))
+    )`),
+    sessionSourceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform, table.sessionId],
+      foreignColumns: [aiMediaOAuthSessions.ownerUserId, aiMediaOAuthSessions.workspaceId, aiMediaOAuthSessions.actorUserId,
+        aiMediaOAuthSessions.providerAccountId, aiMediaOAuthSessions.platform, aiMediaOAuthSessions.id],
+      name: "ai_media_oauth_vault_operations_session_source_fk",
+    }).onUpdate("no action").onDelete("no action"),
+  }),
+);
+
 export const aiMediaProviderResources = pgTable(
   "ai_media_provider_resources",
   {
@@ -1408,6 +1480,7 @@ export const aiMediaStudioTables = {
   videos: aiMediaVideos,
   providerAccounts: aiMediaProviderAccounts,
   oauthSessions: aiMediaOAuthSessions,
+  oauthVaultOperations: aiMediaOAuthVaultOperations,
   providerResources: aiMediaProviderResources,
   governanceProfiles: aiMediaGovernanceProfiles,
   renderJobs: aiMediaRenderJobs,

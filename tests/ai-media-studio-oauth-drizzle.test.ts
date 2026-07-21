@@ -123,11 +123,12 @@ test("atomic consume resolves only digest plus platform fence and requires pendi
   });
   assert.equal(result, undefined);
   const normalized = calls[0].sql.replace(/\s+/g, " ").trim();
-  assert.match(normalized, /^update .*"?ai_media_oauth_sessions"?/i);
+  assert.match(normalized, /^with consumed as \(update .*"?ai_media_oauth_sessions"?/i);
+  assert.match(normalized, /update .*"?ai_media_oauth_vault_operations"?/i);
   for (const column of ["state_digest", "platform", "status", "consumed_at", "expires_at"]) {
     assert.match(normalized, new RegExp(column));
   }
-  for (const untrusted of ["owner_user_id", "workspace_id", "actor_user_id", "provider_account_id", "redirect_uri", "requested_scopes"]) {
+  for (const untrusted of ["actor_user_id", "provider_account_id", "redirect_uri", "requested_scopes"]) {
     assert.doesNotMatch(normalized, new RegExp(untrusted));
   }
   assert.match(normalized, /status = .*consumed/i);

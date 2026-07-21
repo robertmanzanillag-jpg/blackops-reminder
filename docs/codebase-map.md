@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T07:10:20.477Z
+Generated: 2026-07-21T07:50:13.429Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 645 | 554 | 2211 | 487 | 10393 |
+| 655 | 562 | 2235 | 487 | 10564 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 121 | 116 | test:121 |
-| `server/ai-media-studio` | 99 | 97 | server:99 |
+| `tests` | 125 | 120 | test:125 |
+| `server/ai-media-studio` | 103 | 101 | server:103 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 19 | 1 | other:18, docs:1 |
+| `migrations/ai-media-studio` | 21 | 1 | other:20, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 
@@ -80,12 +80,15 @@ Package: `rest-express`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-oauth-authorization-saga.test.ts`
 - `tests/ai-media-studio-oauth-authorization-url.test.ts`
+- `tests/ai-media-studio-oauth-aws-vault-preflight.test.ts`
 - `tests/ai-media-studio-oauth-crypto.test.ts`
 - `tests/ai-media-studio-oauth-drizzle.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-vault.test.ts`
 - `tests/ai-media-studio-oauth-service.test.ts`
+- `tests/ai-media-studio-oauth-vault-cleanup-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
 - `tests/ai-media-studio-operations-http.test.ts`
@@ -95,6 +98,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-persistence.test.ts`
 - `tests/ai-media-studio-pr11-oauth-policy-migration.test.ts`
 - `tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts`
+- `tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`

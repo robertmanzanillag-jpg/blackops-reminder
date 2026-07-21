@@ -3,7 +3,7 @@ import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectComm
 import { aiMediaOAuthPlatformSchema } from "../../../shared/ai-media-studio-oauth";
 import { OAuthFlowError, type OAuthAuthorizationCodeVault, type OAuthAuthorizationCodeVaultContext } from "./contracts";
 import {
-  assertExpectedBucketOwner, assertKmsKeyArn, canonicalContextBytes, decryptEnvelope, digestContext, encryptEnvelope,
+  assertExpectedBucketOwner, assertKmsKeyArn, boundedClient, canonicalContextBytes, decryptEnvelope, digestContext, encryptEnvelope,
   isExactS3KeyAbsence,
   MAX_ENVELOPE_BYTES,
   normalizedExactMetadata, normalizeEnvelopeKmsConfig, officialS3Endpoint, readBoundedBody, safeEqual, validBucket, vaultRejected,
@@ -95,7 +95,7 @@ function normalize(config: S3KmsAuthorizationCodeVaultConfig): Config {
   const partition = assertKmsKeyArn(config.kmsKeyArn, config.region);
   assertExpectedBucketOwner(config.kmsKeyArn, config.expectedBucketOwner);
   return { bucket: config.bucket, expectedBucketOwner: config.expectedBucketOwner, prefix: config.prefix,
-    s3: config.s3Client ?? new S3Client({ region: config.region, endpoint: officialS3Endpoint(partition, config.region) }),
+    s3: boundedClient(config.s3Client ?? new S3Client({ region: config.region, endpoint: officialS3Endpoint(partition, config.region) })),
     kms: normalizeEnvelopeKmsConfig(config), clock: config.clock ?? { now: () => new Date() } };
 }
 

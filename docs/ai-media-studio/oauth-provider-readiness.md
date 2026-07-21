@@ -51,6 +51,8 @@ This is the durable provider-connection gate for AI Media Studio. It records wha
 - Dedicated secret buckets/CMKs by environment and classification, exact bucket owner, Block Public Access, BucketOwnerEnforced, TLS-only, overwrite/list/copy denial and least-privilege roles.
 - Buckets must be unversioned, or references/deletion must become exact-VersionId aware with noncurrent-version cleanup. A delete marker is not secret deletion.
 - S3 `Expires` is metadata, not deletion. A durable bounded reconciler plus lifecycle fallback must remove expired code/PKCE orphans and terminal unreferenced token candidates without deleting active credentials.
+- PR14 implements that reconciler as an explicit, non-autostarting worker with a relational obligation outbox, source revalidation, leases/fencing and two-pass exact deletion. Its migration remains unapplied and no production worker is wired.
+- PR14 also provides an inert double-snapshot S3/KMS preflight. An attestation is necessary but not sufficient: reviewed IaC, effective IAM/Access Analyzer evidence, alarms and recovery drills are still required.
 - The token secret reader is currently a soft TypeScript capability boundary. Production refresh/publisher workers need a separately scoped role/service before runtime wiring.
 - CloudTrail/KMS alarms, inventory/config drift checks, key rotation/rewrap proof and recovery drills remain release gates.
 

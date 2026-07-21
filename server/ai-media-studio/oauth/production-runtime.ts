@@ -20,6 +20,7 @@ const ENV = {
   bucket: "AI_MEDIA_STUDIO_OAUTH_PKCE_BUCKET",
   region: "AI_MEDIA_STUDIO_OAUTH_AWS_REGION",
   kmsKeyArn: "AI_MEDIA_STUDIO_OAUTH_KMS_KEY_ARN",
+  expectedBucketOwner: "AI_MEDIA_STUDIO_OAUTH_EXPECTED_BUCKET_OWNER",
   prefix: "AI_MEDIA_STUDIO_OAUTH_PKCE_PREFIX",
   tiktokClientId: "AI_MEDIA_STUDIO_OAUTH_TIKTOK_CLIENT_ID",
   tiktokRedirectUri: "AI_MEDIA_STUDIO_OAUTH_TIKTOK_REDIRECT_URI",
@@ -72,6 +73,7 @@ type ParsedConfiguration = Readonly<{
   bucket: string;
   region: string;
   kmsKeyArn: string;
+  expectedBucketOwner: string;
   prefix: typeof OAUTH_PKCE_OBJECT_PREFIX;
   enabledPlatforms: readonly AiMediaOAuthPlatform[];
   providers: Readonly<Partial<Record<AiMediaOAuthPlatform, ProviderConfiguration>>>;
@@ -89,6 +91,7 @@ export function createProductionOAuthRuntimeFromEnvironment(
       bucket: config.bucket,
       region: config.region,
       kmsKeyArn: config.kmsKeyArn,
+      expectedBucketOwner: config.expectedBucketOwner,
       prefix: config.prefix,
       ...(dependencies.s3Client ? { client: dependencies.s3Client } : {}),
       ...(dependencies.clock ? { clock: dependencies.clock } : {}),
@@ -138,9 +141,11 @@ function parseConfiguration(environment: ProductionOAuthEnvironment): ParsedConf
   const bucket = required(environment, ENV.bucket);
   const region = required(environment, ENV.region);
   const kmsKeyArn = required(environment, ENV.kmsKeyArn);
+  const expectedBucketOwner = required(environment, ENV.expectedBucketOwner);
   const prefix = required(environment, ENV.prefix);
   if (!validBucket(bucket) || !validRegion(region) || prefix !== OAUTH_PKCE_OBJECT_PREFIX) throw invalidConfiguration();
   try { assertOAuthKmsKeyArn(kmsKeyArn, region); } catch { throw invalidConfiguration(); }
+  if (!/^\d{12}$/u.test(expectedBucketOwner) || !kmsKeyArn.includes(`:${expectedBucketOwner}:key/`)) throw invalidConfiguration();
 
   const enabledPlatforms = parseEnabledPlatforms(required(environment, ENV.enabledPlatforms));
   const providers: Partial<Record<AiMediaOAuthPlatform, ProviderConfiguration>> = {};
@@ -162,6 +167,7 @@ function parseConfiguration(environment: ProductionOAuthEnvironment): ParsedConf
     bucket,
     region,
     kmsKeyArn,
+    expectedBucketOwner,
     prefix: OAUTH_PKCE_OBJECT_PREFIX,
     enabledPlatforms,
     providers,

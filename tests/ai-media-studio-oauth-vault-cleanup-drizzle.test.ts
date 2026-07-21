@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";import test from "node:test";import {PgDialect}from"drizzle-orm/pg-core";
+import {DrizzleOAuthVaultCleanupRepository}from"../server/ai-media-studio/oauth/drizzle-vault-cleanup-repository";
+import type{OAuthDatabase}from"../server/ai-media-studio/oauth/drizzle-repository";
+const dialect=new PgDialect();
+test("cleanup claim is bounded, DB-clock due, SKIP LOCKED, lease fenced, and protects active token credentials",async()=>{const calls:any[]=[];const db:OAuthDatabase={async execute(q){calls.push(dialect.sqlToQuery(q));return{rows:[]}}};const repo=new DrizzleOAuthVaultCleanupRepository(db);
+  await repo.claimDue({limit:100,lease:{leaseToken:"11111111-1111-4111-8111-111111111111",leaseOwner:"worker-1",leaseExpiresAt:"2026-07-21T12:02:00.000Z"}});
+  const sql=calls[0].sql.replace(/\s+/g," ");for(const pattern of [/expired_candidates/i,/exchange_status='in_progress'/i,/expires_at.*clock_timestamp/i,/exchange_status='indeterminate'/i,/failure_code='vault_unavailable'/i,/accelerated_expired_obligations/i,/set state='scheduled'.*quiescent_until.*60 seconds/i,/operations\.state not in \('completed','dead_letter'\)/i,/state <> 'leased' or operations\.lease_expires_at <= clock_timestamp/i,/not exists \(select 1 from expired_sagas where expired_sagas\.id=sessions\.id\)/i,/for update skip locked limit/i,/attempt < .*max_attempts/i,/lease_fencing.*\+\s*1/i,/not exists/i,/pkce_verifier_ref/i,/authorization_code_digest/i,/source_expires_at.*expires_at/i,/oauth-code\/v1/i,/oauth-token\/v1/i,/secret_ref.*or .*token_binding_id/i,/credential_source/i,/credential_version/i,/exchange_status.*failed.*indeterminate/i])assert.match(sql,pattern);
+  assert.doesNotMatch(sql,/state in \([^)]*retained/i);await assert.rejects(repo.claimDue({limit:101,lease:{leaseToken:"x",leaseOwner:"x",leaseExpiresAt:"x"}}),/Invalid cleanup claim/);
+});
+test("cleanup acknowledgements require exact live lease/fence and implement two-pass settle",async()=>{const calls:any[]=[];const db:OAuthDatabase={async execute(q){calls.push(dialect.sqlToQuery(q));return{rows:[]}}};const repo=new DrizzleOAuthVaultCleanupRepository(db);
+  await repo.acknowledgeDelete({id:"1",leaseToken:"2",leaseFencing:3});await repo.recordFailure({id:"1",leaseToken:"2",leaseFencing:3,errorCode:"vault_rejected"});
+  const ack=calls[0].sql.replace(/\s+/g," ");assert.match(ack,/delete_pass=delete_pass\+1/i);assert.match(ack,/verify_wait/i);assert.match(ack,/completed/i);assert.match(ack,/60 seconds/i);assert.match(ack,/lease_expires_at.*clock_timestamp/i);
+  const failed=calls[1].sql.replace(/\s+/g," ");assert.match(failed,/retry_wait/i);assert.match(failed,/dead_letter/i);assert.match(failed,/lease_fencing/i);
+});

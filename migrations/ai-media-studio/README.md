@@ -201,3 +201,16 @@ remain mandatory.
 The rollback is application-only and preserves sessions, opaque references, lifecycle
 metadata, constraints, and audit evidence. Roll code back to a compatible version or
 correct the release and roll forward; destructive retention needs a separate review.
+
+## PR14 OAuth vault operations release
+
+`20260721_pr14_oauth_vault_operations_forward.sql` is an additive, unapplied
+migration for the dedicated OAuth vault cleanup outbox. It creates exact
+PKCE/code/token obligations, source-session foreign keys, state/context constraints,
+due-work indexes, bounded retry/fencing evidence, and conservative backfills. Apply it
+only after every preceding stacked OAuth migration is rehearsed and verified on
+staging. It does not start a worker or make an AWS/provider call.
+
+The rollback is application-only and intentionally preserves obligation, fencing,
+dead-letter and deletion evidence. Do not drop the table as part of an application
+rollback; correct the release and roll forward after review.
