@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES,
+  BLACKROOM_FFPROBE_SHOW_ENTRIES,
+  buildBlackRoomUploadChunks,
   assertSafeConfirmedDeletion,
   buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
@@ -13,12 +16,23 @@ import {
   shouldRunBlackRoomWorker,
   updateBlackRoomLedgerEntry,
   validateBlackRoomRenderProbe,
+  validateBlackRoomAudioLoudness,
 } from "../server/blackroom-local-worker";
 
 const mediaDetails = {
   dj: "DJ Test", language: "en" as const, format: "vertical" as const, durationSeconds: 30 as const,
   segmentStartSeconds: 10, segmentEndSeconds: 40, caption: "Drop incoming.",
 };
+
+test("splits remote video uploads below Replit's per-request limit", () => {
+  const totalBytes = BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2 + 123;
+  assert.deepEqual(buildBlackRoomUploadChunks(totalBytes), [
+    { index: 0, start: 0, end: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES - 1, size: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES },
+    { index: 1, start: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES, end: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2 - 1, size: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES },
+    { index: 2, start: BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES * 2, end: totalBytes - 1, size: 123 },
+  ]);
+  assert.throws(() => buildBlackRoomUploadChunks(0), /Invalid BlackRoom upload size/);
+});
 
 test("worker only runs for an enabled actionable queue", () => {
   assert.equal(shouldRunBlackRoomWorker({ enabled: false, jobs: [{ status: "queued" }] }), false);
@@ -85,16 +99,26 @@ test("past BlackRoom slots roll forward while future slots keep their target dat
 });
 
 test("validates Metricool and TikTok compatible MP4 renders", () => {
+  assert.match(BLACKROOM_FFPROBE_SHOW_ENTRIES, /stream=.*duration.*channels/);
   const valid = {
     format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "30.02" },
     streams: [
       { codec_type: "video", codec_name: "h264", pix_fmt: "yuv420p", width: 1080, height: 1920 },
-      { codec_type: "audio", codec_name: "aac" },
+      { codec_type: "audio", codec_name: "aac", channels: 2, duration: "30.02" },
     ],
   };
   assert.deepEqual(validateBlackRoomRenderProbe(valid, 30), { durationSeconds: 30.02, width: 1080, height: 1920 });
   assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [{ ...valid.streams[0], codec_name: "hevc" }, valid.streams[1]] }, 30), /H\.264/);
   assert.throws(() => validateBlackRoomRenderProbe({ ...valid, format: { ...valid.format, duration: "25" } }, 30), /duration/);
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [valid.streams[0], { ...valid.streams[1], duration: "2" }] }, 30), /audio track/);
+  assert.throws(() => validateBlackRoomRenderProbe({ ...valid, streams: [valid.streams[0], { ...valid.streams[1], channels: 0 }] }, 30), /audio track/);
+});
+
+test("rejects silent or nearly silent DJ audio before upload", () => {
+  assert.deepEqual(validateBlackRoomAudioLoudness("mean_volume: -12.4 dB\nmax_volume: -0.8 dB"), { meanVolumeDb: -12.4, maxVolumeDb: -0.8 });
+  assert.throws(() => validateBlackRoomAudioLoudness("mean_volume: -inf dB\nmax_volume: -inf dB"), /silent/);
+  assert.throws(() => validateBlackRoomAudioLoudness("mean_volume: -50.0 dB\nmax_volume: -35.0 dB"), /audible-volume/);
+  assert.throws(() => validateBlackRoomAudioLoudness("no volumedetect summary"), /silent/);
 });
 
 test("ledger blocks duplicate slots and source videos", () => {

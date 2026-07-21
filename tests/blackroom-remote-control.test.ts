@@ -58,6 +58,9 @@ test("token-protected BlackRoom bridge paths bypass cookie auth for the local wo
   assert.equal(isPublicApiPath("/api/blackroom-agent/metricool/schedule"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1.mp4"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/chunked/upload-1/0"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/chunked/upload-1/complete"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/media/chunked/upload-1/delete"), false);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1/extra"), false);
 });
 

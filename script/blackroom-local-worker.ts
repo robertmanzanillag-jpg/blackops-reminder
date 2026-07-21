@@ -14,6 +14,9 @@ import {
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   validateBlackRoomRenderProbe,
+  validateBlackRoomAudioLoudness,
+  buildBlackRoomUploadChunks,
+  BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
@@ -118,6 +121,32 @@ async function recoverConfirmedCleanup(): Promise<void> {
   }
 }
 
+async function uploadBlackRoomRender(entry: any, renderSize: number): Promise<{ uploadId: string; mediaUrl: string }> {
+  const chunks = buildBlackRoomUploadChunks(renderSize);
+  const initialized = await remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ reservationId: entry.reservationId, totalBytes: renderSize, totalChunks: chunks.length }),
+  });
+  for (const chunk of chunks) {
+    await remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked/${encodeURIComponent(initialized.uploadId)}/${chunk.index}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${remoteToken}`,
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(chunk.size),
+      },
+      body: createReadStream(entry.renderPath, { start: chunk.start, end: chunk.end }) as any,
+      duplex: "half",
+    }, 5 * 60_000);
+  }
+  return remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked/${encodeURIComponent(initialized.uploadId)}/complete`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+}
+
 async function publishOneReservedEntry(): Promise<boolean> {
   if (!remoteToken || remoteToken.length < 32) throw new Error("BLACKROOM_REMOTE_CONTROL_TOKEN is required for Metricool publishing");
   const queue = await readJson<any>(queuePath, {});
@@ -129,22 +158,18 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const renderInfo = await stat(entry.renderPath).catch(() => null);
   if (!renderInfo?.isFile() || renderInfo.size <= 0 || renderInfo.size > 500 * 1024 * 1024) throw new Error(`Reserved render is missing or too large: ${entry.reservationId}`);
   const { stdout: probeOutput } = await execFileAsync(process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe", [
-    "-v", "error", "-show_entries", "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt", "-of", "json", entry.renderPath,
+    "-v", "error", "-show_entries", BLACKROOM_FFPROBE_SHOW_ENTRIES, "-of", "json", entry.renderPath,
   ], { maxBuffer: 4_000_000 });
   validateBlackRoomRenderProbe(JSON.parse(probeOutput), Number(entry.durationSeconds));
+  const { stderr: loudnessOutput } = await execFileAsync(process.env.BLACKROOM_FFMPEG_PATH || "/opt/homebrew/bin/ffmpeg", [
+    "-nostdin", "-hide_banner", "-i", entry.renderPath, "-map", "0:a:0", "-af", "volumedetect", "-vn", "-sn", "-dn", "-f", "null", "-",
+  ], { maxBuffer: 8_000_000 });
+  const loudness = validateBlackRoomAudioLoudness(loudnessOutput);
+  await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
   const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
-  const upload = await remoteJson(`${remoteUrl}/api/blackroom-agent/media/${encodeURIComponent(entry.reservationId)}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${remoteToken}`,
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(renderInfo.size),
-    },
-    body: createReadStream(entry.renderPath) as any,
-    duplex: "half",
-  }, 15 * 60_000);
+  const upload = await uploadBlackRoomRender(entry, renderInfo.size);
   const preScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
     throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);

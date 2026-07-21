@@ -184,6 +184,10 @@ test("addBlackRoomCountdown creates builder countdown with explicit date", async
 test("addBlackRoomCountdown can derive title url and date from an existing party link", async () => {
   const calls: Array<{ url: string; method: string; body?: any }> = [];
   const originalFetch = globalThis.fetch;
+  const now = new Date();
+  const candidate = new Date(now.getFullYear(), 5, 21, 12, 0, 0, 0);
+  if (candidate.getTime() < now.getTime() - 30 * 24 * 60 * 60 * 1000) candidate.setFullYear(candidate.getFullYear() + 1);
+  const expectedCountdownDate = `${candidate.getFullYear()}-06-21T12:00`;
 
   globalThis.fetch = (async (url: any, init: any = {}) => {
     const method = init.method || "GET";
@@ -231,12 +235,12 @@ test("addBlackRoomCountdown can derive title url and date from an existing party
     assert.equal(result.source, "existing_party");
     assert.equal(result.title, "BLACK ROOM & FRIENDS @ CASA NUBE");
     assert.equal(result.url, "https://kongnightlife.com/p/bio-party");
-    assert.equal(result.countdownDate, "2026-06-21T12:00");
+    assert.equal(result.countdownDate, expectedCountdownDate);
     assert.ok(calls.some((call) =>
       call.url.endsWith("/api/admin/bio-elements") &&
       call.method === "POST" &&
       call.body?.element_type === "countdown" &&
-      call.body?.metadata?.countdown_date === "2026-06-21T12:00"
+      call.body?.metadata?.countdown_date === expectedCountdownDate
     ));
   } finally {
     globalThis.fetch = originalFetch;

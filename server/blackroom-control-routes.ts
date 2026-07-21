@@ -1,7 +1,7 @@
 import { type Express, type Request, type Response } from "express";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, unlink } from "node:fs/promises";
+import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Transform } from "node:stream";
@@ -20,9 +20,20 @@ import { parseBlackRoomChatCommand } from "./blackroom-chat";
 import { scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
 
 const BLACKROOM_UPLOAD_MAX_BYTES = 500 * 1024 * 1024;
+const BLACKROOM_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 const BLACKROOM_UPLOAD_TTL_MS = 30 * 60_000;
 const blackRoomUploadDir = path.join(os.tmpdir(), "blackroom-metricool-uploads");
-const blackRoomUploads = new Map<string, { filePath: string; reservationId: string; expiresAt: number }>();
+type BlackRoomUpload = {
+  filePath: string;
+  reservationId: string;
+  expiresAt: number;
+  ready: boolean;
+  totalBytes?: number;
+  totalChunks?: number;
+  nextChunk?: number;
+  chunkSizes?: number[];
+};
+const blackRoomUploads = new Map<string, BlackRoomUpload>();
 export const BLACKROOM_PUBLIC_MEDIA_PATHS = ["/api/blackroom-agent/media/:uploadId.mp4", "/api/blackroom-agent/media/:uploadId"] as const;
 
 async function removeBlackRoomUpload(uploadId: string): Promise<void> {
@@ -56,6 +67,24 @@ async function receiveBlackRoomUpload(request: NodeJS.ReadableStream, filePath: 
   return bytes;
 }
 
+async function receiveBlackRoomUploadChunk(request: NodeJS.ReadableStream, filePath: string): Promise<number> {
+  let bytes = 0;
+  const limiter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > BLACKROOM_UPLOAD_CHUNK_BYTES) {
+        const error = new Error("BlackRoom upload chunk exceeds 4 MB") as Error & { status?: number };
+        error.status = 413;
+        callback(error);
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+  await pipeline(request, limiter, createWriteStream(filePath, { flags: "wx" }));
+  return bytes;
+}
+
 export function parseBlackRoomMediaRange(value: string | undefined, size: number): { start: number; end: number } | null | false {
   if (!value) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
@@ -76,7 +105,7 @@ export function parseBlackRoomMediaRange(value: string | undefined, size: number
 async function serveBlackRoomMedia(req: Request, res: Response): Promise<void> {
   cleanupExpiredBlackRoomUploads();
   const upload = blackRoomUploads.get(String(req.params.uploadId || ""));
-  if (!upload) { res.status(404).end(); return; }
+  if (!upload?.ready) { res.status(404).end(); return; }
   const info = await stat(upload.filePath).catch(() => null);
   if (!info?.isFile()) {
     await removeBlackRoomUpload(String(req.params.uploadId || ""));
@@ -203,13 +232,85 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       await mkdir(blackRoomUploadDir, { recursive: true });
       const bytes = await receiveBlackRoomUpload(req, filePath);
       if (bytes === 0) { await unlink(filePath).catch(() => undefined); return res.status(400).json({ error: "MP4 body is empty" }); }
-      blackRoomUploads.set(uploadId, { filePath, reservationId, expiresAt: Date.now() + BLACKROOM_UPLOAD_TTL_MS });
+      blackRoomUploads.set(uploadId, { filePath, reservationId, expiresAt: Date.now() + BLACKROOM_UPLOAD_TTL_MS, ready: true });
       const publicOrigin = `${req.protocol}://${req.get("host")}`;
       res.status(201).json({ uploadId, mediaUrl: `${publicOrigin}/api/blackroom-agent/media/${uploadId}.mp4` });
     } catch (error: any) {
       await unlink(filePath).catch(() => undefined);
       res.status(error?.status || 500).json({ error: error?.message || "BlackRoom upload failed" });
     }
+  });
+  app.post("/api/blackroom-agent/media/chunked", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    const reservationId = String(req.body?.reservationId || "").trim();
+    const totalBytes = Number(req.body?.totalBytes);
+    const totalChunks = Number(req.body?.totalChunks);
+    const expectedChunks = Math.ceil(totalBytes / BLACKROOM_UPLOAD_CHUNK_BYTES);
+    if (!reservationId || reservationId.length > 300 || !Number.isSafeInteger(totalBytes) || totalBytes <= 0 || totalBytes > BLACKROOM_UPLOAD_MAX_BYTES || !Number.isSafeInteger(totalChunks) || totalChunks !== expectedChunks) {
+      return res.status(400).json({ error: "Valid reservationId, totalBytes, and 4 MB chunk count are required" });
+    }
+    cleanupExpiredBlackRoomUploads();
+    const uploadId = randomUUID();
+    const filePath = path.join(blackRoomUploadDir, `${uploadId}.mp4`);
+    try {
+      await mkdir(blackRoomUploadDir, { recursive: true });
+      await writeFile(filePath, Buffer.alloc(0), { flag: "wx" });
+      blackRoomUploads.set(uploadId, {
+        filePath, reservationId, totalBytes, totalChunks, nextChunk: 0, chunkSizes: [], ready: false,
+        expiresAt: Date.now() + BLACKROOM_UPLOAD_TTL_MS,
+      });
+      res.status(201).json({ uploadId, chunkBytes: BLACKROOM_UPLOAD_CHUNK_BYTES });
+    } catch (error: any) {
+      await unlink(filePath).catch(() => undefined);
+      res.status(500).json({ error: error?.message || "BlackRoom chunked upload initialization failed" });
+    }
+  });
+  app.put("/api/blackroom-agent/media/chunked/:uploadId/:index", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    const uploadId = String(req.params.uploadId || "");
+    const index = Number(req.params.index);
+    const upload = blackRoomUploads.get(uploadId);
+    const declaredSize = Number(req.get("content-length") || 0);
+    if (!upload || upload.ready) return res.status(404).json({ error: "BlackRoom chunked upload not found" });
+    if (!req.is("application/octet-stream") || !Number.isSafeInteger(index) || index < 0 || index >= Number(upload.totalChunks) || !Number.isSafeInteger(declaredSize) || declaredSize <= 0 || declaredSize > BLACKROOM_UPLOAD_CHUNK_BYTES) {
+      return res.status(400).json({ error: "A valid 4 MB upload chunk is required" });
+    }
+    if (index < Number(upload.nextChunk)) {
+      if (upload.chunkSizes?.[index] === declaredSize) return res.json({ uploadId, index, accepted: true, duplicate: true });
+      return res.status(409).json({ error: "BlackRoom upload chunk conflicts with an accepted chunk" });
+    }
+    if (index !== upload.nextChunk) return res.status(409).json({ error: "BlackRoom upload chunks must arrive in order" });
+    const partPath = `${upload.filePath}.${index}.part`;
+    try {
+      const bytes = await receiveBlackRoomUploadChunk(req, partPath);
+      if (bytes !== declaredSize || Number(upload.totalBytes) < (upload.chunkSizes || []).reduce((sum, size) => sum + size, 0) + bytes) {
+        await unlink(partPath).catch(() => undefined);
+        return res.status(400).json({ error: "BlackRoom upload chunk size does not match its declaration" });
+      }
+      await pipeline(createReadStream(partPath), createWriteStream(upload.filePath, { flags: "a" }));
+      await unlink(partPath).catch(() => undefined);
+      upload.chunkSizes?.push(bytes);
+      upload.nextChunk = index + 1;
+      upload.expiresAt = Date.now() + BLACKROOM_UPLOAD_TTL_MS;
+      res.status(201).json({ uploadId, index, accepted: true });
+    } catch (error: any) {
+      await unlink(partPath).catch(() => undefined);
+      res.status(error?.status || 500).json({ error: error?.message || "BlackRoom upload chunk failed" });
+    }
+  });
+  app.post("/api/blackroom-agent/media/chunked/:uploadId/complete", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    const uploadId = String(req.params.uploadId || "");
+    const upload = blackRoomUploads.get(uploadId);
+    if (!upload || upload.ready) return res.status(404).json({ error: "BlackRoom chunked upload not found" });
+    const info = await stat(upload.filePath).catch(() => null);
+    if (!info?.isFile() || upload.nextChunk !== upload.totalChunks || info.size !== upload.totalBytes) {
+      return res.status(409).json({ error: "BlackRoom chunked upload is incomplete" });
+    }
+    upload.ready = true;
+    upload.expiresAt = Date.now() + BLACKROOM_UPLOAD_TTL_MS;
+    const publicOrigin = `${req.protocol}://${req.get("host")}`;
+    res.json({ uploadId, mediaUrl: `${publicOrigin}/api/blackroom-agent/media/${uploadId}.mp4` });
   });
   // Register the extension-specific route first; the generic parameter route
   // would otherwise capture `.mp4` as part of the upload id.
@@ -222,7 +323,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     const uploadId = String(req.body?.uploadId || "");
     const reservationId = String(req.body?.reservationId || "");
     const upload = blackRoomUploads.get(uploadId);
-    if (!upload || upload.reservationId !== reservationId) return res.status(404).json({ error: "BlackRoom upload not found" });
+    if (!upload?.ready || upload.reservationId !== reservationId) return res.status(404).json({ error: "BlackRoom upload not found" });
     try {
       const publicOrigin = `${req.protocol}://${req.get("host")}`;
       const receipt = await scheduleBlackRoomMetricoolPost({
