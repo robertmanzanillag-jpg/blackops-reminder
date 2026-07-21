@@ -14,6 +14,7 @@ import type {
   BoundedArtifactReader,
   ExactHostSsrfPolicy,
   OwnedObjectStorage,
+  ProviderArtifactResolver,
 } from "./contracts";
 import { AssetIngestWorker, type AssetIngestWorkerHooks } from "./worker";
 
@@ -154,6 +155,7 @@ export interface CreateProductionAssetIngestWorkerInput {
   environment?: ProductionAssetEnvironment;
   adapterDependencies?: ProductionAssetAdapterDependencies;
   productionRuntime?: ProductionAssetRuntime;
+  providerArtifactResolver?: ProviderArtifactResolver;
   clock?: { now(): number };
 }
 
@@ -176,6 +178,7 @@ export function createProductionAssetIngestWorker(input: CreateProductionAssetIn
       baseDelayMs: runtime.limits.retryBaseDelayMs,
       maxDelayMs: runtime.limits.retryMaxDelayMs,
     },
+    ...(input.providerArtifactResolver ? { providerArtifactResolver: input.providerArtifactResolver } : {}),
     ...(input.hooks ? { hooks: input.hooks } : {}),
     ...(input.clock ? { clock: input.clock } : {}),
   });

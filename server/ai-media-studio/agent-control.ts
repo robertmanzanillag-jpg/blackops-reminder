@@ -44,8 +44,8 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-pr29-production-composition",
     title: "Inert HeyGen V3 production composition",
     owner: "AI Media Studio runtime squad",
-    state: "ready",
-    branch: null,
+    state: "running",
+    branch: "codex/ai-media-studio-production-composition",
     pullRequestUrl: null,
     acceptance: [
       "Compose admitted submit, terminal observation and renewable ingest without autostart",
@@ -53,9 +53,9 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "Construction performs no database, network, storage or spend action",
     ],
     mergeGate: "Composition tests prove zero construction I/O and fail-closed behavior; no route, timer or loop is mounted.",
-    evidence: ["PR28 composition audit completed", "Existing PR27 primitives are independently reviewed"],
+    evidence: ["PR29 composition audit completed", "Focused tenant/composition/asset regressions: 29/29", "Full suite: 666 passed, 0 failed, 24 skipped", "Checker and App QA recheck: P0=P1=P2=0"],
     blockers: [],
-    nextAction: "Create a stacked branch after the agent-control checkpoint is saved.",
+    nextAction: "Close independent checker and App QA, then save the stacked draft PR without mounting a worker loop.",
   },
   {
     id: "ams-agent-staging-migrations",
