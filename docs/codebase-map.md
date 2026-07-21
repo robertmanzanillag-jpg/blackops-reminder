@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T04:34:37.024Z
+Generated: 2026-07-21T04:40:15.163Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 462 | 383 | 1412 | 465 | 7737 |
+| 462 | 383 | 1412 | 465 | 7740 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -159,7 +159,7 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 31 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 41 symbols, 7 imports)
+- `script/blackroom-control-server.mjs` (script; 44 symbols, 7 imports)
 - `script/blackroom-daily-agent.ts` (script; 14 symbols, 1 imports)
 - `script/blackroom-local-worker.ts` (script; 29 symbols, 5 imports)
 - `script/blackroom-remote-sync.mjs` (script; 3 symbols)

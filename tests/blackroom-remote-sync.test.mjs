@@ -24,3 +24,18 @@ test("already-applied desired state advances generation without restarting", () 
     control: { generation: 4, desiredEnabled: true }, localEnabled: true, lastAppliedGeneration: 3,
   }), { action: "none", generation: 4 });
 });
+
+test("pause remains pending until the local worker has stopped", () => {
+  assert.deepEqual(planBlackRoomRemoteSync({
+    control: { generation: 2, desiredEnabled: false },
+    localEnabled: false,
+    localWorkerRunning: true,
+    lastAppliedGeneration: 1,
+  }), { action: "pause", generation: 2 });
+  assert.deepEqual(planBlackRoomRemoteSync({
+    control: { generation: 2, desiredEnabled: false },
+    localEnabled: false,
+    localWorkerRunning: false,
+    lastAppliedGeneration: 1,
+  }), { action: "none", generation: 2 });
+});

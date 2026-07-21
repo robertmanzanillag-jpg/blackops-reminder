@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T04:34:37.024Z",
+  "generatedAt": "2026-07-21T04:40:15.163Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control",
   "packageName": "rest-express",
   "scripts": {
@@ -99,23 +99,9 @@
     "filesIndexed": 383,
     "imports": 1412,
     "routes": 465,
-    "symbols": 7737
+    "symbols": 7740
   },
   "directories": {
-    "script": {
-      "files": 44,
-      "indexed": 41,
-      "kinds": {
-        "script": 44
-      }
-    },
-    "tests": {
-      "files": 73,
-      "indexed": 70,
-      "kinds": {
-        "test": 73
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -180,6 +166,13 @@
         "docs": 12
       }
     },
+    "script": {
+      "files": 44,
+      "indexed": 41,
+      "kinds": {
+        "script": 44
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -213,6 +206,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 73,
+      "indexed": 70,
+      "kinds": {
+        "test": 73
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3919,7 +3919,10 @@
         "child",
         "command",
         "controlToken",
+        "current",
+        "currentWorker",
         "data",
+        "deadline",
         "execFileAsync",
         "expected",
         "fetchSite",

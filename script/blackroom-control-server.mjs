@@ -51,6 +51,13 @@ async function stopWorker() {
   } else if (state.running && Number.isInteger(state.pid) && state.pid > 0) {
     try { process.kill(-state.pid, "SIGTERM"); } catch { /* legacy state */ }
   }
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline) {
+    const current = await workerState();
+    if (!current.running && !current.workerPid && !current.pid) return current;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("El trabajador local no confirmó la pausa dentro de 12 segundos");
 }
 
 async function remoteRequest(method, body) {
@@ -75,7 +82,13 @@ async function syncRemoteControl() {
   try {
     const { control } = await remoteRequest("GET");
     queue = await serializedCommand("status");
-    const plan = planBlackRoomRemoteSync({ control, localEnabled: queue.enabled, lastAppliedGeneration });
+    const currentWorker = await workerState();
+    const plan = planBlackRoomRemoteSync({
+      control,
+      localEnabled: queue.enabled,
+      localWorkerRunning: Boolean(currentWorker.running || currentWorker.workerPid || currentWorker.pid),
+      lastAppliedGeneration,
+    });
     if (plan.action === "start") {
       queue = await serializedCommand("start", control.weeks);
       wakeWorker();
