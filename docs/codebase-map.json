@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T13:52:31.525Z",
+  "generatedAt": "2026-07-21T14:38:44.226Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,26 +86,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 713,
-    "filesIndexed": 605,
-    "imports": 2440,
+    "filesVisible": 719,
+    "filesIndexed": 609,
+    "imports": 2463,
     "routes": 489,
-    "symbols": 11715
+    "symbols": 11828
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 31,
+      "files": 33,
       "indexed": 1,
       "kinds": {
-        "other": 30,
+        "other": 32,
         "docs": 1
       }
     },
-    "tests": {
-      "files": 150,
-      "indexed": 143,
+    "server/ai-media-studio": {
+      "files": 124,
+      "indexed": 120,
       "kinds": {
-        "test": 150
+        "server": 124
+      }
+    },
+    "tests": {
+      "files": 152,
+      "indexed": 145,
+      "kinds": {
+        "test": 152
       }
     },
     ".agents/skills": {
@@ -191,13 +198,6 @@
       "indexed": 92,
       "kinds": {
         "server": 96
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 122,
-      "indexed": 118,
-      "kinds": {
-        "server": 122
       }
     },
     "server/replit_integrations": {
@@ -9821,6 +9821,89 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/drizzle-held-work-activation-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./authority-locks",
+        "./contracts",
+        "./held-work-activation-domain",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleHeldWorkActivationRepository",
+        "HeldWorkActivationDatabase",
+        "HeldWorkActivationTransactionalDatabase"
+      ],
+      "symbols": [
+        "ACTIVATIONS",
+        "AUTHORITY_SNAPSHOTS",
+        "CREATED_EFFECTS",
+        "DrizzleHeldWorkActivationRepository",
+        "ExecuteResult",
+        "KILL_SWITCH_REVISIONS",
+        "LAUNCH_EVIDENCE",
+        "LAUNCH_INTENTS",
+        "POLICY_REVISIONS",
+        "POST_OUTBOX",
+        "POST_RENDER",
+        "POST_SLOT",
+        "REPLAY_EFFECTS",
+        "SAFE",
+        "SHA256",
+        "UUID",
+        "activatedAt",
+        "activation",
+        "activationDigest",
+        "activationFromRow",
+        "activationId",
+        "after",
+        "at",
+        "before",
+        "canonicalJson",
+        "dbDigest",
+        "dbUuid",
+        "denied",
+        "digest",
+        "exactReplay",
+        "gate",
+        "gateRows",
+        "inputDigest",
+        "inserted",
+        "invalid",
+        "invariant",
+        "iso",
+        "lockedChecksum",
+        "lockedSource",
+        "outbox",
+        "positive",
+        "principal",
+        "recomputedHandoff",
+        "render",
+        "replay",
+        "request",
+        "rows",
+        "safe",
+        "scriptContent",
+        "sealedRequestDigest",
+        "sha256",
+        "slot",
+        "sourceBinding",
+        "sourceHash",
+        "sourceId",
+        "sourceType",
+        "subject",
+        "unsigned",
+        "uuid",
+        "validTimeZone",
+        "validatePrincipal",
+        "validateRequest",
+        "validateUnsigned"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/drizzle-launch-authority-repository.ts",
       "kind": "server",
       "imports": [
@@ -9968,6 +10051,34 @@
         "value",
         "verified",
         "zones"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/held-work-activation-domain.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "ActivateHeldWorkRequest",
+        "ActivateHeldWorkResult",
+        "DurableWorkActivation",
+        "HeldWorkActivationError",
+        "HeldWorkActivationErrorCode",
+        "TrustedActivationPrincipal",
+        "UnsignedActivateHeldWorkRequest",
+        "heldWorkActivationEvidenceDigest",
+        "heldWorkActivationInputDigest"
+      ],
+      "symbols": [
+        "HeldWorkActivationError",
+        "canonicalJson",
+        "heldWorkActivationEvidenceDigest",
+        "heldWorkActivationInputDigest",
+        "sha256"
       ],
       "routes": []
     },
@@ -18582,7 +18693,8 @@
         "aiMediaStudioTables",
         "aiMediaVideoProjects",
         "aiMediaVideos",
-        "aiMediaWebhookEvents"
+        "aiMediaWebhookEvents",
+        "aiMediaWorkActivations"
       ],
       "symbols": [
         "AiMediaRenderJobSelect",
@@ -18626,6 +18738,7 @@
         "aiMediaVideoProjects",
         "aiMediaVideos",
         "aiMediaWebhookEvents",
+        "aiMediaWorkActivations",
         "auditColumns",
         "tenantColumns"
       ],
@@ -19557,6 +19670,49 @@
         "service",
         "tenantA",
         "tenantB"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-held-work-activation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-held-work-activation-repository",
+        "../server/ai-media-studio/planning/held-work-activation-domain",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Rendered",
+        "activatedAt",
+        "activationRow",
+        "canonical",
+        "checksum",
+        "command",
+        "dialect",
+        "digest",
+        "execute",
+        "gate",
+        "gateRow",
+        "h",
+        "handoffDigest",
+        "harness",
+        "hash",
+        "ids",
+        "outbox",
+        "principal",
+        "render",
+        "repository",
+        "requestJson",
+        "result",
+        "script",
+        "sealedDigest",
+        "slot",
+        "valid"
       ],
       "routes": []
     },
@@ -20843,6 +20999,8 @@
       "kind": "test",
       "imports": [
         "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
+        "../server/ai-media-studio/planning/drizzle-held-work-activation-repository",
+        "../server/ai-media-studio/planning/held-work-activation-domain",
         "drizzle-orm",
         "drizzle-orm/pg-core",
         "node:assert/strict",
@@ -20862,8 +21020,14 @@
         "TEMP_PREFIX",
         "TEST_DATABASE_NAME",
         "WORKSPACE",
+        "activation",
+        "activationPrincipal",
+        "activationRepository",
+        "admission",
+        "admissionRepository",
         "afterRollback",
         "assertReapplicationFails",
+        "authorizedActivation",
         "beforeCount",
         "canonical",
         "claimable",
@@ -20880,9 +21044,11 @@
         "expectDatabaseError",
         "handoffDigest",
         "harness",
+        "hash",
         "held",
         "heldControls",
         "ids",
+        "insertCompleteAttachedReservation",
         "integrationTest",
         "matchingAfterRefresh",
         "matchingBeforeRefresh",
@@ -20898,8 +21064,11 @@
         "pr23Client",
         "pr23Forward",
         "pr23Rollback",
+        "pr24Forward",
+        "pr24Rollback",
         "prerequisite",
         "repository",
+        "requestJson",
         "requireSafeTestDatabaseUrl",
         "resolvedRoot",
         "resolvedSocket",
@@ -20913,13 +21082,16 @@
         "selectEvidence",
         "sharedIdempotencyKey",
         "socketDirectory",
+        "state",
         "statement",
         "tables",
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "transactionInsert",
         "triggers",
-        "unsigned"
+        "unsigned",
+        "unsignedActivation",
+        "unsignedAdmission"
       ],
       "routes": []
     },
@@ -20960,6 +21132,25 @@
         "outbox",
         "reservation",
         "reservationColumns",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr24-held-activation-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/models/ai-media-studio-db",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "columns",
+        "config",
+        "forward",
         "rollback"
       ],
       "routes": []
@@ -23305,6 +23496,7 @@
     "tests/ai-media-studio-daily-admission-drizzle.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
+    "tests/ai-media-studio-held-work-activation.test.ts",
     "tests/ai-media-studio-heygen-roster-client.test.ts",
     "tests/ai-media-studio-heygen-roster-contracts.test.ts",
     "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
@@ -23351,6 +23543,7 @@
     "tests/ai-media-studio-pr21-postgres-integration.test.ts",
     "tests/ai-media-studio-pr22-launch-intent-migration.test.ts",
     "tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts",
+    "tests/ai-media-studio-pr24-held-activation-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",

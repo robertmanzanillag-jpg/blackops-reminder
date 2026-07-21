@@ -185,6 +185,7 @@ export class DrizzleOutboxRepository<TPayload = unknown> implements OutboxReposi
           WHERE event.owner_user_id = ${this.ownerUserId}
             AND event.workspace_id = ${this.workspaceId}
             AND event.status IN ('pending', 'retry_wait')
+            AND event.budget_reservation_id IS NULL
             AND event.available_at <= ${now}
             AND event.dead_letter_at IS NULL
           ORDER BY event.available_at, event.created_at, event.id

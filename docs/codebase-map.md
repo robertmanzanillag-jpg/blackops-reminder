@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T13:52:31.525Z
+Generated: 2026-07-21T14:38:44.226Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 713 | 605 | 2440 | 489 | 11715 |
+| 719 | 609 | 2463 | 489 | 11828 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 152 | 150 | ui-component:55, other:43, client-page:23, client-component:21 |
-| `tests` | 150 | 143 | test:150 |
-| `server/ai-media-studio` | 122 | 118 | server:122 |
+| `tests` | 152 | 145 | test:152 |
+| `server/ai-media-studio` | 124 | 120 | server:124 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -44,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 31 | 1 | other:30, docs:1 |
+| `migrations/ai-media-studio` | 33 | 1 | other:32, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `tests/fixtures` | 1 | 0 | test:1 |
@@ -80,6 +80,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-daily-admission-drizzle.test.ts`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
 - `tests/ai-media-studio-governance.test.ts`
+- `tests/ai-media-studio-held-work-activation.test.ts`
 - `tests/ai-media-studio-heygen-roster-client.test.ts`
 - `tests/ai-media-studio-heygen-roster-contracts.test.ts`
 - `tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts`
@@ -126,6 +127,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr21-postgres-integration.test.ts`
 - `tests/ai-media-studio-pr22-launch-intent-migration.test.ts`
 - `tests/ai-media-studio-pr23-admission-held-handoff-migration.test.ts`
+- `tests/ai-media-studio-pr24-held-activation-migration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`

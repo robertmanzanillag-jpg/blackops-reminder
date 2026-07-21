@@ -2,6 +2,16 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active checkpoint: PR24 fenced held-work activation
+
+- Branch: `codex/ai-media-studio-held-activation`, stacked on draft PR #106; ready to preserve as an inert draft checkpoint.
+- Scope: append-only activation evidence plus one exact database transaction for the held reservation/render/outbox/slot handoff. Activation changes internal queue state only and leaves the micro-USD reservation uncommitted.
+- Structural no-spend boundary: generic render and outbox claim SQL exclude every budget-bound admitted artifact. The activated outbox is internal wake/audit work only and has no provider capability. The PR24 repository remains absent from routes, public barrels and runtime composition.
+- Verification evidence: 23 focused security checks, the full AI Media Studio suite with 589 passed and 13 PostgreSQL-only cases skipped, isolated socket-only PostgreSQL 16 with 13/13 passed, TypeScript, production build, generated codebase map and diff hygiene passed. Independent security review found no P0-P2 findings and App QA passed with no PR24-specific warning or failure.
+- Residual hardening note: production authentication/RBAC must mint the trusted activation capability, direct SQL writers must remain restricted, and a future principal representation should be normalized before inclusion in the activation digest. None of these boundaries is mounted by this checkpoint.
+- Next gate: PR25 must implement a dedicated admitted-worker claim, last-mile authority revalidation, atomic commit-before-submit, stable persisted provider idempotency, and non-retriable ambiguous reconciliation before any approved HeyGen sandbox.
+- Safety boundary: migration artifacts remain unapplied; no route, timer or worker is enabled; no provider call, committed spend, publication, secret change or deployment is authorized. Existing build advisories for bundle size and unavailable local Python `yt-dlp` bundling are baseline environment warnings, so no deployment is requested.
+
 ## Active local checkpoint: PR23 immutable admitted-held work handoff
 
 - Branch: `codex/ai-media-studio-admitted-held-work`, draft PR #106, stacked on draft PR #105.

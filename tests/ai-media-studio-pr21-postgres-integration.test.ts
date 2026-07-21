@@ -13,6 +13,12 @@ import {
   type DailyAdmissionDatabase,
   type DailyAdmissionTransactionalDatabase,
 } from "../server/ai-media-studio/planning/drizzle-daily-admission-repository";
+import {
+  DrizzleHeldWorkActivationRepository,
+  type HeldWorkActivationDatabase,
+  type HeldWorkActivationTransactionalDatabase,
+} from "../server/ai-media-studio/planning/drizzle-held-work-activation-repository";
+import type { TrustedActivationPrincipal } from "../server/ai-media-studio/planning/held-work-activation-domain";
 
 const TEMP_PREFIX = "ams-pr21-pg-";
 const TEST_DATABASE_NAME = "ams_pr21_test";
@@ -24,6 +30,7 @@ const ids = {
   account: "10000000-0000-4000-8000-000000000001",
   influencer: "10000000-0000-4000-8000-000000000002",
   avatar: "10000000-0000-4000-8000-000000000003",
+  alternateAvatar: "10000000-0000-4000-8000-000000000019",
   voice: "10000000-0000-4000-8000-000000000004",
   script: "10000000-0000-4000-8000-000000000005",
   sourceItem: "10000000-0000-4000-8000-000000000013",
@@ -40,6 +47,7 @@ const ids = {
   quoteEvidence: "10000000-0000-4000-8000-000000000010",
   snapshot: "10000000-0000-4000-8000-000000000011",
   reservation: "10000000-0000-4000-8000-000000000012",
+  authorityReservation: "10000000-0000-4000-8000-00000000001a",
   launchIntent: "10000000-0000-4000-8000-000000000014",
   launchIntent2: "10000000-0000-4000-8000-000000000015",
   launchIntent4: "10000000-0000-4000-8000-000000000016",
@@ -49,6 +57,10 @@ const ids = {
 
 function digest(character: string): string {
   return `sha256:${character.repeat(64)}`;
+}
+
+function activationPrincipal(actorUserId:string):TrustedActivationPrincipal {
+  return { capability:"activate-held-work",actorUserId } as unknown as TrustedActivationPrincipal;
 }
 
 function testTemporaryDirectory(): string {
@@ -118,6 +130,14 @@ const pr23Rollback = readFileSync(new URL(
   "../migrations/ai-media-studio/20260721_pr23_admission_held_handoff_rollback.sql",
   import.meta.url,
 ), "utf8");
+const pr24Forward = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr24_held_activation_forward.sql",
+  import.meta.url,
+), "utf8");
+const pr24Rollback = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr24_held_activation_rollback.sql",
+  import.meta.url,
+), "utf8");
 
 async function seedAuthorityGraph(): Promise<void> {
   await pool.query(`
@@ -128,6 +148,7 @@ async function seedAuthorityGraph(): Promise<void> {
       (id,owner_user_id,workspace_id,provider_account_id,provider_key,resource_type,status)
     VALUES
       ('${ids.avatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','active'),
+      ('${ids.alternateAvatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','active'),
       ('${ids.voice}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','voice','active');
     INSERT INTO ai_media_influencers (id,owner_user_id,workspace_id,status)
     VALUES ('${ids.influencer}','${OWNER}','${WORKSPACE}','active');
@@ -136,16 +157,17 @@ async function seedAuthorityGraph(): Promise<void> {
     VALUES ('${ids.sourceItem}','${OWNER}','${WORKSPACE}','rss','source-pr21','${digest("9")}',
       'ready','owned','approved');
     INSERT INTO ai_media_scripts
-      (id,owner_user_id,workspace_id,source_type,source_item_id,title,language,status,current_variant_id)
-    VALUES ('${ids.script}','${OWNER}','${WORKSPACE}','rss','${ids.sourceItem}','Launch','en','approved',
+      (id,owner_user_id,workspace_id,influencer_id,source_type,source_item_id,title,language,status,current_variant_id)
+    VALUES ('${ids.script}','${OWNER}','${WORKSPACE}','${ids.influencer}','rss','${ids.sourceItem}','Launch','en','approved',
       '${ids.variant}');
     INSERT INTO ai_media_script_variants
       (id,owner_user_id,workspace_id,script_id,content,checksum,status)
     VALUES ('${ids.variant}','${OWNER}','${WORKSPACE}','${ids.script}','${SCRIPT_CONTENT}',
       '${SCRIPT_CHECKSUM}','approved');
     INSERT INTO ai_media_governance_profiles
-      (id,owner_user_id,workspace_id,influencer_id,version,evidence_digest,state,valid_from,expires_at,allowed_uses,territories)
-    VALUES ('${ids.governance}','${OWNER}','${WORKSPACE}','${ids.influencer}',1,'${digest("2")}',
+      (id,owner_user_id,workspace_id,influencer_id,avatar_resource_id,voice_resource_id,version,evidence_digest,
+       state,valid_from,expires_at,allowed_uses,territories)
+    VALUES ('${ids.governance}','${OWNER}','${WORKSPACE}','${ids.influencer}','${ids.avatar}','${ids.voice}',1,'${digest("2")}',
       'active',clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour','["marketing"]','["WORLDWIDE"]');
     INSERT INTO ai_media_daily_plans
       (id,owner_user_id,workspace_id,public_plan_key,provider_account_id,provider_key,provider_credential_version,
@@ -251,6 +273,28 @@ async function expectDatabaseError(action: () => Promise<unknown>, code: string)
   });
 }
 
+async function insertCompleteAttachedReservation(
+  client:PoolClient,
+  input:{ handoffDigest:string; renderJobId:string; outboxId:string; idempotencyKey:string },
+):Promise<void> {
+  await client.query(`
+    INSERT INTO ai_media_budget_reservations
+      (id,owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,provider_key,
+       provider_credential_version,attempt,state,submission_state,amount_micro_usd,currency,idempotency_key,
+       input_digest,admission_digest,script_variant_checksum,quote_digest,quote_expires_at,
+       content_approval_digest,human_launch_approval_digest,governance_profile_id,governance_evidence_digest,
+       policy_digest,kill_switch_evidence_digest,sandbox_evidence_digest,provider_idempotency_key,
+       reserved_at,expires_at,authority_snapshot_id,authority_digest,render_job_id,dispatch_outbox_id,
+       work_handoff_digest)
+    VALUES ($1,$2,$3,$4,$5,$6,'heygen',1,1,'reserved','not_started',1250000,'USD',$7,$8,$9,$10,$11,
+      clock_timestamp()+interval '30 minutes',$12,$13,$14,$15,$16,$17,$18,'provider-pr21-idempotency',
+      clock_timestamp(),clock_timestamp()+interval '10 minutes',$19,$20,$21,$22,$23)
+  `,[ids.reservation,OWNER,WORKSPACE,ids.bucket,ids.slot,ids.account,input.idempotencyKey,digest("1"),
+    digest("3"),SCRIPT_CHECKSUM,digest("f"),digest("c"),digest("d"),ids.governance,digest("2"),
+    digest("7"),digest("a"),digest("e"),ids.snapshot,digest("4"),input.renderJobId,input.outboxId,
+    input.handoffDigest]);
+}
+
 async function transactionInsert(statement: string, values: readonly unknown[]): Promise<string> {
   const client = await pool.connect();
   try {
@@ -338,6 +382,7 @@ before(async () => {
   await pool.query(pr20Forward);
   await pool.query(pr22Forward);
   await pool.query(pr23Forward);
+  await pool.query(pr24Forward);
   await seedAuthorityGraph();
 });
 
@@ -364,15 +409,15 @@ integrationTest("PR21 runs only on the owned socket-only PostgreSQL 16 database"
   assert.ok(result.rows[0].socket_directories.includes(TEMP_PREFIX));
 });
 
-integrationTest("real PostgreSQL installs the exact PR19, PR20, PR22, and PR23 schema controls", async () => {
+integrationTest("real PostgreSQL installs the exact PR19, PR20, PR22, PR23, and PR24 schema controls", async () => {
   const tables = await pool.query<{ table_name: string }>(`
     SELECT table_name FROM information_schema.tables
     WHERE table_schema='public' AND table_name IN (
       'ai_media_daily_plans','ai_media_daily_plan_slots','ai_media_budget_buckets','ai_media_budget_reservations',
       'ai_media_admission_policy_revisions','ai_media_kill_switch_revisions','ai_media_launch_evidence',
-      'ai_media_launch_authority_snapshots','ai_media_launch_intents') ORDER BY table_name
+      'ai_media_launch_authority_snapshots','ai_media_launch_intents','ai_media_work_activations') ORDER BY table_name
   `);
-  assert.equal(tables.rowCount, 9);
+  assert.equal(tables.rowCount, 10);
 
   const controls = await pool.query<{ constraint_name: string }>(`
     SELECT conname AS constraint_name FROM pg_constraint
@@ -406,10 +451,13 @@ integrationTest("real PostgreSQL installs the exact PR19, PR20, PR22, and PR23 s
       'ai_media_launch_evidence_immutable_guard',
       'ai_media_launch_authority_snapshots_immutable_guard',
       'ai_media_launch_intents_immutable_guard',
-      'ai_media_render_jobs_admission_held_immutable_guard',
-      'ai_media_outbox_held_immutable_guard')
+      'ai_media_render_jobs_admitted_handoff_guard',
+      'ai_media_outbox_admitted_handoff_guard',
+      'ai_media_work_activations_immutable_guard',
+      'ai_media_work_activations_final_state_guard',
+      'ai_media_budget_reservations_handoff_immutable_guard')
   `);
-  assert.equal(triggers.rowCount, 9);
+  assert.equal(triggers.rowCount, 12);
 });
 
 integrationTest("the real admission repository atomically creates one exact non-claimable held triplet", async () => {
@@ -440,6 +488,98 @@ integrationTest("the real admission repository atomically creates one exact non-
   assert.equal(held.render_lease_owner, null);
   assert.equal(held.outbox_lease_owner, null);
   assert.match(String(held.work_handoff_digest), /^sha256:[0-9a-f]{64}$/u);
+});
+
+integrationTest("real admission then real PR24 activation preserves reserved budget and freezes queued render", async () => {
+  const client = await pool.connect();
+  const dialect = new PgDialect();
+  const sharedDb: DailyAdmissionTransactionalDatabase & HeldWorkActivationTransactionalDatabase = {
+    async execute(_query: SQL) { throw new Error("repositories must use the owned transaction"); },
+    async transaction<T>(callback: (tx: DailyAdmissionDatabase & HeldWorkActivationDatabase) => Promise<T>): Promise<T> {
+      return callback({ execute: async (query) => {
+        const compiled = dialect.sqlToQuery(query);
+        return client.query(compiled.sql, compiled.params);
+      } });
+    },
+  };
+  try {
+    await client.query("BEGIN");
+    const admissionRepository = new DrizzleDailyAdmissionRepository(sharedDb, { accountingTimeZone: "UTC" });
+    const unsignedAdmission = {
+      scope: { ownerUserId: OWNER, workspaceId: WORKSPACE }, planId: ids.plan, slotId: ids.slot,
+      budgetBucketId: ids.bucket, authoritySnapshotId: ids.snapshot,
+      authorityDigest: digest("4") as `sha256:${string}`, expectedSlotStateVersion: 1,
+      expectedBucketStateVersion: 1, reservationExpiresAt: new Date(Date.now()+5*60_000).toISOString(),
+      idempotencyKey: "real-admit-then-activate-pr24",
+    };
+    const admission = await admissionRepository.reserveAndAdmit({
+      ...unsignedAdmission,inputDigest:admissionRepository.inputDigest(unsignedAdmission),
+    });
+    assert.equal(admission.replayed,false);
+    const activationRepository = new DrizzleHeldWorkActivationRepository(sharedDb,{accountingTimeZone:"UTC"});
+    const unsignedActivation = {
+      scope:unsignedAdmission.scope,budgetReservationId:admission.reservation.id,
+      workHandoffDigest:admission.reservation.workHandoffDigest,requestedBy:"operator-pr24-real",
+      idempotencyKey:"real-held-activation-pr24",
+    };
+    const authorizedActivation = {
+      ...unsignedActivation,inputDigest:activationRepository.inputDigest(unsignedActivation),
+      principal:activationPrincipal(unsignedActivation.requestedBy),
+    };
+    for (const [savepoint, mutation] of [
+      ["slot_avatar_substitution", `UPDATE ai_media_daily_plan_slots SET avatar_resource_id='${ids.alternateAvatar}' WHERE id='${ids.slot}'`],
+      ["sealed_avatar_deactivated", `UPDATE ai_media_provider_resources SET status='inactive' WHERE id='${ids.avatar}'`],
+      ["script_subject_substitution", `UPDATE ai_media_scripts SET influencer_id=NULL WHERE id='${ids.script}'`],
+      ["script_archived", `UPDATE ai_media_scripts SET archived_at=clock_timestamp() WHERE id='${ids.script}'`],
+    ] as const) {
+      await client.query(`SAVEPOINT ${savepoint}`);
+      await client.query(mutation);
+      await assert.rejects(activationRepository.activate(authorizedActivation));
+      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+    }
+    const activation = await activationRepository.activate({
+      ...authorizedActivation,
+    });
+    assert.equal(activation.replayed,false);
+    assert.equal(activation.effects.budgetCommitted,false);
+    assert.equal(activation.effects.providerCalled,false);
+    await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+    const state=await client.query<Record<string,unknown>>(`
+      SELECT activation.id AS activation_id,job.stage AS render_stage,job.attempts AS render_attempts,
+        job.provider_job_id,outbox.status AS outbox_status,slot.status AS slot_status,
+        reservation.state AS reservation_state,reservation.submission_state,
+        bucket.reserved_micro_usd::text,bucket.committed_micro_usd::text
+      FROM ai_media_work_activations activation
+      JOIN ai_media_budget_reservations reservation ON reservation.id=activation.budget_reservation_id
+      JOIN ai_media_render_jobs job ON job.id=activation.render_job_id
+      JOIN ai_media_outbox outbox ON outbox.id=activation.dispatch_outbox_id
+      JOIN ai_media_daily_plan_slots slot ON slot.id=activation.daily_plan_slot_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      WHERE activation.id=$1`,[activation.activation.id]);
+    assert.equal(state.rowCount,1);
+    assert.deepEqual(state.rows[0],{
+      activation_id:activation.activation.id,render_stage:"queued",render_attempts:0,provider_job_id:null,
+      outbox_status:"pending",slot_status:"queued",reservation_state:"reserved",submission_state:"not_started",
+      reserved_micro_usd:"1250000",committed_micro_usd:"0",
+    });
+
+    for (const [name,statement,params] of [
+      ["queued_render_tamper","UPDATE ai_media_render_jobs SET stage='leased' WHERE id=$1",[activation.activation.renderJobId]],
+      ["activation_update","UPDATE ai_media_work_activations SET actor_user_id='tampered' WHERE id=$1",[activation.activation.id]],
+      ["activation_delete","DELETE FROM ai_media_work_activations WHERE id=$1",[activation.activation.id]],
+    ] as const) {
+      await client.query(`SAVEPOINT ${name}`);
+      await assert.rejects(client.query(statement,[...params]));
+      await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+    }
+    await client.query("SAVEPOINT rollback_guard");
+    await assert.rejects(client.query(pr24Rollback),(error:unknown)=>
+      typeof error==="object"&&error!==null&&"code" in error&&error.code==="P0001");
+    await client.query("ROLLBACK TO SAVEPOINT rollback_guard");
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
 });
 
 integrationTest("tenant and immutable authority constraints fail closed in PostgreSQL", async () => {
@@ -480,7 +620,10 @@ integrationTest("tenant and immutable authority constraints fail closed in Postg
 });
 
 integrationTest("reservation authority remains exact and cannot be attached or rewritten", async () => {
-  await pool.query(`
+  const client=await pool.connect();
+  try {
+  await client.query("BEGIN");
+  await client.query(`
     INSERT INTO ai_media_budget_reservations
       (id,owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,provider_key,
        provider_credential_version,attempt,state,submission_state,amount_micro_usd,currency,idempotency_key,
@@ -488,19 +631,29 @@ integrationTest("reservation authority remains exact and cannot be attached or r
        content_approval_digest,human_launch_approval_digest,governance_profile_id,governance_evidence_digest,
        policy_digest,kill_switch_evidence_digest,sandbox_evidence_digest,provider_idempotency_key,
        reserved_at,expires_at,authority_snapshot_id,authority_digest)
-    VALUES ('${ids.reservation}','${OWNER}','${WORKSPACE}','${ids.bucket}','${ids.slot}','${ids.account}',
+    VALUES ('${ids.authorityReservation}','${OWNER}','${WORKSPACE}','${ids.bucket}','${ids.slot}','${ids.account}',
       'heygen',1,1,'reserved','not_started',1250000,'USD','reservation-pr21-idempotency','${digest("1")}',
       '${digest("3")}','${SCRIPT_CHECKSUM}','${digest("f")}',clock_timestamp()+interval '30 minutes',
       '${digest("c")}','${digest("d")}','${ids.governance}','${digest("2")}','${digest("7")}',
-      '${digest("a")}','${digest("e")}','provider-pr21-idempotency',clock_timestamp(),
+      '${digest("a")}','${digest("e")}','authority-provider-pr21-idempotency',clock_timestamp(),
       clock_timestamp()+interval '10 minutes','${ids.snapshot}','${digest("4")}')
   `);
 
-  await expectDatabaseError(() => pool.query(
+  await client.query("SAVEPOINT rewrite_authority");
+  await expectDatabaseError(() => client.query(
     "UPDATE ai_media_budget_reservations SET authority_digest=$1 WHERE id=$2",
-    [digest("9"), ids.reservation],
+    [digest("9"), ids.authorityReservation],
   ), "P0001");
-  await expectDatabaseError(() => pool.query(`
+  await client.query("ROLLBACK TO SAVEPOINT rewrite_authority");
+  await client.query("SAVEPOINT attach_handoff");
+  await expectDatabaseError(() => client.query(`
+    UPDATE ai_media_budget_reservations
+    SET render_job_id=$1,dispatch_outbox_id=$2,work_handoff_digest=$3
+    WHERE id=$4
+  `,[ids.renderJob,ids.outbox,digest("d"),ids.authorityReservation]),"P0001");
+  await client.query("ROLLBACK TO SAVEPOINT attach_handoff");
+  await client.query("SAVEPOINT wrong_authority");
+  await expectDatabaseError(() => client.query(`
     INSERT INTO ai_media_budget_reservations
       (owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,provider_key,
        provider_credential_version,attempt,state,submission_state,amount_micro_usd,currency,idempotency_key,
@@ -515,6 +668,11 @@ integrationTest("reservation authority remains exact and cannot be attached or r
       '${digest("e")}','provider-wrong-authority',clock_timestamp(),clock_timestamp()+interval '10 minutes',
       clock_timestamp(),'${ids.snapshot}','${digest("4")}')
   `), "23503");
+  await client.query("ROLLBACK TO SAVEPOINT wrong_authority");
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
 });
 
 integrationTest("PR23 exact held handoff is durable, non-claimable, and immutable in PostgreSQL", async () => {
@@ -524,6 +682,11 @@ integrationTest("PR23 exact held handoff is durable, non-claimable, and immutabl
   try {
     await client.query("BEGIN");
     await client.query("SET CONSTRAINTS ALL DEFERRED");
+    await client.query(`UPDATE ai_media_daily_plan_slots SET status='reserved',state_version=2
+      WHERE id='${ids.slot}'`);
+    await insertCompleteAttachedReservation(client,{
+      handoffDigest,renderJobId:ids.renderJob,outboxId:ids.outbox,idempotencyKey:"manual-held-reservation-pr23",
+    });
     await client.query(`
       INSERT INTO ai_media_render_jobs
         (id,owner_user_id,workspace_id,provider_account_id,provider_key,idempotency_key,title,status,stage,
@@ -553,12 +716,6 @@ integrationTest("PR23 exact held handoff is durable, non-claimable, and immutabl
         clock_timestamp(),clock_timestamp(),'${ids.reservation}','${ids.renderJob}','${handoffDigest}',
         '${sealedDigest}')
     `);
-    await client.query(`
-      UPDATE ai_media_budget_reservations
-      SET render_job_id='${ids.renderJob}',dispatch_outbox_id='${ids.outbox}',
-        work_handoff_digest='${handoffDigest}'
-      WHERE id='${ids.reservation}'
-    `);
     await client.query("SET CONSTRAINTS ALL IMMEDIATE");
 
     const claimable = await client.query<{ render_count: string; outbox_count: string }>(`
@@ -583,6 +740,105 @@ integrationTest("PR23 exact held handoff is durable, non-claimable, and immutabl
         await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
       }
     }
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+});
+
+integrationTest("the real PR24 repository atomically activates exact held work while budget and render stay inert", async () => {
+  const client = await pool.connect();
+  const requestJson = { influencerId:ids.influencer,script:SCRIPT_CONTENT,voiceId:ids.voice,language:"en",
+    aspectRatio:"9:16",idempotencyKey:"provider-pr21-idempotency",
+    governance:{profileId:ids.governance,evidenceDigest:digest("2")} };
+  const canonical = (value:unknown):unknown => Array.isArray(value)?value.map(canonical):value&&typeof value==="object"
+    ?Object.fromEntries(Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,entry])=>[key,canonical(entry)])):value;
+  const hash = (value:unknown) => `sha256:${createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex")}`;
+  const sealedDigest = hash({version:1,request:requestJson,reservationId:ids.reservation,renderJobId:ids.renderJob,
+    outboxId:ids.outbox,slotId:ids.slot,slotAttempt:1,authoritySnapshotId:ids.snapshot,authorityDigest:digest("4"),
+    launchIntentId:ids.launchIntent,launchIntentDigest:digest("9"),admissionDigest:digest("3"),
+    providerAccountId:ids.account,providerKey:"heygen",providerCredentialVersion:1,scriptVariantId:ids.variant,
+    scriptVariantChecksum:SCRIPT_CHECKSUM,sourceItemId:ids.sourceItem,sourceContentHash:digest("9"),
+    avatarResourceId:ids.avatar,voiceResourceId:ids.voice});
+  const handoffDigest = hash({version:1,reservationId:ids.reservation,renderJobId:ids.renderJob,outboxId:ids.outbox,
+    sealedRequestDigest:sealedDigest,authorityDigest:digest("4"),launchIntentDigest:digest("9"),admissionDigest:digest("3")}) as `sha256:${string}`;
+  try {
+    await client.query("BEGIN");
+    await client.query("SET CONSTRAINTS ALL DEFERRED");
+    await client.query(`UPDATE ai_media_budget_buckets SET reserved_micro_usd=1250000,state_version=2
+      WHERE id='${ids.bucket}'`);
+    await client.query(`UPDATE ai_media_daily_plan_slots SET status='reserved',state_version=2
+      WHERE id='${ids.slot}'`);
+    await insertCompleteAttachedReservation(client,{
+      handoffDigest,renderJobId:ids.renderJob,outboxId:ids.outbox,idempotencyKey:"manual-held-reservation-pr24",
+    });
+    await client.query(`
+      INSERT INTO ai_media_render_jobs
+        (id,owner_user_id,workspace_id,provider_account_id,provider_key,idempotency_key,title,status,stage,
+         progress,attempts,retry_count,max_attempts,request,governance_profile_id,governance_evidence_digest,
+         queued_at,available_at,created_at,updated_at,budget_reservation_id,daily_plan_slot_id,slot_attempt,
+         influencer_id,avatar_resource_id,voice_resource_id,script_id,script_variant_id,script_variant_checksum,
+         source_item_id,source_content_hash,authority_snapshot_id,authority_digest,launch_intent_id,
+         launch_intent_digest,admission_digest,work_handoff_digest,sealed_request_digest,provider_credential_version)
+      VALUES ('${ids.renderJob}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','provider-pr21-idempotency',
+        'Held render','pending','admission_held',0,0,0,3,
+        '${JSON.stringify(requestJson)}'::jsonb,
+        '${ids.governance}','${digest("2")}',clock_timestamp(),clock_timestamp(),clock_timestamp(),clock_timestamp(),
+        '${ids.reservation}','${ids.slot}',1,'${ids.influencer}','${ids.avatar}','${ids.voice}','${ids.script}',
+        '${ids.variant}','${SCRIPT_CHECKSUM}','${ids.sourceItem}','${digest("9")}','${ids.snapshot}','${digest("4")}',
+        '${ids.launchIntent}','${digest("9")}','${digest("3")}','${handoffDigest}','${sealedDigest}',1)
+    `);
+    await client.query(`
+      INSERT INTO ai_media_outbox
+        (id,owner_user_id,workspace_id,idempotency_key,aggregate_type,aggregate_id,event_type,payload,status,
+         attempts,available_at,fencing_token,created_at,updated_at,budget_reservation_id,render_job_id,
+         work_handoff_digest,sealed_request_digest)
+      VALUES ('${ids.outbox}','${OWNER}','${WORKSPACE}','provider-pr21-idempotency:dispatch','render_job',
+        '${ids.renderJob}','ai_media.render.dispatch','{"version":1}'::jsonb,'held',0,clock_timestamp(),0,
+        clock_timestamp(),clock_timestamp(),'${ids.reservation}','${ids.renderJob}','${handoffDigest}','${sealedDigest}')
+    `);
+    const dialect = new PgDialect();
+    const db: HeldWorkActivationTransactionalDatabase = {
+      async execute(_query: SQL) { throw new Error("activation must use its transaction"); },
+      async transaction<T>(callback: (tx: HeldWorkActivationDatabase) => Promise<T>): Promise<T> {
+        return callback({ execute: async (query) => {
+          const compiled = dialect.sqlToQuery(query);
+          return client.query(compiled.sql, compiled.params);
+        } });
+      },
+    };
+    const repository = new DrizzleHeldWorkActivationRepository(db, { accountingTimeZone: "UTC" });
+    const unsigned = {
+      scope: { ownerUserId: OWNER, workspaceId: WORKSPACE },
+      budgetReservationId: ids.reservation, workHandoffDigest: handoffDigest,
+      requestedBy: "operator-pr24", idempotencyKey: "activate-pr24-real-repository",
+    };
+    const result = await repository.activate({ ...unsigned, inputDigest: repository.inputDigest(unsigned),
+      principal:activationPrincipal(unsigned.requestedBy) });
+    assert.equal(result.replayed, false);
+    assert.equal(result.effects.budgetCommitted, false);
+    assert.equal(result.effects.providerCalled, false);
+    await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+
+    const state = await client.query<{
+      render_stage:string;render_attempts:number;outbox_status:string;slot_status:string;
+      reservation_state:string;submission_state:string;reserved_micro_usd:string;committed_micro_usd:string;
+    }>(`SELECT job.stage AS render_stage,job.attempts AS render_attempts,outbox.status AS outbox_status,
+      slot.status AS slot_status,reservation.state AS reservation_state,reservation.submission_state,
+      bucket.reserved_micro_usd::text,bucket.committed_micro_usd::text
+      FROM ai_media_budget_reservations reservation
+      JOIN ai_media_render_jobs job ON job.id=reservation.render_job_id
+      JOIN ai_media_outbox outbox ON outbox.id=reservation.dispatch_outbox_id
+      JOIN ai_media_daily_plan_slots slot ON slot.id=reservation.daily_plan_slot_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      WHERE reservation.id=$1`,[ids.reservation]);
+    assert.deepEqual(state.rows[0],{
+      render_stage:"queued",render_attempts:0,outbox_status:"pending",slot_status:"queued",
+      reservation_state:"reserved",submission_state:"not_started",reserved_micro_usd:"1250000",committed_micro_usd:"0",
+    });
+    await assert.rejects(client.query(`UPDATE ai_media_render_jobs SET stage='leased',attempts=1,
+      lease_owner='forbidden',lease_expires_at=clock_timestamp()+interval '1 minute' WHERE id=$1`,[ids.renderJob]),
+    );
   } finally {
     await client.query("ROLLBACK");
     client.release();
@@ -761,10 +1017,12 @@ integrationTest("application-only rollbacks preserve evidence and repeated forwa
   );
   const pr23Client = await pool.connect();
   try {
+    await assertReapplicationFails(pr23Client, pr24Forward);
     await assertReapplicationFails(pr23Client, pr23Forward);
   } finally {
     pr23Client.release();
   }
+  await pool.query(pr24Rollback);
   await pool.query(pr23Rollback);
   await pool.query(pr20Rollback);
   await pool.query(pr19Rollback);

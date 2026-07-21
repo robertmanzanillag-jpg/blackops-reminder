@@ -1284,6 +1284,13 @@ export const aiMediaRenderJobs = pgTable(
       table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
       table.workHandoffDigest, table.sealedRequestDigest,
     ),
+    activationIdentityUnique: uniqueIndex("ai_media_render_jobs_activation_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+      table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+      table.authorityDigest, table.launchIntentId, table.launchIntentDigest,
+      table.admissionDigest, table.workHandoffDigest, table.sealedRequestDigest, table.idempotencyKey,
+    ),
     governanceProfileTenantFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.governanceProfileId],
       foreignColumns: [
@@ -1312,7 +1319,7 @@ export const aiMediaRenderJobs = pgTable(
       sql`(${table.governanceProfileId} IS NULL AND ${table.governanceEvidenceDigest} IS NULL) OR (${table.governanceProfileId} IS NOT NULL AND ${table.governanceEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')`,
     ),
     admissionHeldCheck: check("ai_media_render_jobs_admission_held_ck", sql`(
-      (${table.stage}<>'admission_held' AND ${table.budgetReservationId} IS NULL
+      (${table.budgetReservationId} IS NULL
         AND ${table.dailyPlanSlotId} IS NULL AND ${table.slotAttempt} IS NULL
         AND ${table.influencerId} IS NULL AND ${table.avatarResourceId} IS NULL
         AND ${table.voiceResourceId} IS NULL AND ${table.scriptId} IS NULL
@@ -1322,7 +1329,7 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.launchIntentId} IS NULL AND ${table.launchIntentDigest} IS NULL
         AND ${table.admissionDigest} IS NULL AND ${table.workHandoffDigest} IS NULL
         AND ${table.sealedRequestDigest} IS NULL AND ${table.providerCredentialVersion} IS NULL)
-      OR (${table.stage}='admission_held' AND (
+      OR (${table.budgetReservationId} IS NOT NULL AND (
         ${table.budgetReservationId} IS NOT NULL AND ${table.dailyPlanSlotId} IS NOT NULL
         AND ${table.slotAttempt}>=1 AND ${table.influencerId} IS NOT NULL
         AND ${table.avatarResourceId} IS NOT NULL AND ${table.voiceResourceId} IS NOT NULL
@@ -1338,8 +1345,8 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ((${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL)
           OR (${table.sourceItemId} IS NOT NULL AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
-        AND ${table.status}='pending' AND ${table.attempts}=0 AND ${table.retryCount}=0
-        AND ${table.providerJobId} IS NULL
+        AND ${table.stage} IN ('admission_held','queued') AND ${table.status}='pending'
+        AND ${table.attempts}=0 AND ${table.retryCount}=0 AND ${table.providerJobId} IS NULL
         AND ${table.leaseOwner} IS NULL AND ${table.leaseExpiresAt} IS NULL
         AND isfinite(${table.availableAt}) AND isfinite(${table.queuedAt})
         AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
@@ -2098,17 +2105,17 @@ export const aiMediaOutbox = pgTable(
       table.renderJobId, table.workHandoffDigest,
     ),
     heldCheck: check("ai_media_outbox_held_ck", sql`(
-      (${table.status}<>'held' AND ${table.budgetReservationId} IS NULL AND ${table.renderJobId} IS NULL
+      (${table.budgetReservationId} IS NULL AND ${table.renderJobId} IS NULL
         AND ${table.workHandoffDigest} IS NULL AND ${table.sealedRequestDigest} IS NULL)
-      OR (${table.status}='held' AND (
-        ${table.budgetReservationId} IS NOT NULL AND ${table.renderJobId} IS NOT NULL
+      OR (${table.budgetReservationId} IS NOT NULL AND ${table.renderJobId} IS NOT NULL
         AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
-        AND ${table.attempts}=0 AND ${table.lockedAt} IS NULL AND ${table.leaseOwner} IS NULL
+        AND (${table.status}<>'held' OR (
+        ${table.attempts}=0 AND ${table.lockedAt} IS NULL AND ${table.leaseOwner} IS NULL
         AND ${table.leaseExpiresAt} IS NULL AND ${table.processedAt} IS NULL
         AND ${table.fencingToken}=0 AND ${table.deadLetterAt} IS NULL AND ${table.lastError} IS NULL
         AND isfinite(${table.availableAt}) AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
-      ))
+      )))
     )`),
     exactRenderJobFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.renderJobId,
@@ -3131,6 +3138,121 @@ export const aiMediaBudgetReservations = pgTable(
   }),
 );
 
+/**
+ * Immutable authorization evidence for the one permitted transition from an
+ * admitted-held triplet into the internal queues. Provider submission and
+ * budget commitment deliberately remain outside this PR24 boundary.
+ *
+ * The checked-in PR24 forward SQL is authoritative for the deferred
+ * final-state assertion and transition triggers, which Drizzle's table DSL
+ * cannot represent.
+ */
+export const aiMediaWorkActivations = pgTable(
+  "ai_media_work_activations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    renderJobId: uuid("render_job_id").notNull(),
+    dispatchOutboxId: uuid("dispatch_outbox_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    slotAttempt: integer("slot_attempt").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    providerIdempotencyKey: text("provider_idempotency_key").notNull(),
+    scriptVariantChecksum: text("script_variant_checksum").notNull(),
+    authoritySnapshotId: uuid("authority_snapshot_id").notNull(),
+    authorityDigest: text("authority_digest").notNull(),
+    launchIntentId: uuid("launch_intent_id").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
+    admissionDigest: text("admission_digest").notNull(),
+    workHandoffDigest: text("work_handoff_digest").notNull(),
+    sealedRequestDigest: text("sealed_request_digest").notNull(),
+    slotStateVersionBefore: integer("slot_state_version_before").notNull(),
+    slotStateVersionAfter: integer("slot_state_version_after").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    activationDigest: text("activation_digest").notNull(),
+    activatedAt: timestamp("activated_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    idempotencyUnique: uniqueIndex("ai_media_work_activations_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    reservationUnique: uniqueIndex("ai_media_work_activations_reservation_uq").on(
+      table.ownerUserId, table.workspaceId, table.budgetReservationId,
+    ),
+    lifecycleCheck: check("ai_media_work_activations_ck", sql`(
+      ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
+      AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+      AND length(btrim(${table.providerIdempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.scriptVariantChecksum} ~ '^[0-9a-f]{64}$'
+      AND ${table.authorityDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.admissionDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.slotStateVersionBefore}>=1
+      AND ${table.slotStateVersionAfter}=${table.slotStateVersionBefore}+1
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.activationDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND isfinite(${table.activatedAt}) AND isfinite(${table.createdAt})
+    )`),
+    exactReservationFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.budgetReservationId,
+        table.renderJobId, table.dispatchOutboxId, table.workHandoffDigest,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+        table.authorityDigest, table.admissionDigest, table.providerIdempotencyKey],
+      foreignColumns: [aiMediaBudgetReservations.ownerUserId, aiMediaBudgetReservations.workspaceId,
+        aiMediaBudgetReservations.id, aiMediaBudgetReservations.renderJobId,
+        aiMediaBudgetReservations.dispatchOutboxId, aiMediaBudgetReservations.workHandoffDigest,
+        aiMediaBudgetReservations.dailyPlanSlotId, aiMediaBudgetReservations.attempt,
+        aiMediaBudgetReservations.providerAccountId, aiMediaBudgetReservations.providerKey,
+        aiMediaBudgetReservations.providerCredentialVersion, aiMediaBudgetReservations.scriptVariantChecksum,
+        aiMediaBudgetReservations.authoritySnapshotId, aiMediaBudgetReservations.authorityDigest,
+        aiMediaBudgetReservations.admissionDigest, aiMediaBudgetReservations.providerIdempotencyKey],
+      name: "ai_media_work_activations_exact_reservation_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactRenderFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId, table.budgetReservationId,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.scriptVariantChecksum, table.authoritySnapshotId,
+        table.authorityDigest, table.launchIntentId, table.launchIntentDigest, table.admissionDigest,
+        table.workHandoffDigest, table.sealedRequestDigest, table.providerIdempotencyKey],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId, aiMediaRenderJobs.id,
+        aiMediaRenderJobs.budgetReservationId, aiMediaRenderJobs.dailyPlanSlotId,
+        aiMediaRenderJobs.slotAttempt, aiMediaRenderJobs.providerAccountId, aiMediaRenderJobs.providerKey,
+        aiMediaRenderJobs.providerCredentialVersion, aiMediaRenderJobs.scriptVariantChecksum,
+        aiMediaRenderJobs.authoritySnapshotId, aiMediaRenderJobs.authorityDigest,
+        aiMediaRenderJobs.launchIntentId, aiMediaRenderJobs.launchIntentDigest,
+        aiMediaRenderJobs.admissionDigest, aiMediaRenderJobs.workHandoffDigest,
+        aiMediaRenderJobs.sealedRequestDigest, aiMediaRenderJobs.idempotencyKey],
+      name: "ai_media_work_activations_exact_render_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactOutboxFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dispatchOutboxId,
+        table.budgetReservationId, table.renderJobId, table.workHandoffDigest],
+      foreignColumns: [aiMediaOutbox.ownerUserId, aiMediaOutbox.workspaceId, aiMediaOutbox.id,
+        aiMediaOutbox.budgetReservationId, aiMediaOutbox.renderJobId, aiMediaOutbox.workHandoffDigest],
+      name: "ai_media_work_activations_exact_outbox_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactSlotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
+        table.providerAccountId, table.providerKey, table.providerCredentialVersion],
+      foreignColumns: [aiMediaDailyPlanSlots.ownerUserId, aiMediaDailyPlanSlots.workspaceId,
+        aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.providerAccountId,
+        aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion],
+      name: "ai_media_work_activations_exact_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
 export const aiMediaStudioTables = {
   influencers: aiMediaInfluencers,
   scripts: aiMediaScripts,
@@ -3161,6 +3283,7 @@ export const aiMediaStudioTables = {
   launchEvidence: aiMediaLaunchEvidence,
   launchAuthoritySnapshots: aiMediaLaunchAuthoritySnapshots,
   budgetReservations: aiMediaBudgetReservations,
+  workActivations: aiMediaWorkActivations,
   sourceItems: aiMediaSourceItems,
   orchestrationRuns: aiMediaOrchestrationRuns,
   outbox: aiMediaOutbox,
