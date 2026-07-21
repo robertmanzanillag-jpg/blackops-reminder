@@ -185,3 +185,35 @@ Intentionally not done:
 - No migration was applied, no external content was posted and no deployment was requested.
 
 Next safe slice: implement separate envelope-encrypted S3/KMS authorization-code and token-vault adapters plus immutable sandbox provider connectors; then add refresh, revocation and reconciliation. Routes remain blocked until provider sandbox proof and the normal checker/App QA gates pass.
+
+## PR13 checkpoint — encrypted OAuth code and token vaults
+
+GitHub PR: #89, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/89`.
+
+Branch: `codex/ai-media-studio-encrypted-oauth-vaults`, stacked on PR #88.
+
+Implemented:
+
+- Added the official AWS KMS client dependency.
+- Added a shared envelope layer using one fresh KMS `AES_256` data key per object, AES-256-GCM with a random 12-byte IV, full canonical context as AAD, a digest-only KMS encryption context and zeroization of plaintext data-key buffers.
+- Added separate deterministic authorization-code and token vaults. Both use application ciphertext plus S3 SSE-KMS, Bucket Keys, `IfNoneMatch: "*"`, exact expected bucket owner, pinned official S3/KMS endpoints, bounded strict envelopes and generic errors.
+- Code bindings include tenant, workspace, actor, provider account/platform, session, token binding, code digest and expiry. Reads recheck expiry after S3/KMS I/O.
+- Token bindings additionally include target credential version. Descriptor and bundle are authenticated together; the callback saga gets no secret-reader capability.
+- Exact retries recover after a 412 or ambiguous write; competing payloads, cross-context reads, raw/gateway 404s, `NoSuchBucket`, AEAD tampering, metadata collisions and KMS failures fail closed.
+
+Evidence before GitHub preservation:
+
+- Adapter tests: 13/13 passed.
+- Adapter plus saga focused tests: 24/24 passed.
+- Full AI Media Studio suite: authoritative unrestricted run passed 414/414.
+- TypeScript and diff hygiene passed.
+- `npm audit --omit=dev --audit-level=high` reached the registry and reported 16 advisories (7 high, 7 moderate, 2 low). Every reported package already exists in the PR12 base lockfile and none is the new AWS KMS client; remediation requires a separate tested dependency PR, including breaking Drizzle/Google upgrades where indicated. This is not production-clearance evidence.
+- Independent checker and security recheck reported no remaining P0-P3 blockers.
+- Static App QA passed 69/69 OAuth regressions with zero warnings and confirmed no route, UI, timer, migration, automatic network call or deployment surface.
+
+Explicit pre-runtime blockers:
+
+- The token-reader split is an API capability boundary, not yet a separate IAM role/service.
+- Dedicated secret buckets/CMKs, unversioned-or-VersionId-aware deletion, Block Public Access, lifecycle, durable reconciliation, monitoring and key rotation are not configured or proven.
+- Real connectors remain blocked by the target-selection, token-role, lifetime, scope/capability and multi-stage recovery changes captured in `oauth-provider-readiness.md`.
+- No route is mounted, no migration is applied, no AWS/provider call is made, no content is posted and no deployment is authorized.

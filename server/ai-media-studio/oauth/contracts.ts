@@ -175,6 +175,7 @@ export type OAuthTokenVaultContext = Readonly<{
   purpose: "ai_media_oauth_token";
   ownerUserId: string;
   workspaceId: string;
+  actorUserId: string;
   providerAccountId: string;
   platform: AiMediaOAuthPlatform;
   sessionId: string;
@@ -190,6 +191,9 @@ export interface OAuthTokenVault {
   find(context: OAuthTokenVaultContext): Promise<OAuthTokenVaultRecord | undefined>;
   readDescriptor(reference: string, context: OAuthTokenVaultContext): Promise<OAuthSafeTokenDescriptor>;
   delete(reference: string, context: OAuthTokenVaultContext): Promise<void>;
+}
+export interface OAuthTokenSecretReader {
+  readBundle(reference: string, context: OAuthTokenVaultContext): Promise<OAuthSecretTokenBundle>;
 }
 
 export type OAuthVaultContext = Readonly<{

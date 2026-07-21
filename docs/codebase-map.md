@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T06:30:38.834Z
+Generated: 2026-07-21T07:10:20.477Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 639 | 550 | 2193 | 487 | 10300 |
+| 645 | 554 | 2211 | 487 | 10393 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,13 +30,13 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 119 | 115 | test:119 |
-| `server/ai-media-studio` | 96 | 95 | server:96 |
+| `tests` | 121 | 116 | test:121 |
+| `server/ai-media-studio` | 99 | 97 | server:99 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs` | 12 | 11 | docs:12 |
-| `docs/ai-media-studio` | 9 | 9 | docs:9 |
+| `docs/ai-media-studio` | 10 | 10 | docs:10 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `shared` | 7 | 7 | shared:7 |
 | `client/public` | 13 | 2 | other:13 |
@@ -82,6 +82,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-oauth-authorization-url.test.ts`
 - `tests/ai-media-studio-oauth-crypto.test.ts`
 - `tests/ai-media-studio-oauth-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts`
+- `tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-vault.test.ts`
 - `tests/ai-media-studio-oauth-service.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
