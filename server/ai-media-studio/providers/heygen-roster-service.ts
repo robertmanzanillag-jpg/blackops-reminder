@@ -4,6 +4,7 @@ import {
   type ConfigureHeyGenRosterResponse,
   type CreateHeyGenRosterRequest,
   type HeyGenRosterStatus,
+  type HeyGenRosterDailyPlan,
 } from "../../../shared/ai-media-studio-heygen-roster";
 import type { TenantScope } from "../core/resource-domain";
 import {
@@ -70,7 +71,20 @@ export class HeyGenRosterService {
     private readonly repository: HeyGenRosterRepository,
     private readonly accountResolver: HeyGenRosterAccountResolver,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly accountingTimeZone = "UTC",
   ) {}
+
+  private trustedTimeZone(): string {
+    try {
+      if (typeof this.accountingTimeZone !== "string" || this.accountingTimeZone.length > 80
+        || new Intl.DateTimeFormat("en-US", { timeZone: this.accountingTimeZone }).resolvedOptions().timeZone !== this.accountingTimeZone) {
+        throw new Error("invalid zone");
+      }
+      return this.accountingTimeZone;
+    } catch {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+  }
 
   private async resolveActiveAccount(scope: TenantScope): Promise<HeyGenResolvedAccountContext> {
     let account;
@@ -90,7 +104,7 @@ export class HeyGenRosterService {
     record: HeyGenRosterRecord,
     account: HeyGenResolvedAccountContext,
   ): void {
-    if (record.providerAccountId !== account.providerAccountId || record.credentialVersion > account.credentialVersion) {
+    if (record.providerAccountId !== account.providerAccountId || record.credentialVersion !== account.credentialVersion) {
       throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
     }
   }
@@ -117,6 +131,7 @@ export class HeyGenRosterService {
         idempotencyKey: request.idempotencyKey,
         members,
         configuredAt: this.now(),
+        accountingTimeZone: this.trustedTimeZone(),
       });
       return { roster: toHeyGenRosterStatus(record) };
     } catch (error) {
@@ -147,6 +162,25 @@ export class HeyGenRosterService {
       if (record) this.assertRecordMatchesActiveAccount(record, account);
       return record ? toHeyGenRosterStatus(record) : undefined;
     } catch {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+  }
+
+  async currentDailyPlan(scope: TenantScope): Promise<HeyGenRosterDailyPlan | undefined> {
+    if (!validScope(scope)) throw new HeyGenRosterError("INVALID_REQUEST");
+    const account = await this.resolveActiveAccount(scope);
+    try {
+      const plan = await this.repository.getCurrentDailyPlan(scope);
+      const roster = await this.repository.getCurrent(scope);
+      if (!plan && !roster) return undefined;
+      if (!plan || !roster) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      this.assertRecordMatchesActiveAccount(roster, account);
+      if (plan.rosterId !== roster.rosterId || plan.timeZone !== this.trustedTimeZone()) {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      }
+      return plan;
+    } catch (error) {
+      if (error instanceof HeyGenRosterError) throw error;
       throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
     }
   }

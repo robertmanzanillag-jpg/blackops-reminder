@@ -2,17 +2,24 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import {
   aiMediaInfluencers,
+  aiMediaDailyPlans,
+  aiMediaDailyPlanSlots,
   aiMediaProviderAccounts,
   aiMediaProviderResources,
 } from "../../../shared/models/ai-media-studio-db";
 import {
+  HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS,
+  HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
   createHeyGenRosterMemberSchema,
   createHeyGenRosterRequestSchema,
+  heyGenRosterDailyPlanSchema,
+  type HeyGenRosterDailyPlan,
 } from "../../../shared/ai-media-studio-heygen-roster";
 import type { TenantScope } from "../core/resource-domain";
 import {
   HeyGenRosterError,
   type ConfigureHeyGenRosterRecord,
+  type HeyGenRosterConfigurationInput,
   type HeyGenResolvedAccountContext,
   type HeyGenRosterAccountResolver,
   type HeyGenRosterNativeMember,
@@ -68,6 +75,24 @@ function validDate(value: string): boolean {
   return Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 }
 
+function iso(value: unknown): string {
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  if (!Number.isFinite(parsed.getTime())) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+  return parsed.toISOString();
+}
+
+function canonicalTimeZone(value: string): string {
+  try {
+    if (typeof value !== "string" || value.length > 80
+      || new Intl.DateTimeFormat("en-US", { timeZone: value }).resolvedOptions().timeZone !== value) {
+      throw new Error("invalid zone");
+    }
+    return value;
+  } catch {
+    throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+  }
+}
+
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
@@ -83,6 +108,18 @@ function digestMembers(members: readonly HeyGenRosterNativeMember[]): string {
 
 function opaqueId(prefix: "roster" | "member", seed: string): string {
   return `${prefix}_${createHash("sha256").update(seed).digest("hex").slice(0, 24)}`;
+}
+
+function publicPlanKey(rosterId: string, planDate: string, timeZone: string): string {
+  return `plan_${createHash("sha256").update(`${rosterId}\0${planDate}\0${timeZone}`).digest("hex").slice(0, 24)}`;
+}
+
+function publicSlotKey(planKey: string, memberId: string, videoNumber: number): string {
+  return `slot_${createHash("sha256").update(`${planKey}\0${memberId}\0${videoNumber}`).digest("hex").slice(0, 24)}`;
+}
+
+function sha256(value: unknown): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
 
 function opaqueResourceKey(kind: "avatar" | "voice", seed: string): string {
@@ -257,7 +294,7 @@ async function createInfluencer(input: {
   member: HeyGenRosterNativeMember;
   avatarResourceId: string;
   voiceResourceId: string;
-}): Promise<void> {
+}): Promise<string> {
   const { tx, scope, rosterId, member, avatarResourceId, voiceResourceId } = input;
   const influencerId = randomUUID();
   const slug = `heygen-${member.memberId.slice("member_".length)}`;
@@ -275,7 +312,7 @@ async function createInfluencer(input: {
       ${JSON.stringify(persona)}::jsonb, ${voiceResourceId}, ${avatarResourceId}, clock_timestamp(), clock_timestamp()
     ) ON CONFLICT (owner_user_id, workspace_id, slug) DO NOTHING RETURNING id
   `))[0];
-  if (inserted) return;
+  if (inserted) return text(inserted, "id", "id");
 
   const existing = rows(await tx.execute(sql`
     SELECT id, persona FROM ${aiMediaInfluencers}
@@ -297,6 +334,7 @@ async function createInfluencer(input: {
     RETURNING id
   `))[0];
   if (!updated) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+  return text(updated, "id", "id");
 }
 
 /** Resolves exactly one usable HeyGen account without selecting configuration or secret material. */
@@ -329,8 +367,9 @@ export function createDrizzleHeyGenRosterAccountResolver(db: HeyGenRosterExecuto
 export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
   constructor(private readonly db: HeyGenRosterDatabase) {}
 
-  async configure(input: ConfigureHeyGenRosterRecord): Promise<HeyGenRosterRecord> {
+  async configure(input: HeyGenRosterConfigurationInput): Promise<HeyGenRosterRecord> {
     return this.db.transaction(async (tx) => {
+      const accountingTimeZone = canonicalTimeZone(input.accountingTimeZone);
       const account = rows(await tx.execute(sql`
         SELECT id, credential_version, configuration
         FROM ${aiMediaProviderAccounts}
@@ -345,33 +384,122 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
       const replay = parsed.records.get(input.rosterId);
       if (replay) {
         if (!sameReplay(replay, input)) throw new HeyGenRosterError("IDEMPOTENCY_CONFLICT");
+        const durableReplay = await this.loadDailyPlan(tx, replay, accountingTimeZone);
+        if (!durableReplay) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
         return replay;
       }
       if (parsed.records.size >= MAX_DURABLE_ROSTERS_PER_ACCOUNT) {
         throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
       }
 
-      for (const member of input.members) {
+      const clock = rows(await tx.execute(sql`
+        SELECT observed_at, (observed_at AT TIME ZONE ${accountingTimeZone})::date::text AS plan_date
+        FROM (SELECT clock_timestamp() AS observed_at) fresh_clock
+      `))[0];
+      if (!clock) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      const configuredAt = iso(clock.observed_at ?? clock.observedAt);
+      const planDate = text(clock, "planDate", "plan_date");
+      if (!/^\d{4}-\d{2}-\d{2}$/u.test(planDate)) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      const record: ConfigureHeyGenRosterRecord = {
+        scope: { ...input.scope }, providerAccountId: input.providerAccountId,
+        credentialVersion: input.credentialVersion, rosterId: input.rosterId,
+        requestDigest: input.requestDigest, idempotencyKey: input.idempotencyKey,
+        members: input.members.map((member) => ({ ...member })), configuredAt,
+      };
+      const bindings: Array<{
+        member: HeyGenRosterNativeMember;
+        avatarResourceId: string;
+        voiceResourceId: string;
+        influencerId: string;
+      }> = [];
+      for (const member of record.members) {
         const avatarResourceId = await upsertResource({
-          tx, scope: input.scope, providerAccountId: input.providerAccountId,
-          rosterId: input.rosterId, member, kind: "avatar", externalId: member.avatarId,
+          tx, scope: record.scope, providerAccountId: record.providerAccountId,
+          rosterId: record.rosterId, member, kind: "avatar", externalId: member.avatarId,
         });
         const voiceResourceId = await upsertResource({
-          tx, scope: input.scope, providerAccountId: input.providerAccountId,
-          rosterId: input.rosterId, member, kind: "voice", externalId: member.voiceId,
+          tx, scope: record.scope, providerAccountId: record.providerAccountId,
+          rosterId: record.rosterId, member, kind: "voice", externalId: member.voiceId,
         });
-        await createInfluencer({
-          tx, scope: input.scope, rosterId: input.rosterId, member,
+        const influencerId = await createInfluencer({
+          tx, scope: record.scope, rosterId: record.rosterId, member,
           avatarResourceId, voiceResourceId,
         });
+        if (!avatarResourceId || !voiceResourceId || !influencerId) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+        bindings.push({ member, avatarResourceId, voiceResourceId, influencerId });
+      }
+
+      const plannedSlotCount = bindings.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR;
+      if (bindings.length < 5 || bindings.length > 10 || plannedSlotCount < 50 || plannedSlotCount > 100) {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      }
+      const planKey = publicPlanKey(record.rosterId, planDate, accountingTimeZone);
+      const planDigest = sha256({
+        rosterId: record.rosterId, rosterDigest: record.requestDigest, planDate,
+        accountingTimeZone, members: record.members.map((member) => member.memberId),
+        videosPerAvatar: HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
+      });
+      const planUuid = randomUUID();
+      const insertedPlan = rows(await tx.execute(sql`
+        INSERT INTO ${aiMediaDailyPlans} (
+          id, owner_user_id, workspace_id, public_plan_key, provider_account_id, provider_key,
+          provider_credential_version, source_roster_key, source_roster_digest, plan_date,
+          accounting_time_zone, status, planned_slot_count, idempotency_key, input_digest,
+          plan_digest, created_at, updated_at, terminal_at
+        ) VALUES (
+          ${planUuid}, ${record.scope.ownerUserId}, ${record.scope.workspaceId}, ${planKey},
+          ${record.providerAccountId}, 'heygen', ${record.credentialVersion}, ${record.rosterId},
+          ${record.requestDigest}, ${planDate}::date, ${accountingTimeZone}, 'blocked', ${plannedSlotCount},
+          ${`heygen-roster-plan:${record.rosterId}`}, ${record.requestDigest}, ${planDigest},
+          ${configuredAt}::timestamptz, ${configuredAt}::timestamptz, NULL
+        ) RETURNING id
+      `))[0];
+      if (!insertedPlan || text(insertedPlan, "id", "id") !== planUuid) {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      }
+
+      let insertedSlotCount = 0;
+      const memberSlotCounts = new Map<string, number>();
+      for (const binding of bindings) {
+        for (let videoNumber = 1; videoNumber <= HEYGEN_ROSTER_VIDEOS_PER_AVATAR; videoNumber += 1) {
+          const slotKey = publicSlotKey(planKey, binding.member.memberId, videoNumber);
+          const slotDigest = sha256({
+            planKey, rosterId: record.rosterId, memberId: binding.member.memberId, videoNumber,
+            influencerId: binding.influencerId, avatarResourceId: binding.avatarResourceId,
+            voiceResourceId: binding.voiceResourceId,
+          });
+          const slotUuid = randomUUID();
+          const insertedSlot = rows(await tx.execute(sql`
+            INSERT INTO ${aiMediaDailyPlanSlots} (
+              id, owner_user_id, workspace_id, public_slot_key, daily_plan_id, provider_account_id,
+              provider_key, provider_credential_version, source_member_key, influencer_id,
+              avatar_resource_id, voice_resource_id, script_variant_id, video_number, status,
+              slot_digest, state_version, created_at, updated_at
+            ) VALUES (
+              ${slotUuid}, ${record.scope.ownerUserId}, ${record.scope.workspaceId}, ${slotKey}, ${planUuid},
+              ${record.providerAccountId}, 'heygen', ${record.credentialVersion}, ${binding.member.memberId},
+              ${binding.influencerId}, ${binding.avatarResourceId}, ${binding.voiceResourceId}, NULL,
+              ${videoNumber}, 'blocked', ${slotDigest}, 1, ${configuredAt}::timestamptz, ${configuredAt}::timestamptz
+            ) RETURNING id
+          `))[0];
+          if (!insertedSlot || text(insertedSlot, "id", "id") !== slotUuid) {
+            throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+          }
+          insertedSlotCount += 1;
+          memberSlotCounts.set(binding.member.memberId, (memberSlotCounts.get(binding.member.memberId) ?? 0) + 1);
+        }
+      }
+      if (insertedSlotCount !== plannedSlotCount || memberSlotCounts.size !== bindings.length
+        || [...memberSlotCounts.values()].some((count) => count !== HEYGEN_ROSTER_VIDEOS_PER_AVATAR)) {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
       }
 
       const nextNamespace: StoredRosterNamespace = {
         version: 1,
-        activeRosterId: input.rosterId,
+        activeRosterId: record.rosterId,
         rosters: {
           ...Object.fromEntries([...parsed.records].map(([key, value]) => [key, stored(value)])),
-          [input.rosterId]: stored(input),
+          [record.rosterId]: stored(record),
         },
       };
       const updated = rows(await tx.execute(sql`
@@ -385,7 +513,9 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
         RETURNING id
       `))[0];
       if (!updated) throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
-      return { ...input, scope: { ...input.scope }, members: input.members.map((member) => ({ ...member })) };
+      const durable = await this.loadDailyPlan(tx, record, accountingTimeZone);
+      if (!durable || durable.slots.length !== plannedSlotCount) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      return record;
     });
   }
 
@@ -404,6 +534,142 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
     return this.requireAccountBinding(account, record);
   }
 
+  async getCurrentDailyPlan(scope: TenantScope): Promise<HeyGenRosterDailyPlan | undefined> {
+    const account = await this.activeAccount(scope);
+    if (!account) return undefined;
+    const parsed = parseNamespace(account.configuration, scope);
+    const record = parsed.namespace ? parsed.records.get(parsed.namespace.activeRosterId) : undefined;
+    const bound = this.requireAccountBinding(account, record);
+    if (!bound) return undefined;
+    const planRows = rows(await this.db.execute(sql`
+      SELECT accounting_time_zone FROM ${aiMediaDailyPlans}
+      WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
+        AND provider_account_id=${bound.providerAccountId} AND provider_key='heygen'
+        AND provider_credential_version=${bound.credentialVersion} AND source_roster_key=${bound.rosterId}
+      LIMIT 2
+    `));
+    if (planRows.length !== 1) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    return this.loadDailyPlan(this.db, bound, text(planRows[0], "accountingTimeZone", "accounting_time_zone"));
+  }
+
+  private async loadDailyPlan(
+    executor: HeyGenRosterExecutor,
+    roster: HeyGenRosterRecord,
+    unsafeTimeZone: string,
+  ): Promise<HeyGenRosterDailyPlan | undefined> {
+    const timeZone = canonicalTimeZone(unsafeTimeZone);
+    const result = rows(await executor.execute(sql`
+      SELECT plans.id AS daily_plan_id, plans.public_plan_key, plans.source_roster_key,
+        plans.source_roster_digest, plans.plan_date::text AS plan_date,
+        plans.accounting_time_zone, plans.status AS plan_status, plans.planned_slot_count,
+        plans.plan_digest, plans.created_at,
+        slots.public_slot_key, slots.source_member_key, slots.video_number,
+        slots.status AS slot_status, slots.slot_digest, slots.influencer_id,
+        slots.avatar_resource_id, slots.voice_resource_id, influencers.name AS creator_name,
+        avatars.external_resource_id AS avatar_external_id,
+        voices.external_resource_id AS voice_external_id
+      FROM ${aiMediaDailyPlans} plans
+      INNER JOIN ${aiMediaDailyPlanSlots} slots
+        ON slots.owner_user_id=plans.owner_user_id AND slots.workspace_id=plans.workspace_id
+        AND slots.daily_plan_id=plans.id AND slots.provider_account_id=plans.provider_account_id
+        AND slots.provider_key=plans.provider_key
+        AND slots.provider_credential_version=plans.provider_credential_version
+      INNER JOIN ${aiMediaInfluencers} influencers
+        ON influencers.owner_user_id=slots.owner_user_id AND influencers.workspace_id=slots.workspace_id
+        AND influencers.id=slots.influencer_id
+        AND influencers.persona->>'source'='heygen_roster'
+        AND influencers.persona->>'rosterId'=plans.source_roster_key
+        AND influencers.persona->>'memberId'=slots.source_member_key
+        AND influencers.default_avatar_resource_id=slots.avatar_resource_id
+        AND influencers.default_voice_resource_id=slots.voice_resource_id
+      INNER JOIN ${aiMediaProviderResources} avatars
+        ON avatars.owner_user_id=slots.owner_user_id AND avatars.workspace_id=slots.workspace_id
+        AND avatars.provider_account_id=slots.provider_account_id AND avatars.provider_key=slots.provider_key
+        AND avatars.id=slots.avatar_resource_id AND avatars.resource_type='avatar'
+      INNER JOIN ${aiMediaProviderResources} voices
+        ON voices.owner_user_id=slots.owner_user_id AND voices.workspace_id=slots.workspace_id
+        AND voices.provider_account_id=slots.provider_account_id AND voices.provider_key=slots.provider_key
+        AND voices.id=slots.voice_resource_id AND voices.resource_type='voice'
+      WHERE plans.owner_user_id=${roster.scope.ownerUserId} AND plans.workspace_id=${roster.scope.workspaceId}
+        AND plans.provider_account_id=${roster.providerAccountId} AND plans.provider_key='heygen'
+        AND plans.provider_credential_version=${roster.credentialVersion}
+        AND plans.source_roster_key=${roster.rosterId} AND plans.source_roster_digest=${roster.requestDigest}
+        AND plans.accounting_time_zone=${timeZone} AND plans.status='blocked' AND slots.status='blocked'
+      ORDER BY slots.source_member_key ASC, slots.video_number ASC
+    `));
+    if (result.length === 0) return undefined;
+    const first = result[0];
+    const planKey = text(first, "publicPlanKey", "public_plan_key");
+    const planDate = text(first, "planDate", "plan_date");
+    const createdAt = iso(first.createdAt ?? first.created_at);
+    const plannedSlotCount = number(first, "plannedSlotCount", "planned_slot_count");
+    const expectedPlanDigest = sha256({
+      rosterId: roster.rosterId, rosterDigest: roster.requestDigest, planDate,
+      accountingTimeZone: timeZone, members: roster.members.map((member) => member.memberId),
+      videosPerAvatar: HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
+    });
+    if (planKey !== publicPlanKey(roster.rosterId, planDate, timeZone)
+      || text(first, "sourceRosterKey", "source_roster_key") !== roster.rosterId
+      || text(first, "sourceRosterDigest", "source_roster_digest") !== roster.requestDigest
+      || text(first, "planStatus", "plan_status") !== "blocked"
+      || text(first, "planDigest", "plan_digest") !== expectedPlanDigest
+      || plannedSlotCount !== roster.members.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR
+      || result.length !== plannedSlotCount) {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+    const memberOrder = new Map(roster.members.map((member, index) => [member.memberId, index]));
+    const seen = new Set<string>();
+    const memberCounts = new Map<string, Set<number>>();
+    const slots = result.map((row) => {
+      if (text(row, "publicPlanKey", "public_plan_key") !== planKey
+        || text(row, "sourceRosterKey", "source_roster_key") !== roster.rosterId
+        || text(row, "planStatus", "plan_status") !== "blocked"
+        || text(row, "slotStatus", "slot_status") !== "blocked") {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      }
+      const memberId = text(row, "sourceMemberKey", "source_member_key");
+      const member = roster.members.find((candidate) => candidate.memberId === memberId);
+      const videoNumber = number(row, "videoNumber", "video_number");
+      const currentSlotKey = text(row, "publicSlotKey", "public_slot_key");
+      const expectedSlotDigest = sha256({
+        planKey, rosterId: roster.rosterId, memberId, videoNumber,
+        influencerId: text(row, "influencerId", "influencer_id"),
+        avatarResourceId: text(row, "avatarResourceId", "avatar_resource_id"),
+        voiceResourceId: text(row, "voiceResourceId", "voice_resource_id"),
+      });
+      if (!member || text(row, "creatorName", "creator_name") !== member.name
+        || text(row, "avatarExternalId", "avatar_external_id") !== member.avatarId
+        || text(row, "voiceExternalId", "voice_external_id") !== member.voiceId
+        || !Number.isInteger(videoNumber) || videoNumber < 1 || videoNumber > HEYGEN_ROSTER_VIDEOS_PER_AVATAR
+        || currentSlotKey !== publicSlotKey(planKey, memberId, videoNumber)
+        || text(row, "slotDigest", "slot_digest") !== expectedSlotDigest
+        || seen.has(currentSlotKey)) {
+        throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+      }
+      seen.add(currentSlotKey);
+      const memberVideos = memberCounts.get(memberId) ?? new Set<number>();
+      memberVideos.add(videoNumber);
+      memberCounts.set(memberId, memberVideos);
+      return {
+        slotId: currentSlotKey, planId: planKey, rosterId: roster.rosterId, memberId,
+        creatorName: member.name, videoNumber, status: "not_queued" as const,
+        blockers: [...HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS],
+      };
+    }).sort((left, right) => (memberOrder.get(left.memberId)! - memberOrder.get(right.memberId)!)
+      || left.videoNumber - right.videoNumber);
+    if (memberCounts.size !== roster.members.length
+      || [...memberCounts.values()].some((videos) => videos.size !== HEYGEN_ROSTER_VIDEOS_PER_AVATAR)) {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+    return heyGenRosterDailyPlanSchema.parse({
+      planId: planKey, rosterId: roster.rosterId, planDate, timeZone,
+      status: "blocked_before_generation", avatarCount: roster.members.length,
+      videosPerAvatar: HEYGEN_ROSTER_VIDEOS_PER_AVATAR, plannedVideoCount: plannedSlotCount,
+      canGenerate: false, noSpendGuarantee: true, generatedAt: createdAt,
+      blockers: [...HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS], slots,
+    });
+  }
+
   private requireAccountBinding(
     account: Record<string, unknown>,
     record: HeyGenRosterRecord | undefined,
@@ -411,7 +677,7 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
     if (!record) return undefined;
     const accountId = text(account, "id", "id");
     const credentialVersion = number(account, "credentialVersion", "credential_version");
-    if (record.providerAccountId !== accountId || record.credentialVersion > credentialVersion) {
+    if (record.providerAccountId !== accountId || record.credentialVersion !== credentialVersion) {
       throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
     }
     return record;

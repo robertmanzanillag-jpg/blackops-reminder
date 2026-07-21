@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-21T23:03:18.396Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr1-chain`
+Generated: 2026-07-21T23:38:25.073Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-roster-plan-bridge`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 774 | 646 | 2639 | 491 | 12601 |
+| 775 | 647 | 2653 | 491 | 12699 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,7 +29,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 176 | 167 | test:176 |
+| `tests` | 177 | 168 | test:177 |
 | `client/src` | 153 | 151 | ui-component:55, other:43, client-page:24, client-component:21 |
 | `server/ai-media-studio` | 137 | 130 | server:137 |
 | `server` | 96 | 92 | server:96 |
@@ -90,6 +90,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts`
 - `tests/ai-media-studio-heygen-roster-daily-plan.test.ts`
 - `tests/ai-media-studio-heygen-roster-drizzle.test.ts`
+- `tests/ai-media-studio-heygen-roster-plan-postgres.test.ts`
 - `tests/ai-media-studio-heygen-roster-routes.test.ts`
 - `tests/ai-media-studio-heygen-roster-service.test.ts`
 - `tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts`
