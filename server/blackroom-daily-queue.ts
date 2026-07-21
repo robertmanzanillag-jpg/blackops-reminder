@@ -1,7 +1,8 @@
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { BlackRoomRemoteCommand } from "./blackroom-chat";
 
-export const BLACKROOM_QUEUE_VERSION = 2;
+export const BLACKROOM_QUEUE_VERSION = 3;
 export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.json";
 export const BLACKROOM_DEFAULT_BUFFER_DAYS = 7;
 export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 10;
@@ -65,6 +66,10 @@ export interface BlackRoomQueueState {
   updatedAt: string;
   jobs: BlackRoomDailyJob[];
   sourceHistory: BlackRoomSourceUsage[];
+  appliedCommandIds: string[];
+  prioritySources: Array<{ id: string; url: string; videoId: string | null; status: "pending" | "used"; createdAt: string }>;
+  extraPostsByDate: Record<string, number>;
+  adHocExtraDates: string[];
 }
 
 function iso(now: Date): string {
@@ -123,6 +128,10 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
     updatedAt: iso(now),
     jobs: [],
     sourceHistory: [],
+    appliedCommandIds: [],
+    prioritySources: [],
+    extraPostsByDate: {},
+    adHocExtraDates: [],
   };
 }
 
@@ -165,6 +174,119 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
   };
 }
 
+function youtubeVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes("youtu.be")) return parsed.pathname.split("/").filter(Boolean)[0] || null;
+    if (parsed.pathname.startsWith("/shorts/")) return parsed.pathname.split("/")[2] || null;
+    return parsed.searchParams.get("v");
+  } catch { return null; }
+}
+
+function resizeJob(state: BlackRoomQueueState, job: BlackRoomDailyJob, posts: number): void {
+  const count = Math.max(1, Math.min(20, Math.floor(posts)));
+  if (count > 16) {
+    job.slots = buildRotatingSlots({ dayIndex: 0, posts: count, intervalMinutes: 60, timezone: state.timezone });
+  }
+  if (job.slots.length > count) job.slots = job.slots.slice(0, count);
+  const existing = new Set(job.slots.map((slot) => slot.localTime));
+  while (job.slots.length < count) {
+    const previous = job.slots.at(-1)?.localTime || "23:00";
+    const [hours, minutes] = previous.split(":").map(Number);
+    let nextMinutes = hours * 60 + minutes + state.intervalMinutes;
+    let candidate = minutesToTime(nextMinutes);
+    while (existing.has(candidate)) { nextMinutes += state.intervalMinutes; candidate = minutesToTime(nextMinutes); }
+    existing.add(candidate);
+    job.slots.push({ localTime: candidate, timezone: state.timezone });
+  }
+  job.requirements.posts = count;
+  job.requirements.djs = Math.min(5, count);
+  job.requirements.postsPerDj = Math.ceil(count / job.requirements.djs);
+  job.updatedAt = state.updatedAt;
+}
+
+function buildFutureSameDaySlots(now: Date, posts: number, intervalMinutes: number, timezone: string) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  const currentMinutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const first = Math.ceil((currentMinutes + 15) / 15) * 15;
+  const slots = Array.from({ length: posts }, (_, index) => first + index * intervalMinutes);
+  if (slots.some((minutes) => minutes >= 1440)) throw new Error(`No caben ${posts} publicaciones adicionales hoy con ${intervalMinutes} minutos de separación`);
+  return slots.map((minutes) => ({ localTime: minutesToTime(minutes), timezone }));
+}
+
+function appendFutureSameDaySlots(
+  now: Date,
+  existing: Array<{ localTime: string; timezone: string }>,
+  posts: number,
+  intervalMinutes: number,
+  timezone: string,
+) {
+  const seed = buildFutureSameDaySlots(now, 1, intervalMinutes, timezone)[0].localTime;
+  const [seedHour, seedMinute] = seed.split(":").map(Number);
+  const lastExisting = existing.reduce((latest, slot) => {
+    const [hours, minutes] = slot.localTime.split(":").map(Number);
+    return Math.max(latest, hours * 60 + minutes);
+  }, -intervalMinutes);
+  const first = Math.max(seedHour * 60 + seedMinute, lastExisting + intervalMinutes);
+  const minutes = Array.from({ length: posts }, (_, index) => first + index * intervalMinutes);
+  if (minutes.some((value) => value >= 1440)) throw new Error(`No caben ${posts} publicaciones adicionales hoy con ${intervalMinutes} minutos de separación`);
+  return minutes.map((value) => ({ localTime: minutesToTime(value), timezone }));
+}
+
+export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, commands: BlackRoomRemoteCommand[], now = new Date()): number {
+  const applied = new Set(state.appliedCommandIds);
+  let changes = 0;
+  for (const command of commands) {
+    if (!command?.id || applied.has(command.id)) continue;
+    if (command.type === "daily_target") {
+      state.postsPerDay = Math.max(1, Math.min(20, Math.floor(command.posts)));
+      for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
+        const target = state.adHocExtraDates.includes(job.targetDate)
+          ? Number(state.extraPostsByDate[job.targetDate] || job.requirements.posts)
+          : state.postsPerDay + Number(state.extraPostsByDate[job.targetDate] || 0);
+        resizeJob(state, job, target);
+      }
+    } else if (command.type === "extra_posts") {
+      let job = state.jobs.find((item) => item.targetDate === command.targetDate);
+      const createdAdHoc = !job;
+      if (!job) {
+        job = createDailyJob(state, command.targetDate, 0, now);
+        state.jobs.push(job);
+        state.adHocExtraDates.push(command.targetDate);
+      }
+      const added = Math.max(1, Math.min(20, Math.floor(command.posts)));
+      state.extraPostsByDate[command.targetDate] = Number(state.extraPostsByDate[command.targetDate] || 0) + added;
+      if (createdAdHoc) {
+        resizeJob(state, job, state.extraPostsByDate[command.targetDate]);
+        job.slots = buildFutureSameDaySlots(now, job.requirements.posts, state.intervalMinutes, state.timezone);
+      } else if (state.adHocExtraDates.includes(command.targetDate)) {
+        job.slots.push(...appendFutureSameDaySlots(now, job.slots, added, state.intervalMinutes, state.timezone));
+        job.requirements.posts = job.slots.length;
+        job.requirements.djs = Math.min(5, job.requirements.posts);
+        job.requirements.postsPerDj = Math.ceil(job.requirements.posts / job.requirements.djs);
+      } else {
+        resizeJob(state, job, state.postsPerDay + state.extraPostsByDate[command.targetDate]);
+      }
+    } else if (command.type === "priority_source") {
+      state.prioritySources.push({ id: command.id, url: command.url, videoId: youtubeVideoId(command.url), status: "pending", createdAt: command.createdAt });
+      state.prioritySources = state.prioritySources.slice(-50);
+    }
+    applied.add(command.id);
+    changes += 1;
+  }
+  state.appliedCommandIds = [...applied].slice(-200);
+  if (changes) {
+    state.jobs.sort((left, right) => left.targetDate.localeCompare(right.targetDate) || left.createdAt.localeCompare(right.createdAt));
+    state.updatedAt = iso(now);
+  }
+  return changes;
+}
+
 export function recordBlackRoomSourceUsage(
   state: BlackRoomQueueState,
   usage: Omit<BlackRoomSourceUsage, "recordedAt">,
@@ -180,6 +302,9 @@ export function recordBlackRoomSourceUsage(
   }
   const recorded: BlackRoomSourceUsage = { ...usage, videoId, recordedAt: iso(now) };
   state.sourceHistory.push(recorded);
+  for (const source of state.prioritySources) {
+    if (source.status === "pending" && source.videoId === videoId) source.status = "used";
+  }
   state.updatedAt = iso(now);
   return recorded;
 }
@@ -282,6 +407,7 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
     bufferDays: state.bufferDays,
     bufferWeeks: Math.ceil(state.bufferDays / 7),
     postsPerDay: state.postsPerDay,
+    pendingPrioritySources: state.prioritySources.filter((source) => source.status === "pending").length,
     usedSourceVideos: state.sourceHistory.length,
     durationSamples: {
       ...Object.fromEntries(BLACKROOM_DURATION_VARIANTS.map((duration) => [
@@ -313,6 +439,10 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       version: BLACKROOM_QUEUE_VERSION,
       jobs,
       sourceHistory: Array.isArray(parsed.sourceHistory) ? parsed.sourceHistory : [],
+      appliedCommandIds: Array.isArray(parsed.appliedCommandIds) ? parsed.appliedCommandIds : [],
+      prioritySources: Array.isArray(parsed.prioritySources) ? parsed.prioritySources : [],
+      extraPostsByDate: parsed.extraPostsByDate && typeof parsed.extraPostsByDate === "object" ? parsed.extraPostsByDate : {},
+      adHocExtraDates: Array.isArray(parsed.adHocExtraDates) ? parsed.adHocExtraDates : [],
     };
   } catch (error: any) {
     if (error?.code === "ENOENT") return createBlackRoomQueueState(now);

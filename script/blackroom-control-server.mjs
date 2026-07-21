@@ -19,17 +19,18 @@ const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 let commandTail = Promise.resolve();
 let lastAppliedGeneration = -1;
 
-async function command(name, weeks) {
+async function command(name, options = {}) {
   const args = ["run", "blackroom:agent", "--", `--${name}`];
-  if (weeks) args.push("--weeks", String(weeks));
+  if (options.weeks) args.push("--weeks", String(options.weeks));
+  if (options.commands) args.push("--commands", Buffer.from(JSON.stringify(options.commands)).toString("base64url"));
   const { stdout } = await execFileAsync(npmPath, args, { cwd: projectDir, maxBuffer: 2_000_000 });
   const start = stdout.indexOf('{\n  "mode": "blackroom_daily_agent"');
   if (start < 0) throw new Error("Estado de cola inválido");
   return JSON.parse(stdout.slice(start)).summary;
 }
 
-function serializedCommand(name, weeks) {
-  const next = commandTail.then(() => command(name, weeks));
+function serializedCommand(name, options) {
+  const next = commandTail.then(() => command(name, options));
   commandTail = next.catch(() => undefined);
   return next;
 }
@@ -83,6 +84,9 @@ async function syncRemoteControl() {
     const { control } = await remoteRequest("GET");
     queue = await serializedCommand("status");
     const currentWorker = await workerState();
+    if (Number(control.generation || 0) !== lastAppliedGeneration && Array.isArray(control.commands) && control.commands.length) {
+      queue = await serializedCommand("remote-config", { commands: control.commands });
+    }
     const plan = planBlackRoomRemoteSync({
       control,
       localEnabled: queue.enabled,
@@ -90,7 +94,7 @@ async function syncRemoteControl() {
       lastAppliedGeneration,
     });
     if (plan.action === "start") {
-      queue = await serializedCommand("start", control.weeks);
+      queue = await serializedCommand("start", { weeks: control.weeks });
       wakeWorker();
     } else if (plan.action === "pause") {
       queue = await serializedCommand("pause");
@@ -158,7 +162,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/start") {
       const raw = await readBody(req);
       const weeks = Math.max(1, Math.min(4, Number(JSON.parse(raw || "{}").weeks || 2)));
-      const queue = await serializedCommand("start", weeks); wakeWorker();
+      const queue = await serializedCommand("start", { weeks }); wakeWorker();
       return send(res, 200, { queue, worker: await workerState() });
     }
     return send(res, 404, { error: "Not found" });
