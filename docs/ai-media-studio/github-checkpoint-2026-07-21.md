@@ -244,7 +244,7 @@ Evidence before GitHub preservation:
 
 ## PR15 checkpoint — provider connection stages
 
-GitHub PR: pending at first local checkpoint.
+GitHub PR: #94, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/94`.
 
 Branch: `codex/ai-media-studio-provider-connection-stages`, stacked on PR #92 (`codex/ai-media-studio-oauth-vault-operations`).
 
