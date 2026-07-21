@@ -355,6 +355,7 @@ function createDefaultDurableHeyGenRosterRuntime(): {
       configure: async (...args) => (await load()).repository.configure(...args),
       get: async (...args) => (await load()).repository.get(...args),
       getCurrent: async (...args) => (await load()).repository.getCurrent(...args),
+      getCurrentDailyPlan: async (...args) => (await load()).repository.getCurrentDailyPlan(...args),
     },
     accountResolver: {
       resolve: async (...args) => (await load()).accountResolver.resolve(...args),
@@ -368,7 +369,12 @@ function selectHeyGenRosterRuntime(
 ): { service: HeyGenRosterService | undefined; status: MediaStudioPersistenceStatus } {
   if (dependencies.heyGenRosterRepository && dependencies.resolveHeyGenRosterAccount) {
     return {
-      service: new HeyGenRosterService(dependencies.heyGenRosterRepository, dependencies.resolveHeyGenRosterAccount),
+      service: new HeyGenRosterService(
+        dependencies.heyGenRosterRepository,
+        dependencies.resolveHeyGenRosterAccount,
+        () => new Date().toISOString(),
+        dependencies.heyGenRosterDailyPlanTimeZone ?? "UTC",
+      ),
       status: { mode: "injected", available: true, durable: false, reason: "HeyGen roster runtime supplied by the composition caller" },
     };
   }
@@ -382,7 +388,12 @@ function selectHeyGenRosterRuntime(
     try {
       const runtime = (dependencies.createDurableHeyGenRosterRuntime ?? createDefaultDurableHeyGenRosterRuntime)();
       return {
-        service: new HeyGenRosterService(runtime.repository, runtime.accountResolver),
+        service: new HeyGenRosterService(
+          runtime.repository,
+          runtime.accountResolver,
+          () => new Date().toISOString(),
+          dependencies.heyGenRosterDailyPlanTimeZone ?? "UTC",
+        ),
         status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle HeyGen roster persistence selected" },
       };
     } catch (error) {
@@ -609,11 +620,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const governance = new GovernanceService(governanceSelection.repository);
   const heyGenRosterSelection = selectHeyGenRosterRuntime(dependencies, databaseUrl);
   const heyGenRosterDailyPlan = heyGenRosterSelection.service
-    ? new HeyGenRosterDailyPlanService(
-      heyGenRosterSelection.service,
-      () => new Date().toISOString(),
-      dependencies.heyGenRosterDailyPlanTimeZone ?? "UTC",
-    )
+    ? new HeyGenRosterDailyPlanService(heyGenRosterSelection.service)
     : undefined;
   const operations = createOperationsRuntime({
     ...dependencies.operations,

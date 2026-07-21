@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-21T23:03:18.396Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr1-chain",
+  "generatedAt": "2026-07-21T23:48:57.377Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-roster-plan-bridge",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -87,28 +87,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 774,
-    "filesIndexed": 646,
-    "imports": 2639,
+    "filesVisible": 775,
+    "filesIndexed": 647,
+    "imports": 2653,
     "routes": 491,
-    "symbols": 12601
+    "symbols": 12699
   },
   "directories": {
-    "migrations/ai-media-studio": {
-      "files": 46,
-      "indexed": 2,
-      "kinds": {
-        "other": 45,
-        "docs": 1
-      }
-    },
-    "tests": {
-      "files": 176,
-      "indexed": 167,
-      "kinds": {
-        "test": 176
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -173,6 +158,14 @@
         "docs": 12
       }
     },
+    "migrations/ai-media-studio": {
+      "files": 46,
+      "indexed": 2,
+      "kinds": {
+        "other": 45,
+        "docs": 1
+      }
+    },
     "script": {
       "files": 39,
       "indexed": 37,
@@ -220,6 +213,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 177,
+      "indexed": 168,
+      "kinds": {
+        "test": 177
       }
     },
     "tests/fixtures": {
@@ -10611,24 +10611,45 @@
         "StoredRosterNamespace",
         "account",
         "accountId",
+        "accountingTimeZone",
         "actual",
         "avatarResourceId",
+        "bound",
         "candidate",
         "candidates",
         "canonicalKey",
+        "canonicalTimeZone",
+        "clock",
+        "configuredAt",
         "createDrizzleHeyGenRosterAccountResolver",
         "createInfluencer",
+        "createdAt",
         "credentialVersion",
+        "currentSlotKey",
         "digestMembers",
         "displayName",
+        "durable",
+        "durableReplay",
         "entries",
         "existing",
         "existingPersona",
+        "expectedPlanDigest",
         "expectedRosterId",
+        "expectedSlotDigest",
+        "first",
         "hasExactKeys",
         "id",
         "influencerId",
         "inserted",
+        "insertedPlan",
+        "insertedSlot",
+        "iso",
+        "member",
+        "memberCounts",
+        "memberId",
+        "memberOrder",
+        "memberSlotCounts",
+        "memberVideos",
         "members",
         "metadata",
         "number",
@@ -10640,7 +10661,15 @@
         "parseStoredRoster",
         "parsed",
         "persona",
+        "planDate",
+        "planDigest",
+        "planKey",
+        "planRows",
+        "planUuid",
+        "plannedSlotCount",
         "providerAccountId",
+        "publicPlanKey",
+        "publicSlotKey",
         "raced",
         "record",
         "records",
@@ -10652,14 +10681,22 @@
         "rosterValues",
         "rows",
         "sameReplay",
+        "seen",
+        "sha256",
+        "slotDigest",
+        "slotKey",
+        "slotUuid",
+        "slots",
         "slug",
         "stored",
         "text",
+        "timeZone",
         "updated",
         "upsertResource",
         "validDate",
         "validMembers",
         "values",
+        "videoNumber",
         "voiceResourceId"
       ],
       "routes": []
@@ -10704,6 +10741,7 @@
         "HEYGEN_ROSTER_ERROR_CODES",
         "HeyGenResolvedAccountContext",
         "HeyGenRosterAccountResolver",
+        "HeyGenRosterConfigurationInput",
         "HeyGenRosterError",
         "HeyGenRosterErrorCode",
         "HeyGenRosterNativeMember",
@@ -10725,28 +10763,14 @@
         "../../../shared/ai-media-studio-heygen-roster",
         "../core/resource-domain",
         "./heygen-roster-contracts",
-        "./heygen-roster-service",
-        "node:crypto"
+        "./heygen-roster-service"
       ],
       "exports": [
         "HeyGenRosterDailyPlanService"
       ],
       "symbols": [
         "HeyGenRosterDailyPlanService",
-        "blockers",
-        "currentPlanId",
-        "dateInTimeZone",
-        "defaultRequest",
-        "generatedAt",
-        "parseRequest",
-        "parts",
-        "planId",
-        "plannedVideoCount",
-        "request",
-        "roster",
-        "slotId",
-        "slots",
-        "values"
+        "plan"
       ],
       "routes": []
     },
@@ -10754,8 +10778,10 @@
       "path": "server/ai-media-studio/providers/heygen-roster-in-memory.ts",
       "kind": "server",
       "imports": [
+        "../../../shared/ai-media-studio-heygen-roster",
         "../core/resource-domain",
-        "./heygen-roster-contracts"
+        "./heygen-roster-contracts",
+        "node:crypto"
       ],
       "exports": [
         "InMemoryHeyGenRosterRepository"
@@ -10763,10 +10789,20 @@
       "symbols": [
         "InMemoryHeyGenRosterRepository",
         "clone",
+        "currentPlanId",
+        "dateInZone",
         "existing",
         "idempotencyStorageKey",
+        "materializePlan",
+        "parts",
+        "plan",
+        "planDate",
+        "publicKey",
         "record",
-        "scopeKey"
+        "roster",
+        "scopeKey",
+        "slots",
+        "values"
       ],
       "routes": []
     },
@@ -10790,9 +10826,11 @@
         "child",
         "opaqueId",
         "parseRequest",
+        "plan",
         "record",
         "request",
         "requestDigest",
+        "roster",
         "rosterId",
         "stableRequestDigest",
         "validScope"
@@ -19710,6 +19748,7 @@
       "symbols": [
         "appSource",
         "canary",
+        "durablePlan",
         "officeSource",
         "pageSource",
         "routesSource",
@@ -20480,9 +20519,9 @@
       "path": "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
       "kind": "test",
       "imports": [
-        "../server/ai-media-studio/core/resource-domain",
         "../server/ai-media-studio/providers/heygen-roster-contracts",
         "../server/ai-media-studio/providers/heygen-roster-daily-plan-service",
+        "../server/ai-media-studio/providers/heygen-roster-in-memory",
         "../server/ai-media-studio/providers/heygen-roster-service",
         "../shared/ai-media-studio-heygen-roster",
         "node:assert/strict",
@@ -20491,14 +20530,16 @@
       "exports": [],
       "symbols": [
         "base",
+        "configured",
         "first",
-        "nextDay",
         "plan",
         "replay",
+        "repository",
+        "request",
         "roster",
-        "rosterService",
+        "runtime",
         "scope",
-        "service"
+        "slots"
       ],
       "routes": []
     },
@@ -20539,26 +20580,108 @@
       "symbols": [
         "Compiled",
         "FakeRosterDatabase",
+        "allSql",
         "canonicalKeys",
+        "changed",
         "compiled",
         "configured",
         "db",
         "dialect",
+        "durablePlan",
         "entry",
+        "failing",
         "fake",
         "first",
         "lock",
+        "members",
         "metadata",
         "mutationsAfterFirst",
+        "namespace",
         "normalized",
+        "plan",
         "renderedResponse",
         "replay",
         "repository",
         "request",
+        "requestWithCount",
         "resolver",
+        "response",
+        "roster",
+        "rosters",
         "serialized",
         "service",
+        "videoNumber",
         "voiceMutations"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-roster-plan-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/drizzle-heygen-roster-repository",
+        "../server/ai-media-studio/providers/heygen-roster-contracts",
+        "../server/ai-media-studio/providers/heygen-roster-daily-plan-service",
+        "../server/ai-media-studio/providers/heygen-roster-service",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "TEMP_PREFIX",
+        "accounts",
+        "applyFullChain",
+        "bytes",
+        "db",
+        "durableFive",
+        "durableTen",
+        "enabled",
+        "exactReplay",
+        "firstClient",
+        "firstMemberId",
+        "fiveCounts",
+        "fiveRequest",
+        "fiveScope",
+        "integrationTest",
+        "isolatedCounts",
+        "manifest",
+        "migration",
+        "migrationRoot",
+        "opaqueId",
+        "parsed",
+        "pool",
+        "publicDto",
+        "repository",
+        "request",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "rollbackCounts",
+        "rollbackRequest",
+        "rollbackRosterId",
+        "rollbackScope",
+        "rosterService",
+        "seedAccount",
+        "service",
+        "sha256",
+        "sideEffectTables",
+        "socket",
+        "tableCounts",
+        "tenClient",
+        "tenResult",
+        "tenScope",
+        "value"
       ],
       "routes": []
     },
@@ -24909,6 +25032,7 @@
     "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
     "tests/ai-media-studio-heygen-roster-daily-plan.test.ts",
     "tests/ai-media-studio-heygen-roster-drizzle.test.ts",
+    "tests/ai-media-studio-heygen-roster-plan-postgres.test.ts",
     "tests/ai-media-studio-heygen-roster-routes.test.ts",
     "tests/ai-media-studio-heygen-roster-service.test.ts",
     "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",

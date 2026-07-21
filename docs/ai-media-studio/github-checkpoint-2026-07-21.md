@@ -2,6 +2,14 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: durable 5–10 avatar roster plan bridge
+
+- Branch: `codex/ai-media-studio-durable-roster-plan-bridge`, preserved as draft PR #136 and stacked on draft PR #131. No merge, migration application, provider activation or deployment is implied.
+- Scope: one account-row-locked roster transaction persists the private catalog bindings, one blocked daily plan and exactly 10 blocked slots per avatar in the existing PR19 tables. The initial 5-avatar configuration yields 50 slots and the launch cap of 10 yields 100.
+- Authority boundary: PostgreSQL supplies the timestamp; the server supplies the canonical IANA accounting timezone. Tenant, provider account, credential version, roster, member, influencer, avatar and voice bindings are checked on write and durable read. Exact replay does not duplicate the plan or slots, while a changed payload conflicts.
+- Safety boundary: the public plan keeps only opaque keys and `not_queued`, `canGenerate=false`, `noSpendGuarantee=true`. No budget reservation, render job, outbox command, provider submission, HeyGen/network call, migration application, spend, publication, secret change or deploy is introduced.
+- Current evidence: focused service, in-memory, Drizzle and dedicated-agent checks pass; authenticated HTTP routes pass 2/2; TypeScript, production build, generated codebase map and diff hygiene pass. An owned ephemeral PostgreSQL 16 harness verifies every SHA in the 22-migration manifest and passes 1/1 for concurrent exact replay, 5→50, 10→100, cross-tenant isolation, late-failure rollback and zero budget/render/outbox/provider-submission rows. Independent checker and App QA pass at P0=P1=P2=0 with no warnings from this change. The full suite records 700 pass, 38 controlled skips and one inherited no-diff PR26 message-regex mismatch (`otherwise forward-fix` versus `otherwise stop and forward-fix`); both baseline files are unchanged by this branch.
+
 ## Active local checkpoint: reviewed PR1 foundation and full migration chain
 
 - Scope: `20260720_pr1_foundation_forward.sql` and its guarded rollback close

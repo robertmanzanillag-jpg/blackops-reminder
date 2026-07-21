@@ -1,5 +1,6 @@
 import type {
   CreateHeyGenRosterMember,
+  HeyGenRosterDailyPlan,
   HeyGenRosterPublicMember,
   HeyGenRosterStatus,
 } from "../../../shared/ai-media-studio-heygen-roster";
@@ -52,11 +53,18 @@ export type HeyGenRosterRecord = Readonly<{
 
 export type ConfigureHeyGenRosterRecord = HeyGenRosterRecord;
 
+export type HeyGenRosterConfigurationInput = HeyGenRosterRecord & Readonly<{
+  /** Trusted, server-owned canonical IANA time zone. */
+  accountingTimeZone: string;
+}>;
+
 export interface HeyGenRosterRepository {
   /** Atomically creates or returns an exact idempotent replay. */
-  configure(input: ConfigureHeyGenRosterRecord): Promise<HeyGenRosterRecord>;
+  configure(input: HeyGenRosterConfigurationInput): Promise<HeyGenRosterRecord>;
   getCurrent(scope: TenantScope): Promise<HeyGenRosterRecord | undefined>;
   get(scope: TenantScope, rosterId: string): Promise<HeyGenRosterRecord | undefined>;
+  /** Reads the already-materialized blocked plan and slots; never synthesizes a preview. */
+  getCurrentDailyPlan(scope: TenantScope): Promise<HeyGenRosterDailyPlan | undefined>;
 }
 
 export function toHeyGenRosterStatus(record: HeyGenRosterRecord): HeyGenRosterStatus {
