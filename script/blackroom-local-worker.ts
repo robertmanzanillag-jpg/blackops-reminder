@@ -14,6 +14,7 @@ import {
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   validateBlackRoomRenderProbe,
+  buildBlackRoomUploadChunks,
   type BlackRoomLocalWorkerState,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
@@ -118,6 +119,32 @@ async function recoverConfirmedCleanup(): Promise<void> {
   }
 }
 
+async function uploadBlackRoomRender(entry: any, renderSize: number): Promise<{ uploadId: string; mediaUrl: string }> {
+  const chunks = buildBlackRoomUploadChunks(renderSize);
+  const initialized = await remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ reservationId: entry.reservationId, totalBytes: renderSize, totalChunks: chunks.length }),
+  });
+  for (const chunk of chunks) {
+    await remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked/${encodeURIComponent(initialized.uploadId)}/${chunk.index}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${remoteToken}`,
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(chunk.size),
+      },
+      body: createReadStream(entry.renderPath, { start: chunk.start, end: chunk.end }) as any,
+      duplex: "half",
+    }, 5 * 60_000);
+  }
+  return remoteJson(`${remoteUrl}/api/blackroom-agent/media/chunked/${encodeURIComponent(initialized.uploadId)}/complete`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+}
+
 async function publishOneReservedEntry(): Promise<boolean> {
   if (!remoteToken || remoteToken.length < 32) throw new Error("BLACKROOM_REMOTE_CONTROL_TOKEN is required for Metricool publishing");
   const queue = await readJson<any>(queuePath, {});
@@ -135,16 +162,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
   const publicationDateTime = nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
-  const upload = await remoteJson(`${remoteUrl}/api/blackroom-agent/media/${encodeURIComponent(entry.reservationId)}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${remoteToken}`,
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(renderInfo.size),
-    },
-    body: createReadStream(entry.renderPath) as any,
-    duplex: "half",
-  }, 15 * 60_000);
+  const upload = await uploadBlackRoomRender(entry, renderInfo.size);
   const preScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
     throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
