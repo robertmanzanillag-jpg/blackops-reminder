@@ -253,6 +253,9 @@ export const aiMediaProviderAccounts = pgTable(
     oauthSecretRefUnique: uniqueIndex("ai_media_provider_accounts_oauth_secret_ref_uq")
       .on(table.secretRef)
       .where(sql`${table.credentialSource} = 'oauth_authorization'`),
+    oauthRoleV2TokenBindingUnique: uniqueIndex("ai_media_provider_accounts_oauth_role_v2_token_binding_uq")
+      .on(table.tokenBindingId)
+      .where(sql`${table.credentialSource} = 'oauth_role_v2'`),
     webhookMetadataCheck: check(
       "ai_media_provider_accounts_webhook_metadata_ck",
       sql`(
@@ -295,6 +298,21 @@ export const aiMediaProviderAccounts = pgTable(
           AND ${table.tokenBindingId} IS NOT NULL
           AND ${table.tokenKind} = 'Bearer'
           AND ${table.credentialExpiresAt} IS NOT NULL
+          AND ${table.capabilities} @> '["publish_video"]'::jsonb
+          AND jsonb_array_length(${table.grantedScopes}) > 0
+          AND length(btrim(${table.tokenManifestRevision})) BETWEEN 1 AND 100
+        )
+        OR (
+          ${table.credentialSource} = 'oauth_role_v2'
+          AND ${table.status} = 'active'
+          AND ${table.credentialStatus} = 'active'
+          AND ${table.credentialVersion} > 0
+          AND ${table.credentialActorUserId} IS NOT NULL
+          AND ${table.credentialSourceSessionId} IS NOT NULL
+          AND ${table.externalAccountId} IS NOT NULL AND length(btrim(${table.externalAccountId})) BETWEEN 1 AND 255
+          AND ${table.secretRef} IS NULL
+          AND ${table.tokenBindingId} IS NOT NULL
+          AND ${table.tokenKind} = 'role_v2'
           AND ${table.capabilities} @> '["publish_video"]'::jsonb
           AND jsonb_array_length(${table.grantedScopes}) > 0
           AND length(btrim(${table.tokenManifestRevision})) BETWEEN 1 AND 100
@@ -596,7 +614,8 @@ export const aiMediaOAuthConnectionAttempts = pgTable(
     ),
     stageCheck: check("ai_media_oauth_connection_attempts_stage_ck", sql`(
       ${table.stage} IN ('exchange_pending','exchange_in_progress','exchange_indeterminate','discovery_pending',
-        'discovery_in_progress','awaiting_target','activation_pending','activation_in_progress','authorized','failed')
+        'discovery_in_progress','awaiting_target','activation_pending','activation_in_progress',
+        'activation_indeterminate','authorized','failed')
       AND ${table.stageVersion} >= 1
     )`),
     sourceCheck: check("ai_media_oauth_connection_attempts_source_ck", sql`(
@@ -619,11 +638,12 @@ export const aiMediaOAuthConnectionAttempts = pgTable(
         AND ${table.actualScopes} @> ${table.requiredScopes} AND ${table.allowedScopes} @> ${table.actualScopes}
       ))
       AND (${table.stage} NOT IN ('exchange_pending','exchange_in_progress','exchange_indeterminate','failed') OR ${table.actualScopes} IS NULL OR ${table.stage} = 'failed')
-      AND (${table.stage} NOT IN ('discovery_pending','discovery_in_progress','awaiting_target','activation_pending','activation_in_progress','authorized') OR ${table.actualScopes} IS NOT NULL)
+      AND (${table.stage} NOT IN ('discovery_pending','discovery_in_progress','awaiting_target','activation_pending',
+        'activation_in_progress','activation_indeterminate','authorized') OR ${table.actualScopes} IS NOT NULL)
       AND ((${table.actualScopes} IS NULL) = (${table.tokenArtifacts} IS NULL))
       AND (${table.tokenArtifacts} IS NULL OR (
         jsonb_typeof(${table.tokenArtifacts}) = 'array' AND jsonb_array_length(${table.tokenArtifacts}) BETWEEN 1 AND 3
-        AND ${table.tokenArtifacts}::text !~* '"(reference|secret|access_token|refresh_token|provider_json)"'
+        AND ${table.tokenArtifacts}::text !~* '"(reference|vaultreference|secret|clientsecret|client_secret|accesstoken|access_token|refreshtoken|refresh_token|tokenvalue|token_value|providerjson|provider_json|providerpayload|provider_payload|rawprovider|raw_provider)"'
       ))
     )`),
     leaseCheck: check("ai_media_oauth_connection_attempts_lease_ck", sql`(
@@ -748,6 +768,11 @@ export const aiMediaOAuthTargetSelections = pgTable(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
       table.platform, table.oauthSessionId, table.attemptId,
     ),
+    exactSelectionUnique: uniqueIndex("ai_media_oauth_target_selections_exact_selection_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
+      table.platform, table.oauthSessionId, table.attemptId, table.candidateId,
+      table.targetKind, table.targetExternalId,
+    ),
     identityCheck: check("ai_media_oauth_target_selections_identity_ck", sql`(
       ${table.targetKind} IN ('tiktok_user','youtube_channel','facebook_page','instagram_professional_account')
       AND length(btrim(${table.targetExternalId})) BETWEEN 1 AND 255
@@ -766,6 +791,221 @@ export const aiMediaOAuthTargetSelections = pgTable(
         aiMediaOAuthTargetCandidates.attemptId, aiMediaOAuthTargetCandidates.candidateId, aiMediaOAuthTargetCandidates.targetKind,
         aiMediaOAuthTargetCandidates.targetExternalId],
       name: "ai_media_oauth_target_selections_exact_candidate_fk",
+    }).onUpdate("no action").onDelete("no action"),
+  }),
+);
+
+export const aiMediaOAuthCredentialArtifacts = pgTable(
+  "ai_media_oauth_credential_artifacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    platform: text("platform").notNull(),
+    oauthSessionId: uuid("oauth_session_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    candidateId: uuid("candidate_id").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetExternalId: text("target_external_id").notNull(),
+    tokenBindingId: uuid("token_binding_id").notNull(),
+    artifactBindingId: uuid("artifact_binding_id").notNull(),
+    role: text("role").notNull(),
+    vaultReference: text("vault_reference").notNull(),
+    lifetimeKind: text("lifetime_kind").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revalidateAt: timestamp("revalidate_at", { withTimezone: true }).notNull(),
+    manifestRevision: text("manifest_revision").notNull(),
+    expectedCredentialVersion: integer("expected_credential_version").notNull(),
+    targetCredentialVersion: integer("target_credential_version").notNull(),
+    state: text("state").notNull().default("candidate"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    cleanupCompletedAt: timestamp("cleanup_completed_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    artifactBindingRoleUnique: uniqueIndex("ai_media_oauth_credential_artifacts_binding_role_uq").on(
+      table.artifactBindingId, table.role,
+    ),
+    vaultReferenceUnique: uniqueIndex("ai_media_oauth_credential_artifacts_vault_reference_uq").on(table.vaultReference),
+    exactArtifactUnique: uniqueIndex("ai_media_oauth_credential_artifacts_exact_artifact_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+      table.oauthSessionId, table.attemptId, table.artifactBindingId, table.role, table.id, table.vaultReference,
+    ),
+    attemptStateIdx: index("ai_media_oauth_credential_artifacts_attempt_state_idx").on(
+      table.ownerUserId, table.workspaceId, table.attemptId, table.state,
+    ),
+    identityCheck: check("ai_media_oauth_credential_artifacts_identity_ck", sql`(
+      ${table.role} IN ('operational_access','refresh')
+      AND ${table.vaultReference} ~ '^vault://ai-media-studio/oauth-role-token/v2/[0-9a-f]{64}$'
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 255
+      AND length(btrim(${table.targetExternalId})) BETWEEN 1 AND 255
+      AND length(btrim(${table.manifestRevision})) BETWEEN 1 AND 100
+      AND ${table.expectedCredentialVersion} >= 0
+      AND ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1
+    )`),
+    lifetimeCheck: check("ai_media_oauth_credential_artifacts_lifetime_ck", sql`(
+      ${table.lifetimeKind} IN ('expires_at','provider_non_expiring','revocation_bound')
+      AND ((${table.lifetimeKind} = 'expires_at') = (${table.expiresAt} IS NOT NULL))
+      AND ${table.revalidateAt} > ${table.createdAt}
+      AND ${table.revalidateAt} <= ${table.createdAt} + interval '366 days'
+      AND (${table.expiresAt} IS NULL OR ${table.expiresAt} >= ${table.revalidateAt})
+      AND (${table.lifetimeKind} <> 'provider_non_expiring' OR (${table.platform} IN ('facebook','instagram') AND ${table.role} = 'operational_access'))
+      AND (${table.lifetimeKind} <> 'revocation_bound' OR (${table.platform} = 'youtube_shorts' AND ${table.role} = 'refresh'))
+    )`),
+    lifecycleCheck: check("ai_media_oauth_credential_artifacts_lifecycle_ck", sql`(
+      ${table.state} IN ('candidate','active','cleanup_leased','cleanup_retry','cleanup_verify','deleted','cleanup_dead_letter')
+      AND (${table.state} <> 'candidate' OR (${table.activatedAt} IS NULL AND ${table.cleanupCompletedAt} IS NULL))
+      AND (${table.state} <> 'active' OR (${table.activatedAt} IS NOT NULL AND ${table.cleanupCompletedAt} IS NULL))
+      AND (${table.state} <> 'deleted' OR ${table.cleanupCompletedAt} IS NOT NULL)
+    )`),
+    exactSelectionFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId],
+      foreignColumns: [aiMediaOAuthTargetSelections.ownerUserId, aiMediaOAuthTargetSelections.workspaceId,
+        aiMediaOAuthTargetSelections.actorUserId, aiMediaOAuthTargetSelections.providerAccountId,
+        aiMediaOAuthTargetSelections.platform, aiMediaOAuthTargetSelections.oauthSessionId,
+        aiMediaOAuthTargetSelections.attemptId, aiMediaOAuthTargetSelections.candidateId,
+        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId],
+      name: "ai_media_oauth_credential_artifacts_exact_selection_fk",
+    }).onUpdate("no action").onDelete("no action"),
+  }),
+);
+
+export const aiMediaProviderAccountCredentialBindings = pgTable(
+  "ai_media_provider_account_credential_bindings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    platform: text("platform").notNull(),
+    oauthSessionId: uuid("oauth_session_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    candidateId: uuid("candidate_id").notNull(),
+    targetKind: text("target_kind").notNull(),
+    targetExternalId: text("target_external_id").notNull(),
+    selectionDigest: text("selection_digest").notNull(),
+    selectedStageVersion: integer("selected_stage_version").notNull(),
+    activationStageVersion: integer("activation_stage_version").notNull(),
+    selectedEligibilityDigest: text("selected_eligibility_digest").notNull(),
+    tokenBindingId: uuid("token_binding_id").notNull(),
+    artifactBindingId: uuid("artifact_binding_id").notNull(),
+    expectedCredentialVersion: integer("expected_credential_version").notNull(),
+    targetCredentialVersion: integer("target_credential_version").notNull(),
+    actualScopes: jsonb("actual_scopes").$type<string[]>().notNull(),
+    capabilities: jsonb("capabilities").$type<string[]>().notNull(),
+    manifestRevision: text("manifest_revision").notNull(),
+    authorizedDigest: text("authorized_digest").notNull(),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    accountVersionUnique: uniqueIndex("ai_media_provider_account_credential_bindings_account_version_uq").on(
+      table.ownerUserId, table.workspaceId, table.providerAccountId, table.platform, table.targetCredentialVersion,
+    ),
+    tokenBindingUnique: uniqueIndex("ai_media_provider_account_credential_bindings_token_binding_uq").on(table.tokenBindingId),
+    artifactBindingUnique: uniqueIndex("ai_media_provider_account_credential_bindings_artifact_binding_uq").on(table.artifactBindingId),
+    authorizedDigestUnique: uniqueIndex("ai_media_provider_account_credential_bindings_authorized_digest_uq").on(table.authorizedDigest),
+    identityCheck: check("ai_media_provider_account_credential_bindings_identity_ck", sql`(
+      length(btrim(${table.actorUserId})) BETWEEN 1 AND 255
+      AND length(btrim(${table.targetExternalId})) BETWEEN 1 AND 255
+      AND length(btrim(${table.manifestRevision})) BETWEEN 1 AND 100
+      AND ${table.selectionDigest} ~ '^[0-9a-f]{64}$'
+      AND ${table.selectedEligibilityDigest} ~ '^[0-9a-f]{64}$'
+      AND ${table.authorizedDigest} ~ '^[0-9a-f]{64}$'
+      AND ${table.selectedStageVersion} >= 1 AND ${table.activationStageVersion} >= 1
+      AND ${table.expectedCredentialVersion} >= 0
+      AND ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1
+      AND jsonb_typeof(${table.actualScopes}) = 'array' AND jsonb_array_length(${table.actualScopes}) BETWEEN 1 AND 50
+      AND jsonb_typeof(${table.capabilities}) = 'array' AND jsonb_array_length(${table.capabilities}) BETWEEN 1 AND 20
+      AND (${table.actualScopes}::text || ${table.capabilities}::text) !~* '"(reference|vaultreference|secret|clientsecret|client_secret|accesstoken|access_token|refreshtoken|refresh_token|tokenvalue|token_value|providerjson|provider_json|providerpayload|provider_payload|rawprovider|raw_provider)"'
+    )`),
+    exactSelectionFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId],
+      foreignColumns: [aiMediaOAuthTargetSelections.ownerUserId, aiMediaOAuthTargetSelections.workspaceId,
+        aiMediaOAuthTargetSelections.actorUserId, aiMediaOAuthTargetSelections.providerAccountId,
+        aiMediaOAuthTargetSelections.platform, aiMediaOAuthTargetSelections.oauthSessionId,
+        aiMediaOAuthTargetSelections.attemptId, aiMediaOAuthTargetSelections.candidateId,
+        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId],
+      name: "ai_media_provider_account_credential_bindings_exact_selection_fk",
+    }).onUpdate("no action").onDelete("no action"),
+    providerAccountFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.platform],
+      foreignColumns: [aiMediaProviderAccounts.ownerUserId, aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id, aiMediaProviderAccounts.providerKey],
+      name: "ai_media_provider_account_credential_bindings_provider_account_fk",
+    }).onUpdate("no action").onDelete("no action"),
+  }),
+);
+
+export const aiMediaOAuthVaultOperationsV2 = pgTable(
+  "ai_media_oauth_vault_operations_v2",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    platform: text("platform").notNull(),
+    oauthSessionId: uuid("oauth_session_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    artifactId: uuid("artifact_id").notNull(),
+    artifactBindingId: uuid("artifact_binding_id").notNull(),
+    role: text("role").notNull(),
+    vaultReference: text("vault_reference").notNull(),
+    targetCredentialVersion: integer("target_credential_version").notNull(),
+    state: text("state").notNull().default("cleanup_pending"),
+    attempt: integer("attempt").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(8),
+    deletePass: integer("delete_pass").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
+    quiescentUntil: timestamp("quiescent_until", { withTimezone: true }).notNull(),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseFencing: integer("lease_fencing").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    artifactUnique: uniqueIndex("ai_media_oauth_vault_operations_v2_artifact_uq").on(table.artifactId),
+    vaultReferenceUnique: uniqueIndex("ai_media_oauth_vault_operations_v2_vault_reference_uq").on(table.vaultReference),
+    dueIdx: index("ai_media_oauth_vault_operations_v2_due_idx").on(table.state, table.availableAt, table.quiescentUntil),
+    tenantDueIdx: index("ai_media_oauth_vault_operations_v2_tenant_due_idx").on(
+      table.ownerUserId, table.workspaceId, table.state, table.availableAt,
+    ),
+    contextCheck: check("ai_media_oauth_vault_operations_v2_context_ck", sql`(
+      ${table.role} IN ('operational_access','refresh')
+      AND ${table.vaultReference} ~ '^vault://ai-media-studio/oauth-role-token/v2/[0-9a-f]{64}$'
+      AND ${table.targetCredentialVersion} > 0
+    )`),
+    lifecycleCheck: check("ai_media_oauth_vault_operations_v2_lifecycle_ck", sql`(
+      ${table.state} IN ('cleanup_pending','retained','leased','retry_wait','verify_wait','completed','dead_letter')
+      AND ${table.attempt} BETWEEN 0 AND ${table.maxAttempts} AND ${table.maxAttempts} BETWEEN 1 AND 32
+      AND ${table.deletePass} BETWEEN 0 AND 2 AND ${table.leaseFencing} >= 0
+      AND ${table.quiescentUntil} >= ${table.createdAt}
+      AND ((${table.state} = 'leased') = (${table.leaseToken} IS NOT NULL))
+      AND ((${table.leaseToken} IS NULL) = (${table.leaseOwner} IS NULL))
+      AND ((${table.leaseToken} IS NULL) = (${table.leaseExpiresAt} IS NULL))
+      AND (${table.state} <> 'retained' OR (${table.availableAt} = 'infinity'::timestamptz AND ${table.quiescentUntil} = 'infinity'::timestamptz))
+      AND (${table.state} <> 'verify_wait' OR ${table.deletePass} = 1)
+      AND (${table.state} <> 'completed' OR (${table.deletePass} = 2 AND ${table.completedAt} IS NOT NULL))
+      AND (${table.state} <> 'dead_letter' OR ${table.deadLetteredAt} IS NOT NULL)
+      AND (${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN ('vault_rejected','vault_timeout','lease_lost','invalid_obligation'))
+    )`),
+    exactArtifactFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+        table.oauthSessionId, table.attemptId, table.artifactBindingId, table.role, table.artifactId, table.vaultReference],
+      foreignColumns: [aiMediaOAuthCredentialArtifacts.ownerUserId, aiMediaOAuthCredentialArtifacts.workspaceId,
+        aiMediaOAuthCredentialArtifacts.actorUserId, aiMediaOAuthCredentialArtifacts.providerAccountId,
+        aiMediaOAuthCredentialArtifacts.platform, aiMediaOAuthCredentialArtifacts.oauthSessionId,
+        aiMediaOAuthCredentialArtifacts.attemptId, aiMediaOAuthCredentialArtifacts.artifactBindingId,
+        aiMediaOAuthCredentialArtifacts.role, aiMediaOAuthCredentialArtifacts.id,
+        aiMediaOAuthCredentialArtifacts.vaultReference],
+      name: "ai_media_oauth_vault_operations_v2_exact_artifact_fk",
     }).onUpdate("no action").onDelete("no action"),
   }),
 );

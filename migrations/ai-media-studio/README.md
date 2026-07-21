@@ -1,6 +1,6 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover the incremental PR2, PR3, PR4, PR5, PR6, and PR8 schema deltas after the
+These SQL files cover the incremental PR2, PR3, PR4, PR5, PR6, PR8, PR9, PR14, and PR15 schema deltas after the
 PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
 local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
@@ -229,3 +229,12 @@ tenant/actor/account/platform/session provenance, scope containment, stale-fence
 rejection, zero-target terminalization, singleton confirmation and multi-target exact
 selection. The rollback is application-only and retains all attempt, candidate,
 selection and terminal evidence; correct the release and roll forward.
+
+## PR16 provider activation v2 draft
+
+PR16 currently contains additive Drizzle schema declarations for role-specific
+credential artifacts, exact provider-account bindings and v2 vault operations.
+It does not yet contain reviewed forward/rollback SQL or an executable Drizzle
+activation transaction. Do not use `drizzle-kit push` to bypass those missing
+artifacts. A later reviewed slice must add relation-exact, additive SQL plus
+static tests before any staging rehearsal or release consideration.
