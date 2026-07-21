@@ -1,7 +1,9 @@
 export * from "./contracts";
 export * from "./authorization-url";
+export * from "./aws-vault-infrastructure-preflight";
 export * from "./crypto";
 export * from "./drizzle-repository";
+export * from "./drizzle-vault-cleanup-repository";
 export * from "./in-memory";
 export * from "./platform-manifests";
 export * from "./production-runtime";
@@ -10,3 +12,5 @@ export * from "./s3-kms-envelope";
 export * from "./s3-kms-authorization-code-vault";
 export * from "./s3-kms-token-vault";
 export * from "./service";
+export * from "./vault-cleanup-contracts";
+export * from "./vault-cleanup-worker";

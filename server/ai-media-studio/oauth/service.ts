@@ -142,39 +142,38 @@ export function createOAuthService(dependencies: {
     } : null;
     const verifier = pkceMode === "required_s256" ? createPkceVerifier() : null;
     const codeChallenge = verifier ? createPkceChallenge(verifier) : null;
-    let pkceVerifierRef: string | null = null;
-    if (verifier && context) {
+    const pkceVerifierRef = context
+      ? pkceVaultReference(`vault://ai-media-studio/oauth-pkce/v1/${sessionId}`)
+      : null;
+
+    // Persist the session and its exact cleanup obligation before the external
+    // write. If the write fails, the undisclosed state cannot be consumed and
+    // the durable obligation will verify/delete the deterministic key later.
+    await repository.create({
+      id: sessionId,
+      scope,
+      actorUserId,
+      providerAccountId: parsed.providerAccountId,
+      platform: parsed.platform,
+      stateDigest: digestOAuthState(state),
+      redirectUri,
+      requestedScopes,
+      pkceMode,
+      codeChallenge,
+      codeChallengeMethod: codeChallenge ? "S256" : null,
+      pkceVerifierRef,
+      expiresAt,
+      createdAt: createdAt.toISOString(),
+    });
+
+    if (verifier && context && pkceVerifierRef) {
       const rawPkceVerifierRef = await vault.put(verifier, context);
       try {
-        pkceVerifierRef = pkceVaultReference(rawPkceVerifierRef);
+        if (pkceVaultReference(rawPkceVerifierRef) !== pkceVerifierRef) throw new OAuthFlowError();
       } catch (error) {
-        try { await vault.delete(rawPkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
+        try { await vault.delete(rawPkceVerifierRef, context); } catch { /* Durable cleanup remains authoritative. */ }
         throw error;
       }
-    }
-
-    try {
-      await repository.create({
-        id: sessionId,
-        scope,
-        actorUserId,
-        providerAccountId: parsed.providerAccountId,
-        platform: parsed.platform,
-        stateDigest: digestOAuthState(state),
-        redirectUri,
-        requestedScopes,
-        pkceMode,
-        codeChallenge,
-        codeChallengeMethod: codeChallenge ? "S256" : null,
-        pkceVerifierRef,
-        expiresAt,
-        createdAt: createdAt.toISOString(),
-      });
-    } catch (error) {
-      if (pkceVerifierRef && context) {
-        try { await vault.delete(pkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
-      }
-      throw error;
     }
 
     return {

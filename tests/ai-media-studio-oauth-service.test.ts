@@ -187,9 +187,7 @@ test("required_s256 rejects malformed, noncanonical, or echo vault references an
     assert.deepEqual(deletes, [badReference]);
   }
 
-  let creates = 0;
   const repository = new InMemoryOAuthSessionRepository();
-  repository.create = async (session) => { creates += 1; throw new Error(String(session.id)); };
   const echo = createOAuthService({
     repository,
     vault: { put: async (value) => value, read: async () => "unused", delete: async () => undefined },
@@ -200,13 +198,12 @@ test("required_s256 rejects malformed, noncanonical, or echo vault references an
     echo.start({ scope, actorUserId: "actor-1", providerAccountId, platform: "youtube_shorts" }),
     /reference is invalid/,
   );
-  assert.equal(creates, 0);
 });
 
-test("repository failure compensates only an existing verifier reference", async () => {
-  for (const [policies, platform, expectedVaultCalls] of [
-    [requiredPolicies, "youtube_shorts", 1],
-    [nonePolicies, "tiktok", 0],
+test("repository failure happens before any external verifier write", async () => {
+  for (const [policies, platform] of [
+    [requiredPolicies, "youtube_shorts"],
+    [nonePolicies, "tiktok"],
   ] as const) {
     const repository = new InMemoryOAuthSessionRepository();
     repository.create = async () => { throw new Error("database rejected"); };
@@ -214,8 +211,8 @@ test("repository failure compensates only an existing verifier reference", async
     await assert.rejects(h.service.start({
       scope, actorUserId: "actor-1", providerAccountId, platform,
     }), /database rejected/);
-    assert.equal(h.puts.length, expectedVaultCalls);
-    assert.equal(h.deletes.length, expectedVaultCalls);
+    assert.equal(h.puts.length, 0);
+    assert.equal(h.deletes.length, 0);
   }
 });
 

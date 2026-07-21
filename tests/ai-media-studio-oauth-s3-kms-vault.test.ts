@@ -74,6 +74,7 @@ function vault(client: S3KmsCommandClient) {
     bucket: "oauth-private-bucket",
     region: "us-east-1",
     kmsKeyArn: KMS_ARN,
+    expectedBucketOwner: "123456789012",
     prefix: OAUTH_PKCE_OBJECT_PREFIX,
     client,
     clock: { now: () => NOW },
@@ -90,6 +91,7 @@ test("S3 PKCE vault is inert at construction and writes an exclusive, SSE-KMS bu
   const put = client.put;
   assert.ok(put);
   assert.equal(put.input.Bucket, "oauth-private-bucket");
+  assert.equal(put.input.ExpectedBucketOwner, "123456789012");
   assert.equal(put.input.Key, `${OAUTH_PKCE_OBJECT_PREFIX}/${SESSION_ID}.json`);
   assert.equal(put.input.ServerSideEncryption, "aws:kms");
   assert.equal(put.input.SSEKMSKeyId, KMS_ARN);
@@ -143,14 +145,31 @@ test("S3 PKCE delete is idempotent when the exact object is already absent", asy
   const store = vault({ async send(command) {
     commands.push(command);
     if (command instanceof HeadObjectCommand) {
-      const error = new Error("not found") as Error & { $metadata: { httpStatusCode: number } };
-      error.$metadata = { httpStatusCode: 404 };
+      const error = new Error("not found");
+      error.name = "NotFound";
       throw error;
     }
     throw new Error("delete should not run for an absent object");
   } });
   await store.delete(`vault://ai-media-studio/oauth-pkce/v1/${SESSION_ID}`, context);
   assert.equal(commands.length, 1);
+  assert.equal((commands[0] as HeadObjectCommand).input.ExpectedBucketOwner, "123456789012");
+});
+
+test("S3 PKCE cleanup rejects ambiguous status-only 404 and bucket-level absence", async () => {
+  for (const error of [
+    Object.assign(new Error("gateway"), { $metadata: { httpStatusCode: 404 } }),
+    Object.assign(new Error("bucket missing"), { name: "NoSuchBucket" }),
+  ]) {
+    const store = vault({ async send(command) {
+      if (command instanceof HeadObjectCommand) throw error;
+      throw new Error("unexpected command");
+    } });
+    await assert.rejects(
+      store.delete(`vault://ai-media-studio/oauth-pkce/v1/${SESSION_ID}`, context),
+      /vault request was rejected/,
+    );
+  }
 });
 
 test("S3 PKCE vault rejects wrong encryption, oversized bodies, invalid TTLs, and redacts provider errors", async () => {
@@ -196,19 +215,19 @@ test("S3 PKCE vault configuration rejects aliases, mismatched regions, custom pr
   const client = new RecordingClient();
   assert.throws(() => new S3KmsPkceVault({
     bucket: "oauth-private-bucket", region: "us-east-1",
-    kmsKeyArn: "arn:aws:kms:us-east-1:123456789012:alias/oauth", prefix: OAUTH_PKCE_OBJECT_PREFIX, client,
+    kmsKeyArn: "arn:aws:kms:us-east-1:123456789012:alias/oauth", expectedBucketOwner: "123456789012", prefix: OAUTH_PKCE_OBJECT_PREFIX, client,
   }), /vault request was rejected/);
   assert.throws(() => new S3KmsPkceVault({
     bucket: "oauth-private-bucket", region: "us-east-1",
     kmsKeyArn: "arn:aws-cn:kms:us-east-1:123456789012:key/22222222-2222-4222-8222-222222222222",
+    expectedBucketOwner: "123456789012", prefix: OAUTH_PKCE_OBJECT_PREFIX, client,
+  }), /vault request was rejected/);
+  assert.throws(() => new S3KmsPkceVault({
+    bucket: "oauth-private-bucket", region: "us-west-2", kmsKeyArn: KMS_ARN, expectedBucketOwner: "123456789012",
     prefix: OAUTH_PKCE_OBJECT_PREFIX, client,
   }), /vault request was rejected/);
   assert.throws(() => new S3KmsPkceVault({
-    bucket: "oauth-private-bucket", region: "us-west-2", kmsKeyArn: KMS_ARN,
-    prefix: OAUTH_PKCE_OBJECT_PREFIX, client,
-  }), /vault request was rejected/);
-  assert.throws(() => new S3KmsPkceVault({
-    bucket: "oauth-private-bucket", region: "us-east-1", kmsKeyArn: KMS_ARN,
+    bucket: "oauth-private-bucket", region: "us-east-1", kmsKeyArn: KMS_ARN, expectedBucketOwner: "123456789012",
     prefix: "other-prefix" as typeof OAUTH_PKCE_OBJECT_PREFIX, client,
   }), /vault request was rejected/);
   await assert.rejects(
@@ -228,7 +247,7 @@ test("default SDK client pins the official AWS endpoint despite ambient endpoint
   process.env.AWS_ENDPOINT_URL_S3 = "https://attacker.example";
   try {
     const store = new S3KmsPkceVault({
-      bucket: "oauth-private-bucket", region: "us-east-1", kmsKeyArn: KMS_ARN,
+      bucket: "oauth-private-bucket", region: "us-east-1", kmsKeyArn: KMS_ARN, expectedBucketOwner: "123456789012",
       prefix: OAUTH_PKCE_OBJECT_PREFIX,
     });
     const client = (store as unknown as { config: { client: { config: { endpoint(): Promise<{ hostname: string }> } } } }).config.client;

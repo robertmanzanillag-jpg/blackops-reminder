@@ -9,6 +9,7 @@ import {
 import { aiMediaOAuthPlatformSchema } from "../../../shared/ai-media-studio-oauth";
 import type { OAuthVault, OAuthVaultContext } from "./contracts";
 import { OAuthFlowError } from "./contracts";
+import { assertExpectedBucketOwner, boundedClient, isExactS3KeyAbsence } from "./s3-kms-envelope";
 
 const REFERENCE = /^vault:\/\/ai-media-studio\/oauth-pkce\/v1\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/u;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -19,13 +20,14 @@ const MAX_TTL_MS = 15 * 60 * 1_000;
 export const OAUTH_PKCE_OBJECT_PREFIX = "ai-media-studio/oauth-pkce/v1";
 
 export interface S3KmsCommandClient {
-  send(command: unknown): Promise<any>;
+  send(command: unknown,options?:{abortSignal?:AbortSignal}): Promise<any>;
 }
 
 export type S3KmsPkceVaultConfig = Readonly<{
   bucket: string;
   region: string;
   kmsKeyArn: string;
+  expectedBucketOwner: string;
   prefix: typeof OAUTH_PKCE_OBJECT_PREFIX;
   client?: S3KmsCommandClient;
   clock?: { now(): Date };
@@ -34,6 +36,7 @@ export type S3KmsPkceVaultConfig = Readonly<{
 type NormalizedConfig = Readonly<{
   bucket: string;
   kmsKeyArn: string;
+  expectedBucketOwner: string;
   prefix: typeof OAUTH_PKCE_OBJECT_PREFIX;
   client: S3KmsCommandClient;
   clock: { now(): Date };
@@ -55,6 +58,7 @@ export class S3KmsPkceVault implements OAuthVault {
       if (body.byteLength > MAX_BODY_BYTES) throw rejected();
       await this.config.client.send(new PutObjectCommand({
         Bucket: this.config.bucket,
+        ExpectedBucketOwner: this.config.expectedBucketOwner,
         Key: objectKey(this.config.prefix, normalized.sessionId),
         Body: body,
         ContentLength: body.byteLength,
@@ -86,6 +90,7 @@ export class S3KmsPkceVault implements OAuthVault {
       const bindingDigest = bindingDigestFor(normalized);
       const result = await this.config.client.send(new GetObjectCommand({
         Bucket: this.config.bucket,
+        ExpectedBucketOwner: this.config.expectedBucketOwner,
         Key: objectKey(this.config.prefix, normalized.sessionId),
       }));
       validateStoredObject(result, this.config.kmsKeyArn, normalized, bindingDigest);
@@ -114,15 +119,17 @@ export class S3KmsPkceVault implements OAuthVault {
       try {
         head = await this.config.client.send(new HeadObjectCommand({
           Bucket: this.config.bucket,
+          ExpectedBucketOwner: this.config.expectedBucketOwner,
           Key: objectKey(this.config.prefix, normalized.sessionId),
         }));
       } catch (error) {
-        if (isNotFound(error)) return;
+        if (isExactS3KeyAbsence(error, true)) return;
         throw error;
       }
       validateStoredObject(head, this.config.kmsKeyArn, normalized, bindingDigest);
       await this.config.client.send(new DeleteObjectCommand({
         Bucket: this.config.bucket,
+        ExpectedBucketOwner: this.config.expectedBucketOwner,
         Key: objectKey(this.config.prefix, normalized.sessionId),
       }));
     } catch (error) {
@@ -163,16 +170,18 @@ function validateStoredObject(
 function normalizeConfig(config: S3KmsPkceVaultConfig): NormalizedConfig {
   if (!validBucket(config.bucket) || !validRegion(config.region) || config.prefix !== OAUTH_PKCE_OBJECT_PREFIX) throw rejected();
   const partition = assertKmsArn(config.kmsKeyArn, config.region);
+  assertExpectedBucketOwner(config.kmsKeyArn, config.expectedBucketOwner);
   return {
     bucket: config.bucket,
     kmsKeyArn: config.kmsKeyArn,
+    expectedBucketOwner: config.expectedBucketOwner,
     prefix: config.prefix,
     // Pin the SDK to the partition's official AWS endpoint. This deliberately
     // overrides ambient AWS_ENDPOINT_URL/AWS_ENDPOINT_URL_S3 variables.
-    client: config.client ?? new S3Client({
+    client: boundedClient(config.client ?? new S3Client({
       region: config.region,
       endpoint: officialS3Endpoint(partition, config.region),
-    }),
+    })),
     clock: config.clock ?? { now: () => new Date() },
   };
 }
@@ -265,12 +274,6 @@ function normalizedMetadata(value: unknown): Record<string, string> {
     output[key.toLowerCase()] = item;
   }
   return output;
-}
-
-function isNotFound(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
-  return record.name === "NotFound" || record.name === "NoSuchKey" || record.$metadata?.httpStatusCode === 404;
 }
 
 function safeField(value: string): boolean {

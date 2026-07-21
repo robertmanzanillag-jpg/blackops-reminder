@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T07:10:20.477Z",
+  "generatedAt": "2026-07-21T07:50:13.429Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,32 +85,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 645,
-    "filesIndexed": 554,
-    "imports": 2211,
+    "filesVisible": 655,
+    "filesIndexed": 562,
+    "imports": 2235,
     "routes": 487,
-    "symbols": 10393
+    "symbols": 10564
   },
   "directories": {
-    "docs/ai-media-studio": {
-      "files": 10,
-      "indexed": 10,
+    "migrations/ai-media-studio": {
+      "files": 21,
+      "indexed": 1,
       "kinds": {
-        "docs": 10
+        "other": 20,
+        "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 99,
-      "indexed": 97,
+      "files": 103,
+      "indexed": 101,
       "kinds": {
-        "server": 99
+        "server": 103
       }
     },
     "tests": {
-      "files": 121,
-      "indexed": 116,
+      "files": 125,
+      "indexed": 120,
       "kinds": {
-        "test": 121
+        "test": 125
       }
     },
     ".agents/skills": {
@@ -163,19 +164,18 @@
         "client-page": 23
       }
     },
+    "docs/ai-media-studio": {
+      "files": 10,
+      "indexed": 10,
+      "kinds": {
+        "docs": 10
+      }
+    },
     "docs": {
       "files": 12,
       "indexed": 11,
       "kinds": {
         "docs": 12
-      }
-    },
-    "migrations/ai-media-studio": {
-      "files": 19,
-      "indexed": 1,
-      "kinds": {
-        "other": 18,
-        "docs": 1
       }
     },
     "script": {
@@ -7923,6 +7923,114 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/aws-vault-infrastructure-preflight.ts",
+      "kind": "server",
+      "imports": [
+        "@aws-sdk/client-kms",
+        "@aws-sdk/client-s3",
+        "node:crypto"
+      ],
+      "exports": [
+        "AwsVaultCommandClient",
+        "AwsVaultInfrastructureAttestation",
+        "AwsVaultInfrastructureCheckCode",
+        "AwsVaultInfrastructureManifest",
+        "AwsVaultInfrastructureNotReadyError",
+        "AwsVaultInfrastructurePreflight",
+        "AwsVaultInfrastructurePreflightDependencies",
+        "AwsVaultResourceManifest",
+        "canonicalAwsPolicySha256",
+        "createAwsVaultInfrastructurePreflight"
+      ],
+      "symbols": [
+        "ACCOUNT_ID",
+        "ATTESTATION_TTL_MS",
+        "AwsVaultInfrastructureNotReadyError",
+        "AwsVaultInfrastructurePreflight",
+        "BUCKET",
+        "DEFAULT_REQUEST_TIMEOUT_MS",
+        "EXPECTED_PREFIXES",
+        "KMS_KEY_ARN",
+        "MAX_GRANT_PAGES",
+        "NormalizedManifest",
+        "REGION",
+        "SAFE_ERROR",
+        "SHA256",
+        "SnapshotFacts",
+        "VaultRole",
+        "base",
+        "block",
+        "boundedPreflightClient",
+        "canonicalAwsPolicySha256",
+        "canonicalJson",
+        "checkedAt",
+        "checkedPolicyDigest",
+        "checks",
+        "completedAt",
+        "controller",
+        "createAwsVaultInfrastructurePreflight",
+        "described",
+        "encryption",
+        "encryptionRule",
+        "encryptionRules",
+        "exactKeys",
+        "expiration",
+        "filter",
+        "first",
+        "firstDigest",
+        "firstNow",
+        "grants",
+        "isRecord",
+        "kmsRequest",
+        "lifecycle",
+        "lifecycleRequest",
+        "location",
+        "match",
+        "metadata",
+        "modeledAbsenceRequest",
+        "modeledErrorName",
+        "next",
+        "nextRotation",
+        "normalizeManifest",
+        "normalizeRequestTimeout",
+        "normalizedBucketRegion",
+        "notReady",
+        "objectLock",
+        "officialKmsEndpoint",
+        "officialS3Endpoint",
+        "ownership",
+        "partition",
+        "partitionFor",
+        "partitions",
+        "policy",
+        "policyStatus",
+        "publicAccess",
+        "replication",
+        "requestTimeoutMs",
+        "resource",
+        "resources",
+        "roleFacts",
+        "rotation",
+        "rotationDates",
+        "rule",
+        "rules",
+        "s3Request",
+        "second",
+        "secondDigest",
+        "secondNow",
+        "seen",
+        "sha256",
+        "timeout",
+        "trustedNow",
+        "validBucket",
+        "validKmsArn",
+        "validateLifecycle",
+        "versioning",
+        "wrapped"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/contracts.ts",
       "kind": "server",
       "imports": [
@@ -8003,6 +8111,7 @@
       ],
       "symbols": [
         "CasLost",
+        "ClaimLost",
         "DrizzleOAuthAuthorizationSagaRepository",
         "DrizzleOAuthSessionRepository",
         "EXCHANGE_STATUSES",
@@ -8042,6 +8151,35 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/drizzle-vault-cleanup-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./drizzle-repository",
+        "./vault-cleanup-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOAuthVaultCleanupRepository"
+      ],
+      "symbols": [
+        "DrizzleOAuthVaultCleanupRepository",
+        "Result",
+        "at",
+        "common",
+        "context",
+        "expires",
+        "iso",
+        "kind",
+        "mapRow",
+        "result",
+        "rows",
+        "scope",
+        "tokenBindingId"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/in-memory.ts",
       "kind": "server",
       "imports": [
@@ -8049,7 +8187,8 @@
         "node:crypto"
       ],
       "exports": [
-        "InMemoryOAuthSessionRepository"
+        "InMemoryOAuthSessionRepository",
+        "InMemoryOAuthVaultOperation"
       ],
       "symbols": [
         "InMemoryOAuthAccount",
@@ -8059,14 +8198,17 @@
         "account",
         "accountKey",
         "clone",
+        "codeReference",
         "current",
+        "existingCode",
         "expectedCredentialVersion",
         "key",
         "leaseExpiresMs",
         "next",
         "nowMs",
         "session",
-        "tokenBindingId"
+        "tokenBindingId",
+        "tokenReference"
       ],
       "routes": []
     },
@@ -8075,9 +8217,11 @@
       "kind": "server",
       "imports": [
         "./authorization-url",
+        "./aws-vault-infrastructure-preflight",
         "./contracts",
         "./crypto",
         "./drizzle-repository",
+        "./drizzle-vault-cleanup-repository",
         "./in-memory",
         "./platform-manifests",
         "./production-runtime",
@@ -8085,7 +8229,9 @@
         "./s3-kms-envelope",
         "./s3-kms-pkce-vault",
         "./s3-kms-token-vault",
-        "./service"
+        "./service",
+        "./vault-cleanup-contracts",
+        "./vault-cleanup-worker"
       ],
       "exports": [],
       "symbols": [],
@@ -8135,6 +8281,7 @@
         "configuredNames",
         "createProductionOAuthRuntimeFromEnvironment",
         "enabledPlatforms",
+        "expectedBucketOwner",
         "invalidConfiguration",
         "kmsKeyArn",
         "names",
@@ -8212,8 +8359,10 @@
         "EnvelopeKmsConfig",
         "MAX_ENVELOPE_BYTES",
         "NormalizedEnvelopeKmsConfig",
+        "OAUTH_VAULT_SEND_BUDGET_MS",
         "assertExpectedBucketOwner",
         "assertKmsKeyArn",
+        "boundedClient",
         "canonicalContextBytes",
         "decryptEnvelope",
         "digestContext",
@@ -8224,6 +8373,7 @@
         "officialS3Endpoint",
         "readBoundedBody",
         "safeEqual",
+        "sendBounded",
         "validBucket",
         "vaultRejected"
       ],
@@ -8231,6 +8381,7 @@
         "BASE64",
         "EnvelopeV1",
         "MAX_ENVELOPE_BYTES",
+        "OAUTH_VAULT_SEND_BUDGET_MS",
         "SHA256",
         "a",
         "actualDigest",
@@ -8239,6 +8390,7 @@
         "authTag",
         "bindingDigest",
         "body",
+        "boundedClient",
         "canonicalContextBytes",
         "chunk",
         "cipher",
@@ -8265,6 +8417,7 @@
         "partition",
         "readBoundedBody",
         "safeEqual",
+        "sendBounded",
         "validBucket",
         "value",
         "vaultRejected"
@@ -8277,6 +8430,7 @@
       "imports": [
         "../../../shared/ai-media-studio-oauth",
         "./contracts",
+        "./s3-kms-envelope",
         "@aws-sdk/client-s3",
         "node:crypto"
       ],
@@ -8308,7 +8462,6 @@
         "envelope",
         "expiresAtMs",
         "httpExpiry",
-        "isNotFound",
         "leftBytes",
         "match",
         "metadata",
@@ -8371,6 +8524,7 @@
         "parsed",
         "pkceMode",
         "pkceVaultReference",
+        "pkceVerifierRef",
         "policies",
         "policy",
         "policyFor",
@@ -8388,6 +8542,61 @@
         "ttlMs",
         "vault",
         "verifier"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/oauth/vault-cleanup-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-oauth",
+        "../core/resource-domain",
+        "./contracts"
+      ],
+      "exports": [
+        "OAUTH_VAULT_OPERATION_BUDGET_MS",
+        "OAUTH_VAULT_SETTLE_MS",
+        "OAuthVaultCleanupCas",
+        "OAuthVaultCleanupErrorCode",
+        "OAuthVaultCleanupItem",
+        "OAuthVaultCleanupKind",
+        "OAuthVaultCleanupLease",
+        "OAuthVaultCleanupRepository",
+        "OAuthVaultCleanupState"
+      ],
+      "symbols": [
+        "OAUTH_VAULT_OPERATION_BUDGET_MS",
+        "OAUTH_VAULT_SETTLE_MS"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/oauth/vault-cleanup-worker.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./vault-cleanup-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "OAuthVaultCleanupRunResult",
+        "createOAuthVaultCleanupWorker"
+      ],
+      "symbols": [
+        "InvalidCleanupObligation",
+        "VaultCleanupTimeout",
+        "cas",
+        "clock",
+        "createOAuthVaultCleanupWorker",
+        "deleteExact",
+        "deleteWithinBudget",
+        "items",
+        "now",
+        "operationBudgetMs",
+        "result",
+        "runOnce",
+        "state",
+        "timeout"
       ],
       "routes": []
     },
@@ -17110,6 +17319,7 @@
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOAuthSessions",
+        "aiMediaOAuthVaultOperations",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
         "aiMediaProviderAccounts",
@@ -17137,6 +17347,7 @@
         "aiMediaInfluencers",
         "aiMediaMediaAssets",
         "aiMediaOAuthSessions",
+        "aiMediaOAuthVaultOperations",
         "aiMediaOrchestrationRuns",
         "aiMediaOutbox",
         "aiMediaProviderAccounts",
@@ -18115,6 +18326,61 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/aws-vault-infrastructure-preflight",
+        "@aws-sdk/client-kms",
+        "@aws-sdk/client-s3",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "BUCKET_POLICY",
+        "FakeOptions",
+        "KEY_IDS",
+        "KEY_POLICY",
+        "KmsFixture",
+        "NEXT_ROTATION",
+        "NOW",
+        "OWNER",
+        "REGION",
+        "S3Fixture",
+        "arn",
+        "attestation",
+        "bucket",
+        "bucketPolicySha256",
+        "cases",
+        "current",
+        "error",
+        "first",
+        "fixture",
+        "grantCommands",
+        "input",
+        "keyArn",
+        "kms",
+        "kmsKeyPolicySha256",
+        "manifest",
+        "marker",
+        "modeled",
+        "next",
+        "pages",
+        "pass",
+        "preflight",
+        "previousGlobal",
+        "previousKms",
+        "previousS3",
+        "rejectsWith",
+        "resource",
+        "s3",
+        "sentinel",
+        "serialized",
+        "source"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-oauth-crypto.test.ts",
       "kind": "test",
       "imports": [
@@ -18261,6 +18527,35 @@
         "started",
         "unsafe",
         "unsafePolicies"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-oauth-vault-cleanup-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict"
+      ],
+      "exports": [],
+      "symbols": [
+        "ack",
+        "dialect",
+        "failed",
+        "sql"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [
+        "base",
+        "binding",
+        "item",
+        "token",
+        "worker"
       ],
       "routes": []
     },
@@ -18603,6 +18898,14 @@
         "normalized",
         "rollback"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -20974,12 +21277,15 @@
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
+    "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
     "tests/ai-media-studio-oauth-crypto.test.ts",
     "tests/ai-media-studio-oauth-drizzle.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-token-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-vault.test.ts",
     "tests/ai-media-studio-oauth-service.test.ts",
+    "tests/ai-media-studio-oauth-vault-cleanup-drizzle.test.ts",
+    "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",
@@ -20989,6 +21295,7 @@
     "tests/ai-media-studio-persistence.test.ts",
     "tests/ai-media-studio-pr11-oauth-policy-migration.test.ts",
     "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
+    "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",

@@ -6,7 +6,11 @@ const SHA256 = /^[0-9a-f]{64}$/u;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 export const MAX_ENVELOPE_BYTES = 96 * 1024;
 
-export interface AwsCommandClient { send(command: unknown): Promise<any> }
+export const OAUTH_VAULT_SEND_BUDGET_MS=15_000;
+export interface AwsCommandClient { send(command: unknown,options?:{abortSignal?:AbortSignal}): Promise<any> }
+export async function sendBounded(client:AwsCommandClient,command:unknown):Promise<any>{const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),OAUTH_VAULT_SEND_BUDGET_MS);timer.unref?.();try{return await client.send(command,{abortSignal:controller.signal});}finally{clearTimeout(timer);}}
+export function boundedClient(client:AwsCommandClient):AwsCommandClient{return Object.assign({send:(command:unknown)=>sendBounded(client,command)},
+  (client as {config?:unknown}).config===undefined?{}:{config:(client as {config?:unknown}).config});}
 
 export type EnvelopeKmsConfig = Readonly<{
   region: string;
@@ -63,7 +67,7 @@ export async function encryptEnvelope(
   let dek: Buffer | undefined;
   let kmsPlaintext: Uint8Array | undefined;
   try {
-    const generated = await config.kmsClient.send(new GenerateDataKeyCommand({
+    const generated = await sendBounded(config.kmsClient,new GenerateDataKeyCommand({
       KeyId: config.kmsKeyArn,
       KeySpec: "AES_256",
       EncryptionContext: encryptionContext(bindingDigest),
@@ -105,7 +109,7 @@ export async function decryptEnvelope(
     const actualDigest = digestContext(aad);
     if (!safeEqual(actualDigest, expectedBindingDigest) || !safeEqual(envelope.bindingDigest, actualDigest)) throw vaultRejected();
     const encryptedDataKey = decodeBase64(envelope.encryptedDataKey, 1, 16 * 1024);
-    const decrypted = await config.kmsClient.send(new DecryptCommand({
+    const decrypted = await sendBounded(config.kmsClient,new DecryptCommand({
       CiphertextBlob: encryptedDataKey,
       KeyId: config.kmsKeyArn,
       EncryptionAlgorithm: "SYMMETRIC_DEFAULT",

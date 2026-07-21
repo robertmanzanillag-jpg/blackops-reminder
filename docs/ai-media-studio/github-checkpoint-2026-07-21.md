@@ -217,3 +217,27 @@ Explicit pre-runtime blockers:
 - Dedicated secret buckets/CMKs, unversioned-or-VersionId-aware deletion, Block Public Access, lifecycle, durable reconciliation, monitoring and key rotation are not configured or proven.
 - Real connectors remain blocked by the target-selection, token-role, lifetime, scope/capability and multi-stage recovery changes captured in `oauth-provider-readiness.md`.
 - No route is mounted, no migration is applied, no AWS/provider call is made, no content is posted and no deployment is authorized.
+
+## PR14 checkpoint — OAuth vault operations
+
+GitHub PR: #92, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/92`.
+
+Branch: `codex/ai-media-studio-oauth-vault-operations`, stacked on PR #89.
+
+Implemented:
+
+- Added a dedicated relational cleanup outbox whose PKCE/code/token obligations are created before their corresponding external vault writes can become orphaned.
+- Added bounded PostgreSQL-clock claims with `FOR UPDATE SKIP LOCKED`, leases, fencing, retry/dead-letter evidence, exact source-context revalidation, conservative active-token protection and two exact delete passes separated by quiescence.
+- Added an explicit `runOnce` cleanup worker with no timer or autostart and bounded AWS SDK operations.
+- Added an inert S3/KMS infrastructure preflight over three distinct bucket/CMK planes. It validates exact policy digests, unversioned private buckets, encryption/lifecycle/ownership posture, CMK state/rotation/grants and requires two identical full snapshots before returning a short-lived identifier-free attestation.
+- Added an additive reviewed migration and data-preserving rollback. The migration is checked in but unapplied.
+
+Safety boundary: no route, runtime composition, timer, migration apply, live AWS/provider request, external post or deployment is included. Effective IAM/IaC, Access Analyzer, monitoring, migration rehearsal, real connectors, target selection, refresh/revocation and provider sandbox proof remain release gates.
+
+Evidence before GitHub preservation:
+
+- Full AI Media Studio suite: 423/435 passed in the restricted sandbox; the 12 local HTTP cases blocked only by `listen EPERM` were rerun outside the sandbox and passed 12/12, yielding 435/435 composed evidence.
+- TypeScript, production build, codebase-map refresh and staged diff/whitespace checks passed.
+- Independent checker found no remaining P0-P2; independent security review found no remaining P0-P3 after the crash/fencing and error-taxonomy fixes.
+- Static App QA passed with no PR14 findings. Existing bundle-size and local `yt-dlp` build messages are baseline/environment advisories, not PR14 deltas.
+- SQL and migration shape are tested statically but have not been executed against PostgreSQL; staging rehearsal remains mandatory.

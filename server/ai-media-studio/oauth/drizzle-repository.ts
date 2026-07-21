@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { aiMediaOAuthSessions, aiMediaProviderAccounts } from "../../../shared/models/ai-media-studio-db";
+import { aiMediaOAuthSessions, aiMediaOAuthVaultOperations, aiMediaProviderAccounts } from "../../../shared/models/ai-media-studio-db";
 import type {
   ConsumeDeniedOrErrorOAuthSession,
   ClaimOAuthAuthorization,
@@ -125,7 +125,7 @@ export class DrizzleOAuthSessionRepository implements OAuthSessionRepository {
 
   async create(input: CreateOAuthSession): Promise<OAuthSession> {
     const result = await this.db.execute(sql`
-      INSERT INTO ${aiMediaOAuthSessions} (
+      WITH created AS (INSERT INTO ${aiMediaOAuthSessions} (
         id, owner_user_id, workspace_id, actor_user_id, provider_account_id, platform,
         state_digest, redirect_uri, requested_scopes, pkce_mode, code_challenge,
         code_challenge_method, pkce_verifier_ref, status, expires_at, created_at, updated_at
@@ -135,7 +135,14 @@ export class DrizzleOAuthSessionRepository implements OAuthSessionRepository {
         ${JSON.stringify(input.requestedScopes)}::jsonb, ${input.pkceMode}, ${input.codeChallenge}, ${input.codeChallengeMethod},
         ${input.pkceVerifierRef}, 'pending', ${new Date(input.expiresAt)},
         ${new Date(input.createdAt)}, ${new Date(input.createdAt)}
-      ) RETURNING *
+      ) RETURNING *), cleanup AS (
+        INSERT INTO ${aiMediaOAuthVaultOperations} (
+          owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,session_id,kind,reference,
+          source_expires_at,state,available_at,quiescent_until,created_at,updated_at
+        ) SELECT owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,id,'pkce_verifier',pkce_verifier_ref,
+          expires_at,'scheduled',expires_at,expires_at+interval '60 seconds',created_at,created_at
+        FROM created WHERE pkce_verifier_ref IS NOT NULL RETURNING id
+      ) SELECT created.*,(SELECT count(*) FROM cleanup) AS cleanup_count FROM created
     `);
     const row = rows(result)[0];
     if (!row) throw new Error("OAuth session was not created");
@@ -144,7 +151,7 @@ export class DrizzleOAuthSessionRepository implements OAuthSessionRepository {
 
   async consumeDeniedOrError(input: ConsumeDeniedOrErrorOAuthSession): Promise<OAuthSession | undefined> {
     const result = await this.db.execute(sql`
-      UPDATE ${aiMediaOAuthSessions}
+      WITH consumed AS (UPDATE ${aiMediaOAuthSessions}
       SET status = 'consumed', outcome = ${input.outcome}, exchange_status = 'not_required',
           consumed_at = ${new Date(input.now)}, updated_at = ${new Date(input.now)}
       WHERE state_digest = ${input.stateDigest}
@@ -152,7 +159,13 @@ export class DrizzleOAuthSessionRepository implements OAuthSessionRepository {
         AND status = 'pending'
         AND consumed_at IS NULL
         AND expires_at > ${new Date(input.now)}
-      RETURNING *
+      RETURNING *), accelerated AS (
+        UPDATE ${aiMediaOAuthVaultOperations} operations
+        SET state='scheduled',available_at=clock_timestamp(),quiescent_until=clock_timestamp()+interval '60 seconds',updated_at=clock_timestamp()
+        FROM consumed WHERE operations.session_id=consumed.id AND operations.owner_user_id=consumed.owner_user_id
+          AND operations.workspace_id=consumed.workspace_id AND operations.kind='pkce_verifier'
+          AND operations.state NOT IN ('completed','dead_letter') RETURNING operations.id
+      ) SELECT consumed.*,(SELECT count(*) FROM accelerated) AS cleanup_count FROM consumed
     `);
     const row = rows(result)[0];
     return row ? mapRow(row) : undefined;
@@ -163,7 +176,8 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
   constructor(private readonly db: OAuthTransactionalDatabase) {}
 
   async claim(input: ClaimOAuthAuthorization): Promise<OAuthAuthorizationClaim | undefined> {
-    const result = await this.db.execute(sql`
+    class ClaimLost extends Error {}
+    try{return await this.db.transaction(async(tx)=>{const result = await tx.execute(sql`
       WITH eligible AS (
         SELECT sessions.id, accounts.credential_version
         FROM ${aiMediaOAuthSessions} AS sessions
@@ -178,34 +192,55 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
           AND sessions.actor_user_id = ${input.actorUserId}
           AND sessions.provider_account_id = ${input.providerAccountId}
           AND sessions.platform = ${input.platform}
-          AND sessions.expires_at > ${new Date(input.now)}
-          AND ${new Date(input.leaseExpiresAt)} > ${new Date(input.now)}
-          AND ${new Date(input.leaseExpiresAt)} <= ${new Date(input.now)} + interval '5 minutes'
+          AND sessions.expires_at > clock_timestamp()
+          AND ${new Date(input.leaseExpiresAt)} > clock_timestamp()
+          AND ${new Date(input.leaseExpiresAt)} <= clock_timestamp() + interval '5 minutes'
           AND ${new Date(input.leaseExpiresAt)} <= sessions.expires_at
           AND length(btrim(${input.leaseOwner})) BETWEEN 1 AND 255
           AND (
             (sessions.status = 'pending' AND sessions.exchange_status = 'not_started'
              AND sessions.authorization_code_digest IS NULL)
             OR
-            (sessions.status = 'processing' AND sessions.lease_expires_at <= ${new Date(input.now)}
+            (sessions.status = 'processing' AND sessions.lease_expires_at <= clock_timestamp()
              AND sessions.authorization_code_digest = ${input.codeDigest}
              AND sessions.exchange_status IN ('not_started', 'ready', 'in_progress')
              AND accounts.credential_version = sessions.expected_credential_version)
           )
         FOR UPDATE OF sessions
       )
-      UPDATE ${aiMediaOAuthSessions} AS sessions
+      , claimed AS (UPDATE ${aiMediaOAuthSessions} AS sessions
       SET status = 'processing', lease_token = ${input.leaseToken}, lease_owner = ${input.leaseOwner},
           lease_expires_at = ${new Date(input.leaseExpiresAt)}, lease_fencing = sessions.lease_fencing + 1,
           authorization_code_digest = ${input.codeDigest},
           expected_credential_version = COALESCE(sessions.expected_credential_version, eligible.credential_version),
           target_credential_version = COALESCE(sessions.target_credential_version, eligible.credential_version + 1),
-          token_binding_id = COALESCE(sessions.token_binding_id, gen_random_uuid()), updated_at = ${new Date(input.now)}
+          token_binding_id = COALESCE(sessions.token_binding_id, gen_random_uuid()), updated_at = clock_timestamp()
       FROM eligible WHERE sessions.id = eligible.id
-      RETURNING sessions.*
+      RETURNING sessions.*), obligations AS (
+        INSERT INTO ${aiMediaOAuthVaultOperations} (
+          owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,session_id,kind,reference,
+          token_binding_id,authorization_code_digest,source_expires_at,target_credential_version,state,
+          available_at,quiescent_until,created_at,updated_at
+        ) SELECT claimed.owner_user_id,claimed.workspace_id,claimed.actor_user_id,claimed.provider_account_id,claimed.platform,claimed.id,
+          obligation_values.kind,obligation_values.reference,claimed.token_binding_id,obligation_values.code_digest,obligation_values.source_expires_at,obligation_values.target_version,
+          obligation_values.state,obligation_values.available_at,obligation_values.quiescent_until,clock_timestamp(),clock_timestamp()
+        FROM claimed CROSS JOIN LATERAL (VALUES
+          ('authorization_code','vault://ai-media-studio/oauth-code/v1/'||claimed.id,claimed.authorization_code_digest,claimed.expires_at,NULL::integer,'scheduled',claimed.expires_at,claimed.expires_at+interval '60 seconds'),
+          ('token_credential','vault://ai-media-studio/oauth-token/v1/'||claimed.token_binding_id,NULL::text,NULL::timestamptz,claimed.target_credential_version,'retained','infinity'::timestamptz,'infinity'::timestamptz)
+        ) obligation_values(kind,reference,code_digest,source_expires_at,target_version,state,available_at,quiescent_until)
+        ON CONFLICT (kind,reference) DO UPDATE SET reference=EXCLUDED.reference
+        WHERE ai_media_oauth_vault_operations.owner_user_id=EXCLUDED.owner_user_id
+          AND ai_media_oauth_vault_operations.workspace_id=EXCLUDED.workspace_id
+          AND ai_media_oauth_vault_operations.actor_user_id=EXCLUDED.actor_user_id
+          AND ai_media_oauth_vault_operations.provider_account_id=EXCLUDED.provider_account_id
+          AND ai_media_oauth_vault_operations.platform=EXCLUDED.platform
+          AND ai_media_oauth_vault_operations.session_id=EXCLUDED.session_id
+        RETURNING id
+      ) SELECT claimed.*,(SELECT count(*) FROM obligations) AS cleanup_count FROM claimed
+        WHERE (SELECT count(*) FROM obligations)=2
     `);
     const row = rows(result)[0];
-    return row ? claimFromRow(row) : undefined;
+    if(!row)throw new ClaimLost();return claimFromRow(row);});}catch(error){if(error instanceof ClaimLost)return undefined;throw error;}
   }
 
   async attachAuthorizationCode(input: OAuthLeaseCommand & { authorizationCodeRef: string }): Promise<OAuthAuthorizationClaim | undefined> {
@@ -230,7 +265,7 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
             AND provider_account_id = ${input.providerAccountId} AND platform = ${input.platform}
             AND status = 'processing' AND exchange_status = 'in_progress'
             AND lease_token = ${input.leaseToken} AND lease_fencing = ${input.leaseFencing}
-            AND lease_expires_at > ${new Date(input.now)} AND token_binding_id = ${input.descriptor.tokenBindingId}
+            AND lease_expires_at > clock_timestamp() AND token_binding_id = ${input.descriptor.tokenBindingId}
           FOR UPDATE
         `);
         const raw = rows(sessionResult)[0];
@@ -257,7 +292,7 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
         `);
         if (rows(accountResult).length !== 1) throw new CasLost();
         const doneResult = await tx.execute(sql`
-          UPDATE ${aiMediaOAuthSessions}
+          WITH done AS (UPDATE ${aiMediaOAuthSessions}
           SET status = 'consumed', exchange_status = 'succeeded', outcome = 'authorized',
               consumed_at = ${new Date(input.consumedAt)}, lease_token = NULL, lease_owner = NULL,
               lease_expires_at = NULL, failure_code = NULL, updated_at = ${new Date(input.consumedAt)}
@@ -267,7 +302,17 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
             AND status = 'processing' AND exchange_status = 'in_progress'
             AND lease_token = ${input.leaseToken} AND lease_fencing = ${input.leaseFencing}
             AND token_binding_id = ${input.descriptor.tokenBindingId}
-          RETURNING *
+          RETURNING *), cleanup AS (
+            UPDATE ${aiMediaOAuthVaultOperations} operations
+            SET state=CASE WHEN operations.kind='token_credential' THEN 'retained' ELSE 'scheduled' END,
+                available_at=CASE WHEN operations.kind='token_credential' THEN 'infinity'::timestamptz ELSE clock_timestamp() END,
+                quiescent_until=CASE WHEN operations.kind='token_credential' THEN 'infinity'::timestamptz ELSE clock_timestamp()+interval '60 seconds' END,
+                lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=clock_timestamp()
+            FROM done WHERE operations.owner_user_id=done.owner_user_id AND operations.workspace_id=done.workspace_id
+              AND operations.actor_user_id=done.actor_user_id AND operations.provider_account_id=done.provider_account_id
+              AND operations.platform=done.platform AND operations.session_id=done.id AND operations.state NOT IN ('completed','dead_letter')
+            RETURNING operations.id
+          ) SELECT done.*,(SELECT count(*) FROM cleanup) AS cleanup_count FROM done
         `);
         const done = rows(doneResult)[0];
         if (!done) throw new CasLost();
@@ -282,7 +327,7 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
   async markIndeterminate(input: OAuthLeaseCommand & { failureCode: OAuthSession["failureCode"] }): Promise<OAuthSession | undefined> {
     if (!input.failureCode) return undefined;
     const result = await this.db.execute(sql`
-      UPDATE ${aiMediaOAuthSessions}
+      WITH failed AS (UPDATE ${aiMediaOAuthSessions}
       SET exchange_status = 'indeterminate', failure_code = ${input.failureCode},
           lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL, updated_at = ${new Date(input.now)}
       WHERE id = ${input.sessionId} AND owner_user_id = ${input.scope.ownerUserId}
@@ -290,8 +335,14 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
         AND provider_account_id = ${input.providerAccountId} AND platform = ${input.platform}
         AND status = 'processing' AND exchange_status = 'in_progress'
         AND lease_token = ${input.leaseToken} AND lease_fencing = ${input.leaseFencing}
-        AND lease_expires_at > ${new Date(input.now)}
-      RETURNING *
+        AND lease_expires_at > clock_timestamp()
+      RETURNING *), accelerated AS (
+        UPDATE ${aiMediaOAuthVaultOperations} operations
+        SET state='scheduled',available_at=clock_timestamp(),quiescent_until=clock_timestamp()+interval '60 seconds',
+            lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=clock_timestamp()
+        FROM failed WHERE operations.session_id=failed.id AND operations.owner_user_id=failed.owner_user_id
+          AND operations.workspace_id=failed.workspace_id AND operations.state NOT IN ('completed','dead_letter') RETURNING operations.id
+      ) SELECT failed.*,(SELECT count(*) FROM accelerated) AS cleanup_count FROM failed
     `);
     const row = rows(result)[0];
     return row ? mapRow(row) : undefined;
@@ -304,7 +355,7 @@ export class DrizzleOAuthAuthorizationSagaRepository implements OAuthAuthorizati
         AND workspace_id = ${input.scope.workspaceId} AND actor_user_id = ${input.actorUserId}
         AND provider_account_id = ${input.providerAccountId} AND platform = ${input.platform}
         AND status = 'processing' AND lease_token = ${input.leaseToken}
-        AND lease_fencing = ${input.leaseFencing} AND lease_expires_at > ${new Date(input.now)} ${extra}
+        AND lease_fencing = ${input.leaseFencing} AND lease_expires_at > clock_timestamp() ${extra}
       RETURNING *
     `);
     const row = rows(result)[0];
