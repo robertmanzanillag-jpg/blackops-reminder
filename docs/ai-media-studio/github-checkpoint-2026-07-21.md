@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR20 durable launch authorities
+
+- Branch: `codex/ai-media-studio-durable-authorities`, stacked on draft PR #102.
+- Scope: append-only workspace admission-policy and kill-switch revisions, exact per-slot approval/sandbox/maximum-quote evidence chains, immutable launch-authority snapshots, and reservation binding to the exact snapshot/digest.
+- Trust boundary: the reservation caller can no longer provide provider identity, governance facts, approvals, sandbox result, quote/money, policy decision, kill-switch state, or provider idempotency. The unmounted repository derives and revalidates them from locked database rows.
+- Safety boundary: forward/rollback SQL remains unapplied; no authority writer, route, render job, outbox command, provider call, spend, external post, migration application, or deployment is enabled.
+- Evidence: full AI Media Studio suite 543/543, focused PR20 tests, TypeScript, production build, diff hygiene, independent checker and static App QA passed. Security findings were corrected and re-reviewed by the final checker.
+- Remaining gates: authenticated authority issuers, production-scale concurrency counters, and live PostgreSQL migration/rollback/contention proof. The inert scaffold currently serializes count-based concurrency admission with a global advisory lock.
+
 ## Active local checkpoint: PR19 durable daily admission
 
 - Branch: `codex/ai-media-studio-durable-daily-admission`, draft PR #102, stacked on draft PR #100.

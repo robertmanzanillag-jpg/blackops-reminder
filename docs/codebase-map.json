@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T11:22:09.985Z",
+  "generatedAt": "2026-07-21T11:47:07.664Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,263 +85,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1228,
-    "filesIndexed": 591,
-    "imports": 2374,
+    "filesVisible": 698,
+    "filesIndexed": 595,
+    "imports": 2388,
     "routes": 489,
-    "symbols": 11269
+    "symbols": 11370
   },
   "directories": {
-    ".clippers_workspace.agent-test-backup-65561-1784632799281": {
-      "files": 8,
-      "indexed": 0,
-      "kinds": {
-        "docs": 2,
-        "other": 6
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/account-evidence": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/allowlist": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "docs": 2
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/developer-app-evidence": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "other": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/evidence-drop": {
-      "files": 18,
-      "indexed": 0,
-      "kinds": {
-        "docs": 17,
-        "other": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/reports": {
-      "files": 27,
-      "indexed": 0,
-      "kinds": {
-        "other": 18,
-        "docs": 9
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/scheduled": {
-      "files": 3,
-      "indexed": 0,
-      "kinds": {
-        "other": 2,
-        "docs": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-65561-1784632799281/source-drop": {
-      "files": 7,
-      "indexed": 0,
-      "kinds": {
-        "docs": 3,
-        "other": 4
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427": {
-      "files": 18,
-      "indexed": 0,
-      "kinds": {
-        "docs": 6,
-        "other": 12
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/account-evidence": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/allowlist": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "docs": 2
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/developer-app-evidence": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "other": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/evidence-drop": {
-      "files": 18,
-      "indexed": 0,
-      "kinds": {
-        "docs": 17,
-        "other": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/reports": {
-      "files": 27,
-      "indexed": 0,
-      "kinds": {
-        "other": 18,
-        "docs": 9
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/scheduled": {
-      "files": 3,
-      "indexed": 0,
-      "kinds": {
-        "other": 2,
-        "docs": 1
-      }
-    },
-    ".clippers_workspace.agent-test-backup-67219-1784632841427/source-drop": {
-      "files": 7,
-      "indexed": 0,
-      "kinds": {
-        "docs": 3,
-        "other": 4
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316": {
-      "files": 57,
-      "indexed": 0,
-      "kinds": {
-        "docs": 19,
-        "other": 38
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/account-evidence": {
-      "files": 20,
-      "indexed": 0,
-      "kinds": {
-        "docs": 12,
-        "other": 8
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/allowlist": {
-      "files": 64,
-      "indexed": 0,
-      "kinds": {
-        "docs": 64
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/credential-setup": {
-      "files": 17,
-      "indexed": 0,
-      "kinds": {
-        "docs": 6,
-        "other": 11
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/developer-app-evidence": {
-      "files": 14,
-      "indexed": 0,
-      "kinds": {
-        "docs": 3,
-        "other": 11
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/drafts": {
-      "files": 10,
-      "indexed": 0,
-      "kinds": {
-        "other": 10
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/evidence-drop": {
-      "files": 21,
-      "indexed": 0,
-      "kinds": {
-        "docs": 19,
-        "other": 2
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/permission-applications": {
-      "files": 7,
-      "indexed": 0,
-      "kinds": {
-        "docs": 5,
-        "other": 2
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/permission-drop-templates": {
-      "files": 7,
-      "indexed": 0,
-      "kinds": {
-        "docs": 1,
-        "other": 6
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/reports": {
-      "files": 27,
-      "indexed": 0,
-      "kinds": {
-        "other": 20,
-        "docs": 7
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/scheduled": {
-      "files": 12,
-      "indexed": 0,
-      "kinds": {
-        "other": 10,
-        "docs": 2
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/source-drop": {
-      "files": 69,
-      "indexed": 0,
-      "kinds": {
-        "docs": 3,
-        "other": 66
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/sources": {
-      "files": 64,
-      "indexed": 0,
-      "kinds": {
-        "other": 64
-      }
-    },
-    ".clippers_workspace.test-backup-67220-1784632834316/test-fixtures": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "other": 1
-      }
-    },
     "migrations/ai-media-studio": {
-      "files": 25,
+      "files": 27,
       "indexed": 1,
       "kinds": {
-        "other": 24,
+        "other": 26,
         "docs": 1
       }
     },
     "server/ai-media-studio": {
-      "files": 117,
-      "indexed": 113,
+      "files": 119,
+      "indexed": 115,
       "kinds": {
-        "server": 117
+        "server": 119
       }
     },
     "tests": {
-      "files": 142,
-      "indexed": 135,
+      "files": 144,
+      "indexed": 137,
       "kinds": {
-        "test": 142
+        "test": 144
       }
     },
     ".agents/skills": {
@@ -9887,7 +9657,6 @@
       ],
       "exports": [
         "DailyAdmissionDatabase",
-        "DailyAdmissionGovernanceUse",
         "DailyAdmissionPersistenceError",
         "DailyAdmissionPersistenceErrorCode",
         "DailyAdmissionTransactionalDatabase",
@@ -9899,53 +9668,50 @@
         "dailyAdmissionPersistenceInputDigest"
       ],
       "symbols": [
+        "AUTHORITY_SNAPSHOTS",
         "DailyAdmissionPersistenceError",
         "DrizzleDailyAdmissionRepository",
         "EFFECTS",
         "ExecuteResult",
-        "MAX_DB_MICRO_USD",
+        "KILL_SWITCH_REVISIONS",
+        "LAUNCH_EVIDENCE",
+        "POLICY_REVISIONS",
         "SAFE",
         "SHA256",
         "UUID",
-        "ValidatedRequest",
-        "amount",
-        "amountMicroUsd",
-        "boolean",
         "budgetDate",
         "canonical",
         "canonicalDate",
         "canonicalIso",
         "canonicalJson",
-        "canonicalMicroUsd",
-        "checksum",
         "clockRow",
         "createdRows",
         "dailyAdmissionPersistenceInputDigest",
+        "databaseMicroUsd",
         "date",
         "digest",
         "exactReplay",
-        "expectedInputDigest",
         "gateRows",
-        "governanceTerritory",
-        "governanceUse",
-        "immutableMatches",
         "invalid",
         "invariant",
         "isoInput",
+        "matches",
         "parsed",
         "positiveInteger",
+        "providerIdempotencyKey",
         "raw",
         "replayRow",
-        "replayTimeZone",
         "request",
         "reservation",
         "reservationFromRow",
+        "result",
         "resultRows",
         "rows",
         "safeString",
+        "sha256",
+        "stableProviderIdempotencyKey",
         "state",
         "submissionState",
-        "timeZone",
         "uuid",
         "validTimeZone",
         "validateRequest",
@@ -9962,6 +9728,125 @@
       ],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/launch-authority-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./contracts"
+      ],
+      "exports": [
+        "AdmissionPolicyRevision",
+        "LaunchAuthorityDomainError",
+        "LaunchAuthorityDomainErrorCode",
+        "LaunchAuthoritySnapshot",
+        "SLOT_LAUNCH_EVIDENCE_KINDS",
+        "ScriptChecksum",
+        "SlotLaunchAuthoritySubject",
+        "SlotLaunchEvidence",
+        "SlotLaunchEvidenceDecision",
+        "SlotLaunchEvidenceKind",
+        "WorkspaceKillSwitchRevision"
+      ],
+      "symbols": [
+        "LaunchAuthorityDomainError",
+        "SLOT_LAUNCH_EVIDENCE_KINDS"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/launch-authority-domain.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./contracts",
+        "./launch-authority-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "CreateAdmissionPolicyRevisionInput",
+        "CreateLaunchAuthoritySnapshotInput",
+        "CreateSlotLaunchEvidenceInput",
+        "CreateWorkspaceKillSwitchRevisionInput",
+        "createAdmissionPolicyRevision",
+        "createLaunchAuthoritySnapshot",
+        "createSlotLaunchEvidence",
+        "createWorkspaceKillSwitchRevision",
+        "slotLaunchAuthoritySubjectDigest"
+      ],
+      "symbols": [
+        "CHECKSUM",
+        "ID",
+        "SHA256",
+        "admissionDigest",
+        "allowedCountries",
+        "allowedLanguages",
+        "allowedTimeZones",
+        "amountMicroUsd",
+        "assertScope",
+        "authorityDigest",
+        "byKind",
+        "canonical",
+        "chain",
+        "createAdmissionPolicyRevision",
+        "createLaunchAuthoritySnapshot",
+        "createSlotLaunchEvidence",
+        "createWorkspaceKillSwitchRevision",
+        "dailyBudgetMicroUsd",
+        "decision",
+        "denied",
+        "digest",
+        "effective",
+        "evidenceDigest",
+        "expiresAt",
+        "expiries",
+        "fields",
+        "invalid",
+        "killSwitch",
+        "kind",
+        "latest",
+        "launchSubjectDigest",
+        "mismatch",
+        "money",
+        "nextRevision",
+        "nonnegativeInteger",
+        "normalizedList",
+        "now",
+        "oneOf",
+        "policy",
+        "policyDigest",
+        "positiveInteger",
+        "previousEvidenceId",
+        "previousRevisionId",
+        "providerConcurrency",
+        "quote",
+        "reason",
+        "refs",
+        "revision",
+        "rows",
+        "scope",
+        "slotLaunchAuthoritySubjectDigest",
+        "stableId",
+        "stale",
+        "subject",
+        "subjectDigest",
+        "tenantConcurrency",
+        "text",
+        "totalConcurrency",
+        "validDigest",
+        "validFrom",
+        "validId",
+        "validInstant",
+        "validScope",
+        "validSubject",
+        "validWindow",
+        "validateEvidence",
+        "validateKill",
+        "validatePolicy",
+        "window"
+      ],
       "routes": []
     },
     {
@@ -18355,6 +18240,7 @@
         "NewAiMediaQualityReviewRow",
         "NewAiMediaRenderJobRow",
         "NewAiMediaWebhookEventRow",
+        "aiMediaAdmissionPolicyRevisions",
         "aiMediaAnalyticsEvents",
         "aiMediaAnalyticsSnapshots",
         "aiMediaAssetIngestJobs",
@@ -18366,6 +18252,9 @@
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
+        "aiMediaKillSwitchRevisions",
+        "aiMediaLaunchAuthoritySnapshots",
+        "aiMediaLaunchEvidence",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthCredentialArtifacts",
@@ -18393,6 +18282,7 @@
       ],
       "symbols": [
         "AiMediaRenderJobSelect",
+        "aiMediaAdmissionPolicyRevisions",
         "aiMediaAnalyticsEvents",
         "aiMediaAnalyticsSnapshots",
         "aiMediaAssetIngestJobs",
@@ -18404,6 +18294,9 @@
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
         "aiMediaInfluencers",
+        "aiMediaKillSwitchRevisions",
+        "aiMediaLaunchAuthoritySnapshots",
+        "aiMediaLaunchEvidence",
         "aiMediaMediaAssets",
         "aiMediaOAuthConnectionAttempts",
         "aiMediaOAuthCredentialArtifacts",
@@ -19234,28 +19127,32 @@
       "exports": [],
       "symbols": [
         "Rendered",
+        "admissionDigest",
         "assertCode",
+        "authorityDigest",
         "barrel",
+        "cas",
+        "casRepository",
         "changed",
         "databaseNow",
+        "denied",
+        "deniedRepository",
         "dialect",
         "execute",
-        "gateParameters",
-        "gates",
+        "gate",
         "harness",
         "ids",
         "input",
+        "keys",
         "makeDb",
         "mutation",
         "normalized",
-        "oldUnsigned",
         "rendered",
         "repository",
         "request",
         "reservationRow",
         "result",
         "scope",
-        "sha",
         "unsigned",
         "valid"
       ],
@@ -19611,6 +19508,40 @@
         "sequentialIds",
         "updated",
         "voice"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-authority-domain.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/planning/launch-authority-contracts",
+        "../server/ai-media-studio/planning/launch-authority-domain",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "code",
+        "d",
+        "disabled",
+        "evidence",
+        "first",
+        "input",
+        "k1",
+        "kill",
+        "now",
+        "p1",
+        "policy",
+        "q",
+        "s",
+        "scope",
+        "sd",
+        "second",
+        "subject",
+        "subjectDigest"
       ],
       "routes": []
     },
@@ -20468,6 +20399,25 @@
         "rollback",
         "runbook",
         "validateConstraint"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "definitions",
+        "executable",
+        "forward",
+        "rollback",
+        "schema",
+        "tables"
       ],
       "routes": []
     },
@@ -22819,6 +22769,7 @@
     "tests/ai-media-studio-heygen-roster-service.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
+    "tests/ai-media-studio-launch-authority-domain.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
     "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
@@ -22849,6 +22800,7 @@
     "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
     "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
+    "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",

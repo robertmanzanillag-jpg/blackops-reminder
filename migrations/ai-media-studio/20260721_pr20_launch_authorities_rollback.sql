@@ -1,0 +1,12 @@
+-- AI Media Studio PR20 rollback is application-only and data preserving.
+-- Do not drop tables, columns, constraints, indexes, authority snapshots, or evidence.
+--
+-- 1. Disable launch-authority writers and drain admission/render workers.
+-- 2. Keep PR20 reservation authority references nullable for compatibility with PR19 rows.
+--    Retain the authority UPDATE guard; rollback must not permit snapshot attachment or replacement.
+-- 3. Retain every policy, kill-switch, evidence, and immutable snapshot revision for audit.
+-- 4. Roll application code back only to a revision compatible with the retained schema.
+-- 5. Correct the release and roll forward after backup, staging rehearsal, checker, App QA,
+--    and Robert's explicit migration, spending, and deployment approvals.
+--
+-- This file intentionally contains no executable destructive SQL, DELETE, TRUNCATE, or DROP.

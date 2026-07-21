@@ -9,10 +9,16 @@ import {
   aiMediaInfluencers,
   aiMediaProviderAccounts,
   aiMediaProviderResources,
+  aiMediaScripts,
   aiMediaScriptVariants,
 } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
 import type { Sha256Digest } from "./contracts";
+
+const AUTHORITY_SNAPSHOTS = sql.raw('"ai_media_launch_authority_snapshots"');
+const LAUNCH_EVIDENCE = sql.raw('"ai_media_launch_evidence"');
+const POLICY_REVISIONS = sql.raw('"ai_media_admission_policy_revisions"');
+const KILL_SWITCH_REVISIONS = sql.raw('"ai_media_kill_switch_revisions"');
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type DailyAdmissionDatabase = { execute(query: SQL): Promise<ExecuteResult> };
@@ -20,49 +26,18 @@ export type DailyAdmissionTransactionalDatabase = DailyAdmissionDatabase & {
   transaction<T>(callback: (tx: DailyAdmissionDatabase) => Promise<T>): Promise<T>;
 };
 
-export type DailyAdmissionGovernanceUse = "internal_preview" | "organic_social" | "paid_ads" | "commercial";
-
 export interface ReserveAndAdmitRequest {
   scope: TenantScope;
   planId: string;
   slotId: string;
   budgetBucketId: string;
-  providerAccountId: string;
-  providerKey: string;
-  providerCredentialVersion: number;
-  influencerId: string;
-  governanceProfileId: string;
-  governanceUse: DailyAdmissionGovernanceUse;
-  governanceTerritory: string;
-  planDigest: Sha256Digest;
-  slotDigest: Sha256Digest;
-  scriptVariantChecksum: string;
+  authoritySnapshotId: string;
+  authorityDigest: Sha256Digest;
   expectedSlotStateVersion: number;
   expectedBucketStateVersion: number;
-  budgetPolicyVersion: number;
-  attempt: number;
-  amountMicroUsd: bigint | string;
+  reservationExpiresAt: string;
   idempotencyKey: string;
   inputDigest: Sha256Digest;
-  admissionDigest: Sha256Digest;
-  quoteDigest: Sha256Digest;
-  quoteExpiresAt: string;
-  reservationExpiresAt: string;
-  contentApprovalGranted: boolean;
-  contentApprovalDigest: Sha256Digest;
-  contentApprovalExpiresAt: string;
-  humanLaunchApprovalGranted: boolean;
-  humanLaunchApprovalDigest: Sha256Digest;
-  humanLaunchApprovalExpiresAt: string;
-  governanceEvidenceDigest: Sha256Digest;
-  policyAllowed: boolean;
-  policyDigest: Sha256Digest;
-  killSwitchActive: boolean;
-  killSwitchEvidenceDigest: Sha256Digest;
-  sandboxPassed: boolean;
-  sandboxEvidenceDigest: Sha256Digest;
-  sandboxExpiresAt: string;
-  providerIdempotencyKey: string;
 }
 
 export type UnsignedReserveAndAdmitRequest = Omit<ReserveAndAdmitRequest, "inputDigest">;
@@ -88,7 +63,6 @@ export interface ReserveAndAdmitResult {
   budgetDate: string;
   accountingTimeZone: string;
   replayed: boolean;
-  /** PR19 is deliberately reservation-only: activation writes are forbidden here. */
   effects: {
     renderJobCreated: false;
     outboxCreated: false;
@@ -113,7 +87,6 @@ export class DailyAdmissionPersistenceError extends Error {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 const SAFE = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u;
-const MAX_DB_MICRO_USD = 9_000_000_000_000_000n;
 const EFFECTS = Object.freeze({
   renderJobCreated: false,
   outboxCreated: false,
@@ -137,26 +110,26 @@ function canonicalIso(raw: unknown, field: string): string {
 }
 
 function canonicalDate(raw: unknown): string {
-  const value = String(raw);
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) throw invariant("Database returned an invalid budget date");
-  return value;
+  const result = String(raw);
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(result)) throw invariant("Database returned an invalid budget date");
+  return result;
 }
 
 function reservationFromRow(row: Record<string, unknown>): DurableDailyAdmissionReservation {
   const state = String(row.state) as DurableDailyAdmissionReservation["state"];
   const submissionState = String(value(row, "submissionState", "submission_state")) as DurableDailyAdmissionReservation["submissionState"];
-  if (!["reserved", "committed", "released", "expired", "settled"].includes(state)
-    || !["not_started", "dispatching", "confirmed", "ambiguous", "reconciled_no_submit"].includes(submissionState)) {
-    throw invariant("Database returned an invalid reservation lifecycle");
-  }
-  const amountMicroUsd = canonicalMicroUsd(value(row, "amountMicroUsd", "amount_micro_usd"), "database amountMicroUsd");
+  if (![
+    "reserved", "committed", "released", "expired", "settled",
+  ].includes(state) || ![
+    "not_started", "dispatching", "confirmed", "ambiguous", "reconciled_no_submit",
+  ].includes(submissionState)) throw invariant("Database returned an invalid reservation lifecycle");
   return {
     id: uuid(String(row.id), "reservation.id"),
     state,
     submissionState,
     slotId: uuid(String(value(row, "dailyPlanSlotId", "daily_plan_slot_id")), "reservation.slotId"),
     bucketId: uuid(String(value(row, "budgetBucketId", "budget_bucket_id")), "reservation.bucketId"),
-    amountMicroUsd,
+    amountMicroUsd: databaseMicroUsd(value(row, "amountMicroUsd", "amount_micro_usd")),
     attempt: positiveInteger(Number(row.attempt), "reservation.attempt"),
     idempotencyKey: safeString(String(value(row, "idempotencyKey", "idempotency_key")), "reservation.idempotencyKey", 200, 8),
     inputDigest: digest(String(value(row, "inputDigest", "input_digest")), "reservation.inputDigest"),
@@ -166,40 +139,25 @@ function reservationFromRow(row: Record<string, unknown>): DurableDailyAdmission
   };
 }
 
-function exactReplay(row: Record<string, unknown>, request: ValidatedRequest): DurableDailyAdmissionReservation {
+function exactReplay(row: Record<string, unknown>, request: ReserveAndAdmitRequest): DurableDailyAdmissionReservation {
   const reservation = reservationFromRow(row);
-  const immutableMatches = reservation.inputDigest === request.inputDigest
-    && reservation.admissionDigest === request.admissionDigest
-    && String(value(row, "scriptVariantChecksum", "script_variant_checksum")) === request.scriptVariantChecksum
+  const matches = reservation.inputDigest === request.inputDigest
     && reservation.slotId === request.slotId
     && reservation.bucketId === request.budgetBucketId
-    && reservation.amountMicroUsd === request.amountMicroUsd
-    && reservation.attempt === request.attempt
-    && String(value(row, "providerAccountId", "provider_account_id")) === request.providerAccountId
-    && String(value(row, "providerKey", "provider_key")) === request.providerKey
-    && Number(value(row, "providerCredentialVersion", "provider_credential_version")) === request.providerCredentialVersion
-    && String(value(row, "quoteDigest", "quote_digest")) === request.quoteDigest
-    && canonicalIso(value(row, "quoteExpiresAt", "quote_expires_at"), "quoteExpiresAt") === request.quoteExpiresAt
-    && String(value(row, "contentApprovalDigest", "content_approval_digest")) === request.contentApprovalDigest
-    && String(value(row, "humanLaunchApprovalDigest", "human_launch_approval_digest")) === request.humanLaunchApprovalDigest
-    && String(value(row, "governanceProfileId", "governance_profile_id")) === request.governanceProfileId
-    && String(value(row, "governanceEvidenceDigest", "governance_evidence_digest")) === request.governanceEvidenceDigest
-    && String(value(row, "policyDigest", "policy_digest")) === request.policyDigest
-    && String(value(row, "killSwitchEvidenceDigest", "kill_switch_evidence_digest")) === request.killSwitchEvidenceDigest
-    && String(value(row, "sandboxEvidenceDigest", "sandbox_evidence_digest")) === request.sandboxEvidenceDigest
-    && String(value(row, "providerIdempotencyKey", "provider_idempotency_key")) === request.providerIdempotencyKey
-    && reservation.expiresAt === request.reservationExpiresAt;
-  if (!immutableMatches) {
-    throw new DailyAdmissionPersistenceError("IDEMPOTENCY_CONFLICT", "Idempotency key is already bound to different admission evidence");
+    && reservation.expiresAt === request.reservationExpiresAt
+    && String(value(row, "authoritySnapshotId", "authority_snapshot_id")) === request.authoritySnapshotId
+    && String(value(row, "authorityDigest", "authority_digest")) === request.authorityDigest;
+  if (!matches) {
+    throw new DailyAdmissionPersistenceError(
+      "IDEMPOTENCY_CONFLICT",
+      "Idempotency key is already bound to another authority snapshot or reservation request",
+    );
   }
   return reservation;
 }
 
-type ValidatedRequest = Omit<ReserveAndAdmitRequest, "amountMicroUsd"> & { amountMicroUsd: string };
-
-function validateRequest(input: ReserveAndAdmitRequest, trustedTimeZone: string): ValidatedRequest {
-  const request: ValidatedRequest = {
-    ...input,
+function validateRequest(input: ReserveAndAdmitRequest, trustedTimeZone: string): ReserveAndAdmitRequest {
+  const request: ReserveAndAdmitRequest = {
     scope: {
       ownerUserId: safeString(input.scope.ownerUserId, "ownerUserId", 255),
       workspaceId: safeString(input.scope.workspaceId, "workspaceId", 255),
@@ -207,51 +165,18 @@ function validateRequest(input: ReserveAndAdmitRequest, trustedTimeZone: string)
     planId: uuid(input.planId, "planId"),
     slotId: uuid(input.slotId, "slotId"),
     budgetBucketId: uuid(input.budgetBucketId, "budgetBucketId"),
-    providerAccountId: uuid(input.providerAccountId, "providerAccountId"),
-    providerKey: safeString(input.providerKey, "providerKey", 100),
-    providerCredentialVersion: positiveInteger(input.providerCredentialVersion, "providerCredentialVersion"),
-    influencerId: uuid(input.influencerId, "influencerId"),
-    governanceProfileId: uuid(input.governanceProfileId, "governanceProfileId"),
-    governanceUse: governanceUse(input.governanceUse),
-    governanceTerritory: governanceTerritory(input.governanceTerritory),
-    planDigest: digest(input.planDigest, "planDigest"),
-    slotDigest: digest(input.slotDigest, "slotDigest"),
-    scriptVariantChecksum: checksum(input.scriptVariantChecksum, "scriptVariantChecksum"),
+    authoritySnapshotId: uuid(input.authoritySnapshotId, "authoritySnapshotId"),
+    authorityDigest: digest(input.authorityDigest, "authorityDigest"),
     expectedSlotStateVersion: positiveInteger(input.expectedSlotStateVersion, "expectedSlotStateVersion"),
     expectedBucketStateVersion: positiveInteger(input.expectedBucketStateVersion, "expectedBucketStateVersion"),
-    budgetPolicyVersion: positiveInteger(input.budgetPolicyVersion, "budgetPolicyVersion"),
-    attempt: positiveInteger(input.attempt, "attempt"),
-    amountMicroUsd: canonicalMicroUsd(input.amountMicroUsd, "amountMicroUsd"),
+    reservationExpiresAt: isoInput(input.reservationExpiresAt, "reservationExpiresAt"),
     idempotencyKey: safeString(input.idempotencyKey, "idempotencyKey", 200, 8),
     inputDigest: digest(input.inputDigest, "inputDigest"),
-    admissionDigest: digest(input.admissionDigest, "admissionDigest"),
-    quoteDigest: digest(input.quoteDigest, "quoteDigest"),
-    quoteExpiresAt: isoInput(input.quoteExpiresAt, "quoteExpiresAt"),
-    reservationExpiresAt: isoInput(input.reservationExpiresAt, "reservationExpiresAt"),
-    contentApprovalGranted: boolean(input.contentApprovalGranted, "contentApprovalGranted"),
-    contentApprovalDigest: digest(input.contentApprovalDigest, "contentApprovalDigest"),
-    contentApprovalExpiresAt: isoInput(input.contentApprovalExpiresAt, "contentApprovalExpiresAt"),
-    humanLaunchApprovalGranted: boolean(input.humanLaunchApprovalGranted, "humanLaunchApprovalGranted"),
-    humanLaunchApprovalDigest: digest(input.humanLaunchApprovalDigest, "humanLaunchApprovalDigest"),
-    humanLaunchApprovalExpiresAt: isoInput(input.humanLaunchApprovalExpiresAt, "humanLaunchApprovalExpiresAt"),
-    governanceEvidenceDigest: digest(input.governanceEvidenceDigest, "governanceEvidenceDigest"),
-    policyAllowed: boolean(input.policyAllowed, "policyAllowed"),
-    policyDigest: digest(input.policyDigest, "policyDigest"),
-    killSwitchActive: boolean(input.killSwitchActive, "killSwitchActive"),
-    killSwitchEvidenceDigest: digest(input.killSwitchEvidenceDigest, "killSwitchEvidenceDigest"),
-    sandboxPassed: boolean(input.sandboxPassed, "sandboxPassed"),
-    sandboxEvidenceDigest: digest(input.sandboxEvidenceDigest, "sandboxEvidenceDigest"),
-    sandboxExpiresAt: isoInput(input.sandboxExpiresAt, "sandboxExpiresAt"),
-    providerIdempotencyKey: safeString(input.providerIdempotencyKey, "providerIdempotencyKey", 200, 8),
   };
-  if ([request.quoteExpiresAt, request.contentApprovalExpiresAt,
-    request.humanLaunchApprovalExpiresAt, request.sandboxExpiresAt]
-    .some((expiresAt) => request.reservationExpiresAt > expiresAt)) {
-    throw invalid("reservationExpiresAt cannot exceed quote, approval, or sandbox evidence expiry");
+  const { inputDigest: _inputDigest, ...unsigned } = request;
+  if (request.inputDigest !== dailyAdmissionPersistenceInputDigest(unsigned, trustedTimeZone)) {
+    throw invalid("inputDigest does not bind the exact reservation request");
   }
-  const { inputDigest: _inputDigest, ...unsignedRequest } = request;
-  const expectedInputDigest = dailyAdmissionPersistenceInputDigest(unsignedRequest, trustedTimeZone);
-  if (request.inputDigest !== expectedInputDigest) throw invalid("inputDigest does not bind the exact reservation request");
   return request;
 }
 
@@ -259,20 +184,29 @@ export function dailyAdmissionPersistenceInputDigest(
   input: UnsignedReserveAndAdmitRequest,
   trustedAccountingTimeZone: string,
 ): Sha256Digest {
-  const timeZone = validTimeZone(trustedAccountingTimeZone);
   const canonical = canonicalJson({
-    version: 1,
-    trustedAccountingTimeZone: timeZone,
+    version: 2,
+    trustedAccountingTimeZone: validTimeZone(trustedAccountingTimeZone),
     ...input,
-    amountMicroUsd: typeof input.amountMicroUsd === "bigint" ? input.amountMicroUsd.toString() : input.amountMicroUsd,
   });
-  return `sha256:${createHash("sha256").update(JSON.stringify(canonical)).digest("hex")}`;
+  return sha256(JSON.stringify(canonical));
+}
+
+function stableProviderIdempotencyKey(request: ReserveAndAdmitRequest): string {
+  return `admit:${sha256(JSON.stringify(canonicalJson({
+    version: 1,
+    ownerUserId: request.scope.ownerUserId,
+    workspaceId: request.scope.workspaceId,
+    authoritySnapshotId: request.authoritySnapshotId,
+    slotId: request.slotId,
+    idempotencyKey: request.idempotencyKey,
+  }))).slice("sha256:".length)}`;
 }
 
 /**
- * Reservation-only PR19 boundary. This repository cannot create render jobs,
- * outbox commands, events, or provider requests. A later activation service
- * must add those writes to an independently reviewed atomic transaction.
+ * Reservation-only PR20 boundary. Every authority fact is derived from locked,
+ * immutable database revisions. This repository cannot create jobs, outbox
+ * commands, events, provider requests, or any external side effect.
  */
 export class DrizzleDailyAdmissionRepository {
   private readonly accountingTimeZone: string;
@@ -287,6 +221,7 @@ export class DrizzleDailyAdmissionRepository {
 
   async reserveAndAdmit(input: ReserveAndAdmitRequest): Promise<ReserveAndAdmitResult> {
     const request = validateRequest(input, this.accountingTimeZone);
+    const providerIdempotencyKey = stableProviderIdempotencyKey(request);
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended(
@@ -310,17 +245,26 @@ export class DrizzleDailyAdmissionRepository {
         FOR UPDATE OF reservations, buckets
       `))[0];
       if (replayRow) {
-        const replayTimeZone = String(value(replayRow, "replayAccountingTimeZone", "replay_accounting_time_zone"));
-        if (replayTimeZone !== this.accountingTimeZone) {
+        if (String(value(replayRow, "replayAccountingTimeZone", "replay_accounting_time_zone")) !== this.accountingTimeZone) {
           throw new DailyAdmissionPersistenceError("IDEMPOTENCY_CONFLICT", "Existing reservation belongs to another accounting time zone");
         }
         return {
           reservation: exactReplay(replayRow, request),
           databaseNow: canonicalIso(value(replayRow, "databaseNow", "database_now"), "databaseNow"),
           budgetDate: canonicalDate(value(replayRow, "replayBudgetDate", "replay_budget_date")),
-          accountingTimeZone: this.accountingTimeZone, replayed: true, effects: EFFECTS,
+          accountingTimeZone: this.accountingTimeZone,
+          replayed: true,
+          effects: EFFECTS,
         };
       }
+
+      // One global admission lock makes the three count-based concurrency
+      // fences race-safe until they are replaced by dedicated lease counters.
+      await tx.execute(sql`
+        SELECT pg_advisory_xact_lock(hashtextextended(
+          'ai-media:daily-admission:global-concurrency', 0
+        )) AS global_concurrency_locked
+      `);
 
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(hashtextextended(
@@ -329,19 +273,6 @@ export class DrizzleDailyAdmissionRepository {
         )) AS workspace_locked
       `);
 
-      // Governance profile writers must use this same subject lock. It closes
-      // the append/revocation race that a row lock on one immutable revision
-      // alone cannot prevent.
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(hashtextextended(
-          'ai-media-governance:profile:' || ${request.scope.ownerUserId} || ':'
-          || ${request.scope.workspaceId} || ':' || ${request.influencerId}, 0
-        )) AS governance_subject_locked
-      `);
-
-      // This wall clock is sampled only after potentially blocking advisory
-      // locks, so midnight and evidence expiry cannot be decided using a stale
-      // transaction-start instant.
       const clockRow = resultRows(await tx.execute(sql`
         SELECT observed_at AS database_now,
           (observed_at AT TIME ZONE ${this.accountingTimeZone})::date::text AS budget_date
@@ -351,199 +282,439 @@ export class DrizzleDailyAdmissionRepository {
       const budgetDate = canonicalDate(value(clockRow, "budgetDate", "budget_date"));
 
       const gateRows = resultRows(await tx.execute(sql`
-        SELECT plans.id AS plan_id, slots.id AS slot_id, buckets.id AS bucket_id
-        FROM ${aiMediaDailyPlans} plans
+        SELECT snapshots.id AS authority_snapshot_id, snapshots.authority_digest,
+          snapshots.slot_attempt, quotes.amount_micro_usd, snapshots.admission_digest
+        FROM ${AUTHORITY_SNAPSHOTS} snapshots
+        INNER JOIN ${LAUNCH_EVIDENCE} content
+          ON content.owner_user_id=snapshots.owner_user_id AND content.workspace_id=snapshots.workspace_id
+          AND content.id=snapshots.content_approval_evidence_id
+          AND content.evidence_digest=snapshots.content_approval_evidence_digest
+        INNER JOIN ${LAUNCH_EVIDENCE} human
+          ON human.owner_user_id=snapshots.owner_user_id AND human.workspace_id=snapshots.workspace_id
+          AND human.id=snapshots.human_launch_approval_evidence_id
+          AND human.evidence_digest=snapshots.human_launch_approval_evidence_digest
+        INNER JOIN ${LAUNCH_EVIDENCE} sandbox
+          ON sandbox.owner_user_id=snapshots.owner_user_id AND sandbox.workspace_id=snapshots.workspace_id
+          AND sandbox.id=snapshots.sandbox_evidence_id
+          AND sandbox.evidence_digest=snapshots.sandbox_evidence_digest
+        INNER JOIN ${LAUNCH_EVIDENCE} quotes
+          ON quotes.owner_user_id=snapshots.owner_user_id AND quotes.workspace_id=snapshots.workspace_id
+          AND quotes.id=snapshots.maximum_quote_evidence_id
+          AND quotes.evidence_digest=snapshots.maximum_quote_evidence_digest
+        INNER JOIN ${POLICY_REVISIONS} policy
+          ON policy.owner_user_id=snapshots.owner_user_id AND policy.workspace_id=snapshots.workspace_id
+          AND policy.id=snapshots.policy_revision_id AND policy.revision=snapshots.policy_revision
+          AND policy.policy_digest=snapshots.policy_digest
+        INNER JOIN ${KILL_SWITCH_REVISIONS} kill
+          ON kill.owner_user_id=snapshots.owner_user_id AND kill.workspace_id=snapshots.workspace_id
+          AND kill.id=snapshots.kill_switch_revision_id AND kill.revision=snapshots.kill_switch_revision
+          AND kill.evidence_digest=snapshots.kill_switch_evidence_digest
+        INNER JOIN ${aiMediaDailyPlans} plans
+          ON plans.owner_user_id=snapshots.owner_user_id AND plans.workspace_id=snapshots.workspace_id
+          AND plans.id=snapshots.daily_plan_id AND plans.plan_digest=snapshots.plan_digest
+          AND plans.provider_account_id=snapshots.provider_account_id
+          AND plans.provider_key=snapshots.provider_key
+          AND plans.provider_credential_version=snapshots.provider_credential_version
         INNER JOIN ${aiMediaDailyPlanSlots} slots
-          ON slots.owner_user_id=plans.owner_user_id AND slots.workspace_id=plans.workspace_id
-          AND slots.daily_plan_id=plans.id AND slots.provider_account_id=plans.provider_account_id
-          AND slots.provider_key=plans.provider_key
-          AND slots.provider_credential_version=plans.provider_credential_version
+          ON slots.owner_user_id=snapshots.owner_user_id AND slots.workspace_id=snapshots.workspace_id
+          AND slots.id=snapshots.daily_plan_slot_id AND slots.daily_plan_id=snapshots.daily_plan_id
+          AND slots.slot_digest=snapshots.slot_digest
+          AND slots.provider_account_id=snapshots.provider_account_id
+          AND slots.provider_key=snapshots.provider_key
+          AND slots.provider_credential_version=snapshots.provider_credential_version
+          AND slots.script_variant_id=snapshots.script_variant_id
         INNER JOIN ${aiMediaBudgetBuckets} buckets
-          ON buckets.owner_user_id=plans.owner_user_id AND buckets.workspace_id=plans.workspace_id
+          ON buckets.owner_user_id=snapshots.owner_user_id AND buckets.workspace_id=snapshots.workspace_id
         INNER JOIN ${aiMediaProviderAccounts} accounts
-          ON accounts.owner_user_id=plans.owner_user_id AND accounts.workspace_id=plans.workspace_id
-          AND accounts.id=plans.provider_account_id AND accounts.provider_key=plans.provider_key
+          ON accounts.owner_user_id=snapshots.owner_user_id AND accounts.workspace_id=snapshots.workspace_id
+          AND accounts.id=snapshots.provider_account_id AND accounts.provider_key=snapshots.provider_key
         INNER JOIN ${aiMediaGovernanceProfiles} governance
-          ON governance.owner_user_id=slots.owner_user_id AND governance.workspace_id=slots.workspace_id
-          AND governance.id=${request.governanceProfileId} AND governance.influencer_id=slots.influencer_id
-          AND governance.avatar_resource_id=slots.avatar_resource_id
-          AND governance.voice_resource_id=slots.voice_resource_id
+          ON governance.owner_user_id=snapshots.owner_user_id AND governance.workspace_id=snapshots.workspace_id
+          AND governance.id=snapshots.governance_profile_id
+          AND governance.influencer_id=slots.influencer_id
+          AND governance.evidence_digest=snapshots.governance_evidence_digest
         INNER JOIN ${aiMediaInfluencers} influencers
           ON influencers.owner_user_id=slots.owner_user_id AND influencers.workspace_id=slots.workspace_id
           AND influencers.id=slots.influencer_id
         INNER JOIN ${aiMediaProviderResources} avatars
           ON avatars.owner_user_id=slots.owner_user_id AND avatars.workspace_id=slots.workspace_id
-          AND avatars.provider_account_id=slots.provider_account_id AND avatars.provider_key=slots.provider_key
-          AND avatars.id=slots.avatar_resource_id AND avatars.resource_type='avatar'
+          AND avatars.id=slots.avatar_resource_id AND avatars.provider_account_id=snapshots.provider_account_id
+          AND avatars.provider_key=snapshots.provider_key AND avatars.resource_type='avatar'
         INNER JOIN ${aiMediaProviderResources} voices
           ON voices.owner_user_id=slots.owner_user_id AND voices.workspace_id=slots.workspace_id
-          AND voices.provider_account_id=slots.provider_account_id AND voices.provider_key=slots.provider_key
-          AND voices.id=slots.voice_resource_id AND voices.resource_type='voice'
+          AND voices.id=slots.voice_resource_id AND voices.provider_account_id=snapshots.provider_account_id
+          AND voices.provider_key=snapshots.provider_key AND voices.resource_type='voice'
         INNER JOIN ${aiMediaScriptVariants} variants
-          ON variants.owner_user_id=slots.owner_user_id AND variants.workspace_id=slots.workspace_id
-          AND variants.id=slots.script_variant_id
-        WHERE plans.owner_user_id=${request.scope.ownerUserId}
-          AND plans.workspace_id=${request.scope.workspaceId} AND plans.id=${request.planId}
-          AND plans.status='planned' AND plans.plan_digest=${request.planDigest}
-          AND plans.provider_account_id=${request.providerAccountId}
-          AND plans.provider_key=${request.providerKey}
-          AND plans.provider_credential_version=${request.providerCredentialVersion}
-          AND plans.plan_date=${budgetDate}::date
+          ON variants.owner_user_id=snapshots.owner_user_id AND variants.workspace_id=snapshots.workspace_id
+          AND variants.id=snapshots.script_variant_id AND variants.checksum=snapshots.script_variant_checksum
+        INNER JOIN ${aiMediaScripts} scripts
+          ON scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
+          AND scripts.id=variants.script_id
+        WHERE snapshots.owner_user_id=${request.scope.ownerUserId}
+          AND snapshots.workspace_id=${request.scope.workspaceId}
+          AND snapshots.id=${request.authoritySnapshotId}
+          AND snapshots.authority_digest=${request.authorityDigest}
+          AND snapshots.daily_plan_id=${request.planId} AND snapshots.daily_plan_slot_id=${request.slotId}
+          AND snapshots.valid_from<=clock_timestamp() AND snapshots.expires_at>clock_timestamp()
+          AND ${request.reservationExpiresAt}::timestamptz>clock_timestamp()
+          AND ${request.reservationExpiresAt}::timestamptz<=snapshots.expires_at
+          AND plans.status='planned' AND plans.plan_date=${budgetDate}::date
           AND plans.accounting_time_zone=${this.accountingTimeZone}
-          AND slots.id=${request.slotId} AND slots.status='planned'
-          AND slots.influencer_id=${request.influencerId}
-          AND slots.slot_digest=${request.slotDigest}
-          AND slots.state_version=${request.expectedSlotStateVersion}
-          AND ${request.attempt}=COALESCE((
-            SELECT MAX(previous.attempt)+1 FROM ${aiMediaBudgetReservations} previous
-            WHERE previous.owner_user_id=slots.owner_user_id
-              AND previous.workspace_id=slots.workspace_id
-              AND previous.daily_plan_slot_id=slots.id
-          ),1)
+          AND slots.status='planned' AND slots.state_version=${request.expectedSlotStateVersion}
           AND buckets.id=${request.budgetBucketId} AND buckets.budget_date=${budgetDate}::date
           AND buckets.accounting_time_zone=${this.accountingTimeZone} AND buckets.currency='USD'
-          AND buckets.policy_digest=${request.policyDigest}
-          AND buckets.policy_version=${request.budgetPolicyVersion}
+          AND buckets.policy_digest=policy.policy_digest AND buckets.policy_version=policy.revision
+          AND buckets.limit_micro_usd=policy.daily_budget_micro_usd
           AND buckets.state_version=${request.expectedBucketStateVersion}
-          AND buckets.reserved_micro_usd+buckets.committed_micro_usd+${request.amountMicroUsd}::numeric
-            <= buckets.limit_micro_usd
+          AND buckets.reserved_micro_usd+buckets.committed_micro_usd+quotes.amount_micro_usd<=buckets.limit_micro_usd
+          AND snapshots.maximum_quote_micro_usd=quotes.amount_micro_usd
+          AND snapshots.currency='USD' AND quotes.currency=snapshots.currency
+          AND accounts.credential_version=snapshots.provider_credential_version
           AND accounts.status IN ('active','connected') AND accounts.credential_status='active'
-          AND accounts.credential_version=${request.providerCredentialVersion}
           AND (accounts.credential_expires_at IS NULL OR accounts.credential_expires_at>clock_timestamp())
           AND influencers.status='active' AND influencers.archived_at IS NULL
           AND avatars.status='active' AND voices.status='active'
-          AND variants.status='approved' AND variants.checksum=${request.scriptVariantChecksum}
+          AND variants.status='approved'
           AND governance.state='active' AND governance.revoked_at IS NULL
           AND governance.valid_from<=clock_timestamp() AND governance.expires_at>clock_timestamp()
-          AND governance.evidence_digest=${request.governanceEvidenceDigest}
-          AND governance.allowed_uses @> ${JSON.stringify([request.governanceUse])}::jsonb
-          AND (governance.territories @> ${JSON.stringify([request.governanceTerritory])}::jsonb
+          AND governance.allowed_uses @> jsonb_build_array(snapshots.governance_use)
+          AND (governance.territories @> jsonb_build_array(snapshots.governance_territory)
             OR governance.territories @> '["WORLDWIDE"]'::jsonb)
-          AND NOT EXISTS (
-            SELECT 1 FROM ${aiMediaGovernanceProfiles} newer_governance
+          AND content.evidence_kind='content_approval' AND content.decision='approved'
+          AND human.evidence_kind='human_launch_approval' AND human.decision='approved'
+          AND sandbox.evidence_kind='sandbox_proof' AND sandbox.decision='passed'
+          AND quotes.evidence_kind='maximum_quote' AND quotes.decision='quoted'
+          AND content.launch_subject_digest=snapshots.launch_subject_digest
+          AND human.launch_subject_digest=snapshots.launch_subject_digest
+          AND sandbox.launch_subject_digest=snapshots.launch_subject_digest
+          AND quotes.launch_subject_digest=snapshots.launch_subject_digest
+          AND (content.provider_account_id,content.provider_key,content.provider_credential_version,
+            content.script_variant_id,content.script_variant_checksum,content.governance_profile_id,
+            content.governance_evidence_digest,content.governance_use,content.governance_territory)
+            =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+              snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+              snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+          AND (human.provider_account_id,human.provider_key,human.provider_credential_version,
+            human.script_variant_id,human.script_variant_checksum,human.governance_profile_id,
+            human.governance_evidence_digest,human.governance_use,human.governance_territory)
+            =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+              snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+              snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+          AND (sandbox.provider_account_id,sandbox.provider_key,sandbox.provider_credential_version,
+            sandbox.script_variant_id,sandbox.script_variant_checksum,sandbox.governance_profile_id,
+            sandbox.governance_evidence_digest,sandbox.governance_use,sandbox.governance_territory)
+            =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+              snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+              snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+          AND (quotes.provider_account_id,quotes.provider_key,quotes.provider_credential_version,
+            quotes.script_variant_id,quotes.script_variant_checksum,quotes.governance_profile_id,
+            quotes.governance_evidence_digest,quotes.governance_use,quotes.governance_territory)
+            =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+              snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+              snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+          AND content.daily_plan_slot_id=snapshots.daily_plan_slot_id AND content.slot_attempt=snapshots.slot_attempt
+          AND human.daily_plan_slot_id=snapshots.daily_plan_slot_id AND human.slot_attempt=snapshots.slot_attempt
+          AND sandbox.daily_plan_slot_id=snapshots.daily_plan_slot_id AND sandbox.slot_attempt=snapshots.slot_attempt
+          AND quotes.daily_plan_slot_id=snapshots.daily_plan_slot_id AND quotes.slot_attempt=snapshots.slot_attempt
+          AND content.valid_from<=clock_timestamp() AND content.expires_at>clock_timestamp()
+          AND human.valid_from<=clock_timestamp() AND human.expires_at>clock_timestamp()
+          AND sandbox.valid_from<=clock_timestamp() AND sandbox.expires_at>clock_timestamp()
+          AND quotes.valid_from<=clock_timestamp() AND quotes.expires_at>clock_timestamp()
+          AND ${request.reservationExpiresAt}::timestamptz<=content.expires_at
+          AND ${request.reservationExpiresAt}::timestamptz<=human.expires_at
+          AND ${request.reservationExpiresAt}::timestamptz<=sandbox.expires_at
+          AND ${request.reservationExpiresAt}::timestamptz<=quotes.expires_at
+          AND policy.state='active' AND policy.valid_from<=clock_timestamp()
+          AND (policy.expires_at IS NULL OR policy.expires_at>clock_timestamp())
+          AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone})
+          AND policy.allowed_countries @> jsonb_build_array(snapshots.content_country)
+          AND policy.allowed_languages @> jsonb_build_array(scripts.language)
+          AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+            WHERE (active.state='committed'
+              OR (active.state='reserved' AND active.expires_at>clock_timestamp())))<policy.total_concurrency
+          AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+            WHERE active.provider_key=snapshots.provider_key
+              AND (active.state='committed'
+                OR (active.state='reserved' AND active.expires_at>clock_timestamp())))<policy.provider_concurrency
+          AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+            WHERE active.owner_user_id=snapshots.owner_user_id
+              AND active.workspace_id=snapshots.workspace_id
+              AND (active.state='committed'
+                OR (active.state='reserved' AND active.expires_at>clock_timestamp())))<policy.tenant_concurrency
+          AND kill.active=false AND kill.valid_from<=clock_timestamp()
+          AND (kill.expires_at IS NULL OR kill.expires_at>clock_timestamp())
+          AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+            WHERE newer.owner_user_id=content.owner_user_id AND newer.workspace_id=content.workspace_id
+              AND newer.daily_plan_slot_id=content.daily_plan_slot_id
+              AND newer.slot_attempt=content.slot_attempt AND newer.evidence_kind=content.evidence_kind
+              AND newer.revision>content.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+            WHERE newer.owner_user_id=human.owner_user_id AND newer.workspace_id=human.workspace_id
+              AND newer.daily_plan_slot_id=human.daily_plan_slot_id
+              AND newer.slot_attempt=human.slot_attempt AND newer.evidence_kind=human.evidence_kind
+              AND newer.revision>human.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+            WHERE newer.owner_user_id=sandbox.owner_user_id AND newer.workspace_id=sandbox.workspace_id
+              AND newer.daily_plan_slot_id=sandbox.daily_plan_slot_id
+              AND newer.slot_attempt=sandbox.slot_attempt AND newer.evidence_kind=sandbox.evidence_kind
+              AND newer.revision>sandbox.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+            WHERE newer.owner_user_id=quotes.owner_user_id AND newer.workspace_id=quotes.workspace_id
+              AND newer.daily_plan_slot_id=quotes.daily_plan_slot_id
+              AND newer.slot_attempt=quotes.slot_attempt AND newer.evidence_kind=quotes.evidence_kind
+              AND newer.revision>quotes.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${POLICY_REVISIONS} newer_policy
+            WHERE newer_policy.owner_user_id=policy.owner_user_id AND newer_policy.workspace_id=policy.workspace_id
+              AND newer_policy.revision>policy.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${KILL_SWITCH_REVISIONS} newer_kill
+            WHERE newer_kill.owner_user_id=kill.owner_user_id AND newer_kill.workspace_id=kill.workspace_id
+              AND newer_kill.revision>kill.revision)
+          AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer_governance
             WHERE newer_governance.owner_user_id=governance.owner_user_id
               AND newer_governance.workspace_id=governance.workspace_id
               AND newer_governance.influencer_id=governance.influencer_id
-              AND newer_governance.version>governance.version
-          )
-          AND ${request.quoteExpiresAt}::timestamptz>clock_timestamp()
-          AND ${request.reservationExpiresAt}::timestamptz>clock_timestamp()
-          AND ${request.reservationExpiresAt}::timestamptz<=${request.quoteExpiresAt}::timestamptz
-          AND ${request.contentApprovalGranted}=true
-          AND ${request.contentApprovalExpiresAt}::timestamptz>clock_timestamp()
-          AND ${request.reservationExpiresAt}::timestamptz<=${request.contentApprovalExpiresAt}::timestamptz
-          AND ${request.humanLaunchApprovalGranted}=true
-          AND ${request.humanLaunchApprovalExpiresAt}::timestamptz>clock_timestamp()
-          AND ${request.reservationExpiresAt}::timestamptz<=${request.humanLaunchApprovalExpiresAt}::timestamptz
-          AND ${request.policyAllowed}=true AND ${request.killSwitchActive}=false
-          AND ${request.sandboxPassed}=true
-          AND ${request.sandboxExpiresAt}::timestamptz>clock_timestamp()
-          AND ${request.reservationExpiresAt}::timestamptz<=${request.sandboxExpiresAt}::timestamptz
-        FOR UPDATE OF plans, slots, buckets, accounts, governance, influencers, avatars, voices, variants
+              AND newer_governance.version>governance.version)
+          AND snapshots.slot_attempt=COALESCE((SELECT MAX(previous.attempt)+1
+            FROM ${aiMediaBudgetReservations} previous
+            WHERE previous.owner_user_id=slots.owner_user_id
+              AND previous.workspace_id=slots.workspace_id
+              AND previous.daily_plan_slot_id=slots.id),1)
+        FOR UPDATE OF snapshots, content, human, sandbox, quotes, policy, kill,
+          plans, slots, buckets, accounts, governance, influencers, avatars, voices, variants, scripts
       `));
       if (gateRows.length !== 1) {
-        throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Daily admission gates did not resolve to one exact locked subject");
+        throw new DailyAdmissionPersistenceError("ADMISSION_DENIED", "Exact durable launch authority did not admit this slot");
       }
 
       const createdRows = resultRows(await tx.execute(sql`
         WITH fresh_clock AS MATERIALIZED (
-          SELECT observed_at,
-            (observed_at AT TIME ZONE ${this.accountingTimeZone})::date AS budget_date
+          SELECT observed_at, (observed_at AT TIME ZONE ${this.accountingTimeZone})::date AS budget_date
           FROM (SELECT clock_timestamp() AS observed_at) sampled_clock
-        ), final_guard AS (
-          SELECT buckets.id AS bucket_id, fresh_clock.observed_at
-          FROM ${aiMediaDailyPlans} plans
-          INNER JOIN ${aiMediaDailyPlanSlots} slots
-            ON slots.owner_user_id=plans.owner_user_id AND slots.workspace_id=plans.workspace_id
-            AND slots.daily_plan_id=plans.id
+        ), final_guard AS MATERIALIZED (
+          SELECT buckets.id AS bucket_id, snapshots.slot_attempt, quotes.amount_micro_usd,
+            snapshots.provider_account_id, snapshots.provider_key, snapshots.provider_credential_version,
+            snapshots.script_variant_checksum, snapshots.admission_digest,
+            snapshots.maximum_quote_evidence_digest AS quote_digest, quotes.expires_at AS quote_expires_at,
+            snapshots.content_approval_evidence_digest, snapshots.human_launch_approval_evidence_digest,
+            snapshots.governance_profile_id, snapshots.governance_evidence_digest,
+            snapshots.policy_digest, snapshots.kill_switch_evidence_digest,
+            snapshots.sandbox_evidence_digest, fresh_clock.observed_at
+          FROM ${AUTHORITY_SNAPSHOTS} snapshots
+          INNER JOIN ${LAUNCH_EVIDENCE} content ON content.id=snapshots.content_approval_evidence_id
+            AND content.owner_user_id=snapshots.owner_user_id AND content.workspace_id=snapshots.workspace_id
+            AND content.evidence_digest=snapshots.content_approval_evidence_digest
+          INNER JOIN ${LAUNCH_EVIDENCE} human ON human.id=snapshots.human_launch_approval_evidence_id
+            AND human.owner_user_id=snapshots.owner_user_id AND human.workspace_id=snapshots.workspace_id
+            AND human.evidence_digest=snapshots.human_launch_approval_evidence_digest
+          INNER JOIN ${LAUNCH_EVIDENCE} sandbox ON sandbox.id=snapshots.sandbox_evidence_id
+            AND sandbox.owner_user_id=snapshots.owner_user_id AND sandbox.workspace_id=snapshots.workspace_id
+            AND sandbox.evidence_digest=snapshots.sandbox_evidence_digest
+          INNER JOIN ${LAUNCH_EVIDENCE} quotes ON quotes.id=snapshots.maximum_quote_evidence_id
+            AND quotes.owner_user_id=snapshots.owner_user_id AND quotes.workspace_id=snapshots.workspace_id
+            AND quotes.evidence_digest=snapshots.maximum_quote_evidence_digest
+          INNER JOIN ${POLICY_REVISIONS} policy ON policy.id=snapshots.policy_revision_id
+            AND policy.owner_user_id=snapshots.owner_user_id AND policy.workspace_id=snapshots.workspace_id
+            AND policy.revision=snapshots.policy_revision AND policy.policy_digest=snapshots.policy_digest
+          INNER JOIN ${KILL_SWITCH_REVISIONS} kill ON kill.id=snapshots.kill_switch_revision_id
+            AND kill.owner_user_id=snapshots.owner_user_id AND kill.workspace_id=snapshots.workspace_id
+            AND kill.revision=snapshots.kill_switch_revision
+            AND kill.evidence_digest=snapshots.kill_switch_evidence_digest
+          INNER JOIN ${aiMediaDailyPlans} plans ON plans.id=snapshots.daily_plan_id
+            AND plans.owner_user_id=snapshots.owner_user_id AND plans.workspace_id=snapshots.workspace_id
+            AND plans.plan_digest=snapshots.plan_digest AND plans.provider_account_id=snapshots.provider_account_id
+            AND plans.provider_key=snapshots.provider_key
+            AND plans.provider_credential_version=snapshots.provider_credential_version
+          INNER JOIN ${aiMediaDailyPlanSlots} slots ON slots.id=snapshots.daily_plan_slot_id
+            AND slots.owner_user_id=snapshots.owner_user_id AND slots.workspace_id=snapshots.workspace_id
+            AND slots.daily_plan_id=snapshots.daily_plan_id AND slots.slot_digest=snapshots.slot_digest
+            AND slots.script_variant_id=snapshots.script_variant_id
           INNER JOIN ${aiMediaBudgetBuckets} buckets
-            ON buckets.owner_user_id=plans.owner_user_id AND buckets.workspace_id=plans.workspace_id
-          INNER JOIN ${aiMediaProviderAccounts} accounts
-            ON accounts.owner_user_id=plans.owner_user_id AND accounts.workspace_id=plans.workspace_id
-            AND accounts.id=plans.provider_account_id AND accounts.provider_key=plans.provider_key
-          INNER JOIN ${aiMediaGovernanceProfiles} governance
-            ON governance.owner_user_id=slots.owner_user_id AND governance.workspace_id=slots.workspace_id
-            AND governance.id=${request.governanceProfileId}
+            ON buckets.owner_user_id=snapshots.owner_user_id AND buckets.workspace_id=snapshots.workspace_id
+          INNER JOIN ${aiMediaProviderAccounts} accounts ON accounts.id=snapshots.provider_account_id
+            AND accounts.owner_user_id=snapshots.owner_user_id AND accounts.workspace_id=snapshots.workspace_id
+            AND accounts.provider_key=snapshots.provider_key
+          INNER JOIN ${aiMediaGovernanceProfiles} governance ON governance.id=snapshots.governance_profile_id
+            AND governance.owner_user_id=snapshots.owner_user_id AND governance.workspace_id=snapshots.workspace_id
+            AND governance.evidence_digest=snapshots.governance_evidence_digest
             AND governance.influencer_id=slots.influencer_id
-          INNER JOIN ${aiMediaScriptVariants} variants
-            ON variants.owner_user_id=slots.owner_user_id AND variants.workspace_id=slots.workspace_id
-            AND variants.id=slots.script_variant_id
+          INNER JOIN ${aiMediaInfluencers} influencers
+            ON influencers.owner_user_id=slots.owner_user_id AND influencers.workspace_id=slots.workspace_id
+            AND influencers.id=slots.influencer_id
+          INNER JOIN ${aiMediaProviderResources} avatars
+            ON avatars.owner_user_id=slots.owner_user_id AND avatars.workspace_id=slots.workspace_id
+            AND avatars.id=slots.avatar_resource_id AND avatars.provider_account_id=snapshots.provider_account_id
+            AND avatars.provider_key=snapshots.provider_key AND avatars.resource_type='avatar'
+          INNER JOIN ${aiMediaProviderResources} voices
+            ON voices.owner_user_id=slots.owner_user_id AND voices.workspace_id=slots.workspace_id
+            AND voices.id=slots.voice_resource_id AND voices.provider_account_id=snapshots.provider_account_id
+            AND voices.provider_key=snapshots.provider_key AND voices.resource_type='voice'
+          INNER JOIN ${aiMediaScriptVariants} variants ON variants.id=snapshots.script_variant_id
+            AND variants.owner_user_id=snapshots.owner_user_id AND variants.workspace_id=snapshots.workspace_id
+            AND variants.checksum=snapshots.script_variant_checksum
+          INNER JOIN ${aiMediaScripts} scripts ON scripts.id=variants.script_id
+            AND scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
           CROSS JOIN fresh_clock
-          WHERE plans.id=${request.planId} AND plans.owner_user_id=${request.scope.ownerUserId}
-            AND plans.workspace_id=${request.scope.workspaceId} AND plans.status='planned'
-            AND plans.plan_digest=${request.planDigest}
-            AND plans.provider_account_id=${request.providerAccountId}
-            AND plans.provider_key=${request.providerKey}
-            AND plans.provider_credential_version=${request.providerCredentialVersion}
-            AND plans.plan_date=fresh_clock.budget_date
+          WHERE snapshots.id=${request.authoritySnapshotId}
+            AND snapshots.owner_user_id=${request.scope.ownerUserId}
+            AND snapshots.workspace_id=${request.scope.workspaceId}
+            AND snapshots.authority_digest=${request.authorityDigest}
+            AND snapshots.daily_plan_id=${request.planId} AND snapshots.daily_plan_slot_id=${request.slotId}
+            AND snapshots.valid_from<=fresh_clock.observed_at AND snapshots.expires_at>fresh_clock.observed_at
+            AND ${request.reservationExpiresAt}::timestamptz>fresh_clock.observed_at
+            AND ${request.reservationExpiresAt}::timestamptz<=snapshots.expires_at
+            AND plans.status='planned' AND plans.plan_date=fresh_clock.budget_date
             AND plans.accounting_time_zone=${this.accountingTimeZone}
-            AND slots.id=${request.slotId} AND slots.status='planned'
-            AND slots.influencer_id=${request.influencerId}
-            AND slots.slot_digest=${request.slotDigest}
-            AND slots.state_version=${request.expectedSlotStateVersion}
+            AND slots.status='planned' AND slots.state_version=${request.expectedSlotStateVersion}
+            AND slots.provider_account_id=snapshots.provider_account_id
+            AND slots.provider_key=snapshots.provider_key
+            AND slots.provider_credential_version=snapshots.provider_credential_version
             AND buckets.id=${request.budgetBucketId} AND buckets.budget_date=fresh_clock.budget_date
             AND buckets.accounting_time_zone=${this.accountingTimeZone} AND buckets.currency='USD'
-            AND buckets.policy_digest=${request.policyDigest}
-            AND buckets.policy_version=${request.budgetPolicyVersion}
+            AND buckets.policy_digest=policy.policy_digest AND buckets.policy_version=policy.revision
+            AND buckets.limit_micro_usd=policy.daily_budget_micro_usd
             AND buckets.state_version=${request.expectedBucketStateVersion}
-            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+${request.amountMicroUsd}::numeric
-              <= buckets.limit_micro_usd
+            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+quotes.amount_micro_usd<=buckets.limit_micro_usd
+            AND quotes.amount_micro_usd=snapshots.maximum_quote_micro_usd
+            AND quotes.currency='USD' AND snapshots.currency='USD'
+            AND accounts.credential_version=snapshots.provider_credential_version
             AND accounts.status IN ('active','connected') AND accounts.credential_status='active'
-            AND accounts.credential_version=${request.providerCredentialVersion}
-            AND (accounts.credential_expires_at IS NULL
-              OR accounts.credential_expires_at>fresh_clock.observed_at)
+            AND (accounts.credential_expires_at IS NULL OR accounts.credential_expires_at>fresh_clock.observed_at)
+            AND influencers.status='active' AND influencers.archived_at IS NULL
+            AND avatars.status='active' AND voices.status='active'
             AND governance.state='active' AND governance.revoked_at IS NULL
-            AND governance.valid_from<=fresh_clock.observed_at
-            AND governance.expires_at>fresh_clock.observed_at
-            AND governance.evidence_digest=${request.governanceEvidenceDigest}
-            AND governance.allowed_uses @> ${JSON.stringify([request.governanceUse])}::jsonb
-            AND (governance.territories @> ${JSON.stringify([request.governanceTerritory])}::jsonb
+            AND governance.valid_from<=fresh_clock.observed_at AND governance.expires_at>fresh_clock.observed_at
+            AND governance.allowed_uses @> jsonb_build_array(snapshots.governance_use)
+            AND (governance.territories @> jsonb_build_array(snapshots.governance_territory)
               OR governance.territories @> '["WORLDWIDE"]'::jsonb)
-            AND variants.status='approved' AND variants.checksum=${request.scriptVariantChecksum}
-            AND ${request.quoteExpiresAt}::timestamptz>fresh_clock.observed_at
-            AND ${request.reservationExpiresAt}::timestamptz>fresh_clock.observed_at
-            AND ${request.contentApprovalExpiresAt}::timestamptz>fresh_clock.observed_at
-            AND ${request.humanLaunchApprovalExpiresAt}::timestamptz>fresh_clock.observed_at
-            AND ${request.sandboxExpiresAt}::timestamptz>fresh_clock.observed_at
-            AND ${request.reservationExpiresAt}::timestamptz<=${request.quoteExpiresAt}::timestamptz
-            AND ${request.reservationExpiresAt}::timestamptz<=${request.contentApprovalExpiresAt}::timestamptz
-            AND ${request.reservationExpiresAt}::timestamptz<=${request.humanLaunchApprovalExpiresAt}::timestamptz
-            AND ${request.reservationExpiresAt}::timestamptz<=${request.sandboxExpiresAt}::timestamptz
-            AND ${request.contentApprovalGranted}=true
-            AND ${request.humanLaunchApprovalGranted}=true
-            AND ${request.policyAllowed}=true AND ${request.killSwitchActive}=false
-            AND ${request.sandboxPassed}=true
-          FOR UPDATE OF plans, slots, buckets, accounts, governance, variants
+            AND variants.status='approved'
+            AND content.evidence_kind='content_approval' AND content.decision='approved'
+            AND human.evidence_kind='human_launch_approval' AND human.decision='approved'
+            AND sandbox.evidence_kind='sandbox_proof' AND sandbox.decision='passed'
+            AND quotes.evidence_kind='maximum_quote' AND quotes.decision='quoted'
+            AND content.launch_subject_digest=snapshots.launch_subject_digest
+            AND human.launch_subject_digest=snapshots.launch_subject_digest
+            AND sandbox.launch_subject_digest=snapshots.launch_subject_digest
+            AND quotes.launch_subject_digest=snapshots.launch_subject_digest
+            AND (content.provider_account_id,content.provider_key,content.provider_credential_version,
+              content.script_variant_id,content.script_variant_checksum,content.governance_profile_id,
+              content.governance_evidence_digest,content.governance_use,content.governance_territory)
+              =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+                snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+                snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+            AND (human.provider_account_id,human.provider_key,human.provider_credential_version,
+              human.script_variant_id,human.script_variant_checksum,human.governance_profile_id,
+              human.governance_evidence_digest,human.governance_use,human.governance_territory)
+              =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+                snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+                snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+            AND (sandbox.provider_account_id,sandbox.provider_key,sandbox.provider_credential_version,
+              sandbox.script_variant_id,sandbox.script_variant_checksum,sandbox.governance_profile_id,
+              sandbox.governance_evidence_digest,sandbox.governance_use,sandbox.governance_territory)
+              =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+                snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+                snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+            AND (quotes.provider_account_id,quotes.provider_key,quotes.provider_credential_version,
+              quotes.script_variant_id,quotes.script_variant_checksum,quotes.governance_profile_id,
+              quotes.governance_evidence_digest,quotes.governance_use,quotes.governance_territory)
+              =(snapshots.provider_account_id,snapshots.provider_key,snapshots.provider_credential_version,
+                snapshots.script_variant_id,snapshots.script_variant_checksum,snapshots.governance_profile_id,
+                snapshots.governance_evidence_digest,snapshots.governance_use,snapshots.governance_territory)
+            AND content.daily_plan_slot_id=snapshots.daily_plan_slot_id AND content.slot_attempt=snapshots.slot_attempt
+            AND human.daily_plan_slot_id=snapshots.daily_plan_slot_id AND human.slot_attempt=snapshots.slot_attempt
+            AND sandbox.daily_plan_slot_id=snapshots.daily_plan_slot_id AND sandbox.slot_attempt=snapshots.slot_attempt
+            AND quotes.daily_plan_slot_id=snapshots.daily_plan_slot_id AND quotes.slot_attempt=snapshots.slot_attempt
+            AND content.valid_from<=fresh_clock.observed_at AND content.expires_at>fresh_clock.observed_at
+            AND human.valid_from<=fresh_clock.observed_at AND human.expires_at>fresh_clock.observed_at
+            AND sandbox.valid_from<=fresh_clock.observed_at AND sandbox.expires_at>fresh_clock.observed_at
+            AND quotes.valid_from<=fresh_clock.observed_at AND quotes.expires_at>fresh_clock.observed_at
+            AND ${request.reservationExpiresAt}::timestamptz<=content.expires_at
+            AND ${request.reservationExpiresAt}::timestamptz<=human.expires_at
+            AND ${request.reservationExpiresAt}::timestamptz<=sandbox.expires_at
+            AND ${request.reservationExpiresAt}::timestamptz<=quotes.expires_at
+            AND policy.state='active' AND policy.valid_from<=fresh_clock.observed_at
+            AND (policy.expires_at IS NULL OR policy.expires_at>fresh_clock.observed_at)
+            AND policy.allowed_time_zones @> jsonb_build_array(${this.accountingTimeZone})
+            AND policy.allowed_countries @> jsonb_build_array(snapshots.content_country)
+            AND policy.allowed_languages @> jsonb_build_array(scripts.language)
+            AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+              WHERE (active.state='committed'
+                OR (active.state='reserved' AND active.expires_at>fresh_clock.observed_at)))<policy.total_concurrency
+            AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+              WHERE active.provider_key=snapshots.provider_key
+                AND (active.state='committed'
+                  OR (active.state='reserved' AND active.expires_at>fresh_clock.observed_at)))<policy.provider_concurrency
+            AND (SELECT count(*) FROM ${aiMediaBudgetReservations} active
+              WHERE active.owner_user_id=snapshots.owner_user_id
+                AND active.workspace_id=snapshots.workspace_id
+                AND (active.state='committed'
+                  OR (active.state='reserved' AND active.expires_at>fresh_clock.observed_at)))<policy.tenant_concurrency
+            AND kill.active=false AND kill.valid_from<=fresh_clock.observed_at
+            AND (kill.expires_at IS NULL OR kill.expires_at>fresh_clock.observed_at)
+            AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+              WHERE newer.owner_user_id=content.owner_user_id AND newer.workspace_id=content.workspace_id
+                AND newer.daily_plan_slot_id=content.daily_plan_slot_id AND newer.slot_attempt=content.slot_attempt
+                AND newer.evidence_kind=content.evidence_kind AND newer.revision>content.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+              WHERE newer.owner_user_id=human.owner_user_id AND newer.workspace_id=human.workspace_id
+                AND newer.daily_plan_slot_id=human.daily_plan_slot_id AND newer.slot_attempt=human.slot_attempt
+                AND newer.evidence_kind=human.evidence_kind AND newer.revision>human.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+              WHERE newer.owner_user_id=sandbox.owner_user_id AND newer.workspace_id=sandbox.workspace_id
+                AND newer.daily_plan_slot_id=sandbox.daily_plan_slot_id AND newer.slot_attempt=sandbox.slot_attempt
+                AND newer.evidence_kind=sandbox.evidence_kind AND newer.revision>sandbox.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${LAUNCH_EVIDENCE} newer
+              WHERE newer.owner_user_id=quotes.owner_user_id AND newer.workspace_id=quotes.workspace_id
+                AND newer.daily_plan_slot_id=quotes.daily_plan_slot_id AND newer.slot_attempt=quotes.slot_attempt
+                AND newer.evidence_kind=quotes.evidence_kind AND newer.revision>quotes.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${POLICY_REVISIONS} newer_policy
+              WHERE newer_policy.owner_user_id=policy.owner_user_id
+                AND newer_policy.workspace_id=policy.workspace_id AND newer_policy.revision>policy.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${KILL_SWITCH_REVISIONS} newer_kill
+              WHERE newer_kill.owner_user_id=kill.owner_user_id
+                AND newer_kill.workspace_id=kill.workspace_id AND newer_kill.revision>kill.revision)
+            AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer_governance
+              WHERE newer_governance.owner_user_id=governance.owner_user_id
+                AND newer_governance.workspace_id=governance.workspace_id
+                AND newer_governance.influencer_id=governance.influencer_id
+                AND newer_governance.version>governance.version)
+            AND snapshots.slot_attempt=COALESCE((SELECT MAX(previous.attempt)+1
+              FROM ${aiMediaBudgetReservations} previous
+              WHERE previous.owner_user_id=slots.owner_user_id
+                AND previous.workspace_id=slots.workspace_id
+                AND previous.daily_plan_slot_id=slots.id),1)
+          FOR UPDATE OF snapshots, content, human, sandbox, quotes, policy, kill,
+            plans, slots, buckets, accounts, governance, influencers, avatars, voices, variants, scripts
         ), bucket_update AS (
           UPDATE ${aiMediaBudgetBuckets} buckets
-          SET reserved_micro_usd=buckets.reserved_micro_usd+${request.amountMicroUsd}::numeric,
+          SET reserved_micro_usd=buckets.reserved_micro_usd+final_guard.amount_micro_usd,
             state_version=buckets.state_version+1, updated_at=final_guard.observed_at
           FROM final_guard
           WHERE buckets.id=final_guard.bucket_id
             AND buckets.owner_user_id=${request.scope.ownerUserId}
             AND buckets.workspace_id=${request.scope.workspaceId} AND buckets.currency='USD'
             AND buckets.state_version=${request.expectedBucketStateVersion}
-            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+${request.amountMicroUsd}::numeric
-              <=buckets.limit_micro_usd
-          RETURNING buckets.id, final_guard.observed_at
+            AND buckets.reserved_micro_usd+buckets.committed_micro_usd+final_guard.amount_micro_usd<=buckets.limit_micro_usd
+          RETURNING buckets.id, final_guard.*
         ), reservation_insert AS (
           INSERT INTO ${aiMediaBudgetReservations} (
             owner_user_id,workspace_id,budget_bucket_id,daily_plan_slot_id,provider_account_id,
             provider_key,provider_credential_version,attempt,state,submission_state,amount_micro_usd,
-            currency,idempotency_key,input_digest,admission_digest,script_variant_checksum,quote_digest,quote_expires_at,
-            content_approval_digest,human_launch_approval_digest,governance_profile_id,
-            governance_evidence_digest,policy_digest,kill_switch_evidence_digest,sandbox_evidence_digest,
-            provider_idempotency_key,render_job_id,dispatch_outbox_id,reserved_at,expires_at,created_at,updated_at
+            currency,idempotency_key,input_digest,admission_digest,authority_snapshot_id,authority_digest,
+            script_variant_checksum,quote_digest,quote_expires_at,content_approval_digest,
+            human_launch_approval_digest,governance_profile_id,governance_evidence_digest,policy_digest,
+            kill_switch_evidence_digest,sandbox_evidence_digest,provider_idempotency_key,
+            render_job_id,dispatch_outbox_id,reserved_at,expires_at,created_at,updated_at
           )
           SELECT ${request.scope.ownerUserId},${request.scope.workspaceId},${request.budgetBucketId},
-            ${request.slotId},${request.providerAccountId},${request.providerKey},
-            ${request.providerCredentialVersion},${request.attempt},'reserved','not_started',
-            ${request.amountMicroUsd}::numeric,'USD',${request.idempotencyKey},${request.inputDigest},
-            ${request.admissionDigest},${request.scriptVariantChecksum},${request.quoteDigest},
-            ${request.quoteExpiresAt}::timestamptz,
-            ${request.contentApprovalDigest},${request.humanLaunchApprovalDigest},${request.governanceProfileId},
-            ${request.governanceEvidenceDigest},${request.policyDigest},${request.killSwitchEvidenceDigest},
-            ${request.sandboxEvidenceDigest},${request.providerIdempotencyKey},NULL,NULL,
+            ${request.slotId},bucket_update.provider_account_id,bucket_update.provider_key,
+            bucket_update.provider_credential_version,bucket_update.slot_attempt,'reserved','not_started',
+            bucket_update.amount_micro_usd,'USD',${request.idempotencyKey},${request.inputDigest},
+            bucket_update.admission_digest,${request.authoritySnapshotId},${request.authorityDigest},
+            bucket_update.script_variant_checksum,bucket_update.quote_digest,bucket_update.quote_expires_at,
+            bucket_update.content_approval_evidence_digest,bucket_update.human_launch_approval_evidence_digest,
+            bucket_update.governance_profile_id,bucket_update.governance_evidence_digest,
+            bucket_update.policy_digest,bucket_update.kill_switch_evidence_digest,
+            bucket_update.sandbox_evidence_digest,${providerIdempotencyKey},NULL,NULL,
             bucket_update.observed_at,${request.reservationExpiresAt}::timestamptz,
             bucket_update.observed_at,bucket_update.observed_at
           FROM bucket_update
@@ -574,11 +745,11 @@ export class DrizzleDailyAdmissionRepository {
   }
 }
 
-function canonicalMicroUsd(value: unknown, field: string): string {
-  const raw = typeof value === "bigint" ? value.toString() : typeof value === "string" ? value : "";
-  if (!/^[1-9]\d*$/u.test(raw)) throw invalid(`${field} must be a positive integer micro-USD string or bigint`);
-  const amount = BigInt(raw);
-  if (amount > MAX_DB_MICRO_USD) throw invalid(`${field} exceeds the durable database limit`);
+function databaseMicroUsd(value: unknown): string {
+  const raw = typeof value === "bigint" ? value.toString() : String(value);
+  if (!/^[1-9]\d*$/u.test(raw) || BigInt(raw) > 9_000_000_000_000_000n) {
+    throw invariant("Database returned an invalid amountMicroUsd");
+  }
   return raw;
 }
 
@@ -592,13 +763,6 @@ function digest(value: string, field: string): Sha256Digest {
   return value as Sha256Digest;
 }
 
-function checksum(value: string, field: string): string {
-  if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) {
-    throw invalid(`${field} must be a lowercase SHA-256 checksum`);
-  }
-  return value;
-}
-
 function safeString(value: string, field: string, max: number, min = 1): string {
   if (typeof value !== "string" || value.length < min || value.length > max || !SAFE.test(value)) {
     throw invalid(`${field} is invalid`);
@@ -608,23 +772,6 @@ function safeString(value: string, field: string, max: number, min = 1): string 
 
 function positiveInteger(value: number, field: string): number {
   if (!Number.isSafeInteger(value) || value < 1) throw invalid(`${field} must be a positive safe integer`);
-  return value;
-}
-
-function boolean(value: boolean, field: string): boolean {
-  if (typeof value !== "boolean") throw invalid(`${field} must be boolean`);
-  return value;
-}
-
-function governanceUse(value: string): DailyAdmissionGovernanceUse {
-  if (!["internal_preview", "organic_social", "paid_ads", "commercial"].includes(value)) throw invalid("governanceUse is invalid");
-  return value as DailyAdmissionGovernanceUse;
-}
-
-function governanceTerritory(value: string): string {
-  if (typeof value !== "string" || !/^(?:WORLDWIDE|[A-Z]{2})$/u.test(value)) {
-    throw invalid("governanceTerritory must be WORLDWIDE or an uppercase ISO country code");
-  }
   return value;
 }
 
@@ -647,7 +794,6 @@ function validTimeZone(value: string): string {
 }
 
 function canonicalJson(value: unknown): unknown {
-  if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return value.map(canonicalJson);
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>)
@@ -656,6 +802,10 @@ function canonicalJson(value: unknown): unknown {
       .map(([key, entry]) => [key, canonicalJson(entry)]));
   }
   return value;
+}
+
+function sha256(value: string): Sha256Digest {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function invalid(message: string): DailyAdmissionPersistenceError {
