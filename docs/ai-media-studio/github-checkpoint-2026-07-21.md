@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR19 durable daily admission
 
-- Branch: `codex/ai-media-studio-durable-daily-admission`, stacked on draft PR #100.
+- Branch: `codex/ai-media-studio-durable-daily-admission`, draft PR #102, stacked on draft PR #100.
 - Scope: provider-neutral plans/slots, exact bigint micro-USD domain math, durable budget buckets, immutable reservation evidence, and an unmounted reservation-only Drizzle transaction.
 - Database authority: accounting date/timezone, locks, account/credential version, governance, policy, quote, approval, sandbox, and reservation state must be revalidated in one PostgreSQL transaction.
 - Ambiguous side effects: committed money cannot expire or auto-refund after a timeout or uncertain provider response; only definitive reconciliation may release or settle it.
