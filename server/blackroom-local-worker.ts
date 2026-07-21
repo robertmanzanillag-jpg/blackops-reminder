@@ -32,6 +32,12 @@ export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
 export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
 export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
 
+function isValidBlackRoomPublicationDateTime(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 19) === value;
+}
+
 export interface BlackRoomLedgerEntry {
   reservationId: string;
   jobId: string;
@@ -81,7 +87,7 @@ export function markBlackRoomNetworkUncertain(
   publicationDateTime: string,
 ): BlackRoomLedgerEntry {
   if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(publicationDateTime)) throw new Error("invalid Metricool publication date");
+  if (!isValidBlackRoomPublicationDateTime(publicationDateTime)) throw new Error("invalid Metricool publication date");
   entry.networkAttempts ||= {};
   entry.networkReceipts ||= {};
   entry.networkAttempts[network] = "uncertain";
@@ -172,13 +178,23 @@ export function isBlackRoomJobPublishable(
     && (!job.notBefore || new Date(job.notBefore).getTime() <= now.getTime()));
 }
 
-export function selectPublishableBlackRoomReservation<T extends { status?: string; jobId?: string }>(
+export function selectPublishableBlackRoomReservation<T extends { status?: string; jobId?: string; publicationDateTime?: string | null }>(
   queue: { enabled?: unknown; jobs?: Array<{ id?: string; status?: string; notBefore?: string }> },
   entries: T[],
   now = new Date(),
 ): T | null {
-  return entries.find((entry) => ["reserved", "uncertain"].includes(String(entry.status || ""))
-    && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now)) || null;
+  const publishable = entries.filter((entry) => ["reserved", "uncertain"].includes(String(entry.status || ""))
+    && isBlackRoomJobPublishable(queue, String(entry.jobId || ""), now));
+  // An explicitly scheduled reservation is an owner-approved override and must
+  // be processed before legacy unscheduled reservations. Stable index order is
+  // preserved among entries with the same priority.
+  return publishable.map((entry, index) => ({ entry, index }))
+    .sort((left, right) => {
+      const leftDate = left.entry.publicationDateTime || "";
+      const rightDate = right.entry.publicationDateTime || "";
+      if (Boolean(leftDate) !== Boolean(rightDate)) return leftDate ? -1 : 1;
+      return leftDate.localeCompare(rightDate) || left.index - right.index;
+    })[0]?.entry || null;
 }
 
 function addUtcCalendarDay(date: string): string {
@@ -291,7 +307,7 @@ export function updateBlackRoomLedgerEntry(
     throw new Error("complete Metricool receipts are required for confirmation");
   }
   if (update.status === "uncertain" && update.publicationDateTime
-    && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(update.publicationDateTime)) {
+    && !isValidBlackRoomPublicationDateTime(update.publicationDateTime)) {
     throw new Error("invalid Metricool publication date");
   }
   entry.status = update.status;
@@ -299,6 +315,20 @@ export function updateBlackRoomLedgerEntry(
   if (update.status === "uncertain" && update.publicationDateTime) {
     entry.publicationDateTime = update.publicationDateTime;
   }
+  entry.updatedAt = now.toISOString();
+  return entry;
+}
+
+export function scheduleBlackRoomLedgerEntry(
+  entry: BlackRoomLedgerEntry,
+  publicationDateTime: string,
+  now = new Date(),
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  if (!isValidBlackRoomPublicationDateTime(publicationDateTime)) {
+    throw new Error("invalid Metricool publication date");
+  }
+  entry.publicationDateTime = publicationDateTime;
   entry.updatedAt = now.toISOString();
   return entry;
 }
