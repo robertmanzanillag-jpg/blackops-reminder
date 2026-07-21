@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addBlackRoomCountdown, deactivateBlackRoomLink, formatBlackRoomLinkPerformance, getBlackRoomLinkPerformance } from "../server/blackroom-links";
+import {
+  addBlackRoomCountdown,
+  addBlackRoomLink,
+  deactivateBlackRoomLink,
+  formatBlackRoomLinkPerformance,
+  getBlackRoomLinkPerformance,
+  updateBlackRoomLink,
+} from "../server/blackroom-links";
 
 test("Black Room admin headers reject placeholder credentials", async () => {
   const originalFetch = globalThis.fetch;
@@ -112,6 +119,117 @@ test("deactivateBlackRoomLink soft-disables bio link and builder element without
       call.url.endsWith("/api/admin/bio-elements/20") &&
       call.method === "PUT" &&
       call.body?.is_active === false
+    ));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("addBlackRoomLink creates both bio link and builder element", async () => {
+  const calls: Array<{ url: string; method: string; body?: any }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (url: any, init: any = {}) => {
+    const method = init.method || "GET";
+    calls.push({
+      url: String(url),
+      method,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+
+    return new Response(JSON.stringify({ id: calls.length, ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await addBlackRoomLink({
+      title: "New Party",
+      subtitle: "Friday",
+      url: "https://tickets.example/new",
+      icon: "ticket",
+      display_order: 2,
+    });
+
+    assert.equal(result.action, "added");
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-links") &&
+      call.method === "POST" &&
+      call.body?.title === "New Party" &&
+      call.body?.url === "https://tickets.example/new" &&
+      call.body?.display_order === 2 &&
+      call.body?.is_active === true
+    ));
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-elements") &&
+      call.method === "POST" &&
+      call.body?.element_type === "link" &&
+      call.body?.title === "New Party" &&
+      call.body?.url === "https://tickets.example/new" &&
+      call.body?.position === 3 &&
+      call.body?.is_active === true
+    ));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("updateBlackRoomLink updates matching bio link and builder element", async () => {
+  const calls: Array<{ url: string; method: string; body?: any }> = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (url: any, init: any = {}) => {
+    const method = init.method || "GET";
+    calls.push({
+      url: String(url),
+      method,
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+    });
+
+    if (String(url).endsWith("/api/admin/link-stats")) {
+      return new Response(JSON.stringify({
+        links: [
+          { id: 10, title: "Old Party", url: "https://tickets.example/old", is_active: true },
+        ],
+        totals: {},
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    if (String(url).endsWith("/api/admin/bio-elements")) {
+      return new Response(JSON.stringify([
+        { id: 20, element_type: "link", title: "Old Party", url: "https://tickets.example/old", is_active: true },
+      ]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await updateBlackRoomLink({
+      matchTitle: "Old Party",
+      title: "Old Party",
+      url: "https://tickets.example/new",
+      icon: "ticket",
+    });
+
+    assert.equal(result.action, "updated");
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-links/10") &&
+      call.method === "PUT" &&
+      call.body?.title === "Old Party" &&
+      call.body?.url === "https://tickets.example/new" &&
+      call.body?.is_active === true
+    ));
+    assert.ok(calls.some((call) =>
+      call.url.endsWith("/api/admin/bio-elements/20") &&
+      call.method === "PUT" &&
+      call.body?.title === "Old Party" &&
+      call.body?.url === "https://tickets.example/new" &&
+      call.body?.is_active === true
     ));
   } finally {
     globalThis.fetch = originalFetch;

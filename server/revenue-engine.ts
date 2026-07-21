@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -104,9 +105,14 @@ export const revenueOutreachDraftSchema = proposalEmailSchema.extend({
 
 export type RevenueOutreachDraftInput = z.infer<typeof revenueOutreachDraftSchema>;
 
+const explicitApprovalBooleanSchema = z.union([
+  z.boolean(),
+  z.enum(["true", "false"]).transform((value) => value === "true"),
+]);
+
 export const revenueOutreachSendSchema = z.object({
   draftId: z.string().trim().min(1).max(160),
-  approvalToSend: z.coerce.boolean().default(false),
+  approvalToSend: explicitApprovalBooleanSchema.default(false),
 });
 
 export type RevenueOutreachSendInput = z.infer<typeof revenueOutreachSendSchema>;
@@ -310,6 +316,62 @@ export const revenueSalesAutopilotSchema = z.object({
 });
 
 export type RevenueSalesAutopilotInput = z.infer<typeof revenueSalesAutopilotSchema>;
+
+export const revenuePublicLeadCandidateSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  websiteStatus: z.enum(["no_website", "weak_website", "has_website", "unknown"]).default("unknown"),
+  contactChannel: z.enum(["email", "phone", "instagram", "contact_form", "unknown"]).default("unknown"),
+  contactValue: z.string().trim().max(240).optional().default(""),
+  sourceUrl: z.string().trim().url().max(500).optional(),
+  evidence: z.string().trim().min(20).max(2400),
+  painPoint: z.string().trim().min(8).max(800),
+  estimatedOfferUsd: z.coerce.number().min(500).max(100000).default(3500),
+  verificationStatus: z.enum(["needs_review", "reviewed"]).default("needs_review"),
+  publicEvidenceVerified: z.coerce.boolean().default(false),
+  approvalToImport: z.coerce.boolean().default(false),
+});
+
+export type RevenuePublicLeadCandidateInput = z.infer<typeof revenuePublicLeadCandidateSchema>;
+
+export const revenuePublicCandidateBatchSchema = z.object({
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  reviewedBy: z.string().trim().min(2).max(120).default("Robert"),
+  candidates: z.array(revenuePublicLeadCandidateSchema).min(1).max(50),
+});
+
+export type RevenuePublicCandidateBatchInput = z.infer<typeof revenuePublicCandidateBatchSchema>;
+
+export const revenueMoneySprintRunPacketReviewSchema = z.object({
+  seedLeadBatchText: z.string().trim().min(20).max(50000),
+  reviewedEvidencePath: z.string().trim().min(1).max(600),
+  reviewPacketEvidenceDigest: z.string().trim().regex(/^[a-f0-9]{64}$/),
+  approvedByRobert: z.coerce.boolean().default(false),
+  seedLeads: z.array(z.never()).default([]),
+  writePreviewFiles: z.coerce.boolean().default(false),
+});
+
+export type RevenueMoneySprintRunPacketReviewInput = z.infer<typeof revenueMoneySprintRunPacketReviewSchema>;
+
+export const revenuePremiumWebsiteWorkOrderSchema = z.object({
+  businessName: z.string().trim().min(2).max(160),
+  area: z.string().trim().min(2).max(120),
+  niche: z.string().trim().min(2).max(120),
+  offer: z.string().trim().min(8).max(240).default("Website 3D Premium + Automation Sprint"),
+  verifiedEvidencePath: z.string().trim().min(1).max(600),
+  verifiedEvidenceDigest: z.string().trim().regex(/^[a-f0-9]{64}$/),
+  designExecutionBriefPath: z.string().trim().min(1).max(600),
+  designExecutionBriefDigest: z.string().trim().regex(/^[a-f0-9]{64}$/),
+  robertApprovalEvidencePath: z.string().trim().min(1).max(600),
+  robertApprovalEvidenceDigest: z.string().trim().regex(/^[a-f0-9]{64}$/),
+  productDesignSkillUsed: z.string().trim().min(8).max(120).default("product-design:get-context"),
+  claudeDesignSkillUsed: z.string().trim().min(5).max(120).default("Claude design skills"),
+  approvedForPrBuild: z.coerce.boolean().default(false),
+});
+
+export type RevenuePremiumWebsiteWorkOrderInput = z.infer<typeof revenuePremiumWebsiteWorkOrderSchema>;
 
 export const revenueApprovalDecisionSchema = z.object({
   targetId: z.string().trim().min(1).max(200),
@@ -3515,6 +3577,222 @@ export function recordRevenueAgentRun(input: RevenueAgentRunInput) {
   };
 }
 
+function sha256Text(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function ensureRevenueWorkspaceDir(...parts: string[]): string {
+  const dir = path.join(process.cwd(), "revenue_workspace", ...parts);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function readRevenueWorkspaceEvidence(inputPath: string, subdir: string, maxBytes = 100_000) {
+  const root = path.resolve(process.cwd(), "revenue_workspace", subdir);
+  fs.mkdirSync(root, { recursive: true });
+  const realRoot = fs.realpathSync(root);
+  const resolved = path.resolve(inputPath);
+  const insideRoot = resolved === root || resolved.startsWith(`${root}${path.sep}`);
+  if (!insideRoot) {
+    return {
+      ok: false,
+      path: resolved,
+      text: "",
+      digest: "",
+      error: `Evidence path must be inside revenue_workspace/${subdir}`,
+    };
+  }
+  if (!fs.existsSync(resolved)) {
+    return { ok: false, path: resolved, text: "", digest: "", error: "Evidence path must exist" };
+  }
+  const realResolved = fs.realpathSync(resolved);
+  const realInsideRoot = realResolved === realRoot || realResolved.startsWith(`${realRoot}${path.sep}`);
+  if (!realInsideRoot) {
+    return {
+      ok: false,
+      path: realResolved,
+      text: "",
+      digest: "",
+      error: `Evidence path must resolve inside revenue_workspace/${subdir}`,
+    };
+  }
+  const stat = fs.statSync(resolved);
+  if (!stat.isFile()) {
+    return { ok: false, path: resolved, text: "", digest: "", error: "Evidence path must be a file" };
+  }
+  if (stat.size > maxBytes) {
+    return { ok: false, path: resolved, text: "", digest: "", error: "Evidence file is too large" };
+  }
+  const text = fs.readFileSync(resolved, "utf8");
+  return { ok: true, path: resolved, text, digest: sha256Text(text), error: "" };
+}
+
+export function reviewRevenuePublicLeadCandidates(input: RevenuePublicCandidateBatchInput) {
+  const parsed = revenuePublicCandidateBatchSchema.parse(input);
+  const accepted = parsed.candidates.filter((candidate) => {
+    const hasPublicSource = Boolean(candidate.sourceUrl || candidate.contactValue.trim());
+    const hasWebsiteGap = candidate.websiteStatus === "no_website" || candidate.websiteStatus === "weak_website";
+    const approved = candidate.verificationStatus === "reviewed" && candidate.publicEvidenceVerified && candidate.approvalToImport;
+    return approved && hasPublicSource && hasWebsiteGap && candidate.evidence.trim().length >= 20 && candidate.painPoint.trim().length >= 8;
+  });
+  const rejected = parsed.candidates.filter((candidate) => !accepted.includes(candidate));
+  const seedLeadBatchText = accepted
+    .map((candidate, index) => [
+      `#${index + 1} ${candidate.businessName}`,
+      `Area: ${candidate.area}`,
+      `Niche: ${candidate.niche}`,
+      `Website status: ${candidate.websiteStatus}`,
+      `Contact: ${candidate.contactChannel} ${candidate.contactValue || "unknown"}`,
+      candidate.sourceUrl ? `Source: ${candidate.sourceUrl}` : "Source: public contact/evidence only",
+      `Evidence: ${candidate.evidence}`,
+      `Pain point: ${candidate.painPoint}`,
+      `Offer: $${candidate.estimatedOfferUsd}`,
+    ].join("\n"))
+    .join("\n\n");
+  const digest = sha256Text(seedLeadBatchText || "no-approved-leads");
+  const evidenceDir = ensureRevenueWorkspaceDir("approval-packets");
+  const evidencePath = path.join(evidenceDir, `money-sprint-review-${Date.now()}-${randomUUID().slice(0, 8)}.md`);
+  const report = [
+    `# Money Sprint public lead review - ${parsed.area} ${parsed.niche}`,
+    "",
+    "Approval status: needs_robert_approval",
+    `Reviewed by: ${parsed.reviewedBy}`,
+    `Approved candidates: ${accepted.length}`,
+    `Rejected candidates: ${rejected.length}`,
+    `Digest: ${digest}`,
+    "",
+    "## Approved seed batch",
+    seedLeadBatchText || "No approved public leads.",
+    "",
+    "## Required gates",
+    "- Import only reviewed public evidence.",
+    "- Do not contact prospects until Robert approves an outreach draft.",
+    "- Do not spend money unless a separate approval records the cap.",
+    "- Use Product Design + Claude design skills before website PR build.",
+  ].join("\n");
+  fs.writeFileSync(evidencePath, report, "utf8");
+
+  return {
+    status: accepted.length > 0 ? "review_ready_for_robert_approval" : "blocked",
+    accepted,
+    rejected,
+    seedLeadBatchText,
+    reviewPacketEvidenceDigest: digest,
+    reviewedEvidencePath: evidencePath,
+    nextApiAction: null,
+    nextHumanAction: "Robert must approve this packet in chat before any Money Sprint preview, import, outreach, or build.",
+  };
+}
+
+export function validateRevenueMoneySprintRunPacketReview(input: RevenueMoneySprintRunPacketReviewInput) {
+  const parsed = revenueMoneySprintRunPacketReviewSchema.parse(input);
+  const computedDigest = sha256Text(parsed.seedLeadBatchText);
+  const evidence = readRevenueWorkspaceEvidence(parsed.reviewedEvidencePath, "approval-packets");
+  const errors = [
+    parsed.approvedByRobert && "approvedByRobert cannot be accepted from API/CLI input; Robert approval must happen outside this endpoint",
+    parsed.seedLeads.length !== 0 && "seedLeads must be empty; use reviewed seedLeadBatchText instead",
+    parsed.writePreviewFiles && "writePreviewFiles must be false until the preview is separately approved",
+    parsed.reviewPacketEvidenceDigest !== computedDigest && "reviewPacketEvidenceDigest must equal sha256(seedLeadBatchText)",
+    !evidence.ok && evidence.error,
+    evidence.ok && !evidence.text.includes("Approval status: needs_robert_approval") && "reviewedEvidencePath must be a review packet waiting for Robert approval",
+    evidence.ok && !evidence.text.includes(`Digest: ${computedDigest}`) && "reviewedEvidencePath digest must match seedLeadBatchText",
+    evidence.ok && !evidence.text.includes(parsed.seedLeadBatchText) && "reviewedEvidencePath must contain the exact reviewed seedLeadBatchText",
+  ].filter(Boolean) as string[];
+
+  return {
+    status: errors.length === 0 ? "review_ready_for_robert_approval" : "blocked",
+    errors,
+    computedDigest,
+    reviewedEvidencePath: evidence.path,
+    nextApiAction: null,
+    nextHumanAction: errors.length === 0 ? "Ask Robert for explicit approval in the Codex/ChatGPT thread before proceeding." : null,
+  };
+}
+
+export function buildRevenueMoneySprintPreview(input: RevenueMoneySprintRunPacketReviewInput) {
+  const review = validateRevenueMoneySprintRunPacketReview(input);
+  if (review.errors.length > 0) {
+    return {
+      status: "blocked",
+      review,
+      previews: [],
+      nextApiAction: null,
+    };
+  }
+
+  const previews = input.seedLeadBatchText
+    .split(/\n\n+/)
+    .filter((block) => block.trim().length > 0)
+    .slice(0, 10)
+    .map((block, index) => ({
+      id: `preview-${index + 1}`,
+      sourceDigest: review.computedDigest,
+      summary: block.split("\n").slice(0, 4).join(" | "),
+      requiredDesignEvidence: [
+        "Product Design get-context brief",
+        "Claude design skill direction for premium website",
+        "3D/animation concept and asset plan",
+        "PR-first build handoff with App QA gate",
+      ],
+    }));
+
+  return {
+    status: "preview_ready_requires_robert_approval",
+    review,
+    previews,
+    nextApiAction: null,
+    nextHumanAction: "Do not import, contact, spend, or build. Robert must explicitly approve the reviewed preview in chat.",
+  };
+}
+
+export function buildRevenueWebsiteCreationPacket(input: RevenuePremiumWebsiteWorkOrderInput) {
+  const parsed = revenuePremiumWebsiteWorkOrderSchema.parse(input);
+  const verifiedEvidence = readRevenueWorkspaceEvidence(parsed.verifiedEvidencePath, "approval-packets");
+  const designEvidence = readRevenueWorkspaceEvidence(parsed.designExecutionBriefPath, "design-briefs");
+  const robertApprovalEvidence = readRevenueWorkspaceEvidence(parsed.robertApprovalEvidencePath, "approvals");
+  const evidenceMatches = verifiedEvidence.ok && verifiedEvidence.digest === parsed.verifiedEvidenceDigest;
+  const designMatches = designEvidence.ok && designEvidence.digest === parsed.designExecutionBriefDigest;
+  const approvalMatches = robertApprovalEvidence.ok && robertApprovalEvidence.digest === parsed.robertApprovalEvidenceDigest;
+  const designApproved = designEvidence.ok && designEvidence.text.includes("Design status: approved_for_pr_build");
+  const designSkillsRecorded = designEvidence.ok
+    && designEvidence.text.includes("product-design:get-context")
+    && designEvidence.text.toLowerCase().includes("claude");
+  const robertApprovalRequested = robertApprovalEvidence.ok && robertApprovalEvidence.text.includes("Robert approval requested: pr_build");
+  const skillsReady = parsed.productDesignSkillUsed.includes("product-design") && parsed.claudeDesignSkillUsed.toLowerCase().includes("claude");
+  const blockers = [
+    !verifiedEvidence.ok && verifiedEvidence.error,
+    !evidenceMatches && "verifiedEvidenceDigest must match the verified evidence file",
+    !designEvidence.ok && designEvidence.error,
+    !designMatches && "designExecutionBriefDigest must match the design evidence file",
+    !designApproved && "designExecutionBriefPath must contain Design status: approved_for_pr_build",
+    !designSkillsRecorded && "design evidence must record product-design:get-context and Claude design skill usage",
+    !robertApprovalEvidence.ok && robertApprovalEvidence.error,
+    !approvalMatches && "robertApprovalEvidenceDigest must match the approval evidence file",
+    !robertApprovalRequested && "robertApprovalEvidencePath must contain Robert approval requested: pr_build",
+    !skillsReady && "Product Design and Claude design skills must be named in the work order",
+    parsed.approvedForPrBuild && "approvedForPrBuild cannot be accepted from API/CLI input; Robert must approve PR build in chat",
+  ].filter(Boolean) as string[];
+
+  return {
+    status: blockers.length === 0 ? "handoff_ready_for_robert_pr_approval" : "blocked",
+    blockers,
+    workOrder: {
+      businessName: parsed.businessName,
+      offer: parsed.offer,
+      stackPreference: "React/Vite + Three.js or equivalent 3D scene, responsive, production QA",
+      requiredSkills: [parsed.productDesignSkillUsed, parsed.claudeDesignSkillUsed],
+      buildRules: [
+        "Create a separate codex/* branch.",
+        "Open a pull request before merge.",
+        "Run App QA route/link/API/error/improvement scouts before Robert sees it as ready.",
+        "Do not deploy to Replit without explicit Robert approval.",
+      ],
+    },
+    nextApiAction: null,
+    nextHumanAction: blockers.length === 0 ? "Robert must explicitly approve the PR build in chat; then Codex creates a codex/* branch and PR." : null,
+  };
+}
+
 export function recordRevenueLead(input: RevenueLeadInput) {
   loadRevenueLeads();
   const qualification = qualifyRevenueLead(input);
@@ -3738,6 +4016,7 @@ export async function sendRevenueOutreachDraft(input: RevenueOutreachSendInput) 
   const gates = [
     { gate: "draft_found", passed: Boolean(draft), fix: "Seleccionar un draft existente del outbox." },
     { gate: "draft_approved", passed: draft?.status === "approved", fix: "Aprobar el draft antes de enviar." },
+    { gate: "email_channel", passed: draft?.channel === "email", fix: "Solo drafts con channel=email pueden enviarse por Resend; Gmail, mailto, Instagram y formularios son manuales." },
     { gate: "human_approval", passed: input.approvalToSend, fix: "Marcar approvalToSend=true para contacto externo." },
     { gate: "provider_configured", passed: provider.configured, fix: `Configurar ${provider.missing.join(" y ") || "proveedor de email"}.` },
     { gate: "not_duplicate", passed: draft?.delivery.sendStatus !== "sent", fix: "Este draft ya fue enviado; crear uno nuevo para reenviar." },

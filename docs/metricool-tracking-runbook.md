@@ -26,7 +26,7 @@ Current app plan:
 | Black Room (Fiesta + Radio) | Instagram, TikTok | One shared brand for events, radio, flyers, promo videos, stories, links, and recaps. |
 | Dropshipping 1 | TikTok, Instagram, YouTube, Pinterest | Organic validation plus Shopify/UTM learning. |
 | Dropshipping 2 | TikTok, Instagram, YouTube, Pinterest | Separate niche, offer, or angle so analytics do not mix. |
-| Kong | Instagram | WhatsApp, email, and event ops stay outside Metricool. |
+| Kong | Instagram, TikTok | Public social tracking is connected through Metricool; WhatsApp, email, and event ops stay outside Metricool. |
 | Sports Daily Clips | TikTok, Instagram, YouTube | Clips with rights gates before publishing. |
 | Meme Radar | TikTok, Instagram, YouTube | YouTube is prepared in code; skip it if launch stays TikTok + Instagram only. |
 | Streamer Pulse | TikTok, Instagram, YouTube | Clips with source allowlist and creator permission checks. |
@@ -34,7 +34,7 @@ Current app plan:
 | Winner Account 2 | TikTok, Instagram, YouTube | Reserved for the second new account based on performance data. |
 | Winner Account 3 | TikTok, Instagram, YouTube | Reserved for the third new account based on performance data. |
 
-Total: 10 brands and 29 social profiles if every prepared profile is connected.
+Total: 10 brands and 30 social profiles if every prepared profile is connected.
 
 ## What Was Installed
 

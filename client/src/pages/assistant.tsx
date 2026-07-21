@@ -101,7 +101,6 @@ export default function AssistantPage() {
   const clearChat = () => {
     setMessages([]);
     setSelectedImages([]);
-    setAssistantStatus("");
   };
 
   const compressImage = (file: File, maxWidth = 1200, quality = 0.7): Promise<string> => {
@@ -331,102 +330,97 @@ export default function AssistantPage() {
 
       const decoder = new TextDecoder();
       let assistantMessage = "";
-      let streamBuffer = "";
-      let sawAssistantStatus = false;
-      let sawTerminalAssistantEvent = false;
 
       setMessages((prev) => [...prev, { role: "assistant", content: "", timestamp: new Date() }]);
-
-      const updateAssistantMessage = () => {
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: assistantMessage,
-            timestamp: new Date(),
-          };
-          return updated;
-        });
-      };
-
-      const handleStreamData = (data: any) => {
-        if (data.content) {
-          assistantMessage += data.content;
-          setAssistantStatus("");
-          updateAssistantMessage();
-        }
-        if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
-          sawAssistantStatus = true;
-          setAssistantStatus(data.assistantStatus.trim());
-        }
-        if (
-          data.radioYoutubeProcessed ||
-          data.radioYoutubeNeedsConfirmation ||
-          data.radioYoutubeNeedsDjName ||
-          data.radioDriveVideoProcessed ||
-          data.radioDriveVideoNeedsConfirmation ||
-          data.radioDriveVideoNeedsDjName
-        ) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-        }
-        if (
-          data.taskCreated ||
-          data.radioUpdated ||
-          data.actionExecuted ||
-          data.googleEventCreated ||
-          data.investmentCreated ||
-          data.investmentUpdated ||
-          data.promoVideosGenerated
-        ) {
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-          queryClient.invalidateQueries({ queryKey: ["investments"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
-        }
-        if (data.actionExecuted) {
-          assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-          queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
-          updateAssistantMessage();
-        }
-        if (data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.radioDriveVideoError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError}`;
-          updateAssistantMessage();
-        }
-        if (data.approvalRequired && data.pendingAction) {
-          sawTerminalAssistantEvent = true;
-          setAssistantStatus("");
-          assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo o revisarlo en approvals antes de ejecutar.`;
-          queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
-          updateAssistantMessage();
-        }
-      };
-
-      const processStreamEvent = (eventText: string) => {
-        for (const line of eventText.split("\n")) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            handleStreamData(JSON.parse(line.slice(6)));
-          } catch (e) {}
-        }
-      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        streamBuffer += decoder.decode(value, { stream: true });
-        const events = streamBuffer.split("\n\n");
-        streamBuffer = events.pop() || "";
-        for (const eventText of events) processStreamEvent(eventText);
-      }
-      streamBuffer += decoder.decode();
-      if (streamBuffer.trim()) processStreamEvent(streamBuffer);
-      if (sawAssistantStatus && !sawTerminalAssistantEvent && !/Listo\.|No pude completar|Pendiente de aprobacion|Total estimado de esta edición/i.test(assistantMessage)) {
-        assistantMessage += "\n\nNo pude completar la accion: el proceso terminó sin devolver resultado final. Gasto estimado de esta corrida: $0.00 USD.";
-        updateAssistantMessage();
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (typeof data.assistantStatus === "string" && data.assistantStatus.trim()) {
+                setAssistantStatus(data.assistantStatus.trim());
+              }
+              if (data.content) {
+                assistantMessage += data.content;
+                setAssistantStatus("");
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
+              }
+              if (
+                data.taskCreated ||
+                data.radioUpdated ||
+                data.actionExecuted ||
+                data.googleEventCreated ||
+                data.investmentCreated ||
+                data.investmentUpdated ||
+                data.promoVideosGenerated
+              ) {
+                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                queryClient.invalidateQueries({ queryKey: ["investments"] });
+                queryClient.invalidateQueries({ queryKey: ["/api/promo-video/status"] });
+              }
+              if (data.actionExecuted) {
+                assistantMessage += `\n\nEjecutado: ${data.title || "accion completada"}.`;
+                setAssistantStatus("");
+                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
+              }
+              if (data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError) {
+                assistantMessage += `\n\nNo pude completar la accion: ${data.googleEventError || data.radioError || data.radioYoutubeError || data.blackRoomLinkError || data.promoVideoError || data.metricoolAutomationError || data.actionExecutionError}`;
+                setAssistantStatus("");
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
+              }
+              if (data.approvalRequired && data.pendingAction) {
+                assistantMessage += `\n\nPendiente de aprobacion: ${data.pendingAction.title}. Puedes decir "si, hazlo" aqui mismo, o revisarlo en approvals antes de ejecutar.`;
+                setAssistantStatus("");
+                queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = {
+                    role: "assistant",
+                    content: assistantMessage,
+                    timestamp: new Date(),
+                  };
+                  return updated;
+                });
+              }
+              if (data.done) {
+                setAssistantStatus("");
+              }
+            } catch (e) {}
+          }
+        }
       }
     } catch (error) {
       console.error("Error sending message:", error);
@@ -459,8 +453,6 @@ export default function AssistantPage() {
     return content
       .replace(/\[CREAR_TAREA:.*?\]/g, "Tarea creada")
       .replace(/\[MODIFICAR_RADIO:.*?\]/g, "Radio actualizado")
-      .replace(/\[RADIO_YOUTUBE_CLIPS:.*?\]/g, "")
-      .replace(/\[RADIO_DRIVE_VIDEO_CLIPS:.*?\]/g, "")
       .replace(/\[CREAR_EVENTO_GOOGLE:.*?\]/g, "Evento creado en Google Calendar")
       .replace(/\[EDITAR_EVENTO_GOOGLE:.*?\]/g, "Evento actualizado en Google Calendar")
       .replace(/\[AGREGAR_INVERSION:.*?\]/g, "Inversion agregada")
@@ -634,7 +626,7 @@ export default function AssistantPage() {
                               ))}
                             </div>
                           )}
-                          <p className="whitespace-pre-wrap">{formatContent(msg.content) || (isLoading && i === messages.length - 1 ? "Trabajando..." : "Listo.")}</p>
+                          <p className="whitespace-pre-wrap">{formatContent(msg.content) || "Listo."}</p>
                         </div>
                         <span className="mt-1 block px-1 text-[11px] text-zinc-600">{formatTime(msg.timestamp)}</span>
                       </div>
@@ -645,7 +637,7 @@ export default function AssistantPage() {
                       <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-zinc-950">
                         <Bot className="h-4 w-4 text-zinc-100" />
                       </div>
-                      <div className="flex max-w-[88%] items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-400 md:max-w-[72%]" data-testid="assistant-working-status">
+                      <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-zinc-950/85 px-4 py-3 text-sm text-zinc-400">
                         <Loader2 className="h-4 w-4 animate-spin text-zinc-300" />
                         {assistantStatus || "Pensando y revisando tu contexto..."}
                       </div>

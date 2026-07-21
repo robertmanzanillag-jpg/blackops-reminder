@@ -6,10 +6,10 @@ test("builds the Metricool brand and profile plan for current businesses", () =>
   const plan = getMetricoolTrackingPlan();
 
   assert.equal(plan.brandCount, 10);
-  assert.equal(plan.socialProfileCount, 29);
+  assert.equal(plan.socialProfileCount, 30);
   assert.equal(plan.recommendedPlan, "starter_10_brands");
   assert.equal(plan.directPlatformApisNeeded, false);
-  assert.equal(plan.networks.tiktok, 9);
+  assert.equal(plan.networks.tiktok, 10);
   assert.equal(plan.networks.instagram, 10);
   assert.equal(plan.networks.youtube, 8);
   assert.equal(plan.networks.pinterest, 2);

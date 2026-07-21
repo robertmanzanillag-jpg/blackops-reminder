@@ -1,11 +1,36 @@
 type CostPolicyOrigin = "web" | "telegram";
 
 type SpendRun = {
+  id?: string | null;
+  automationId?: string | null;
   startedAt?: Date | string | null;
   createdAt?: Date | string | null;
   status?: string | null;
   costEstimate?: string | null;
+  resultSummary?: string | null;
+  errorMessage?: string | null;
+  triggeredBy?: string | null;
   metadata?: unknown;
+};
+
+type SpendAutomation = {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  type?: string | null;
+  assignedAgentId?: string | null;
+};
+
+type SpendHistoryEntry = {
+  id: string;
+  date: string;
+  label: string;
+  detail: string;
+  amountUsd: number;
+  sourceId: string;
+  sourceLabel: string;
+  kind: string;
+  status: string;
 };
 
 function readUsdEnv(name: string, fallback: number, min: number, max: number): number {
@@ -71,7 +96,39 @@ function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-export function buildMonthlyAiSpendReport(runs: SpendRun[], now = new Date()) {
+function readMetadataString(metadata: unknown, keys: string[]): string {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "";
+  const record = metadata as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function buildAutomationMap(automations: SpendAutomation[]): Map<string, SpendAutomation> {
+  return new Map(automations.map((automation) => [automation.id, automation]));
+}
+
+function getRunLabel(run: SpendRun, automationById: Map<string, SpendAutomation>): string {
+  const automation = run.automationId ? automationById.get(run.automationId) : undefined;
+  return automation?.name
+    || readMetadataString(run.metadata, ["title", "name", "label", "automationName"])
+    || automation?.assignedAgentId
+    || automation?.type
+    || "Automatizacion";
+}
+
+function getRunDetail(run: SpendRun, automationById: Map<string, SpendAutomation>): string {
+  const automation = run.automationId ? automationById.get(run.automationId) : undefined;
+  return run.resultSummary
+    || run.errorMessage
+    || readMetadataString(run.metadata, ["summary", "description", "source", "function"])
+    || automation?.description
+    || `Estado: ${run.status || "registrado"}`;
+}
+
+export function buildMonthlyAiSpendReport(runs: SpendRun[], now = new Date(), automations: SpendAutomation[] = []) {
   const policy = getAiCostPolicySnapshot();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -97,6 +154,60 @@ export function buildMonthlyAiSpendReport(runs: SpendRun[], now = new Date()) {
     : projectedMonthUsd > policy.operatingTargetUsd
       ? "watch"
       : "healthy";
+  const automationById = buildAutomationMap(automations);
+  const historyEntries: Array<SpendHistoryEntry | null> = [
+    ...monthRuns.map((run) => {
+      const date = getRunDate(run) || monthStart;
+      const amountUsd = roundMoney(estimateRunUsd(run.costEstimate));
+      return {
+        id: run.id || `${run.automationId || "automation"}-${date.toISOString()}`,
+        date: date.toISOString(),
+        label: getRunLabel(run, automationById),
+        detail: getRunDetail(run, automationById),
+        amountUsd,
+        sourceId: "automation_runs",
+        sourceLabel: "Automatizaciones",
+        kind: "estimated",
+        status: run.status || "registrado",
+      };
+    }),
+    manualAiSpendUsd > 0 ? {
+      id: "manual_ai_month_to_date",
+      date: now.toISOString(),
+      label: "Uso manual OpenAI/Gemini",
+      detail: "Importe cargado desde BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD.",
+      amountUsd: roundMoney(manualAiSpendUsd),
+      sourceId: "manual_ai",
+      sourceLabel: "AI/API manual",
+      kind: "manual_env",
+      status: "registrado",
+    } : null,
+    metricoolUsd > 0 ? {
+      id: "metricool_monthly",
+      date: monthStart.toISOString(),
+      label: "Metricool",
+      detail: "Suscripcion mensual cargada desde BLACKOPS_METRICOOL_MONTHLY_USD.",
+      amountUsd: roundMoney(metricoolUsd),
+      sourceId: "metricool",
+      sourceLabel: "Metricool",
+      kind: "fixed_env",
+      status: "registrado",
+    } : null,
+    fixedToolsUsd > 0 ? {
+      id: "fixed_tools_monthly",
+      date: monthStart.toISOString(),
+      label: "Otras herramientas",
+      detail: "Herramientas fijas cargadas desde BLACKOPS_FIXED_MONTHLY_TOOLS_USD.",
+      amountUsd: roundMoney(fixedToolsUsd),
+      sourceId: "fixed_tools",
+      sourceLabel: "Herramientas",
+      kind: "fixed_env",
+      status: "registrado",
+    } : null,
+  ];
+  const history = historyEntries
+    .filter((entry): entry is SpendHistoryEntry => Boolean(entry && entry.amountUsd > 0))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return {
     month: monthStart.toISOString().slice(0, 7),
@@ -112,11 +223,12 @@ export function buildMonthlyAiSpendReport(runs: SpendRun[], now = new Date()) {
     projectedBudgetPct,
     status,
     sources: [
-      { id: "automation_runs", label: "Automation runs", amountUsd: automationEstimateUsd, count: monthRuns.length, kind: "estimated" },
+      { id: "automation_runs", label: "Automatizaciones", amountUsd: automationEstimateUsd, count: monthRuns.length, kind: "estimated" },
       { id: "manual_ai", label: "Manual AI/API MTD", amountUsd: roundMoney(manualAiSpendUsd), count: manualAiSpendUsd > 0 ? 1 : 0, kind: "manual_env" },
       { id: "metricool", label: "Metricool", amountUsd: roundMoney(metricoolUsd), count: metricoolUsd > 0 ? 1 : 0, kind: "fixed_env" },
-      { id: "fixed_tools", label: "Other tools", amountUsd: roundMoney(fixedToolsUsd), count: fixedToolsUsd > 0 ? 1 : 0, kind: "fixed_env" },
+      { id: "fixed_tools", label: "Otras herramientas", amountUsd: roundMoney(fixedToolsUsd), count: fixedToolsUsd > 0 ? 1 : 0, kind: "fixed_env" },
     ],
+    history,
     notes: [
       "This is a local monthly spend tracker, not a provider invoice.",
       "Set BLACKOPS_AI_MANUAL_MONTH_TO_DATE_USD when you want to add real OpenAI/Gemini usage from provider dashboards.",

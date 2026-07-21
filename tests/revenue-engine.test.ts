@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -9,10 +11,12 @@ import {
   buildRevenueEnginePlan,
   buildRevenueLaunchReadiness,
   buildRevenueLeadRadar,
+  buildRevenueMoneySprintPreview,
   buildRevenueMockup,
   buildRevenueMockupTemplatePack,
   buildRevenueProjectPlan,
   buildRevenueScoutingMission,
+  buildRevenueWebsiteCreationPacket,
   closeRevenueAutomationOpportunity,
   convertRevenueAutomationIntakeToOpportunity,
   createDeliveryWorkspaceFromAutomationOpportunity,
@@ -29,8 +33,10 @@ import {
   recordRevenueLead,
   recordRevenueLedgerEntry,
   recordRevenueOutreachDraft,
+  revenueOutreachSendSchema,
   recordRevenueSalesAutopilot,
   recordRevenueScoutingMission,
+  reviewRevenuePublicLeadCandidates,
   runRevenueAutomationAgentCommand,
   resetRevenueAgentRunsForTests,
   resetRevenueApprovalDecisionsForTests,
@@ -240,6 +246,173 @@ test("lead radar caps paid data spend and requires approval", () => {
   assert.equal(radar.operatingMode.spendMode, "approval_required");
   assert.equal(radar.dailyLimits.approvedPaidDataSpendUsd, 100);
   assert.equal(radar.nextActions.some((action) => action.includes("Contactar max 12/dia")), true);
+});
+
+test("reviews public candidates into a durable approved money sprint packet", () => {
+  const blocked = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "med spas",
+    reviewedBy: "Robert",
+    candidates: [
+      {
+        businessName: "Unreviewed Glow",
+        area: "Miami",
+        niche: "med spa",
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@unreviewedglow",
+        sourceUrl: "https://example.com/unreviewed",
+        evidence: "Public Instagram has booking requests in comments and no website link in profile.",
+        painPoint: "Needs a booking website, offer pages, and follow-up automation.",
+        estimatedOfferUsd: 4500,
+      },
+    ],
+  });
+
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.accepted.length, 0);
+
+  const result = reviewRevenuePublicLeadCandidates({
+    area: "Miami",
+    niche: "med spas",
+    reviewedBy: "Robert",
+    candidates: [
+      {
+        businessName: "Glow Lab",
+        area: "Miami",
+        niche: "med spa",
+        websiteStatus: "no_website",
+        contactChannel: "instagram",
+        contactValue: "@glowlab",
+        sourceUrl: "https://example.com/glowlab",
+        evidence: "Public Instagram has booking requests in comments and no website link in profile.",
+        painPoint: "Needs a booking website, offer pages, and follow-up automation.",
+        estimatedOfferUsd: 4500,
+        verificationStatus: "reviewed",
+        publicEvidenceVerified: true,
+        approvalToImport: true,
+      },
+    ],
+  });
+
+  assert.equal(result.status, "review_ready_for_robert_approval");
+  assert.equal(result.accepted.length, 1);
+  assert.match(result.reviewPacketEvidenceDigest, /^[a-f0-9]{64}$/);
+  assert.equal(fs.existsSync(result.reviewedEvidencePath), true);
+  assert.match(fs.readFileSync(result.reviewedEvidencePath, "utf8"), /Approval status: needs_robert_approval/);
+  assert.equal(result.nextApiAction, null);
+
+  const preview = buildRevenueMoneySprintPreview({
+    seedLeadBatchText: result.seedLeadBatchText,
+    reviewedEvidencePath: result.reviewedEvidencePath,
+    reviewPacketEvidenceDigest: result.reviewPacketEvidenceDigest,
+    approvedByRobert: false,
+    seedLeads: [],
+    writePreviewFiles: false,
+  });
+
+  assert.equal(preview.status, "preview_ready_requires_robert_approval");
+  assert.equal(preview.nextApiAction, null);
+});
+
+test("blocks money sprint preview when reviewed digest does not match seed text", () => {
+  const evidencePath = path.join("/tmp", `money-sprint-evidence-${Date.now()}.md`);
+  fs.writeFileSync(evidencePath, "reviewed evidence", "utf8");
+
+  const result = buildRevenueMoneySprintPreview({
+    seedLeadBatchText: "Glow Lab\nEvidence: public source reviewed and ready.",
+    reviewedEvidencePath: evidencePath,
+    reviewPacketEvidenceDigest: "0".repeat(64),
+    approvedByRobert: true,
+    seedLeads: [],
+    writePreviewFiles: false,
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.review.errors.includes("approvedByRobert cannot be accepted from API/CLI input; Robert approval must happen outside this endpoint"), true);
+  assert.equal(result.review.errors.includes("reviewPacketEvidenceDigest must equal sha256(seedLeadBatchText)"), true);
+  assert.equal(result.review.errors.includes("Evidence path must be inside revenue_workspace/approval-packets"), true);
+});
+
+test("requires design skill evidence before premium website PR build", () => {
+  const workspaceRoot = path.join(process.cwd(), "revenue_workspace");
+  const approvalPacketDir = path.join(workspaceRoot, "approval-packets");
+  const designBriefDir = path.join(workspaceRoot, "design-briefs");
+  const approvalDir = path.join(workspaceRoot, "approvals");
+  fs.mkdirSync(approvalPacketDir, { recursive: true });
+  fs.mkdirSync(designBriefDir, { recursive: true });
+  fs.mkdirSync(approvalDir, { recursive: true });
+  const evidencePath = path.join(approvalPacketDir, `premium-website-evidence-${Date.now()}.md`);
+  const designPath = path.join(designBriefDir, `premium-website-design-${Date.now()}.md`);
+  const robertApprovalPath = path.join(approvalDir, `premium-website-approval-${Date.now()}.md`);
+  fs.writeFileSync(evidencePath, "verified public lead evidence", "utf8");
+  fs.writeFileSync(designPath, "Design brief drafted without final approval.", "utf8");
+  fs.writeFileSync(robertApprovalPath, "Robert approval pending.", "utf8");
+
+  const blocked = buildRevenueWebsiteCreationPacket({
+    businessName: "Glow Lab",
+    area: "Miami",
+    niche: "med spa",
+    offer: "Website 3D Premium + Automation Sprint",
+    verifiedEvidencePath: evidencePath,
+    verifiedEvidenceDigest: "0".repeat(64),
+    designExecutionBriefPath: designPath,
+    designExecutionBriefDigest: "0".repeat(64),
+    robertApprovalEvidencePath: robertApprovalPath,
+    robertApprovalEvidenceDigest: "0".repeat(64),
+    productDesignSkillUsed: "product-design:get-context",
+    claudeDesignSkillUsed: "Claude design skills",
+    approvedForPrBuild: false,
+  });
+
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.blockers.some((blocker) => blocker.includes("approved_for_pr_build")), true);
+
+  const digest = createHash("sha256").update(fs.readFileSync(evidencePath, "utf8")).digest("hex");
+  const designText = "Design status: approved_for_pr_build\nUsed product-design:get-context and Claude design skills for high-end 3D motion, responsive proof, and App QA.";
+  const approvalText = "Robert approval requested: pr_build\nReady to ask Robert for explicit chat approval before Codex creates a PR.";
+  fs.writeFileSync(designPath, designText, "utf8");
+  fs.writeFileSync(robertApprovalPath, approvalText, "utf8");
+  const designDigest = createHash("sha256").update(designText).digest("hex");
+  const approvalDigest = createHash("sha256").update(approvalText).digest("hex");
+  const ready = buildRevenueWebsiteCreationPacket({
+    businessName: "Glow Lab",
+    area: "Miami",
+    niche: "med spa",
+    offer: "Website 3D Premium + Automation Sprint",
+    verifiedEvidencePath: evidencePath,
+    verifiedEvidenceDigest: digest,
+    designExecutionBriefPath: designPath,
+    designExecutionBriefDigest: designDigest,
+    robertApprovalEvidencePath: robertApprovalPath,
+    robertApprovalEvidenceDigest: approvalDigest,
+    productDesignSkillUsed: "product-design:get-context",
+    claudeDesignSkillUsed: "Claude design skills",
+    approvedForPrBuild: false,
+  });
+
+  assert.equal(ready.status, "handoff_ready_for_robert_pr_approval");
+  assert.equal(ready.workOrder.requiredSkills.includes("product-design:get-context"), true);
+  assert.equal(ready.nextApiAction, null);
+
+  const forgedApproval = buildRevenueWebsiteCreationPacket({
+    businessName: "Glow Lab",
+    area: "Miami",
+    niche: "med spa",
+    offer: "Website 3D Premium + Automation Sprint",
+    verifiedEvidencePath: evidencePath,
+    verifiedEvidenceDigest: digest,
+    designExecutionBriefPath: designPath,
+    designExecutionBriefDigest: designDigest,
+    robertApprovalEvidencePath: robertApprovalPath,
+    robertApprovalEvidenceDigest: approvalDigest,
+    productDesignSkillUsed: "product-design:get-context",
+    claudeDesignSkillUsed: "Claude design skills",
+    approvedForPrBuild: true,
+  });
+
+  assert.equal(forgedApproval.status, "blocked");
+  assert.equal(forgedApproval.blockers.includes("approvedForPrBuild cannot be accepted from API/CLI input; Robert must approve PR build in chat"), true);
 });
 
 test("builds a zero-cost premium mockup template pack", () => {
@@ -761,6 +934,47 @@ test("blocks outreach send when email provider is missing", async () => {
   assert.equal(sendResult.provider.configured, false);
   assert.equal(sendResult.draft?.delivery.sendStatus, "provider_missing");
   assert.equal(sendResult.gates.some((gate) => gate.gate === "provider_configured" && gate.passed === false), true);
+});
+
+test("parses explicit outreach approval without treating string false as true", () => {
+  assert.equal(revenueOutreachSendSchema.parse({ draftId: "draft-1", approvalToSend: true }).approvalToSend, true);
+  assert.equal(revenueOutreachSendSchema.parse({ draftId: "draft-1", approvalToSend: "true" }).approvalToSend, true);
+  assert.equal(revenueOutreachSendSchema.parse({ draftId: "draft-1", approvalToSend: false }).approvalToSend, false);
+  assert.equal(revenueOutreachSendSchema.parse({ draftId: "draft-1", approvalToSend: "false" }).approvalToSend, false);
+  assert.equal(revenueOutreachSendSchema.safeParse({ draftId: "draft-1", approvalToSend: "1" }).success, false);
+});
+
+test("blocks provider send for manual-only outreach channels", async () => {
+  process.env.RESEND_API_KEY = "re_test";
+  process.env.REVENUE_ENGINE_FROM_EMAIL = "Revenue Engine <sales@example.com>";
+  let sendAttempts = 0;
+  setRevenueOutreachSenderForTests(async () => {
+    sendAttempts += 1;
+    return { id: "must_not_send" };
+  });
+  const result = recordRevenueOutreachDraft({
+    channel: "gmail",
+    approvalStatus: "approved",
+    recipientEmail: "client@example.com",
+    contactName: "Client",
+    businessName: "Manual Channel Outreach",
+    sourceUrl: "https://example.com",
+    businessSummary: "Manual Channel Outreach has public evidence and a clear website conversion need.",
+    websitePriceUsd: 3500,
+    automationPriceUsd: 2500,
+    monthlyRetainerUsd: 750,
+    estimatedInternalMonthlyCostUsd: 54,
+    notes: "",
+  });
+
+  const sendResult = await sendRevenueOutreachDraft({
+    draftId: result.draft.id,
+    approvalToSend: true,
+  });
+
+  assert.equal(sendResult.status, "blocked");
+  assert.equal(sendAttempts, 0);
+  assert.equal(sendResult.gates.some((gate) => gate.gate === "email_channel" && gate.passed === false), true);
 });
 
 test("blocks outreach send when email provider values are placeholders", async () => {

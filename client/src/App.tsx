@@ -15,6 +15,7 @@ const Projects = lazy(() => import("@/pages/projects"));
 const RadioPage = lazy(() => import("@/pages/radio"));
 const PromoVideoPage = lazy(() => import("@/pages/promo-video"));
 const ClippersPage = lazy(() => import("@/pages/clippers"));
+const BlackRoomPage = lazy(() => import("@/pages/blackroom"));
 const AssistantPage = lazy(() => import("@/pages/assistant"));
 const CodeAgentPage = lazy(() => import("@/pages/code-agent"));
 const GitHubAgentPage = lazy(() => import("@/pages/github-agent"));
@@ -134,6 +135,7 @@ function Router() {
           <Route path="/radio" component={RadioPage} />
           <Route path="/promo-video" component={PromoVideoPage} />
           <Route path="/clippers" component={ClippersPage} />
+          <Route path="/blackroom" component={BlackRoomPage} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

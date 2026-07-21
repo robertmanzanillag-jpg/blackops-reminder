@@ -113,12 +113,9 @@ export type RadioDriveVideoProcessResult = RadioVideoProcessResult & {
   pendingActionId?: string;
 };
 
-function runCommand(command: string, args: string[], options: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): Promise<CommandResult> {
+function runCommand(command: string, args: string[], options: { timeoutMs?: number } = {}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: options.env ? { ...process.env, ...options.env } : process.env,
-    });
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let didTimeout = false;
@@ -152,92 +149,6 @@ function runCommand(command: string, args: string[], options: { timeoutMs?: numb
       reject(new Error(`${command} failed with code ${code}: ${stderr || stdout}`));
     });
   });
-}
-
-let freshYtDlpPythonPackageDirPromise: Promise<string | null> | null = null;
-
-function shouldAutoInstallFreshYtDlp(): boolean {
-  const configured = process.env.YT_DLP_AUTO_UPDATE?.trim();
-  return !/^(0|false|off|none|disabled)$/i.test(configured || "");
-}
-
-function pythonEnvForYtDlpPackageDir(packageDir: string): NodeJS.ProcessEnv {
-  const currentPythonPath = process.env.PYTHONPATH?.trim();
-  return {
-    ...process.env,
-    PYTHONPATH: currentPythonPath ? `${packageDir}${path.delimiter}${currentPythonPath}` : packageDir,
-  };
-}
-
-function pipInstallEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    PIP_CONFIG_FILE: process.platform === "win32" ? "NUL" : "/dev/null",
-    PIP_USER: "false",
-    PYTHONNOUSERSITE: "1",
-  };
-}
-
-async function packageSupportsYtDlpJsRuntimes(packageDir: string): Promise<boolean> {
-  try {
-    await runCommand("python3", [
-      "-m",
-      "yt_dlp",
-      "--js-runtimes",
-      "node",
-      "--version",
-    ], {
-      timeoutMs: 15_000,
-      env: pythonEnvForYtDlpPackageDir(packageDir),
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function existingFreshYtDlpPackageDir(packageDir: string): Promise<string | null> {
-  const packageMarker = path.join(packageDir, "yt_dlp", "__init__.py");
-  if (!(await pathExists(packageMarker))) return null;
-  return (await packageSupportsYtDlpJsRuntimes(packageDir)) ? packageDir : null;
-}
-
-async function ensureFreshYtDlpPythonPackageDir(): Promise<string | null> {
-  if (!shouldAutoInstallFreshYtDlp()) return null;
-
-  const bundledDir = process.env.YT_DLP_BUNDLED_PYTHON_DIR?.trim()
-    || path.join(process.cwd(), "dist", "yt-dlp-python");
-  const existingBundledDir = await existingFreshYtDlpPackageDir(bundledDir);
-  if (existingBundledDir) return existingBundledDir;
-
-  const targetDir = process.env.YT_DLP_PYTHON_TARGET_DIR?.trim()
-    || path.join(os.tmpdir(), "robplanner-yt-dlp-python");
-  const existingTargetDir = await existingFreshYtDlpPackageDir(targetDir);
-  if (existingTargetDir) return existingTargetDir;
-
-  await fs.mkdir(targetDir, { recursive: true });
-  try {
-    await runCommand("python3", [
-      "-m",
-      "pip",
-      "install",
-      "--upgrade",
-      "--force-reinstall",
-      "--target",
-      targetDir,
-      "yt-dlp[default]",
-      "curl-cffi>=0.11",
-    ], { timeoutMs: 5 * 60 * 1000, env: pipInstallEnv() });
-    return (await existingFreshYtDlpPackageDir(targetDir)) || targetDir;
-  } catch (error) {
-    console.warn("[radio-video-edit] could not install fresh yt-dlp:", error instanceof Error ? error.message : error);
-    return null;
-  }
-}
-
-function getFreshYtDlpPythonPackageDir(): Promise<string | null> {
-  freshYtDlpPythonPackageDirPromise ||= ensureFreshYtDlpPythonPackageDir();
-  return freshYtDlpPythonPackageDirPromise;
 }
 
 function sanitizeDjName(value: string): string {
@@ -334,11 +245,59 @@ function isYouTubeUrl(value: string): boolean {
   }
 }
 
+function extractYouTubeVideoId(value: string): string | null {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "youtu.be") return url.pathname.split("/").filter(Boolean)[0] || null;
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      return url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).at(-1) || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function findExistingDownloadedYoutubeVideo(url: string, sourceDir: string): Promise<string | null> {
+  const videoId = extractYouTubeVideoId(url)?.toLowerCase();
+  if (!videoId) return null;
+
+  const matches: Array<{ filePath: string; mtimeMs: number }> = [];
+  const visit = async (dir: string): Promise<void> => {
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const filePath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(filePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (/^(worker_copy_|\.worker-refresh-|.*\.worker-refresh-)/i.test(entry.name)) continue;
+      if (!VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+      if (!entry.name.toLowerCase().includes(videoId)) continue;
+      const stat = await fs.stat(filePath).catch(() => null);
+      if (stat) matches.push({ filePath, mtimeMs: stat.mtimeMs });
+    }
+  };
+
+  await visit(sourceDir);
+  return matches.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]?.filePath || null;
+}
+
+async function refreshLocalVideoFile(filePath: string): Promise<string> {
+  const parsed = path.parse(filePath);
+  const tempPath = path.join(parsed.dir, `.${parsed.name}.worker-refresh-${Date.now()}${parsed.ext}`);
+  await fs.copyFile(filePath, tempPath);
+  await fs.rename(tempPath, filePath);
+  return filePath;
+}
+
 async function runFirstSuccessfulCommand(commandSpecs: YtDlpCommandSpec[], timeoutMs: number, mediaLabel: "video" | "audio" = "video"): Promise<void> {
   const errors: string[] = [];
   for (const spec of commandSpecs) {
     try {
-      await runCommand(spec.command, spec.args, { timeoutMs, env: spec.env });
+      await runCommand(spec.command, spec.args, { timeoutMs });
       return;
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
@@ -355,13 +314,11 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "%(title).120s-%(id)s.%(ext)s");
-  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "video",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
-    freshPythonPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
@@ -388,6 +345,20 @@ async function downloadYoutubeVideo(url: string, outputDir: string): Promise<str
   return selected;
 }
 
+async function resolveYoutubeVideoPath(url: string, sourceDir: string): Promise<string> {
+  try {
+    return await downloadYoutubeVideo(url, sourceDir);
+  } catch (error) {
+    const fallback = await findExistingDownloadedYoutubeVideo(url, sourceDir);
+    if (fallback) {
+      const refreshed = await refreshLocalVideoFile(fallback).catch(() => fallback);
+      console.warn("[radio-video-edit-agent] yt-dlp failed; using existing local YouTube source:", refreshed);
+      return refreshed;
+    }
+    throw error;
+  }
+}
+
 async function downloadYoutubeAudio(url: string, outputDir: string): Promise<string> {
   if (!isYouTubeUrl(url)) {
     throw new Error("El link de audio no parece ser de YouTube.");
@@ -395,13 +366,11 @@ async function downloadYoutubeAudio(url: string, outputDir: string): Promise<str
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputTemplate = path.join(outputDir, "audio_%(title).120s-%(id)s.%(ext)s");
-  const freshPythonPackageDir = await getFreshYtDlpPythonPackageDir();
   const commandSpecs = buildYtDlpCommandSpecs({
     url,
     outputTemplate,
     mode: "audio",
     explicitBinary: process.env.YT_DLP_PATH?.trim(),
-    freshPythonPackageDir,
   });
 
   const before = new Set((await fs.readdir(outputDir).catch(() => [])).map((file) => path.join(outputDir, file)));
@@ -1367,7 +1336,7 @@ export async function processYoutubeRadioVideoLink(params: {
   const sourceDir = params.sourceDir || path.join(process.cwd(), "radio_video_edits", "01_originales", "youtube");
   const deleteSourceAfterSuccess = params.deleteSourceAfterSuccess ?? true;
   const videoPath = params.driveFolderPathFromYoutubeTitle
-    ? await downloadYoutubeVideo(params.youtubeUrl, sourceDir)
+    ? await resolveYoutubeVideoPath(params.youtubeUrl, sourceDir)
     : null;
   if (params.driveFolderPathFromYoutubeTitle && videoPath) {
     driveFolderPath.push(folderNameFromDownloadedYoutubeVideo(videoPath));
@@ -1413,7 +1382,7 @@ export async function processYoutubeRadioVideoLink(params: {
     driveFolderCreated = true;
   }
 
-  const resolvedVideoPath = videoPath || await downloadYoutubeVideo(params.youtubeUrl, sourceDir);
+  const resolvedVideoPath = videoPath || await resolveYoutubeVideoPath(params.youtubeUrl, sourceDir);
   const musicPath = params.musicPath || (params.musicUrl
     ? await downloadYoutubeAudio(params.musicUrl, path.join(sourceDir, "audio"))
     : undefined);

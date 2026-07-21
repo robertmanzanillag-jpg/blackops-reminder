@@ -1,6 +1,6 @@
 import type { PendingAction } from "@shared/schema";
 import { storage } from "./storage";
-import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
+import { createCalendarEvent, makeGoogleCalendarExternalId, parseGoogleCalendarExternalId, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
 import { writeAuditLog } from "./trust-policy";
 import { addBlackRoomCountdown, addBlackRoomLink, deactivateBlackRoomLink, updateBlackRoomLink } from "./blackroom-links";
 import { createGoogleDriveFolderPath } from "./google-drive-folder-command";
@@ -11,6 +11,24 @@ type JsonRecord = Record<string, any>;
 
 function actionInput(action: PendingAction): JsonRecord {
   return ((action.editedInput || action.input || {}) as JsonRecord) || {};
+}
+
+function googleCalendarExternalIdCandidates(input: JsonRecord): string[] {
+  const eventId = typeof input.eventId === "string" ? input.eventId.trim() : "";
+  if (!eventId) return [];
+
+  const parsed = parseGoogleCalendarExternalId(eventId);
+  const candidates = new Set<string>([eventId]);
+  if (parsed?.eventId) candidates.add(parsed.eventId);
+
+  const calendarId = typeof input.calendarId === "string" && input.calendarId.trim()
+    ? input.calendarId.trim()
+    : parsed?.calendarId;
+  if (calendarId && parsed?.eventId) {
+    candidates.add(makeGoogleCalendarExternalId(calendarId, parsed.eventId));
+  }
+
+  return [...candidates];
 }
 
 export async function executeApprovedPendingAction(
@@ -42,18 +60,22 @@ export async function executeApprovedPendingAction(
       case "calendar.create_event": {
         const eventId = await createCalendarEvent({
           title: input.title,
+          calendarId: input.calendarId,
           date: input.date,
           endDate: input.endDate,
           description: input.description,
+          location: input.location,
+          isAllDay: input.isAllDay,
         });
         result = { eventId, title: input.title };
         break;
       }
 
       case "calendar.modify_radio": {
-        await updateCalendarEventDescription(input.eventId, input.description);
+        await updateCalendarEventDescription(input.eventId, input.description, input.calendarId);
         const tasks = await storage.getTasks(action.userId);
-        const taskToUpdate = tasks.find((task) => task.externalId === input.eventId);
+        const externalIdCandidates = googleCalendarExternalIdCandidates(input);
+        const taskToUpdate = tasks.find((task) => task.externalId && externalIdCandidates.includes(task.externalId));
         if (taskToUpdate) {
           await storage.updateTask(taskToUpdate.id, { description: input.description });
         }
@@ -64,6 +86,7 @@ export async function executeApprovedPendingAction(
       case "calendar.update_event": {
         await updateCalendarEvent({
           eventId: input.eventId,
+          calendarId: input.calendarId,
           title: input.title,
           date: input.date,
           endDate: input.endDate,
@@ -72,7 +95,8 @@ export async function executeApprovedPendingAction(
           isAllDay: input.isAllDay,
         });
         const tasks = await storage.getTasks(action.userId);
-        const taskToUpdate = tasks.find((task) => task.externalId === input.eventId);
+        const externalIdCandidates = googleCalendarExternalIdCandidates(input);
+        const taskToUpdate = tasks.find((task) => task.externalId && externalIdCandidates.includes(task.externalId));
         if (taskToUpdate) {
           await storage.updateTask(taskToUpdate.id, {
             ...(input.title !== undefined ? { title: input.title } : {}),

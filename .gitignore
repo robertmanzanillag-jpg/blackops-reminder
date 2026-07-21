@@ -1,5 +1,12 @@
 node_modules
 dist
+.pnpm-store/
+.worktrees/
+.pr*-worktree
+dist.corrupt-*/
+marketing_workspace/
+revenue_workspace/
+google-drive-keys-root.test.txt
 .cache
 .DS_Store
 .codex-vite-*.log
