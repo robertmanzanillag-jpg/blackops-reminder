@@ -10,6 +10,8 @@ Flow: **Backlog -> Ready -> In progress -> Checker review -> App QA -> Done**. A
 | PR2 core | PR #70, `codex/ai-media-studio-core` | Stacked on PR #67 | Durable core, owned media and operational APIs; review the PR2 delta after base merge/rebase |
 | PR3 operations | PR #71, `codex/ai-media-studio-operations`, stacked on PR #70 | Ready for GitHub review | Publishing/analytics/intake/orchestration contracts, repositories, UI and worker operations passed checker/static App QA; no live operation implied |
 | PR4 owned assets | `codex/ai-media-studio-quality`, stacked on PR #71 | Ready for GitHub review | Owned render ingest/delivery passed independent checker and static App QA; production reader/storage/signer, live migration and deployment remain absent |
+| PR5–PR8 hardening | PRs #75, #77, #80 and #82 | Ready for GitHub review | Governance, account-scoped provider identity, production asset adapters and tenant/platform publishing-account isolation passed local gates; migrations remain unapplied |
+| PR9 OAuth control plane | `codex/ai-media-studio-social-oauth-foundation`, stacked on PR #82 | In progress | Durable one-time state, PKCE/vault ports and unverified credential lifecycle are under checker/App QA; no live connector or route |
 
 ## PR2 — durable core and owned media
 
@@ -67,6 +69,7 @@ The PR2, PR3, and PR4 migrations remain unapplied. No `db:push`, live PostgreSQL
 | AMS-308 Distributed workers | Platform owner | Partial (code) | No-autostart loop, durable/in-memory outbox, fencing, retry/DLQ, health snapshot and render quotas exist; no deployment, autoscaling or real load proof |
 | AMS-309 Multi-country/language policy | Policy owner | Partial (code) | Admission evaluates provider/tenant limits, language, country, timezone and daily budget; residency/rights/provider-routing operations remain missing |
 | AMS-310 10,000/day capacity gate | Performance owner | Blocked on real environment | Deterministic 10k fake-provider rehearsal exists and is not capacity proof; burst/load, SLO telemetry, provider quotas, cost envelope and DR remain required |
+| AMS-311 OAuth/vault control plane | Identity owner | Checker review | Durable digest-only state, mandatory PKCE S256, opaque purpose-scoped vault references, exact account binding and legacy-unverified lifecycle exist locally; production vault, provider adapters, refresh/revocation and sandbox proof remain blocked |
 
 ### PR3 current integration evidence
 

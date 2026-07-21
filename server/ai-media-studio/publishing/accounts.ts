@@ -34,6 +34,9 @@ type ProviderAccountRow = {
   status: unknown;
   secretRef: unknown;
   capabilities: unknown;
+  credentialStatus: unknown;
+  credentialVersion: unknown;
+  credentialExpiresAt: unknown;
   lastVerifiedAt: unknown;
 };
 
@@ -87,9 +90,16 @@ function asCheckedAt(value: unknown): string | null {
 }
 
 function isUsable(row: ProviderAccountRow): boolean {
+  const credentialExpiresAt = asCheckedAt(row.credentialExpiresAt);
   return (
     row.status === "active" &&
     asNonEmptyString(row.secretRef) !== null &&
+    row.credentialStatus === "active" &&
+    typeof row.credentialVersion === "number" &&
+    Number.isSafeInteger(row.credentialVersion) &&
+    row.credentialVersion > 0 &&
+    credentialExpiresAt !== null &&
+    Date.parse(credentialExpiresAt) > Date.now() &&
     parseCapabilities(row.capabilities).includes("publish_video")
   );
 }
@@ -166,6 +176,9 @@ export function createPublishingAccountsRepository(db: PublishingAccountsDatabas
         ${aiMediaProviderAccounts.status} as "status",
         ${aiMediaProviderAccounts.secretRef} as "secretRef",
         ${aiMediaProviderAccounts.capabilities} as "capabilities",
+        ${aiMediaProviderAccounts.credentialStatus} as "credentialStatus",
+        ${aiMediaProviderAccounts.credentialVersion} as "credentialVersion",
+        ${aiMediaProviderAccounts.credentialExpiresAt} as "credentialExpiresAt",
         ${aiMediaProviderAccounts.lastVerifiedAt} as "lastVerifiedAt"
       from ${aiMediaProviderAccounts}
       where ${aiMediaProviderAccounts.ownerUserId} = ${scope.ownerUserId}

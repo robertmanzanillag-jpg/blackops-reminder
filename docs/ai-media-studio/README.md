@@ -24,6 +24,8 @@ This remains local code/test evidence. No live artifact was downloaded, no objec
 
 The publishing-account slice reuses the server-owned provider-account identity as a vault-reference-only social connection record. Durable readiness reads are tenant/workspace scoped, expose one internal connection ID at most, allow only four provider-neutral capabilities, and fail closed when accounts are incomplete or ambiguous. Publishing-job account references are constrained to the same tenant, workspace, and platform. No endpoint accepts a token or secret value, OAuth is not implemented, and automatic publishing remains disabled.
 
+The PR9 control-plane slice adds provider-neutral, durable OAuth session contracts without enabling a provider flow. It generates 48-byte opaque state, persists only its SHA-256 digest, requires PKCE S256, stores the verifier only through a purpose/version-scoped vault reference, and atomically consumes an unexpired state once using only the digest plus platform fence. Sessions retain the exact tenant, actor, account, redirect and requested-scope snapshot behind a composite tenant/workspace/account/platform foreign key. Provider credential metadata defaults all legacy accounts to `unverified` and version zero; a social connection is unusable until a future approved connector records an active, versioned, unexpired credential. There is still no mounted OAuth callback, production vault, token exchange, provider request, external post or deployment.
+
 ## Documents
 
 - [Architecture](./architecture.md)
@@ -35,7 +37,7 @@ The publishing-account slice reuses the server-owned provider-account identity a
 
 ## API contract
 
-Foundation DTOs live in `shared/ai-media-studio.ts`; PR3 publishing, analytics, source, and policy DTOs live in `shared/ai-media-studio-operations.ts`. Frontend and backend must import those definitions rather than creating provider-specific response types.
+Foundation DTOs live in `shared/ai-media-studio.ts`; PR3 publishing, analytics, source, and policy DTOs live in `shared/ai-media-studio-operations.ts`; PR9 transient OAuth control-plane DTOs live in `shared/ai-media-studio-oauth.ts`. Frontend and backend must import those definitions rather than creating provider-specific response types.
 
 The authenticated API root remains `/api/ai-media-studio`. Provider callbacks use `/api/ai-media-studio/webhooks/providers/:providerKey/accounts/:endpointKey`; the route is public only for reachability, resolves the opaque endpoint to exactly one tenant/provider account, and requires verified raw-body provider HMAC. Production does not use the legacy provider-only callback or process-global webhook secrets. PR3 adds mounted routes for publishing previews/jobs/connections, analytics summaries/attribution, sources, and the read-only automation policy. Mounted code is not deployment evidence: no real connector, migration, or external post is enabled.
 

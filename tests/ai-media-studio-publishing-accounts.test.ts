@@ -32,6 +32,9 @@ function providerRow(overrides: Record<string, unknown> = {}) {
     status: "active",
     secretRef: "vault://publishing/tiktok",
     capabilities: ["publish_video", "schedule_post", "unknown_permission"],
+    credentialStatus: "active",
+    credentialVersion: 1,
+    credentialExpiresAt: new Date("2099-07-20T12:00:00.000Z"),
     lastVerifiedAt: new Date("2026-07-20T12:00:00.000Z"),
     externalAccountId: "must-not-leak",
     configuration: { token: "must-not-leak" },
@@ -89,6 +92,14 @@ test("listConnections marks an incomplete account for attention", async () => {
   assert.equal(connection.status, "attention");
   assert.equal(connection.connectionId, "connection-1");
   assert.deepEqual(connection.capabilities, ["read_analytics"]);
+});
+
+test("listConnections keeps legacy unverified and expired credentials unusable", async () => {
+  const legacy = mockDatabase([providerRow({ credentialStatus: "unverified", credentialVersion: 0 })]);
+  const expired = mockDatabase([providerRow({ credentialExpiresAt: new Date("2020-01-01T00:00:00.000Z") })]);
+
+  assert.equal((await createPublishingAccountsRepository(legacy.db).listConnections(scope))[0].status, "attention");
+  assert.equal((await createPublishingAccountsRepository(expired.db).listConnections(scope))[0].status, "attention");
 });
 
 test("listConnections fails closed whenever multiple accounts are ambiguous", async () => {
