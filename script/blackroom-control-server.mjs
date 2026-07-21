@@ -10,6 +10,9 @@ const projectDir = process.cwd();
 const port = Number(process.env.BLACKROOM_CONTROL_PORT || 5020);
 const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
 const workerStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-state.json");
+const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
+const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
+const remotePollMs = Math.max(10_000, Number(process.env.BLACKROOM_REMOTE_POLL_MS || 15_000));
 const controlToken = randomBytes(32).toString("hex");
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 let commandTail = Promise.resolve();
@@ -45,6 +48,52 @@ async function stopWorker() {
     try { process.kill(state.workerPid, "SIGTERM"); } catch { /* already stopped */ }
   } else if (state.running && Number.isInteger(state.pid) && state.pid > 0) {
     try { process.kill(-state.pid, "SIGTERM"); } catch { /* legacy state */ }
+  }
+}
+
+async function remoteRequest(method, body) {
+  const response = await fetch(`${remoteUrl}/api/blackroom-agent/remote`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${remoteToken}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Remote control returned ${response.status}`);
+  return data;
+}
+
+async function syncRemoteControl() {
+  if (!remoteToken) return;
+  let lastError = null;
+  let queue;
+  try {
+    const { control } = await remoteRequest("GET");
+    queue = await serializedCommand("status");
+    if (control.desiredEnabled && !queue.enabled) {
+      queue = await serializedCommand("start", control.weeks);
+      wakeWorker();
+    } else if (!control.desiredEnabled && queue.enabled) {
+      queue = await serializedCommand("pause");
+      await stopWorker();
+    }
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+    console.error("[blackroom-control] remote sync failed:", lastError);
+  }
+  try {
+    queue ||= await serializedCommand("status");
+    await remoteRequest("POST", {
+      deviceId: "blackroom-mac",
+      queue,
+      worker: await workerState(),
+      lastError,
+    });
+  } catch (error) {
+    console.error("[blackroom-control] remote heartbeat failed:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -106,3 +155,9 @@ async function recoverWorker() {
 server.listen(port, "127.0.0.1", () => console.log(`[blackroom-control] http://127.0.0.1:${port}/blackroom`));
 setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
+if (remoteToken) {
+  setTimeout(syncRemoteControl, 2_000);
+  setInterval(syncRemoteControl, remotePollMs).unref();
+} else {
+  console.warn("[blackroom-control] BLACKROOM_REMOTE_CONTROL_TOKEN is not configured; Replit control is disabled");
+}

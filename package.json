@@ -75,6 +75,7 @@
     "test:blackroom-agent": "node --import tsx --test tests/blackroom-daily-queue.test.ts",
     "test:blackroom-content": "node --import tsx --test tests/blackroom-content-agent.test.ts",
     "test:blackroom-worker": "node --import tsx --test tests/blackroom-local-worker.test.ts",
+    "test:blackroom-remote": "node --import tsx --test tests/blackroom-remote-control.test.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",

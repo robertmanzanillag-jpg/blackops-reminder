@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-20T22:23:59.858Z",
-  "repoRoot": "/private/tmp/blackroom-longform",
+  "generatedAt": "2026-07-21T04:29:17.654Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-remote-control",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -74,6 +74,7 @@
     "test:blackroom-agent": "node --import tsx --test tests/blackroom-daily-queue.test.ts",
     "test:blackroom-content": "node --import tsx --test tests/blackroom-content-agent.test.ts",
     "test:blackroom-worker": "node --import tsx --test tests/blackroom-local-worker.test.ts",
+    "test:blackroom-remote": "node --import tsx --test tests/blackroom-remote-control.test.ts",
     "telegram:webhook": "node --import tsx script/telegram-webhook.ts",
     "telegram:configure": "node --import tsx script/configure-telegram.ts",
     "radio:edit-videos": "tsx script/radio-video-edits.ts",
@@ -94,18 +95,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 458,
-    "filesIndexed": 379,
-    "imports": 1398,
-    "routes": 464,
-    "symbols": 7662
+    "filesVisible": 460,
+    "filesIndexed": 381,
+    "imports": 1410,
+    "routes": 465,
+    "symbols": 7729
   },
   "directories": {
-    "script": {
-      "files": 43,
-      "indexed": 40,
+    "server": {
+      "files": 112,
+      "indexed": 108,
       "kinds": {
-        "script": 43
+        "server": 112
+      }
+    },
+    "tests": {
+      "files": 72,
+      "indexed": 69,
+      "kinds": {
+        "test": 72
       }
     },
     ".": {
@@ -172,18 +180,18 @@
         "docs": 12
       }
     },
+    "script": {
+      "files": 43,
+      "indexed": 40,
+      "kinds": {
+        "script": 43
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 111,
-      "indexed": 107,
-      "kinds": {
-        "server": 111
       }
     },
     "server/replit_integrations": {
@@ -205,13 +213,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 71,
-      "indexed": 68,
-      "kinds": {
-        "test": 71
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3917,10 +3918,12 @@
         "child",
         "command",
         "controlToken",
+        "data",
         "execFileAsync",
         "expected",
         "fetchSite",
         "host",
+        "next",
         "npmPath",
         "origin",
         "page",
@@ -3930,11 +3933,18 @@
         "raw",
         "readBody",
         "recoverWorker",
+        "remotePollMs",
+        "remoteRequest",
+        "remoteToken",
+        "remoteUrl",
+        "response",
         "send",
+        "serializedCommand",
         "server",
         "start",
         "state",
         "stopWorker",
+        "syncRemoteControl",
         "url",
         "wakeWorker",
         "weeks",
@@ -3954,6 +3964,7 @@
         "Command",
         "argument",
         "command",
+        "created",
         "durationSeconds",
         "index",
         "inline",
@@ -3961,6 +3972,7 @@
         "main",
         "queuePath",
         "recovered",
+        "result",
         "selectedCommand",
         "state"
       ],
@@ -3981,14 +3993,17 @@
         "appendLog",
         "child",
         "codexPath",
+        "ended",
         "existingPid",
         "exitCode",
-        "fallback",
+        "exitPromise",
         "handle",
         "lockPath",
+        "lockStat",
         "logPath",
         "main",
         "maxRunMs",
+        "outcome",
         "output",
         "pollMs",
         "projectDir",
@@ -4001,6 +4016,8 @@
         "statePath",
         "stop",
         "temporary",
+        "terminateChildGroup",
+        "waitForChildExit",
         "writeJson"
       ],
       "routes": []
@@ -4009,24 +4026,37 @@
       "path": "script/blackroom-worker-ledger.ts",
       "kind": "script",
       "imports": [
+        "../server/blackroom-daily-queue",
         "../server/blackroom-local-worker",
         "node:fs/promises",
         "node:path"
       ],
       "exports": [],
       "symbols": [
+        "acquireLock",
         "arg",
+        "durationSeconds",
         "entry",
+        "existingPid",
+        "format",
+        "handle",
         "index",
+        "language",
         "ledger",
         "ledgerPath",
         "lock",
         "lockPath",
+        "lockStat",
         "main",
         "projectDir",
+        "queue",
+        "queuePath",
         "readLedger",
+        "renderPathInput",
         "safePath",
+        "sourcePathInput",
         "temporary",
+        "usedSourceVideoIds",
         "writeLedger"
       ],
       "routes": []
@@ -6566,20 +6596,35 @@
       "kind": "server",
       "imports": [
         "./blackroom-daily-queue",
-        "express"
+        "./blackroom-remote-control",
+        "express",
+        "node:crypto"
       ],
       "exports": [
+        "hasValidBlackRoomRemoteToken",
         "registerBlackRoomControlRoutes"
       ],
       "symbols": [
         "blackRoomPage",
+        "current",
+        "expectedBuffer",
+        "hasValidBlackRoomRemoteToken",
         "ids",
+        "localQueue",
+        "mutateRemoteControl",
+        "next",
         "registerBlackRoomControlRoutes",
-        "state"
+        "remote",
+        "remoteView",
+        "state",
+        "supplied",
+        "suppliedBuffer",
+        "token"
       ],
       "routes": [
         "/api/blackroom-agent",
         "/api/blackroom-agent/pause",
+        "/api/blackroom-agent/remote",
         "/api/blackroom-agent/start",
         "/blackroom"
       ]
@@ -6615,6 +6660,7 @@
         "retryBlackRoomJob",
         "startBlackRoomAgent",
         "summarizeBlackRoomQueue",
+        "withBlackRoomQueueLock",
         "writeBlackRoomQueue"
       ],
       "symbols": [
@@ -6630,14 +6676,18 @@
         "completeBlackRoomJob",
         "createBlackRoomQueueState",
         "createDailyJob",
+        "deadline",
         "delayMinutes",
         "ensureBlackRoomScheduleBuffer",
         "existing",
+        "existingPid",
         "intervalMinutes",
         "iso",
         "job",
         "jobs",
         "localDate",
+        "lockPath",
+        "lockStat",
         "minutesToTime",
         "noonUtc",
         "normalized",
@@ -6661,6 +6711,7 @@
         "totals",
         "value",
         "videoId",
+        "withBlackRoomQueueLock",
         "writeBlackRoomQueue"
       ],
       "routes": []
@@ -6775,6 +6826,7 @@
         "BlackRoomLocalWorkerState",
         "BlackRoomWorkerLedger",
         "assertSafeConfirmedDeletion",
+        "buildBlackRoomCodexArgs",
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
@@ -6788,6 +6840,7 @@
         "BLACKROOM_WORKER_STATE_PATH",
         "allowedRoots",
         "assertSafeConfirmedDeletion",
+        "buildBlackRoomCodexArgs",
         "buildBlackRoomWorkerPrompt",
         "createBlackRoomLocalWorkerState",
         "createBlackRoomWorkerLedger",
@@ -6800,6 +6853,40 @@
         "shouldRunBlackRoomWorker",
         "timestamp",
         "updateBlackRoomLedgerEntry"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-remote-control.ts",
+      "kind": "server",
+      "imports": [
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "BLACKROOM_REMOTE_CONTROL_PATH",
+        "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
+        "BlackRoomRemoteControlState",
+        "BlackRoomRemoteDeviceStatus",
+        "createBlackRoomRemoteControlState",
+        "isBlackRoomRemoteDeviceOnline",
+        "readBlackRoomRemoteControl",
+        "recordBlackRoomRemoteHeartbeat",
+        "setBlackRoomRemoteCommand",
+        "writeBlackRoomRemoteControl"
+      ],
+      "symbols": [
+        "BLACKROOM_REMOTE_CONTROL_PATH",
+        "BLACKROOM_REMOTE_ONLINE_WINDOW_MS",
+        "createBlackRoomRemoteControlState",
+        "isBlackRoomRemoteDeviceOnline",
+        "parsed",
+        "readBlackRoomRemoteControl",
+        "recordBlackRoomRemoteHeartbeat",
+        "seenAt",
+        "setBlackRoomRemoteCommand",
+        "temporary",
+        "writeBlackRoomRemoteControl"
       ],
       "routes": []
     },
@@ -13288,8 +13375,11 @@
         "claimed",
         "completed",
         "directory",
+        "finalState",
         "late",
+        "lockPath",
         "migrated",
+        "mutate",
         "now",
         "overnight",
         "queuePath",
@@ -13327,10 +13417,35 @@
       ],
       "exports": [],
       "symbols": [
+        "args",
         "entry",
         "ledger",
+        "mediaDetails",
         "project",
         "prompt"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-remote-control.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-control-routes",
+        "../server/blackroom-remote-control",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "directory",
+        "filePath",
+        "now",
+        "restored",
+        "state",
+        "token"
       ],
       "routes": []
     },
@@ -14775,6 +14890,7 @@
     "tests/blackroom-daily-queue.test.ts",
     "tests/blackroom-links.test.ts",
     "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-remote-control.test.ts",
     "tests/ceo-backup-check-cli.test.ts",
     "tests/ceo-brief-cli.test.ts",
     "tests/ceo-briefing.test.ts",

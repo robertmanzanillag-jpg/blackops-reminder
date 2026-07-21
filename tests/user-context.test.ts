@@ -138,6 +138,7 @@ test("classifies public callback and webhook paths", () => {
   assert.equal(isPublicApiPath("/api/google-drive/oauth/callback"), true);
   assert.equal(isPublicApiPath("/api/canva/oauth/callback"), true);
   assert.equal(isPublicApiPath("/api/zoho/callback"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/remote"), true);
   assert.equal(isPublicApiPath("/api/shopify/oauth/callback"), false);
   assert.equal(isPublicApiPath("/api/shopify/oauth/start"), false);
   assert.equal(isPublicApiPath("/api/shopify/install"), false);
