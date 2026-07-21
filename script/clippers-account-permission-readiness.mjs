@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const rootDir = path.join(process.cwd(), "clippers_workspace");
+const rootDir = process.env.CLIPPERS_WORKSPACE_ROOT || path.join(process.cwd(), "clippers_workspace");
 const accountEvidenceDir = path.join(rootDir, "account-evidence");
 const outJsonPath = path.join(rootDir, "account-permission-readiness.json");
 const outMarkdownPath = path.join(rootDir, "account-permission-readiness.md");

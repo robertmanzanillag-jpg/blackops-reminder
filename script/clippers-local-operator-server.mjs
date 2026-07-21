@@ -1,7 +1,7 @@
-import { createReadStream } from "node:fs";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFile, lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 
@@ -9,6 +9,7 @@ const root = process.cwd();
 const workspaceRoot = process.env.CLIPPERS_WORKSPACE_ROOT || path.join(root, "clippers_workspace");
 const reportsDir = path.join(workspaceRoot, "reports");
 const scheduledDir = path.join(workspaceRoot, "scheduled");
+const quarantineDir = path.join(workspaceRoot, "quarantine");
 const batchEvidenceCsvPath = path.join(scheduledDir, "metricool-100-batch-evidence-imports", "metricool-batch-01-evidence-import.csv");
 const batchEvidenceLockPath = `${batchEvidenceCsvPath}.lock`;
 const masterEvidenceCsvPath = path.join(workspaceRoot, "evidence-drop", "metricool-100-approval-evidence-import.csv");
@@ -19,6 +20,11 @@ const externalEvidenceCsvPath = path.join(workspaceRoot, "evidence-drop", "exter
 const externalProofsDir = path.join(workspaceRoot, "evidence-drop", "external-closeout-proofs");
 const realClipPermissionCrmCsvPath = path.join(workspaceRoot, "evidence-drop", "real-clip-permission-outreach.csv");
 const realClipPermissionCrmLockPath = `${realClipPermissionCrmCsvPath}.lock`;
+const streamerResearchDir = path.join(workspaceRoot, "research");
+const streamerBlanketPermissionCsvPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+const humanReviewDecisionsCsvPath = path.join(workspaceRoot, "evidence-drop", "human-review-decisions.csv");
+const humanReviewDecisionsLockPath = `${humanReviewDecisionsCsvPath}.lock`;
+const realClipIntakeManifestLockPath = path.join(scheduledDir, ".real-clip-intake-manifest.lock");
 const currentBatchWorkbookJsonPath = path.join(scheduledDir, "metricool-100-current-batch-workbook.json");
 const currentBatchUploadPackJsonPath = path.join(reportsDir, "clippers-metricool-current-batch-upload-pack.json");
 const requestedHost = process.env.HOST || "127.0.0.1";
@@ -62,6 +68,11 @@ const refreshScriptPaths = [
 ];
 const rollForwardScriptPaths = [
   "script/clippers-metricool-operator-handoff.mjs",
+  "script/clippers-tiktok-mvp-go-live-packet.mjs",
+  "script/clippers-tiktok-launch-control.mjs",
+  "script/clippers-goal-completion-audit.mjs",
+  "script/clippers-tiktok-mvp-readiness-verifier.mjs",
+  "script/clippers-metricool-mcp-preflight.ts",
   "script/clippers-metricool-current-batch-upload-pack.mjs",
   "script/clippers-tiktok-operator-cockpit.mjs",
   "script/clippers-tiktok-operator-cockpit-preflight.mjs",
@@ -69,6 +80,11 @@ const rollForwardScriptPaths = [
 ];
 const sourceDropMetricoolRefreshScriptPaths = [
   "script/clippers-metricool-operator-handoff.mjs",
+  "script/clippers-tiktok-mvp-go-live-packet.mjs",
+  "script/clippers-tiktok-launch-control.mjs",
+  "script/clippers-goal-completion-audit.mjs",
+  "script/clippers-tiktok-mvp-readiness-verifier.mjs",
+  "script/clippers-metricool-mcp-preflight.ts",
   "script/clippers-metricool-current-batch-upload-pack.mjs",
   "script/clippers-metricool-current-batch-session-packet.mjs",
   ...refreshScriptPaths,
@@ -104,9 +120,11 @@ const clipperPageTitles = new Map([
   ["Clippers Permission CRM", ["Permisos", "Gestionar permisos"]],
   ["Clippers Permission Outreach", ["Permisos", "Pedir permisos"]],
   ["Clippers Permission Request Packets", ["Permisos", "Mensajes para pedir permiso"]],
+  ["Clippers 100 Streamer Campaign", ["Permisos", "Campana de 100 streamers"]],
   ["Clippers Real Clip Acquisition", ["Preparar", "Preparar clips"]],
   ["Clippers Real Clip Intake", ["Preparar", "Cargar archivos reales"]],
   ["Clippers Real Clip Intake Validation", ["Preparar", "Validar clips"]],
+  ["Clippers Human Review Queue", ["Preparar", "Revisar candidatos"]],
   ["Clippers Source-drop Import", ["Preparar", "Enviar clips a Metricool"]],
   ["Clippers TikTok Batch Now", ["Metricool", "Programar en Metricool"]],
   ["Clippers TikTok Public Metrics Now", ["Optimizar", "Registrar resultados"]],
@@ -122,9 +140,11 @@ const clipperPageGuides = new Map([
   ["Clippers Permission CRM", "Registra el contacto con cada creador y la evidencia de su respuesta. Nada pasa a Metricool sin prueba valida."],
   ["Clippers Permission Outreach", "Prepara y controla las solicitudes de permiso. Esta pantalla no envia mensajes ni aprueba clips por si sola."],
   ["Clippers Permission Request Packets", "Revisa los mensajes preparados para cada creador antes de enviarlos y guardar la respuesta en Permisos."],
+  ["Clippers 100 Streamer Campaign", "Investiga y prioriza 100 creadores para solicitar permiso general. Un candidato o un correo enviado nunca cuenta como autorizacion."],
   ["Clippers Real Clip Acquisition", "Mira que le falta a cada candidato y completa URL, permiso, evidencia y archivo en el orden correcto."],
   ["Clippers Real Clip Intake", "Carga los MP4 reales aprobados para reemplazar los videos de prueba. No se publica nada desde esta pantalla."],
   ["Clippers Real Clip Intake Validation", "Comprueba que cada clip tenga archivo, URL exacta, creador y permiso antes de enviarlo a Metricool."],
+  ["Clippers Human Review Queue", "Reproduce cada candidato y registra audio, contexto y material de terceros. Las decisiones son locales y nunca desbloquean Metricool por sí solas."],
   ["Clippers Source-drop Import", "Envia a la cola de Metricool solo los clips reales que superaron todas las validaciones."],
   ["Clippers TikTok Batch Now", "Programa en Metricool los clips aprobados y guarda la evidencia de la programacion."],
   ["Clippers TikTok Public Metrics Now", "Registra las vistas y resultados reales despues de publicar para que el sistema pueda mejorar."],
@@ -142,7 +162,7 @@ function polishClipperOperatorPage(body) {
     main{max-width:1120px!important;margin:0 auto!important;padding:0 24px 64px!important}
     .operator-nav{min-height:62px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);margin-bottom:34px}
     .operator-brand{font-size:18px;font-weight:800;color:#fff!important;text-decoration:none}
-    .operator-nav-links{display:flex;align-items:center;gap:8px}.operator-nav-links a{color:#dce7e1!important;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:12px}
+    .operator-nav-links{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.operator-nav-links a{color:#dce7e1!important;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:12px}
     .operator-stage{font-size:11px;text-transform:uppercase;color:var(--green);font-weight:800;letter-spacing:.08em;margin-bottom:7px}
     main>h1{font-size:30px!important;line-height:1.15!important;margin:0 0 9px!important;letter-spacing:0!important}
     main>h1+p{max-width:760px;color:var(--muted)!important;margin-bottom:24px!important}
@@ -159,9 +179,9 @@ function polishClipperOperatorPage(body) {
     table{width:100%!important;border-collapse:collapse!important;margin-top:12px!important;font-size:13px!important;display:block!important;overflow-x:auto!important}thead,tbody{display:table;width:100%;min-width:720px;table-layout:fixed}th,td{border-top:1px solid var(--line)!important;padding:10px 8px!important;text-align:left!important;vertical-align:top!important;overflow-wrap:anywhere}th{color:var(--muted)!important;font-size:11px!important;text-transform:uppercase!important;letter-spacing:.05em!important}td{color:#edf4f0!important}
     code,pre,.caption,.note{background:#0d1410!important;border:1px solid var(--line)!important;border-radius:6px!important;color:#d9eee2!important}code{padding:2px 5px!important;overflow-wrap:anywhere}pre,.caption,.note{white-space:pre-wrap;word-break:break-word;padding:12px!important;max-width:100%;overflow:auto}.small,small{font-size:12px!important;color:var(--muted)!important}
     details{border-top:1px solid var(--line);padding:10px 0}summary{cursor:pointer;color:#dce7e1!important;font-weight:700}
-    @media(max-width:720px){main{padding:0 17px 48px!important}.operator-nav{margin-bottom:26px}.operator-nav-links{gap:5px}.operator-nav-links a{padding:7px 8px;font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.grid>.card,.grid>.card:first-child{padding:15px 11px!important;border-left:1px solid var(--line)!important}.grid>.card:nth-child(odd){border-left:0!important;padding-left:0!important}.actions{display:grid!important;grid-template-columns:1fr!important}.actions a,.actions button{width:100%!important}.clip-head,.row-head{flex-direction:column!important}main>h1{font-size:26px!important}}
+    @media(max-width:720px){main{padding:0 17px 48px!important}.operator-nav{align-items:flex-start;flex-direction:column;padding:14px 0;margin-bottom:26px}.operator-nav-links{justify-content:flex-start;gap:5px}.operator-nav-links a{padding:7px 8px;font-size:11px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.grid>.card,.grid>.card:first-child{padding:15px 11px!important;border-left:1px solid var(--line)!important}.grid>.card:nth-child(odd){border-left:0!important;padding-left:0!important}.actions{display:grid!important;grid-template-columns:1fr!important}.actions a,.actions button{width:100%!important}.clip-head,.row-head{flex-direction:column!important}main>h1{font-size:26px!important}}
   </style>`;
-  const navigation = `<nav class="operator-nav" aria-label="Clippers"><a class="operator-brand" href="/clippers">Clippers</a><div class="operator-nav-links"><a href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a><a href="/api/clippers/real-clip-permission-crm.html">Permisos</a><a href="/api/clippers/real-clip-acquisition-workbench.html">Preparar</a></div></nav><div class="operator-stage">${escapeHtml(stage)}</div>`;
+  const navigation = `<nav class="operator-nav" aria-label="Clippers"><a class="operator-brand" href="/clippers">Clippers</a><div class="operator-nav-links"><a href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a><a href="/api/clippers/streamer-100-campaign.html">100 streamers</a><a href="/api/clippers/real-clip-permission-crm.html">Permisos</a><a href="/api/clippers/real-clip-acquisition-workbench.html">Preparar</a></div></nav><div class="operator-stage">${escapeHtml(stage)}</div>`;
   let polished = String(body)
     .replace("</head>", `${sharedStyles}</head>`)
     .replace(/<main>/i, `<main>${navigation}`)
@@ -871,6 +891,14 @@ async function withEvidenceCsvLock(callback) {
 
 async function withPermissionCrmLock(callback) {
   return withExclusiveFileLock(realClipPermissionCrmLockPath, "permission_crm_locked", callback);
+}
+
+async function withHumanReviewDecisionLock(callback) {
+  return withExclusiveFileLock(humanReviewDecisionsLockPath, "human_review_decisions_locked", callback);
+}
+
+async function withRealClipIntakeManifestLock(callback) {
+  return withExclusiveFileLock(realClipIntakeManifestLockPath, "real_clip_intake_manifest_locked", callback);
 }
 
 async function withExclusiveFileLock(lockPath, lockedError, callback) {
@@ -1783,7 +1811,12 @@ async function recordNextExternalProof(input) {
 
 function runNodeScript(scriptPath, env = {}, args = [], nodeArgs = []) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [...nodeArgs, scriptPath, ...args], {
+    const effectiveNodeArgs = nodeArgs.length > 0
+      ? nodeArgs
+      : scriptPath.endsWith(".ts")
+        ? ["--import", "tsx"]
+        : [];
+    const child = spawn(process.execPath, [...effectiveNodeArgs, scriptPath, ...args], {
       cwd: root,
       env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
@@ -2294,6 +2327,7 @@ function safeReturnToPath(value) {
     "/api/clippers/tiktok-public-metrics-now.html",
     "/api/clippers/real-clip-intake.html",
     "/api/clippers/real-clip-intake-validation.html",
+    "/api/clippers/human-review-queue.html",
     "/api/clippers/tiktok-launch-authorization.html",
   ].includes(returnTo)) return returnTo;
   const accountNowMatch = returnTo.match(/^\/api\/clippers\/tiktok-account-now\.html\?accountId=([A-Za-z0-9_-]+)$/);
@@ -2489,7 +2523,7 @@ function buildMetricoolOperatorChecklist(rows, status) {
         : blockers.includes("schedule_needs_roll_forward")
         ? "Click Roll forward schedule before opening Metricool."
         : "Open the Upload pack and schedule the earliest deadline rows first.",
-      "Use the Metricool brand shown on each row: SPORT for sports, memes for Meme Radar.",
+      "Use the Metricool brand shown on each row: SPORT for Streamer Highlights, memes for Streamer Reactions.",
       "After each row is scheduled in Metricool, paste the real Metricool planner URL and a concrete note in Save scheduled proof.",
       "Do not enter public TikTok URLs or 24h metrics until the video is live and metrics are real.",
     ].filter(Boolean),
@@ -3557,6 +3591,12 @@ function classifyClipSource(row = {}) {
   };
 }
 
+function canonicalTikTokAccountName(accountId, fallback = "") {
+  if (accountId === "sports-daily") return "Streamer Highlights";
+  if (accountId === "meme-radar") return "Streamer Reactions";
+  return fallback;
+}
+
 function buildRealClipGapSummary(rows = [], uploadPackIntegrity = {}) {
   const uploadRowsByQueueId = new Map((uploadPackIntegrity.rows || []).map((row) => [String(row.queueItemId || ""), row]));
   const rowSummaries = rows.map((row) => {
@@ -3565,9 +3605,11 @@ function buildRealClipGapSummary(rows = [], uploadPackIntegrity = {}) {
     return {
       queueItemId: row.queueItemId || "",
       rank: row.rank || "",
+      accountId: row.accountId || "",
       brand: row.metricoolBrandName || "",
-      accountName: row.accountName || "",
+      accountName: canonicalTikTokAccountName(row.accountId, row.accountName || ""),
       platform: row.platform || "",
+      publishAt: row.publishAt || "",
       uploadFileName: row.uploadFileName || "",
       sourceFileName: row.sourceFileName || "",
       sourceMetadataPresent: Boolean(row.sourceFileName || row.sourcePath),
@@ -3680,8 +3722,10 @@ function buildRealClipIntakePack(status) {
         queueItemId: row.queueItemId || "",
         category,
         brand: row.brand || "",
+        accountId: row.accountId || "",
         accountName: row.accountName || "",
         platform: row.platform || "tiktok",
+        publishAt: row.publishAt || "",
         currentUploadFileName: row.uploadFileName || "",
         currentSourceKind: row.sourceKind || "",
         targetSourceDropFile: `source-drop/${category}/${targetFileName}`,
@@ -3693,6 +3737,11 @@ function buildRealClipIntakePack(status) {
         evidenceType: "<creator_permission|licensed_asset|owned_source|official_policy_allowlist|recreate_plan_approved>",
         evidenceLink: "<paste proof URL or local proof path>",
         notes: "Replace this starter row with a real source file, exact URL, rights proof, and 20+ character notes before import.",
+        aiProcessing: "",
+        originalStreamEndedAt: "",
+        plannedPublishAt: "",
+        contextReviewStatus: "",
+        creditText: "",
       };
     });
   const manifestRows = rows.map((row) => ({
@@ -3706,6 +3755,11 @@ function buildRealClipIntakePack(status) {
     evidence_link: safeCsvText(row.evidenceLink),
     priority: safeCsvText(row.order <= 10 ? "high" : "medium"),
     notes: safeCsvText(row.notes),
+    ai_processing: safeCsvText(row.aiProcessing),
+    original_stream_ended_at: safeCsvText(row.originalStreamEndedAt),
+    planned_publish_at: safeCsvText(row.plannedPublishAt),
+    context_review_status: safeCsvText(row.contextReviewStatus),
+    credit_text: safeCsvText(row.creditText),
   }));
   const manifestCsv = renderCsv([
     "category",
@@ -3718,6 +3772,11 @@ function buildRealClipIntakePack(status) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ], manifestRows);
   return {
     status: rows.length ? "needs_real_clip_intake" : "no_replacement_rows_needed",
@@ -3821,7 +3880,7 @@ function buildRealClipIntakeMarkdown(status) {
     "",
     "## Required Manifest Columns",
     "",
-    "`category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes`",
+    "`category,title,url,source,platform,target_file_name,rights_status,evidence_link,priority,notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text`",
     "",
     "## Guardrails",
     "",
@@ -3971,6 +4030,32 @@ function sourcePlatformForExactUrl(value) {
   return "unknown";
 }
 
+function sourceUrlMatchesCreator(value, source) {
+  const expected = campaignHandleKey(source);
+  if (!expected) return false;
+  try {
+    const parsed = new URL(String(value || "").trim());
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (["tiktok.com", "m.tiktok.com"].includes(hostName)) {
+      const match = parsed.pathname.match(/^\/@([^/]+)\/video\/[0-9]+\/?$/i);
+      return Boolean(match && campaignHandleKey(match[1]) === expected);
+    }
+    if (["twitch.tv", "m.twitch.tv"].includes(hostName)) {
+      const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})\/clip\/[A-Za-z0-9_-]{4,120}\/?$/);
+      return Boolean(match && campaignHandleKey(match[1]) === expected);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function creditIdentifiesCreator(value, source) {
+  const credit = String(value || "").trim().toLowerCase();
+  const creator = campaignHandleKey(source);
+  return creator.length >= 3 && credit.length >= creator.length + 4 && campaignHandleKey(credit).includes(creator);
+}
+
 function concreteIntakeNotes(value) {
   return !validateOperatorNotes(value);
 }
@@ -4102,6 +4187,8 @@ function manifestRecordForTarget(manifestRows, targetFileName) {
 
 async function buildRealClipIntakeValidation(status) {
   const pack = buildRealClipIntakePack(status);
+  const streamerCampaign = await buildStreamer100Campaign();
+  const streamerPermissions = campaignPermissionMap(streamerCampaign.permissionLedgerRows);
   const manifestCache = new Map();
   for (const category of new Set(pack.rows.map((row) => row.category))) {
     const manifestLocation = await sourceDropManifestLocation(category);
@@ -4121,6 +4208,47 @@ async function buildRealClipIntakeValidation(status) {
     const source = String(record?.source || record?.creator || record?.creator_or_rights_holder || "").trim();
     const evidenceLink = String(record?.evidence_link || record?.evidence || record?.proof_url || record?.proof || "").trim();
     const notes = String(record?.notes || "").trim();
+    const creatorPermission = streamerPermissions.get(campaignHandleKey(source));
+    const creatorRestrictions = creatorPermission?.restrictions || {};
+    const aiProcessing = String(record?.ai_processing || record?.aiProcessing || "").trim().toLowerCase();
+    const contextReviewStatus = String(record?.context_review_status || record?.contextReviewStatus || "").trim().toLowerCase();
+    const creditText = String(record?.credit_text || record?.creditText || "").trim();
+    const streamEndedAt = Date.parse(String(record?.original_stream_ended_at || record?.originalStreamEndedAt || "").trim());
+    const plannedPublishAt = Date.parse(String(record?.planned_publish_at || record?.plannedPublishAt || "").trim());
+    const canonicalPublishAt = Date.parse(String(intakeRow.publishAt || "").trim());
+    const allowedAccountNames = Array.isArray(creatorRestrictions.allowedAccountNames) ? creatorRestrictions.allowedAccountNames : [];
+    const requiredDelayMs = Math.max(0, Number(creatorRestrictions.minimumPublishDelayHours || 0)) * 60 * 60 * 1000;
+    const plannedPublishMatchesQueue = Number.isFinite(plannedPublishAt)
+      && Number.isFinite(canonicalPublishAt)
+      && Math.abs(plannedPublishAt - canonicalPublishAt) <= 60_000;
+    const minimumPublishDelayVerified = requiredDelayMs === 0 || (
+      Number.isFinite(streamEndedAt)
+      && Number.isFinite(canonicalPublishAt)
+      && plannedPublishMatchesQueue
+      && canonicalPublishAt - streamEndedAt >= requiredDelayMs
+    );
+    const restrictionBlockers = [
+      !creatorPermission ? "not_in_blanket_campaign" : null,
+      creatorPermission && creatorPermission.permissionStatus !== "approved_blanket" && creatorPermission.permissionStatus !== "denied"
+        ? "creator_blanket_permission_not_approved"
+        : null,
+      creatorPermission?.permissionStatus === "denied" ? "creator_permission_denied" : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.noAi && !["none", "ffmpeg_no_ai", "deterministic_ffmpeg_no_ai"].includes(aiProcessing)
+        ? "creator_no_ai_processing_not_verified"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.contextReviewRequired && contextReviewStatus !== "approved"
+        ? "creator_context_review_not_approved"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && creatorRestrictions.creatorCreditRequired && !creditIdentifiesCreator(creditText, source)
+        ? "creator_credit_text_missing"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && allowedAccountNames.length && !allowedAccountNames.includes(intakeRow.accountName)
+        ? "creator_account_not_authorized"
+        : null,
+      creatorPermission?.permissionStatus === "approved_blanket" && requiredDelayMs > 0 && !minimumPublishDelayVerified
+        ? "creator_minimum_publish_delay_not_verified"
+        : null,
+    ].filter(Boolean);
     const evidenceStatus = record ? await realClipEvidenceStatus(evidenceLink) : { ok: false, status: "evidence_link_missing" };
     const blockers = [
       fileStatus.ok ? null : fileStatus.status,
@@ -4129,9 +4257,13 @@ async function buildRealClipIntakeValidation(status) {
       record ? null : "manifest_row_missing",
       record && isExactSourceVideoOrPostUrl(url) ? null : "exact_source_video_or_post_url_missing",
       record && !hasStarterPlaceholder(source) ? null : "creator_or_source_missing",
+      record && !hasStarterPlaceholder(source) && isExactSourceVideoOrPostUrl(url) && !sourceUrlMatchesCreator(url, creatorPermission?.handle || source)
+        ? "source_url_creator_not_verified"
+        : null,
       record && rightsStatus === "owned_or_permissioned" ? null : "rights_status_not_owned_or_permissioned",
       record && evidenceStatus.ok ? null : evidenceStatus.status,
       record && concreteIntakeNotes(notes) ? null : "operator_notes_not_concrete",
+      ...restrictionBlockers,
     ].filter(Boolean);
     return {
       order: intakeRow.order,
@@ -4152,6 +4284,16 @@ async function buildRealClipIntakeValidation(status) {
       evidenceLinkPresent: Boolean(record && evidenceStatus.ok),
       evidenceStatus: evidenceStatus.status,
       notesOk: Boolean(record && concreteIntakeNotes(notes)),
+      creatorPermissionStatus: creatorPermission?.permissionStatus || "not_in_blanket_campaign",
+      creatorRestrictions,
+      creatorRestrictionChecks: {
+        aiProcessing: aiProcessing || "missing",
+        contextReviewStatus: contextReviewStatus || "missing",
+        creditTextPresent: creditIdentifiesCreator(creditText, source),
+        allowedAccount: !allowedAccountNames.length || allowedAccountNames.includes(intakeRow.accountName),
+        plannedPublishMatchesQueue,
+        minimumPublishDelayVerified,
+      },
     };
   }));
   const readyRows = rows.filter((row) => row.status === "ready_for_source_drop_import").length;
@@ -4251,7 +4393,7 @@ function renderRealClipIntakeValidationPage(validation) {
     <div class="label">Batch exact URL + rights proof intake</div>
     <form method="post" action="/api/clippers/real-clip-intake/record-batch">
       <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
-      <textarea name="realClipIntakeBatch" rows="8" placeholder="metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes"></textarea>
+      <textarea name="realClipIntakeBatch" rows="8" placeholder="metricool_queue_item_id,exact_video_or_post_url,creator_or_rights_holder,evidence_link,operator_notes,ai_processing,original_stream_ended_at,planned_publish_at,context_review_status,credit_text"></textarea>
       <button type="submit">Validate and record batch</button>
     </form>
     <p class="small">If any row is invalid, nothing is written. This records manifest proof only; local MP4 files are still required.</p>
@@ -4277,6 +4419,23 @@ function renderRealClipIntakeValidationPage(validation) {
                 <input name="creatorOrRightsHolder" placeholder="@creator or rights holder" />
                 <input name="evidenceLink" placeholder="https://proof.example/permission or /clippers-workspace/evidence-drop/..." />
                 <textarea name="operatorNotes" placeholder="20+ chars. Describe permission/source proof without secrets."></textarea>
+                <select name="aiProcessing">
+                  <option value="">AI processing (leave blank if unrestricted)</option>
+                  <option value="none">None</option>
+                  <option value="ffmpeg_no_ai">FFmpeg, no AI</option>
+                  <option value="deterministic_ffmpeg_no_ai">Deterministic FFmpeg, no AI</option>
+                  <option value="ai_assisted">AI assisted</option>
+                </select>
+                <input name="originalStreamEndedAt" placeholder="Original stream ended at (ISO 8601, optional)" />
+                <input name="plannedPublishAt" placeholder="Planned publish at (ISO 8601, optional)" />
+                <select name="contextReviewStatus">
+                  <option value="">Context review (leave blank if unrestricted)</option>
+                  <option value="not_required">Not required</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+                <input name="creditText" maxlength="500" placeholder="Exact creator credit text (optional)" />
                 <button type="submit">Record intake proof</button>
               </form>
               <p class="small">This only updates the source-drop manifest. A local MP4 is still required before the row can become ready.</p>
@@ -4291,12 +4450,27 @@ function renderRealClipIntakeValidationPage(validation) {
 </html>`;
 }
 
+function validatedOptionalTimestamp(value, fieldName) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return { ok: true, value: "" };
+  const parsed = Date.parse(normalized);
+  if (!Number.isFinite(parsed) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) {
+    return { ok: false, error: `invalid_${fieldName}` };
+  }
+  return { ok: true, value: normalized, parsed };
+}
+
 function validateRealClipIntakeRecordInput(status, input = {}) {
   const metricoolQueueItemId = String(input.metricoolQueueItemId || "").trim();
   const exactVideoOrPostUrl = String(input.exactVideoOrPostUrl || "").trim();
   const creatorOrRightsHolder = String(input.creatorOrRightsHolder || "").trim();
   const evidenceLink = String(input.evidenceLink || "").trim();
   const operatorNotes = String(input.operatorNotes || "").trim();
+  const aiProcessing = String(input.aiProcessing || "").trim().toLowerCase();
+  const contextReviewStatus = String(input.contextReviewStatus || "").trim().toLowerCase();
+  const creditText = String(input.creditText || "").trim();
+  const originalStreamEndedAt = validatedOptionalTimestamp(input.originalStreamEndedAt, "original_stream_ended_at");
+  const plannedPublishAt = validatedOptionalTimestamp(input.plannedPublishAt, "planned_publish_at");
   if (!/^[a-z0-9_-]{6,80}$/i.test(metricoolQueueItemId)) {
     return { ok: false, statusCode: 400, error: "invalid_metricool_queue_item_id", metricoolQueueItemId };
   }
@@ -4315,6 +4489,20 @@ function validateRealClipIntakeRecordInput(status, input = {}) {
   }
   const notesError = validateOperatorNotes(operatorNotes);
   if (notesError) return { ok: false, statusCode: 400, error: notesError, metricoolQueueItemId };
+  if (aiProcessing && !["none", "ffmpeg_no_ai", "deterministic_ffmpeg_no_ai", "ai_assisted"].includes(aiProcessing)) {
+    return { ok: false, statusCode: 400, error: "invalid_ai_processing", metricoolQueueItemId };
+  }
+  if (!originalStreamEndedAt.ok) return { ok: false, statusCode: 400, error: originalStreamEndedAt.error, metricoolQueueItemId };
+  if (!plannedPublishAt.ok) return { ok: false, statusCode: 400, error: plannedPublishAt.error, metricoolQueueItemId };
+  if (originalStreamEndedAt.value && plannedPublishAt.value && plannedPublishAt.parsed < originalStreamEndedAt.parsed) {
+    return { ok: false, statusCode: 400, error: "planned_publish_at_before_original_stream_ended_at", metricoolQueueItemId };
+  }
+  if (contextReviewStatus && !["not_required", "pending", "approved", "rejected"].includes(contextReviewStatus)) {
+    return { ok: false, statusCode: 400, error: "invalid_context_review_status", metricoolQueueItemId };
+  }
+  if (creditText && (hasStarterPlaceholder(creditText) || creditText.length > 500 || secretTextPattern.test(creditText) || secretQueryParamPattern.test(creditText))) {
+    return { ok: false, statusCode: 400, error: "invalid_credit_text", metricoolQueueItemId };
+  }
   return {
     ok: true,
     statusCode: 200,
@@ -4324,6 +4512,11 @@ function validateRealClipIntakeRecordInput(status, input = {}) {
     creatorOrRightsHolder,
     evidenceLink,
     operatorNotes,
+    aiProcessing,
+    originalStreamEndedAt: originalStreamEndedAt.value,
+    plannedPublishAt: plannedPublishAt.value,
+    contextReviewStatus,
+    creditText,
   };
 }
 
@@ -4333,6 +4526,11 @@ const realClipIntakeBatchHeader = [
   "creator_or_rights_holder",
   "evidence_link",
   "operator_notes",
+  "ai_processing",
+  "original_stream_ended_at",
+  "planned_publish_at",
+  "context_review_status",
+  "credit_text",
 ];
 
 function realClipIntakeBatchTemplateCsv(status) {
@@ -4343,6 +4541,11 @@ function realClipIntakeBatchTemplateCsv(status) {
     creator_or_rights_holder: safeCsvText("<paste creator or rights holder>"),
     evidence_link: safeCsvText(evidenceTemplateUrl(row.queueItemId)),
     operator_notes: safeCsvText("Replace with 20+ chars describing the real permission/source evidence without secrets."),
+    ai_processing: "",
+    original_stream_ended_at: "",
+    planned_publish_at: "",
+    context_review_status: "",
+    credit_text: "",
   })));
 }
 
@@ -4353,6 +4556,11 @@ function normalizeRealClipIntakeBatchRow(row = {}) {
     creatorOrRightsHolder: row.creator_or_rights_holder || row.creatorOrRightsHolder || row.source || row.creator || "",
     evidenceLink: row.evidence_link || row.evidenceLink || row.proof_url || row.proof || "",
     operatorNotes: row.operator_notes || row.operatorNotes || row.notes || "",
+    aiProcessing: row.ai_processing || row.aiProcessing || "",
+    originalStreamEndedAt: row.original_stream_ended_at || row.originalStreamEndedAt || "",
+    plannedPublishAt: row.planned_publish_at || row.plannedPublishAt || "",
+    contextReviewStatus: row.context_review_status || row.contextReviewStatus || "",
+    creditText: row.credit_text || row.creditText || "",
   };
 }
 
@@ -4369,6 +4577,11 @@ function buildRealClipManifestRow(validated) {
     evidence_link: safeCsvText(validated.evidenceLink),
     priority: intakeRow.order <= 10 ? "high" : "medium",
     notes: safeCsvText(validated.operatorNotes),
+    ai_processing: safeCsvText(validated.aiProcessing),
+    original_stream_ended_at: safeCsvText(validated.originalStreamEndedAt),
+    planned_publish_at: safeCsvText(validated.plannedPublishAt),
+    context_review_status: safeCsvText(validated.contextReviewStatus),
+    credit_text: safeCsvText(validated.creditText),
   };
 }
 
@@ -4433,7 +4646,8 @@ async function realClipEvidenceStatus(value) {
   return { ok: true, status: "local_evidence_file_ready" };
 }
 
-async function recordRealClipIntakeManifestRow(input) {
+async function recordRealClipIntakeManifestRow(input, { skipLock = false } = {}) {
+  if (!skipLock) return withRealClipIntakeManifestLock(() => recordRealClipIntakeManifestRow(input, { skipLock: true }));
   const status = await buildStatus();
   const validated = validateRealClipIntakeRecordInput(status, input);
   if (!validated.ok) return validated;
@@ -4454,6 +4668,11 @@ async function recordRealClipIntakeManifestRow(input) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ];
   const manifestRead = await readTextForMutation(manifestPath, { allowMissing: true });
   if (!manifestRead.ok) {
@@ -4488,7 +4707,8 @@ async function recordRealClipIntakeManifestRow(input) {
   };
 }
 
-async function recordRealClipIntakeManifestBatch(rawCsv) {
+async function recordRealClipIntakeManifestBatch(rawCsv, { skipLock = false } = {}) {
+  if (!skipLock) return withRealClipIntakeManifestLock(() => recordRealClipIntakeManifestBatch(rawCsv, { skipLock: true }));
   const status = await buildStatus();
   const parsed = parseCsv(String(rawCsv || ""));
   if (!parsed.header.length || !parsed.rows.length) {
@@ -4542,6 +4762,11 @@ async function recordRealClipIntakeManifestBatch(rawCsv) {
     "evidence_link",
     "priority",
     "notes",
+    "ai_processing",
+    "original_stream_ended_at",
+    "planned_publish_at",
+    "context_review_status",
+    "credit_text",
   ];
   const categoryGroups = new Map();
   for (const { validated } of validatedRows) {
@@ -6035,8 +6260,19 @@ async function buildRealClipPermissionCrm(status) {
   const rows = await readRealClipPermissionCrmRows();
   const latest = latestPermissionCrmByQueueId(rows);
   const validationRows = status.realClipIntakeValidation?.rows || [];
-  const mergedRows = validationRows.map((row) => {
+  const mergedRows = await Promise.all(validationRows.map(async (row) => {
     const crm = latest.get(row.queueItemId) || {};
+    const recordedPermissionStatus = crm.permission_status || "not_requested";
+    const claimsApproval = recordedPermissionStatus === "approved" || recordedPermissionStatus === "owned_source";
+    const evidenceLink = String(crm.evidence_link || "").trim();
+    const evidenceValidation = claimsApproval && /^https:\/\//i.test(evidenceLink)
+      ? { ok: false, status: "approved_permission_requires_local_evidence_file" }
+      : claimsApproval
+      ? await realClipEvidenceStatus(evidenceLink)
+      : { ok: false, status: "not_required_for_current_status" };
+    const permissionStatus = claimsApproval && !evidenceValidation.ok
+      ? "blocked_invalid_evidence"
+      : recordedPermissionStatus;
     return {
       queueItemId: row.queueItemId,
       category: row.category,
@@ -6048,8 +6284,10 @@ async function buildRealClipPermissionCrm(status) {
       creatorOrRightsHolder: crm.creator_or_rights_holder || "",
       outreachChannel: crm.outreach_channel || "",
       outreachStatus: crm.outreach_status || "not_sent",
-      permissionStatus: crm.permission_status || "not_requested",
-      evidenceLink: crm.evidence_link || "",
+      permissionStatus,
+      recordedPermissionStatus,
+      evidenceValidationStatus: evidenceValidation.status,
+      evidenceLink,
       updatedAt: crm.updated_at || "",
       crmRecorded: Boolean(crm.metricool_queue_item_id),
       canUseForIntake: false,
@@ -6057,7 +6295,7 @@ async function buildRealClipPermissionCrm(status) {
         ? "Source-drop intake is ready; CRM is informational."
         : "Use CRM status to manage outreach, then record final Real Clip Intake when proof and MP4 exist.",
     };
-  });
+  }));
   const csvRows = mergedRows.map((row) => ({
     metricool_queue_item_id: row.queueItemId,
     category: row.category,
@@ -6066,6 +6304,8 @@ async function buildRealClipPermissionCrm(status) {
     intake_status: row.intakeStatus,
     outreach_status: row.outreachStatus,
     permission_status: row.permissionStatus,
+    recorded_permission_status: row.recordedPermissionStatus,
+    evidence_validation_status: row.evidenceValidationStatus,
     exact_video_or_post_url: row.exactVideoOrPostUrl,
     creator_or_rights_holder: row.creatorOrRightsHolder,
     evidence_link: row.evidenceLink,
@@ -6081,6 +6321,7 @@ async function buildRealClipPermissionCrm(status) {
     totalRows: mergedRows.length,
     recordedRows: mergedRows.filter((row) => row.crmRecorded).length,
     approvedRows: mergedRows.filter((row) => row.permissionStatus === "approved" || row.permissionStatus === "owned_source").length,
+    invalidEvidenceRows: mergedRows.filter((row) => row.permissionStatus === "blocked_invalid_evidence").length,
     deniedRows: mergedRows.filter((row) => row.permissionStatus === "denied").length,
     recreateOnlyRows: mergedRows.filter((row) => row.permissionStatus === "recreate_only").length,
     rows: mergedRows,
@@ -6092,6 +6333,8 @@ async function buildRealClipPermissionCrm(status) {
       "intake_status",
       "outreach_status",
       "permission_status",
+      "recorded_permission_status",
+      "evidence_validation_status",
       "exact_video_or_post_url",
       "creator_or_rights_holder",
       "evidence_link",
@@ -6104,6 +6347,7 @@ async function buildRealClipPermissionCrm(status) {
     guardrails: [
       "CRM records are operational notes, not final publishing approval.",
       "Approved CRM status still requires final Real Clip Intake plus a local MP4.",
+      "An approval claim with a missing, invalid, placeholder, remote-only, or unsafe evidence file is reported as blocked_invalid_evidence and is never counted as approved.",
       "Never store tokens, cookies, passwords, private keys, or sensitive private messages.",
       "Metricool remains approval_required and realPublishEnabled=false.",
     ],
@@ -6147,6 +6391,7 @@ function renderRealClipPermissionCrmPage(crm) {
     <div class="card"><div class="label">Status</div><div class="value">${escapeHtml(crm.status)}</div></div>
     <div class="card"><div class="label">Recorded</div><div class="value">${escapeHtml(crm.recordedRows)}/${escapeHtml(crm.totalRows)}</div></div>
     <div class="card"><div class="label">Approved CRM</div><div class="value">${escapeHtml(crm.approvedRows)}</div></div>
+    <div class="card"><div class="label">Invalid evidence</div><div class="value">${escapeHtml(crm.invalidEvidenceRows)}</div></div>
     <div class="card"><div class="label">Recreate only</div><div class="value">${escapeHtml(crm.recreateOnlyRows)}</div></div>
   </div>
   <div class="actions">
@@ -6178,7 +6423,7 @@ function renderRealClipPermissionCrmPage(crm) {
         ${crm.rows.map((row) => `<tr>
           <td>${escapeHtml(row.queueItemId)}<div class="small">${escapeHtml(row.category)}</div></td>
           <td>${escapeHtml(row.accountName)}</td>
-          <td>${escapeHtml(row.outreachStatus)} / ${escapeHtml(row.permissionStatus)}<div class="small">${escapeHtml(row.updatedAt || "not recorded")}</div></td>
+          <td>${escapeHtml(row.outreachStatus)} / ${escapeHtml(row.permissionStatus)}<div class="small">recorded: ${escapeHtml(row.recordedPermissionStatus)} · evidence: ${escapeHtml(row.evidenceValidationStatus)}</div><div class="small">${escapeHtml(row.updatedAt || "not recorded")}</div></td>
           <td><code>${escapeHtml(row.targetSourceDropFile)}</code><div class="small">${escapeHtml(row.intakeBlockers.join(", ") || "none")}</div></td>
           <td>
             <form method="post" action="/api/clippers/real-clip-permission-crm/record">
@@ -6193,7 +6438,7 @@ function renderRealClipPermissionCrmPage(crm) {
                 ${[...allowedOutreachStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.outreachStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
               </select>
               <select name="permissionStatus">
-                ${[...allowedPermissionStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.permissionStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+                ${[...allowedPermissionStatuses].map((value) => `<option value="${escapeHtml(value)}"${row.recordedPermissionStatus === value ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}
               </select>
               <input name="evidenceLink" placeholder="https://proof... or /clippers-workspace/evidence-drop/..." value="${escapeHtml(row.evidenceLink)}" />
               <textarea name="operatorNotes" placeholder="20+ chars, concrete non-secret note"></textarea>
@@ -6470,10 +6715,11 @@ async function buildRealClipPermissionRequestPackets(status) {
     const exactUrl = row.exactVideoOrPostUrl || "<exact source video URL>";
     const creator = row.creatorOrRightsHolder || "<creator>";
     const message = [
-      `Hi ${creator}, I run ${account} and would like permission to feature this exact source video: ${exactUrl}.`,
-      "We will not post it unless you approve in writing.",
-      "If approved, please reply with any credit, caption, tag, duration, or usage requirements.",
-      "If you do not want the original reposted, we can skip it or make a recreate-only version with our own assets.",
+      `Hi ${creator}, I run ${account}. This clip is a sample of the content we would like to feature: ${exactUrl}.`,
+      "We are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams on our TikTok accounts.",
+      "We will credit and tag your official account, follow any duration or caption requirements, remove a post on request, and stop future use if you revoke permission in writing.",
+      "Please confirm whether this covers TikTok, commercial/monetized use, edits, and future clips, and include any restrictions or required credit.",
+      "We will not post unless you approve in writing.",
     ].join(" ");
     return {
       order: row.order,
@@ -6490,6 +6736,7 @@ async function buildRealClipPermissionRequestPackets(status) {
       creatorOrRightsHolder: row.creatorOrRightsHolder,
       outreachChannel: "tiktok_dm",
       permissionStatusToRecord: "requested",
+      permissionScope: "blanket_creator_tiktok_commercial",
       evidenceTemplate: row.evidenceTemplate,
       message,
       crmRecordHint: sendable
@@ -6517,6 +6764,7 @@ async function buildRealClipPermissionRequestPackets(status) {
       "Do not send a permission request without an exact source video URL and identified creator/rightsholder.",
       "A sent request is not approval.",
       "Only written approval, owned source proof, license, official policy, or approved recreate plan can unlock intake.",
+      "Blanket creator approval may cover future clips, but every clip still needs an exact source URL, a real local source file, and the saved approval evidence.",
       "Never store passwords, cookies, tokens, or private sensitive screenshots as evidence.",
     ],
   };
@@ -6534,6 +6782,7 @@ function buildRealClipPermissionRequestPacketsCsv(packet) {
     "creator_or_rights_holder",
     "outreach_channel",
     "permission_status_to_record",
+    "permission_scope",
     "evidence_template",
     "message",
     "crm_record_hint",
@@ -6549,6 +6798,7 @@ function buildRealClipPermissionRequestPacketsCsv(packet) {
     creator_or_rights_holder: workspaceSafeCsvText(row.creatorOrRightsHolder),
     outreach_channel: workspaceSafeCsvText(row.outreachChannel),
     permission_status_to_record: workspaceSafeCsvText(row.permissionStatusToRecord),
+    permission_scope: workspaceSafeCsvText(row.permissionScope),
     evidence_template: workspaceSafeCsvText(row.evidenceTemplate),
     message: workspaceSafeCsvText(row.message),
     crm_record_hint: workspaceSafeCsvText(row.crmRecordHint),
@@ -6976,6 +7226,11 @@ function buildNextBestAction(status) {
   };
 }
 
+function exactTikTokProfileUrl(value, expectedHandle) {
+  const match = String(value || "").trim().match(/^https:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._-]{2,64})\/?$/i);
+  return Boolean(match && `@${match[1].toLowerCase()}` === String(expectedHandle || "").trim().toLowerCase());
+}
+
 function trustedStreamerGrowthMetrics(input) {
   const source = String(input?.source || "").trim().toLowerCase();
   const measuredAt = String(input?.measuredAt || "").trim();
@@ -6986,6 +7241,8 @@ function trustedStreamerGrowthMetrics(input) {
   const sportsAccountName = String(input?.sportsAccountName || "").trim();
   const memesAccountName = String(input?.memesAccountName || "").trim();
   const published30d = Number(input?.published30d);
+  const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
+  const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
   const measuredAtMs = Date.parse(measuredAt);
   const ageMs = Date.now() - measuredAtMs;
   const trusted = source === "metricool"
@@ -6995,7 +7252,12 @@ function trustedStreamerGrowthMetrics(input) {
     && memesFollowers >= 0
     && Number.isFinite(measuredAtMs)
     && ageMs >= 0
-    && ageMs <= 72 * 60 * 60_000;
+    && ageMs <= 72 * 60 * 60_000
+    && input?.publicProfileVerified === true
+    && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
+    && sportsAccountName.toLowerCase() === "streamer highlights"
+    && memesAccountName.toLowerCase() === "streamer reactions";
   return {
     trusted,
     source: trusted ? "metricool" : "metricool_not_imported",
@@ -7016,6 +7278,9 @@ function trustedStreamerGrowthMetrics(input) {
       && Number.isFinite(measuredAtMs)
       && ageMs >= 0
       && ageMs <= 72 * 60 * 60_000
+      && input?.publicProfileVerified === true
+      && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+      && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
       && sportsAccountName.toLowerCase() === "streamer highlights"
       && memesAccountName.toLowerCase() === "streamer reactions",
     accountNames: {
@@ -7035,31 +7300,537 @@ function trustedStreamerRoutingProof(input) {
   const source = String(input?.source || "").trim().toLowerCase();
   const confirmedAt = String(input?.confirmedAt || "").trim();
   const confirmedAtMs = Date.parse(confirmedAt);
+  const connectionsVerifiedAt = String(input?.connectionsVerifiedAt || confirmedAt).trim();
+  const connectionsVerifiedAtMs = Date.parse(connectionsVerifiedAt);
   const sportsAccountName = String(input?.sportsAccountName || "").trim();
   const memesAccountName = String(input?.memesAccountName || "").trim();
   const platform = String(input?.platform || "").trim().toLowerCase();
-  const confirmed = ["user_confirmed", "metricool_ui_verified"].includes(source)
-    && Number.isFinite(confirmedAtMs)
-    && confirmedAtMs <= Date.now() + 5 * 60_000
+  const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
+  const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
+  const connectionsVerified = ["user_confirmed", "metricool_ui_verified"].includes(source)
+    && Number.isFinite(connectionsVerifiedAtMs)
+    && connectionsVerifiedAtMs <= Date.now() + 5 * 60_000
     && platform === "tiktok"
     && input?.sportsConnected === true
     && input?.memesConnected === true
+    && input?.publicProfileVerified === true
+    && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
+    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips");
+  const confirmed = connectionsVerified
+    && Number.isFinite(confirmedAtMs)
+    && confirmedAtMs <= Date.now() + 5 * 60_000
     && sportsAccountName.toLowerCase() === "streamer highlights"
     && memesAccountName.toLowerCase() === "streamer reactions";
   return {
     confirmed,
-    source: confirmed ? source : "not_confirmed",
+    connectionsVerified,
+    source: connectionsVerified ? source : "not_confirmed",
     confirmedAt: confirmed ? confirmedAt : "",
+    connectionsVerifiedAt: connectionsVerified ? connectionsVerifiedAt : "",
     accountNames: {
-      sportsConnection: confirmed ? sportsAccountName : "SPORT",
-      memesConnection: confirmed ? memesAccountName : "memes",
+      sportsConnection: connectionsVerified ? sportsAccountName : "SPORT",
+      memesConnection: connectionsVerified ? memesAccountName : "memes",
+    },
+    profileUrls: {
+      sportsConnection: connectionsVerified ? sportsProfileUrl : "",
+      memesConnection: connectionsVerified ? memesProfileUrl : "",
     },
   };
+}
+
+function safeCampaignHttpsUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw || hasStarterPlaceholder(raw) || secretQueryParamPattern.test(raw)) return "";
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function exactTwitchChannelUrl(value) {
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe) return "";
+  try {
+    const parsed = new URL(safe);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (hostName !== "twitch.tv" || parsed.search || parsed.hash) return "";
+    const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})\/?$/);
+    return match ? `https://www.twitch.tv/${match[1]}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function exactCreatorChannel(value) {
+  const twitchUrl = exactTwitchChannelUrl(value);
+  if (twitchUrl) {
+    return {
+      url: twitchUrl,
+      platform: "twitch",
+      handle: new URL(twitchUrl).pathname.split("/").filter(Boolean)[0],
+    };
+  }
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe) return null;
+  try {
+    const parsed = new URL(safe);
+    const hostName = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (parsed.search || parsed.hash) return null;
+    if (hostName === "kick.com") {
+      const match = parsed.pathname.match(/^\/([A-Za-z0-9_]{3,25})(?:\/(?:about|clips))?\/?$/);
+      return match ? { url: `https://kick.com/${match[1]}`, platform: "kick", handle: match[1] } : null;
+    }
+    if (hostName === "youtube.com") {
+      const handleMatch = parsed.pathname.match(/^\/@([A-Za-z0-9_.-]{3,50})\/?$/);
+      if (handleMatch) return { url: `https://www.youtube.com/@${handleMatch[1]}`, platform: "youtube", handle: handleMatch[1] };
+      const channelMatch = parsed.pathname.match(/^\/channel\/([A-Za-z0-9_-]{10,64})\/?$/);
+      if (channelMatch) return { url: `https://www.youtube.com/channel/${channelMatch[1]}`, platform: "youtube", handle: channelMatch[1] };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function campaignCandidateRows(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+  for (const key of ["candidates", "streamers", "rows", "creators", "items"]) {
+    if (Array.isArray(payload[key])) return payload[key];
+  }
+  return [];
+}
+
+function firstCampaignValue(row, keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function firstCampaignArrayUrl(row, keys) {
+  for (const key of keys) {
+    const values = row?.[key];
+    if (!Array.isArray(values)) continue;
+    for (const value of values) {
+      const safe = safeCampaignHttpsUrl(value);
+      if (safe) return safe;
+    }
+  }
+  return "";
+}
+
+function normalizeCampaignEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(email)
+    ? email
+    : "";
+}
+
+function campaignHandleKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "");
+}
+
+function campaignRowHandleKeys(row) {
+  return [...new Set([row?.handle, ...(Array.isArray(row?.outreachHandleKeys) ? row.outreachHandleKeys : [])]
+    .map(campaignHandleKey)
+    .filter(Boolean))];
+}
+
+function campaignPermissionMap(rows) {
+  const permissions = new Map();
+  for (const row of rows || []) {
+    for (const key of campaignRowHandleKeys(row)) permissions.set(key, row);
+  }
+  return permissions;
+}
+
+function campaignRowMatchesHandle(row, handle) {
+  return campaignRowHandleKeys(row).includes(campaignHandleKey(handle));
+}
+
+function streamerPermissionRestrictions(outreach = {}) {
+  const delay = Number.parseInt(String(outreach.min_publish_delay_hours || "").trim(), 10);
+  return {
+    noAi: String(outreach.no_ai || "").trim().toLowerCase() === "yes",
+    minimumPublishDelayHours: Number.isInteger(delay) && delay >= 0 && delay <= 720 ? delay : 0,
+    contextReviewRequired: String(outreach.context_review_required || "").trim().toLowerCase() === "yes",
+    creatorCreditRequired: String(outreach.creator_credit_required || "").trim().toLowerCase() === "yes",
+    allowedAccountNames: String(outreach.allowed_account_names || "")
+      .split("|")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  };
+}
+
+function campaignContactUrlFromEvidence(type, value) {
+  const safe = safeCampaignHttpsUrl(value);
+  if (!safe || !/(inquiry_form|official_(?:instagram|social|x)_profile|public_social_profile|business_email_or_(?:form|bluesky|marshmallow|twitter|vgen))/i.test(String(type || ""))) return "";
+  try {
+    const hostName = new URL(safe).hostname.replace(/^www\./, "").toLowerCase();
+    if (["twitchtracker.com", "betterbanned.com", "streamscharts.com", "twitchmetrics.net"].includes(hostName)) return "";
+    return safe;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
+  const channel = exactCreatorChannel(firstCampaignValue(raw, [
+    "officialCreatorUrl", "official_creator_url", "officialChannelUrl", "official_channel_url", "officialUrl", "official_url",
+    "kickUrl", "kick_url", "kickOfficialUrl", "kick_official_url", "youtubeUrl", "youtube_url", "youtubeOfficialUrl", "youtube_official_url",
+    "twitchUrl", "twitch_url", "twitchOfficialUrl", "twitch_official_url", "twitchOfficial", "twitch_official", "officialTwitch", "official_twitch", "officialTwitchUrl", "official_twitch_url", "channelUrl", "channel_url",
+  ]));
+  const handleFromUrl = channel?.handle || "";
+  const rawHandle = firstCampaignValue(raw, ["handle", "handleExact", "handle_exact", "twitchHandle", "twitch_handle", "creator", "name"])
+    .replace(/^@/, "")
+    .trim();
+  const handle = handleFromUrl;
+  if (!handle || !channel) return null;
+  if (channel.platform !== "twitch" && rawHandle && campaignHandleKey(rawHandle) !== campaignHandleKey(handleFromUrl)) return null;
+  const nestedContact = raw?.publicContact && typeof raw.publicContact === "object"
+    ? raw.publicContact
+    : raw?.contact && typeof raw.contact === "object"
+      ? raw.contact
+      : {};
+  const nestedPolicy = raw?.clipPolicy && typeof raw.clipPolicy === "object" ? raw.clipPolicy : {};
+  const contactEvidenceUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["contactEvidenceUrl", "contact_evidence_url", "contactEvidence", "contact_evidence", "evidenceUrl", "evidence_url"]))
+    || firstCampaignArrayUrl(raw, ["contactEvidenceUrls", "contact_evidence_urls"])
+    || safeCampaignHttpsUrl(nestedContact.evidenceUrl);
+  const policyEvidenceUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["policyEvidenceUrl", "policy_evidence_url", "clipPolicyEvidenceUrl", "clip_policy_evidence_url", "clipsPolicyEvidenceUrl", "clips_policy_evidence_url", "rightsEvidenceUrl", "rights_evidence_url"]))
+    || firstCampaignArrayUrl(raw, ["clipPolicyEvidenceUrls", "clip_policy_evidence_urls"])
+    || safeCampaignHttpsUrl(nestedPolicy.evidenceUrl || nestedPolicy.creatorEvidenceUrl || nestedPolicy.platformEvidenceUrl);
+  const publicBusinessContact = firstCampaignValue(raw, ["publicBusinessContact", "public_business_contact"])
+    || String(nestedContact.value || "").trim();
+  const contactEmail = normalizeCampaignEmail(firstCampaignValue(raw, ["contactEmail", "contact_email", "businessEmail", "business_email", "email"]) || publicBusinessContact);
+  const contactUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["contactUrl", "contact_url", "businessContactUrl", "business_contact_url", "contactForm", "contact_form"]) || publicBusinessContact)
+    || campaignContactUrlFromEvidence(nestedContact.type, nestedContact.evidenceUrl);
+  const requiresHumanVerification = raw?.contactRequiresCaptcha === true
+    || raw?.contact_requires_captcha === true
+    || nestedContact.requiresHumanVerification === true
+    || nestedContact.requires_human_verification === true
+    || nestedContact.requiresCaptcha === true;
+  const requestedPolicy = firstCampaignValue(raw, ["rightsPolicy", "rights_policy", "policyStatus", "policy_status"])
+    || String(nestedPolicy.rightsPolicy || nestedPolicy.rights_policy || "").trim();
+  const policySummary = firstCampaignValue(raw, ["policySummary", "policy_summary", "publicClipPolicy", "public_clip_policy", "publicClipsPolicy", "public_clips_policy", "policy"])
+    || String(nestedPolicy.summary || "").trim();
+  const rightsPolicy = requestedPolicy === "public_blanket_allow" && /(separate|direct|written|business|commercial).{0,50}(approval|permission|required|contact)|larger[- ]scale/i.test(policySummary)
+    ? "request_required"
+    : new Set(["public_blanket_allow", "verified_campaign_only", "request_required", "no_evidence", "forbidden"]).has(requestedPolicy)
+      ? requestedPolicy
+    : "no_evidence";
+  const campaignUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["campaignUrl", "campaign_url", "verifiedCampaignUrl", "verified_campaign_url"]));
+  const campaignOwner = firstCampaignValue(raw, ["campaignOwner", "campaign_owner", "campaignPlatform", "campaign_platform"]);
+  const campaignStatus = firstCampaignValue(raw, ["campaignStatus", "campaign_status"]);
+  const campaignPayout = firstCampaignValue(raw, ["campaignPayout", "campaign_payout", "payout", "reward"]);
+  const campaignTermsUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["campaignTermsUrl", "campaign_terms_url", "clipperTermsUrl", "clipper_terms_url"]));
+  const campaignVerified = rightsPolicy === "verified_campaign_only" && Boolean(campaignUrl && policyEvidenceUrl);
+  // Research data may identify a signup route, but it cannot prove that Robert accepted terms.
+  const accountCreationStatus = campaignVerified ? "legal_acceptance_required" : "not_applicable";
+  const hasVerifiedContact = Boolean((contactEmail || contactUrl) && contactEvidenceUrl);
+  const priority = campaignVerified
+    ? "campaign_join_required"
+    : rightsPolicy === "forbidden"
+    ? "exclude"
+    : requiresHumanVerification
+      ? "human_action_required"
+    : hasVerifiedContact && rightsPolicy === "public_blanket_allow"
+      ? "policy_review_first"
+      : hasVerifiedContact
+        ? "outreach_ready"
+        : "needs_verified_contact";
+  return {
+    handle,
+    displayName: rawHandle || handle,
+    outreachHandleKeys: [...new Set([handle, rawHandle].map(campaignHandleKey).filter(Boolean))],
+    creatorUrl: channel.url,
+    platform: channel.platform,
+    twitchUrl: channel.platform === "twitch" ? channel.url : "",
+    cohort,
+    sourceFile,
+    language: firstCampaignValue(raw, ["language", "idioma"])
+      || String(raw?.countryLanguage?.language || raw?.country_language?.language || "").trim(),
+    country: firstCampaignValue(raw, ["country", "pais", "region", "countryOrRegion", "country_or_region"])
+      || String(raw?.countryLanguage?.country || raw?.country_language?.country || "").trim(),
+    category: firstCampaignValue(raw, ["category", "niche", "categoria"]),
+    contactEmail,
+    contactUrl,
+    contactEvidenceUrl,
+    requiresHumanVerification,
+    rightsPolicy,
+    policyEvidenceUrl,
+    policySummary,
+    campaignUrl,
+    campaignOwner,
+    campaignStatus,
+    campaignPayout,
+    campaignTermsUrl,
+    campaignVerified,
+    accountCreationStatus,
+    legalAcceptanceRequired: campaignVerified,
+    risk: typeof raw?.risk === "object" && raw.risk
+      ? [raw.risk.level, raw.risk.notes].filter(Boolean).join(": ")
+      : [firstCampaignValue(raw, ["risk", "riskNote", "risk_note", "riesgo"]), firstCampaignValue(raw, ["riskNotes", "risk_notes"])].filter(Boolean).join(": "),
+    reasonToPrioritize: firstCampaignValue(raw, ["reasonToPrioritize", "reason_to_prioritize", "priorityReason", "priority_reason"]),
+    hasVerifiedContact,
+    priority,
+    permissionStatus: "not_requested",
+    canPublish: false,
+    permissionScope: campaignVerified ? "verified_campaign_materials_and_brief_only" : "blanket_creator_tiktok_commercial",
+    contentLane: campaignVerified ? "join_verified_campaign" : rightsPolicy === "forbidden" ? "original_commentary_only" : "permission_required",
+    outreachMessage: campaignVerified
+      ? `Join the verified ${campaignOwner || "clipping"} campaign for ${handle}, capture the accepted terms and campaign brief locally, and use only campaign-supplied or campaign-authorized source material.`
+      : `Hi ${handle}, we run two TikTok streamer pages and are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams. We will credit/tag you, follow your restrictions, remove posts on request, and stop future use if permission is revoked. Please confirm TikTok, commercial use, edits, future clips, and required credit. We will not post without written approval.`,
+  };
+}
+
+async function buildStreamer100Campaign() {
+  const names = [
+    "streamer-cohort-premium.json",
+    "streamer-cohort-en-na.json",
+    "streamer-cohort-es.json",
+    "streamer-cohort-eu.json",
+    "streamer-cohort-indie.json",
+  ];
+  const byHandle = new Map();
+  const sourceFiles = [];
+  for (const fileName of names) {
+    const filePath = path.join(streamerResearchDir, fileName);
+    let parsed;
+    try {
+      parsed = JSON.parse(await readFile(filePath, "utf8"));
+      sourceFiles.push(fileName);
+    } catch {
+      continue;
+    }
+    const cohort = fileName.replace(/^streamer-cohort-|\.json$/g, "");
+    for (const raw of campaignCandidateRows(parsed)) {
+      const row = normalizeStreamerCampaignRow(raw, cohort, fileName);
+      if (!row) continue;
+      const key = campaignHandleKey(row.handle);
+      const previous = byHandle.get(key);
+      if (!previous || (!previous.hasVerifiedContact && row.hasVerifiedContact)) byHandle.set(key, row);
+    }
+  }
+  const outreachRaw = await readText(streamerBlanketPermissionCsvPath, "");
+  const outreachRows = outreachRaw.trim() ? parseCsv(outreachRaw).rows : [];
+  const outreachByHandle = new Map(outreachRows.map((row) => [campaignHandleKey(row.handle), row]));
+  const mergedRows = await Promise.all([...byHandle.values()].map(async (row) => {
+    const outreach = row.outreachHandleKeys.map((key) => outreachByHandle.get(key)).find(Boolean) || {};
+    const claimedOutreachStatus = String(outreach.outreach_status || "not_sent").trim().toLowerCase();
+    const outreachEvidenceLink = String(outreach.outreach_evidence_link || "").trim();
+    const requestedPermissionStatus = String(outreach.permission_status || "not_requested").trim().toLowerCase();
+    const evidenceLink = String(outreach.evidence_link || "").trim();
+    const scopeComplete = ["scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips"]
+      .every((key) => String(outreach[key] || "").trim().toLowerCase() === "yes");
+    const localEvidenceLink = evidenceLink && !/^https:\/\//i.test(evidenceLink);
+    const evidence = localEvidenceLink
+      ? await realClipEvidenceStatus(evidenceLink)
+      : { ok: false };
+    const localOutreachEvidenceLink = outreachEvidenceLink && !/^https?:\/\//i.test(outreachEvidenceLink);
+    const outreachEvidence = localOutreachEvidenceLink
+      ? await realClipEvidenceStatus(outreachEvidenceLink)
+      : { ok: false };
+    const responseEvidenceValid = claimedOutreachStatus === "responded" && evidence.ok;
+    const blanketApprovalValid = requestedPermissionStatus === "approved_blanket" && scopeComplete && responseEvidenceValid;
+    const permissionDeniedValid = requestedPermissionStatus === "denied" && responseEvidenceValid;
+    const outreachClaimVerified = ["sent", "delivered"].includes(claimedOutreachStatus)
+      ? outreachEvidence.ok
+      : claimedOutreachStatus === "responded"
+        ? responseEvidenceValid
+        : !["bounced", "failed"].includes(claimedOutreachStatus) || outreachEvidence.ok;
+    const outreachStatus = outreachClaimVerified
+      ? claimedOutreachStatus
+      : ["sent", "delivered", "responded", "bounced", "failed"].includes(claimedOutreachStatus)
+        ? "unverified_claim"
+        : claimedOutreachStatus;
+    const outreachEvidenceStatus = ["sent", "delivered"].includes(claimedOutreachStatus)
+      ? (outreachEvidence.status || "missing")
+      : claimedOutreachStatus === "responded"
+        ? (evidence.status || "missing")
+        : outreachStatus === "unverified_claim"
+          ? (outreachEvidence.status || evidence.status || "missing")
+          : "not_required";
+    return {
+      ...row,
+      outreachStatus,
+      outreachClaimStatus: claimedOutreachStatus,
+      outreachEvidenceLink: outreachEvidence.ok ? outreachEvidenceLink : "",
+      outreachEvidenceStatus,
+      permissionStatus: blanketApprovalValid
+        ? "approved_blanket"
+        : requestedPermissionStatus === "approved_blanket"
+          ? "approval_evidence_incomplete"
+          : requestedPermissionStatus === "denied" && !permissionDeniedValid
+            ? "denial_evidence_incomplete"
+            : requestedPermissionStatus,
+      evidenceLink: responseEvidenceValid ? evidenceLink : "",
+      updatedAt: String(outreach.updated_at || "").trim(),
+      restrictions: streamerPermissionRestrictions(outreach),
+      priority: permissionDeniedValid ? "exclude" : row.priority,
+      canPublish: false,
+    };
+  }));
+  const priorityOrder = { campaign_join_required: 0, policy_review_first: 1, outreach_ready: 2, human_action_required: 3, needs_verified_contact: 4, exclude: 5 };
+  const outreachOrder = { sent: 0, responded: 0, delivered: 0, not_sent: 1, "": 1, bounced: 2, failed: 2 };
+  const permissionLedgerRows = mergedRows.sort((a, b) => {
+    const aOutreach = outreachOrder[a.outreachStatus] ?? 1;
+    const bOutreach = outreachOrder[b.outreachStatus] ?? 1;
+    if (aOutreach !== bOutreach) return aOutreach - bOutreach;
+    const aExcluded = a.priority === "exclude" ? 1 : 0;
+    const bExcluded = b.priority === "exclude" ? 1 : 0;
+    if (aExcluded !== bExcluded) return aExcluded - bExcluded;
+    return (priorityOrder[a.priority] - priorityOrder[b.priority])
+      || a.handle.localeCompare(b.handle);
+  });
+  const rows = permissionLedgerRows.slice(0, 100);
+  const premiumRows = permissionLedgerRows.filter((row) => row.cohort === "premium");
+  const contactableRows = rows.filter((row) => row.hasVerifiedContact && !["exclude", "human_action_required"].includes(row.priority)).length;
+  const excludedRows = rows.filter((row) => row.priority === "exclude").length;
+  const outreachSentRows = rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length;
+  const responsesReceivedRows = rows.filter((row) => row.outreachStatus === "responded").length;
+  const blanketApprovedRows = rows.filter((row) => row.permissionStatus === "approved_blanket").length;
+  const verifiedCampaignRows = permissionLedgerRows.filter((row) => row.campaignVerified).length;
+  return {
+    status: rows.length >= 100 ? "research_complete_outreach_review_required" : "building_100_streamer_research_pool",
+    generatedAt: new Date().toISOString(),
+    targetStreamers: 100,
+    researchedRows: rows.length,
+    totalResearchPoolRows: permissionLedgerRows.length,
+    remainingResearchRows: Math.max(0, 100 - rows.length),
+    contactableRows,
+    humanActionRequiredRows: permissionLedgerRows.filter((row) => row.priority === "human_action_required").length,
+    needsVerifiedContactRows: rows.filter((row) => row.priority === "needs_verified_contact").length,
+    publicPolicyReviewRows: rows.filter((row) => row.rightsPolicy === "public_blanket_allow").length,
+    excludedRows,
+    outreachSentRows,
+    responsesReceivedRows,
+    blanketApprovedRows,
+    verifiedCampaignRows,
+    deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
+    unverifiedOutreachRows: rows.filter((row) => row.outreachStatus === "unverified_claim").length,
+    sourceFiles,
+    premiumRows,
+    rows,
+    permissionLedgerRows,
+    nextAction: verifiedCampaignRows > 0
+      ? `Join and document the ${verifiedCampaignRows} verified campaign(s), then ingest only campaign-authorized source material. Public listings alone do not unlock Metricool.`
+      : rows.length < 100
+        ? `Complete ${100 - rows.length} more verified streamer research rows.`
+      : blanketApprovedRows > 0
+        ? "Use only approved creators for source review, enforce every creator restriction, and keep monitoring the remaining replies."
+        : outreachSentRows >= rows.length
+          ? "Monitor creator replies, save every response as local evidence, and keep all clips blocked until written permission is complete."
+          : `Send the remaining ${rows.length - outreachSentRows} blanket permission requests in controlled batches and save every response as local evidence.`,
+    guardrails: [
+      "Research, public contact details, and sent outreach never count as permission.",
+      "A public clipping policy must explicitly cover the intended TikTok and commercial use before it can become allowlist evidence.",
+      "Blanket approval must be written, locally evidenced, and include TikTok, edits, monetization, future clips, credit, and revocation terms.",
+      "A verified campaign is campaign-scoped, not blanket permission. Join it, capture its terms and brief, and use only authorized campaign material.",
+      "Each published clip still requires an exact source URL, a real local source file, and Metricool approval.",
+    ],
+  };
+}
+
+function buildStreamer100CampaignCsv(campaign) {
+  return renderCsv([
+    "handle", "display_name", "creator_url", "platform", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
+    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "campaign_url", "campaign_owner", "campaign_status", "campaign_payout", "campaign_terms_url", "account_creation_status", "legal_acceptance_required", "content_lane", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
+    "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
+    "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
+  ], campaign.rows.map((row) => ({
+    handle: workspaceSafeCsvText(row.handle),
+    display_name: workspaceSafeCsvText(row.displayName),
+    creator_url: workspaceSafeCsvText(row.creatorUrl),
+    platform: workspaceSafeCsvText(row.platform),
+    twitch_url: workspaceSafeCsvText(row.twitchUrl),
+    cohort: workspaceSafeCsvText(row.cohort),
+    language: workspaceSafeCsvText(row.language),
+    country: workspaceSafeCsvText(row.country),
+    category: workspaceSafeCsvText(row.category),
+    contact_email: workspaceSafeCsvText(row.contactEmail),
+    contact_url: workspaceSafeCsvText(row.contactUrl),
+    contact_evidence_url: workspaceSafeCsvText(row.contactEvidenceUrl),
+    requires_human_verification: row.requiresHumanVerification ? "yes" : "no",
+    rights_policy: workspaceSafeCsvText(row.rightsPolicy),
+    policy_evidence_url: workspaceSafeCsvText(row.policyEvidenceUrl),
+    campaign_url: workspaceSafeCsvText(row.campaignUrl),
+    campaign_owner: workspaceSafeCsvText(row.campaignOwner),
+    campaign_status: workspaceSafeCsvText(row.campaignStatus),
+    campaign_payout: workspaceSafeCsvText(row.campaignPayout),
+    campaign_terms_url: workspaceSafeCsvText(row.campaignTermsUrl),
+    account_creation_status: workspaceSafeCsvText(row.accountCreationStatus),
+    legal_acceptance_required: row.legalAcceptanceRequired ? "yes" : "no",
+    content_lane: workspaceSafeCsvText(row.contentLane),
+    priority: workspaceSafeCsvText(row.priority),
+    outreach_status: workspaceSafeCsvText(row.outreachStatus),
+    outreach_claim_status: workspaceSafeCsvText(row.outreachClaimStatus),
+    outreach_evidence_link: workspaceSafeCsvText(row.outreachEvidenceLink),
+    permission_status: workspaceSafeCsvText(row.permissionStatus),
+    permission_scope: workspaceSafeCsvText(row.permissionScope),
+    evidence_link: workspaceSafeCsvText(row.evidenceLink),
+    updated_at: workspaceSafeCsvText(row.updatedAt),
+    no_ai: row.restrictions?.noAi ? "yes" : "no",
+    min_publish_delay_hours: workspaceSafeCsvText(row.restrictions?.minimumPublishDelayHours || 0),
+    context_review_required: row.restrictions?.contextReviewRequired ? "yes" : "no",
+    creator_credit_required: row.restrictions?.creatorCreditRequired ? "yes" : "no",
+    allowed_account_names: workspaceSafeCsvText((row.restrictions?.allowedAccountNames || []).join("|")),
+    can_publish: "no",
+    risk: workspaceSafeCsvText(row.risk),
+    reason_to_prioritize: workspaceSafeCsvText(row.reasonToPrioritize),
+    outreach_message: workspaceSafeCsvText(row.outreachMessage),
+  })));
+}
+
+function renderStreamerCampaignRows(rows) {
+  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div>${row.campaignVerified ? `<div class="small"><a href="${escapeHtml(row.campaignUrl)}">abrir campana verificada</a> / ${escapeHtml(row.campaignOwner || "plataforma")} / ${escapeHtml(row.campaignPayout || "ver brief")}</div><div class="small">alta: ${escapeHtml(row.accountCreationStatus)}${row.campaignTermsUrl ? ` / <a href="${escapeHtml(row.campaignTermsUrl)}">terminos</a>` : ""}</div>` : ""}</td><td>${escapeHtml(row.priority)}<div class="small">lane: ${escapeHtml(row.contentLane)} / outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
+}
+
+function renderStreamer100CampaignPage(campaign) {
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Clippers 100 Streamer Campaign</title></head>
+<body><main>
+  <h1>Clippers 100 Streamer Campaign</h1>
+  <p>Cartera verificable para conseguir permisos generales de clips comerciales en TikTok. Ninguna fila permite publicar hasta guardar aprobacion escrita.</p>
+  <div class="grid">
+    <div class="card"><div class="label">Investigados</div><div class="value">${escapeHtml(campaign.researchedRows)}/${escapeHtml(campaign.targetStreamers)}</div></div>
+    <div class="card"><div class="label">Contacto verificado</div><div class="value">${escapeHtml(campaign.contactableRows)}</div></div>
+    <div class="card"><div class="label">Solicitudes enviadas</div><div class="value">${escapeHtml(campaign.outreachSentRows)}</div></div>
+    <div class="card"><div class="label">Respuestas</div><div class="value">${escapeHtml(campaign.responsesReceivedRows)}</div></div>
+    <div class="card"><div class="label">Campanas verificadas</div><div class="value">${escapeHtml(campaign.verifiedCampaignRows)}</div></div>
+    <div class="card"><div class="label">Permiso general</div><div class="value">${escapeHtml(campaign.blanketApprovedRows)}</div></div>
+    <div class="card"><div class="label">Denegados</div><div class="value">${escapeHtml(campaign.deniedRows)}</div></div>
+    <div class="card"><div class="label">Publicables</div><div class="value">0</div></div>
+  </div>
+  <div class="actions">
+    ${link("/clippers", "Dashboard")}
+    ${link("/api/clippers/streamer-100-campaign.json", "JSON")}
+    ${link("/api/clippers/streamer-100-campaign.csv", "CSV")}
+    ${link("/api/clippers/real-clip-permission-crm.html", "Permission CRM")}
+  </div>
+  <div class="card"><div class="label">Siguiente paso</div><p>${escapeHtml(campaign.nextAction)}</p></div>
+  <div class="card"><div class="label">Creadores premium solicitados</div><table><thead><tr><th>Creador</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Estado real</th></tr></thead><tbody>
+    ${renderStreamerCampaignRows(campaign.premiumRows)}
+  </tbody></table></div>
+  <div class="card"><div class="label">Candidatos</div><table><thead><tr><th>Streamer</th><th>Cohorte</th><th>Contacto</th><th>Politica</th><th>Prioridad</th></tr></thead><tbody>
+    ${renderStreamerCampaignRows(campaign.rows)}
+  </tbody></table></div>
+  <div class="card"><div class="label">Controles</div>${campaign.guardrails.map((item) => `<p class="small">${escapeHtml(item)}</p>`).join("")}</div>
+</main></body></html>`;
 }
 
 function buildStreamerGrowthCeo(status) {
   const targetFollowers = 10_000;
   const metrics = trustedStreamerGrowthMetrics(status.streamerGrowthMetrics);
+  const allowlistedCreators = Math.max(0, Number(status.streamer100Campaign?.blanketApprovedRows || 0));
   const routingProof = trustedStreamerRoutingProof(status.streamerGrowthRoutingProof);
   const rebrandConfirmed = metrics.rebrandConfirmed || routingProof.confirmed;
   const sportsMetricoolRows = Number(status.handoff?.sports || 0);
@@ -7094,11 +7865,16 @@ function buildStreamerGrowthCeo(status) {
     statusLabel = "baseline_required";
     title = "Import real SPORT and memes baselines from Metricool";
     detail = "Follower progress is unknown for both accounts. Do not report zero or estimate growth until Metricool provides measured follower counts and 30-day views for SPORT and memes.";
-  } else if (metrics.allowlistedCreators < 10) {
+  } else if ((metrics.followers || 0) >= targetFollowers) {
+    stage = "verify_monetization_eligibility";
+    statusLabel = "target_reached_review_required";
+    title = "Verify TikTok monetization eligibility after reaching 10K";
+    detail = "The follower target is met. Confirm real 30-day views, region, personal-account status, and original 60+ second content eligibility before counting revenue.";
+  } else if (allowlistedCreators < 100) {
     stage = "build_creator_allowlist";
     statusLabel = "building_supply";
-    title = "Build the first 10-streamer permission allowlist";
-    detail = `${metrics.allowlistedCreators}/10 verified creators are allowlisted. The CEO prepares outreach and evidence; sending remains approval-gated.`;
+    title = "Build the 100-streamer blanket permission allowlist";
+    detail = `${allowlistedCreators}/100 verified creators have written blanket permission for commercial TikTok clips. Research and outreach do not count as approval.`;
     primaryHref = "/api/clippers/real-clip-permission-crm.html";
     primaryAction = "Open permission CRM";
   } else if (metrics.weeklyCandidates < 500) {
@@ -7120,11 +7896,6 @@ function buildStreamerGrowthCeo(status) {
     statusLabel = "building_supply";
     title = "Queue the approved 100-clip streamer batch in Metricool";
     detail = `${metrics.weeklyMetricoolQueued}/100 rights-cleared drafts are in the Metricool approval queue. No queued row counts as published.`;
-  } else if ((metrics.followers || 0) >= targetFollowers) {
-    stage = "verify_monetization_eligibility";
-    statusLabel = "target_reached_review_required";
-    title = "Verify TikTok monetization eligibility after reaching 10K";
-    detail = "The follower target is met. Confirm real 30-day views, region, personal-account status, and original 60+ second content eligibility before counting revenue.";
   }
 
   return {
@@ -7147,8 +7918,12 @@ function buildStreamerGrowthCeo(status) {
     measuredAt: metrics.measuredAt,
     routingConfirmation: {
       confirmed: rebrandConfirmed,
+      connectionsVerified: metrics.rebrandConfirmed || routingProof.connectionsVerified,
       source: metrics.rebrandConfirmed ? "metricool" : routingProof.source,
       confirmedAt: metrics.rebrandConfirmed ? metrics.measuredAt : routingProof.confirmedAt,
+      connectionsVerifiedAt: metrics.rebrandConfirmed ? metrics.measuredAt : routingProof.connectionsVerifiedAt,
+      accountNames: routingProof.accountNames,
+      profileUrls: routingProof.profileUrls,
     },
     views30d: metrics.views30d,
     followersByAccount: metrics.followersByAccount,
@@ -7177,7 +7952,7 @@ function buildStreamerGrowthCeo(status) {
       routingAccountsReady,
       sportsMetricoolRows,
       memesMetricoolRows,
-      allowlistedCreators: metrics.allowlistedCreators,
+      allowlistedCreators,
       weeklyCandidates: metrics.weeklyCandidates,
       weeklyRightsCleared: metrics.weeklyRightsCleared,
       weeklyDraftReady: metrics.weeklyDraftReady,
@@ -7335,7 +8110,7 @@ function renderStreamerGrowthCeoPage(ceo) {
   </div>
   <h2>Weekly operating targets</h2>
   <table><thead><tr><th>Stage</th><th>Current</th><th>Target</th></tr></thead><tbody>
-    <tr><td>Allowlisted creators</td><td>${escapeHtml(ceo.supply.allowlistedCreators)}</td><td>10 initial / 25-40 scale</td></tr>
+    <tr><td>Allowlisted creators</td><td>${escapeHtml(ceo.supply.allowlistedCreators)}</td><td>100 blanket approvals</td></tr>
     <tr><td>Exact scored candidates</td><td>${escapeHtml(ceo.supply.weeklyCandidates)}</td><td>${escapeHtml(ceo.weeklyTargets.scoredCandidates)}</td></tr>
     <tr><td>Rights-cleared sources</td><td>${escapeHtml(ceo.supply.weeklyRightsCleared)}</td><td>${escapeHtml(ceo.weeklyTargets.rightsClearedSources)}</td></tr>
     <tr><td>Final drafts</td><td>${escapeHtml(ceo.supply.weeklyDraftReady)}</td><td>${escapeHtml(ceo.weeklyTargets.finalClips)}</td></tr>
@@ -8900,6 +9675,8 @@ async function serveFile(res, filePath) {
     ".csv": "text/csv; charset=utf-8",
     ".md": "text/markdown; charset=utf-8",
     ".mp4": "video/mp4",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
   }[ext] || "application/octet-stream";
   res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
   const stream = createReadStream(fileRealPath);
@@ -8962,7 +9739,7 @@ async function buildStatus() {
       rank: row.rank || "",
       status: row.status || "",
       queueItemId,
-      accountName: row.accountName || "",
+      accountName: canonicalTikTokAccountName(row.accountId, row.accountName || ""),
       accountId: row.accountId || "",
       metricoolBrandName: row.metricoolBrandName || "",
       platform: row.platform || "",
@@ -9116,6 +9893,7 @@ async function buildStatus() {
   status.externalEvidence = buildExternalEvidenceSummary(externalEvidenceCsv);
   status.externalEvidenceValidation = buildExternalEvidenceValidationSummary(externalEvidenceReport, externalCloseout);
   status.goalReadinessAudit = buildGoalReadinessAudit(status);
+  status.streamer100Campaign = await buildStreamer100Campaign();
   status.streamerGrowthCeo = buildStreamerGrowthCeo(status);
   status.nextBestAction = buildNextBestAction(status);
   status.goLiveGapResolver = buildGoLiveGapResolver(status);
@@ -9207,13 +9985,699 @@ function scrubInternalPathsFromStatusValue(value) {
   return value;
 }
 
+function verifiedTwitchClipUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || !(hostname === "twitch.tv" || hostname.endsWith(".twitch.tv"))) return "";
+    const exactClipPath = /\/clip\//i.test(url.pathname)
+      || (hostname === "clips.twitch.tv" && url.pathname.split("/").filter(Boolean).length === 1);
+    return exactClipPath ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+const humanReviewDecisionHeader = [
+  "id",
+  "creator",
+  "title",
+  "decision",
+  "audio_status",
+  "context_status",
+  "third_party_status",
+  "human_review_confirmed",
+  "ai_used",
+  "notes",
+  "reviewed_at",
+];
+const allowedHumanReviewDecisions = new Set(["approved_for_intake", "rejected"]);
+const allowedHumanReviewCheckStatuses = new Set(["approved", "rejected"]);
+
+async function readHumanReviewDecisions() {
+  const evidenceRoot = path.join(workspaceRoot, "evidence-drop");
+  const evidenceRootStat = await lstat(evidenceRoot).catch(() => null);
+  if (evidenceRootStat?.isSymbolicLink()) return { status: "evidence_drop_root_symlink_blocked", rows: [] };
+  const ledgerStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (!ledgerStat) return { status: "not_recorded", rows: [] };
+  if (ledgerStat.isSymbolicLink()) return { status: "human_review_decisions_symlink_blocked", rows: [] };
+  if (!ledgerStat.isFile()) return { status: "human_review_decisions_not_a_file", rows: [] };
+  const workspaceReal = await realpath(workspaceRoot).catch(() => workspaceRoot);
+  const evidenceRootReal = await realpath(evidenceRoot).catch(() => null);
+  const ledgerReal = await realpath(humanReviewDecisionsCsvPath).catch(() => null);
+  if (!evidenceRootReal || (evidenceRootReal !== workspaceReal && !evidenceRootReal.startsWith(workspaceReal + path.sep))) {
+    return { status: "evidence_drop_root_outside_workspace", rows: [] };
+  }
+  if (!ledgerReal || (ledgerReal !== evidenceRootReal && !ledgerReal.startsWith(evidenceRootReal + path.sep))) {
+    return { status: "human_review_decisions_outside_workspace", rows: [] };
+  }
+  const raw = await readText(humanReviewDecisionsCsvPath, "");
+  return { status: raw.trim() ? "ready" : "empty", rows: raw.trim() ? parseCsv(raw).rows : [] };
+}
+
+function latestHumanReviewDecisionById(rows = []) {
+  const byId = new Map();
+  for (const row of rows) {
+    const id = String(row.id || "").trim();
+    if (!id) continue;
+    const previous = byId.get(id);
+    if (!previous || String(row.reviewed_at || "") >= String(previous.reviewed_at || "")) byId.set(id, row);
+  }
+  return byId;
+}
+
+function humanReviewManifestRejected(row) {
+  return /rejected/i.test(row.status) || row.contextReview === "rejected";
+}
+
+function validPersistedHumanReviewDecision(decision, reviewRow) {
+  if (!decision || !reviewRow || !allowedHumanReviewDecisions.has(String(decision.decision || ""))) return false;
+  if (String(decision.human_review_confirmed || "") !== "yes") return false;
+  if ([decision.audio_status, decision.context_status, decision.third_party_status]
+    .some((value) => !allowedHumanReviewCheckStatuses.has(String(value || "")))) return false;
+  const aiUsed = String(decision.ai_used || "");
+  if (!["yes", "no"].includes(aiUsed)) return false;
+  const notes = String(decision.notes || "").trim();
+  if (validateOperatorNotes(notes) || secretTextPattern.test(notes) || secretQueryParamPattern.test(notes)) return false;
+  if (decision.decision === "approved_for_intake") {
+    if (humanReviewManifestRejected(reviewRow) || !reviewRow.fileReady) return false;
+    if ([decision.audio_status, decision.context_status, decision.third_party_status].some((value) => value !== "approved")) return false;
+    if (reviewRow.noAiRequired && aiUsed !== "no") return false;
+  }
+  return true;
+}
+
+async function verifiedHumanReviewContactSheet(directoryPath, directory, localFile) {
+  if (!localFile) return "";
+  const contactSheetName = `${path.parse(localFile).name}__contact-sheet.jpg`;
+  const contactSheetPath = path.join(directoryPath, contactSheetName);
+  const [quarantineStat, directoryStat, contactSheetStat] = await Promise.all([
+    lstat(quarantineDir).catch(() => null),
+    lstat(directoryPath).catch(() => null),
+    lstat(contactSheetPath).catch(() => null),
+  ]);
+  if (quarantineStat?.isSymbolicLink() || directoryStat?.isSymbolicLink() || contactSheetStat?.isSymbolicLink()) return "";
+  if (!contactSheetStat?.isFile() || contactSheetStat.size < 1_024 || contactSheetStat.size > 5 * 1024 * 1024) return "";
+  const file = await open(contactSheetPath, "r").catch(() => null);
+  if (!file) return "";
+  try {
+    const header = Buffer.alloc(3);
+    const footer = Buffer.alloc(2);
+    const [headerRead, footerRead] = await Promise.all([
+      file.read(header, 0, header.length, 0),
+      file.read(footer, 0, footer.length, contactSheetStat.size - footer.length),
+    ]);
+    const isJpeg = headerRead.bytesRead === 3
+      && footerRead.bytesRead === 2
+      && header[0] === 0xff
+      && header[1] === 0xd8
+      && header[2] === 0xff
+      && footer[0] === 0xff
+      && footer[1] === 0xd9;
+    if (!isJpeg) return "";
+  } finally {
+    await file.close().catch(() => {});
+  }
+  return `/clippers-workspace/quarantine/${encodeURIComponent(directory)}/${encodeURIComponent(contactSheetName)}`;
+}
+
+async function buildHumanReviewQueue() {
+  const campaign = await buildStreamer100Campaign();
+  const permissionByHandle = campaignPermissionMap(campaign.permissionLedgerRows);
+  const sources = [
+    {
+      creator: "sadlights",
+      creatorHandle: "sadlights",
+      directory: "sadlights-review",
+      manifest: "review-manifest.csv",
+      normalize: (row) => ({
+        title: row.title,
+        sourceUrl: row.exact_source_url,
+        localFile: row.local_raw_file,
+        suggestedTargetFile: row.vertical_intake_file ? path.basename(String(row.vertical_intake_file)) : "",
+        sourceAge: row.source_age,
+        sourceViews: row.source_views,
+        rightsStatus: row.creator_permission === "verified" ? "approved_blanket" : row.creator_permission,
+        audioReview: row.audio_review,
+        contextReview: row.context_review,
+        thirdPartyReview: row.gameplay_rights_review,
+        noAiRequired: false,
+        status: row.status,
+        notes: "Exact Twitch candidate. Verify permission, audio, context, and third-party material before intake.",
+      }),
+    },
+    {
+      creator: "ESP Leonidas",
+      creatorHandle: "esp_leonidas",
+      directory: "esp-leonidas-review",
+      manifest: "review-manifest.csv",
+      normalize: (row) => ({
+        title: row.title,
+        sourceUrl: row.source_url,
+        localFile: row.local_file,
+        suggestedTargetFile: "",
+        sourceAge: row.source_posted_at ? `Published ${row.source_posted_at}` : "",
+        sourceViews: row.historical_views,
+        rightsStatus: row.rights_status,
+        audioReview: row.audio_review,
+        contextReview: row.intake_status === "rejected_visual_policy_risk" ? "rejected" : "required",
+        thirdPartyReview: row.third_party_review,
+        noAiRequired: false,
+        status: row.intake_status,
+        notes: row.notes,
+      }),
+    },
+  ];
+  const rows = [];
+  for (const source of sources) {
+    const directoryPath = path.join(quarantineDir, source.directory);
+    const raw = await readText(path.join(directoryPath, source.manifest), "");
+    if (!raw) continue;
+    for (const manifestRow of parseCsv(raw).rows) {
+      const normalized = source.normalize(manifestRow);
+      const localFile = path.basename(String(normalized.localFile || ""));
+      const filePath = localFile ? path.join(directoryPath, localFile) : "";
+      const fileStat = filePath ? await stat(filePath).catch(() => null) : null;
+      const contactSheetUrl = fileStat?.isFile()
+        ? await verifiedHumanReviewContactSheet(directoryPath, source.directory, localFile)
+        : "";
+      const creatorPermission = permissionByHandle.get(campaignHandleKey(source.creatorHandle));
+      const blanketPermissionVerified = creatorPermission?.permissionStatus === "approved_blanket";
+      rows.push({
+        id: `${source.directory}:${localFile || normalized.title || rows.length + 1}`,
+        creator: source.creator,
+        creatorHandle: source.creatorHandle,
+        title: normalized.title || "Untitled clip",
+        sourceUrl: verifiedTwitchClipUrl(normalized.sourceUrl),
+        localFile,
+        quarantineDirectory: source.directory,
+        suggestedTargetFile: normalized.suggestedTargetFile || "",
+        mediaUrl: fileStat?.isFile()
+          ? `/clippers-workspace/quarantine/${encodeURIComponent(source.directory)}/${encodeURIComponent(localFile)}`
+          : "",
+        contactSheetUrl,
+        fileReady: Boolean(fileStat?.isFile()),
+        fileBytes: fileStat?.isFile() ? fileStat.size : 0,
+        evidenceUrl: blanketPermissionVerified ? creatorPermission.evidenceLink : "",
+        sourceAge: normalized.sourceAge || "Unknown",
+        sourceViews: normalized.sourceViews || "Unknown",
+        rightsStatus: blanketPermissionVerified ? "approved_blanket" : "review_required",
+        audioReview: normalized.audioReview || "required",
+        contextReview: normalized.contextReview || "required",
+        thirdPartyReview: normalized.thirdPartyReview || "required",
+        noAiRequired: blanketPermissionVerified && creatorPermission.restrictions?.noAi === true,
+        restrictionsVerified: blanketPermissionVerified,
+        status: normalized.status || "review_required",
+        notes: normalized.notes || "Human review required before intake.",
+        publishAllowed: false,
+      });
+    }
+  }
+  const intakeStatus = await buildLightweightRealClipIntakeStatus();
+  const intakeValidation = await buildRealClipIntakeValidation(intakeStatus);
+  const validationByQueueId = new Map((intakeValidation.rows || []).map((row) => [row.queueItemId, row]));
+  const intakeTargets = buildRealClipIntakePack(intakeStatus).rows.map((row) => ({
+    queueItemId: row.queueItemId,
+    accountName: row.accountName,
+    category: row.category,
+    targetFileName: row.targetFileName,
+    targetSourceDropFile: row.targetSourceDropFile,
+    targetMediaUrl: `/clippers-workspace/source-drop/${encodeURIComponent(row.category)}/${encodeURIComponent(row.targetFileName)}`,
+    publishAt: row.publishAt,
+    status: validationByQueueId.get(row.queueItemId)?.status || "blocked",
+    blockers: validationByQueueId.get(row.queueItemId)?.blockers || [],
+  }));
+  const targetByFileName = new Map(intakeTargets.map((row) => [row.targetFileName, row]));
+  for (const row of rows) {
+    const suggestedTarget = targetByFileName.get(row.suggestedTargetFile);
+    row.suggestedQueueItemId = suggestedTarget?.queueItemId || "";
+    row.suggestedTargetStatus = suggestedTarget?.status || "";
+    row.suggestedTargetBlockers = suggestedTarget?.blockers || [];
+  }
+  const decisionLedger = await readHumanReviewDecisions();
+  const decisionsById = latestHumanReviewDecisionById(decisionLedger.rows);
+  let invalidDecisionRows = 0;
+  for (const row of rows) {
+    const storedDecision = decisionsById.get(row.id);
+    const decision = validPersistedHumanReviewDecision(storedDecision, row) ? storedDecision : null;
+    if (storedDecision && !decision) invalidDecisionRows += 1;
+    row.humanDecision = decision?.decision || "pending";
+    row.humanReviewComplete = ["approved_for_intake", "rejected"].includes(row.humanDecision);
+    row.reviewedAt = decision?.reviewed_at || "";
+    row.reviewNotes = decision?.notes || "";
+    row.recordedChecks = decision ? {
+      audio: decision.audio_status || "",
+      context: decision.context_status || "",
+      thirdParty: decision.third_party_status || "",
+      aiUsed: decision.ai_used || "",
+    } : null;
+  }
+  const approvedRows = rows.filter((row) => row.humanDecision === "approved_for_intake" && !humanReviewManifestRejected(row)).length;
+  const rejectedRows = rows.filter((row) => humanReviewManifestRejected(row) || row.humanDecision === "rejected").length;
+  const reviewRequiredRows = rows.filter((row) => !humanReviewManifestRejected(row) && !row.humanReviewComplete).length;
+  return {
+    status: rows.length === 0
+      ? "no_review_candidates"
+      : reviewRequiredRows > 0
+        ? "human_review_required"
+        : approvedRows > 0
+          ? "human_review_complete_for_intake"
+          : "review_complete_no_approved_rows",
+    generatedAt: new Date().toISOString(),
+    readOnly: false,
+    decisionRecordingEnabled: true,
+    decisionsUnlockPublishing: false,
+    decisionLedgerStatus: decisionLedger.status,
+    invalidDecisionRows,
+    metricoolApprovalRequired: true,
+    realPublishEnabled: false,
+    totals: {
+      rows: rows.length,
+      filesReady: rows.filter((row) => row.fileReady).length,
+      reviewRequired: reviewRequiredRows,
+      approvedForIntake: approvedRows,
+      rejected: rejectedRows,
+      noAi: rows.filter((row) => row.noAiRequired).length,
+      publishAllowed: 0,
+    },
+    intakeTargets,
+    staleIntakeTargets: intakeTargets.filter((row) => {
+      const publishAtMs = Date.parse(String(row.publishAt || ""));
+      return !Number.isFinite(publishAtMs) || publishAtMs <= operatorNowMs() + 20 * 60_000;
+    }).length,
+    rows,
+  };
+}
+
+async function recordHumanReviewDecision(input = {}, { skipLock = false } = {}) {
+  if (!skipLock) {
+    const evidenceDir = await ensureContainedEvidenceDir();
+    if (!evidenceDir.ok) return { ok: false, statusCode: 409, error: evidenceDir.status, id: String(input.id || "").trim() };
+    return withHumanReviewDecisionLock(() => recordHumanReviewDecision(input, { skipLock: true }));
+  }
+  const id = String(input.id || "").trim();
+  const decision = String(input.decision || "").trim();
+  const audioStatus = String(input.audioStatus || "").trim();
+  const contextStatus = String(input.contextStatus || "").trim();
+  const thirdPartyStatus = String(input.thirdPartyStatus || "").trim();
+  const humanReviewConfirmed = String(input.humanReviewConfirmed || "").trim();
+  const aiUsed = String(input.aiUsed || "").trim();
+  const notes = String(input.notes || "").trim();
+  const queue = await buildHumanReviewQueue();
+  const reviewRow = queue.rows.find((row) => row.id === id);
+  if (!reviewRow) return { ok: false, statusCode: 404, error: "human_review_candidate_not_found", id };
+  if (!allowedHumanReviewDecisions.has(decision)) {
+    return { ok: false, statusCode: 400, error: "invalid_human_review_decision", id };
+  }
+  if (humanReviewConfirmed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_confirmation_required", id };
+  }
+  if ([audioStatus, contextStatus, thirdPartyStatus].some((value) => !allowedHumanReviewCheckStatuses.has(value))) {
+    return { ok: false, statusCode: 400, error: "invalid_human_review_check_status", id };
+  }
+  const noteError = validateOperatorNotes(notes);
+  if (noteError) return { ok: false, statusCode: 400, error: noteError, id };
+  if (secretTextPattern.test(notes) || secretQueryParamPattern.test(notes)) {
+    return { ok: false, statusCode: 400, error: "human_review_notes_secret_like", id };
+  }
+  if (!new Set(["yes", "no"]).has(aiUsed)) {
+    return { ok: false, statusCode: 400, error: "ai_used_confirmation_required", id };
+  }
+  if (decision === "approved_for_intake") {
+    if (humanReviewManifestRejected(reviewRow)) {
+      return { ok: false, statusCode: 409, error: "manifest_rejection_cannot_be_overridden", id };
+    }
+    if (!reviewRow.fileReady) {
+      return { ok: false, statusCode: 409, error: "human_review_source_file_missing", id };
+    }
+    if ([audioStatus, contextStatus, thirdPartyStatus].some((value) => value !== "approved")) {
+      return { ok: false, statusCode: 400, error: "all_human_review_checks_must_be_approved", id };
+    }
+    if (reviewRow.noAiRequired && aiUsed !== "no") {
+      return { ok: false, statusCode: 400, error: "creator_prohibits_ai_processing", id };
+    }
+  }
+  const evidenceDirWithinLock = await ensureContainedEvidenceDir();
+  if (!evidenceDirWithinLock.ok) return { ok: false, statusCode: 409, error: evidenceDirWithinLock.status, id };
+  const ledgerLinkStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (ledgerLinkStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "human_review_decisions_symlink_blocked", id };
+  }
+  const ledgerRead = await readTextForMutation(humanReviewDecisionsCsvPath, { allowMissing: true });
+  if (!ledgerRead.ok) return { ok: false, statusCode: 503, error: "human_review_decisions_read_unavailable", id };
+  const rows = ledgerRead.value.trim() ? parseCsv(ledgerRead.value).rows : [];
+  const reviewedAt = new Date().toISOString();
+  const recorded = {
+    id: safeCsvText(id),
+    creator: safeCsvText(reviewRow.creator),
+    title: safeCsvText(reviewRow.title),
+    decision,
+    audio_status: safeCsvText(audioStatus),
+    context_status: safeCsvText(contextStatus),
+    third_party_status: safeCsvText(thirdPartyStatus),
+    human_review_confirmed: "yes",
+    ai_used: aiUsed,
+    notes: safeCsvText(notes),
+    reviewed_at: reviewedAt,
+  };
+  const existingIndex = rows.findIndex((row) => String(row.id || "") === id);
+  if (existingIndex >= 0) rows[existingIndex] = recorded;
+  else rows.push(recorded);
+  const evidenceDirBeforeWrite = await ensureContainedEvidenceDir();
+  if (!evidenceDirBeforeWrite.ok) return { ok: false, statusCode: 409, error: evidenceDirBeforeWrite.status, id };
+  const ledgerBeforeWriteStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (ledgerBeforeWriteStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "human_review_decisions_symlink_blocked", id };
+  }
+  await atomicWriteFile(humanReviewDecisionsCsvPath, renderCsv(humanReviewDecisionHeader, rows));
+  return {
+    ok: true,
+    statusCode: 200,
+    status: "human_review_decision_recorded",
+    id,
+    decision,
+    reviewedAt,
+    unlocksSourceDrop: false,
+    unlocksMetricool: false,
+    publishAllowed: false,
+    nextAction: decision === "approved_for_intake"
+      ? "Decision recorded. Complete the separate Real Clip Intake before the Metricool approval queue can consider this source."
+      : "Candidate rejected and remains blocked from intake and Metricool.",
+  };
+}
+
+async function humanReviewSourceFileStatus(row) {
+  const safeDirectory = String(row?.quarantineDirectory || "").replace(/[^A-Za-z0-9_-]/g, "");
+  const safeFileName = path.basename(String(row?.localFile || ""));
+  if (!safeDirectory || !safeFileName || safeFileName !== String(row?.localFile || "")) {
+    return { ok: false, status: "invalid_review_source_path", filePath: "", bytes: 0 };
+  }
+  const quarantineRootStat = await lstat(quarantineDir).catch(() => null);
+  if (quarantineRootStat?.isSymbolicLink()) return { ok: false, status: "quarantine_root_symlink_blocked", filePath: "", bytes: 0 };
+  const directoryPath = path.join(quarantineDir, safeDirectory);
+  const directoryStat = await lstat(directoryPath).catch(() => null);
+  if (directoryStat?.isSymbolicLink()) return { ok: false, status: "review_source_directory_symlink_blocked", filePath: "", bytes: 0 };
+  const filePath = path.join(directoryPath, safeFileName);
+  const fileStat = await lstat(filePath).catch(() => null);
+  if (fileStat?.isSymbolicLink()) return { ok: false, status: "review_source_file_symlink_blocked", filePath: "", bytes: 0 };
+  if (!fileStat?.isFile()) return { ok: false, status: "review_source_file_missing", filePath: "", bytes: 0 };
+  if (fileStat.size < 8192) return { ok: false, status: "review_source_file_too_small", filePath: "", bytes: fileStat.size };
+  const quarantineReal = await realpath(quarantineDir).catch(() => null);
+  const fileReal = await realpath(filePath).catch(() => null);
+  if (!quarantineReal || !fileReal || (fileReal !== quarantineReal && !fileReal.startsWith(quarantineReal + path.sep))) {
+    return { ok: false, status: "review_source_file_outside_quarantine", filePath: "", bytes: fileStat.size };
+  }
+  const prefix = await readFilePrefix(filePath, Math.min(4096, fileStat.size));
+  if (!prefix || !prefix.toString("latin1").includes("ftyp")) {
+    return { ok: false, status: "review_source_file_not_mp4_like", filePath: "", bytes: fileStat.size };
+  }
+  return { ok: true, status: "ready", filePath, bytes: fileStat.size };
+}
+
+async function fileSha256(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function promoteHumanReviewCandidate(input = {}, { skipLock = false } = {}) {
+  if (!skipLock) {
+    return withHumanReviewDecisionLock(() => withRealClipIntakeManifestLock(
+      () => promoteHumanReviewCandidate(input, { skipLock: true }),
+    ));
+  }
+  const id = String(input.id || "").trim();
+  const metricoolQueueItemId = String(input.metricoolQueueItemId || "").trim();
+  const originalStreamEndedAtInput = String(input.originalStreamEndedAt || "").trim();
+  const promotionConfirmed = String(input.promotionConfirmed || "").trim();
+  const finalOutputReviewed = String(input.finalOutputReviewed || "").trim();
+  if (promotionConfirmed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_promotion_confirmation_required", id, metricoolQueueItemId };
+  }
+  if (finalOutputReviewed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_final_output_confirmation_required", id, metricoolQueueItemId };
+  }
+  const queue = await buildHumanReviewQueue();
+  const reviewRow = queue.rows.find((row) => row.id === id);
+  if (!reviewRow) return { ok: false, statusCode: 404, error: "human_review_candidate_not_found", id, metricoolQueueItemId };
+  if (reviewRow.humanDecision !== "approved_for_intake") {
+    return { ok: false, statusCode: 409, error: "human_review_approval_required", id, metricoolQueueItemId };
+  }
+  const target = queue.intakeTargets.find((row) => row.queueItemId === metricoolQueueItemId);
+  if (!target) return { ok: false, statusCode: 404, error: "human_review_intake_target_not_found", id, metricoolQueueItemId };
+  if (reviewRow.suggestedQueueItemId && reviewRow.suggestedQueueItemId !== metricoolQueueItemId) {
+    return { ok: false, statusCode: 409, error: "human_review_target_does_not_match_candidate_mapping", id, metricoolQueueItemId };
+  }
+  const publishAtMs = Date.parse(String(target.publishAt || ""));
+  if (!Number.isFinite(publishAtMs) || publishAtMs <= operatorNowMs() + 20 * 60_000) {
+    return { ok: false, statusCode: 409, error: "human_review_target_schedule_requires_roll_forward", id, metricoolQueueItemId };
+  }
+  const campaign = await buildStreamer100Campaign();
+  const permission = (campaign.permissionLedgerRows || []).find((row) => campaignRowMatchesHandle(row, reviewRow.creatorHandle));
+  if (!permission || permission.permissionStatus !== "approved_blanket") {
+    return { ok: false, statusCode: 409, error: "creator_blanket_permission_not_approved", id, metricoolQueueItemId };
+  }
+  if (!sourceUrlMatchesCreator(reviewRow.sourceUrl, permission.handle)) {
+    return { ok: false, statusCode: 409, error: "source_url_creator_not_verified", id, metricoolQueueItemId };
+  }
+  const allowedAccountNames = Array.isArray(permission.restrictions?.allowedAccountNames)
+    ? permission.restrictions.allowedAccountNames
+    : [];
+  if (allowedAccountNames.length && !allowedAccountNames.includes(target.accountName)) {
+    return { ok: false, statusCode: 409, error: "creator_account_not_authorized", id, metricoolQueueItemId };
+  }
+  if (permission.restrictions?.noAi && reviewRow.recordedChecks?.aiUsed !== "no") {
+    return { ok: false, statusCode: 409, error: "creator_no_ai_processing_not_verified", id, metricoolQueueItemId };
+  }
+  const evidenceStatus = await realClipEvidenceStatus(reviewRow.evidenceUrl);
+  if (!evidenceStatus.ok) {
+    return { ok: false, statusCode: 409, error: evidenceStatus.status, id, metricoolQueueItemId };
+  }
+  const originalStreamEndedAt = validatedOptionalTimestamp(originalStreamEndedAtInput, "original_stream_ended_at");
+  if (!originalStreamEndedAt.ok) {
+    return { ok: false, statusCode: 400, error: originalStreamEndedAt.error, id, metricoolQueueItemId };
+  }
+  const minimumDelayHours = Math.max(0, Number(permission.restrictions?.minimumPublishDelayHours || 0));
+  if (minimumDelayHours > 0 && !originalStreamEndedAt.value) {
+    return { ok: false, statusCode: 400, error: "original_stream_ended_at_required_for_creator_delay", id, metricoolQueueItemId };
+  }
+  if (minimumDelayHours > 0 && publishAtMs - originalStreamEndedAt.parsed < minimumDelayHours * 60 * 60 * 1000) {
+    return { ok: false, statusCode: 409, error: "creator_minimum_publish_delay_not_met", id, metricoolQueueItemId };
+  }
+  const sourceStatus = await humanReviewSourceFileStatus(reviewRow);
+  if (!sourceStatus.ok) return { ok: false, statusCode: 409, error: sourceStatus.status, id, metricoolQueueItemId };
+  const categoryDir = await ensureSourceDropCategoryDir(target.category);
+  if (!categoryDir.ok) return { ok: false, statusCode: 409, error: categoryDir.status, id, metricoolQueueItemId };
+  const manifestLocation = await sourceDropManifestLocation(target.category);
+  if (!manifestLocation.ok) return { ok: false, statusCode: 409, error: manifestLocation.status, id, metricoolQueueItemId };
+  const manifestRaw = await readText(manifestLocation.manifestPath, "");
+  const existingManifestRow = manifestRaw.trim()
+    ? manifestRecordForTarget(parseCsv(manifestRaw).rows, target.targetFileName)
+    : null;
+  const existingManifestUrl = String(existingManifestRow?.url || "").trim();
+  if (isExactSourceVideoOrPostUrl(existingManifestUrl) && existingManifestUrl !== reviewRow.sourceUrl) {
+    return { ok: false, statusCode: 409, error: "target_manifest_source_conflict", id, metricoolQueueItemId };
+  }
+  const destinationPath = path.join(categoryDir.categoryDir, target.targetFileName);
+  const destinationStat = await lstat(destinationPath).catch(() => null);
+  if (destinationStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "target_source_file_symlink_blocked", id, metricoolQueueItemId };
+  }
+  let copiedSourceFile = false;
+  let reusedDerivedTarget = false;
+  let derivedTargetAiProcessing = "";
+  if (destinationStat?.isFile()) {
+    const [sourceHash, destinationHash] = await Promise.all([fileSha256(sourceStatus.filePath), fileSha256(destinationPath)]);
+    if (sourceHash !== destinationHash) {
+      const existingManifestSource = String(existingManifestRow?.source || existingManifestRow?.creator || existingManifestRow?.creator_or_rights_holder || "").trim();
+      const existingManifestEvidence = String(existingManifestRow?.evidence_link || existingManifestRow?.evidence || existingManifestRow?.proof_url || existingManifestRow?.proof || "").trim();
+      const existingRightsStatus = String(existingManifestRow?.rights_status || existingManifestRow?.rightsStatus || "").trim();
+      const existingAiProcessing = String(existingManifestRow?.ai_processing || existingManifestRow?.aiProcessing || "").trim().toLowerCase();
+      const existingNotes = String(existingManifestRow?.notes || "").trim();
+      const deterministicDerivedProvenance = ["ffmpeg_no_ai", "deterministic_ffmpeg_no_ai"].includes(existingAiProcessing)
+        || /rendered vertically without ai|deterministic ffmpeg/i.test(existingNotes);
+      const provenanceAllowsCreator = !permission.restrictions?.noAi || deterministicDerivedProvenance;
+      const derivedTargetMapped = existingManifestUrl === reviewRow.sourceUrl
+        && campaignHandleKey(existingManifestSource) === campaignHandleKey(reviewRow.creatorHandle)
+        && existingManifestEvidence === reviewRow.evidenceUrl
+        && existingRightsStatus === "owned_or_permissioned"
+        && provenanceAllowsCreator;
+      const reviewDerivedTargetMapped = existingManifestUrl === reviewRow.sourceUrl
+        && campaignHandleKey(existingManifestSource) === campaignHandleKey(reviewRow.creatorHandle)
+        && existingManifestEvidence === reviewRow.evidenceUrl
+        && existingRightsStatus === "review_required"
+        && deterministicDerivedProvenance;
+      if (!derivedTargetMapped && !reviewDerivedTargetMapped) {
+        return { ok: false, statusCode: 409, error: "target_derived_file_provenance_missing", id, metricoolQueueItemId };
+      }
+      const derivedFileStatus = await sourceDropVideoStatus(target.category, target.targetFileName);
+      if (!derivedFileStatus.ok) {
+        return { ok: false, statusCode: 409, error: derivedFileStatus.status, id, metricoolQueueItemId };
+      }
+      reusedDerivedTarget = true;
+      derivedTargetAiProcessing = existingAiProcessing
+        || (deterministicDerivedProvenance ? "deterministic_ffmpeg_no_ai" : "ai_assisted");
+    }
+  } else if (destinationStat) {
+    return { ok: false, statusCode: 409, error: "target_source_path_not_a_file", id, metricoolQueueItemId };
+  } else {
+    try {
+      await copyFile(sourceStatus.filePath, destinationPath, fsConstants.COPYFILE_EXCL);
+      copiedSourceFile = true;
+    } catch (error) {
+      return { ok: false, statusCode: error?.code === "EEXIST" ? 409 : 500, error: error?.code === "EEXIST" ? "target_source_file_conflict" : "review_source_copy_failed", id, metricoolQueueItemId };
+    }
+  }
+  let result;
+  try {
+    result = await recordRealClipIntakeManifestRow({
+      metricoolQueueItemId,
+      exactVideoOrPostUrl: reviewRow.sourceUrl,
+      creatorOrRightsHolder: reviewRow.creatorHandle,
+      evidenceLink: reviewRow.evidenceUrl,
+      operatorNotes: reviewRow.reviewNotes,
+      aiProcessing: reusedDerivedTarget
+        ? derivedTargetAiProcessing
+        : (reviewRow.recordedChecks?.aiUsed === "no" ? "none" : "ai_assisted"),
+      originalStreamEndedAt: originalStreamEndedAt.value,
+      plannedPublishAt: target.publishAt,
+      contextReviewStatus: "approved",
+      creditText: `Credit: @${reviewRow.creatorHandle}`,
+    }, { skipLock: true });
+  } catch {
+    if (copiedSourceFile) await rm(destinationPath, { force: true }).catch(() => {});
+    return { ok: false, statusCode: 500, error: "real_clip_intake_manifest_write_failed", id, metricoolQueueItemId };
+  }
+  if (!result.ok && copiedSourceFile) await rm(destinationPath, { force: true }).catch(() => {});
+  if (!result.ok) return result;
+  return {
+    ...result,
+    status: result.rowStatus === "ready_for_source_drop_import" ? "human_review_promoted_to_intake" : "human_review_promoted_but_intake_blocked",
+    sourceFileCopied: copiedSourceFile,
+    reusedDerivedTarget,
+    humanReviewCandidateId: id,
+    unlocksMetricool: false,
+    publishAllowed: false,
+  };
+}
+
+function humanReviewStatusLabel(row) {
+  if (humanReviewManifestRejected(row) || row.humanDecision === "rejected") return "Descartado";
+  if (row.humanDecision === "approved_for_intake" && row.rightsStatus !== "approved_blanket") return "Contenido revisado · falta permiso";
+  if (row.humanDecision === "approved_for_intake") return "Aprobado para intake";
+  if (!row.fileReady) return "Falta archivo";
+  if (row.rightsStatus !== "approved_blanket") return "Falta permiso verificado";
+  return "Revisión humana pendiente";
+}
+
+function renderHumanReviewQueuePage(queue) {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clippers Human Review Queue</title>
+  <style>
+    .review-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border-top:1px solid #29372f;border-bottom:1px solid #29372f;margin:22px 0 28px}
+    .review-stat{padding:16px;border-left:1px solid #29372f}.review-stat:first-child{border-left:0;padding-left:0}.review-stat strong{display:block;font-size:22px;margin-top:5px}
+    .review-list{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}.review-item{border-top:1px solid #29372f;padding:22px 0;min-width:0}
+    .review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.review-head h2{margin:0}.review-meta{color:#9eaca4;font-size:12px;margin-top:5px}
+    .review-status{border:1px solid #52635a;border-radius:999px;padding:5px 8px;font-size:11px;white-space:nowrap}.review-status.rejected{border-color:#74433e;color:#ff9d95}.review-status.approved{border-color:#3f765a;color:#a8efc6}
+    video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806;margin:0 0 13px}
+    .review-preview{display:block;margin:0 0 13px}.review-preview span{display:block;color:#9eaca4;font-size:12px;margin-bottom:7px}.review-preview img{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806}
+    .review-checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin:13px 0}.review-check{font-size:12px;color:#c9d2cd}.review-check strong{color:#fff}
+    .review-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.review-links a{border:1px solid #29372f;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:12px}
+    .review-note{font-size:12px;color:#9eaca4;border-left:2px solid #52635a;padding-left:10px;margin-top:13px}
+    .review-form{margin-top:16px;border-top:1px solid #29372f;padding-top:13px}.review-form form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.review-form label{font-size:12px;color:#c9d2cd}.review-form select,.review-form textarea{width:100%;margin-top:5px}.review-form textarea{grid-column:1/-1;min-height:76px}.review-form .full{grid-column:1/-1}.review-saved{color:#a8efc6;font-size:12px;margin-top:13px}
+    @media(max-width:800px){.review-summary{grid-template-columns:repeat(2,1fr)}.review-stat:nth-child(odd){border-left:0;padding-left:0}.review-list{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <h1>Revisión humana de clips</h1>
+  <p>Revisa cada archivo y registra una decisión local. Aprobar aquí solo lo deja listo para el intake separado: no mueve archivos, no habilita Metricool y no publica.</p>
+  <div class="review-summary">
+    <div class="review-stat"><span class="label">Candidatos</span><strong>${escapeHtml(queue.totals.rows)}</strong></div>
+    <div class="review-stat"><span class="label">Archivos</span><strong>${escapeHtml(queue.totals.filesReady)}/${escapeHtml(queue.totals.rows)}</strong></div>
+    <div class="review-stat"><span class="label">Por revisar</span><strong>${escapeHtml(queue.totals.reviewRequired)}</strong></div>
+    <div class="review-stat"><span class="label">Aprobados</span><strong>${escapeHtml(queue.totals.approvedForIntake)}</strong></div>
+    <div class="review-stat"><span class="label">Sin IA</span><strong>${escapeHtml(queue.totals.noAi)}</strong></div>
+  </div>
+  <div class="actions"><a href="/api/clippers/real-clip-intake.html">Abrir intake después de aprobar</a><a href="/clippers">Volver al inicio</a></div>
+  ${queue.staleIntakeTargets ? `<form method="post" action="/api/clippers/roll-forward">
+    <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+    <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+    <p class="review-note">Las ${escapeHtml(queue.staleIntakeTargets)} filas de destino necesitan un horario futuro antes de promover clips.</p>
+    <button type="submit">Actualizar horario local</button>
+  </form>` : ""}
+  <section class="review-list" aria-label="Candidatos en revisión">
+    ${queue.rows.map((row) => {
+      const rejected = humanReviewManifestRejected(row) || row.humanDecision === "rejected";
+      const approved = row.humanDecision === "approved_for_intake" && !rejected;
+      return `<article class="review-item">
+        <div class="review-head"><div><h2>${escapeHtml(row.title)}</h2><div class="review-meta">${escapeHtml(row.creator)} · ${escapeHtml(row.sourceAge)} · ${escapeHtml(row.sourceViews)} vistas históricas</div></div><span class="review-status${rejected ? " rejected" : approved ? " approved" : ""}">${escapeHtml(humanReviewStatusLabel(row))}</span></div>
+        ${row.contactSheetUrl ? `<a class="review-preview" href="${escapeHtml(row.contactSheetUrl)}" target="_blank" rel="noopener noreferrer"><span>Vista rápida · abre la imagen completa</span><img loading="lazy" src="${escapeHtml(row.contactSheetUrl)}" alt="Seis fotogramas para revisar visualmente ${escapeHtml(row.title)}" /></a>` : ""}
+        ${row.mediaUrl ? `<video controls preload="metadata" src="${escapeHtml(row.mediaUrl)}"></video>` : `<p class="review-note">Falta el archivo local.</p>`}
+        <div class="review-checks">
+          <div class="review-check"><strong>Derechos:</strong> ${escapeHtml(row.rightsStatus)}</div>
+          <div class="review-check"><strong>Audio:</strong> ${escapeHtml(row.audioReview)}</div>
+          <div class="review-check"><strong>Contexto:</strong> ${escapeHtml(row.contextReview)}</div>
+          <div class="review-check"><strong>Terceros:</strong> ${escapeHtml(row.thirdPartyReview)}</div>
+          <div class="review-check"><strong>IA:</strong> ${escapeHtml(row.restrictionsVerified ? (row.noAiRequired ? "prohibida" : "sin restricción registrada") : "restricciones sin verificar")}</div>
+          <div class="review-check"><strong>Metricool:</strong> bloqueado</div>
+        </div>
+        <p class="review-note">${escapeHtml(row.notes)}</p>
+        ${row.humanReviewComplete ? `<p class="review-saved"><strong>Decisión guardada:</strong> ${escapeHtml(humanReviewStatusLabel(row))} · ${escapeHtml(row.reviewedAt)}<br />${escapeHtml(row.reviewNotes)}</p>` : ""}
+        ${approved && row.suggestedQueueItemId ? `<p class="review-note"><strong>Intake:</strong> ${escapeHtml(row.suggestedTargetStatus)}${row.suggestedTargetBlockers.length ? ` · ${escapeHtml(row.suggestedTargetBlockers.join(", "))}` : ""}</p>
+        <video controls preload="metadata" src="${escapeHtml(queue.intakeTargets.find((target) => target.queueItemId === row.suggestedQueueItemId)?.targetMediaUrl || "")}"></video>
+        <p class="review-note">Resultado vertical asociado. Revísalo completo antes de promover.</p>` : ""}
+        <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}${row.evidenceUrl ? `<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a>` : `<span class="review-note">Sin evidencia externa de permiso</span>`}</div>
+        ${humanReviewManifestRejected(row) ? "" : `<details class="review-form">
+          <summary>${row.humanReviewComplete ? "Cambiar decisión" : "Registrar decisión"}</summary>
+          <form method="post" action="/api/clippers/human-review-decision">
+            <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+            <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+            <input type="hidden" name="id" value="${escapeHtml(row.id)}" />
+            <label>Decisión<select name="decision" required><option value="approved_for_intake">Aprobar para intake</option><option value="rejected">Descartar</option></select></label>
+            <label>Audio<select name="audioStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>Contexto<select name="contextStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>Material de terceros<select name="thirdPartyStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>¿Se usó IA?<select name="aiUsed" required><option value="no">No</option><option value="yes">Sí</option></select></label>
+            <label class="full"><input type="checkbox" name="humanReviewConfirmed" value="yes" required /> Confirmo que una persona reprodujo y revisó el clip completo.</label>
+            ${row.noAiRequired ? `<p class="review-note full">Este creador prohíbe IA. Solo se acepta “No” en la revisión.</p>` : ""}
+            <label class="full">Notas concretas (20+ caracteres)<textarea name="notes" minlength="20" required placeholder="Describe qué verificaste en audio, contexto y terceros."></textarea></label>
+            <button class="full" type="submit">Guardar decisión local</button>
+          </form>
+        </details>`}
+        ${approved ? `<details class="review-form">
+          <summary>Promover al intake real</summary>
+          <form method="post" action="/api/clippers/human-review-promote">
+            <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+            <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+            <input type="hidden" name="id" value="${escapeHtml(row.id)}" />
+            <label class="full">Destino<select name="metricoolQueueItemId" required>
+              ${queue.intakeTargets.map((target) => `<option value="${escapeHtml(target.queueItemId)}"${target.queueItemId === row.suggestedQueueItemId ? " selected" : ""}>${escapeHtml(target.accountName)} · ${escapeHtml(target.targetFileName)} · ${escapeHtml(target.publishAt)}</option>`).join("")}
+            </select></label>
+            <label class="full">Fin del stream original (ISO 8601; obligatorio cuando exista demora mínima)<input name="originalStreamEndedAt" placeholder="2026-07-20T18:30:00Z" /></label>
+            <label class="full"><input type="checkbox" name="finalOutputReviewed" value="yes" required /> Revisé completo el resultado vertical asociado y confirmé audio, contexto, terceros y procesamiento sin IA.</label>
+            <label class="full"><input type="checkbox" name="promotionConfirmed" value="yes" required /> Confirmo el destino. La acción prepara source-drop e intake, pero no publica.</label>
+            <button class="full" type="submit">Promover de forma segura</button>
+          </form>
+        </details>` : ""}
+      </article>`;
+    }).join("")}
+  </section>
+</main></body></html>`;
+}
+
 function renderHome(status) {
   const preflightTotal = Number(status.preflight.passed || 0) + Number(status.preflight.failed || 0);
   const nextExternalRepair = status.externalEvidenceValidation.nextRepair;
   const nextExternalRepairIsActive = nextExternalRepair && !nextExternalRepair.deferredForMetricoolMvp;
   const realClipIntakeBlocked = status.realClipIntakeValidation?.status && !realClipIntakeReadyForScheduling(status.realClipIntakeValidation.status);
   const dashboardAction = status.nextBestAction || status.streamerGrowthCeo?.nextAction;
-  const routingConfirmed = status.streamerGrowthCeo?.routingConfirmation?.confirmed === true;
+  const metricoolReadyLanes = Number(status.metricoolMvp?.activeReadyLanes || 0);
+  const metricoolTargetLanes = Number(status.metricoolMvp?.activeTargetLanes || 0);
+  const metricoolAccountsReady = metricoolTargetLanes > 0 && metricoolReadyLanes >= metricoolTargetLanes;
   const baselineKnown = status.streamerGrowthCeo?.progressKnown === true;
   const realClipsReady = Number(status.realClipIntakeValidation?.readyRows || 0);
   const realClipsTotal = Number(status.realClipIntakeValidation?.totalRows || 0);
@@ -9326,7 +10790,7 @@ function renderHome(status) {
 <main>
   <nav class="topbar" aria-label="Navegación principal">
     <a class="brand" href="/clippers">Clippers</a>
-    <div class="top-status"><span class="dot${routingConfirmed ? "" : " pending"}" aria-hidden="true"></span><span>${escapeHtml(routingConfirmed ? "2 cuentas confirmadas en Metricool" : "Conexión pendiente de confirmar")}</span><span class="badge">Aprobación manual</span></div>
+    <div class="top-status"><span class="dot${metricoolAccountsReady ? "" : " pending"}" aria-hidden="true"></span><span>${escapeHtml(metricoolAccountsReady ? `${metricoolReadyLanes} cuentas listas para Metricool` : "Conexión pendiente de confirmar")}</span><span class="badge">Aprobación manual</span></div>
   </nav>
   <header class="hero">
     <div class="hero-copy">
@@ -9337,6 +10801,7 @@ function renderHome(status) {
         <a class="secondary-link" href="/api/clippers/real-clip-source-hunt.html">Buscar videos</a>
         <a class="secondary-link" href="/api/clippers/real-clip-exact-source-candidate.html">Guardar candidato</a>
         <a class="secondary-link" href="/api/clippers/real-clip-permission-crm.html">Gestionar permisos</a>
+        <a class="secondary-link" href="/api/clippers/human-review-queue.html">Revisar candidatos</a>
         <a class="secondary-link" href="/api/clippers/real-clip-acquisition-workbench.html">Preparar clips</a>
       </nav>
     </div>
@@ -9423,6 +10888,9 @@ function renderHome(status) {
     ${link("/api/clippers/streamer-growth-ceo.html", "Streamer Growth CEO")}
     ${link("/api/clippers/streamer-growth-ceo.json", "CEO growth JSON")}
     ${link("/api/clippers/streamer-growth-ceo.md", "CEO growth report")}
+    ${link("/api/clippers/streamer-100-campaign.html", "100 streamer campaign")}
+    ${link("/api/clippers/streamer-100-campaign.json", "100 streamer JSON")}
+    ${link("/api/clippers/streamer-100-campaign.csv", "100 streamer CSV")}
     ${link("/api/clippers/goal-gaps.json", "Goal gaps JSON")}
     ${link("/api/clippers/goal-gaps.md", "Goal gaps MD")}
     ${link("/api/clippers/real-clip-gap.json", "Real clip gap JSON")}
@@ -10049,6 +11517,63 @@ const server = createServer(async (req, res) => {
       json(res, 200, await buildStatus());
       return;
     }
+    if (parsed.pathname === "/api/clippers/human-review-queue.json" && req.method === "GET") {
+      json(res, 200, await buildHumanReviewQueue());
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-queue.html" && req.method === "GET") {
+      html(res, 200, renderHumanReviewQueuePage(await buildHumanReviewQueue()));
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-decision" && req.method === "POST") {
+      const body = await readRequestBody(req);
+      const validation = validatePostRequest(req, body);
+      if (!validation.ok) {
+        json(res, validation.statusCode, validation);
+        return;
+      }
+      const form = validation.form;
+      const result = await recordHumanReviewDecision({
+        id: form.get("id"),
+        decision: form.get("decision"),
+        audioStatus: form.get("audioStatus"),
+        contextStatus: form.get("contextStatus"),
+        thirdPartyStatus: form.get("thirdPartyStatus"),
+        humanReviewConfirmed: form.get("humanReviewConfirmed"),
+        aiUsed: form.get("aiUsed"),
+        notes: form.get("notes"),
+      });
+      if (result.ok && safeReturnToPath(form.get("returnTo"))) {
+        res.writeHead(303, { location: "/api/clippers/human-review-queue.html", "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 500, result);
+      }
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-promote" && req.method === "POST") {
+      const body = await readRequestBody(req);
+      const validation = validatePostRequest(req, body);
+      if (!validation.ok) {
+        json(res, validation.statusCode, validation);
+        return;
+      }
+      const form = validation.form;
+      const result = await promoteHumanReviewCandidate({
+        id: form.get("id"),
+        metricoolQueueItemId: form.get("metricoolQueueItemId"),
+        originalStreamEndedAt: form.get("originalStreamEndedAt"),
+        finalOutputReviewed: form.get("finalOutputReviewed"),
+        promotionConfirmed: form.get("promotionConfirmed"),
+      });
+      if (result.ok && safeReturnToPath(form.get("returnTo"))) {
+        res.writeHead(303, { location: "/api/clippers/human-review-queue.html", "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 500, result);
+      }
+      return;
+    }
     if (parsed.pathname === "/api/clippers/metricool-upload-checklist.csv" && req.method === "GET") {
       const status = await buildStatus();
       csv(res, 200, status.metricoolSchedulingRunSheet.uploadChecklistCsv);
@@ -10227,6 +11752,18 @@ const server = createServer(async (req, res) => {
       html(res, 200, renderStreamerGrowthCeoPage(ceo));
       return;
     }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.json" && req.method === "GET") {
+      json(res, 200, await buildStreamer100Campaign());
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.csv" && req.method === "GET") {
+      csv(res, 200, buildStreamer100CampaignCsv(await buildStreamer100Campaign()), "clippers-100-streamer-campaign.csv");
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/streamer-100-campaign.html" && req.method === "GET") {
+      html(res, 200, renderStreamer100CampaignPage(await buildStreamer100Campaign()));
+      return;
+    }
     if (parsed.pathname === "/api/clippers/go-live-gap-resolver.json" && req.method === "GET") {
       const status = await buildStatus();
       json(res, 200, status.goLiveGapResolver || buildGoLiveGapResolver(status));
@@ -10360,6 +11897,11 @@ const server = createServer(async (req, res) => {
         creatorOrRightsHolder: form.get("creatorOrRightsHolder"),
         evidenceLink: form.get("evidenceLink"),
         operatorNotes: form.get("operatorNotes"),
+        aiProcessing: form.get("aiProcessing"),
+        originalStreamEndedAt: form.get("originalStreamEndedAt"),
+        plannedPublishAt: form.get("plannedPublishAt"),
+        contextReviewStatus: form.get("contextReviewStatus"),
+        creditText: form.get("creditText"),
       });
       const returnTo = safeReturnToPath(form.get("returnTo"));
       if (result.ok && returnTo) {
@@ -10685,7 +12227,13 @@ const server = createServer(async (req, res) => {
       const result = await guardedRollForwardPendingSchedules({
         leadThresholdMinutes,
       });
-      json(res, result.statusCode || 200, result);
+      const returnTo = safeReturnToPath(validation.form.get("returnTo"));
+      if (result.status === "rolled_forward" && result.verifiedRollForward === true && returnTo) {
+        res.writeHead(303, { location: returnTo, "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 200, result);
+      }
       return;
     }
     if (parsed.pathname === "/api/clippers/external-evidence/preview" && req.method === "POST") {
