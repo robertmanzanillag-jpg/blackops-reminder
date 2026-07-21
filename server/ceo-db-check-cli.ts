@@ -20,6 +20,7 @@ export const REQUIRED_CEO_DB_TABLES = [
   "tasks",
   "telegram_config",
   "telegram_processed_updates",
+  "revenue_stripe_events",
   "app_rate_limit_buckets",
   "automation_definitions",
   "automation_runs",

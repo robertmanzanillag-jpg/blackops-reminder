@@ -107,6 +107,7 @@ import {
   extractRevenueMockupContentSecurityPolicy,
 } from "../server/revenue-engine";
 import { createRevenueEngineStateStore, type RevenueEngineStateAdapter, type RevenueEngineStateCollection } from "../server/revenue-engine-state-store";
+import { updateRevenueOutreachDraft } from "../server/revenue-engine";
 import { registerRoutes } from "../server/routes";
 
 const testLedgerPath = path.join("/tmp", "revenue-engine-ledger-test.json");
@@ -3447,9 +3448,65 @@ test("builds concise client-facing outreach without exposing internal economics"
   assert.match(proposal.body, /Robert Websites/);
   assert.match(proposal.body, /\$2,925/);
   assert.match(proposal.body, /\$1,463/);
-  assert.match(proposal.body, /15 minutos/);
+  assert.match(proposal.body, /15-minute call/);
   assert.doesNotMatch(proposal.body, /Costo interno|Margen mensual|Cap interno|INTERNAL ONLY|private-research-source|private\.example|93%|\$54|Revenue Engine/i);
   assert.equal(proposal.body.length < 1800, true);
+});
+
+test("defaults new website proposals to the accessible mid-tier price", () => {
+  const proposal = buildProposalEmail({
+    recipientEmail: "owner@example.com",
+    contactName: "Owner",
+    businessName: "Accessible Price Co",
+    businessSummary: "Public website opportunity with a verified contact path.",
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  });
+
+  assert.equal(proposal.pricing.totalSetupUsd, 1500);
+  assert.equal(proposal.pricing.depositUsd, 750);
+  assert.match(proposal.body, /Initial project: \$1,500/);
+});
+
+test("does not convert an automation-only draft into a 700 dollar website opportunity", () => {
+  const lead = recordRevenueLead({
+    businessName: "Automation Only Co",
+    area: "Miami",
+    niche: "professional services",
+    websiteStatus: "has_website",
+    contactChannel: "email",
+    contactValue: "owner@automation-only.example",
+    evidence: "Public company profile and owner email are verified.",
+    painPoint: "Needs a lead follow-up workflow.",
+    estimatedOfferUsd: 1500,
+    status: "qualified",
+  }).lead;
+  const draft = recordRevenueOutreachDraft({
+    leadId: lead.id,
+    channel: "email",
+    approvalStatus: "draft",
+    recipientEmail: "owner@automation-only.example",
+    contactName: "Owner",
+    businessName: lead.businessName,
+    sourceUrl: "https://example.com/automation-only",
+    mockupUrl: "/api/revenue-engine/mockup-previews/automation-only",
+    businessSummary: "Verified automation opportunity with no website scope.",
+    websitePriceUsd: 0,
+    automationPriceUsd: 1500,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  }).draft;
+  approveRevenueOutreachDraft({ draftId: draft.id, approvedByRobert: true });
+
+  const result = recordRevenueWebsiteOpportunity({ leadId: lead.id, outreachDraftId: draft.id, projectType: "website" });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.opportunity, null);
+  assert.equal(result.gates.some((gate) => gate.gate === "website_scope" && !gate.passed), true);
+  const snapshot = getRevenueEngineSnapshot();
+  assert.equal(snapshot.websiteSalesPacketQueue.items.some((item) => item.leadId === lead.id), false);
+  assert.equal(snapshot.websiteSalesPacketQueue.blocked.some((item) => item.leadId === lead.id && item.reason.includes("precio de website")), true);
 });
 
 test("records outreach draft without sending and moves matching lead to outreach", () => {
@@ -3540,6 +3597,48 @@ test("approves outreach draft for manual queue without sending or side effects",
   assert.equal(result.snapshot.recentLeads[0].status, statusBeforeApproval);
   assert.equal(result.snapshot.recentLedger.length, 0);
   assert.equal(result.snapshot.recentDeliveryWorkspaces.length, 0);
+});
+
+test("editing an outreach draft saves copy and requires Robert to approve it again", () => {
+  const leadResult = recordRevenueLead({
+    businessName: "Editable Spa",
+    area: "Miami",
+    niche: "med spa",
+    websiteStatus: "weak_website",
+    contactChannel: "email",
+    contactValue: "owner@editablespa.example",
+    evidence: "Public business page lists an owner email and current services but has no clear booking path.",
+    painPoint: "Needs a clearer offer and booking conversion path.",
+    estimatedOfferUsd: 1500,
+    status: "qualified",
+  });
+  const draftResult = recordRevenueOutreachDraft({
+    leadId: leadResult.lead.id,
+    channel: "email",
+    approvalStatus: "approved",
+    recipientEmail: "owner@editablespa.example",
+    contactName: "Owner",
+    businessName: "Editable Spa",
+    sourceUrl: "https://example.com/editable-spa",
+    businessSummary: "Editable Spa has a verified public email and a clear website conversion opportunity.",
+    websitePriceUsd: 1500,
+    automationPriceUsd: 0,
+    monthlyRetainerUsd: 0,
+    estimatedInternalMonthlyCostUsd: 0,
+  });
+
+  const result = updateRevenueOutreachDraft({
+    draftId: draftResult.draft.id,
+    subject: "Una idea sencilla para llenar más citas",
+    body: "Hola, revisé su presencia digital y preparé una propuesta concreta para convertir más visitas en citas verificables.",
+  });
+
+  assert.equal(result.status, "updated");
+  assert.equal(result.draft?.subject, "Una idea sencilla para llenar más citas");
+  assert.equal(result.draft?.status, "draft");
+  assert.equal(result.draft?.approvalStatus, "draft");
+  assert.equal(result.draft?.qaGates.find((gate) => gate.gate === "approval")?.passed, false);
+  assert.equal(result.safety.sendsOutreach, false);
 });
 
 test("daily money command blocks real contact queue until production persistence is ready", () => {
@@ -5274,7 +5373,7 @@ test("website-only handoff uses website deposit when draft also has automation u
   assert.equal(handoff.snapshot.metrics.appsSold, 1);
   assert.equal(handoff.snapshot.metrics.cashCollectedUsd, 1500);
   assert.equal(handoff.snapshot.recentLedger[0].kind, "website_sale");
-  assert.equal(handoff.snapshot.recentLedger[0].amountUsd, 3000);
+  assert.equal(handoff.snapshot.recentLedger[0].amountUsd, 2500);
 });
 
 test("website delivery ledger dedupe uses exact lead token not id prefix", () => {
