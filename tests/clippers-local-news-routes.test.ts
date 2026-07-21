@@ -89,6 +89,9 @@ test("GET status is uncached and POST bootstrap returns the real workspace statu
   assert.equal(status.response.headers.get("cache-control"), "no-store");
   assert.equal(status.json.workspaceDir, workspaceDir);
   assert.equal(status.json.bootstrapped, false);
+  assert.equal(status.json.metricool.status, "blocked");
+  assert.equal(status.json.metricool.platforms.facebook.ready, false);
+  assert.equal(status.json.metricool.platforms.x.ready, false);
 
   const bootstrap = await request("POST", "/api/clippers/local-news/bootstrap", {});
   assert.equal(bootstrap.response.status, 200);
