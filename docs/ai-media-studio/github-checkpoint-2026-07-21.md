@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR20 durable launch authorities
 
-- Branch: `codex/ai-media-studio-durable-authorities`, stacked on draft PR #102.
+- Branch: `codex/ai-media-studio-durable-authorities`, draft PR #103, stacked on draft PR #102.
 - Scope: append-only workspace admission-policy and kill-switch revisions, exact per-slot approval/sandbox/maximum-quote evidence chains, immutable launch-authority snapshots, and reservation binding to the exact snapshot/digest.
 - Trust boundary: the reservation caller can no longer provide provider identity, governance facts, approvals, sandbox result, quote/money, policy decision, kill-switch state, or provider idempotency. The unmounted repository derives and revalidates them from locked database rows.
 - Safety boundary: forward/rollback SQL remains unapplied; no authority writer, route, render job, outbox command, provider call, spend, external post, migration application, or deployment is enabled.
