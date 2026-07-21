@@ -121,6 +121,7 @@ const evidenceChecklistJsonPath = path.join(reportsDir, "clippers-tiktok-evidenc
 const operatorHandoffJsonPath = path.join(workspaceRoot, "scheduled", "metricool-100-operator-handoff.json");
 const streamerGrowthMetricsPath = path.join(reportsDir, "clippers-streamer-growth-metrics.json");
 const streamerGrowthRoutingPath = path.join(reportsDir, "clippers-streamer-account-routing.json");
+const humanReviewDecisionsPath = path.join(workspaceRoot, "evidence-drop", "human-review-decisions.csv");
 await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
   source: "user_confirmed",
   confirmedAt: "2026-07-20T09:15:00.000Z",
@@ -2972,10 +2973,14 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.equal(jsonResponse.status, 200);
     const queue = await jsonResponse.json();
     assert.equal(queue.status, "human_review_required");
-    assert.equal(queue.readOnly, true);
+    assert.equal(queue.readOnly, false);
+    assert.equal(queue.decisionRecordingEnabled, true);
+    assert.equal(queue.decisionsUnlockPublishing, false);
+    assert.equal(queue.decisionLedgerStatus, "not_recorded");
+    assert.equal(queue.invalidDecisionRows, 0);
     assert.equal(queue.metricoolApprovalRequired, true);
     assert.equal(queue.realPublishEnabled, false);
-    assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, rejected: 1, noAi: 1, publishAllowed: 0 });
+    assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, approvedForIntake: 0, rejected: 1, noAi: 1, publishAllowed: 0 });
     assert.ok(queue.rows.every((row) => row.publishAllowed === false));
     assert.equal(queue.rows.find((row) => row.creator === "sadlights").noAiRequired, true);
     assert.equal(queue.rows.find((row) => row.creator === "sadlights").sourceUrl, "https://clips.twitch.tv/ExactClip");
@@ -2990,7 +2995,97 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(body, /IA:<\/strong> prohibida/);
     assert.match(body, /Metricool:<\/strong> bloqueado/);
     assert.match(body, /Descartado/);
+    assert.match(body, /action="\/api\/clippers\/human-review-decision"/);
+    assert.match(body, /Aprobar para intake/);
     assert.doesNotMatch(body, /ready to publish|listo para publicar/i);
+
+    const baseDecision = {
+      id: "sadlights-review:sad.mp4",
+      decision: "approved_for_intake",
+      audioStatus: "approved",
+      contextStatus: "approved",
+      thirdPartyStatus: "approved",
+      humanReviewConfirmed: "yes",
+      aiUsed: "no",
+      notes: "Reviewed the full clip and confirmed clean audio, intact context, and no third-party material.",
+    };
+    const postDecision = (values, { token = csrfToken } = {}) => fetch("http://127.0.0.1:5578/api/clippers/human-review-decision", {
+      method: "POST",
+      redirect: "manual",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({ ...(token ? { csrfToken: token } : {}), returnTo: "/api/clippers/human-review-queue.html", ...values }),
+    });
+
+    const decisionHeader = ["id", "creator", "title", "decision", "audio_status", "context_status", "third_party_status", "human_review_confirmed", "ai_used", "notes", "reviewed_at"];
+    const tamperedDecision = [
+      "sadlights-review:sad.mp4", "sadlights", "Safe candidate", "approved_for_intake", "approved", "approved", "approved", "yes", "yes",
+      "Manually changed row that violates the creator no-AI restriction and must be ignored.", "2026-07-21T10:00:00.000Z",
+    ];
+    await writeFile(humanReviewDecisionsPath, `${renderTestCsvLine(decisionHeader)}\n${renderTestCsvLine(tamperedDecision)}\n`);
+    const tamperedQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(tamperedQueue.invalidDecisionRows, 1);
+    assert.equal(tamperedQueue.totals.approvedForIntake, 0);
+    assert.equal(tamperedQueue.rows.find((row) => row.creator === "sadlights").humanDecision, "pending");
+    await rm(humanReviewDecisionsPath, { force: true });
+
+    const outsideLedgerPath = path.join(testWorkspaceParent, "outside-human-review-decisions.csv");
+    await writeFile(outsideLedgerPath, `${renderTestCsvLine(decisionHeader)}\n${renderTestCsvLine(tamperedDecision)}\n`);
+    await symlink(outsideLedgerPath, humanReviewDecisionsPath);
+    const symlinkedQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(symlinkedQueue.decisionLedgerStatus, "human_review_decisions_symlink_blocked");
+    assert.equal(symlinkedQueue.totals.approvedForIntake, 0);
+    await rm(humanReviewDecisionsPath, { force: true });
+    await rm(outsideLedgerPath, { force: true });
+
+    const missingCsrf = await postDecision(baseDecision, { token: "" });
+    assert.equal(missingCsrf.status, 403);
+    assert.equal((await missingCsrf.json()).error, "invalid_or_missing_csrf_token");
+
+    const aiRejected = await postDecision({ ...baseDecision, aiUsed: "yes" });
+    assert.equal(aiRejected.status, 400);
+    assert.equal((await aiRejected.json()).error, "creator_prohibits_ai_processing");
+
+    const incompleteChecks = await postDecision({ ...baseDecision, thirdPartyStatus: "rejected" });
+    assert.equal(incompleteChecks.status, 400);
+    assert.equal((await incompleteChecks.json()).error, "all_human_review_checks_must_be_approved");
+
+    const secretNotes = await postDecision({
+      ...baseDecision,
+      notes: "Reviewed the full clip and copied the API key into this unsafe decision note.",
+    });
+    assert.equal(secretNotes.status, 400);
+    assert.equal((await secretNotes.json()).error, "human_review_notes_secret_like");
+
+    const rejectedOverride = await postDecision({
+      ...baseDecision,
+      id: "esp-leonidas-review:esp.mp4",
+      aiUsed: "no",
+    });
+    assert.equal(rejectedOverride.status, 409);
+    assert.equal((await rejectedOverride.json()).error, "manifest_rejection_cannot_be_overridden");
+
+    await rm(path.join(workspaceRoot, "evidence-drop"), { recursive: true, force: true });
+    const approved = await postDecision(baseDecision);
+    assert.equal(approved.status, 303);
+    assert.equal(approved.headers.get("location"), "/api/clippers/human-review-queue.html");
+
+    const updatedQueue = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(updatedQueue.status, "human_review_complete_for_intake");
+    assert.deepEqual(updatedQueue.totals, { rows: 2, filesReady: 2, reviewRequired: 0, approvedForIntake: 1, rejected: 1, noAi: 1, publishAllowed: 0 });
+    const approvedRow = updatedQueue.rows.find((row) => row.creator === "sadlights");
+    assert.equal(approvedRow.humanDecision, "approved_for_intake");
+    assert.equal(approvedRow.humanReviewComplete, true);
+    assert.equal(approvedRow.recordedChecks.aiUsed, "no");
+    assert.equal(approvedRow.publishAllowed, false);
+    assert.equal(updatedQueue.metricoolApprovalRequired, true);
+    assert.equal(updatedQueue.realPublishEnabled, false);
+    assert.equal(updatedQueue.decisionLedgerStatus, "ready");
+    assert.equal(updatedQueue.invalidDecisionRows, 0);
+
+    const updatedBody = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.html")).text();
+    assert.match(updatedBody, /Decisión guardada:/);
+    assert.match(updatedBody, /Aprobado para intake/);
+    assert.match(updatedBody, /Metricool:<\/strong> bloqueado/);
   });
 });
 

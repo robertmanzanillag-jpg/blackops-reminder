@@ -22,6 +22,8 @@ const realClipPermissionCrmCsvPath = path.join(workspaceRoot, "evidence-drop", "
 const realClipPermissionCrmLockPath = `${realClipPermissionCrmCsvPath}.lock`;
 const streamerResearchDir = path.join(workspaceRoot, "research");
 const streamerBlanketPermissionCsvPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+const humanReviewDecisionsCsvPath = path.join(workspaceRoot, "evidence-drop", "human-review-decisions.csv");
+const humanReviewDecisionsLockPath = `${humanReviewDecisionsCsvPath}.lock`;
 const currentBatchWorkbookJsonPath = path.join(scheduledDir, "metricool-100-current-batch-workbook.json");
 const currentBatchUploadPackJsonPath = path.join(reportsDir, "clippers-metricool-current-batch-upload-pack.json");
 const requestedHost = process.env.HOST || "127.0.0.1";
@@ -131,7 +133,7 @@ const clipperPageGuides = new Map([
   ["Clippers Real Clip Acquisition", "Mira que le falta a cada candidato y completa URL, permiso, evidencia y archivo en el orden correcto."],
   ["Clippers Real Clip Intake", "Carga los MP4 reales aprobados para reemplazar los videos de prueba. No se publica nada desde esta pantalla."],
   ["Clippers Real Clip Intake Validation", "Comprueba que cada clip tenga archivo, URL exacta, creador y permiso antes de enviarlo a Metricool."],
-  ["Clippers Human Review Queue", "Reproduce los candidatos autorizados y revisa audio, contexto y material de terceros. Esta pantalla es de solo lectura y nunca desbloquea Metricool."],
+  ["Clippers Human Review Queue", "Reproduce cada candidato y registra audio, contexto y material de terceros. Las decisiones son locales y nunca desbloquean Metricool por sí solas."],
   ["Clippers Source-drop Import", "Envia a la cola de Metricool solo los clips reales que superaron todas las validaciones."],
   ["Clippers TikTok Batch Now", "Programa en Metricool los clips aprobados y guarda la evidencia de la programacion."],
   ["Clippers TikTok Public Metrics Now", "Registra las vistas y resultados reales despues de publicar para que el sistema pueda mejorar."],
@@ -878,6 +880,10 @@ async function withEvidenceCsvLock(callback) {
 
 async function withPermissionCrmLock(callback) {
   return withExclusiveFileLock(realClipPermissionCrmLockPath, "permission_crm_locked", callback);
+}
+
+async function withHumanReviewDecisionLock(callback) {
+  return withExclusiveFileLock(humanReviewDecisionsLockPath, "human_review_decisions_locked", callback);
 }
 
 async function withExclusiveFileLock(lockPath, lockedError, callback) {
@@ -2301,6 +2307,7 @@ function safeReturnToPath(value) {
     "/api/clippers/tiktok-public-metrics-now.html",
     "/api/clippers/real-clip-intake.html",
     "/api/clippers/real-clip-intake-validation.html",
+    "/api/clippers/human-review-queue.html",
     "/api/clippers/tiktok-launch-authorization.html",
   ].includes(returnTo)) return returnTo;
   const accountNowMatch = returnTo.match(/^\/api\/clippers\/tiktok-account-now\.html\?accountId=([A-Za-z0-9_-]+)$/);
@@ -9782,6 +9789,75 @@ function verifiedTwitchClipUrl(value) {
   }
 }
 
+const humanReviewDecisionHeader = [
+  "id",
+  "creator",
+  "title",
+  "decision",
+  "audio_status",
+  "context_status",
+  "third_party_status",
+  "human_review_confirmed",
+  "ai_used",
+  "notes",
+  "reviewed_at",
+];
+const allowedHumanReviewDecisions = new Set(["approved_for_intake", "rejected"]);
+const allowedHumanReviewCheckStatuses = new Set(["approved", "rejected"]);
+
+async function readHumanReviewDecisions() {
+  const evidenceRoot = path.join(workspaceRoot, "evidence-drop");
+  const evidenceRootStat = await lstat(evidenceRoot).catch(() => null);
+  if (evidenceRootStat?.isSymbolicLink()) return { status: "evidence_drop_root_symlink_blocked", rows: [] };
+  const ledgerStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (!ledgerStat) return { status: "not_recorded", rows: [] };
+  if (ledgerStat.isSymbolicLink()) return { status: "human_review_decisions_symlink_blocked", rows: [] };
+  if (!ledgerStat.isFile()) return { status: "human_review_decisions_not_a_file", rows: [] };
+  const workspaceReal = await realpath(workspaceRoot).catch(() => workspaceRoot);
+  const evidenceRootReal = await realpath(evidenceRoot).catch(() => null);
+  const ledgerReal = await realpath(humanReviewDecisionsCsvPath).catch(() => null);
+  if (!evidenceRootReal || (evidenceRootReal !== workspaceReal && !evidenceRootReal.startsWith(workspaceReal + path.sep))) {
+    return { status: "evidence_drop_root_outside_workspace", rows: [] };
+  }
+  if (!ledgerReal || (ledgerReal !== evidenceRootReal && !ledgerReal.startsWith(evidenceRootReal + path.sep))) {
+    return { status: "human_review_decisions_outside_workspace", rows: [] };
+  }
+  const raw = await readText(humanReviewDecisionsCsvPath, "");
+  return { status: raw.trim() ? "ready" : "empty", rows: raw.trim() ? parseCsv(raw).rows : [] };
+}
+
+function latestHumanReviewDecisionById(rows = []) {
+  const byId = new Map();
+  for (const row of rows) {
+    const id = String(row.id || "").trim();
+    if (!id) continue;
+    const previous = byId.get(id);
+    if (!previous || String(row.reviewed_at || "") >= String(previous.reviewed_at || "")) byId.set(id, row);
+  }
+  return byId;
+}
+
+function humanReviewManifestRejected(row) {
+  return /rejected/i.test(row.status) || row.contextReview === "rejected";
+}
+
+function validPersistedHumanReviewDecision(decision, reviewRow) {
+  if (!decision || !reviewRow || !allowedHumanReviewDecisions.has(String(decision.decision || ""))) return false;
+  if (String(decision.human_review_confirmed || "") !== "yes") return false;
+  if ([decision.audio_status, decision.context_status, decision.third_party_status]
+    .some((value) => !allowedHumanReviewCheckStatuses.has(String(value || "")))) return false;
+  const aiUsed = String(decision.ai_used || "");
+  if (!["yes", "no"].includes(aiUsed)) return false;
+  const notes = String(decision.notes || "").trim();
+  if (validateOperatorNotes(notes) || secretTextPattern.test(notes) || secretQueryParamPattern.test(notes)) return false;
+  if (decision.decision === "approved_for_intake") {
+    if (humanReviewManifestRejected(reviewRow) || !reviewRow.fileReady) return false;
+    if ([decision.audio_status, decision.context_status, decision.third_party_status].some((value) => value !== "approved")) return false;
+    if (reviewRow.noAiRequired && aiUsed !== "no") return false;
+  }
+  return true;
+}
+
 async function buildHumanReviewQueue() {
   const sources = [
     {
@@ -9860,18 +9936,48 @@ async function buildHumanReviewQueue() {
       });
     }
   }
-  const rejectedRows = rows.filter((row) => /rejected/i.test(row.status) || row.contextReview === "rejected").length;
-  const reviewRequiredRows = rows.filter((row) => !/rejected/i.test(row.status) && row.contextReview !== "rejected").length;
+  const decisionLedger = await readHumanReviewDecisions();
+  const decisionsById = latestHumanReviewDecisionById(decisionLedger.rows);
+  let invalidDecisionRows = 0;
+  for (const row of rows) {
+    const storedDecision = decisionsById.get(row.id);
+    const decision = validPersistedHumanReviewDecision(storedDecision, row) ? storedDecision : null;
+    if (storedDecision && !decision) invalidDecisionRows += 1;
+    row.humanDecision = decision?.decision || "pending";
+    row.humanReviewComplete = ["approved_for_intake", "rejected"].includes(row.humanDecision);
+    row.reviewedAt = decision?.reviewed_at || "";
+    row.reviewNotes = decision?.notes || "";
+    row.recordedChecks = decision ? {
+      audio: decision.audio_status || "",
+      context: decision.context_status || "",
+      thirdParty: decision.third_party_status || "",
+      aiUsed: decision.ai_used || "",
+    } : null;
+  }
+  const approvedRows = rows.filter((row) => row.humanDecision === "approved_for_intake" && !humanReviewManifestRejected(row)).length;
+  const rejectedRows = rows.filter((row) => humanReviewManifestRejected(row) || row.humanDecision === "rejected").length;
+  const reviewRequiredRows = rows.filter((row) => !humanReviewManifestRejected(row) && !row.humanReviewComplete).length;
   return {
-    status: rows.length === 0 ? "no_review_candidates" : reviewRequiredRows > 0 ? "human_review_required" : "review_complete_no_approved_rows",
+    status: rows.length === 0
+      ? "no_review_candidates"
+      : reviewRequiredRows > 0
+        ? "human_review_required"
+        : approvedRows > 0
+          ? "human_review_complete_for_intake"
+          : "review_complete_no_approved_rows",
     generatedAt: new Date().toISOString(),
-    readOnly: true,
+    readOnly: false,
+    decisionRecordingEnabled: true,
+    decisionsUnlockPublishing: false,
+    decisionLedgerStatus: decisionLedger.status,
+    invalidDecisionRows,
     metricoolApprovalRequired: true,
     realPublishEnabled: false,
     totals: {
       rows: rows.length,
       filesReady: rows.filter((row) => row.fileReady).length,
       reviewRequired: reviewRequiredRows,
+      approvedForIntake: approvedRows,
       rejected: rejectedRows,
       noAi: rows.filter((row) => row.noAiRequired).length,
       publishAllowed: 0,
@@ -9880,8 +9986,106 @@ async function buildHumanReviewQueue() {
   };
 }
 
+async function recordHumanReviewDecision(input = {}, { skipLock = false } = {}) {
+  if (!skipLock) {
+    const evidenceDir = await ensureContainedEvidenceDir();
+    if (!evidenceDir.ok) return { ok: false, statusCode: 409, error: evidenceDir.status, id: String(input.id || "").trim() };
+    return withHumanReviewDecisionLock(() => recordHumanReviewDecision(input, { skipLock: true }));
+  }
+  const id = String(input.id || "").trim();
+  const decision = String(input.decision || "").trim();
+  const audioStatus = String(input.audioStatus || "").trim();
+  const contextStatus = String(input.contextStatus || "").trim();
+  const thirdPartyStatus = String(input.thirdPartyStatus || "").trim();
+  const humanReviewConfirmed = String(input.humanReviewConfirmed || "").trim();
+  const aiUsed = String(input.aiUsed || "").trim();
+  const notes = String(input.notes || "").trim();
+  const queue = await buildHumanReviewQueue();
+  const reviewRow = queue.rows.find((row) => row.id === id);
+  if (!reviewRow) return { ok: false, statusCode: 404, error: "human_review_candidate_not_found", id };
+  if (!allowedHumanReviewDecisions.has(decision)) {
+    return { ok: false, statusCode: 400, error: "invalid_human_review_decision", id };
+  }
+  if (humanReviewConfirmed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_confirmation_required", id };
+  }
+  if ([audioStatus, contextStatus, thirdPartyStatus].some((value) => !allowedHumanReviewCheckStatuses.has(value))) {
+    return { ok: false, statusCode: 400, error: "invalid_human_review_check_status", id };
+  }
+  const noteError = validateOperatorNotes(notes);
+  if (noteError) return { ok: false, statusCode: 400, error: noteError, id };
+  if (secretTextPattern.test(notes) || secretQueryParamPattern.test(notes)) {
+    return { ok: false, statusCode: 400, error: "human_review_notes_secret_like", id };
+  }
+  if (!new Set(["yes", "no"]).has(aiUsed)) {
+    return { ok: false, statusCode: 400, error: "ai_used_confirmation_required", id };
+  }
+  if (decision === "approved_for_intake") {
+    if (humanReviewManifestRejected(reviewRow)) {
+      return { ok: false, statusCode: 409, error: "manifest_rejection_cannot_be_overridden", id };
+    }
+    if (!reviewRow.fileReady) {
+      return { ok: false, statusCode: 409, error: "human_review_source_file_missing", id };
+    }
+    if ([audioStatus, contextStatus, thirdPartyStatus].some((value) => value !== "approved")) {
+      return { ok: false, statusCode: 400, error: "all_human_review_checks_must_be_approved", id };
+    }
+    if (reviewRow.noAiRequired && aiUsed !== "no") {
+      return { ok: false, statusCode: 400, error: "creator_prohibits_ai_processing", id };
+    }
+  }
+  const evidenceDirWithinLock = await ensureContainedEvidenceDir();
+  if (!evidenceDirWithinLock.ok) return { ok: false, statusCode: 409, error: evidenceDirWithinLock.status, id };
+  const ledgerLinkStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (ledgerLinkStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "human_review_decisions_symlink_blocked", id };
+  }
+  const ledgerRead = await readTextForMutation(humanReviewDecisionsCsvPath, { allowMissing: true });
+  if (!ledgerRead.ok) return { ok: false, statusCode: 503, error: "human_review_decisions_read_unavailable", id };
+  const rows = ledgerRead.value.trim() ? parseCsv(ledgerRead.value).rows : [];
+  const reviewedAt = new Date().toISOString();
+  const recorded = {
+    id: safeCsvText(id),
+    creator: safeCsvText(reviewRow.creator),
+    title: safeCsvText(reviewRow.title),
+    decision,
+    audio_status: safeCsvText(audioStatus),
+    context_status: safeCsvText(contextStatus),
+    third_party_status: safeCsvText(thirdPartyStatus),
+    human_review_confirmed: "yes",
+    ai_used: aiUsed,
+    notes: safeCsvText(notes),
+    reviewed_at: reviewedAt,
+  };
+  const existingIndex = rows.findIndex((row) => String(row.id || "") === id);
+  if (existingIndex >= 0) rows[existingIndex] = recorded;
+  else rows.push(recorded);
+  const evidenceDirBeforeWrite = await ensureContainedEvidenceDir();
+  if (!evidenceDirBeforeWrite.ok) return { ok: false, statusCode: 409, error: evidenceDirBeforeWrite.status, id };
+  const ledgerBeforeWriteStat = await lstat(humanReviewDecisionsCsvPath).catch(() => null);
+  if (ledgerBeforeWriteStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "human_review_decisions_symlink_blocked", id };
+  }
+  await atomicWriteFile(humanReviewDecisionsCsvPath, renderCsv(humanReviewDecisionHeader, rows));
+  return {
+    ok: true,
+    statusCode: 200,
+    status: "human_review_decision_recorded",
+    id,
+    decision,
+    reviewedAt,
+    unlocksSourceDrop: false,
+    unlocksMetricool: false,
+    publishAllowed: false,
+    nextAction: decision === "approved_for_intake"
+      ? "Decision recorded. Complete the separate Real Clip Intake before the Metricool approval queue can consider this source."
+      : "Candidate rejected and remains blocked from intake and Metricool.",
+  };
+}
+
 function humanReviewStatusLabel(row) {
-  if (/rejected/i.test(row.status) || row.contextReview === "rejected") return "Descartado";
+  if (humanReviewManifestRejected(row) || row.humanDecision === "rejected") return "Descartado";
+  if (row.humanDecision === "approved_for_intake") return "Aprobado para intake";
   if (!row.fileReady) return "Falta archivo";
   return "Revisión humana pendiente";
 }
@@ -9898,30 +10102,32 @@ function renderHumanReviewQueuePage(queue) {
     .review-stat{padding:16px;border-left:1px solid #29372f}.review-stat:first-child{border-left:0;padding-left:0}.review-stat strong{display:block;font-size:22px;margin-top:5px}
     .review-list{display:grid;grid-template-columns:1fr 1fr;gap:0 28px}.review-item{border-top:1px solid #29372f;padding:22px 0;min-width:0}
     .review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.review-head h2{margin:0}.review-meta{color:#9eaca4;font-size:12px;margin-top:5px}
-    .review-status{border:1px solid #52635a;border-radius:999px;padding:5px 8px;font-size:11px;white-space:nowrap}.review-status.rejected{border-color:#74433e;color:#ff9d95}
+    .review-status{border:1px solid #52635a;border-radius:999px;padding:5px 8px;font-size:11px;white-space:nowrap}.review-status.rejected{border-color:#74433e;color:#ff9d95}.review-status.approved{border-color:#3f765a;color:#a8efc6}
     video{display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#050806;margin:0 0 13px}
     .review-checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px;margin:13px 0}.review-check{font-size:12px;color:#c9d2cd}.review-check strong{color:#fff}
     .review-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.review-links a{border:1px solid #29372f;border-radius:6px;padding:8px 10px;text-decoration:none;font-size:12px}
     .review-note{font-size:12px;color:#9eaca4;border-left:2px solid #52635a;padding-left:10px;margin-top:13px}
+    .review-form{margin-top:16px;border-top:1px solid #29372f;padding-top:13px}.review-form form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.review-form label{font-size:12px;color:#c9d2cd}.review-form select,.review-form textarea{width:100%;margin-top:5px}.review-form textarea{grid-column:1/-1;min-height:76px}.review-form .full{grid-column:1/-1}.review-saved{color:#a8efc6;font-size:12px;margin-top:13px}
     @media(max-width:800px){.review-summary{grid-template-columns:repeat(2,1fr)}.review-stat:nth-child(odd){border-left:0;padding-left:0}.review-list{grid-template-columns:1fr}}
   </style>
 </head>
 <body><main>
   <h1>Revisión humana de clips</h1>
-  <p>Estos candidatos tienen archivos y evidencia, pero ninguno está autorizado para Metricool hasta completar audio, contexto y material de terceros. La página no guarda decisiones ni publica.</p>
+  <p>Revisa cada archivo y registra una decisión local. Aprobar aquí solo lo deja listo para el intake separado: no mueve archivos, no habilita Metricool y no publica.</p>
   <div class="review-summary">
     <div class="review-stat"><span class="label">Candidatos</span><strong>${escapeHtml(queue.totals.rows)}</strong></div>
     <div class="review-stat"><span class="label">Archivos</span><strong>${escapeHtml(queue.totals.filesReady)}/${escapeHtml(queue.totals.rows)}</strong></div>
     <div class="review-stat"><span class="label">Por revisar</span><strong>${escapeHtml(queue.totals.reviewRequired)}</strong></div>
-    <div class="review-stat"><span class="label">Descartados</span><strong>${escapeHtml(queue.totals.rejected)}</strong></div>
+    <div class="review-stat"><span class="label">Aprobados</span><strong>${escapeHtml(queue.totals.approvedForIntake)}</strong></div>
     <div class="review-stat"><span class="label">Sin IA</span><strong>${escapeHtml(queue.totals.noAi)}</strong></div>
   </div>
   <div class="actions"><a href="/api/clippers/real-clip-intake.html">Abrir intake después de aprobar</a><a href="/clippers">Volver al inicio</a></div>
   <section class="review-list" aria-label="Candidatos en revisión">
     ${queue.rows.map((row) => {
-      const rejected = /rejected/i.test(row.status) || row.contextReview === "rejected";
+      const rejected = humanReviewManifestRejected(row) || row.humanDecision === "rejected";
+      const approved = row.humanDecision === "approved_for_intake" && !rejected;
       return `<article class="review-item">
-        <div class="review-head"><div><h2>${escapeHtml(row.title)}</h2><div class="review-meta">${escapeHtml(row.creator)} · ${escapeHtml(row.sourceAge)} · ${escapeHtml(row.sourceViews)} vistas históricas</div></div><span class="review-status${rejected ? " rejected" : ""}">${escapeHtml(humanReviewStatusLabel(row))}</span></div>
+        <div class="review-head"><div><h2>${escapeHtml(row.title)}</h2><div class="review-meta">${escapeHtml(row.creator)} · ${escapeHtml(row.sourceAge)} · ${escapeHtml(row.sourceViews)} vistas históricas</div></div><span class="review-status${rejected ? " rejected" : approved ? " approved" : ""}">${escapeHtml(humanReviewStatusLabel(row))}</span></div>
         ${row.mediaUrl ? `<video controls preload="metadata" src="${escapeHtml(row.mediaUrl)}"></video>` : `<p class="review-note">Falta el archivo local.</p>`}
         <div class="review-checks">
           <div class="review-check"><strong>Derechos:</strong> ${escapeHtml(row.rightsStatus)}</div>
@@ -9932,7 +10138,25 @@ function renderHumanReviewQueuePage(queue) {
           <div class="review-check"><strong>Metricool:</strong> bloqueado</div>
         </div>
         <p class="review-note">${escapeHtml(row.notes)}</p>
+        ${row.humanReviewComplete ? `<p class="review-saved"><strong>Decisión guardada:</strong> ${escapeHtml(humanReviewStatusLabel(row))} · ${escapeHtml(row.reviewedAt)}<br />${escapeHtml(row.reviewNotes)}</p>` : ""}
         <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a></div>
+        ${humanReviewManifestRejected(row) ? "" : `<details class="review-form">
+          <summary>${row.humanReviewComplete ? "Cambiar decisión" : "Registrar decisión"}</summary>
+          <form method="post" action="/api/clippers/human-review-decision">
+            <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+            <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+            <input type="hidden" name="id" value="${escapeHtml(row.id)}" />
+            <label>Decisión<select name="decision" required><option value="approved_for_intake">Aprobar para intake</option><option value="rejected">Descartar</option></select></label>
+            <label>Audio<select name="audioStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>Contexto<select name="contextStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>Material de terceros<select name="thirdPartyStatus" required><option value="approved">Aprobado</option><option value="rejected">Rechazado</option></select></label>
+            <label>¿Se usó IA?<select name="aiUsed" required><option value="no">No</option><option value="yes">Sí</option></select></label>
+            <label class="full"><input type="checkbox" name="humanReviewConfirmed" value="yes" required /> Confirmo que una persona reprodujo y revisó el clip completo.</label>
+            ${row.noAiRequired ? `<p class="review-note full">Este creador prohíbe IA. Solo se acepta “No” en la revisión.</p>` : ""}
+            <label class="full">Notas concretas (20+ caracteres)<textarea name="notes" minlength="20" required placeholder="Describe qué verificaste en audio, contexto y terceros."></textarea></label>
+            <button class="full" type="submit">Guardar decisión local</button>
+          </form>
+        </details>`}
       </article>`;
     }).join("")}
   </section>
@@ -10791,6 +11015,32 @@ const server = createServer(async (req, res) => {
     }
     if (parsed.pathname === "/api/clippers/human-review-queue.html" && req.method === "GET") {
       html(res, 200, renderHumanReviewQueuePage(await buildHumanReviewQueue()));
+      return;
+    }
+    if (parsed.pathname === "/api/clippers/human-review-decision" && req.method === "POST") {
+      const body = await readRequestBody(req);
+      const validation = validatePostRequest(req, body);
+      if (!validation.ok) {
+        json(res, validation.statusCode, validation);
+        return;
+      }
+      const form = validation.form;
+      const result = await recordHumanReviewDecision({
+        id: form.get("id"),
+        decision: form.get("decision"),
+        audioStatus: form.get("audioStatus"),
+        contextStatus: form.get("contextStatus"),
+        thirdPartyStatus: form.get("thirdPartyStatus"),
+        humanReviewConfirmed: form.get("humanReviewConfirmed"),
+        aiUsed: form.get("aiUsed"),
+        notes: form.get("notes"),
+      });
+      if (result.ok && safeReturnToPath(form.get("returnTo"))) {
+        res.writeHead(303, { location: "/api/clippers/human-review-queue.html", "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 500, result);
+      }
       return;
     }
     if (parsed.pathname === "/api/clippers/metricool-upload-checklist.csv" && req.method === "GET") {
