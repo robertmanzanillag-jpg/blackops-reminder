@@ -63,6 +63,8 @@ export class S3KmsPkceVault implements OAuthVault {
         SSEKMSKeyId: this.config.kmsKeyArn,
         BucketKeyEnabled: true,
         IfNoneMatch: "*",
+        Tagging: "classification=oauth-pkce&retention=ephemeral",
+        Expires: httpExpiry(normalized.expiresAt),
         Metadata: {
           "binding-digest": bindingDigest,
           "expires-at": normalized.expiresAt,
@@ -141,6 +143,8 @@ function validateStoredObject(
     || value?.SSEKMSKeyId !== kmsKeyArn
     || value?.BucketKeyEnabled !== true
     || value?.ContentType !== "application/json"
+    || !(value?.Expires instanceof Date)
+    || value.Expires.toISOString() !== httpExpiry(context.expiresAt).toISOString()
     || (value?.ContentLength !== undefined && (
       !Number.isSafeInteger(value.ContentLength)
       || value.ContentLength < 1
@@ -305,6 +309,11 @@ function nowMs(clock: { now(): Date }): number {
   const now = clock.now();
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) throw rejected();
   return now.getTime();
+}
+
+/** S3 serializes Expires through HTTP-date, whose precision is whole seconds. */
+function httpExpiry(value: string): Date {
+  return new Date(Math.floor(Date.parse(value) / 1_000) * 1_000);
 }
 
 function safeEqual(left: string, right: string): boolean {

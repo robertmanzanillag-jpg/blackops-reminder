@@ -19,7 +19,7 @@ import { createOAuthState, createPkceChallenge, createPkceVerifier, digestOAuthS
 
 const MAX_TTL_MS = 15 * 60 * 1_000;
 const DEFAULT_TTL_MS = 10 * 60 * 1_000;
-const PKCE_VAULT_REFERENCE = /^vault:\/\/ai-media-studio\/oauth-pkce\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PKCE_VAULT_REFERENCE = /^vault:\/\/ai-media-studio\/oauth-pkce\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 function nonEmpty(value: string, name: string): string {
   const normalized = value?.trim();
@@ -37,7 +37,12 @@ function exactScopeList(scopes: readonly string[]): string[] {
 
 function policyFor(policies: OAuthPlatformPolicies, platform: AiMediaOAuthPlatform) {
   const policy = policies[platform];
-  if (!policy || !policy.redirectUris.length || !policy.scopes.length) {
+  if (
+    !policy
+    || !policy.redirectUris.length
+    || !policy.scopes.length
+    || (policy.pkce !== "required_s256" && policy.pkce !== "none")
+  ) {
     throw new OAuthFlowError("OAuth platform is not configured");
   }
   return policy;
@@ -48,12 +53,17 @@ function trustedRedirectUri(value: string): string {
   try { redirect = new URL(value); } catch { throw new OAuthFlowError("OAuth redirect is invalid"); }
   if (
     redirect.protocol !== "https:" ||
+    value.length < 12 ||
+    value.length > 512 ||
     redirect.username !== "" ||
     redirect.password !== "" ||
     redirect.search !== "" ||
     redirect.hash !== "" ||
     (redirect.port !== "" && redirect.port !== "443") ||
-    redirect.href !== value
+    redirect.href !== value ||
+    redirect.hostname === "localhost" ||
+    /^\d+(?:\.\d*)*$/u.test(redirect.hostname) ||
+    redirect.hostname.includes(":")
   ) {
     throw new OAuthFlowError("OAuth redirect is invalid");
   }
@@ -106,6 +116,7 @@ export function createOAuthService(dependencies: {
     });
     const policy = policyFor(policies, parsed.platform);
     if (policy.redirectUris.length !== 1) throw new OAuthFlowError("OAuth platform redirect is ambiguous");
+    const pkceMode = policy.pkce;
     const redirectUri = trustedRedirectUri(policy.redirectUris[0]);
     const requestedScopes = exactScopeList(policy.scopes);
     await accounts.assertConnectable({
@@ -120,9 +131,7 @@ export function createOAuthService(dependencies: {
     const sessionId = randomUUID();
     const expiresAt = new Date(createdAt.getTime() + ttlMs).toISOString();
     const state = createOAuthState();
-    const verifier = createPkceVerifier();
-    const codeChallenge = createPkceChallenge(verifier);
-    const context: OAuthVaultContext = {
+    const context: OAuthVaultContext | null = pkceMode === "required_s256" ? {
       purpose: "ai_media_oauth_pkce",
       ...scope,
       actorUserId,
@@ -130,14 +139,18 @@ export function createOAuthService(dependencies: {
       platform: parsed.platform,
       sessionId,
       expiresAt,
-    };
-    const rawPkceVerifierRef = await vault.put(verifier, context);
-    let pkceVerifierRef: string;
-    try {
-      pkceVerifierRef = pkceVaultReference(rawPkceVerifierRef);
-    } catch (error) {
-      try { await vault.delete(rawPkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
-      throw error;
+    } : null;
+    const verifier = pkceMode === "required_s256" ? createPkceVerifier() : null;
+    const codeChallenge = verifier ? createPkceChallenge(verifier) : null;
+    let pkceVerifierRef: string | null = null;
+    if (verifier && context) {
+      const rawPkceVerifierRef = await vault.put(verifier, context);
+      try {
+        pkceVerifierRef = pkceVaultReference(rawPkceVerifierRef);
+      } catch (error) {
+        try { await vault.delete(rawPkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
+        throw error;
+      }
     }
 
     try {
@@ -150,14 +163,17 @@ export function createOAuthService(dependencies: {
         stateDigest: digestOAuthState(state),
         redirectUri,
         requestedScopes,
+        pkceMode,
         codeChallenge,
-        codeChallengeMethod: "S256",
+        codeChallengeMethod: codeChallenge ? "S256" : null,
         pkceVerifierRef,
         expiresAt,
         createdAt: createdAt.toISOString(),
       });
     } catch (error) {
-      try { await vault.delete(pkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
+      if (pkceVerifierRef && context) {
+        try { await vault.delete(pkceVerifierRef, context); } catch { /* Vault TTL remains the final cleanup boundary. */ }
+      }
       throw error;
     }
 
@@ -165,8 +181,7 @@ export function createOAuthService(dependencies: {
       sessionId,
       platform: parsed.platform,
       state,
-      codeChallenge,
-      codeChallengeMethod: "S256",
+      ...(codeChallenge ? { codeChallenge, codeChallengeMethod: "S256" as const } : {}),
       redirectUri,
       requestedScopes,
       expiresAt,
@@ -178,6 +193,11 @@ export function createOAuthService(dependencies: {
     platform: AiMediaOAuthPlatform;
     outcome: AiMediaOAuthOutcome;
   }): Promise<AiMediaOAuthCallbackResponse> {
+    // Authorization needs an atomic claim/exchange/token-vault flow that is not
+    // part of this foundation. Never burn a valid state before that exists.
+    if (input.outcome === "authorized" || (input.outcome !== "denied" && input.outcome !== "error")) {
+      throw new OAuthFlowError();
+    }
     policyFor(policies, input.platform);
     let stateDigest: string;
     try { stateDigest = digestOAuthState(input.state); } catch { throw new OAuthFlowError(); }
@@ -189,7 +209,7 @@ export function createOAuthService(dependencies: {
       now: consumedAt,
     });
     if (!session) throw new OAuthFlowError();
-    if (input.outcome !== "authorized") {
+    if (session.pkceVerifierRef) {
       const context: OAuthVaultContext = {
         purpose: "ai_media_oauth_pkce",
         ...session.scope,

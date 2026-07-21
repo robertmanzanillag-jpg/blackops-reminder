@@ -58,7 +58,7 @@ export type ProductionOAuthRuntime =
       authorizationUrl(input: {
         platform: AiMediaOAuthPlatform;
         state: string;
-        codeChallenge: string;
+        codeChallenge?: string;
       }): string;
     }>;
 
@@ -98,6 +98,7 @@ export function createProductionOAuthRuntimeFromEnvironment(
       {
         redirectUris: [config.providers[platform]!.redirectUri],
         scopes: AI_MEDIA_OAUTH_PLATFORM_MANIFESTS[platform].defaultScopes,
+        pkce: AI_MEDIA_OAUTH_PLATFORM_MANIFESTS[platform].pkce === "required_s256" ? "required_s256" : "none",
       },
     ]));
 
@@ -114,13 +115,12 @@ export function createProductionOAuthRuntimeFromEnvironment(
       }),
       authorizationUrl: (input) => {
         if (!config.enabledPlatforms.includes(input.platform)) throw new OAuthFlowError();
-        const manifest = AI_MEDIA_OAUTH_PLATFORM_MANIFESTS[input.platform];
         return buildOAuthAuthorizationUrl({
           platform: input.platform,
           clientId: config.providers[input.platform]!.clientId,
           redirectUri: config.providers[input.platform]!.redirectUri,
           state: input.state,
-          ...(manifest.pkce === "required_s256" ? { codeChallenge: input.codeChallenge } : {}),
+          ...(input.codeChallenge === undefined ? {} : { codeChallenge: input.codeChallenge }),
         });
       },
     };

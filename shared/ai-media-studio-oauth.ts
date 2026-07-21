@@ -9,6 +9,8 @@ export const AI_MEDIA_OAUTH_PLATFORMS = [
 
 export const aiMediaOAuthPlatformSchema = z.enum(AI_MEDIA_OAUTH_PLATFORMS);
 export const aiMediaOAuthOutcomeSchema = z.enum(["authorized", "denied", "error"]);
+export const AI_MEDIA_OAUTH_PKCE_MODES = ["required_s256", "none"] as const;
+export const aiMediaOAuthPkceModeSchema = z.enum(AI_MEDIA_OAUTH_PKCE_MODES);
 
 const scopeSchema = z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9._:/-]+$/);
 
@@ -22,12 +24,16 @@ export const aiMediaOAuthStartResponseSchema = z.object({
   sessionId: z.string().uuid(),
   platform: aiMediaOAuthPlatformSchema,
   state: z.string().regex(/^[A-Za-z0-9_-]{64}$/),
-  codeChallenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-  codeChallengeMethod: z.literal("S256"),
+  codeChallenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
+  codeChallengeMethod: z.literal("S256").optional(),
   redirectUri: z.string().url(),
   requestedScopes: z.array(scopeSchema).min(1).max(50),
   expiresAt: z.string().datetime(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if ((value.codeChallenge === undefined) !== (value.codeChallengeMethod === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "PKCE response fields must be returned together" });
+  }
+});
 
 export const aiMediaOAuthCallbackResponseSchema = z.object({
   sessionId: z.string().uuid(),
@@ -38,6 +44,7 @@ export const aiMediaOAuthCallbackResponseSchema = z.object({
 
 export type AiMediaOAuthPlatform = z.infer<typeof aiMediaOAuthPlatformSchema>;
 export type AiMediaOAuthOutcome = z.infer<typeof aiMediaOAuthOutcomeSchema>;
+export type AiMediaOAuthPkceMode = z.infer<typeof aiMediaOAuthPkceModeSchema>;
 export type AiMediaOAuthStartRequest = z.infer<typeof aiMediaOAuthStartRequestSchema>;
 export type AiMediaOAuthStartResponse = z.infer<typeof aiMediaOAuthStartResponseSchema>;
 export type AiMediaOAuthCallbackResponse = z.infer<typeof aiMediaOAuthCallbackResponseSchema>;

@@ -36,23 +36,25 @@ test("Meta authorization is explicitly versioned and conservatively omits PKCE",
   }
 });
 
-test("Google authorization requires S256 and fixed offline-consent parameters", () => {
+test("Google Web Server authorization omits PKCE and applies immutable offline-consent parameters", () => {
   const url = new URL(buildOAuthAuthorizationUrl({
     platform: "youtube_shorts",
     clientId: "client.apps.googleusercontent.com",
     redirectUri: "https://app.example.com/oauth/youtube/callback",
     state: STATE,
-    codeChallenge: CHALLENGE,
   }));
   assert.equal(url.origin + url.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
   assert.equal(url.searchParams.get("scope"), AI_MEDIA_OAUTH_PLATFORM_MANIFESTS.youtube_shorts.defaultScopes.join(" "));
-  assert.equal(url.searchParams.get("code_challenge"), CHALLENGE);
-  assert.equal(url.searchParams.get("code_challenge_method"), "S256");
+  assert.equal(url.searchParams.has("code_challenge"), false);
+  assert.equal(url.searchParams.has("code_challenge_method"), false);
   assert.equal(url.searchParams.get("access_type"), "offline");
   assert.equal(url.searchParams.get("include_granted_scopes"), "false");
   assert.equal(url.searchParams.get("prompt"), "consent");
+  assert.equal(Object.isFrozen(AI_MEDIA_OAUTH_PLATFORM_MANIFESTS.youtube_shorts), true);
+  assert.equal(Object.isFrozen(AI_MEDIA_OAUTH_PLATFORM_MANIFESTS.youtube_shorts.authorizationParameters), true);
   assert.throws(() => buildOAuthAuthorizationUrl({
-    platform: "youtube_shorts", clientId: "client", redirectUri: "https://app.example.com/callback", state: STATE,
+    platform: "youtube_shorts", clientId: "client", redirectUri: "https://app.example.com/callback",
+    state: STATE, codeChallenge: CHALLENGE,
   }), /authorization configuration is invalid/);
 });
 
@@ -61,6 +63,11 @@ test("authorization URL composition rejects unsafe redirects and malformed calle
     "http://app.example.com/callback",
     "https://localhost/callback",
     "https://127.0.0.1/callback",
+    "https://127.1/callback",
+    "https://0x7f000001/callback",
+    "https://0x7f.1/callback",
+    "https://127.0x0.0.1/callback",
+    "https://2130706433/callback",
     "https://[::1]/callback",
     "https://user@app.example.com/callback",
     "https://app.example.com:8443/callback",
