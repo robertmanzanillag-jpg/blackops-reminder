@@ -134,6 +134,31 @@ async function main(): Promise<void> {
       "--test-concurrency=1",
       "tests/ai-media-studio-pr21-postgres-integration.test.ts",
     ], childEnvironment);
+
+    // PR26 exercises irreversible evidence rows and real concurrent sessions.
+    // Recreate the owned ephemeral database so its capability/race suite never
+    // depends on, or contaminates, the PR21-PR25 migration rehearsal above.
+    await runCommand("dropdb", [
+      "-h", socketDirectory,
+      "-p", TEST_PORT,
+      "-U", "postgres",
+      TEST_DATABASE_NAME,
+    ]);
+    await runCommand("createdb", [
+      "-h", socketDirectory,
+      "-p", TEST_PORT,
+      "-U", "postgres",
+      "-T", "template0",
+      "--encoding=UTF8",
+      "--locale=C",
+      TEST_DATABASE_NAME,
+    ]);
+    await runCommand("node", [
+      "--import", "tsx",
+      "--test",
+      "--test-concurrency=1",
+      "tests/ai-media-studio-pr26-postgres-races.test.ts",
+    ], childEnvironment);
   } catch (error) {
     const log = testProcessStarted ? "" : await readFile(logPath, "utf8").catch(() => "");
     if (log) process.stderr.write(`Isolated PostgreSQL log:\n${log}`);
