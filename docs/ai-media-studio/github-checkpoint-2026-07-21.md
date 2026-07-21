@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active checkpoint: PR24 fenced held-work activation
 
-- Branch: `codex/ai-media-studio-held-activation`, stacked on draft PR #106; ready to preserve as an inert draft checkpoint.
+- Branch: `codex/ai-media-studio-held-activation`, draft PR #107, stacked on draft PR #106; preserved as an inert GitHub checkpoint.
 - Scope: append-only activation evidence plus one exact database transaction for the held reservation/render/outbox/slot handoff. Activation changes internal queue state only and leaves the micro-USD reservation uncommitted.
 - Structural no-spend boundary: generic render and outbox claim SQL exclude every budget-bound admitted artifact. The activated outbox is internal wake/audit work only and has no provider capability. The PR24 repository remains absent from routes, public barrels and runtime composition.
 - Verification evidence: 23 focused security checks, the full AI Media Studio suite with 589 passed and 13 PostgreSQL-only cases skipped, isolated socket-only PostgreSQL 16 with 13/13 passed, TypeScript, production build, generated codebase map and diff hygiene passed. Independent security review found no P0-P2 findings and App QA passed with no PR24-specific warning or failure.
