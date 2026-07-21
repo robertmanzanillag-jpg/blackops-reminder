@@ -244,7 +244,7 @@ export type OAuthProviderActivationResult = Readonly<{
 export type OAuthProviderConnectionFailureCode =
   | "invalid_exchange" | "exchange_ambiguous" | "scope_mismatch" | "invalid_artifact"
   | "invalid_discovery" | "no_targets" | "target_not_found" | "target_mismatch" | "activation_rejected"
-  | "provider_rejected" | "internal_failure";
+  | "activation_ambiguous" | "provider_rejected" | "internal_failure";
 
 export interface OAuthProviderConnectionRepository {
   create(input: CreateOAuthProviderConnectionAttempt): Promise<OAuthProviderConnectionAttempt>;

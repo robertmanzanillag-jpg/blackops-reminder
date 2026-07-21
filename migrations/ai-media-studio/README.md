@@ -5,7 +5,7 @@ PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 pass
 local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
 `npm run db:push` for reviewed SQL. The complete preparation-only manifest,
-approval gates, current PR16 SQL blocker, staging verification, reverse order,
+approval gates, current PR16B repository/CAS blocker, staging verification, reverse order,
 and stop conditions live in
 `docs/ai-media-studio/staging-rehearsal-runbook.md`. That runbook does not
 authorize a database connection or migration. PR7 has no database migration in
@@ -15,8 +15,8 @@ this directory.
 
 Do not treat the per-delta notes below as an executable sequence. The sole
 current sequence authority is the preparation-only staging runbook linked
-above, and it is **NO-GO** because PR1 provenance is unproven and PR16 has no
-reviewed forward/rollback SQL or complete relational invariants. PR13 is a
+above, and it is **NO-GO** because PR1 provenance is unproven, independently checked local PR16A SQL
+is unapplied, and the PR16B durable repository/CAS is absent. PR13 is a
 reviewed schema-neutral adapter slice; PR14 verifies its PR12 database prerequisites. No
 database target, backup/restore, maintenance window, migration, restart, or
 deployment has been approved. Individual sections describe a delta's historical
@@ -234,12 +234,18 @@ selection and terminal evidence; correct the release and roll forward.
 
 ## PR16 provider activation v2 draft
 
-PR16 currently contains additive Drizzle schema declarations for role-specific
-credential artifacts, exact provider-account bindings and v2 vault operations.
-It does not yet contain reviewed forward/rollback SQL or an executable Drizzle
-activation transaction. Do not use `drizzle-kit push` to bypass those missing
-artifacts. A later reviewed slice must add relation-exact, additive SQL plus
-static tests before any staging rehearsal or release consideration.
+PR16A now has local additive forward/rollback SQL for role-specific credential
+artifacts, exact provider-account bindings, v2 vault operations, lifecycle
+guards and deferred graph integrity. The pair is unapplied but passes its
+independent checker and App QA; isolated PostgreSQL 16 and static evidence on this branch
+are local proof, not staging acceptance. The evidence-preserving rollback does
+not authorize destructive cleanup.
+
+PR16B durable activation repository and fenced CAS remain absent and blocking.
+Do not use `drizzle-kit push` to bypass that application boundary. The staging
+sequence may inventory PR16A after PR15, but must stop before PR19 and before
+any application restart until PR16B has its own maker/checker and PostgreSQL
+evidence.
 
 ## PR19 durable daily admission draft
 

@@ -367,7 +367,7 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderA
     const storageKey = key(input.scope, input.attemptId);
     const attempt = this.attempts.get(storageKey);
     if (!attempt || !hasFence(attempt, input, "activation_in_progress")) return undefined;
-    const updated = advance(attempt, "activation_indeterminate", input.now);
+    const updated = advance(attempt, "activation_indeterminate", input.now, { failureCode: "activation_ambiguous" });
     this.attempts.set(storageKey, updated);
     return clone(updated);
   }
