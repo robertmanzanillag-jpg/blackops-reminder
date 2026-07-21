@@ -220,7 +220,9 @@ Explicit pre-runtime blockers:
 
 ## PR14 checkpoint — OAuth vault operations
 
-Branch: `codex/ai-media-studio-oauth-vault-operations`, stacked on PR #89. GitHub PR number will be recorded after the branch is pushed.
+GitHub PR: #92, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/92`.
+
+Branch: `codex/ai-media-studio-oauth-vault-operations`, stacked on PR #89.
 
 Implemented:
 
