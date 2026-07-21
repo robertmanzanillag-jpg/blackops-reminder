@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local checkpoint: PR25 dedicated admitted worker
 
-- Branch: `codex/ai-media-studio-admitted-worker`, stacked on draft PR #107; ready to preserve as an inert draft checkpoint.
+- Branch: `codex/ai-media-studio-admitted-worker`, draft PR #108, stacked on draft PR #107; preserved as an inert GitHub checkpoint.
 - Scope: a provider-neutral admitted-worker contract, dedicated Drizzle repository, append-only submission-attempt/event ledgers, guarded forward/rollback SQL, and an orchestration loop with no timer or runtime composition.
 - Money and submission boundary: claim leases without spending; authorization revalidates the full current database authority graph and atomically moves the exact reservation from reserved to committed before returning the sealed request and persisted provider idempotency key. The injected provider port can be called only once per authorization. Every uncertain outcome is permanently non-retriable and enters reconciliation.
 - Refund boundary: only an exact provider capability carrying linearizable negative-finality evidence may prove that an idempotency key was not accepted and can never be accepted later. Timeout, HTTP status, eventual absence and ordinary 404 responses can never release committed funds. No HeyGen implementation of that capability exists.
