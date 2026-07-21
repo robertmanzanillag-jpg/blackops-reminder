@@ -271,6 +271,7 @@ function codeContextFor(claim: OAuthAuthorizationClaim): OAuthAuthorizationCodeV
 function tokenContextFor(claim: OAuthAuthorizationClaim): OAuthTokenVaultContext {
   return {
     purpose: "ai_media_oauth_token", ...claim.session.scope,
+    actorUserId: claim.session.actorUserId,
     providerAccountId: claim.session.providerAccountId, platform: claim.session.platform,
     sessionId: claim.session.id, targetCredentialVersion: claim.targetCredentialVersion,
     tokenBindingId: claim.tokenBindingId,

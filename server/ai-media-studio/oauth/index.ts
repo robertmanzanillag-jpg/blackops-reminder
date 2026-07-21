@@ -6,4 +6,7 @@ export * from "./in-memory";
 export * from "./platform-manifests";
 export * from "./production-runtime";
 export * from "./s3-kms-pkce-vault";
+export * from "./s3-kms-envelope";
+export * from "./s3-kms-authorization-code-vault";
+export * from "./s3-kms-token-vault";
 export * from "./service";
