@@ -91,6 +91,7 @@ test("selection is exact, immutable, and idempotent only for an exact retry", as
   const command = { attemptId: "attempt-1", scope, actorUserId: "actor-1", expectedStageVersion: recorded.stageVersion, candidateId: "candidate-1", targetId: "target-1", targetKind: "tiktok_user" as const, now: "2026-07-21T12:04:00.000Z" };
   assert.deepEqual(await repository.selectTarget(command), await repository.selectTarget(command));
   await assert.rejects(repository.selectTarget({ ...command, targetId: "target-other" }), OAuthProviderConnectionError);
+  await assert.rejects(repository.selectTarget({ ...command, expectedStageVersion: command.expectedStageVersion + 1 }), OAuthProviderConnectionError);
 });
 
 test("exchange rejects scope escalation and invalid artifact lifetime generically", async () => {

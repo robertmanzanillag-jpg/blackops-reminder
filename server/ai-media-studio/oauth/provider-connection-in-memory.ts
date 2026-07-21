@@ -212,7 +212,8 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderC
     timestamp(input.now);
     if (attempt.selectedCandidateId !== null) {
       if (attempt.selectedCandidateId === input.candidateId && attempt.selectedTargetId === input.targetId
-        && attempt.selectedTargetKind === input.targetKind && attempt.selectedByActorUserId === input.actorUserId) return clone(attempt);
+        && attempt.selectedTargetKind === input.targetKind && attempt.selectedByActorUserId === input.actorUserId
+        && attempt.selectedStageVersion === input.expectedStageVersion) return clone(attempt);
       throw new OAuthProviderConnectionError();
     }
     if (attempt.stage !== "awaiting_target" || attempt.stageVersion !== input.expectedStageVersion

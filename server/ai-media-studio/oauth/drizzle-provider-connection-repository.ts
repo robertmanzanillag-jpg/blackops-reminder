@@ -249,9 +249,15 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
       if (!current) return undefined;
       validateOAuthProviderTokenArtifacts(current.grantFamily, input.tokenArtifacts, databaseNow);
       validateOAuthProviderScopes(current.grantFamily, current.requiredScopes, input.actualScopes, current.allowedScopes);
+      const safeArtifacts = input.tokenArtifacts.map((artifact) => ({
+        role: artifact.role,
+        lifetime: artifact.lifetime.kind === "expires_at"
+          ? { kind: "expires_at" as const, expiresAt: artifact.lifetime.expiresAt, revalidateAt: artifact.lifetime.revalidateAt }
+          : { kind: "provider_non_expiring" as const, revalidateAt: artifact.lifetime.revalidateAt },
+      }));
       const updated = rows(await tx.execute(sql`UPDATE ${aiMediaOAuthConnectionAttempts} SET
         stage='discovery_pending',stage_version=stage_version+1,actual_scopes=${JSON.stringify(input.actualScopes)}::jsonb,
-        token_artifacts=${JSON.stringify(input.tokenArtifacts)}::jsonb,lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,
+        token_artifacts=${JSON.stringify(safeArtifacts)}::jsonb,lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,
         failure_code=NULL,updated_at=clock_timestamp()
         WHERE id=${input.attemptId} AND owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
           AND stage='exchange_in_progress' AND lease_token=${input.leaseToken} AND lease_fencing=${input.leaseFencing}
@@ -352,7 +358,8 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
         if (replay.length !== 1 || String(value(replay[0], "candidateId", "candidate_id")) !== input.candidateId
           || String(value(replay[0], "targetKind", "target_kind")) !== input.targetKind
           || String(value(replay[0], "targetExternalId", "target_external_id")) !== input.targetId
-          || String(value(replay[0], "selectedActorUserId", "selected_actor_user_id")) !== input.actorUserId) return undefined;
+          || String(value(replay[0], "selectedActorUserId", "selected_actor_user_id")) !== input.actorUserId
+          || Number(value(replay[0], "selectedStageVersion", "selected_stage_version")) !== input.expectedStageVersion) return undefined;
         return this.readAttempt(tx, input.scope, input.attemptId, attemptRow);
       }
       if (attempt.stage !== "awaiting_target" || attempt.stageVersion !== input.expectedStageVersion

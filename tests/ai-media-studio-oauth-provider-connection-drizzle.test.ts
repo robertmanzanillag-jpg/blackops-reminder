@@ -127,17 +127,20 @@ test("exchange completion persists only safe descriptors after required subset a
     rows: call === 1 ? [{ database_now: new Date("2026-07-21T12:01:00.000Z") }]
       : call === 2 ? [exchange] : call === 5 ? [completed] : [],
   }));
+  const unsafeArtifact = { role: "operational_access" as const, lifetime: { kind: "expires_at" as const,
+    expiresAt: "2026-07-21T13:00:00.000Z", revalidateAt: "2026-07-21T12:30:00.000Z" },
+    access_token: "must-never-persist" };
   const result = await new DrizzleOAuthProviderConnectionRepository(db).markExchangeComplete({
     attemptId, scope, leaseToken, leaseFencing: 7, now: "2020-01-01T00:00:00.000Z",
     actualScopes: ["https://www.googleapis.com/auth/youtube.upload"],
-    tokenArtifacts: [{ role: "operational_access", lifetime: { kind: "expires_at",
-      expiresAt: "2026-07-21T13:00:00.000Z", revalidateAt: "2026-07-21T12:30:00.000Z" } },
+    tokenArtifacts: [unsafeArtifact,
       { role: "refresh", lifetime: { kind: "expires_at",
         expiresAt: "2027-07-21T12:00:00.000Z", revalidateAt: "2026-08-21T12:00:00.000Z" } }],
   });
   assert.equal(result?.stage, "discovery_pending");
   const rendered = JSON.stringify(calls);
   assert.doesNotMatch(rendered, /vault:\/\/|access-token|refresh-token|provider_json/i);
+  assert.doesNotMatch(rendered, /must-never-persist|access_token/i);
   const mutation = calls[4].sql.replace(/\s+/g, " ");
   assert.match(mutation, /lease_token.*lease_fencing.*lease_expires_at.*clock_timestamp/i);
   assert.match(mutation, /actual_scopes.*token_artifacts/i);
@@ -252,7 +255,7 @@ test("exact selection replay returns the existing choice while a different repla
     actual_scopes: ["https://www.googleapis.com/auth/youtube.upload"], token_artifacts: [{}] });
   const replaySelection = { ...candidateRow(), selected_actor_user_id: "actor-1",
     selected_at: new Date("2026-07-21T12:04:00.000Z"), selected_stage_version: 5 };
-  for (const targetId of ["channel-1", "channel-other"]) {
+  for (const [targetId, expectedStageVersion] of [["channel-1", 5], ["channel-other", 5], ["channel-1", 4]] as const) {
     const { db } = makeDb((call) => {
       if (call === 1) return { rows: [activation] };
       if (call === 2) return { rows: [replaySelection] };
@@ -261,10 +264,10 @@ test("exact selection replay returns the existing choice while a different repla
       return { rows: [] };
     });
     const replayed = await new DrizzleOAuthProviderConnectionRepository(db).selectTarget({
-      attemptId, scope, actorUserId: "actor-1", expectedStageVersion: 5,
+      attemptId, scope, actorUserId: "actor-1", expectedStageVersion,
       candidateId, targetId, targetKind: "youtube_channel", now: "2026-07-21T12:04:00.000Z",
     });
-    assert.equal(Boolean(replayed), targetId === "channel-1");
+    assert.equal(Boolean(replayed), targetId === "channel-1" && expectedStageVersion === 5);
   }
 });
 
