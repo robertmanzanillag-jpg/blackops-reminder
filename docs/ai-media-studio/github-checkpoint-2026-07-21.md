@@ -282,3 +282,35 @@ Final PR15 hardening checkpoint:
 - Production build exits successfully. Existing Vite chunk-size and unavailable local `yt-dlp` Python runtime warnings still block deployment under App QA policy; no deployment is requested.
 - Independent security re-review reports no remaining P0-P3. Static App QA reports no PR15 UI, route, timer, network, provider/AWS, posting, migration-apply or customer-visible regression.
 - Full-project `npm run check` remained abnormally long and was interrupted without diagnostics; the PR remains draft while that global gate lacks completed evidence.
+
+## PR16 checkpoint — provider activation CAS foundation
+
+Branch: `codex/ai-media-studio-provider-activation-cas`, stacked on PR #94.
+
+This is an intentionally incomplete GitHub-preservation checkpoint. It adds exact
+selected-target activation contracts and an in-memory account/version CAS, plus a
+separate S3/KMS vault v2 that stores one opaque secret object per artifact role.
+The authorization digest is bound to immutable selection/artifact/version evidence,
+not a worker lease or retry timestamp, so an exact retry can reconcile a lost
+response without accepting a different target or credential candidate.
+
+The additive Drizzle schema draft models role-specific credential artifacts,
+immutable provider-account bindings and v2 cleanup obligations. It is not yet a
+release migration: reviewed forward/rollback SQL and the executable Drizzle staging
+and activation transaction remain pending. Cleanup v2 composition also remains
+pending, so no runtime is allowed to write these role-token objects yet.
+
+Evidence before preservation:
+
+- Focused provider connection, activation, vault and persistence tests: 45/45 passed.
+- `git diff --check` passed.
+- The full-project TypeScript command again ran abnormally long without diagnostics
+  and was interrupted; a direct isolated invocation was blocked by the repository's
+  pre-existing duplicate `@types/* 2` directories. PR16 therefore remains draft.
+- No route, worker, real AWS/provider call, migration apply, external post or deploy.
+- Legacy publishing remains fail-closed until exact target/binding integration.
+
+Next recovery slice: author and statically test the additive migration, implement
+prewrite-safe artifact/cleanup staging and the single-transaction Drizzle activation
+CAS, compose cleanup v2 without a delete-vs-activation race, and repeat independent
+checker, security and App QA gates before any runtime wiring.

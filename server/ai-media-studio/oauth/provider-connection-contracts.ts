@@ -1,10 +1,11 @@
+import { createHash } from "node:crypto";
 import type { AiMediaOAuthPlatform } from "../../../shared/ai-media-studio-oauth";
 import type { TenantScope } from "../core/resource-domain";
 
 export const OAUTH_PROVIDER_CONNECTION_STAGES = [
   "exchange_pending", "exchange_in_progress", "exchange_indeterminate",
   "discovery_pending", "discovery_in_progress", "awaiting_target",
-  "activation_pending", "activation_in_progress", "authorized", "failed",
+  "activation_pending", "activation_in_progress", "activation_indeterminate", "authorized", "failed",
 ] as const;
 export type OAuthProviderConnectionStage = typeof OAUTH_PROVIDER_CONNECTION_STAGES[number];
 
@@ -27,6 +28,17 @@ export type OAuthProviderTokenLifetime =
 /** Safe metadata only. Secret values and vault references belong to a later vault slice. */
 export type OAuthProviderTokenArtifactDescriptor = Readonly<{
   role: OAuthProviderTokenArtifactRole;
+  lifetime: OAuthProviderTokenLifetime;
+}>;
+
+/**
+ * Durable evidence for one role-specific v2 vault object. The reference is opaque
+ * and contains no token value; the role is part of the immutable object identity.
+ */
+export type OAuthProviderActivationArtifactEvidence = Readonly<{
+  role: OAuthProviderTokenArtifactRole;
+  artifactBindingId: string;
+  vaultReference: string;
   lifetime: OAuthProviderTokenLifetime;
 }>;
 
@@ -82,6 +94,11 @@ export type OAuthProviderConnectionAttempt = Readonly<{
   selectedAt: string | null;
   selectedEligibilityDigest: string | null;
   selectedStageVersion: number | null;
+  selectionDigest: string | null;
+  activationArtifactBindingId: string | null;
+  activationArtifacts: readonly OAuthProviderActivationArtifactEvidence[];
+  authorizedDigest: string | null;
+  authorizedAt: string | null;
   leaseToken: string | null;
   leaseOwner: string | null;
   leaseExpiresAt: string | null;
@@ -171,6 +188,58 @@ export type SelectOAuthProviderTarget = Readonly<{
   now: string;
 }>;
 
+export type OAuthProviderActivationAccount = Readonly<{
+  scope: TenantScope;
+  providerAccountId: string;
+  platform: AiMediaOAuthPlatform;
+  credentialVersion: number;
+  status: "disconnected" | "active";
+  targetId: string | null;
+  targetKind: OAuthProviderTargetKind | null;
+  actorUserId: string | null;
+  oauthSessionId: string | null;
+  tokenBindingId: string | null;
+  artifactBindingId: string | null;
+  artifacts: readonly OAuthProviderActivationArtifactEvidence[];
+  grantedScopes: readonly string[];
+  capabilities: readonly OAuthProviderConnectionCapability[];
+  manifestRevision: string | null;
+  authorizedDigest: string | null;
+  authorizedAt: string | null;
+}>;
+
+export type CreateOAuthProviderActivationAccount = Readonly<{
+  scope: TenantScope;
+  providerAccountId: string;
+  platform: AiMediaOAuthPlatform;
+  credentialVersion: number;
+}>;
+
+/** All public evidence required by the single atomic attempt/account activation CAS. */
+export type FinalizeOAuthProviderActivation = OAuthProviderConnectionFence & Readonly<{
+  actorUserId: string;
+  activationStageVersion: number;
+  selectedCandidateId: string;
+  selectedTargetId: string;
+  selectedTargetKind: OAuthProviderTargetKind;
+  selectedEligibilityDigest: string;
+  selectedStageVersion: number;
+  selectionDigest: string;
+  tokenBindingId: string;
+  artifactBindingId: string;
+  artifacts: readonly OAuthProviderActivationArtifactEvidence[];
+  actualScopes: readonly string[];
+  capabilities: readonly OAuthProviderConnectionCapability[];
+  manifestRevision: string;
+  expectedCredentialVersion: number;
+  targetCredentialVersion: number;
+}>;
+
+export type OAuthProviderActivationResult = Readonly<{
+  attempt: OAuthProviderConnectionAttempt;
+  account: OAuthProviderActivationAccount;
+}>;
+
 export type OAuthProviderConnectionFailureCode =
   | "invalid_exchange" | "exchange_ambiguous" | "scope_mismatch" | "invalid_artifact"
   | "invalid_discovery" | "no_targets" | "target_not_found" | "target_mismatch" | "activation_rejected"
@@ -185,6 +254,13 @@ export interface OAuthProviderConnectionRepository {
   recordDiscovery(input: RecordOAuthProviderDiscovery): Promise<OAuthProviderConnectionAttempt | undefined>;
   selectTarget(input: SelectOAuthProviderTarget): Promise<OAuthProviderConnectionAttempt | undefined>;
   markFailed(input: OAuthProviderConnectionFence & { failureCode: OAuthProviderConnectionFailureCode }): Promise<OAuthProviderConnectionAttempt | undefined>;
+}
+
+/** Kept as an extension so PR15 repositories remain valid until their PR16 CAS is implemented. */
+export interface OAuthProviderActivationRepository extends OAuthProviderConnectionRepository {
+  getActivationAccount(scope: TenantScope, providerAccountId: string, platform: AiMediaOAuthPlatform): Promise<OAuthProviderActivationAccount | undefined>;
+  finalizeActivation(input: FinalizeOAuthProviderActivation): Promise<OAuthProviderActivationResult | undefined>;
+  markActivationIndeterminate(input: OAuthProviderConnectionFence): Promise<OAuthProviderConnectionAttempt | undefined>;
 }
 
 export class OAuthProviderConnectionError extends Error {
@@ -295,6 +371,97 @@ export function validateOAuthProviderTokenArtifacts(
   }
 }
 
+export function validateOAuthProviderActivationArtifacts(
+  grantFamily: OAuthProviderGrantFamily,
+  artifactBindingId: string,
+  artifacts: readonly OAuthProviderActivationArtifactEvidence[],
+  now: string,
+): readonly OAuthProviderActivationArtifactEvidence[] {
+  if (!UUID.test(artifactBindingId) || !Array.isArray(artifacts)) throw new OAuthProviderConnectionError();
+  const expectedRoles: readonly OAuthProviderTokenArtifactRole[] = grantFamily === "meta_facebook_login"
+    ? ["operational_access"]
+    : ["operational_access", "refresh"];
+  if (artifacts.length !== expectedRoles.length) throw new OAuthProviderConnectionError();
+  const byRole = new Map<OAuthProviderTokenArtifactRole, OAuthProviderActivationArtifactEvidence>();
+  for (const artifact of artifacts) {
+    if (!artifact || !expectedRoles.includes(artifact.role) || byRole.has(artifact.role)
+      || artifact.artifactBindingId !== artifactBindingId
+      || artifact.vaultReference !== oauthProviderActivationVaultReference(artifactBindingId, artifact.role)) {
+      throw new OAuthProviderConnectionError();
+    }
+    byRole.set(artifact.role, artifact);
+  }
+  const canonical = expectedRoles.map((role) => {
+    const artifact = byRole.get(role);
+    if (!artifact) throw new OAuthProviderConnectionError();
+    validateActivationLifetime(grantFamily, role, artifact.lifetime, now);
+    return Object.freeze({
+      role,
+      artifactBindingId,
+      vaultReference: oauthProviderActivationVaultReference(artifactBindingId, role),
+      lifetime: cloneLifetime(artifact.lifetime),
+    });
+  });
+  return Object.freeze(canonical);
+}
+
+export function oauthProviderActivationVaultReference(
+  artifactBindingId: string,
+  role: OAuthProviderTokenArtifactRole,
+): string {
+  if (!UUID.test(artifactBindingId) || !OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES.includes(role)) throw new OAuthProviderConnectionError();
+  const opaqueBinding = createHash("sha256").update(JSON.stringify([artifactBindingId, role]), "utf8").digest("hex");
+  return `vault://ai-media-studio/oauth-role-token/v2/${opaqueBinding}`;
+}
+
+export type OAuthProviderSelectionDigestEvidence = Readonly<{
+  attemptId: string;
+  scope: TenantScope;
+  actorUserId: string;
+  providerAccountId: string;
+  oauthSessionId: string;
+  platform: AiMediaOAuthPlatform;
+  grantFamily: OAuthProviderGrantFamily;
+  candidateId: string;
+  targetId: string;
+  targetKind: OAuthProviderTargetKind;
+  eligibilityDigest: string;
+  selectedStageVersion: number;
+  selectedAt: string;
+  manifestRevision: string;
+  tokenBindingId: string;
+  expectedCredentialVersion: number;
+  targetCredentialVersion: number;
+  actualScopes: readonly string[];
+  capabilities: readonly OAuthProviderConnectionCapability[];
+}>;
+
+export function deriveOAuthProviderSelectionDigest(evidence: OAuthProviderSelectionDigestEvidence): string {
+  return digestCanonical("ai-media-oauth-provider-selection-v1", [
+    evidence.attemptId, evidence.scope.ownerUserId, evidence.scope.workspaceId, evidence.actorUserId,
+    evidence.providerAccountId, evidence.oauthSessionId, evidence.platform, evidence.grantFamily,
+    evidence.candidateId, evidence.targetId, evidence.targetKind, evidence.eligibilityDigest,
+    evidence.selectedStageVersion, evidence.selectedAt, evidence.manifestRevision, evidence.tokenBindingId,
+    evidence.expectedCredentialVersion, evidence.targetCredentialVersion,
+    canonicalDigestList(evidence.actualScopes), canonicalDigestList(evidence.capabilities),
+  ]);
+}
+
+export function deriveOAuthProviderAuthorizedDigest(input: FinalizeOAuthProviderActivation): string {
+  return digestCanonical("ai-media-oauth-provider-authorization-v1", [
+    input.attemptId, input.scope.ownerUserId, input.scope.workspaceId, input.actorUserId,
+    input.activationStageVersion,
+    input.selectedCandidateId, input.selectedTargetId, input.selectedTargetKind,
+    input.selectedEligibilityDigest, input.selectedStageVersion, input.selectionDigest,
+    input.tokenBindingId, input.artifactBindingId,
+    input.artifacts.map((artifact) => [artifact.role, artifact.artifactBindingId, artifact.vaultReference,
+      artifact.lifetime.kind, artifact.lifetime.revalidateAt,
+      artifact.lifetime.kind === "expires_at" ? artifact.lifetime.expiresAt : null]),
+    canonicalDigestList(input.actualScopes), canonicalDigestList(input.capabilities), input.manifestRevision,
+    input.expectedCredentialVersion, input.targetCredentialVersion,
+  ]);
+}
+
 export function toOAuthProviderTargetDto(candidate: OAuthProviderTargetCandidate): OAuthProviderTargetDto {
   return Object.freeze({ targetId: candidate.targetId, kind: candidate.kind, displayName: candidate.displayName, capabilities: Object.freeze([...candidate.capabilities]) });
 }
@@ -309,4 +476,46 @@ function parseIso(value: string): number {
   const parsed = Date.parse(value);
   if (!value || !Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) throw new OAuthProviderConnectionError();
   return parsed;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+function validateActivationLifetime(
+  grantFamily: OAuthProviderGrantFamily,
+  role: OAuthProviderTokenArtifactRole,
+  lifetime: OAuthProviderTokenLifetime,
+  now: string,
+): void {
+  const nowMs = parseIso(now);
+  const revalidateMs = parseIso(lifetime.revalidateAt);
+  if (revalidateMs <= nowMs || revalidateMs > nowMs + 366 * 24 * 60 * 60 * 1_000) throw new OAuthProviderConnectionError();
+  if (lifetime.kind === "expires_at") {
+    const expiryMs = parseIso(lifetime.expiresAt);
+    if (expiryMs <= nowMs || revalidateMs > expiryMs) throw new OAuthProviderConnectionError();
+    return;
+  }
+  if (lifetime.kind === "provider_non_expiring") {
+    if (grantFamily !== "meta_facebook_login" || role !== "operational_access") throw new OAuthProviderConnectionError();
+    return;
+  }
+  if (lifetime.kind === "revocation_bound") {
+    if (grantFamily !== "google_user" || role !== "refresh") throw new OAuthProviderConnectionError();
+    return;
+  }
+  throw new OAuthProviderConnectionError();
+}
+
+function cloneLifetime(lifetime: OAuthProviderTokenLifetime): OAuthProviderTokenLifetime {
+  return Object.freeze(lifetime.kind === "expires_at"
+    ? { kind: "expires_at" as const, expiresAt: lifetime.expiresAt, revalidateAt: lifetime.revalidateAt }
+    : { kind: lifetime.kind, revalidateAt: lifetime.revalidateAt });
+}
+
+function canonicalDigestList(values: readonly string[]): readonly string[] {
+  if (!Array.isArray(values) || new Set(values).size !== values.length) throw new OAuthProviderConnectionError();
+  return Object.freeze([...values].sort());
+}
+
+function digestCanonical(domain: string, values: readonly unknown[]): string {
+  return createHash("sha256").update(JSON.stringify([domain, ...values]), "utf8").digest("hex");
 }
