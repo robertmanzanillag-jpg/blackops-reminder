@@ -201,6 +201,7 @@ export type OAuthProviderActivationAccount = Readonly<{
   oauthSessionId: string | null;
   tokenBindingId: string | null;
   artifactBindingId: string | null;
+  credentialBindingId?: string | null;
   artifacts: readonly OAuthProviderActivationArtifactEvidence[];
   grantedScopes: readonly string[];
   capabilities: readonly OAuthProviderConnectionCapability[];
@@ -236,6 +237,59 @@ export type FinalizeOAuthProviderActivation = OAuthProviderConnectionFence & Rea
   targetCredentialVersion: number;
 }>;
 
+export type FinalizeDurableOAuthProviderActivation = Omit<FinalizeOAuthProviderActivation, "credentialBindingId"> & Readonly<{
+  credentialBindingId: string;
+}>;
+
+export type StageOAuthProviderActivationArtifact = OAuthProviderActivationArtifactEvidence & Readonly<{
+  artifactId: string;
+  cleanupOperationId: string;
+}>;
+
+/** Secret-free graph persisted before the caller writes any vault object. */
+export type StageOAuthProviderActivation = OAuthProviderConnectionFence & Readonly<{
+  credentialBindingId: string;
+  actorUserId: string;
+  activationStageVersion: number;
+  selectedCandidateId: string;
+  selectedTargetId: string;
+  selectedTargetKind: OAuthProviderTargetKind;
+  selectedEligibilityDigest: string;
+  selectedStageVersion: number;
+  selectionDigest: string;
+  tokenBindingId: string;
+  artifactBindingId: string;
+  artifacts: readonly StageOAuthProviderActivationArtifact[];
+  actualScopes: readonly string[];
+  capabilities: readonly OAuthProviderConnectionCapability[];
+  manifestRevision: string;
+  expectedCredentialVersion: number;
+  targetCredentialVersion: number;
+}>;
+
+export type StagedOAuthProviderActivation = Readonly<{
+  state: "staged";
+  credentialBindingId: string;
+  artifactBindingId: string;
+  artifacts: readonly StageOAuthProviderActivationArtifact[];
+  stagedAt: string;
+}>;
+
+export type OAuthProviderActivationStageResult = StagedOAuthProviderActivation | Readonly<{
+  state: "authorized";
+  result: OAuthProviderActivationResult;
+}>;
+
+export type DurableOAuthProviderActivationResult = Readonly<{
+  state: "activated" | "replayed";
+  result: OAuthProviderActivationResult;
+}>;
+
+export type RecoverExpiredOAuthProviderActivation = Readonly<{
+  attemptId: string;
+  scope: TenantScope;
+}>;
+
 export type OAuthProviderActivationResult = Readonly<{
   attempt: OAuthProviderConnectionAttempt;
   account: OAuthProviderActivationAccount;
@@ -262,6 +316,12 @@ export interface OAuthProviderActivationRepository extends OAuthProviderConnecti
   getActivationAccount(scope: TenantScope, providerAccountId: string, platform: AiMediaOAuthPlatform): Promise<OAuthProviderActivationAccount | undefined>;
   finalizeActivation(input: FinalizeOAuthProviderActivation): Promise<OAuthProviderActivationResult | undefined>;
   markActivationIndeterminate(input: OAuthProviderConnectionFence): Promise<OAuthProviderConnectionAttempt | undefined>;
+}
+
+export interface OAuthProviderDurableActivationRepository extends OAuthProviderActivationRepository {
+  stageActivation(input: StageOAuthProviderActivation): Promise<OAuthProviderActivationStageResult | undefined>;
+  finalizeStagedActivation(input: FinalizeDurableOAuthProviderActivation): Promise<DurableOAuthProviderActivationResult | undefined>;
+  recoverExpiredStagedActivation(input: RecoverExpiredOAuthProviderActivation): Promise<OAuthProviderConnectionAttempt | undefined>;
 }
 
 export class OAuthProviderConnectionError extends Error {
@@ -466,6 +526,17 @@ export function deriveOAuthProviderAuthorizedDigest(input: FinalizeOAuthProvider
       artifact.lifetime.kind === "expires_at" ? artifact.lifetime.expiresAt : null]),
     canonicalDigestList(input.actualScopes), canonicalDigestList(input.capabilities), input.manifestRevision,
     input.expectedCredentialVersion, input.targetCredentialVersion,
+  ]);
+}
+
+export function deriveOAuthProviderActivationIndeterminateDigest(input: Readonly<{
+  attemptId: string; scope: TenantScope; credentialBindingId: string; artifactBindingId: string;
+  leaseFencing: number; artifactIds: readonly string[]; cleanupOperationIds: readonly string[];
+}>): string {
+  return digestCanonical("ai-media-oauth-provider-activation-indeterminate-v1", [
+    input.attemptId, input.scope.ownerUserId, input.scope.workspaceId, input.credentialBindingId,
+    input.artifactBindingId, input.leaseFencing, canonicalDigestList(input.artifactIds),
+    canonicalDigestList(input.cleanupOperationIds),
   ]);
 }
 

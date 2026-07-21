@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T20:40:35.634Z",
+  "generatedAt": "2026-07-21T21:43:09.795Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,40 +86,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 756,
-    "filesIndexed": 636,
-    "imports": 2591,
+    "filesVisible": 768,
+    "filesIndexed": 641,
+    "imports": 2618,
     "routes": 491,
-    "symbols": 12352
+    "symbols": 12535
   },
   "directories": {
-    "migrations/ai-media-studio": {
-      "files": 41,
-      "indexed": 1,
-      "kinds": {
-        "other": 40,
-        "docs": 1
-      }
-    },
     "server/ai-media-studio": {
-      "files": 133,
-      "indexed": 128,
+      "files": 138,
+      "indexed": 130,
       "kinds": {
-        "server": 133
-      }
-    },
-    "tests": {
-      "files": 167,
-      "indexed": 160,
-      "kinds": {
-        "test": 167
-      }
-    },
-    "tests/fixtures": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "test": 2
+        "server": 138
       }
     },
     ".agents/skills": {
@@ -186,6 +164,14 @@
         "docs": 12
       }
     },
+    "migrations/ai-media-studio": {
+      "files": 43,
+      "indexed": 1,
+      "kinds": {
+        "other": 42,
+        "docs": 1
+      }
+    },
     "script": {
       "files": 39,
       "indexed": 37,
@@ -226,6 +212,20 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 172,
+      "indexed": 163,
+      "kinds": {
+        "test": 172
+      }
+    },
+    "tests/fixtures": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "test": 2
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -8103,6 +8103,86 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/aws-vault-infrastructure-preflight-v2.ts",
+      "kind": "server",
+      "imports": [
+        "@aws-sdk/client-kms",
+        "@aws-sdk/client-s3",
+        "node:crypto"
+      ],
+      "exports": [
+        "AwsRoleTokenVaultCommandClient",
+        "AwsRoleTokenVaultInfrastructureAttestationV2",
+        "AwsRoleTokenVaultInfrastructureManifestV2",
+        "AwsRoleTokenVaultInfrastructurePreflightV2",
+        "AwsRoleTokenVaultPreflightV2CheckCode",
+        "AwsRoleTokenVaultPreflightV2NotReadyError",
+        "canonicalAwsRoleTokenPolicySha256V2",
+        "createAwsRoleTokenVaultInfrastructurePreflightV2"
+      ],
+      "symbols": [
+        "ACCOUNT",
+        "ATTESTATION_TTL_MS",
+        "AwsRoleTokenVaultInfrastructurePreflightV2",
+        "AwsRoleTokenVaultPreflightV2NotReadyError",
+        "BUCKET",
+        "DEFAULT_TIMEOUT_MS",
+        "KMS_ARN",
+        "MAX_GRANT_PAGES",
+        "PREFIX",
+        "REGION",
+        "SAFE_ERROR",
+        "SHA256",
+        "absentRequest",
+        "base",
+        "block",
+        "bounded",
+        "bucketRegion",
+        "canonicalAwsRoleTokenPolicySha256V2",
+        "canonicalJson",
+        "checkedPolicyDigest",
+        "completedAt",
+        "controller",
+        "createAwsRoleTokenVaultInfrastructurePreflightV2",
+        "described",
+        "digest",
+        "encryption",
+        "encryptionRule",
+        "first",
+        "firstDigest",
+        "grants",
+        "isRecord",
+        "keyPolicy",
+        "kmsRequest",
+        "location",
+        "match",
+        "metadata",
+        "normalizeManifest",
+        "normalizeTimeout",
+        "notReady",
+        "objectLock",
+        "ownership",
+        "partition",
+        "partitionFor",
+        "policy",
+        "policyStatus",
+        "publicAccess",
+        "replication",
+        "requireModeledAbsence",
+        "rotation",
+        "rules",
+        "s3Request",
+        "second",
+        "secondDigest",
+        "timeout",
+        "timeoutMs",
+        "trustedNow",
+        "validKmsArn",
+        "versioning"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/aws-vault-infrastructure-preflight.ts",
       "kind": "server",
       "imports": [
@@ -8275,6 +8355,82 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/drizzle-provider-activation-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "./drizzle-provider-connection-repository",
+        "./provider-connection-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOAuthProviderActivationRepository"
+      ],
+      "symbols": [
+        "ActivationCasLost",
+        "DrizzleOAuthProviderActivationRepository",
+        "ExecuteResult",
+        "Row",
+        "UUID",
+        "abandoned",
+        "account",
+        "accountRow",
+        "accountRows",
+        "artifactRows",
+        "artifacts",
+        "attempt",
+        "attemptRow",
+        "attemptRows",
+        "binding",
+        "bindingId",
+        "bindingRows",
+        "bindings",
+        "canonical",
+        "canonicalInput",
+        "capabilities",
+        "claimed",
+        "databaseNow",
+        "date",
+        "dbArtifact",
+        "digest",
+        "equalList",
+        "equalStageArtifacts",
+        "evidence",
+        "evidenceDigest",
+        "evidenceRows",
+        "existing",
+        "expected",
+        "expectedGraphSize",
+        "expiresAt",
+        "finalAccount",
+        "finalAttempt",
+        "graph",
+        "insertedBinding",
+        "iso",
+        "jsDigest",
+        "leaseExpires",
+        "lifetimeKind",
+        "normalize",
+        "nowMs",
+        "operationRows",
+        "parsed",
+        "projected",
+        "requiredUuid",
+        "resultRows",
+        "rows",
+        "sqlDigestRow",
+        "stringArray",
+        "terminal",
+        "updatedAccount",
+        "updatedArtifacts",
+        "updatedBinding",
+        "updatedOperations",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/drizzle-provider-connection-repository.ts",
       "kind": "server",
       "imports": [
@@ -8301,6 +8457,7 @@
         "attemptResult",
         "attemptRow",
         "candidate",
+        "candidateCapabilities",
         "candidateFromRow",
         "candidateIds",
         "candidateResult",
@@ -8331,6 +8488,7 @@
         "rows",
         "safeArtifacts",
         "safeDisplay",
+        "selectedAt",
         "selectionDigest",
         "selectionRows",
         "source",
@@ -8568,6 +8726,8 @@
         "ClaimOAuthProviderConnectionStage",
         "CreateOAuthProviderActivationAccount",
         "CreateOAuthProviderConnectionAttempt",
+        "DurableOAuthProviderActivationResult",
+        "FinalizeDurableOAuthProviderActivation",
         "FinalizeOAuthProviderActivation",
         "MarkOAuthProviderExchangeComplete",
         "OAUTH_PROVIDER_CONNECTION_CAPABILITIES",
@@ -8582,6 +8742,7 @@
         "OAuthProviderActivationArtifactEvidence",
         "OAuthProviderActivationRepository",
         "OAuthProviderActivationResult",
+        "OAuthProviderActivationStageResult",
         "OAuthProviderConnectionActionableStage",
         "OAuthProviderConnectionAttempt",
         "OAuthProviderConnectionCapability",
@@ -8592,6 +8753,7 @@
         "OAuthProviderConnectionInProgressStage",
         "OAuthProviderConnectionRepository",
         "OAuthProviderConnectionStage",
+        "OAuthProviderDurableActivationRepository",
         "OAuthProviderGrantFamily",
         "OAuthProviderSelectionDigestEvidence",
         "OAuthProviderTargetCandidate",
@@ -8601,7 +8763,12 @@
         "OAuthProviderTokenArtifactRole",
         "OAuthProviderTokenLifetime",
         "RecordOAuthProviderDiscovery",
+        "RecoverExpiredOAuthProviderActivation",
         "SelectOAuthProviderTarget",
+        "StageOAuthProviderActivation",
+        "StageOAuthProviderActivationArtifact",
+        "StagedOAuthProviderActivation",
+        "deriveOAuthProviderActivationIndeterminateDigest",
         "deriveOAuthProviderAuthorizedDigest",
         "deriveOAuthProviderCapabilities",
         "deriveOAuthProviderSelectionDigest",
@@ -8628,6 +8795,7 @@
         "canonicalDigestList",
         "capabilities",
         "cloneLifetime",
+        "deriveOAuthProviderActivationIndeterminateDigest",
         "deriveOAuthProviderAuthorizedDigest",
         "deriveOAuthProviderCapabilities",
         "deriveOAuthProviderSelectionDigest",
@@ -20702,6 +20870,30 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-oauth-aws-vault-preflight-v2.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/aws-vault-infrastructure-preflight-v2",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "BUCKET_POLICY",
+        "KEY",
+        "KEY_POLICY",
+        "NOW",
+        "clients",
+        "fake",
+        "manifest",
+        "name",
+        "response",
+        "result",
+        "send"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
       "kind": "test",
       "imports": [
@@ -21522,6 +21714,93 @@
         "uuid",
         "value",
         "vaultReference"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr16b-durable-activation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "artifactBindingId",
+        "artifacts",
+        "attempt",
+        "binding",
+        "command",
+        "connectionSource",
+        "forward",
+        "indeterminate",
+        "operations",
+        "rollback",
+        "scope",
+        "selection",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr16b-postgres-activation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/drizzle-provider-activation-repository",
+        "../server/ai-media-studio/oauth/drizzle-provider-connection-repository",
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "Seed",
+        "TEMP_PREFIX",
+        "accessLifetime",
+        "account",
+        "artifactBindingId",
+        "client",
+        "dialect",
+        "digest",
+        "enabled",
+        "expectedDigest",
+        "expiresAt",
+        "fixture",
+        "forwards",
+        "graph",
+        "migration",
+        "now",
+        "objects",
+        "ownedUrl",
+        "parsed",
+        "pool",
+        "postCommitStageReplay",
+        "raw",
+        "recovered",
+        "refreshLifetime",
+        "rendered",
+        "repo",
+        "repository",
+        "resolvedSocket",
+        "results",
+        "rollback",
+        "seedActivation",
+        "selected",
+        "selection",
+        "stageCommand",
+        "state",
+        "tokenBinding",
+        "uuid"
       ],
       "routes": []
     },
@@ -22829,6 +23108,7 @@
         "pr14Forward",
         "pr16Plan",
         "pr16a",
+        "pr16b",
         "pr16bStop",
         "pr19",
         "pr26Forward",
@@ -24502,6 +24782,7 @@
     "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
+    "tests/ai-media-studio-oauth-aws-vault-preflight-v2.test.ts",
     "tests/ai-media-studio-oauth-aws-vault-preflight.test.ts",
     "tests/ai-media-studio-oauth-crypto.test.ts",
     "tests/ai-media-studio-oauth-drizzle.test.ts",
@@ -24509,6 +24790,8 @@
     "tests/ai-media-studio-oauth-provider-connection-contracts.test.ts",
     "tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts",
     "tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts",
+    "tests/ai-media-studio-oauth-role-token-cleanup-drizzle.test.ts",
+    "tests/ai-media-studio-oauth-role-token-cleanup-worker.test.ts",
     "tests/ai-media-studio-oauth-role-token-vault-contracts.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts",
     "tests/ai-media-studio-oauth-s3-kms-role-token-vault.test.ts",
@@ -24530,6 +24813,8 @@
     "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
     "tests/ai-media-studio-pr16-provider-activation-migration.test.ts",
     "tests/ai-media-studio-pr16a-postgres-migration.test.ts",
+    "tests/ai-media-studio-pr16b-durable-activation.test.ts",
+    "tests/ai-media-studio-pr16b-postgres-activation.test.ts",
     "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",
@@ -24634,9 +24919,7 @@
     "tests/user-context.test.ts",
     "tests/user-migration-plan.test.ts"
   ],
-  "skippedDatalessFiles": [
-    "server/ai-media-studio/planning/launch-authority-contracts 3.ts"
-  ],
+  "skippedDatalessFiles": [],
   "guardrails": [
     "Generated locally from Git-visible files only: tracked files plus untracked files that are not ignored.",
     "Skips credentials/, secrets/, .env files, node_modules/, build outputs, media folders, and large data exports.",

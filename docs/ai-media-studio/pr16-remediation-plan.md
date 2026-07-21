@@ -1,6 +1,6 @@
 # PR16 provider activation remediation plan
 
-Status: **NO-GO / PR16A independently checked; PR16B blocked**. This plan does not authorize a
+Status: **NO-GO / PR16A and local PR16B independently checked**. This plan does not authorize a
 database connection, migration, secret or vault operation, provider call,
 spend, deployment, or runtime mounting.
 
@@ -10,9 +10,13 @@ PR16 requires two separately reviewed, stacked slices: first exact schema and
 relational integrity, then the durable activation/CAS repository. PR16A now has
 local additive forward/rollback SQL, field/state alignment coverage, and isolated
 PostgreSQL 16 integrity proof on this branch. Its final independent checker and
-App QA gates pass at P0=P1=P2=0, but it remains unapplied. PR16B is still absent. The
+App QA gates pass at P0=P1=P2=0, but it remains unapplied. PR16B now has an
+unmounted local durable repository, cleanup v2, infrastructure preflight and an
+additive migration pair. Its focused suite passes 14/14 and its isolated
+PostgreSQL 16 suite passes 3/3, the complete suite passes 688 with 0 failures
+and 34 PostgreSQL-only skips, and checker plus App QA are P0=P1=P2=0. The
 staging rehearsal must stop after PR16A and before PR19 until both slices and
-their PostgreSQL evidence pass.
+all review gates pass.
 
 ## PR16A local SQL inventory
 
@@ -96,6 +100,36 @@ Required work:
 5. Make identical replay idempotent and conflicting replay fail closed.
 6. Ensure every losing, stale, partial, or crashed path retains a valid cleanup
    obligation without weakening tenant isolation.
+
+### Audited PR16B recovery and cleanup policy
+
+The pre-implementation concurrency/security audit fixes these additional
+rules. They are requirements, not runtime authorization:
+
+- `stageActivation` must commit the exact credential binding, every
+  role-specific candidate artifact, and one `cleanup_pending` operation per
+  artifact in a single transaction before the first vault `putOnce` call.
+- A committed staged graph is never resumed after its activation lease expires.
+  Recovery atomically changes the binding to `abandoned` and the attempt to
+  `activation_indeterminate`; the artifacts and cleanup obligations remain
+  durable. This avoids refencing immutable staging evidence after an ambiguous
+  external write.
+- A v2 cleanup operation is ineligible while its binding is `staged` or its
+  attempt is `activation_in_progress`, regardless of `available_at` or
+  `quiescent_until`. Cleanup may claim it only after an atomic terminal
+  abandonment, so it cannot verify absence and then race a later vault write.
+- Target selection must use the canonical selection digest over the complete
+  tenant/account/session/actor/target/version/scope/capability evidence and a
+  PostgreSQL-owned `selected_at`; the former reduced durable digest is not
+  trusted for activation.
+- A lost or ambiguous vault/transaction response requires exact durable
+  readback. It never creates new identifiers, deletes inline, retries with a new
+  binding, or infers authorization.
+- The existing PKCE/code/token-v1 cleanup worker and AWS attestation do not
+  cover role-token-v2. Dedicated fenced two-pass cleanup and a fresh stable
+  double-snapshot for `ai-media-studio/oauth-role-token/v2` are separate PR16B
+  gates. Activation, cleanup and preflight remain unmounted until independently
+  reviewed.
 
 ## Required PostgreSQL evidence
 

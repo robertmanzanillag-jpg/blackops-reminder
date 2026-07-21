@@ -23,6 +23,7 @@ const migrationPrefixes = [
   "20260721_pr14_oauth_vault_operations",
   "20260721_pr15_provider_connection_stages",
   "20260721_pr16_provider_activation_integrity",
+  "20260721_pr16b_durable_activation",
   "20260721_pr19_daily_admission",
   "20260721_pr20_launch_authorities",
   "20260721_pr22_launch_intents",
@@ -60,7 +61,7 @@ test("staging runbook is no-go and names every available migration in exact forw
   }
 });
 
-test("runbook inventory matches the SQL directory, proves PR13 schema-neutral and keeps PR16B as a stop", () => {
+test("runbook inventory matches the SQL directory, proves PR13 schema-neutral and keeps PR16B review as a stop", () => {
   const sqlFiles = readdirSync(migrationDirectoryUrl)
     .filter((name) => name.endsWith(".sql"))
     .sort();
@@ -72,19 +73,20 @@ test("runbook inventory matches the SQL directory, proves PR13 schema-neutral an
   const pr12 = runbook.indexOf("20260721_pr12_oauth_callback_saga_forward.sql");
   const pr14 = runbook.indexOf("20260721_pr14_oauth_vault_operations_forward.sql");
   const pr16a = runbook.indexOf("20260721_pr16_provider_activation_integrity_forward.sql");
+  const pr16b = runbook.indexOf("20260721_pr16b_durable_activation_forward.sql");
   const pr16bStop = runbook.indexOf("PR16B durable repository/CAS gate");
   const pr19 = runbook.indexOf("20260721_pr19_daily_admission_forward.sql");
   assert.ok(pr12 < pr14);
-  assert.ok(pr14 < pr16a && pr16a < pr16bStop && pr16bStop < pr19);
+  assert.ok(pr14 < pr16a && pr16a < pr16b && pr16b < pr16bStop && pr16bStop < pr19);
   assert.match(runbook, /PR14's database prerequisites are the validated PR12 OAuth saga/u);
   assert.match(pr14Forward, /PR14 requires PR12 OAuth callback saga schema/u);
   assert.match(pr14Forward, /PR14 requires validated PR12 OAuth saga and credential provenance controls/u);
   assert.match(migrationsReadme, /PR16A now has local additive forward\/rollback SQL/u);
-  assert.match(migrationsReadme, /PR16B durable activation repository/u);
+  assert.match(migrationsReadme, /PR16B now has local additive forward\/rollback SQL/u);
   assert.match(runbook, /PR2 is a[\s\S]*delta, not an initial-schema migration/u);
   assert.match(runbook, /pr16-remediation-plan\.md/u);
   assert.match(pr16Plan, /PR16A — schema and integrity[\s\S]*PR16B — durable activation and CAS/u);
-  assert.match(pr16Plan, /Status: \*\*NO-GO \/ PR16A independently checked; PR16B blocked\*\*/u);
+  assert.match(pr16Plan, /Status: \*\*NO-GO \/ PR16A and local PR16B independently checked\*\*/u);
 });
 
 test("runbook requires exact roles, private evidence, approvals and provider-free restart", () => {

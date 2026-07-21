@@ -489,3 +489,28 @@ diff. PR16B's durable activation repository, prewrite cleanup obligation and fen
 activation/finality CAS remain the mandatory stop before PR19, restart or runtime
 mounting. The initial launch remains exactly 5–10 avatars with 10 videos each
 (50–100), after a separately approved one-video sandbox.
+
+### Local PR16B follow-up — durable activation and cleanup
+
+The current branch `codex/ai-media-studio-pr16-durable-activation` is stacked on
+PR16A commit `c9cd255c`. It adds an unapplied PR16B forward/rollback pair,
+PostgreSQL-owned canonical selection time/digest, a secret-free staged
+binding/artifact/cleanup graph, exact durable activation and replay CAS,
+expired-staging abandonment to `activation_indeterminate`, a separate fenced
+two-pass role-token-v2 cleanup subsystem, and a dedicated stable-double-snapshot
+AWS v2 preflight. Every component remains unmounted and no real vault, provider,
+database, spend, post or deployment was touched.
+
+Final local evidence is 14/14 focused tests and 3/3 tests against an owned,
+socket-only PostgreSQL cluster created under `/private/tmp` and destroyed after
+the run. The PostgreSQL suite proves canonical JS/SQL selection digest parity,
+prewrite graph staging, exact replay, cross-tenant rejection, concurrent
+finalization with one `activated` and one `replayed`, expired staged recovery,
+cleanup gating and evidence-preserving rollback. The complete suite passes 688
+with 0 failures and 34 PostgreSQL-only skips out of 722; together with the three
+separately executed PR16B PostgreSQL cases, composed evidence is 691 passed and
+31 older PostgreSQL-only skips. TypeScript, production build, generated map and
+diff hygiene pass. Independent checker and App QA are clean at P0=P1=P2=0 after
+closing an expired-lease staged-replay race. Commit, push and draft PR remain
+pending; staging and the one-video HeyGen sandbox still require Robert's
+separate explicit approvals.
