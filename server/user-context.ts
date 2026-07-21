@@ -24,6 +24,7 @@ const PUBLIC_API_PATHS = [
   "/api/google-drive/oauth/callback",
   "/api/canva/oauth/callback",
   "/api/zoho/callback",
+  "/api/blackroom-agent/remote",
 ];
 
 const PUBLIC_API_PATTERNS: RegExp[] = [];

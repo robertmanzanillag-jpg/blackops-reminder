@@ -1043,6 +1043,15 @@ export const revenueEngineState = pgTable("revenue_engine_state", {
 
 export type RevenueEngineState = typeof revenueEngineState.$inferSelect;
 
+// ==================== BLACKROOM REMOTE CONTROL ====================
+
+export const blackRoomRemoteControl = pgTable("blackroom_remote_control", {
+  id: varchar("id").primaryKey(),
+  data: jsonb("data").notNull().$type<unknown>(),
+  revision: integer("revision").notNull().default(1),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ==================== DJ MESSAGE TEMPLATES ====================
 
 export const djMessageTemplates = pgTable("dj_message_templates", {
