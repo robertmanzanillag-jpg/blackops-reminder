@@ -34,6 +34,7 @@ The PR10 managed-OAuth-vault slice adds internal-only production composition for
 - [ADR 0001: Provider-neutral modular boundary](./adr-0001-provider-neutral-boundary.md)
 - [Delivery board](./kanban.md)
 - [Requirements matrix](./requirements-matrix.md)
+- [GitHub recovery checkpoint — 2026-07-21](./github-checkpoint-2026-07-21.md)
 - [Source snapshot and script variants](./script-generation-contract.md)
 - [Durable persistence readiness](./persistence.md)
 

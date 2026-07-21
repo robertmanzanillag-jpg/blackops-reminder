@@ -6,6 +6,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 - Worktree: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 - Branch: `codex/ai-media-studio-managed-oauth-vault`
+- Pull request: `#84`, stacked on `codex/ai-media-studio-social-oauth-foundation` (PR #83).
 - Base commit at checkpoint start: `a6cd2f31 feat(ai-media-studio): add social oauth foundation`
 - PR10 scope: managed production OAuth vault foundation, provider authorization URL builders, and fail-closed runtime composition.
 - Explicit PR10 safety decision: keep OAuth routes unmounted until token exchange, token vaulting, account CAS binding, callback semantics, and provider sandbox proof are complete.
@@ -75,7 +76,7 @@ Files intentionally out of scope for the first PR10 code slice:
 ## Security constraints captured for PR10
 
 - Do not mount OAuth start/callback routes in this slice.
-- No raw OAuth state in logs, docs, responses, metadata, or persisted records.
+- No raw OAuth state in logs, metadata or persisted records. A future start response may contain it only inside the provider authorization URL, never as a separate field.
 - State remains one-time, digest-only, platform-bound, tenant/workspace/actor/account-bound, and expiry-bound.
 - PKCE verifier vault references must be opaque: `vault://ai-media-studio/oauth-pkce/v1/<uuid>`.
 - S3 vault must:
@@ -106,9 +107,12 @@ Files intentionally out of scope for the first PR10 code slice:
 
 ## PR10 local evidence recorded after code landed
 
-- Focused OAuth tests: `node --import tsx --test tests/ai-media-studio-oauth-s3-kms-vault.test.ts tests/ai-media-studio-oauth-authorization-url.test.ts tests/ai-media-studio-production-oauth-runtime.test.ts tests/ai-media-studio-oauth-service.test.ts tests/ai-media-studio-oauth-crypto.test.ts` passed 24/24.
-- TypeScript: `npm run check` passed.
-- `npm test` was attempted but this repo has no `test` script; the project-specific Node test runner above is the authoritative focused test command.
+- OAuth/PR9 regression set passed 31/31.
+- Full AI Media Studio suite passed 374/374. The first sandboxed run produced only twelve `listen EPERM` infrastructure failures; the required rerun with local loopback binding passed all 374 tests.
+- TypeScript: `npx tsc --noEmit` passed.
+- Production build: `npm run build` passed. Existing bundle-size and local `yt-dlp` environment warnings remain unrelated to PR10.
+- Codebase map: `npm run codebase:map` completed and refreshed both generated map files.
+- Diff hygiene: `git diff --check` passed.
 - No live AWS, provider, OAuth route, token exchange, social post, migration apply, or deployment was performed.
 
 ## Current blockers / not done
@@ -123,6 +127,7 @@ Files intentionally out of scope for the first PR10 code slice:
 ## Next recovery steps if this Codex session stops
 
 1. Continue on branch `codex/ai-media-studio-managed-oauth-vault`.
-2. Re-run independent checker and App QA review before telling Robert PR10 is ready.
-3. Push any follow-up fixes to the stacked PR10 branch against PR #83’s branch.
-4. Do not deploy or apply migrations without Robert’s explicit approval.
+2. Finish independent checker and App QA review before calling the PR10 code slice ready.
+3. Push the reviewed code and evidence to PR #84.
+4. Continue with a separate PR for callback-safe token exchange, long-lived token vaulting, account CAS binding, refresh/revocation and provider sandbox proof.
+5. Do not mount OAuth routes, deploy, apply migrations or post externally without the required release gates and Robert’s explicit approval.
