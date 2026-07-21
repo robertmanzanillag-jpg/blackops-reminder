@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T19:14:00.207Z
+Generated: 2026-07-21T19:47:51.690Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 748 | 631 | 2576 | 491 | 12282 |
+| 751 | 634 | 2579 | 491 | 12300 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,14 +30,14 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 164 | 157 | test:164 |
+| `tests` | 165 | 158 | test:165 |
 | `client/src` | 153 | 151 | ui-component:55, other:43, client-page:24, client-component:21 |
 | `server/ai-media-studio` | 133 | 128 | server:133 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
+| `docs/ai-media-studio` | 12 | 12 | docs:12 |
 | `docs` | 12 | 11 | docs:12 |
-| `docs/ai-media-studio` | 10 | 10 | docs:10 |
 | `shared` | 9 | 9 | shared:9 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `client/public` | 13 | 2 | other:13 |
@@ -162,6 +162,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-schema-wiring.test.ts`
 - `tests/ai-media-studio-scripts-contract.test.ts`
 - `tests/ai-media-studio-sources.test.ts`
+- `tests/ai-media-studio-staging-rehearsal-runbook.test.ts`
 - `tests/ai-media-studio-webhook-env-secret.test.ts`
 - `tests/ai-media-studio-webhook-resolver.test.ts`
 - `tests/ai-media-studio-webhook-security.test.ts`

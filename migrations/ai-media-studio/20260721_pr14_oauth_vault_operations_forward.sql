@@ -7,7 +7,7 @@ SET LOCAL search_path=public,pg_catalog;
 DO $preflight$
 BEGIN
   IF to_regclass('public.ai_media_oauth_sessions') IS NULL OR to_regclass('public.ai_media_provider_accounts') IS NULL THEN
-    RAISE EXCEPTION 'PR14 requires PR13 OAuth schema';
+    RAISE EXCEPTION 'PR14 requires PR12 OAuth callback saga schema';
   END IF;
   IF to_regclass('public.ai_media_oauth_vault_operations') IS NOT NULL THEN RAISE EXCEPTION 'PR14 cleanup table must be absent'; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint c
@@ -16,7 +16,7 @@ BEGIN
     OR NOT EXISTS (SELECT 1 FROM pg_constraint c
       WHERE c.conname='ai_media_provider_accounts_oauth_credential_provenance_ck'
         AND c.conrelid='public.ai_media_provider_accounts'::regclass AND c.contype='c' AND c.convalidated) THEN
-    RAISE EXCEPTION 'PR14 requires validated PR13 controls';
+    RAISE EXCEPTION 'PR14 requires validated PR12 OAuth saga and credential provenance controls';
   END IF;
   IF EXISTS (
     SELECT 1 FROM ai_media_provider_accounts accounts

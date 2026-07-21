@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T19:14:00.207Z",
+  "generatedAt": "2026-07-21T19:47:51.690Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,13 +86,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 748,
-    "filesIndexed": 631,
-    "imports": 2576,
+    "filesVisible": 751,
+    "filesIndexed": 634,
+    "imports": 2579,
     "routes": 491,
-    "symbols": 12282
+    "symbols": 12300
   },
   "directories": {
+    "docs/ai-media-studio": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "docs": 12
+      }
+    },
     "server/ai-media-studio": {
       "files": 133,
       "indexed": 128,
@@ -148,13 +155,6 @@
         "client-hook": 3,
         "client-lib": 7,
         "client-page": 24
-      }
-    },
-    "docs/ai-media-studio": {
-      "files": 10,
-      "indexed": 10,
-      "kinds": {
-        "docs": 10
       }
     },
     "docs": {
@@ -215,10 +215,10 @@
       }
     },
     "tests": {
-      "files": 164,
-      "indexed": 157,
+      "files": 165,
+      "indexed": 158,
       "kinds": {
-        "test": 164
+        "test": 165
       }
     },
     "tests/fixtures": {
@@ -4838,6 +4838,14 @@
       "routes": []
     },
     {
+      "path": "docs/ai-media-studio/pr16-remediation-plan.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ai-media-studio/pr5-governance-notes.md",
       "kind": "docs",
       "imports": [],
@@ -4863,6 +4871,14 @@
     },
     {
       "path": "docs/ai-media-studio/script-generation-contract.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/staging-rehearsal-runbook.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -19521,7 +19537,8 @@
         "pageSource",
         "routesSource",
         "sandbox",
-        "snapshot"
+        "snapshot",
+        "staging"
       ],
       "routes": []
     },
@@ -22709,6 +22726,36 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "expected",
+        "filename",
+        "migrationDirectoryUrl",
+        "migrationPrefixes",
+        "migrationsReadme",
+        "position",
+        "pr12",
+        "pr14",
+        "pr14Forward",
+        "pr16Plan",
+        "pr16Stop",
+        "pr19",
+        "pr26Forward",
+        "reverseSection",
+        "runbook",
+        "runbookUrl",
+        "sqlFiles"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-webhook-resolver.test.ts",
       "kind": "test",
       "imports": [
@@ -24433,6 +24480,7 @@
     "tests/ai-media-studio-schema-wiring.test.ts",
     "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-media-studio-sources.test.ts",
+    "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
     "tests/ai-media-studio-webhook-env-secret.test.ts",
     "tests/ai-media-studio-webhook-resolver.test.ts",
     "tests/ai-media-studio-webhook-security.test.ts",

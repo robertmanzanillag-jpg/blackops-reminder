@@ -49,9 +49,13 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   });
   const sandbox = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-sandbox");
   const canary = snapshot.workItems.find((item) => item.id === "ams-agent-five-by-ten-canary");
+  const staging = snapshot.workItems.find((item) => item.id === "ams-agent-staging-migrations");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
+  assert.match(staging?.blockers.join(" ") ?? "", /PR1[\s\S]*PR16/u);
+  assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR13/u);
+  assert.match(staging?.nextAction ?? "", /PR1[\s\S]*PR16/u);
 });
 
 test("agent API is authenticated, read-only and mounted separately from product actions", () => {

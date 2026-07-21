@@ -1,24 +1,26 @@
 # AI Media Studio reviewed migration runbook
 
-These SQL files cover the incremental PR2, PR3, PR4, PR5, PR6, PR8, PR9, PR14, and PR15 schema deltas after the
+These SQL files cover reviewed incremental schema deltas after the
 PR1 AI Media Studio tables. PR2/PR3 have prior review evidence; PR4 and PR5 passed their
 local independent checker/static App QA gates. They do not create the PR1
 tables, and the migrations have not been applied to any database. Do not substitute `drizzle-kit push` or
-`npm run db:push` for the reviewed SQL and release sequence below. Apply the
-deltas strictly in PR2 -> PR3 -> PR4 -> PR5 -> PR6 -> PR8 order. PR7 has no
-database migration in this directory.
+`npm run db:push` for reviewed SQL. The complete preparation-only manifest,
+approval gates, current PR16 SQL blocker, staging verification, reverse order,
+and stop conditions live in
+`docs/ai-media-studio/staging-rehearsal-runbook.md`. That runbook does not
+authorize a database connection or migration. PR7 has no database migration in
+this directory.
 
-## Required release sequence
+## Release sequence authority
 
-1. Confirm the PR1 schema exists and record the deployed application revision.
-2. Take and verify a restorable database backup.
-3. Stop or drain AI Media Studio writers and queue workers.
-4. Apply `20260720_pr2_core_forward.sql` to staging with an operator-reviewed
-   PostgreSQL client invocation.
-5. Verify row counts, foreign keys, indexes, tenant isolation, queue claiming,
-   restart recovery, and rollback on staging.
-6. Run the complete App QA release gate. Any warning or failure blocks release.
-7. Obtain Robert's explicit approval before any Replit/production deployment.
+Do not treat the per-delta notes below as an executable sequence. The sole
+current sequence authority is the preparation-only staging runbook linked
+above, and it is **NO-GO** because PR1 provenance is unproven and PR16 has no
+reviewed forward/rollback SQL or complete relational invariants. PR13 is a
+reviewed schema-neutral adapter slice; PR14 verifies its PR12 database prerequisites. No
+database target, backup/restore, maintenance window, migration, restart, or
+deployment has been approved. Individual sections describe a delta's historical
+prerequisites and verification intent only.
 
 The forward migration is transactional and idempotent. It backfills every new
 required value before setting `NOT NULL`, fails rather than silently repairing
