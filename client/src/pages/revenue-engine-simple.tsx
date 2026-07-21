@@ -16,6 +16,7 @@ import {
   Settings2,
   ShieldCheck,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -61,15 +62,30 @@ type RevenueSnapshot = {
   };
   pipelineStages: Array<{ id: string; name: string; count: number; valueUsd: number }>;
   recentOutreach: OutreachDraft[];
+  recentLeads: Array<{
+    id: string;
+    createdAt: string;
+    businessName: string;
+    area: string;
+    niche: string;
+    websiteStatus: "no_website" | "weak_website" | "has_website" | "unknown";
+    contactChannel: "email" | "phone" | "instagram" | "contact_form" | "unknown";
+    contactValue: string;
+    evidence: string;
+    painPoint: string;
+    estimatedOfferUsd: number;
+    status: "research" | "qualified" | "mockup_ready" | "outreach_ready" | "contacted" | "proposal_sent" | "closed" | "disqualified";
+  }>;
   emailProvider: {
     configured: boolean;
     fromEmail: string;
   };
 };
 
-type ViewId = "pending" | "approved" | "sent" | "replies" | "sales" | "closed";
+type ViewId = "leads" | "pending" | "approved" | "sent" | "replies" | "sales" | "closed";
 
 const views: Array<{ id: ViewId; label: string; icon: typeof Inbox }> = [
+  { id: "leads", label: "Leads", icon: Users },
   { id: "pending", label: "Needs approval", icon: Inbox },
   { id: "approved", label: "Approved", icon: CheckCircle2 },
   { id: "sent", label: "Sent", icon: Send },
@@ -92,6 +108,7 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
 }
 
 function matchesView(draft: OutreachDraft, view: ViewId) {
+  if (view === "leads") return false;
   const sent = draft.delivery.sendStatus === "sent";
   const outcome = draft.delivery.outcome;
   if (view === "pending") return !sent && (draft.status === "draft" || draft.status === "blocked");
@@ -143,7 +160,7 @@ function professionalDraft(draft: OutreachDraft) {
 }
 
 export default function RevenueEngineSimplePage() {
-  const [view, setView] = useState<ViewId>("pending");
+  const [view, setView] = useState<ViewId>("leads");
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(false);
@@ -164,6 +181,11 @@ export default function RevenueEngineSimplePage() {
   });
 
   const drafts = snapshotQuery.data?.recentOutreach || [];
+  const leads = snapshotQuery.data?.recentLeads || [];
+  const filteredLeads = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return leads.filter((lead) => !normalized || `${lead.businessName} ${lead.niche} ${lead.area} ${lead.contactValue}`.toLowerCase().includes(normalized));
+  }, [leads, query]);
   const filteredDrafts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return drafts.filter((draft) => matchesView(draft, view)).filter((draft) =>
@@ -263,7 +285,7 @@ export default function RevenueEngineSimplePage() {
     onError: () => setNotice({ tone: "error", text: "The outcome could not be recorded. Confirm the draft status and required payment evidence, then try again." }),
   });
 
-  const counts = useMemo(() => Object.fromEntries(views.map((item) => [item.id, drafts.filter((draft) => matchesView(draft, item.id)).length])) as Record<ViewId, number>, [drafts]);
+  const counts = useMemo(() => Object.fromEntries(views.map((item) => [item.id, item.id === "leads" ? leads.length : drafts.filter((draft) => matchesView(draft, item.id)).length])) as Record<ViewId, number>, [drafts, leads]);
   const pipelineEstimated = snapshotQuery.data?.pipelineStages.reduce((sum, stage) => sum + stage.valueUsd, 0) || 0;
   const replies = drafts.filter((draft) => draft.delivery.outcome === "reply").length;
   const calls = drafts.filter((draft) => draft.delivery.outcome === "call_booked").length;
@@ -297,7 +319,7 @@ export default function RevenueEngineSimplePage() {
       </header>
 
       <nav className="border-b border-white/10" aria-label="Email status">
-        <div className="mx-auto grid max-w-[1500px] grid-cols-2 px-4 sm:grid-cols-3 lg:grid-cols-6 lg:px-8">
+        <div className="mx-auto grid max-w-[1500px] grid-cols-2 px-4 sm:grid-cols-4 lg:grid-cols-7 lg:px-8">
           {views.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -320,6 +342,60 @@ export default function RevenueEngineSimplePage() {
         </div>
       )}
 
+      {view === "leads" ? (
+        <section className="mx-auto min-h-[690px] max-w-[1500px] px-5 py-8 lg:px-8">
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-6">
+            <div>
+              <p className="text-sm font-medium text-emerald-300">Prospect list</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">All leads</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">Public prospects and their current qualification status. Nothing is contacted until you approve its message.</p>
+            </div>
+            <Button onClick={() => snapshotQuery.refetch()} disabled={snapshotQuery.isFetching} className="bg-emerald-600 text-white hover:bg-emerald-500">
+              {snapshotQuery.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}Refresh leads
+            </Button>
+          </div>
+
+          <label className="relative mt-6 block max-w-md">
+            <span className="sr-only">Search leads</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by business, niche, or city" className="border-white/10 bg-transparent pl-10" />
+          </label>
+
+          <div className="mt-6 divide-y divide-white/10 border-y border-white/10">
+            {snapshotQuery.isLoading && <p className="py-12 text-center text-sm text-zinc-500">Loading leads...</p>}
+            {snapshotQuery.isError && <p className="py-12 text-center text-sm text-red-300">Leads could not be loaded.</p>}
+            {!snapshotQuery.isLoading && filteredLeads.length === 0 && (
+              <div className="py-16 text-center">
+                <Users className="mx-auto h-8 w-8 text-zinc-700" />
+                <p className="mt-4 font-medium text-white">{leads.length === 0 ? "No leads yet" : "No leads match your search"}</p>
+                <p className="mt-2 text-sm text-zinc-500">{leads.length === 0 ? "Today’s free public-research batch will appear here." : "Try a different business name, niche, or city."}</p>
+              </div>
+            )}
+            {filteredLeads.map((lead) => (
+              <article key={lead.id} className="grid gap-5 py-6 md:grid-cols-[minmax(0,1.5fr)_minmax(180px,.8fr)_minmax(160px,.6fr)] md:items-center">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h3 className="text-lg font-semibold text-white">{lead.businessName}</h3>
+                    <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs capitalize text-zinc-400">{lead.status.replaceAll("_", " ")}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-zinc-400">{lead.niche} · {lead.area}</p>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-500">{lead.painPoint || lead.evidence || "Public evidence still needs review."}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-zinc-600">Public contact</p>
+                  <p className="mt-2 break-all text-sm text-zinc-300">{lead.contactValue || "Not verified"}</p>
+                  <p className="mt-1 text-xs capitalize text-zinc-600">{lead.contactChannel.replaceAll("_", " ")} · {lead.websiteStatus.replaceAll("_", " ")}</p>
+                </div>
+                <div className="md:text-right">
+                  <p className="text-xs uppercase tracking-wide text-zinc-600">Suggested offer</p>
+                  <p className="mt-2 text-xl font-semibold text-emerald-300">{money.format(lead.estimatedOfferUsd)}</p>
+                  <p className="mt-1 text-xs text-zinc-600">Estimate, not revenue</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
       <section className="mx-auto grid min-h-[690px] max-w-[1500px] lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="border-r border-white/10 px-4 py-5 lg:px-6">
           <label className="relative block">
@@ -470,6 +546,7 @@ export default function RevenueEngineSimplePage() {
           )}
         </article>
       </section>
+      )}
 
       <footer className="border-t border-white/10">
         <div className="mx-auto grid max-w-[1500px] gap-px bg-white/10 sm:grid-cols-4">

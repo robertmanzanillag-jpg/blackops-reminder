@@ -7097,7 +7097,7 @@ export function getRevenueEngineSnapshot() {
     dailyResearchTarget: 120,
     dailyMockupTarget: 5,
     dailyContactTarget: 10,
-    emailPending: true,
+    emailPending: false,
   });
   const approvalQueueItems = [
     (estimatedSpendUsd > 100 || estimatedSpendUsd > cashCollectedUsd) && {
@@ -7242,7 +7242,7 @@ export function getRevenueEngineSnapshot() {
     pipelineStages: buildPipelineStages(revenueLedger, revenueLeads),
     packages,
     recentLedger: revenueLedger.slice(-8).reverse(),
-    recentLeads: revenueLeads.slice(-10).reverse(),
+    recentLeads: revenueLeads.slice(-100).reverse(),
     recentOutreach: revenueOutreachDrafts.slice(-10).reverse(),
     recentAgentRuns: revenueAgentRuns.slice(-10).reverse(),
     recentAutomationOpportunities: revenueAutomationOpportunities.slice(-10).reverse(),
@@ -12243,9 +12243,10 @@ export function recordRevenueImprovementReview(input: ImprovementReviewInput) {
 
 export function buildRevenueEnginePlan(input: RevenueEnginePlanInput) {
   const budgetUsd = Math.min(input.monthlyBudgetUsd, 100);
-  const researchCostUsd = Number((input.leadCount * 0.03).toFixed(2));
+  const freePublicResearch = budgetUsd === 0;
+  const researchCostUsd = freePublicResearch ? 0 : Number((input.leadCount * 0.03).toFixed(2));
   const mockupSlots = Math.min(5, Math.max(1, Math.floor(input.leadCount / 5)));
-  const mockupCostUsd = Number((mockupSlots * 0.4).toFixed(2));
+  const mockupCostUsd = freePublicResearch ? 0 : Number((mockupSlots * 0.4).toFixed(2));
   const totalCostUsd = Number((researchCostUsd + mockupCostUsd).toFixed(2));
   const remainingBudgetUsd = Number((budgetUsd - totalCostUsd).toFixed(2));
   const offerLabel =
@@ -12262,7 +12263,7 @@ export function buildRevenueEnginePlan(input: RevenueEnginePlanInput) {
       estimatedFirstBatchUsd: totalCostUsd,
       remainingBudgetUsd,
       isInsideCap: totalCostUsd <= budgetUsd,
-      mode: "low_cost_first",
+      mode: freePublicResearch ? "free_public_research" : "low_cost_first",
     },
     target: {
       area: input.area,
