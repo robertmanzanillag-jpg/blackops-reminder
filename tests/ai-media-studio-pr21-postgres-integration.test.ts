@@ -19,6 +19,11 @@ import {
   type HeldWorkActivationTransactionalDatabase,
 } from "../server/ai-media-studio/planning/drizzle-held-work-activation-repository";
 import type { TrustedActivationPrincipal } from "../server/ai-media-studio/planning/held-work-activation-domain";
+import {
+  DrizzleAdmittedRenderRepository,
+  type AdmittedRenderTransactionalDatabase,
+} from "../server/ai-media-studio/workers/drizzle-admitted-render-repository";
+import type { ExactNegativeSubmissionFinality } from "../server/ai-media-studio/workers/admitted-render-contracts";
 
 const TEMP_PREFIX = "ams-pr21-pg-";
 const TEST_DATABASE_NAME = "ams_pr21_test";
@@ -138,6 +143,12 @@ const pr24Rollback = readFileSync(new URL(
   "../migrations/ai-media-studio/20260721_pr24_held_activation_rollback.sql",
   import.meta.url,
 ), "utf8");
+const pr25Forward = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr25_admitted_worker_forward.sql", import.meta.url,
+), "utf8");
+const pr25Rollback = readFileSync(new URL(
+  "../migrations/ai-media-studio/20260721_pr25_admitted_worker_rollback.sql", import.meta.url,
+), "utf8");
 
 async function seedAuthorityGraph(): Promise<void> {
   await pool.query(`
@@ -145,11 +156,11 @@ async function seedAuthorityGraph(): Promise<void> {
       (id,owner_user_id,workspace_id,provider_key,credential_version,status,credential_status)
     VALUES ('${ids.account}','${OWNER}','${WORKSPACE}','heygen',1,'active','active');
     INSERT INTO ai_media_provider_resources
-      (id,owner_user_id,workspace_id,provider_account_id,provider_key,resource_type,status)
+      (id,owner_user_id,workspace_id,provider_account_id,provider_key,resource_type,external_resource_id,status)
     VALUES
-      ('${ids.avatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','active'),
-      ('${ids.alternateAvatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','active'),
-      ('${ids.voice}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','voice','active');
+      ('${ids.avatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','avatar-external-pr25','active'),
+      ('${ids.alternateAvatar}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','avatar','avatar-alternate-pr25','active'),
+      ('${ids.voice}','${OWNER}','${WORKSPACE}','${ids.account}','heygen','voice','voice-external-pr25','active');
     INSERT INTO ai_media_influencers (id,owner_user_id,workspace_id,status)
     VALUES ('${ids.influencer}','${OWNER}','${WORKSPACE}','active');
     INSERT INTO ai_media_source_items
@@ -383,6 +394,7 @@ before(async () => {
   await pool.query(pr22Forward);
   await pool.query(pr23Forward);
   await pool.query(pr24Forward);
+  await pool.query(pr25Forward);
   await seedAuthorityGraph();
 });
 
@@ -409,15 +421,16 @@ integrationTest("PR21 runs only on the owned socket-only PostgreSQL 16 database"
   assert.ok(result.rows[0].socket_directories.includes(TEMP_PREFIX));
 });
 
-integrationTest("real PostgreSQL installs the exact PR19, PR20, PR22, PR23, and PR24 schema controls", async () => {
+integrationTest("real PostgreSQL installs the exact PR19 through PR25 schema controls", async () => {
   const tables = await pool.query<{ table_name: string }>(`
     SELECT table_name FROM information_schema.tables
     WHERE table_schema='public' AND table_name IN (
       'ai_media_daily_plans','ai_media_daily_plan_slots','ai_media_budget_buckets','ai_media_budget_reservations',
       'ai_media_admission_policy_revisions','ai_media_kill_switch_revisions','ai_media_launch_evidence',
-      'ai_media_launch_authority_snapshots','ai_media_launch_intents','ai_media_work_activations') ORDER BY table_name
+      'ai_media_launch_authority_snapshots','ai_media_launch_intents','ai_media_work_activations',
+      'ai_media_provider_submission_attempts','ai_media_provider_submission_events') ORDER BY table_name
   `);
-  assert.equal(tables.rowCount, 10);
+  assert.equal(tables.rowCount, 12);
 
   const controls = await pool.query<{ constraint_name: string }>(`
     SELECT conname AS constraint_name FROM pg_constraint
@@ -451,8 +464,8 @@ integrationTest("real PostgreSQL installs the exact PR19, PR20, PR22, PR23, and 
       'ai_media_launch_evidence_immutable_guard',
       'ai_media_launch_authority_snapshots_immutable_guard',
       'ai_media_launch_intents_immutable_guard',
-      'ai_media_render_jobs_admitted_handoff_guard',
-      'ai_media_outbox_admitted_handoff_guard',
+      'ai_media_render_jobs_admitted_submission_guard',
+      'ai_media_outbox_admitted_submission_guard',
       'ai_media_work_activations_immutable_guard',
       'ai_media_work_activations_final_state_guard',
       'ai_media_budget_reservations_handoff_immutable_guard')
@@ -490,7 +503,7 @@ integrationTest("the real admission repository atomically creates one exact non-
   assert.match(String(held.work_handoff_digest), /^sha256:[0-9a-f]{64}$/u);
 });
 
-integrationTest("real admission then real PR24 activation preserves reserved budget and freezes queued render", async () => {
+integrationTest("real admission, activation, claim, and PR25 authorization commit exactly once", async () => {
   const client = await pool.connect();
   const dialect = new PgDialect();
   const sharedDb: DailyAdmissionTransactionalDatabase & HeldWorkActivationTransactionalDatabase = {
@@ -572,8 +585,60 @@ integrationTest("real admission then real PR24 activation preserves reserved bud
       await assert.rejects(client.query(statement,[...params]));
       await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
     }
+    const admittedDb=sharedDb as AdmittedRenderTransactionalDatabase;
+    const admittedRepository=new DrizzleAdmittedRenderRepository(admittedDb,{workspaceId:WORKSPACE,accountingTimeZone:"UTC"});
+    const claim=await admittedRepository.claim({workerId:"worker-pr25-real",leaseDurationMs:60_000});
+    assert.ok(claim);
+    assert.match(claim.providerIdempotencyKey,/^admit:[0-9a-f]{64}$/u);
+    const authorization=await admittedRepository.authorize(claim);
+    assert.ok(authorization);
+    assert.equal(authorization.providerAccountId,ids.account);
+    const committed=await client.query<{state:string;submission_state:string;render_stage:string;render_attempts:number;
+      outbox_status:string;slot_status:string;reserved_micro_usd:string;committed_micro_usd:string}>(`
+      SELECT reservation.state,reservation.submission_state,job.stage render_stage,job.attempts render_attempts,
+        outbox.status outbox_status,slot.status slot_status,bucket.reserved_micro_usd::text,
+        bucket.committed_micro_usd::text FROM ai_media_budget_reservations reservation
+      JOIN ai_media_render_jobs job ON job.id=reservation.render_job_id
+      JOIN ai_media_outbox outbox ON outbox.id=reservation.dispatch_outbox_id
+      JOIN ai_media_daily_plan_slots slot ON slot.id=reservation.daily_plan_slot_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      WHERE reservation.id=$1`,[admission.reservation.id]);
+    assert.deepEqual(committed.rows[0],{state:"committed",submission_state:"dispatching",render_stage:"leased",
+      render_attempts:1,outbox_status:"leased",slot_status:"committed",reserved_micro_usd:"0",committed_micro_usd:"1250000"});
+    assert.equal(await admittedRepository.markAmbiguous({...authorization,evidenceDigest:digest("8") as `sha256:${string}`}),true);
+    await client.query("SAVEPOINT ambiguous_reopen");
+    await assert.rejects(client.query(`UPDATE ai_media_budget_reservations SET submission_state='dispatching'
+      WHERE id=$1 AND submission_state='ambiguous'`,[admission.reservation.id]));
+    await client.query("ROLLBACK TO SAVEPOINT ambiguous_reopen");
+    const unknownReconciliation=await admittedRepository.claimAmbiguous({workerId:"reconciler-pr25-unknown",leaseDurationMs:60_000});
+    assert.ok(unknownReconciliation);
+    assert.equal(await admittedRepository.releaseUnknownReconciliation(unknownReconciliation),true);
+    const releasedLeaseEvent=await client.query<{event_kind:string;actor_user_id:string}>(`
+      SELECT event_kind,actor_user_id FROM ai_media_provider_submission_events
+      WHERE submission_attempt_id=$1 ORDER BY sequence DESC LIMIT 1`,[unknownReconciliation.id]);
+    assert.deepEqual(releasedLeaseEvent.rows[0],{event_kind:"reconciliation_released",actor_user_id:"reconciler-pr25-unknown"});
+    const reconciliation=await admittedRepository.claimAmbiguous({workerId:"reconciler-pr25-real",leaseDurationMs:60_000});
+    assert.ok(reconciliation);
+    const finality={scope:reconciliation.scope,providerAccountId:reconciliation.providerAccountId,
+      providerKey:reconciliation.providerKey,providerCredentialVersion:reconciliation.providerCredentialVersion,
+      authorizationDigest:reconciliation.authorizationDigest,providerIdempotencyKey:reconciliation.providerIdempotencyKey,
+      guarantee:"linearizable_not_accepted_and_cannot_later_accept",observedAt:new Date().toISOString(),
+      evidenceDigest:digest("9") as `sha256:${string}`} as unknown as ExactNegativeSubmissionFinality;
+    assert.equal(await admittedRepository.markReconciledNoSubmit({...reconciliation,
+      finality}),true);
+    assert.equal(await admittedRepository.markReconciledNoSubmit({...reconciliation,
+      finality}),false,"stale reconciliation fence cannot refund twice");
+    const released=await client.query<{state:string;submission_state:string;committed_micro_usd:string}>(`
+      SELECT reservation.state,reservation.submission_state,bucket.committed_micro_usd::text
+      FROM ai_media_budget_reservations reservation JOIN ai_media_budget_buckets bucket
+        ON bucket.id=reservation.budget_bucket_id WHERE reservation.id=$1`,[admission.reservation.id]);
+    assert.deepEqual(released.rows[0],{state:"released",submission_state:"reconciled_no_submit",committed_micro_usd:"0"});
+    const terminalEvent=await client.query<{actor_user_id:string}>(`SELECT actor_user_id
+      FROM ai_media_provider_submission_events WHERE submission_attempt_id=$1
+      ORDER BY sequence DESC LIMIT 1`,[reconciliation.id]);
+    assert.equal(terminalEvent.rows[0]?.actor_user_id,"reconciler-pr25-real");
     await client.query("SAVEPOINT rollback_guard");
-    await assert.rejects(client.query(pr24Rollback),(error:unknown)=>
+    await assert.rejects(client.query(pr25Rollback),(error:unknown)=>
       typeof error==="object"&&error!==null&&"code" in error&&error.code==="P0001");
     await client.query("ROLLBACK TO SAVEPOINT rollback_guard");
   } finally {
@@ -682,6 +747,8 @@ integrationTest("PR23 exact held handoff is durable, non-claimable, and immutabl
   try {
     await client.query("BEGIN");
     await client.query("SET CONSTRAINTS ALL DEFERRED");
+    await client.query(`UPDATE ai_media_budget_buckets SET reserved_micro_usd=1250000,state_version=state_version+1
+      WHERE id='${ids.bucket}'`);
     await client.query(`UPDATE ai_media_daily_plan_slots SET status='reserved',state_version=2
       WHERE id='${ids.slot}'`);
     await insertCompleteAttachedReservation(client,{
@@ -1017,11 +1084,13 @@ integrationTest("application-only rollbacks preserve evidence and repeated forwa
   );
   const pr23Client = await pool.connect();
   try {
+    await assertReapplicationFails(pr23Client, pr25Forward);
     await assertReapplicationFails(pr23Client, pr24Forward);
     await assertReapplicationFails(pr23Client, pr23Forward);
   } finally {
     pr23Client.release();
   }
+  await pool.query(pr25Rollback);
   await pool.query(pr24Rollback);
   await pool.query(pr23Rollback);
   await pool.query(pr20Rollback);
