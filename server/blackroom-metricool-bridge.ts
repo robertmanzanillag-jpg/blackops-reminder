@@ -45,6 +45,7 @@ export async function postMetricoolJsonBytes(
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
+    const headerStream = child.stdio[3];
     let settled = false;
     const finish = (error?: Error, response?: Response) => {
       if (settled) return;
@@ -70,7 +71,13 @@ export async function postMetricoolJsonBytes(
     child.stdin.once("error", (error) => failStream("request", error));
     child.stdout.once("error", (error) => failStream("response", error));
     child.stderr.once("error", (error) => failStream("diagnostic", error));
-    child.stdio[3]?.once("error", (error) => failStream("header", error));
+    if (!headerStream || typeof (headerStream as NodeJS.WritableStream).end !== "function") {
+      child.kill("SIGKILL");
+      finish(new Error("Metricool scheduler header stream is unavailable"));
+      return;
+    }
+    const writableHeaderStream = headerStream as NodeJS.WritableStream;
+    writableHeaderStream.once("error", (error) => failStream("header", error));
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.once("close", (code) => {
@@ -87,7 +94,7 @@ export async function postMetricoolJsonBytes(
       const body = output.subarray(0, separator);
       finish(undefined, new Response(status === 204 ? null : body, { status }));
     });
-    child.stdio[3].end(`X-Mc-Auth: ${token}\ncontent-type: application/json\naccept: application/json\n`);
+    writableHeaderStream.end(`X-Mc-Auth: ${token}\ncontent-type: application/json\naccept: application/json\n`);
     child.stdin.end(payloadBytes);
   });
 }
