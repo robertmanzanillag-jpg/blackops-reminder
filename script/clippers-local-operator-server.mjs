@@ -6264,7 +6264,7 @@ async function buildRealClipPermissionCrm(status) {
     const crm = latest.get(row.queueItemId) || {};
     const recordedPermissionStatus = crm.permission_status || "not_requested";
     const claimsApproval = recordedPermissionStatus === "approved" || recordedPermissionStatus === "owned_source";
-    const evidenceLink = crm.evidence_link || "";
+    const evidenceLink = String(crm.evidence_link || "").trim();
     const evidenceValidation = claimsApproval && /^https:\/\//i.test(evidenceLink)
       ? { ok: false, status: "approved_permission_requires_local_evidence_file" }
       : claimsApproval

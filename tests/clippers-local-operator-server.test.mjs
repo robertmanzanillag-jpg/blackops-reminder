@@ -4142,7 +4142,7 @@ test("Clippers permission CRM blocks stale approval claims when local evidence i
   await writeFile(crmPath, [
     "metricool_queue_item_id,category,account_name,exact_video_or_post_url,creator_or_rights_holder,outreach_channel,outreach_status,permission_status,evidence_link,operator_notes,updated_at",
     "7129d59b5f5e,sports,Streamer Highlights,https://www.twitch.tv/example/clip/ExactClipSlug,example,email,responded,approved,/clippers-workspace/evidence-drop/streamer-permissions/missing-proof.md,Legacy row incorrectly claimed permission despite missing proof.,2026-07-21T08:55:00Z",
-    "53467d8f7dad,memes,Streamer Reactions,https://www.twitch.tv/example/clip/AnotherExactClip,example,email,responded,approved,https://example.com/unverified-proof,Legacy row incorrectly claimed permission using remote-only proof.,2026-07-21T08:56:00Z",
+    "53467d8f7dad,memes,Streamer Reactions,https://www.twitch.tv/example/clip/AnotherExactClip,example,email,responded,approved, https://example.com/unverified-proof,Legacy row incorrectly claimed permission using whitespace-prefixed remote-only proof.,2026-07-21T08:56:00Z",
     "",
   ].join("\n"));
 
