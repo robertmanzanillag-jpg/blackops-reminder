@@ -6,7 +6,7 @@ This is the durable provider-connection gate for AI Media Studio. It records wha
 
 - Persist an immutable selected external target. Never select the first Page, Instagram professional account, or YouTube channel returned by a provider.
 - Represent token artifacts by role rather than pretending every provider has an access/refresh pair. At minimum distinguish operational access, refresh, and grant-level user access artifacts.
-- Represent lifetime as a discriminated value plus a mandatory revalidation horizon. Do not invent an expiry for provider-reported non-expiring Meta Page tokens.
+- Represent lifetime as a discriminated value plus a mandatory revalidation horizon. Do not invent an expiry for provider-reported non-expiring Meta Page tokens or Google refresh tokens with no reported expiry; the latter are `revocation_bound`, not permanent.
 - Validate `required scopes ⊆ actual grants ⊆ immutable provider allowlist`. Capabilities and manifest revision are derived locally from a frozen manifest and verified account tasks, never from provider JSON.
 - Separate exchange, identity discovery/selection, activation, refresh, revoke and reconciliation into fenced durable stages. A token exchange that may have reached the provider is never retried automatically.
 - Refresh always writes a new token-binding/credential-version candidate. Account CAS activates it before old material is scheduled for deletion.
@@ -27,7 +27,7 @@ PR15 implements the first six items as provider-neutral domain and persistence c
 - Current confidential Web Server contract does not use a PKCE verifier. DPoP is a separate key/nonce lifecycle and remains disabled by policy.
 - A new unattended publishing binding must obtain `youtube.upload` and a refresh token.
 - Zero channels is not connectable. Multiple channels require an exact previously selected target; never choose the first.
-- Refresh responses commonly omit `refresh_token`; omission preserves the existing value, while a returned non-empty value replaces it. Empty is invalid, not omission.
+- Refresh responses commonly omit `refresh_token`; omission preserves the existing value, while a returned non-empty value replaces it. Empty is invalid, not omission. A refresh token without a provider expiry is `revocation_bound` with mandatory revalidation; do not invent `expiresAt`.
 - Revocation can invalidate a project-wide grant, so shared-grant blast radius must be shown and approved.
 
 ## Meta: Facebook and Instagram with Facebook Login
@@ -35,7 +35,7 @@ PR15 implements the first six items as provider-neutral domain and persistence c
 - Facebook Login and Instagram-with-Facebook-Login are explicit grant families. They must never be mixed with Instagram Login scopes or endpoints.
 - Keep Meta connectors blocked until one current Graph version is pinned and proven in a developer/test app. The existing v23 authorization manifest is not production approval evidence; v25 is the current sandbox-validation candidate recorded by the provider audit.
 - Exchange yields a User grant, then bounded discovery returns Pages, Page tasks/tokens and linked Instagram professional identities. Activation requires an exact selected Page or Instagram ID and verified publishing tasks.
-- Store the Page token as the operational artifact. Retain a grant-level User token only when an explicit lifecycle requirement justifies its broader blast radius.
+- Store the Page token as the operational artifact. Retain a grant-level User token only when an explicit lifecycle requirement justifies its broader blast radius; a User token must carry its reported expiry and must not be labeled provider-non-expiring.
 - Meta has no generic refresh-token contract equivalent to TikTok/Google for this flow. Model revalidation/reauthorization rather than inventing refresh behavior.
 - Local disconnect of one credential is distinct from grant-wide deauthorization, which may affect several Page/Instagram accounts.
 

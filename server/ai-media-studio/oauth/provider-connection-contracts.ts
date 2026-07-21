@@ -21,7 +21,8 @@ export type OAuthProviderTokenArtifactRole = typeof OAUTH_PROVIDER_TOKEN_ARTIFAC
 
 export type OAuthProviderTokenLifetime =
   | Readonly<{ kind: "expires_at"; expiresAt: string; revalidateAt: string }>
-  | Readonly<{ kind: "provider_non_expiring"; revalidateAt: string }>;
+  | Readonly<{ kind: "provider_non_expiring"; revalidateAt: string }>
+  | Readonly<{ kind: "revocation_bound"; revalidateAt: string }>;
 
 /** Safe metadata only. Secret values and vault references belong to a later vault slice. */
 export type OAuthProviderTokenArtifactDescriptor = Readonly<{
@@ -256,12 +257,20 @@ export function validateOAuthProviderTokenArtifacts(
     if (artifact.lifetime.kind === "expires_at") {
       const expiryMs = parseIso(artifact.lifetime.expiresAt);
       if (expiryMs <= nowMs || revalidateMs > expiryMs) throw new OAuthProviderConnectionError();
-    } else if (artifact.lifetime.kind !== "provider_non_expiring" || grantFamily !== "meta_facebook_login") {
+    } else if (artifact.lifetime.kind === "provider_non_expiring") {
+      if (grantFamily !== "meta_facebook_login" || artifact.role !== "operational_access") throw new OAuthProviderConnectionError();
+    } else if (artifact.lifetime.kind === "revocation_bound") {
+      const allowedRevocationBound = (grantFamily === "google_user" && artifact.role === "refresh")
+        || (grantFamily === "meta_facebook_login" && artifact.role === "operational_access");
+      if (!allowedRevocationBound) throw new OAuthProviderConnectionError();
+    } else {
       throw new OAuthProviderConnectionError();
     }
   }
   if (grantFamily === "meta_facebook_login") {
     if (!roles.has("operational_access") || roles.has("refresh")) throw new OAuthProviderConnectionError();
+    const grantArtifact = artifacts.find((artifact) => artifact.role === "grant_user_access");
+    if (grantArtifact && grantArtifact.lifetime.kind !== "expires_at") throw new OAuthProviderConnectionError();
   } else if (roles.size !== 2 || !roles.has("operational_access") || !roles.has("refresh") || roles.has("grant_user_access")) {
     throw new OAuthProviderConnectionError();
   }

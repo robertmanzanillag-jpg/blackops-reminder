@@ -44,7 +44,11 @@ test("artifact lifetime is discriminated and always has a future revalidation ho
   const now = "2026-07-21T12:00:00.000Z";
   validateOAuthProviderTokenArtifacts("meta_facebook_login", [
     { role: "operational_access", lifetime: { kind: "expires_at", expiresAt: "2026-07-21T14:00:00.000Z", revalidateAt: "2026-07-21T13:00:00.000Z" } },
-    { role: "grant_user_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-07-22T12:00:00.000Z" } },
+    { role: "grant_user_access", lifetime: { kind: "expires_at", expiresAt: "2026-07-23T12:00:00.000Z", revalidateAt: "2026-07-22T12:00:00.000Z" } },
+  ], now);
+  validateOAuthProviderTokenArtifacts("google_user", [
+    { role: "operational_access", lifetime: { kind: "expires_at", expiresAt: "2026-07-21T14:00:00.000Z", revalidateAt: "2026-07-21T13:00:00.000Z" } },
+    { role: "refresh", lifetime: { kind: "revocation_bound", revalidateAt: "2026-08-21T12:00:00.000Z" } },
   ], now);
   assert.throws(() => validateOAuthProviderTokenArtifacts("meta_facebook_login", [
     { role: "operational_access", lifetime: { kind: "expires_at", expiresAt: "2026-07-21T14:00:00.000Z", revalidateAt: now } },
@@ -54,6 +58,10 @@ test("artifact lifetime is discriminated and always has a future revalidation ho
   ], now), OAuthProviderConnectionError);
   assert.throws(() => validateOAuthProviderTokenArtifacts("meta_facebook_login", [
     { role: "operational_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "9999-12-31T23:59:59.999Z" } },
+  ], now), OAuthProviderConnectionError);
+  assert.throws(() => validateOAuthProviderTokenArtifacts("meta_facebook_login", [
+    { role: "operational_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-07-22T12:00:00.000Z" } },
+    { role: "grant_user_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-07-22T12:00:00.000Z" } },
   ], now), OAuthProviderConnectionError);
   assert.throws(() => validateOAuthProviderTokenArtifacts("google_user", [
     { role: "operational_access", lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-07-22T12:00:00.000Z" } },

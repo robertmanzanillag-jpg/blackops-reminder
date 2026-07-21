@@ -564,7 +564,7 @@ export const aiMediaOAuthConnectionAttempts = pgTable(
     tokenArtifacts: jsonb("token_artifacts").$type<Array<{
       role: "operational_access" | "refresh" | "grant_user_access";
       lifetime: { kind: "expires_at"; expiresAt: string; revalidateAt: string }
-        | { kind: "provider_non_expiring"; revalidateAt: string };
+        | { kind: "provider_non_expiring" | "revocation_bound"; revalidateAt: string };
     }>>(),
     tokenBindingId: uuid("token_binding_id").notNull(),
     expectedCredentialVersion: integer("expected_credential_version").notNull(),

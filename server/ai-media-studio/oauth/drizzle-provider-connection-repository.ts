@@ -253,7 +253,7 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
         role: artifact.role,
         lifetime: artifact.lifetime.kind === "expires_at"
           ? { kind: "expires_at" as const, expiresAt: artifact.lifetime.expiresAt, revalidateAt: artifact.lifetime.revalidateAt }
-          : { kind: "provider_non_expiring" as const, revalidateAt: artifact.lifetime.revalidateAt },
+          : { kind: artifact.lifetime.kind, revalidateAt: artifact.lifetime.revalidateAt },
       }));
       const updated = rows(await tx.execute(sql`UPDATE ${aiMediaOAuthConnectionAttempts} SET
         stage='discovery_pending',stage_version=stage_version+1,actual_scopes=${JSON.stringify(input.actualScopes)}::jsonb,

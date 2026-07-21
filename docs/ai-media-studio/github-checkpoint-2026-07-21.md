@@ -253,6 +253,7 @@ Implemented:
 - Added provider-neutral durable stages for exchange, target discovery, explicit target selection and the later activation handoff.
 - Added exact target compatibility for TikTok users, YouTube channels, Facebook Pages and Instagram professional accounts. Zero targets terminalizes as not connectable; one or many targets always require explicit actor selection.
 - Added frozen grant scope allowlists, local verified-task capability derivation and safe role/lifetime descriptors without tokens, secrets, provider JSON or vault references.
+- Models Google refresh tokens without a reported expiry as revocation-bound with mandatory revalidation, and forbids treating a Meta grant-level User token as provider-non-expiring.
 - Added additive attempt/candidate/immutable-selection tables with exact tenant, actor, provider-account, platform, OAuth-session and discovered-candidate provenance.
 - Preserved DB-clock leases/fencing and data-preserving rollback policy. The migration is checked in but unapplied.
 
