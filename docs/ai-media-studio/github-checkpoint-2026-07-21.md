@@ -153,6 +153,8 @@ Files intentionally out of scope for the first PR10 code slice:
 
 ## PR12 checkpoint — durable OAuth callback saga
 
+GitHub PR: #88, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/88`.
+
 Branch: `codex/ai-media-studio-oauth-callback-saga`, stacked on PR #85 (`codex/ai-media-studio-oauth-policy-hardening`).
 
 This slice adds a provider-neutral, fenced callback saga without mounting a route or making live provider calls. It separates authorization-code, PKCE, provider connector, and long-lived token-vault contracts; performs no database transaction across external I/O; claims work with leases and fencing; prevents automatic re-exchange after ambiguous provider I/O; and atomically binds a token-vault reference plus exact provider identity/provenance to the account with credential-version CAS.
