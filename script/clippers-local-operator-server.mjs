@@ -1,7 +1,7 @@
-import { createReadStream } from "node:fs";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { appendFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
 
@@ -24,6 +24,7 @@ const streamerResearchDir = path.join(workspaceRoot, "research");
 const streamerBlanketPermissionCsvPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
 const humanReviewDecisionsCsvPath = path.join(workspaceRoot, "evidence-drop", "human-review-decisions.csv");
 const humanReviewDecisionsLockPath = `${humanReviewDecisionsCsvPath}.lock`;
+const realClipIntakeManifestLockPath = path.join(scheduledDir, ".real-clip-intake-manifest.lock");
 const currentBatchWorkbookJsonPath = path.join(scheduledDir, "metricool-100-current-batch-workbook.json");
 const currentBatchUploadPackJsonPath = path.join(reportsDir, "clippers-metricool-current-batch-upload-pack.json");
 const requestedHost = process.env.HOST || "127.0.0.1";
@@ -884,6 +885,10 @@ async function withPermissionCrmLock(callback) {
 
 async function withHumanReviewDecisionLock(callback) {
   return withExclusiveFileLock(humanReviewDecisionsLockPath, "human_review_decisions_locked", callback);
+}
+
+async function withRealClipIntakeManifestLock(callback) {
+  return withExclusiveFileLock(realClipIntakeManifestLockPath, "real_clip_intake_manifest_locked", callback);
 }
 
 async function withExclusiveFileLock(lockPath, lockedError, callback) {
@@ -4626,7 +4631,8 @@ async function realClipEvidenceStatus(value) {
   return { ok: true, status: "local_evidence_file_ready" };
 }
 
-async function recordRealClipIntakeManifestRow(input) {
+async function recordRealClipIntakeManifestRow(input, { skipLock = false } = {}) {
+  if (!skipLock) return withRealClipIntakeManifestLock(() => recordRealClipIntakeManifestRow(input, { skipLock: true }));
   const status = await buildStatus();
   const validated = validateRealClipIntakeRecordInput(status, input);
   if (!validated.ok) return validated;
@@ -4686,7 +4692,8 @@ async function recordRealClipIntakeManifestRow(input) {
   };
 }
 
-async function recordRealClipIntakeManifestBatch(rawCsv) {
+async function recordRealClipIntakeManifestBatch(rawCsv, { skipLock = false } = {}) {
+  if (!skipLock) return withRealClipIntakeManifestLock(() => recordRealClipIntakeManifestBatch(rawCsv, { skipLock: true }));
   const status = await buildStatus();
   const parsed = parseCsv(String(rawCsv || ""));
   if (!parsed.header.length || !parsed.rows.length) {
@@ -9862,6 +9869,7 @@ async function buildHumanReviewQueue() {
   const sources = [
     {
       creator: "sadlights",
+      creatorHandle: "sadlights",
       directory: "sadlights-review",
       manifest: "review-manifest.csv",
       evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md",
@@ -9869,6 +9877,7 @@ async function buildHumanReviewQueue() {
         title: row.title,
         sourceUrl: row.exact_source_url,
         localFile: row.local_raw_file,
+        suggestedTargetFile: row.vertical_intake_file ? path.basename(String(row.vertical_intake_file)) : "",
         sourceAge: row.source_age,
         sourceViews: row.source_views,
         rightsStatus: row.creator_permission === "verified" ? "approved_blanket" : row.creator_permission,
@@ -9882,6 +9891,7 @@ async function buildHumanReviewQueue() {
     },
     {
       creator: "ESP Leonidas",
+      creatorHandle: "esp_leonidas",
       directory: "esp-leonidas-review",
       manifest: "review-manifest.csv",
       evidenceUrl: "/clippers-workspace/evidence-drop/streamer-permissions/esp-leonidas-blanket-permission-2026-07-21.md",
@@ -9889,6 +9899,7 @@ async function buildHumanReviewQueue() {
         title: row.title,
         sourceUrl: row.source_url,
         localFile: row.local_file,
+        suggestedTargetFile: "",
         sourceAge: row.source_posted_at ? `Published ${row.source_posted_at}` : "",
         sourceViews: row.historical_views,
         rightsStatus: row.rights_status,
@@ -9914,9 +9925,12 @@ async function buildHumanReviewQueue() {
       rows.push({
         id: `${source.directory}:${localFile || normalized.title || rows.length + 1}`,
         creator: source.creator,
+        creatorHandle: source.creatorHandle,
         title: normalized.title || "Untitled clip",
         sourceUrl: verifiedTwitchClipUrl(normalized.sourceUrl),
         localFile,
+        quarantineDirectory: source.directory,
+        suggestedTargetFile: normalized.suggestedTargetFile || "",
         mediaUrl: fileStat?.isFile()
           ? `/clippers-workspace/quarantine/${encodeURIComponent(source.directory)}/${encodeURIComponent(localFile)}`
           : "",
@@ -9935,6 +9949,27 @@ async function buildHumanReviewQueue() {
         publishAllowed: false,
       });
     }
+  }
+  const intakeStatus = await buildLightweightRealClipIntakeStatus();
+  const intakeValidation = await buildRealClipIntakeValidation(intakeStatus);
+  const validationByQueueId = new Map((intakeValidation.rows || []).map((row) => [row.queueItemId, row]));
+  const intakeTargets = buildRealClipIntakePack(intakeStatus).rows.map((row) => ({
+    queueItemId: row.queueItemId,
+    accountName: row.accountName,
+    category: row.category,
+    targetFileName: row.targetFileName,
+    targetSourceDropFile: row.targetSourceDropFile,
+    targetMediaUrl: `/clippers-workspace/source-drop/${encodeURIComponent(row.category)}/${encodeURIComponent(row.targetFileName)}`,
+    publishAt: row.publishAt,
+    status: validationByQueueId.get(row.queueItemId)?.status || "blocked",
+    blockers: validationByQueueId.get(row.queueItemId)?.blockers || [],
+  }));
+  const targetByFileName = new Map(intakeTargets.map((row) => [row.targetFileName, row]));
+  for (const row of rows) {
+    const suggestedTarget = targetByFileName.get(row.suggestedTargetFile);
+    row.suggestedQueueItemId = suggestedTarget?.queueItemId || "";
+    row.suggestedTargetStatus = suggestedTarget?.status || "";
+    row.suggestedTargetBlockers = suggestedTarget?.blockers || [];
   }
   const decisionLedger = await readHumanReviewDecisions();
   const decisionsById = latestHumanReviewDecisionById(decisionLedger.rows);
@@ -9982,6 +10017,11 @@ async function buildHumanReviewQueue() {
       noAi: rows.filter((row) => row.noAiRequired).length,
       publishAllowed: 0,
     },
+    intakeTargets,
+    staleIntakeTargets: intakeTargets.filter((row) => {
+      const publishAtMs = Date.parse(String(row.publishAt || ""));
+      return !Number.isFinite(publishAtMs) || publishAtMs <= operatorNowMs() + 20 * 60_000;
+    }).length,
     rows,
   };
 }
@@ -10083,6 +10123,201 @@ async function recordHumanReviewDecision(input = {}, { skipLock = false } = {}) 
   };
 }
 
+async function humanReviewSourceFileStatus(row) {
+  const safeDirectory = String(row?.quarantineDirectory || "").replace(/[^A-Za-z0-9_-]/g, "");
+  const safeFileName = path.basename(String(row?.localFile || ""));
+  if (!safeDirectory || !safeFileName || safeFileName !== String(row?.localFile || "")) {
+    return { ok: false, status: "invalid_review_source_path", filePath: "", bytes: 0 };
+  }
+  const quarantineRootStat = await lstat(quarantineDir).catch(() => null);
+  if (quarantineRootStat?.isSymbolicLink()) return { ok: false, status: "quarantine_root_symlink_blocked", filePath: "", bytes: 0 };
+  const directoryPath = path.join(quarantineDir, safeDirectory);
+  const directoryStat = await lstat(directoryPath).catch(() => null);
+  if (directoryStat?.isSymbolicLink()) return { ok: false, status: "review_source_directory_symlink_blocked", filePath: "", bytes: 0 };
+  const filePath = path.join(directoryPath, safeFileName);
+  const fileStat = await lstat(filePath).catch(() => null);
+  if (fileStat?.isSymbolicLink()) return { ok: false, status: "review_source_file_symlink_blocked", filePath: "", bytes: 0 };
+  if (!fileStat?.isFile()) return { ok: false, status: "review_source_file_missing", filePath: "", bytes: 0 };
+  if (fileStat.size < 8192) return { ok: false, status: "review_source_file_too_small", filePath: "", bytes: fileStat.size };
+  const quarantineReal = await realpath(quarantineDir).catch(() => null);
+  const fileReal = await realpath(filePath).catch(() => null);
+  if (!quarantineReal || !fileReal || (fileReal !== quarantineReal && !fileReal.startsWith(quarantineReal + path.sep))) {
+    return { ok: false, status: "review_source_file_outside_quarantine", filePath: "", bytes: fileStat.size };
+  }
+  const prefix = await readFilePrefix(filePath, Math.min(4096, fileStat.size));
+  if (!prefix || !prefix.toString("latin1").includes("ftyp")) {
+    return { ok: false, status: "review_source_file_not_mp4_like", filePath: "", bytes: fileStat.size };
+  }
+  return { ok: true, status: "ready", filePath, bytes: fileStat.size };
+}
+
+async function fileSha256(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function promoteHumanReviewCandidate(input = {}, { skipLock = false } = {}) {
+  if (!skipLock) {
+    return withHumanReviewDecisionLock(() => withRealClipIntakeManifestLock(
+      () => promoteHumanReviewCandidate(input, { skipLock: true }),
+    ));
+  }
+  const id = String(input.id || "").trim();
+  const metricoolQueueItemId = String(input.metricoolQueueItemId || "").trim();
+  const originalStreamEndedAtInput = String(input.originalStreamEndedAt || "").trim();
+  const promotionConfirmed = String(input.promotionConfirmed || "").trim();
+  const finalOutputReviewed = String(input.finalOutputReviewed || "").trim();
+  if (promotionConfirmed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_promotion_confirmation_required", id, metricoolQueueItemId };
+  }
+  if (finalOutputReviewed !== "yes") {
+    return { ok: false, statusCode: 400, error: "human_review_final_output_confirmation_required", id, metricoolQueueItemId };
+  }
+  const queue = await buildHumanReviewQueue();
+  const reviewRow = queue.rows.find((row) => row.id === id);
+  if (!reviewRow) return { ok: false, statusCode: 404, error: "human_review_candidate_not_found", id, metricoolQueueItemId };
+  if (reviewRow.humanDecision !== "approved_for_intake") {
+    return { ok: false, statusCode: 409, error: "human_review_approval_required", id, metricoolQueueItemId };
+  }
+  const target = queue.intakeTargets.find((row) => row.queueItemId === metricoolQueueItemId);
+  if (!target) return { ok: false, statusCode: 404, error: "human_review_intake_target_not_found", id, metricoolQueueItemId };
+  if (reviewRow.suggestedQueueItemId && reviewRow.suggestedQueueItemId !== metricoolQueueItemId) {
+    return { ok: false, statusCode: 409, error: "human_review_target_does_not_match_candidate_mapping", id, metricoolQueueItemId };
+  }
+  const publishAtMs = Date.parse(String(target.publishAt || ""));
+  if (!Number.isFinite(publishAtMs) || publishAtMs <= operatorNowMs() + 20 * 60_000) {
+    return { ok: false, statusCode: 409, error: "human_review_target_schedule_requires_roll_forward", id, metricoolQueueItemId };
+  }
+  const campaign = await buildStreamer100Campaign();
+  const permission = (campaign.permissionLedgerRows || []).find((row) => campaignHandleKey(row.handle) === campaignHandleKey(reviewRow.creatorHandle));
+  if (!permission || permission.permissionStatus !== "approved_blanket") {
+    return { ok: false, statusCode: 409, error: "creator_blanket_permission_not_approved", id, metricoolQueueItemId };
+  }
+  if (!sourceUrlMatchesCreator(reviewRow.sourceUrl, reviewRow.creatorHandle)) {
+    return { ok: false, statusCode: 409, error: "source_url_creator_not_verified", id, metricoolQueueItemId };
+  }
+  const allowedAccountNames = Array.isArray(permission.restrictions?.allowedAccountNames)
+    ? permission.restrictions.allowedAccountNames
+    : [];
+  if (allowedAccountNames.length && !allowedAccountNames.includes(target.accountName)) {
+    return { ok: false, statusCode: 409, error: "creator_account_not_authorized", id, metricoolQueueItemId };
+  }
+  if (permission.restrictions?.noAi && reviewRow.recordedChecks?.aiUsed !== "no") {
+    return { ok: false, statusCode: 409, error: "creator_no_ai_processing_not_verified", id, metricoolQueueItemId };
+  }
+  const evidenceStatus = await realClipEvidenceStatus(reviewRow.evidenceUrl);
+  if (!evidenceStatus.ok) {
+    return { ok: false, statusCode: 409, error: evidenceStatus.status, id, metricoolQueueItemId };
+  }
+  const originalStreamEndedAt = validatedOptionalTimestamp(originalStreamEndedAtInput, "original_stream_ended_at");
+  if (!originalStreamEndedAt.ok) {
+    return { ok: false, statusCode: 400, error: originalStreamEndedAt.error, id, metricoolQueueItemId };
+  }
+  const minimumDelayHours = Math.max(0, Number(permission.restrictions?.minimumPublishDelayHours || 0));
+  if (minimumDelayHours > 0 && !originalStreamEndedAt.value) {
+    return { ok: false, statusCode: 400, error: "original_stream_ended_at_required_for_creator_delay", id, metricoolQueueItemId };
+  }
+  if (minimumDelayHours > 0 && publishAtMs - originalStreamEndedAt.parsed < minimumDelayHours * 60 * 60 * 1000) {
+    return { ok: false, statusCode: 409, error: "creator_minimum_publish_delay_not_met", id, metricoolQueueItemId };
+  }
+  const sourceStatus = await humanReviewSourceFileStatus(reviewRow);
+  if (!sourceStatus.ok) return { ok: false, statusCode: 409, error: sourceStatus.status, id, metricoolQueueItemId };
+  const categoryDir = await ensureSourceDropCategoryDir(target.category);
+  if (!categoryDir.ok) return { ok: false, statusCode: 409, error: categoryDir.status, id, metricoolQueueItemId };
+  const manifestLocation = await sourceDropManifestLocation(target.category);
+  if (!manifestLocation.ok) return { ok: false, statusCode: 409, error: manifestLocation.status, id, metricoolQueueItemId };
+  const manifestRaw = await readText(manifestLocation.manifestPath, "");
+  const existingManifestRow = manifestRaw.trim()
+    ? manifestRecordForTarget(parseCsv(manifestRaw).rows, target.targetFileName)
+    : null;
+  const existingManifestUrl = String(existingManifestRow?.url || "").trim();
+  if (isExactSourceVideoOrPostUrl(existingManifestUrl) && existingManifestUrl !== reviewRow.sourceUrl) {
+    return { ok: false, statusCode: 409, error: "target_manifest_source_conflict", id, metricoolQueueItemId };
+  }
+  const destinationPath = path.join(categoryDir.categoryDir, target.targetFileName);
+  const destinationStat = await lstat(destinationPath).catch(() => null);
+  if (destinationStat?.isSymbolicLink()) {
+    return { ok: false, statusCode: 409, error: "target_source_file_symlink_blocked", id, metricoolQueueItemId };
+  }
+  let copiedSourceFile = false;
+  let reusedDerivedTarget = false;
+  let derivedTargetAiProcessing = "";
+  if (destinationStat?.isFile()) {
+    const [sourceHash, destinationHash] = await Promise.all([fileSha256(sourceStatus.filePath), fileSha256(destinationPath)]);
+    if (sourceHash !== destinationHash) {
+      const existingManifestSource = String(existingManifestRow?.source || existingManifestRow?.creator || existingManifestRow?.creator_or_rights_holder || "").trim();
+      const existingManifestEvidence = String(existingManifestRow?.evidence_link || existingManifestRow?.evidence || existingManifestRow?.proof_url || existingManifestRow?.proof || "").trim();
+      const existingRightsStatus = String(existingManifestRow?.rights_status || existingManifestRow?.rightsStatus || "").trim();
+      const existingAiProcessing = String(existingManifestRow?.ai_processing || existingManifestRow?.aiProcessing || "").trim().toLowerCase();
+      const existingNotes = String(existingManifestRow?.notes || "").trim();
+      const deterministicDerivedProvenance = ["ffmpeg_no_ai", "deterministic_ffmpeg_no_ai"].includes(existingAiProcessing)
+        || /rendered vertically without ai|deterministic ffmpeg/i.test(existingNotes);
+      const provenanceAllowsCreator = !permission.restrictions?.noAi || deterministicDerivedProvenance;
+      const derivedTargetMapped = existingManifestUrl === reviewRow.sourceUrl
+        && campaignHandleKey(existingManifestSource) === campaignHandleKey(reviewRow.creatorHandle)
+        && existingManifestEvidence === reviewRow.evidenceUrl
+        && existingRightsStatus === "owned_or_permissioned"
+        && provenanceAllowsCreator;
+      const reviewDerivedTargetMapped = existingManifestUrl === reviewRow.sourceUrl
+        && campaignHandleKey(existingManifestSource) === campaignHandleKey(reviewRow.creatorHandle)
+        && existingManifestEvidence === reviewRow.evidenceUrl
+        && existingRightsStatus === "review_required"
+        && deterministicDerivedProvenance;
+      if (!derivedTargetMapped && !reviewDerivedTargetMapped) {
+        return { ok: false, statusCode: 409, error: "target_derived_file_provenance_missing", id, metricoolQueueItemId };
+      }
+      const derivedFileStatus = await sourceDropVideoStatus(target.category, target.targetFileName);
+      if (!derivedFileStatus.ok) {
+        return { ok: false, statusCode: 409, error: derivedFileStatus.status, id, metricoolQueueItemId };
+      }
+      reusedDerivedTarget = true;
+      derivedTargetAiProcessing = existingAiProcessing
+        || (deterministicDerivedProvenance ? "deterministic_ffmpeg_no_ai" : "ai_assisted");
+    }
+  } else if (destinationStat) {
+    return { ok: false, statusCode: 409, error: "target_source_path_not_a_file", id, metricoolQueueItemId };
+  } else {
+    try {
+      await copyFile(sourceStatus.filePath, destinationPath, fsConstants.COPYFILE_EXCL);
+      copiedSourceFile = true;
+    } catch (error) {
+      return { ok: false, statusCode: error?.code === "EEXIST" ? 409 : 500, error: error?.code === "EEXIST" ? "target_source_file_conflict" : "review_source_copy_failed", id, metricoolQueueItemId };
+    }
+  }
+  let result;
+  try {
+    result = await recordRealClipIntakeManifestRow({
+      metricoolQueueItemId,
+      exactVideoOrPostUrl: reviewRow.sourceUrl,
+      creatorOrRightsHolder: reviewRow.creatorHandle,
+      evidenceLink: reviewRow.evidenceUrl,
+      operatorNotes: reviewRow.reviewNotes,
+      aiProcessing: reusedDerivedTarget
+        ? derivedTargetAiProcessing
+        : (reviewRow.recordedChecks?.aiUsed === "no" ? "none" : "ai_assisted"),
+      originalStreamEndedAt: originalStreamEndedAt.value,
+      plannedPublishAt: target.publishAt,
+      contextReviewStatus: "approved",
+      creditText: `Credit: @${reviewRow.creatorHandle}`,
+    }, { skipLock: true });
+  } catch {
+    if (copiedSourceFile) await rm(destinationPath, { force: true }).catch(() => {});
+    return { ok: false, statusCode: 500, error: "real_clip_intake_manifest_write_failed", id, metricoolQueueItemId };
+  }
+  if (!result.ok && copiedSourceFile) await rm(destinationPath, { force: true }).catch(() => {});
+  if (!result.ok) return result;
+  return {
+    ...result,
+    status: result.rowStatus === "ready_for_source_drop_import" ? "human_review_promoted_to_intake" : "human_review_promoted_but_intake_blocked",
+    sourceFileCopied: copiedSourceFile,
+    reusedDerivedTarget,
+    humanReviewCandidateId: id,
+    unlocksMetricool: false,
+    publishAllowed: false,
+  };
+}
+
 function humanReviewStatusLabel(row) {
   if (humanReviewManifestRejected(row) || row.humanDecision === "rejected") return "Descartado";
   if (row.humanDecision === "approved_for_intake") return "Aprobado para intake";
@@ -10122,6 +10357,12 @@ function renderHumanReviewQueuePage(queue) {
     <div class="review-stat"><span class="label">Sin IA</span><strong>${escapeHtml(queue.totals.noAi)}</strong></div>
   </div>
   <div class="actions"><a href="/api/clippers/real-clip-intake.html">Abrir intake después de aprobar</a><a href="/clippers">Volver al inicio</a></div>
+  ${queue.staleIntakeTargets ? `<form method="post" action="/api/clippers/roll-forward">
+    <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+    <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+    <p class="review-note">Las ${escapeHtml(queue.staleIntakeTargets)} filas de destino necesitan un horario futuro antes de promover clips.</p>
+    <button type="submit">Actualizar horario local</button>
+  </form>` : ""}
   <section class="review-list" aria-label="Candidatos en revisión">
     ${queue.rows.map((row) => {
       const rejected = humanReviewManifestRejected(row) || row.humanDecision === "rejected";
@@ -10139,6 +10380,9 @@ function renderHumanReviewQueuePage(queue) {
         </div>
         <p class="review-note">${escapeHtml(row.notes)}</p>
         ${row.humanReviewComplete ? `<p class="review-saved"><strong>Decisión guardada:</strong> ${escapeHtml(humanReviewStatusLabel(row))} · ${escapeHtml(row.reviewedAt)}<br />${escapeHtml(row.reviewNotes)}</p>` : ""}
+        ${approved && row.suggestedQueueItemId ? `<p class="review-note"><strong>Intake:</strong> ${escapeHtml(row.suggestedTargetStatus)}${row.suggestedTargetBlockers.length ? ` · ${escapeHtml(row.suggestedTargetBlockers.join(", "))}` : ""}</p>
+        <video controls preload="metadata" src="${escapeHtml(queue.intakeTargets.find((target) => target.queueItemId === row.suggestedQueueItemId)?.targetMediaUrl || "")}"></video>
+        <p class="review-note">Resultado vertical asociado. Revísalo completo antes de promover.</p>` : ""}
         <div class="review-links">${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noopener noreferrer">Fuente exacta</a>` : ""}<a href="${escapeHtml(row.evidenceUrl)}" target="_blank" rel="noopener noreferrer">Evidencia de permiso</a></div>
         ${humanReviewManifestRejected(row) ? "" : `<details class="review-form">
           <summary>${row.humanReviewComplete ? "Cambiar decisión" : "Registrar decisión"}</summary>
@@ -10157,6 +10401,21 @@ function renderHumanReviewQueuePage(queue) {
             <button class="full" type="submit">Guardar decisión local</button>
           </form>
         </details>`}
+        ${approved ? `<details class="review-form">
+          <summary>Promover al intake real</summary>
+          <form method="post" action="/api/clippers/human-review-promote">
+            <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}" />
+            <input type="hidden" name="returnTo" value="/api/clippers/human-review-queue.html" />
+            <input type="hidden" name="id" value="${escapeHtml(row.id)}" />
+            <label class="full">Destino<select name="metricoolQueueItemId" required>
+              ${queue.intakeTargets.map((target) => `<option value="${escapeHtml(target.queueItemId)}"${target.queueItemId === row.suggestedQueueItemId ? " selected" : ""}>${escapeHtml(target.accountName)} · ${escapeHtml(target.targetFileName)} · ${escapeHtml(target.publishAt)}</option>`).join("")}
+            </select></label>
+            <label class="full">Fin del stream original (ISO 8601; obligatorio cuando exista demora mínima)<input name="originalStreamEndedAt" placeholder="2026-07-20T18:30:00Z" /></label>
+            <label class="full"><input type="checkbox" name="finalOutputReviewed" value="yes" required /> Revisé completo el resultado vertical asociado y confirmé audio, contexto, terceros y procesamiento sin IA.</label>
+            <label class="full"><input type="checkbox" name="promotionConfirmed" value="yes" required /> Confirmo el destino. La acción prepara source-drop e intake, pero no publica.</label>
+            <button class="full" type="submit">Promover de forma segura</button>
+          </form>
+        </details>` : ""}
       </article>`;
     }).join("")}
   </section>
@@ -11043,6 +11302,29 @@ const server = createServer(async (req, res) => {
       }
       return;
     }
+    if (parsed.pathname === "/api/clippers/human-review-promote" && req.method === "POST") {
+      const body = await readRequestBody(req);
+      const validation = validatePostRequest(req, body);
+      if (!validation.ok) {
+        json(res, validation.statusCode, validation);
+        return;
+      }
+      const form = validation.form;
+      const result = await promoteHumanReviewCandidate({
+        id: form.get("id"),
+        metricoolQueueItemId: form.get("metricoolQueueItemId"),
+        originalStreamEndedAt: form.get("originalStreamEndedAt"),
+        finalOutputReviewed: form.get("finalOutputReviewed"),
+        promotionConfirmed: form.get("promotionConfirmed"),
+      });
+      if (result.ok && safeReturnToPath(form.get("returnTo"))) {
+        res.writeHead(303, { location: "/api/clippers/human-review-queue.html", "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 500, result);
+      }
+      return;
+    }
     if (parsed.pathname === "/api/clippers/metricool-upload-checklist.csv" && req.method === "GET") {
       const status = await buildStatus();
       csv(res, 200, status.metricoolSchedulingRunSheet.uploadChecklistCsv);
@@ -11696,7 +11978,13 @@ const server = createServer(async (req, res) => {
       const result = await guardedRollForwardPendingSchedules({
         leadThresholdMinutes,
       });
-      json(res, result.statusCode || 200, result);
+      const returnTo = safeReturnToPath(validation.form.get("returnTo"));
+      if (result.status === "rolled_forward" && result.verifiedRollForward === true && returnTo) {
+        res.writeHead(303, { location: returnTo, "cache-control": "no-store" });
+        res.end();
+      } else {
+        json(res, result.statusCode || 200, result);
+      }
       return;
     }
     if (parsed.pathname === "/api/clippers/external-evidence/preview" && req.method === "POST") {

@@ -2953,11 +2953,11 @@ test("Clippers human review queue exposes authorized files without unlocking Met
   const leonidasDir = path.join(workspaceRoot, "quarantine", "esp-leonidas-review");
   await mkdir(sadlightsDir, { recursive: true });
   await mkdir(leonidasDir, { recursive: true });
-  await writeFile(path.join(sadlightsDir, "sad.mp4"), Buffer.from("review-only-source"));
+  await writeFile(path.join(sadlightsDir, "sad.mp4"), Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_000)]));
   await writeFile(path.join(leonidasDir, "esp.mp4"), Buffer.from("review-only-source"));
   await writeFile(path.join(sadlightsDir, "review-manifest.csv"), [
     "title,exact_source_url,local_raw_file,vertical_intake_file,source_age,source_views,creator_permission,audio_review,context_review,gameplay_rights_review,no_ai_required,status",
-    '"Safe candidate","https://clips.twitch.tv/ExactClip","sad.mp4","","2 days","42","verified","required","required","required","yes","review_required"',
+    '"Safe candidate","https://www.twitch.tv/sadlights/clip/ExactClip","sad.mp4","../../source-drop/memes/memes-real-53467d8f7dad.mp4","2 days","42","verified","required","required","required","yes","review_required"',
   ].join("\n"));
   await writeFile(path.join(leonidasDir, "review-manifest.csv"), [
     "source_id,title,source_url,source_posted_at,historical_views,duration_seconds,local_file,rights_status,rights_evidence,visual_review,audio_review,third_party_review,recency_status,intake_status,publish_allowed,notes",
@@ -2978,12 +2978,14 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.equal(queue.decisionsUnlockPublishing, false);
     assert.equal(queue.decisionLedgerStatus, "not_recorded");
     assert.equal(queue.invalidDecisionRows, 0);
+    assert.equal(queue.intakeTargets.length, 10);
+    assert.match(queue.intakeTargets[0].targetMediaUrl, /^\/clippers-workspace\/source-drop\//);
     assert.equal(queue.metricoolApprovalRequired, true);
     assert.equal(queue.realPublishEnabled, false);
     assert.deepEqual(queue.totals, { rows: 2, filesReady: 2, reviewRequired: 1, approvedForIntake: 0, rejected: 1, noAi: 1, publishAllowed: 0 });
     assert.ok(queue.rows.every((row) => row.publishAllowed === false));
     assert.equal(queue.rows.find((row) => row.creator === "sadlights").noAiRequired, true);
-    assert.equal(queue.rows.find((row) => row.creator === "sadlights").sourceUrl, "https://clips.twitch.tv/ExactClip");
+    assert.equal(queue.rows.find((row) => row.creator === "sadlights").sourceUrl, "https://www.twitch.tv/sadlights/clip/ExactClip");
     assert.equal(queue.rows.find((row) => row.creator === "ESP Leonidas").status, "rejected_visual_policy_risk");
 
     const htmlResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.html");
@@ -3086,6 +3088,143 @@ test("Clippers human review queue exposes authorized files without unlocking Met
     assert.match(updatedBody, /Decisión guardada:/);
     assert.match(updatedBody, /Aprobado para intake/);
     assert.match(updatedBody, /Metricool:<\/strong> bloqueado/);
+    assert.match(updatedBody, /action="\/api\/clippers\/human-review-promote"/);
+    assert.match(updatedBody, /Resultado vertical asociado/);
+    assert.match(updatedBody, /name="finalOutputReviewed"/);
+
+    const researchDir = path.join(workspaceRoot, "research");
+    const permissionsDir = path.join(workspaceRoot, "evidence-drop", "streamer-permissions");
+    const outreachPath = path.join(workspaceRoot, "evidence-drop", "streamer-blanket-permission-outreach.csv");
+    const permissionEvidenceUrl = "/clippers-workspace/evidence-drop/streamer-permissions/sadlights-blanket-permission-2026-07-21.md";
+    await mkdir(researchDir, { recursive: true });
+    await mkdir(permissionsDir, { recursive: true });
+    await writeFile(path.join(researchDir, "streamer-cohort-indie.json"), `${JSON.stringify({
+      streamers: [{
+        handle: "sadlights",
+        twitchOfficialUrl: "https://www.twitch.tv/sadlights",
+        contact: { type: "business_email", value: "rights@sadlights.example", evidenceUrl: "https://sadlights.example/contact" },
+        clipPolicy: { rightsPolicy: "request_required", summary: "Written commercial permission required.", evidenceUrl: "https://sadlights.example/policy" },
+      }],
+    })}\n`);
+    await writeFile(path.join(permissionsDir, "sadlights-blanket-permission-2026-07-21.md"), "Creator granted written blanket permission for commercial TikTok clips on both named accounts, with human-only editing, full-context review, creator credit, a twelve-hour delay, and removal on written request.\n");
+    const outreachHeader = ["handle", "contact_email", "outreach_status", "permission_status", "scope_tiktok", "scope_commercial", "scope_edits", "scope_future_clips", "evidence_link", "operator_notes", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required", "creator_credit_required", "allowed_account_names"];
+    await writeFile(outreachPath, `${renderTestCsvLine(outreachHeader)}\n${renderTestCsvLine([
+      "sadlights", "rights@sadlights.example", "responded", "approved_blanket", "yes", "yes", "yes", "yes", permissionEvidenceUrl,
+      "Creator granted written blanket commercial TikTok permission with enforceable restrictions.", "2026-07-21T08:36:00Z",
+      "yes", "12", "yes", "yes", "Streamer Highlights|Streamer Reactions",
+    ])}\n`);
+    const approvedQueueRow = updatedQueue.rows.find((row) => row.creator === "sadlights");
+    const promotionTarget = updatedQueue.intakeTargets.find((row) => row.queueItemId === approvedQueueRow.suggestedQueueItemId);
+    assert.ok(promotionTarget);
+    const postPromotion = (values) => fetch("http://127.0.0.1:5578/api/clippers/human-review-promote", {
+      method: "POST",
+      redirect: "manual",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({
+        csrfToken,
+        returnTo: "/api/clippers/human-review-queue.html",
+        id: baseDecision.id,
+        metricoolQueueItemId: promotionTarget.queueItemId,
+        ...values,
+      }),
+    });
+    const wrongTarget = updatedQueue.intakeTargets.find((row) => row.queueItemId !== promotionTarget.queueItemId);
+    const mismatchedTarget = await fetch("http://127.0.0.1:5578/api/clippers/human-review-promote", {
+      method: "POST",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({
+        csrfToken,
+        id: baseDecision.id,
+        metricoolQueueItemId: wrongTarget.queueItemId,
+        originalStreamEndedAt: "2026-07-01T12:00:00Z",
+        finalOutputReviewed: "yes",
+        promotionConfirmed: "yes",
+      }),
+    });
+    assert.equal(mismatchedTarget.status, 409);
+    assert.equal((await mismatchedTarget.json()).error, "human_review_target_does_not_match_candidate_mapping");
+    const missingFinalOutputReview = await postPromotion({ promotionConfirmed: "yes", originalStreamEndedAt: "2026-07-01T12:00:00Z" });
+    assert.equal(missingFinalOutputReview.status, 400);
+    assert.equal((await missingFinalOutputReview.json()).error, "human_review_final_output_confirmation_required");
+    const missingDelayProof = await postPromotion({ promotionConfirmed: "yes", finalOutputReviewed: "yes" });
+    assert.equal(missingDelayProof.status, 400);
+    assert.equal((await missingDelayProof.json()).error, "original_stream_ended_at_required_for_creator_delay");
+
+    const promoted = await postPromotion({ promotionConfirmed: "yes", finalOutputReviewed: "yes", originalStreamEndedAt: "2026-07-01T12:00:00Z" });
+    assert.equal(promoted.status, 303);
+    assert.equal(promoted.headers.get("location"), "/api/clippers/human-review-queue.html");
+    const promotedFile = path.join(workspaceRoot, "source-drop", promotionTarget.category, promotionTarget.targetFileName);
+    assert.equal((await stat(promotedFile)).size, 9_012);
+    const promotedManifest = await readFile(path.join(workspaceRoot, "source-drop", promotionTarget.category, "source-drop-manifest.csv"), "utf8");
+    assert.match(promotedManifest, /owned_or_permissioned/);
+    assert.match(promotedManifest, /https:\/\/www\.twitch\.tv\/sadlights\/clip\/ExactClip/);
+    assert.match(promotedManifest, /Credit: @sadlights/);
+    assert.match(promotedManifest, /,none,/);
+
+    await writeFile(promotedFile, Buffer.concat([Buffer.from("0000ftypisom"), Buffer.alloc(9_500)]));
+    const promotedManifestPath = path.join(workspaceRoot, "source-drop", promotionTarget.category, "source-drop-manifest.csv");
+    await writeFile(promotedManifestPath, promotedManifest.replace(",none,", ",ai_assisted,"));
+    const aiDerivedBlockedResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-promote", {
+      method: "POST",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({
+        csrfToken,
+        id: baseDecision.id,
+        metricoolQueueItemId: promotionTarget.queueItemId,
+        originalStreamEndedAt: "2026-07-01T12:00:00Z",
+        finalOutputReviewed: "yes",
+        promotionConfirmed: "yes",
+      }),
+    });
+    assert.equal(aiDerivedBlockedResponse.status, 409);
+    assert.equal((await aiDerivedBlockedResponse.json()).error, "target_derived_file_provenance_missing");
+    await writeFile(promotedManifestPath, promotedManifest.replace(",none,", ",deterministic_ffmpeg_no_ai,"));
+    const reusedDerivedResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-promote", {
+      method: "POST",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({
+        csrfToken,
+        id: baseDecision.id,
+        metricoolQueueItemId: promotionTarget.queueItemId,
+        originalStreamEndedAt: "2026-07-01T12:00:00Z",
+        finalOutputReviewed: "yes",
+        promotionConfirmed: "yes",
+      }),
+    });
+    assert.equal(reusedDerivedResponse.status, 200);
+    const reusedDerived = await reusedDerivedResponse.json();
+    assert.equal(reusedDerived.ok, true);
+    assert.equal(reusedDerived.reusedDerivedTarget, true);
+    assert.equal(reusedDerived.sourceFileCopied, false);
+    const derivedManifest = await readFile(promotedManifestPath, "utf8");
+    assert.match(derivedManifest, /deterministic_ffmpeg_no_ai/);
+
+    await writeFile(
+      promotedManifestPath,
+      derivedManifest.replace("owned_or_permissioned", "review_required"),
+    );
+    const reviewedDerivedResponse = await fetch("http://127.0.0.1:5578/api/clippers/human-review-promote", {
+      method: "POST",
+      headers: { origin: "http://127.0.0.1:5578" },
+      body: new URLSearchParams({
+        csrfToken,
+        id: baseDecision.id,
+        metricoolQueueItemId: promotionTarget.queueItemId,
+        originalStreamEndedAt: "2026-07-01T12:00:00Z",
+        finalOutputReviewed: "yes",
+        promotionConfirmed: "yes",
+      }),
+    });
+    assert.equal(reviewedDerivedResponse.status, 200);
+    assert.equal((await reviewedDerivedResponse.json()).reusedDerivedTarget, true);
+
+    const intakeAfterPromotion = await (await fetch("http://127.0.0.1:5578/api/clippers/real-clip-intake-validation.json")).json();
+    const promotedIntakeRow = intakeAfterPromotion.rows.find((row) => row.queueItemId === promotionTarget.queueItemId);
+    assert.equal(promotedIntakeRow.status, "ready_for_source_drop_import", JSON.stringify(promotedIntakeRow));
+    const queueAfterPromotion = await (await fetch("http://127.0.0.1:5578/api/clippers/human-review-queue.json")).json();
+    assert.equal(queueAfterPromotion.realPublishEnabled, false);
+    assert.equal(queueAfterPromotion.metricoolApprovalRequired, true);
+    assert.ok(queueAfterPromotion.rows.every((row) => row.publishAllowed === false));
   });
 });
 
@@ -3560,6 +3699,26 @@ test("Clippers real clip intake batch endpoint records validated manifest rows a
     assert.match(sportsManifest, /,twitch,sports-real-7129d59b5f5e\.mp4/);
     assert.match(memesManifest, /memes-real-53467d8f7dad\.mp4/);
     assert.match(memesManifest, /,youtube,memes-real-53467d8f7dad\.mp4/);
+
+    const concurrentRows = [
+      ["cf33ed488e40", "1234567890123456701"],
+      ["7395617c94b6", "1234567890123456702"],
+    ];
+    const concurrentResponses = await Promise.all(concurrentRows.map(([metricoolQueueItemId, videoId]) => fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake/record`, {
+      method: "POST",
+      body: new URLSearchParams({
+        csrfToken,
+        metricoolQueueItemId,
+        exactVideoOrPostUrl: `https://www.tiktok.com/@concurrentcreator/video/${videoId}`,
+        creatorOrRightsHolder: "@concurrentcreator",
+        evidenceLink: "https://rights.receipts.local/concurrent-creator-permission",
+        operatorNotes: `Concurrent manifest write for queue ${metricoolQueueItemId} with verified permission evidence.`,
+      }),
+    })));
+    assert.deepEqual(concurrentResponses.map((response) => response.status), [200, 200]);
+    const concurrentManifest = await readFile(memesManifestPath, "utf8");
+    assert.match(concurrentManifest, /memes-real-cf33ed488e40\.mp4/);
+    assert.match(concurrentManifest, /memes-real-7395617c94b6\.mp4/);
 
     const validationResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/real-clip-intake-validation.json`);
     assert.equal(validationResponse.status, 200);

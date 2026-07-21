@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { access } from "node:fs/promises";
-import { mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import path from "node:path";
 
@@ -12,6 +13,8 @@ const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-q
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const safePublicBaseUrl = "https://app.clipprreview.com";
+const metricoolApprovalRunFixture = await readFile(path.join(rootDir, "scheduled/metricool-100-approval-run.json"), "utf8");
+const metricoolRunSheetFixture = await readFile(path.join(rootDir, "scheduled/metricool-100-operator-run-sheet.csv"), "utf8");
 let workspaceBackupPath: string | null = null;
 
 const sliceRequired = (content: string, startNeedle: string, endNeedle: string) => {
@@ -1973,5 +1976,72 @@ test("owned source generator commands have timeout and process group cleanup", a
     assert.ok(source.includes("process.kill(-child.pid"), `${scriptPath} should kill the process group on timeout`);
     assert.ok(source.includes('child.kill("SIGKILL")'), `${scriptPath} should fall back to direct child kill`);
     assert.ok(source.includes("timed out after"), `${scriptPath} should report timeout failures`);
+  }
+});
+
+test("Metricool handoff permits only guarded schedule roll-forward while approval needs review", async () => {
+  const isolatedRoot = await mkdtemp(path.join(tmpdir(), "clippers-needs-review-roll-forward-"));
+  const isolatedScheduled = path.join(isolatedRoot, "scheduled");
+  const isolatedReports = path.join(isolatedRoot, "reports");
+  const isolatedEvidence = path.join(isolatedRoot, "evidence-drop");
+  try {
+    await mkdir(isolatedScheduled, { recursive: true });
+    await mkdir(isolatedReports, { recursive: true });
+    await mkdir(isolatedEvidence, { recursive: true });
+    const approvalRun = JSON.parse(metricoolApprovalRunFixture);
+    approvalRun.status = "needs_review";
+    approvalRun.realPublishEnabled = false;
+    approvalRun.approvalRequired = true;
+    approvalRun.totals = {
+      ...(approvalRun.totals || {}),
+      productionItems: 100,
+      draftReady: 97,
+      metricoolQueuedForApproval: 97,
+      approvalSessionReadyForReview: 97,
+      readyToSend: 0,
+    };
+    await writeFile(path.join(isolatedScheduled, "metricool-100-approval-run.json"), `${JSON.stringify(approvalRun, null, 2)}\n`);
+    const runSheetLines = metricoolRunSheetFixture.trimEnd().split(/\r?\n/);
+    assert.ok(runSheetLines.length >= 98);
+    await writeFile(path.join(isolatedScheduled, "metricool-100-operator-run-sheet.csv"), `${runSheetLines.slice(0, 98).join("\n")}\n`);
+
+    const blocked = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+      cwd: process.cwd(),
+      env: { ...process.env, CLIPPERS_WORKSPACE_ROOT: isolatedRoot },
+      encoding: "utf8",
+    });
+    assert.notEqual(blocked.status, 0);
+    assert.match(blocked.stderr || blocked.stdout, /approval run status is needs_review/);
+
+    const invalidLead = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        CLIPPERS_WORKSPACE_ROOT: isolatedRoot,
+        CLIPPERS_ROLL_FORWARD_MIN_LEAD_MINUTES: "not-a-number",
+      },
+      encoding: "utf8",
+    });
+    assert.notEqual(invalidLead.status, 0);
+    assert.match(invalidLead.stderr || invalidLead.stdout, /must be a number from 1 to 10080/);
+
+    const rolled = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        CLIPPERS_WORKSPACE_ROOT: isolatedRoot,
+        CLIPPERS_ROLL_FORWARD_MIN_LEAD_MINUTES: "20",
+      },
+      encoding: "utf8",
+    });
+    assert.equal(rolled.status, 0, rolled.stderr || rolled.stdout);
+    const output = JSON.parse(rolled.stdout);
+    assert.equal(output.rows, 97);
+    assert.equal(output.readyToSend, 0);
+    const handoff = JSON.parse(await readFile(path.join(isolatedScheduled, "metricool-100-operator-handoff.json"), "utf8"));
+    assert.equal(handoff.totals.readyToSend, 0);
+    assert.ok(handoff.guardrails.some((guardrail: string) => guardrail.includes("approval_required")));
+  } finally {
+    await rm(isolatedRoot, { recursive: true, force: true });
   }
 });
