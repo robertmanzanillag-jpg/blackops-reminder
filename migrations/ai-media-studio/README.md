@@ -180,3 +180,24 @@ constraint, PR6 candidate key, columns, and all rows. Restoring the id-only
 `SET NULL` foreign key would weaken isolation and silently detach publishing
 intent. Roll code back only to a revision compatible with the retained nullable
 account column and composite identity; otherwise correct the release and roll forward.
+
+## PR9 OAuth/vault foundation release
+
+`20260721_pr9_oauth_foundation_forward.sql` is an additive, unapplied control-plane
+migration. It stores globally unique SHA-256 state digests, exact tenant/actor/account/
+platform bindings, allowlisted redirect and scope snapshots, S256 challenges, and only
+opaque PKCE vault references. Raw state, authorization codes, PKCE verifiers, client
+secrets, and access or refresh tokens are never database fields. Provider accounts gain
+credential lifecycle metadata, with every existing account remaining `unverified`.
+
+Apply only after PR6 and PR8 pass staging. Drain account-connection writers, take and
+verify a restorable backup, then prove global state uniqueness, the composite account
+foreign key, the 15-minute maximum lifetime, atomic one-time consumption, exact callback
+binding, redirect allowlisting, and vault compensation. No provider endpoint, token
+exchange, OAuth application, publishing worker, or production deployment is enabled by
+this migration. Full checker and App QA gates plus Robert's explicit deployment approval
+remain mandatory.
+
+The rollback is application-only and preserves sessions, opaque references, lifecycle
+metadata, constraints, and audit evidence. Roll code back to a compatible version or
+correct the release and roll forward; destructive retention needs a separate review.

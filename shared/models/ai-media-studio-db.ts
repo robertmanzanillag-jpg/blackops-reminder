@@ -206,6 +206,12 @@ export const aiMediaProviderAccounts = pgTable(
     webhookPreviousSecretExpiresAt: timestamp("webhook_previous_secret_expires_at", { withTimezone: true }),
     externalAccountId: text("external_account_id"),
     capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
+    grantedScopes: jsonb("granted_scopes").$type<string[]>().notNull().default([]),
+    credentialStatus: text("credential_status").notNull().default("unverified"),
+    credentialVersion: integer("credential_version").notNull().default(0),
+    credentialExpiresAt: timestamp("credential_expires_at", { withTimezone: true }),
+    credentialRefreshExpiresAt: timestamp("credential_refresh_expires_at", { withTimezone: true }),
+    credentialRefreshedAt: timestamp("credential_refreshed_at", { withTimezone: true }),
     configuration: jsonb("configuration").$type<Record<string, unknown>>().notNull().default({}),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
     ...auditColumns(),
@@ -249,6 +255,103 @@ export const aiMediaProviderAccounts = pgTable(
         AND (${table.webhookPreviousSecretRef} IS NULL OR length(btrim(${table.webhookPreviousSecretRef})) BETWEEN 1 AND 500)
       )`,
     ),
+    credentialMetadataCheck: check(
+      "ai_media_provider_accounts_credential_metadata_ck",
+      sql`(
+        jsonb_typeof(${table.grantedScopes}) = 'array'
+        AND ${table.credentialStatus} IN ('unverified', 'active', 'expired', 'revoked', 'attention')
+        AND ${table.credentialVersion} >= 0
+        AND (${table.credentialExpiresAt} IS NULL OR ${table.credentialExpiresAt} > ${table.createdAt})
+        AND (${table.credentialRefreshExpiresAt} IS NULL OR ${table.credentialRefreshExpiresAt} > ${table.createdAt})
+        AND (${table.credentialRefreshedAt} IS NULL OR ${table.credentialRefreshedAt} >= ${table.createdAt})
+      )`,
+    ),
+  }),
+);
+
+export const aiMediaOAuthSessions = pgTable(
+  "ai_media_oauth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    platform: text("platform").notNull(),
+    stateDigest: text("state_digest").notNull(),
+    redirectUri: text("redirect_uri").notNull(),
+    requestedScopes: jsonb("requested_scopes").$type<string[]>().notNull().default([]),
+    codeChallenge: text("code_challenge").notNull(),
+    codeChallengeMethod: text("code_challenge_method").notNull().default("S256"),
+    pkceVerifierRef: text("pkce_verifier_ref").notNull(),
+    status: text("status").notNull().default("pending"),
+    outcome: text("outcome"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    stateDigestUnique: uniqueIndex("ai_media_oauth_sessions_state_digest_uq").on(table.stateDigest),
+    ownerWorkspacePlatformStatusIdx: index("ai_media_oauth_sessions_owner_workspace_platform_status_idx").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.platform,
+      table.status,
+      table.expiresAt,
+    ),
+    platformCheck: check(
+      "ai_media_oauth_sessions_platform_ck",
+      sql`${table.platform} IN ('tiktok', 'instagram', 'facebook', 'youtube_shorts')`,
+    ),
+    statusCheck: check(
+      "ai_media_oauth_sessions_status_ck",
+      sql`${table.status} IN ('pending', 'consumed')`,
+    ),
+    requestedScopesCheck: check(
+      "ai_media_oauth_sessions_requested_scopes_ck",
+      sql`jsonb_typeof(${table.requestedScopes}) = 'array' AND jsonb_array_length(${table.requestedScopes}) BETWEEN 1 AND 50`,
+    ),
+    pkceCheck: check(
+      "ai_media_oauth_sessions_pkce_ck",
+      sql`(
+        ${table.codeChallengeMethod} = 'S256'
+        AND length(${table.codeChallenge}) = 43
+        AND ${table.codeChallenge} ~ '^[A-Za-z0-9_-]+$'
+        AND ${table.pkceVerifierRef} ~ '^vault://ai-media-studio/oauth-pkce/v1/[0-9A-Fa-f-]{36}$'
+      )`,
+    ),
+    lifecycleCheck: check(
+      "ai_media_oauth_sessions_lifecycle_ck",
+      sql`(
+        ${table.expiresAt} > ${table.createdAt}
+        AND ${table.expiresAt} <= ${table.createdAt} + interval '15 minutes'
+        AND ((${table.status} = 'consumed') = (${table.consumedAt} IS NOT NULL))
+        AND ((${table.status} = 'consumed') = (${table.outcome} IS NOT NULL))
+        AND (${table.outcome} IS NULL OR ${table.outcome} IN ('authorized', 'denied', 'error'))
+        AND (${table.consumedAt} IS NULL OR ${table.consumedAt} >= ${table.createdAt})
+      )`,
+    ),
+    redirectCheck: check(
+      "ai_media_oauth_sessions_redirect_ck",
+      sql`${table.redirectUri} ~ '^https://' AND length(${table.redirectUri}) BETWEEN 12 AND 2048`,
+    ),
+    actorCheck: check(
+      "ai_media_oauth_sessions_actor_ck",
+      sql`length(btrim(${table.actorUserId})) BETWEEN 1 AND 255`,
+    ),
+    stateDigestCheck: check(
+      "ai_media_oauth_sessions_state_digest_ck",
+      sql`length(${table.stateDigest}) = 64 AND ${table.stateDigest} ~ '^[0-9a-f]+$'`,
+    ),
+    providerAccountTenantPlatformFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.platform],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_oauth_sessions_provider_account_tenant_platform_fk",
+    }).onUpdate("no action").onDelete("no action"),
   }),
 );
 
@@ -1186,6 +1289,7 @@ export const aiMediaStudioTables = {
   videoProjects: aiMediaVideoProjects,
   videos: aiMediaVideos,
   providerAccounts: aiMediaProviderAccounts,
+  oauthSessions: aiMediaOAuthSessions,
   providerResources: aiMediaProviderResources,
   governanceProfiles: aiMediaGovernanceProfiles,
   renderJobs: aiMediaRenderJobs,
