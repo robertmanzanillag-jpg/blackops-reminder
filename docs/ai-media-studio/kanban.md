@@ -71,7 +71,7 @@ The PR2, PR3, and PR4 migrations remain unapplied. No `db:push`, live PostgreSQL
 | AMS-308 Distributed workers | Platform owner | Partial (code) | No-autostart loop, durable/in-memory outbox, fencing, retry/DLQ, health snapshot and render quotas exist; no deployment, autoscaling or real load proof |
 | AMS-309 Multi-country/language policy | Policy owner | Partial (code) | Admission evaluates provider/tenant limits, language, country, timezone and daily budget; residency/rights/provider-routing operations remain missing |
 | AMS-310 10,000/day capacity gate | Performance owner | Blocked on real environment | Deterministic 10k fake-provider rehearsal exists and is not capacity proof; burst/load, SLO telemetry, provider quotas, cost envelope and DR remain required |
-| AMS-311 OAuth/vault control plane | Identity owner | Checker review | Durable digest-only state, provider-neutral persisted PKCE policy snapshots, opaque purpose-scoped vault references, exact account binding, legacy-unverified lifecycle, S3-KMS PKCE vault, provider authorization URL builders and fail-closed runtime composition are preserved in the stacked PR branches; authorized claim/exchange, mounted routes, token vault, refresh/revocation and sandbox proof remain blocked |
+| AMS-311 OAuth/vault control plane | Identity owner | PR #88 open | Durable digest-only state, persisted PKCE policy, opaque context-bound vault contracts, exact account binding, fenced callback saga, provider exchange ambiguity recovery, atomic credential-version CAS and legacy-unverified lifecycle are preserved in stacked PR #88. Production code/token vault adapters, real connectors, mounted routes, refresh/revocation and sandbox proof remain blocked |
 
 ### PR3 current integration evidence
 

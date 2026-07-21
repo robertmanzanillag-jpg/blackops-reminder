@@ -237,10 +237,10 @@ test("denial and provider error consume once and delete only when a verifier exi
 test("authorized callback is rejected before digest, repository mutation, or vault access", async () => {
   const repository = new InMemoryOAuthSessionRepository();
   let consumes = 0;
-  repository.consume = async () => { consumes += 1; throw new Error("must not mutate"); };
+  repository.consumeDeniedOrError = async () => { consumes += 1; throw new Error("must not mutate"); };
   const h = harness(nonePolicies, repository);
   await assert.rejects(
-    h.service.consume({ state: "not-even-a-valid-state", platform: "tiktok", outcome: "authorized" }),
+    h.service.consume({ state: "not-even-a-valid-state", platform: "tiktok", outcome: "authorized" as never }),
     /rejected/,
   );
   assert.equal(consumes, 0);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T05:50:09.648Z",
+  "generatedAt": "2026-07-21T06:30:38.834Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,26 +85,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 634,
-    "filesIndexed": 547,
-    "imports": 2177,
+    "filesVisible": 639,
+    "filesIndexed": 550,
+    "imports": 2193,
     "routes": 487,
-    "symbols": 10174
+    "symbols": 10300
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 17,
+      "files": 19,
       "indexed": 1,
       "kinds": {
-        "other": 16,
+        "other": 18,
         "docs": 1
       }
     },
-    "tests": {
-      "files": 117,
-      "indexed": 113,
+    "server/ai-media-studio": {
+      "files": 96,
+      "indexed": 95,
       "kinds": {
-        "test": 117
+        "server": 96
+      }
+    },
+    "tests": {
+      "files": 119,
+      "indexed": 115,
+      "kinds": {
+        "test": 119
       }
     },
     ".agents/skills": {
@@ -190,13 +197,6 @@
       "indexed": 92,
       "kinds": {
         "server": 96
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 95,
-      "indexed": 94,
-      "kinds": {
-        "server": 95
       }
     },
     "server/replit_integrations": {
@@ -7815,6 +7815,74 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/oauth/authorization-saga.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-oauth",
+        "../core/resource-domain",
+        "./contracts",
+        "./crypto",
+        "node:crypto"
+      ],
+      "exports": [
+        "createOAuthAuthorizationSaga"
+      ],
+      "symbols": [
+        "CODE_REF",
+        "LEASE_MS",
+        "PUBLISHING_CAPABILITIES",
+        "SAFE_VALUE",
+        "TOKEN_REF",
+        "actorUserId",
+        "authorize",
+        "candidate",
+        "capabilities",
+        "claim",
+        "cleanupTerminal",
+        "clock",
+        "codeContext",
+        "codeContextFor",
+        "codeDigest",
+        "command",
+        "completed",
+        "createOAuthAuthorizationSaga",
+        "descriptorMatches",
+        "digest",
+        "exactSafeList",
+        "exactSecret",
+        "exchanged",
+        "externalAccountId",
+        "finalize",
+        "leaseCommand",
+        "leaseExpiresAt",
+        "leaseMs",
+        "leaseOwner",
+        "leaseToken",
+        "manifestRevision",
+        "markIndeterminate",
+        "normalizeResult",
+        "normalized",
+        "now",
+        "persisted",
+        "pkceContext",
+        "pkceContextFor",
+        "providerAccountId",
+        "readback",
+        "requested",
+        "required",
+        "result",
+        "safeFind",
+        "scope",
+        "scopes",
+        "started",
+        "startedCommand",
+        "tokenContext",
+        "tokenContextFor",
+        "validateDescriptorForClaim"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/oauth/authorization-url.ts",
       "kind": "server",
       "imports": [
@@ -7853,15 +7921,31 @@
         "../core/resource-domain"
       ],
       "exports": [
-        "ConsumeOAuthSession",
+        "ClaimOAuthAuthorization",
+        "ConsumeDeniedOrErrorOAuthSession",
         "CreateOAuthSession",
         "OAuthAccountBindingVerifier",
+        "OAuthAuthorizationClaim",
+        "OAuthAuthorizationCodeVault",
+        "OAuthAuthorizationCodeVaultContext",
+        "OAuthAuthorizationFailureCode",
+        "OAuthAuthorizationSagaRepository",
+        "OAuthDeniedOrErrorOutcome",
+        "OAuthFinalizeAuthorization",
         "OAuthFlowError",
+        "OAuthLeaseCommand",
         "OAuthPlatformPolicies",
         "OAuthPlatformPolicy",
+        "OAuthProviderConnector",
+        "OAuthProviderExchangeResult",
+        "OAuthSafeTokenDescriptor",
+        "OAuthSecretTokenBundle",
         "OAuthSession",
         "OAuthSessionRepository",
         "OAuthSessionStatus",
+        "OAuthTokenVault",
+        "OAuthTokenVaultContext",
+        "OAuthTokenVaultRecord",
         "OAuthVault",
         "OAuthVaultContext"
       ],
@@ -7901,25 +7985,47 @@
         "drizzle-orm"
       ],
       "exports": [
+        "DrizzleOAuthAuthorizationSagaRepository",
         "DrizzleOAuthSessionRepository",
         "OAuthDatabase",
+        "OAuthTransactionalDatabase",
         "createDrizzleOAuthAccountBindingVerifier"
       ],
       "symbols": [
+        "CasLost",
+        "DrizzleOAuthAuthorizationSagaRepository",
         "DrizzleOAuthSessionRepository",
+        "EXCHANGE_STATUSES",
         "ExecuteResult",
+        "FAILURE_CODES",
+        "OUTCOMES",
+        "SESSION_STATUSES",
+        "accountResult",
+        "claimFromRow",
         "codeChallengeMethod",
         "createDrizzleOAuthAccountBindingVerifier",
         "date",
+        "done",
+        "doneResult",
+        "exchangeStatus",
+        "expectedCredentialVersion",
+        "failureCode",
         "iso",
+        "leaseFencing",
         "mapRow",
         "nullableString",
+        "outcome",
         "pkceMode",
+        "raw",
         "requested",
         "requestedScopes",
         "result",
         "row",
         "rows",
+        "session",
+        "sessionResult",
+        "status",
+        "targetCredentialVersion",
         "value",
         "values"
       ],
@@ -7929,15 +8035,28 @@
       "path": "server/ai-media-studio/oauth/in-memory.ts",
       "kind": "server",
       "imports": [
-        "./contracts"
+        "./contracts",
+        "node:crypto"
       ],
       "exports": [
         "InMemoryOAuthSessionRepository"
       ],
       "symbols": [
+        "InMemoryOAuthAccount",
         "InMemoryOAuthSessionRepository",
+        "SHA256",
+        "UUID",
+        "account",
+        "accountKey",
         "clone",
-        "session"
+        "current",
+        "expectedCredentialVersion",
+        "key",
+        "leaseExpiresMs",
+        "next",
+        "nowMs",
+        "session",
+        "tokenBindingId"
       ],
       "routes": []
     },
@@ -8108,7 +8227,7 @@
         "accounts",
         "actorUserId",
         "codeChallenge",
-        "consume",
+        "consumeDeniedOrError",
         "consumedAt",
         "createOAuthService",
         "createdAt",
@@ -8117,6 +8236,7 @@
         "nonEmpty",
         "normalized",
         "now",
+        "outcome",
         "parsed",
         "pkceMode",
         "pkceVaultReference",
@@ -16607,15 +16727,18 @@
         "zod"
       ],
       "exports": [
+        "AI_MEDIA_OAUTH_EXCHANGE_STATUSES",
         "AI_MEDIA_OAUTH_PKCE_MODES",
         "AI_MEDIA_OAUTH_PLATFORMS",
         "AiMediaOAuthCallbackResponse",
+        "AiMediaOAuthExchangeStatus",
         "AiMediaOAuthOutcome",
         "AiMediaOAuthPkceMode",
         "AiMediaOAuthPlatform",
         "AiMediaOAuthStartRequest",
         "AiMediaOAuthStartResponse",
         "aiMediaOAuthCallbackResponseSchema",
+        "aiMediaOAuthExchangeStatusSchema",
         "aiMediaOAuthOutcomeSchema",
         "aiMediaOAuthPkceModeSchema",
         "aiMediaOAuthPlatformSchema",
@@ -16623,9 +16746,11 @@
         "aiMediaOAuthStartResponseSchema"
       ],
       "symbols": [
+        "AI_MEDIA_OAUTH_EXCHANGE_STATUSES",
         "AI_MEDIA_OAUTH_PKCE_MODES",
         "AI_MEDIA_OAUTH_PLATFORMS",
         "aiMediaOAuthCallbackResponseSchema",
+        "aiMediaOAuthExchangeStatusSchema",
         "aiMediaOAuthOutcomeSchema",
         "aiMediaOAuthPkceModeSchema",
         "aiMediaOAuthPlatformSchema",
@@ -17791,6 +17916,53 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-oauth-authorization-saga.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/authorization-saga",
+        "../server/ai-media-studio/oauth/contracts",
+        "../server/ai-media-studio/oauth/crypto",
+        "../server/ai-media-studio/oauth/in-memory",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "accountId",
+        "base",
+        "candidates",
+        "claim",
+        "clock",
+        "code",
+        "codes",
+        "digest",
+        "durable",
+        "found",
+        "h",
+        "harness",
+        "id",
+        "input",
+        "originalExchange",
+        "prior",
+        "ready",
+        "record",
+        "recovered",
+        "ref",
+        "repository",
+        "requestedScopes",
+        "result",
+        "saga",
+        "scope",
+        "seeded",
+        "started",
+        "state",
+        "winner"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-oauth-authorization-url.test.ts",
       "kind": "test",
       "imports": [
@@ -17834,12 +18006,19 @@
       ],
       "exports": [],
       "symbols": [
+        "accountId",
+        "accountSql",
+        "completed",
+        "completionSql",
         "created",
         "dialect",
+        "execute",
         "normalized",
+        "rendered",
         "repository",
         "result",
         "row",
+        "sagaRow",
         "scope"
       ],
       "routes": []
@@ -18234,6 +18413,22 @@
         "rollbackSql",
         "snapshot",
         "trusted"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "forward",
+        "normalized",
+        "rollback"
       ],
       "routes": []
     },
@@ -20604,6 +20799,7 @@
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
+    "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
     "tests/ai-media-studio-oauth-crypto.test.ts",
     "tests/ai-media-studio-oauth-drizzle.test.ts",
@@ -20617,6 +20813,7 @@
     "tests/ai-media-studio-owned-artifact-flow.test.ts",
     "tests/ai-media-studio-persistence.test.ts",
     "tests/ai-media-studio-pr11-oauth-policy-migration.test.ts",
+    "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
