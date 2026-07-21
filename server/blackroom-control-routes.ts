@@ -319,6 +319,8 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     const uploadId = String(req.body?.uploadId || "");
     const reservationId = String(req.body?.reservationId || "");
     const verifyOnly = req.body?.verifyOnly === true;
+    const network = String(req.body?.network || "");
+    if (!['tiktok', 'facebook', 'youtube'].includes(network)) return res.status(400).json({ error: "Invalid BlackRoom Metricool network" });
     const upload = verifyOnly ? null : blackRoomUploads.get(uploadId);
     if (!verifyOnly && (!upload?.ready || upload.reservationId !== reservationId)) return res.status(404).json({ error: "BlackRoom upload not found" });
     try {
@@ -332,7 +334,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
         publicationDateTime: String(req.body?.publicationDateTime || ""),
         timezone: String(req.body?.timezone || "America/New_York"),
         mediaUrl: verifyOnly ? "https://localhost.invalid/blackroom-verification-only.mp4" : `${publicOrigin}/api/blackroom-agent/media/${uploadId}.mp4`,
-      }, { verifyOnly });
+      }, { verifyOnly, networks: [network as "tiktok" | "facebook" | "youtube"] });
       if (!verifyOnly) await removeBlackRoomUpload(uploadId);
       res.status(201).json({ receipt });
     } catch (error: any) {

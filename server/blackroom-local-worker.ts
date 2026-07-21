@@ -29,6 +29,8 @@ export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLAC
 }
 
 export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
+export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
+export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
 
 export interface BlackRoomLedgerEntry {
   reservationId: string;
@@ -47,6 +49,8 @@ export interface BlackRoomLedgerEntry {
   status: BlackRoomLedgerStatus;
   metricoolId: string | null;
   publicationDateTime: string | null;
+  networkAttempts: Partial<Record<BlackRoomReceiptNetwork, BlackRoomNetworkAttemptStatus>>;
+  networkReceipts: Partial<Record<BlackRoomReceiptNetwork, string>>;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,6 +73,50 @@ export function hasCompleteBlackRoomMetricoolReceipt(
     if (match) receipts.set(match[1], match[2]);
   }
   return requiredBlackRoomReceiptNetworks(entry).every((network) => Boolean(receipts.get(network)));
+}
+
+export function markBlackRoomNetworkUncertain(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+  publicationDateTime: string,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(publicationDateTime)) throw new Error("invalid Metricool publication date");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  entry.networkAttempts[network] = "uncertain";
+  entry.publicationDateTime = publicationDateTime;
+  entry.updatedAt = new Date().toISOString();
+  return entry;
+}
+
+export function confirmBlackRoomNetworkReceipt(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+  metricoolId: string,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  const id = metricoolId.trim();
+  if (!id || /[|\s]/.test(id)) throw new Error("valid Metricool network receipt is required");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  entry.networkAttempts[network] = "confirmed";
+  entry.networkReceipts[network] = id;
+  entry.updatedAt = new Date().toISOString();
+  return entry;
+}
+
+export function resetBlackRoomNetworkAttempt(
+  entry: BlackRoomLedgerEntry,
+  network: BlackRoomReceiptNetwork,
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed") throw new Error("confirmed reservation is immutable");
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  delete entry.networkAttempts[network];
+  delete entry.networkReceipts[network];
+  entry.updatedAt = new Date().toISOString();
+  return entry;
 }
 
 export function createBlackRoomWorkerLedger(): BlackRoomWorkerLedger {
@@ -201,7 +249,7 @@ export function validateBlackRoomAudioLoudness(output: string): { meanVolumeDb: 
 
 export function reserveBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
-  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "publicationDateTime" | "createdAt" | "updatedAt">,
+  input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "publicationDateTime" | "networkAttempts" | "networkReceipts" | "createdAt" | "updatedAt">,
   usedSourceVideoIds: Iterable<string> = [],
   now = new Date(),
 ): BlackRoomLedgerEntry {
@@ -221,6 +269,8 @@ export function reserveBlackRoomLedgerEntry(
     status: "reserved",
     metricoolId: null,
     publicationDateTime: null,
+    networkAttempts: {},
+    networkReceipts: {},
     createdAt: timestamp,
     updatedAt: timestamp,
   };

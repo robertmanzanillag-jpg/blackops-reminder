@@ -311,6 +311,7 @@ export async function scheduleBlackRoomMetricoolPost(
     verifyOnly?: boolean;
     verificationAttempts?: number;
     verificationIntervalMs?: number;
+    networks?: BlackRoomMetricoolNetwork[];
   } = {},
 ): Promise<BlackRoomMetricoolReceipt> {
   const env = options.env || process.env;
@@ -338,7 +339,12 @@ export async function scheduleBlackRoomMetricoolPost(
     facebook: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId, input.language),
     youtube: buildBlackRoomYouTubeCaption(input),
   };
-  const requiredNetworks = blackRoomMetricoolNetworks(input);
+  const eligibleNetworks = blackRoomMetricoolNetworks(input);
+  const requestedNetworks = options.networks?.length ? Array.from(new Set(options.networks)) : eligibleNetworks;
+  if (requestedNetworks.some((network) => !eligibleNetworks.includes(network))) {
+    throw new Error("Requested Metricool network is not eligible for this BlackRoom clip");
+  }
+  const requiredNetworks = requestedNetworks;
   const platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {};
   const missingNetworks: BlackRoomMetricoolNetwork[] = [];
   for (const network of requiredNetworks) {
@@ -349,7 +355,7 @@ export async function scheduleBlackRoomMetricoolPost(
   }
   if (!missingNetworks.length) {
     return {
-      metricoolId: platformReceipts.tiktok!,
+      metricoolId: platformReceipts.tiktok || platformReceipts[requiredNetworks[0]]!,
       platformReceipts,
       publicationDateTime: input.publicationDateTime,
       caption: input.caption,
@@ -413,7 +419,7 @@ export async function scheduleBlackRoomMetricoolPost(
     throw new Error("Metricool did not confirm every BlackRoom network");
   }
   return {
-    metricoolId: platformReceipts.tiktok!,
+    metricoolId: platformReceipts.tiktok || platformReceipts[requiredNetworks[0]]!,
     platformReceipts,
     publicationDateTime: input.publicationDateTime,
     caption: input.caption,

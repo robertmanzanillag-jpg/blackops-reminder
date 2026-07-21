@@ -16,6 +16,7 @@ import {
   validateBlackRoomRenderProbe,
   validateBlackRoomAudioLoudness,
   hasCompleteBlackRoomMetricoolReceipt,
+  requiredBlackRoomReceiptNetworks,
   buildBlackRoomUploadChunks,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
@@ -175,45 +176,67 @@ async function publishOneReservedEntry(): Promise<boolean> {
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
   const publicationDateTime = String(entry.publicationDateTime || "")
     || nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
-  const verifyOnly = entry.status === "uncertain";
-  const upload = verifyOnly ? null : await uploadBlackRoomRender(entry, renderInfo.size);
-  const preScheduleQueue = await readJson<any>(queuePath, {});
-  if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
-    throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
+  entry.networkAttempts ||= {};
+  entry.networkReceipts ||= {};
+  const networks = requiredBlackRoomReceiptNetworks(entry);
+  // A legacy whole-reservation uncertainty has no per-network state. Treat every
+  // required network as verification-only so an upgrade can never duplicate it.
+  if (entry.status === "uncertain" && !Object.keys(entry.networkAttempts).length) {
+    for (const network of networks) entry.networkAttempts[network] = "uncertain";
   }
-  if (!verifyOnly) {
-    // Persist the exact schedule and switch to verification-only recovery before
-    // the external POST. A process crash can therefore never replay the POST.
-    await runNpm(["run", "blackroom:ledger", "--", "--uncertain", "--reservation", entry.reservationId,
-      "--publication-date-time", publicationDateTime]);
+  for (const network of networks) {
+    if (entry.networkReceipts[network]) continue;
+    const verifyOnly = entry.networkAttempts[network] === "uncertain";
+    const upload = verifyOnly ? null : await uploadBlackRoomRender(entry, renderInfo.size);
+    const preScheduleQueue = await readJson<any>(queuePath, {});
+    if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
+      throw new BlackRoomPublishPausedError(`BlackRoom paused before Metricool scheduling for ${entry.reservationId}`);
+    }
+    if (!verifyOnly) {
+      // Persist intent for this exact network before its POST. A crash may leave
+      // only this network uncertain; later networks remain safely not_attempted.
+      await runNpm(["run", "blackroom:ledger", "--", "--network-uncertain", "--reservation", entry.reservationId,
+        "--network", network, "--publication-date-time", publicationDateTime]);
+      entry.networkAttempts[network] = "uncertain";
+      entry.publicationDateTime = publicationDateTime;
+    }
+    let scheduled: any;
+    try {
+      scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(upload ? { uploadId: upload.uploadId } : {}),
+          verifyOnly,
+          network,
+          reservationId: entry.reservationId,
+          caption: entry.caption,
+          language: entry.language,
+          sourceVideoId: entry.videoId,
+          durationSeconds: entry.durationSeconds,
+          videoFormat: entry.format,
+          publicationDateTime,
+          timezone: queue.timezone || "America/New_York",
+        }),
+      });
+    } catch (error) {
+      if (!(error as Error & { uncertain?: boolean })?.uncertain) {
+        await runNpm(["run", "blackroom:ledger", "--", "--network-reset", "--reservation", entry.reservationId,
+          "--network", network]).catch(() => undefined);
+        delete entry.networkAttempts[network];
+      }
+      throw error;
+    }
+    const networkId = String(scheduled?.receipt?.platformReceipts?.[network] || scheduled?.receipt?.metricoolId || "").trim();
+    if (!scheduled?.receipt?.verified || !networkId) throw new Error(`Metricool bridge returned no verified ${network} receipt`);
+    await runNpm(["run", "blackroom:ledger", "--", "--network-confirm", "--reservation", entry.reservationId,
+      "--network", network, "--metricool-id", networkId]);
+    entry.networkAttempts[network] = "confirmed";
+    entry.networkReceipts[network] = networkId;
   }
-  let scheduled: any;
-  try {
-    scheduled = await remoteJson(`${remoteUrl}/api/blackroom-agent/metricool/schedule`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${remoteToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(upload ? { uploadId: upload.uploadId } : {}),
-        verifyOnly,
-        reservationId: entry.reservationId,
-        caption: entry.caption,
-        language: entry.language,
-        sourceVideoId: entry.videoId,
-        durationSeconds: entry.durationSeconds,
-        videoFormat: entry.format,
-        publicationDateTime,
-        timezone: queue.timezone || "America/New_York",
-      }),
-    });
-  } catch (error) { throw error; }
-  const metricoolId = String(scheduled?.receipt?.metricoolId || "").trim();
-  const tiktokId = String(scheduled?.receipt?.platformReceipts?.tiktok || "").trim();
-  const facebookId = String(scheduled?.receipt?.platformReceipts?.facebook || "").trim();
-  const youtubeId = String(scheduled?.receipt?.platformReceipts?.youtube || "").trim();
-  const youtubeShortRequired = entry.format === "vertical" && Number(entry.durationSeconds) >= 3 && Number(entry.durationSeconds) <= 178;
-  if (!scheduled?.receipt?.verified || !metricoolId || !tiktokId || !facebookId || (youtubeShortRequired && !youtubeId)) {
-    throw new Error("Metricool bridge returned incomplete TikTok, Facebook, or YouTube Shorts receipts");
-  }
+  const tiktokId = String(entry.networkReceipts.tiktok || "");
+  const facebookId = String(entry.networkReceipts.facebook || "");
+  const youtubeId = String(entry.networkReceipts.youtube || "");
   const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}${youtubeId ? `|youtube:${youtubeId}` : ""}`;
   await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});

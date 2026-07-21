@@ -4,6 +4,9 @@ import {
   BLACKROOM_WORKER_LEDGER_PATH,
   assertSafeConfirmedDeletion,
   createBlackRoomWorkerLedger,
+  markBlackRoomNetworkUncertain,
+  confirmBlackRoomNetworkReceipt,
+  resetBlackRoomNetworkAttempt,
   reserveBlackRoomLedgerEntry,
   updateBlackRoomLedgerEntry,
   type BlackRoomWorkerLedger,
@@ -17,6 +20,11 @@ const queuePath = path.join(projectDir, process.env.BLACKROOM_QUEUE_PATH || BLAC
 const arg = (name: string) => {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
+};
+const networkArg = () => {
+  const network = arg("--network");
+  if (network !== "tiktok" && network !== "facebook" && network !== "youtube") throw new Error("network must be tiktok, facebook, or youtube");
+  return network;
 };
 
 async function readLedger(): Promise<BlackRoomWorkerLedger> {
@@ -91,13 +99,28 @@ async function main(): Promise<void> {
         publicationDateTime: arg("--publication-date-time"),
       });
       await writeLedger(ledger);
+    } else if (process.argv.includes("--network-uncertain")) {
+      const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
+      if (!entry) throw new Error("reservation not found");
+      result = markBlackRoomNetworkUncertain(entry, networkArg(), arg("--publication-date-time") || "");
+      await writeLedger(ledger);
+    } else if (process.argv.includes("--network-confirm")) {
+      const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
+      if (!entry) throw new Error("reservation not found");
+      result = confirmBlackRoomNetworkReceipt(entry, networkArg(), arg("--metricool-id") || "");
+      await writeLedger(ledger);
+    } else if (process.argv.includes("--network-reset")) {
+      const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
+      if (!entry) throw new Error("reservation not found");
+      result = resetBlackRoomNetworkAttempt(entry, networkArg());
+      await writeLedger(ledger);
     } else if (process.argv.includes("--delete-confirmed")) {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
       if (!entry) throw new Error("reservation not found");
       const safePath = assertSafeConfirmedDeletion(projectDir, entry, arg("--file") || "");
       await unlink(safePath);
       result = { deleted: safePath };
-    } else throw new Error("Expected --reserve, --confirm, --uncertain, or --delete-confirmed");
+    } else throw new Error("Expected a BlackRoom ledger operation");
     console.log(JSON.stringify(result, null, 2));
   } finally {
     await lock.close();

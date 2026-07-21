@@ -269,6 +269,29 @@ test("retries only the missing Facebook post after TikTok was already confirmed"
   assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
 });
 
+test("schedules and verifies only the explicitly requested network", async () => {
+  const calls: Array<{ method: string; body?: any }> = [];
+  const facebook = { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } };
+  const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
+    const method = init.method || "GET";
+    calls.push({ method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    if (String(url).includes("/normalize/")) return new Response(input.mediaUrl);
+    if (method === "POST") return Response.json({ id: 992 });
+    const gets = calls.filter((call) => call.method === "GET").length;
+    return Response.json({ data: gets === 1 ? [] : [facebook] });
+  };
+  const receipt = await scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+    networks: ["facebook"],
+  });
+  const posts = calls.filter((call) => call.method === "POST");
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body.providers, [{ network: "facebook" }]);
+  assert.equal(receipt.metricoolId, "992");
+  assert.deepEqual(receipt.platformReceipts, { facebook: "992" });
+});
+
 test("refuses to confirm when the verification response does not contain the post", async () => {
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     if (init.method !== "POST" && String(url).includes("/scheduler/posts")) return Response.json({ data: [] });

@@ -7,11 +7,14 @@ import {
   assertSafeConfirmedDeletion,
   buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
+  confirmBlackRoomNetworkReceipt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
   nextBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
+  markBlackRoomNetworkUncertain,
   reserveBlackRoomLedgerEntry,
+  resetBlackRoomNetworkAttempt,
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
   updateBlackRoomLedgerEntry,
@@ -160,6 +163,29 @@ test("uncertain reservations persist their exact Metricool schedule for verifica
   assert.equal(entry.status, "uncertain");
   assert.equal(entry.publicationDateTime, "2026-07-22T00:30:00");
   assert.throws(() => updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "uncertain", publicationDateTime: "tomorrow" }), /invalid Metricool publication date/);
+});
+
+test("persists Metricool progress independently for each network", () => {
+  const ledger = createBlackRoomWorkerLedger();
+  const entry = reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-1", slot: "00:30", videoId: "video-1",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/a.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/a.mp4",
+  });
+  markBlackRoomNetworkUncertain(entry, "tiktok", "2026-07-22T00:30:00");
+  assert.deepEqual(entry.networkAttempts, { tiktok: "uncertain" });
+  assert.equal(entry.networkAttempts.facebook, undefined);
+
+  confirmBlackRoomNetworkReceipt(entry, "tiktok", "991");
+  assert.deepEqual(entry.networkReceipts, { tiktok: "991" });
+  assert.equal(entry.networkAttempts.tiktok, "confirmed");
+
+  markBlackRoomNetworkUncertain(entry, "facebook", "2026-07-22T00:30:00");
+  resetBlackRoomNetworkAttempt(entry, "facebook");
+  assert.equal(entry.networkAttempts.facebook, undefined);
+  assert.equal(entry.networkReceipts.facebook, undefined);
+  assert.equal(entry.networkReceipts.tiktok, "991");
 });
 
 test("safe deletion requires confirmed Metricool receipt and exact media path", () => {
