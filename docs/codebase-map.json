@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-21T21:43:09.795Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
+  "generatedAt": "2026-07-21T23:03:18.396Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr1-chain",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -44,6 +44,7 @@
     "test:automation-registry": "node --import tsx --test tests/automation-registry.test.ts",
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:ai-media-postgres": "node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
+    "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
@@ -86,18 +87,26 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 768,
-    "filesIndexed": 641,
-    "imports": 2618,
+    "filesVisible": 774,
+    "filesIndexed": 646,
+    "imports": 2639,
     "routes": 491,
-    "symbols": 12535
+    "symbols": 12601
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 138,
-      "indexed": 130,
+    "migrations/ai-media-studio": {
+      "files": 46,
+      "indexed": 2,
       "kinds": {
-        "server": 138
+        "other": 45,
+        "docs": 1
+      }
+    },
+    "tests": {
+      "files": 176,
+      "indexed": 167,
+      "kinds": {
+        "test": 176
       }
     },
     ".agents/skills": {
@@ -164,14 +173,6 @@
         "docs": 12
       }
     },
-    "migrations/ai-media-studio": {
-      "files": 43,
-      "indexed": 1,
-      "kinds": {
-        "other": 42,
-        "docs": 1
-      }
-    },
     "script": {
       "files": 39,
       "indexed": 37,
@@ -193,6 +194,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 137,
+      "indexed": 130,
+      "kinds": {
+        "server": 137
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -212,13 +220,6 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 172,
-      "indexed": 163,
-      "kinds": {
-        "test": 172
       }
     },
     "tests/fixtures": {
@@ -4980,6 +4981,14 @@
         "./server/env-loader",
         "drizzle-kit"
       ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "migrations/ai-media-studio/manifest.json",
+      "kind": "other",
+      "imports": [],
       "exports": [],
       "symbols": [],
       "routes": []
@@ -20256,6 +20265,59 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-full-chain-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "TEMP_PREFIX",
+        "aclCatalog",
+        "aiMediaAclCatalog",
+        "aiMediaCatalog",
+        "bytes",
+        "catalog",
+        "crossMembership",
+        "directExecutorTableAcl",
+        "enabled",
+        "executorAcl",
+        "integrationTest",
+        "manifest",
+        "migration",
+        "migrationRoot",
+        "parsed",
+        "pgcrypto",
+        "pool",
+        "pr1",
+        "pr26",
+        "pr27",
+        "publicCreate",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "retainedCatalog",
+        "roles",
+        "securityDefiners",
+        "sha256",
+        "socket",
+        "value",
+        "workerSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-governance-drizzle.test.ts",
       "kind": "test",
       "imports": [
@@ -20798,6 +20860,33 @@
         "scope",
         "subject",
         "validFrom"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-migration-manifest.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Manifest",
+        "MigrationEntry",
+        "MigrationFile",
+        "bytes",
+        "digest",
+        "evidencePreservingNoOp",
+        "files",
+        "inventoried",
+        "manifest",
+        "migrationDirectory",
+        "migrationPullRequests",
+        "ownsTransaction",
+        "sql"
       ],
       "routes": []
     },
@@ -21572,6 +21661,31 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr1-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "directory",
+        "forward",
+        "historicalIndexes",
+        "historicalModel",
+        "historicalTables",
+        "position",
+        "rollback",
+        "sqlIndexes",
+        "sqlTables"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr11-oauth-policy-migration.test.ts",
       "kind": "test",
       "imports": [
@@ -22231,6 +22345,27 @@
         "waitForBlocked",
         "waitForExpiredAttempt",
         "work"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr27-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "compact",
+        "forward",
+        "grantStart",
+        "revoke",
+        "revokeStart",
+        "rollback",
+        "sql",
+        "terminalSignatures"
       ],
       "routes": []
     },
@@ -23103,14 +23238,15 @@
         "migrationPrefixes",
         "migrationsReadme",
         "position",
+        "pr1",
         "pr12",
         "pr14",
         "pr14Forward",
         "pr16Plan",
         "pr16a",
         "pr16b",
-        "pr16bStop",
         "pr19",
+        "pr2",
         "pr26Forward",
         "reverseSection",
         "runbook",
@@ -24764,6 +24900,7 @@
     "tests/ai-media-studio-core-schema.test.ts",
     "tests/ai-media-studio-daily-admission-domain.test.ts",
     "tests/ai-media-studio-daily-admission-drizzle.test.ts",
+    "tests/ai-media-studio-full-chain-postgres.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-held-work-activation.test.ts",
@@ -24780,6 +24917,7 @@
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
     "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
+    "tests/ai-media-studio-migration-manifest.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",
     "tests/ai-media-studio-oauth-authorization-url.test.ts",
     "tests/ai-media-studio-oauth-aws-vault-preflight-v2.test.ts",
@@ -24807,6 +24945,7 @@
     "tests/ai-media-studio-orchestration.test.ts",
     "tests/ai-media-studio-owned-artifact-flow.test.ts",
     "tests/ai-media-studio-persistence.test.ts",
+    "tests/ai-media-studio-pr1-migration.test.ts",
     "tests/ai-media-studio-pr11-oauth-policy-migration.test.ts",
     "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
     "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
@@ -24826,6 +24965,7 @@
     "tests/ai-media-studio-pr26-db-capability-migration.test.ts",
     "tests/ai-media-studio-pr26-db-capability.test.ts",
     "tests/ai-media-studio-pr26-postgres-races.test.ts",
+    "tests/ai-media-studio-pr27-migration.test.ts",
     "tests/ai-media-studio-pr27-postgres-migration.test.ts",
     "tests/ai-media-studio-pr27-terminal-migration.test.ts",
     "tests/ai-media-studio-pr27-terminal-repository.test.ts",

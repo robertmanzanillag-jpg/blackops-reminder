@@ -11,6 +11,7 @@ const runbook = readFileSync(runbookUrl, "utf8");
 const pr16Plan = readFileSync(new URL("../docs/ai-media-studio/pr16-remediation-plan.md", import.meta.url), "utf8");
 
 const migrationPrefixes = [
+  "20260720_pr1_foundation",
   "20260720_pr2_core",
   "20260720_pr3_operations",
   "20260720_pr4_assets",
@@ -38,7 +39,7 @@ test("staging runbook is no-go and names every available migration in exact forw
   assert.match(runbook, /Status: \*\*NO-GO \/ preparation only\*\*/u);
   assert.match(runbook, /Nothing in this runbook authorizes a[\s\S]*database connection/u);
   assert.match(runbook, /PR13's reviewed commit is schema-neutral/u);
-  assert.match(runbook, /PR16B[\s\S]*mandatory stop/u);
+  assert.match(runbook, /PR16A and PR16B[\s\S]*remain[\s\S]*unapplied/u);
   assert.doesNotMatch(runbook, /(?:drizzle-kit push|npm run db:push)[\s\S]{0,80}(?:use|run|execute) it/u);
 
   let previousForward = -1;
@@ -61,7 +62,7 @@ test("staging runbook is no-go and names every available migration in exact forw
   }
 });
 
-test("runbook inventory matches the SQL directory, proves PR13 schema-neutral and keeps PR16B review as a stop", () => {
+test("runbook inventory matches all 22 reviewed-local migration pairs", () => {
   const sqlFiles = readdirSync(migrationDirectoryUrl)
     .filter((name) => name.endsWith(".sql"))
     .sort();
@@ -70,23 +71,27 @@ test("runbook inventory matches the SQL directory, proves PR13 schema-neutral an
     .sort();
   assert.deepEqual(sqlFiles, expected);
 
+  const pr1 = runbook.indexOf("20260720_pr1_foundation_forward.sql");
+  const pr2 = runbook.indexOf("20260720_pr2_core_forward.sql");
   const pr12 = runbook.indexOf("20260721_pr12_oauth_callback_saga_forward.sql");
   const pr14 = runbook.indexOf("20260721_pr14_oauth_vault_operations_forward.sql");
   const pr16a = runbook.indexOf("20260721_pr16_provider_activation_integrity_forward.sql");
   const pr16b = runbook.indexOf("20260721_pr16b_durable_activation_forward.sql");
-  const pr16bStop = runbook.indexOf("PR16B durable repository/CAS gate");
   const pr19 = runbook.indexOf("20260721_pr19_daily_admission_forward.sql");
+  assert.ok(pr1 < pr2);
   assert.ok(pr12 < pr14);
-  assert.ok(pr14 < pr16a && pr16a < pr16b && pr16b < pr16bStop && pr16bStop < pr19);
+  assert.ok(pr14 < pr16a && pr16a < pr16b && pr16b < pr19);
   assert.match(runbook, /PR14's database prerequisites are the validated PR12 OAuth saga/u);
   assert.match(pr14Forward, /PR14 requires PR12 OAuth callback saga schema/u);
   assert.match(pr14Forward, /PR14 requires validated PR12 OAuth saga and credential provenance controls/u);
   assert.match(migrationsReadme, /PR16A now has local additive forward\/rollback SQL/u);
   assert.match(migrationsReadme, /PR16B now has local additive forward\/rollback SQL/u);
-  assert.match(runbook, /PR2 is a[\s\S]*delta, not an initial-schema migration/u);
+  assert.match(runbook, /PR2 remains a delta[\s\S]*must never substitute for[\s\S]*PR1 baseline/u);
+  assert.match(runbook, /migrations\/ai-media-studio\/manifest\.json/u);
+  assert.match(runbook, /PR1 rollback is valid only[\s\S]*empty-baseline rollback/u);
+  assert.match(runbook, /operator stop after PR16B[\s\S]*not claims[\s\S]*PR16B implementation or review is pending/u);
   assert.match(runbook, /pr16-remediation-plan\.md/u);
   assert.match(pr16Plan, /PR16A — schema and integrity[\s\S]*PR16B — durable activation and CAS/u);
-  assert.match(pr16Plan, /Status: \*\*NO-GO \/ PR16A and local PR16B independently checked\*\*/u);
 });
 
 test("runbook requires exact roles, private evidence, approvals and provider-free restart", () => {
@@ -107,7 +112,8 @@ test("runbook requires exact roles, private evidence, approvals and provider-fre
   assert.match(runbook, /one HeyGen[\s\S]*explicit approval/u);
   assert.match(runbook, /Replit\/production deploy[\s\S]*separately approve/u);
   assert.match(runbook, /PR23–PR27[\s\S]*forward fix/u);
-  assert.match(runbook, /After the reverse SQL completes, restart the exact application revision/u);
+  assert.match(runbook, /Mandatory preservation stop:[\s\S]*PR26 rollback must detect[\s\S]*fail before mutation/u);
+  assert.match(runbook, /After the approved reverse segment reaches its preservation stop, restart the[\s\S]*exact application revision/u);
   assert.match(runbook, /post-rollback restart evidence/u);
   assert.match(migrationsReadme, /staging-rehearsal-runbook\.md/u);
   assert.match(migrationsReadme, /sole[\s\S]*sequence authority[\s\S]*NO-GO/u);

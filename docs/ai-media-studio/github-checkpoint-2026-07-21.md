@@ -2,23 +2,53 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: reviewed PR1 foundation and full migration chain
+
+- Scope: `20260720_pr1_foundation_forward.sql` and its guarded rollback close
+  the missing local baseline artifact. The source is pinned to foundation commit
+  `8b30f184`, blob `4678f3b60595fe272ce11999806a4634317edb03` and
+  source SHA-256 `560ac47625eb1a14297a5a5d127be7cc267d5de3c1943d51ea7e19640be1972d`;
+  `migrations/ai-media-studio/manifest.json`
+  records the exact SHA-256 provenance and order of all 22 forward/rollback
+  pairs through PR27.
+- Rollback boundary: PR1 rollback is empty-baseline-only. It runs last, fails
+  closed if later state or evidence remains, and cannot erase evidence preserved
+  by any later data-preserving rollback.
+- Review evidence: the focused PR1/runbook checks pass 8/8, including exact
+  source provenance, 18-table/20-foreign-key/38-index shape and guarded
+  empty-baseline rollback. The manifest/full-chain command passes 7/7: four
+  exact inventory/hash/security checks plus live disposable PostgreSQL proof of
+  PR1-only rollback, all 22 forward pairs through PR27, and the mandatory
+  evidence-preserving reverse stop before PR26. Before that final rollback
+  hardening, the complete AI Media Studio suite passed 699 with 0 failures and
+  36 controlled skips out of 735; the final delta then passed the 14 focused
+  contracts, PR26 PostgreSQL 7/7 and TypeScript. Production build, generated
+  codebase map and diff hygiene pass. Final independent checker/App QA remain
+  pending for the combined diff.
+- Status: **NO-GO**. Local provenance does not authorize staging access or prove
+  compatibility with a named restored catalog. No migration, `db:push`, role,
+  provider call, spend, publication, secret change or deployment occurred.
+- Launch boundary: 5–10 HeyGen avatars with exactly 10 videos each (50–100)
+  remains blocked behind staging evidence, one separately approved one-video
+  sandbox, App QA, explicit batch-cost approval and separate Replit approval.
+
 ## Active local checkpoint: PR16A provider activation integrity
 
 - Branch: `codex/ai-media-studio-pr16-schema-integrity`, draft PR #121, stacked on draft PR #118. Initial checkpoint commit: `e7b2b7ab`; no merge, migration or deployment is implied.
 - Scope: one additive, unapplied forward/rollback pair binds provider account, attempt, exact selection, target, role-specific artifacts and cleanup obligations. A database-derived canonical authorization digest matches the TypeScript contract, non-retained cleanup stays actionable, and ambiguous/abandoned evidence remains immutable.
 - Provider proof: isolated PostgreSQL 16 accepts the exact TikTok role pair and the Meta `grant_user_access` exchange to one target `operational_access` artifact transformation. It rejects partial roles, altered scopes, arbitrary authorization digests, inert cleanup deadlines, contradictory lifecycle pairs and null/invalid token lifetimes.
 - Evidence: focused checker suite 36/36, PostgreSQL 16 harness 7/7, final full suite 674 passed/0 failed/31 skipped of 705, TypeScript and production build pass. Combined with the seven separately executed PR16A PostgreSQL cases, final evidence is 681 passed and 24 older PostgreSQL-only skips. Independent checker and App QA are P0=P1=P2=0.
-- Safety boundary: PR16A is unmounted and unapplied. PR16B durable activation/CAS remains absent and is a mandatory stop before PR19, restart, sandbox or provider use. No database outside the destroyed local harness, secret, provider, spend, publication or deployment was touched.
+- Safety boundary: PR16A is unmounted and unapplied. PR16B is now preserved in draft PR #124 with clean review evidence, but it too remains unmounted and unapplied. No database outside the destroyed local harness, secret, provider, spend, publication or deployment was touched.
 
 ## Active local checkpoint: PR30 staging rehearsal runbook
 
 - Branch: `codex/ai-media-studio-staging-rehearsal-runbook`, draft PR #118, stacked on draft PR #116. Initial checkpoint commit: `bdd1f2fd`. This is documentation/static validation only; it does not authorize or perform a database connection.
 - Runbook: `docs/ai-media-studio/staging-rehearsal-runbook.md` defines named approvals, immutable evidence, read-only preflight, backup/isolated restore, one-file-at-a-time forward order, restart with provider workers off, exact reverse order, stop conditions and the separately approved one-video handoff.
-- SQL inventory: all 20 checked-in forward files and all 20 rollback files are listed in exact order and compared to the migration directory by a static test. `db:push` and inferred SQL are forbidden.
-- Critical audit result: the chain remains NO-GO. PR1 baseline is unproven. Local PR16A has clean checker/App QA plus isolated PostgreSQL 16 integrity proof but remains unapplied, and PR16B's durable repository/CAS is absent. The named staging target, restorable backup, maintenance window and separate DB principals/capabilities are also unproven/unapproved.
+- SQL inventory: the reviewed-local PR1 baseline expands the manifest to 22 checked-in forward files and 22 rollback files in exact order. `manifest.json` binds their source provenance and SHA-256 digests; `db:push` and inferred SQL are forbidden.
+- Critical audit result: the chain remains NO-GO. PR1 is locally reconstructed and PR16A/PR16B have clean review evidence, but every pair is unapplied. The named staging target, catalog compatibility, restorable backup, maintenance window and separate DB principals/capabilities are still unproven/unapproved.
 - Corrected provenance: a dedicated commit/file audit proved PR13 intentionally changes application adapters only and is schema-neutral. PR14's database controls come from PR12; its mislabeled preflight now names those exact prerequisites. This correction does not prove PR13 S3/KMS/IAM runtime readiness, which remains a separate gate.
 - Preserved PR16 handoff: `docs/ai-media-studio/pr16-remediation-plan.md` records every missing schema group, the relational/CAS blockers, the PR16A schema and PR16B repository split, required PostgreSQL concurrency/crash/rollback evidence, and the exit gate. It authorizes no implementation or environment access.
-- Current evidence: the runbook inventory tests pass 3/3. PR16A's final full AI Media Studio suite passes 674 with 0 failures and 31 skips out of 705; its isolated PostgreSQL suite passes 7/7, leaving 24 older PostgreSQL-only skips in the composed evidence. TypeScript and production build pass. Dedicated auditors confirmed the 20-file order, PostgreSQL 16/pgcrypto, exact PR26 role prerequisites, PR13 schema neutrality and clean PR16A checker/App QA gates at P0=P1=P2=0.
+- Current PR30 evidence remains historical: its runbook inventory tests passed 3/3 and its PR16A evidence passed the recorded local gates. The new exact manifest and disposable-local full-chain command now passes 7/7, including the fail-before-mutation PR27→PR26 reverse preservation stop; this is still not approved restored-staging, restart, rollback-rehearsal or deployment evidence.
 - Safety boundary: no database was opened, no backup was taken, no role/capability was created, no SQL was applied, no service restarted, no credential touched, no provider/storage call made, no money spent and no deployment requested.
 
 ## Active local checkpoint: PR29 inert HeyGen V3 production composition
@@ -479,15 +509,15 @@ repeat checker, security and App QA gates before any runtime wiring.
 
 ### Local PR16A follow-up — schema/integrity branch
 
-The current local PR16A branch adds the twentieth forward/rollback migration pair
-after PR15 and before PR19. It encodes exact artifact, binding, selection and v2
+The PR16A branch adds its reviewed forward/rollback migration pair after PR15
+and before PR19. It encodes exact artifact, binding, selection and v2
 cleanup relations, platform role cardinality, lifecycle/immutability guards and a
 deferred active-account graph. Static parity coverage and an isolated PostgreSQL 16
-harness provide local integrity evidence. Nothing has been applied to staging, and
-no GitHub PR is claimed here; the independent checker must still review the final
-diff. PR16B's durable activation repository, prewrite cleanup obligation and fenced
-activation/finality CAS remain the mandatory stop before PR19, restart or runtime
-mounting. The initial launch remains exactly 5–10 avatars with 10 videos each
+harness provide local integrity evidence. It is preserved in draft PR #121 and
+nothing has been applied to staging. PR16B's durable activation repository,
+prewrite cleanup obligation and fenced activation/finality CAS are now preserved
+in reviewed draft PR #124, still unmounted and unapplied. The initial launch
+remains exactly 5–10 avatars with 10 videos each
 (50–100), after a separately approved one-video sandbox.
 
 ### Local PR16B follow-up — durable activation and cleanup
@@ -511,6 +541,6 @@ with 0 failures and 34 PostgreSQL-only skips out of 722; together with the three
 separately executed PR16B PostgreSQL cases, composed evidence is 691 passed and
 31 older PostgreSQL-only skips. TypeScript, production build, generated map and
 diff hygiene pass. Independent checker and App QA are clean at P0=P1=P2=0 after
-closing an expired-lease staged-replay race. Commit, push and draft PR remain
-pending; staging and the one-video HeyGen sandbox still require Robert's
+closing an expired-lease staged-replay race. Commit and push are preserved in
+draft PR #124; staging and the one-video HeyGen sandbox still require Robert's
 separate explicit approvals.

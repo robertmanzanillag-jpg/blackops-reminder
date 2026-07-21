@@ -78,10 +78,10 @@ async function main(): Promise<void> {
     throw new Error("Refusing an external TEST_DATABASE_URL; this harness always creates its own mktemp PostgreSQL cluster");
   }
   const selectedSuite = process.env.AI_MEDIA_POSTGRES_SUITE?.trim() || "all";
-  if (!(["all", "pr21", "pr26", "pr16a", "pr16b"] as const).includes(
-    selectedSuite as "all" | "pr21" | "pr26" | "pr16a" | "pr16b",
+  if (!(["all", "pr21", "pr26", "pr16a", "pr16b", "full-chain"] as const).includes(
+    selectedSuite as "all" | "pr21" | "pr26" | "pr16a" | "pr16b" | "full-chain",
   )) {
-    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, pr16a, or pr16b");
+    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, pr16a, pr16b, or full-chain");
   }
 
   const temporaryRoot = await mkdtemp(join(testTemporaryDirectory(), TEMP_PREFIX));
@@ -134,6 +134,14 @@ async function main(): Promise<void> {
     const { DATABASE_URL: _productionDatabaseUrl, TEST_DATABASE_URL: _externalTestDatabaseUrl, ...safeEnvironment } = process.env;
     const childEnvironment = { ...safeEnvironment, TEST_DATABASE_URL: testDatabaseUrl };
     testProcessStarted = true;
+    if (selectedSuite === "full-chain") {
+      await runCommand("node", [
+        "--import", "tsx",
+        "--test",
+        "--test-concurrency=1",
+        "tests/ai-media-studio-full-chain-postgres.test.ts",
+      ], childEnvironment);
+    }
     if (selectedSuite === "all" || selectedSuite === "pr21") {
       await runCommand("node", [
         "--import", "tsx",

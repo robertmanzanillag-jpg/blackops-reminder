@@ -21,7 +21,7 @@ REVOKE EXECUTE ON FUNCTION
   ai_media_worker_api.claim_terminal_check_v1(uuid,text,text,text,integer),
   ai_media_worker_api.release_terminal_check_unknown_v1(uuid,text,text,uuid,uuid,bigint,text,timestamptz,text),
   ai_media_worker_api.record_provider_terminal_v1(uuid,text,text,uuid,uuid,bigint,uuid,bigint,text,uuid,text,integer,text,text,text,text,timestamptz,text)
-FROM ai_media_admitted_reconcile_executor;
+FROM PUBLIC,ai_media_admitted_reconcile_executor;
 REVOKE EXECUTE ON FUNCTION ai_media_worker_api.release_terminal_capacity_v1(uuid,text,text,uuid,uuid,text,text,text)
   FROM ai_media_admitted_reconcile_executor;
 DROP FUNCTION ai_media_worker_api.record_provider_terminal_v1(uuid,text,text,uuid,uuid,bigint,uuid,bigint,text,uuid,text,integer,text,text,text,text,timestamptz,text);
