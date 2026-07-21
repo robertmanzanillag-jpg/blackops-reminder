@@ -134,6 +134,7 @@ test("admission-held render work is represented honestly and remains outside cla
   const claim = fake.queries.find((query) => query.text.includes("WITH active_leases AS MATERIALIZED"));
   assert.ok(claim);
   assert.match(claim.text, /stage IN \('queued', 'retry_wait'\)/i);
+  assert.match(claim.text, /job\.budget_reservation_id IS NULL/i);
   assert.doesNotMatch(claim.text, /stage IN \([^)]*admission_held/i);
 });
 

@@ -42,12 +42,14 @@ CREATE TABLE ai_media_scripts (
   id uuid PRIMARY KEY,
   owner_user_id text NOT NULL,
   workspace_id text NOT NULL,
+  influencer_id uuid,
   source_type text NOT NULL DEFAULT 'manual',
   source_item_id uuid,
   title text NOT NULL,
   language text NOT NULL,
   status text NOT NULL DEFAULT 'approved',
-  current_variant_id uuid
+  current_variant_id uuid,
+  archived_at timestamptz
 );
 
 CREATE TABLE ai_media_script_variants (
@@ -65,6 +67,8 @@ CREATE TABLE ai_media_governance_profiles (
   owner_user_id text NOT NULL,
   workspace_id text NOT NULL,
   influencer_id uuid NOT NULL,
+  avatar_resource_id uuid NOT NULL,
+  voice_resource_id uuid NOT NULL,
   version integer NOT NULL DEFAULT 1,
   evidence_digest text NOT NULL,
   state text NOT NULL DEFAULT 'active',

@@ -92,6 +92,7 @@ test("held outbox work is represented honestly while claim SQL excludes it", asy
   const claim = fake.queries.find((query) => query.text.startsWith("WITH candidate AS"));
   assert.ok(claim);
   assert.match(claim.text, /status IN \('pending', 'retry_wait'\)/i);
+  assert.match(claim.text, /event\.budget_reservation_id IS NULL/i);
   assert.doesNotMatch(claim.text, /status IN \([^)]*held/i);
 });
 
@@ -121,6 +122,7 @@ test("concurrent claims use SKIP LOCKED and cannot escape tenant/workspace scope
     assert.match(claim.text, /event\.owner_user_id =/i);
     assert.match(claim.text, /event\.workspace_id =/i);
     assert.match(claim.text, /event\.status IN \('pending', 'retry_wait'\)/i);
+    assert.match(claim.text, /event\.budget_reservation_id IS NULL/i);
     assert.match(claim.text, /event\.dead_letter_at IS NULL/i);
     assert.match(claim.text, /UPDATE "ai_media_outbox" AS event/i);
     assert.ok(claim.params.includes("tenant-a"));

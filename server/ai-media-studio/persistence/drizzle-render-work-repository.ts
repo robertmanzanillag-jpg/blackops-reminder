@@ -276,6 +276,9 @@ export class DrizzleRenderWorkRepository<TPayload = unknown> implements RenderWo
           FROM ${aiMediaRenderJobs} AS job
           WHERE job.workspace_id = ${this.workspaceId}
             AND job.provider_key IS NOT NULL
+            -- Admitted work is owned by the dedicated budget-aware worker
+            -- introduced after PR24. The generic worker must never submit it.
+            AND job.budget_reservation_id IS NULL
             AND job.stage IN ('queued', 'retry_wait')
             AND job.available_at <= ${now}
             AND job.dead_letter_at IS NULL
