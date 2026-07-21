@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T03:28:49.644Z
+Generated: 2026-07-21T04:12:15.647Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 598 | 517 | 2049 | 487 | 9695 |
+| 605 | 524 | 2090 | 487 | 9884 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,9 +30,9 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 151 | 149 | ui-component:55, other:42, client-page:23, client-component:21 |
-| `tests` | 104 | 100 | test:104 |
+| `tests` | 107 | 103 | test:107 |
 | `server` | 96 | 92 | server:96 |
-| `server/ai-media-studio` | 80 | 79 | server:80 |
+| `server/ai-media-studio` | 84 | 83 | server:84 |
 | `script` | 38 | 36 | script:38 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs` | 12 | 11 | docs:12 |
@@ -76,6 +76,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-core-schema.test.ts`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
 - `tests/ai-media-studio-governance.test.ts`
+- `tests/ai-media-studio-http-artifact-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
@@ -90,6 +91,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
+- `tests/ai-media-studio-production-asset-runtime.test.ts`
 - `tests/ai-media-studio-publishing-drizzle.test.ts`
 - `tests/ai-media-studio-publishing.test.ts`
 - `tests/ai-media-studio-render-flow-integration.test.ts`
@@ -97,6 +99,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-render-worker.test.ts`
 - `tests/ai-media-studio-routes.test.ts`
 - `tests/ai-media-studio-runtime-persistence.test.ts`
+- `tests/ai-media-studio-s3-storage.test.ts`
 - `tests/ai-media-studio-schema-wiring.test.ts`
 - `tests/ai-media-studio-scripts-contract.test.ts`
 - `tests/ai-media-studio-sources.test.ts`
@@ -238,16 +241,16 @@ Package: `rest-express`
 - `server/ai-media-studio/assets/contracts.ts` (server; 1 symbols)
 - `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 24 symbols, 5 imports)
 - `server/ai-media-studio/assets/fakes.ts` (server; 12 symbols, 2 imports)
+- `server/ai-media-studio/assets/http-artifact-reader.ts` (server; 32 symbols, 7 imports)
 - `server/ai-media-studio/assets/in-memory-repository.ts` (server; 10 symbols, 2 imports)
-- `server/ai-media-studio/assets/index.ts` (server; 5 imports)
-- `server/ai-media-studio/assets/worker.ts` (server; 28 symbols, 2 imports)
+- `server/ai-media-studio/assets/index.ts` (server; 8 imports)
+- `server/ai-media-studio/assets/object-keys.ts` (server; 2 symbols)
+- `server/ai-media-studio/assets/production-runtime.ts` (server; 40 symbols, 4 imports)
+- `server/ai-media-studio/assets/s3-compatible-storage.ts` (server; 40 symbols, 5 imports)
+- `server/ai-media-studio/assets/worker.ts` (server; 27 symbols, 3 imports)
 - `server/ai-media-studio/core/asset-domain.ts` (server; 21 symbols, 1 imports)
 - `server/ai-media-studio/core/in-memory-asset-repository.ts` (server; 17 symbols, 1 imports)
 - `server/ai-media-studio/core/in-memory-core-repositories.ts` (server; 17 symbols, 2 imports)
-- `server/ai-media-studio/core/influencer-domain.ts` (server; 40 symbols, 3 imports)
-- `server/ai-media-studio/core/resource-domain.ts` (server; 21 symbols, 2 imports)
-- `server/ai-media-studio/core/runtime.ts` (server; 21 symbols, 7 imports)
-- `server/ai-media-studio/core/safe-media-downloader.ts` (server; 34 symbols, 2 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

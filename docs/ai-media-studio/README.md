@@ -18,6 +18,10 @@ This is code and test evidence, not operational evidence. The final independent 
 
 The deterministic 10,000-job rehearsal exercises arithmetic and fake-provider assumptions only. It is explicitly not evidence of 10,000-video/day capacity.
 
+The current production-assets slice adds a streaming Node HTTPS artifact reader, S3/R2-compatible multipart owned storage, short-lived S3-compatible delivery signing, and a strict `AI_MEDIA_STUDIO_ASSET_*` composition factory. Configuration is atomic and fail-closed: an empty namespace leaves delivery unavailable, while any partial or unsafe namespace rejects startup with a generic error. An explicitly injected signer takes precedence for controlled composition tests. The worker factory starts no timer, process, or network request, and repository presence is never treated as a worker heartbeat.
+
+This remains local code/test evidence. No live artifact was downloaded, no object was uploaded or signed against a real account, no worker heartbeat exists, no migration was applied, and no deploy was performed. Production worker operation, lifecycle/retention configuration, staging restart/recovery, throughput, and provider/storage quota evidence remain release gates.
+
 ## Documents
 
 - [Architecture](./architecture.md)

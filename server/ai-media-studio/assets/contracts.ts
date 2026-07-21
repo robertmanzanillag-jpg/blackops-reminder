@@ -108,6 +108,8 @@ export interface ArtifactReadStream {
   mimeType: string;
   declaredSizeBytes?: number;
   chunks: AsyncIterable<Uint8Array>;
+  /** Immediately releases the underlying response when a consumer rejects before or during iteration. */
+  abort(): void;
 }
 
 /** Implementations must pin approved DNS addresses, validate every redirect, and stop at both bounds. */

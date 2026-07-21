@@ -16,7 +16,7 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 | Provider-neutral business logic | Proved | `ports.ts`, `service.ts`, fake and HeyGen adapters; requests contain internal refs, not provider IDs | Contract tests required for every new provider |
 | Replace HeyGen without changing use cases/UI | Proved | `VideoProvider` port and provider-neutral DTOs | Add a second production adapter before claiming operational portability |
 | Independently deployable media platform | Partial | Domain is isolated but still shares the Express/React application deployment | Define service extraction trigger, ownership and data/API boundary before separate deployment |
-| Enterprise-ready production operation | Missing | Architecture, schemas and render/ingest/outbox code anticipate it, but migrations, production object storage, live SLOs, provider operation and load evidence are absent | Complete PR2/PR3/PR4 gates below |
+| Enterprise-ready production operation | Missing | Architecture, schemas, render/ingest/outbox code, and production reader/S3-compatible adapter composition exist, but migrations, live storage, worker heartbeat, live SLOs, provider operation and load evidence are absent | Complete migration, staging, live-storage, worker, provider, QA and capacity gates below |
 
 ## Dashboard
 
@@ -66,18 +66,18 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 | Receive signed provider webhook | Proved | Narrow public route, raw-body HMAC, replay/event dedupe and tests | Provider sandbox callback evidence |
 | HeyGen v3 adapter | Partial | v3 submit/status/parser/resource resolver exist and are deny-by-default | Sandbox generation, webhook and billing evidence with approved spend |
 | Tavus, Captions, open-source and future adapters | Missing | Port supports them, implementations do not exist | Provider contract suite must pass per adapter |
-| Download MP4 automatically | Partial | A no-autostart ingest worker contract streams provider output through exact-host/HTTPS/redirect/address/byte/chunk/MIME/MP4/checksum controls and redacts the source URL | Production bounded network reader, approved provider download and deployed worker evidence |
-| Save video and metadata | Partial | Tenant content-addressed storage contract/fake, durable fenced ingest repository, canonical checksum-deduplicated asset linkage, retry/DLQ and completed-unlinked reconciliation are covered in code/tests | Production object-storage adapter, staging migration, restart/recovery and transaction/contention evidence |
-| Reusable provider-independent asset URL | Partial | Authenticated tenant/status-gated delivery route signs an owned storage key for five minutes and public DTOs redact provider/storage internals | Production signer/object store, retention/lifecycle policy and live delivery evidence |
+| Download MP4 automatically | Partial | A no-autostart ingest worker and DNS-pinned Node HTTPS reader stream provider output through exact-host/HTTPS/redirect/address/byte/chunk/MIME/MP4/checksum controls and redact the source URL | Approved live provider download, deployed worker heartbeat and recovery evidence |
+| Save video and metadata | Partial | S3/R2-compatible multipart storage, tenant content-addressed keys, durable fenced ingest, canonical checksum-deduplicated linkage, retry/DLQ and reconciliation are covered in code/tests | Live bucket/lifecycle proof, staging migration, restart/recovery and transaction/contention evidence |
+| Reusable provider-independent asset URL | Partial | Authenticated tenant/status-gated delivery route selects an explicit signer first or a fully configured S3-compatible signer; empty config stays `503`, and public DTOs redact provider/storage/config internals | Real-account signing, retention/lifecycle policy and live delivery evidence |
 
 ## Media library
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Reusable videos and scripts | Partial | Tenant-scoped library API/UI, search/cursor pagination and on-demand owned-video delivery contract are integrated | Production storage/signer, script versioning and staging persistence proof |
+| Reusable videos and scripts | Partial | Tenant-scoped library API/UI, search/cursor pagination, owned-video delivery, and strict S3/R2-compatible adapter composition are integrated | Live bucket/signer evidence, script versioning and staging persistence proof |
 | Voices and avatars | Partial | Canonical resources drive options and influencer validation without provider IDs | Catalog sync, previews, rights and availability operations |
 | B-roll, images, music, logos, subtitles and thumbnails | Partial | Nine typed classes are exposed through the redacted library API/UI; PR4 owned ingest is video/MP4 only | Upload/ingest, transformations and owned delivery for every non-video class |
-| Asset provenance, checksum and metadata | Partial | Owned render ingest computes SHA-256/size, creates or reuses a canonical same-tenant video asset, links the render and keeps provider URLs private | Production reader/storage proof, richer provenance policy and staging integrity evidence |
+| Asset provenance, checksum and metadata | Partial | Owned render ingest computes SHA-256/size, creates or reuses a canonical same-tenant video asset, and now has streaming HTTPS plus S3/R2-compatible production adapters while keeping provider URLs private | Live provider-to-bucket proof, richer provenance policy and staging integrity evidence |
 
 ## Publishing
 
@@ -105,7 +105,7 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 | --- | --- | --- | --- |
 | Trigger on new event, restaurant, hotel, promotion, deal or travel package | Partial | Category-aware source snapshots, stable content hashing, tenant dedupe repositories and fake adapter exist | Live domain event producers/consumers, OAuth/trusted ingestion and operational scheduling |
 | Analyze data and generate ideas/scripts/titles/captions/hashtags | Partial | Deterministic snapshot-to-variants flow works manually | Automatic consumer, quality rules and approval state |
-| Automatically render, download, store and queue publishing | Partial | Orchestration gates and CAS/outbox persist; PR4 adds a guarded owned-render ingest/linkage contract with retry, dead-letter and reconciliation | Consumers, production reader/object storage/signer, real connectors and live end-to-end crash recovery |
+| Automatically render, download, store and queue publishing | Partial | Orchestration gates and CAS/outbox persist; guarded ingest/linkage now has strict production HTTPS/S3-compatible composition with retry, dead-letter and reconciliation | Deployed consumers/heartbeat, real connectors and live end-to-end crash recovery |
 | No-manual-work mode | Missing | Deliberately disabled | Production policy, emergency stop and Robert-approved autonomy level |
 
 ## Queue and scale

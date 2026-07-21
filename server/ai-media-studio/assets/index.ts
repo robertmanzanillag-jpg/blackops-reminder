@@ -3,3 +3,6 @@ export * from "./in-memory-repository";
 export * from "./fakes";
 export * from "./worker";
 export * from "./drizzle-ingest-repository";
+export * from "./http-artifact-reader";
+export * from "./s3-compatible-storage";
+export * from "./production-runtime";
