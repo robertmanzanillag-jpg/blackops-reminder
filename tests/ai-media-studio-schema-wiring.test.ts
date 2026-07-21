@@ -34,6 +34,10 @@ test("the wired module exposes key migration tables", () => {
     ["aiMediaDailyPlans", "ai_media_daily_plans"],
     ["aiMediaDailyPlanSlots", "ai_media_daily_plan_slots"],
     ["aiMediaBudgetBuckets", "ai_media_budget_buckets"],
+    ["aiMediaAdmissionPolicyRevisions", "ai_media_admission_policy_revisions"],
+    ["aiMediaKillSwitchRevisions", "ai_media_kill_switch_revisions"],
+    ["aiMediaLaunchEvidence", "ai_media_launch_evidence"],
+    ["aiMediaLaunchAuthoritySnapshots", "ai_media_launch_authority_snapshots"],
     ["aiMediaBudgetReservations", "ai_media_budget_reservations"],
   ] as const) {
     assert.match(

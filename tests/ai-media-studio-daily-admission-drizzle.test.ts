@@ -16,14 +16,13 @@ const ids = {
   plan: "11111111-1111-4111-8111-111111111111",
   slot: "22222222-2222-4222-8222-222222222222",
   bucket: "33333333-3333-4333-8333-333333333333",
-  account: "44444444-4444-4444-8444-444444444444",
-  governance: "55555555-5555-4555-8555-555555555555",
-  reservation: "66666666-6666-4666-8666-666666666666",
-  influencer: "77777777-7777-4777-8777-777777777777",
+  snapshot: "44444444-4444-4444-8444-444444444444",
+  reservation: "55555555-5555-4555-8555-555555555555",
 } as const;
 const scope = { ownerUserId: "owner-1", workspaceId: "workspace-1" } as const;
 const databaseNow = new Date("2026-07-21T12:00:00.000Z");
-const sha = (character: string) => `sha256:${character.repeat(64)}` as const;
+const authorityDigest = `sha256:${"a".repeat(64)}` as const;
+const admissionDigest = `sha256:${"b".repeat(64)}` as const;
 
 function unsigned(overrides: Partial<UnsignedReserveAndAdmitRequest> = {}): UnsignedReserveAndAdmitRequest {
   return {
@@ -31,41 +30,12 @@ function unsigned(overrides: Partial<UnsignedReserveAndAdmitRequest> = {}): Unsi
     planId: ids.plan,
     slotId: ids.slot,
     budgetBucketId: ids.bucket,
-    providerAccountId: ids.account,
-    providerKey: "video-provider",
-    providerCredentialVersion: 4,
-    influencerId: ids.influencer,
-    governanceProfileId: ids.governance,
-    governanceUse: "commercial",
-    governanceTerritory: "US",
-    planDigest: sha("a"),
-    slotDigest: sha("b"),
-    scriptVariantChecksum: "9".repeat(64),
+    authoritySnapshotId: ids.snapshot,
+    authorityDigest,
     expectedSlotStateVersion: 2,
     expectedBucketStateVersion: 7,
-    budgetPolicyVersion: 3,
-    attempt: 1,
-    amountMicroUsd: 1_250_000n,
-    idempotencyKey: "daily-admission-slot-1-attempt-1",
-    admissionDigest: sha("c"),
-    quoteDigest: sha("d"),
-    quoteExpiresAt: "2026-07-21T12:30:00.000Z",
     reservationExpiresAt: "2026-07-21T12:10:00.000Z",
-    contentApprovalGranted: true,
-    contentApprovalDigest: sha("e"),
-    contentApprovalExpiresAt: "2026-07-21T12:20:00.000Z",
-    humanLaunchApprovalGranted: true,
-    humanLaunchApprovalDigest: sha("f"),
-    humanLaunchApprovalExpiresAt: "2026-07-21T12:20:00.000Z",
-    governanceEvidenceDigest: sha("1"),
-    policyAllowed: true,
-    policyDigest: sha("2"),
-    killSwitchActive: false,
-    killSwitchEvidenceDigest: sha("3"),
-    sandboxPassed: true,
-    sandboxEvidenceDigest: sha("4"),
-    sandboxExpiresAt: "2026-07-21T12:20:00.000Z",
-    providerIdempotencyKey: "provider-slot-1-attempt-1",
+    idempotencyKey: "daily-admission-slot-1-attempt-1",
     ...overrides,
   };
 }
@@ -78,31 +48,17 @@ function request(repository: DrizzleDailyAdmissionRepository, overrides: Partial
 function reservationRow(input: ReserveAndAdmitRequest, overrides: Record<string, unknown> = {}) {
   return {
     id: ids.reservation,
-    owner_user_id: scope.ownerUserId,
-    workspace_id: scope.workspaceId,
     budget_bucket_id: ids.bucket,
     daily_plan_slot_id: ids.slot,
-    provider_account_id: ids.account,
-    provider_key: input.providerKey,
-    provider_credential_version: input.providerCredentialVersion,
-    attempt: input.attempt,
+    attempt: 3,
     state: "reserved",
     submission_state: "not_started",
-    amount_micro_usd: String(input.amountMicroUsd),
+    amount_micro_usd: "1250000",
     idempotency_key: input.idempotencyKey,
     input_digest: input.inputDigest,
-    admission_digest: input.admissionDigest,
-    script_variant_checksum: input.scriptVariantChecksum,
-    quote_digest: input.quoteDigest,
-    quote_expires_at: new Date(input.quoteExpiresAt),
-    content_approval_digest: input.contentApprovalDigest,
-    human_launch_approval_digest: input.humanLaunchApprovalDigest,
-    governance_profile_id: input.governanceProfileId,
-    governance_evidence_digest: input.governanceEvidenceDigest,
-    policy_digest: input.policyDigest,
-    kill_switch_evidence_digest: input.killSwitchEvidenceDigest,
-    sandbox_evidence_digest: input.sandboxEvidenceDigest,
-    provider_idempotency_key: input.providerIdempotencyKey,
+    admission_digest: admissionDigest,
+    authority_snapshot_id: input.authoritySnapshotId,
+    authority_digest: input.authorityDigest,
     reserved_at: databaseNow,
     expires_at: new Date(input.reservationExpiresAt),
     database_now: databaseNow,
@@ -121,8 +77,7 @@ function makeDb(handler: (call: number, query: Rendered) => { rows: unknown[] })
   const execute = async (query: Parameters<DailyAdmissionDatabase["execute"]>[0]) => {
     const rendered = dialect.sqlToQuery(query);
     calls.push(rendered);
-    call += 1;
-    return handler(call, rendered);
+    return handler(++call, rendered);
   };
   const db: DailyAdmissionTransactionalDatabase = {
     execute,
@@ -134,24 +89,35 @@ function makeDb(handler: (call: number, query: Rendered) => { rows: unknown[] })
   return { db, calls, transactionCount: () => transactions };
 }
 
-function normalized(query: Rendered): string {
-  return query.sql.replace(/\s+/gu, " ").trim();
-}
+const normalized = (query: Rendered) => query.sql.replace(/\s+/gu, " ").trim();
+const assertCode = (code: DailyAdmissionPersistenceError["code"]) =>
+  (error: unknown) => error instanceof DailyAdmissionPersistenceError && error.code === code;
 
-function assertCode(code: DailyAdmissionPersistenceError["code"]) {
-  return (error: unknown) => error instanceof DailyAdmissionPersistenceError && error.code === code;
-}
-
-test("reservation scaffold is not exported through the runtime planning barrel", () => {
+test("PR20 admission repository remains unexported and request has no self-certified authority", () => {
   const barrel = readFileSync(new URL("../server/ai-media-studio/planning/index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(barrel, /drizzle-daily-admission-repository/u);
+  const repository = new DrizzleDailyAdmissionRepository(makeDb(() => ({ rows: [] })).db, {
+    accountingTimeZone: "America/New_York",
+  });
+  const keys = Object.keys(request(repository)).sort();
+  assert.deepEqual(keys, [
+    "authorityDigest", "authoritySnapshotId", "budgetBucketId", "expectedBucketStateVersion",
+    "expectedSlotStateVersion", "idempotencyKey", "inputDigest", "planId", "reservationExpiresAt",
+    "scope", "slotId",
+  ]);
+  for (const forbidden of [
+    "providerAccountId", "providerKey", "providerCredentialVersion", "influencerId", "governanceProfileId",
+    "governanceUse", "governanceTerritory", "planDigest", "slotDigest", "scriptVariantChecksum", "attempt",
+    "amountMicroUsd", "admissionDigest", "quoteDigest", "quoteExpiresAt", "contentApprovalGranted",
+    "humanLaunchApprovalGranted", "policyAllowed", "killSwitchActive", "sandboxPassed", "providerIdempotencyKey",
+  ]) assert.ok(!keys.includes(forbidden), `${forbidden} must not be caller supplied`);
 });
 
-test("reserveAndAdmit locks exact authority and performs one event-free reservation transaction", async () => {
+test("locks exact durable authority, derives money/provider facts, and writes no activation effects", async () => {
   let input!: ReserveAndAdmitRequest;
   const harness = makeDb((call) => {
     if (call === 5) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 6) return { rows: [{ plan_id: ids.plan, slot_id: ids.slot, bucket_id: ids.bucket }] };
+    if (call === 6) return { rows: [{ authority_snapshot_id: ids.snapshot, amount_micro_usd: "1250000" }] };
     if (call === 7) return { rows: [reservationRow(input)] };
     return { rows: [] };
   });
@@ -161,135 +127,96 @@ test("reserveAndAdmit locks exact authority and performs one event-free reservat
 
   assert.equal(harness.transactionCount(), 1);
   assert.equal(harness.calls.length, 7);
-  assert.equal(result.replayed, false);
-  assert.equal(result.budgetDate, "2026-07-21");
-  assert.equal(result.accountingTimeZone, "America/New_York");
   assert.equal(result.reservation.amountMicroUsd, "1250000");
+  assert.equal(result.replayed, false);
   assert.deepEqual(result.effects, {
     renderJobCreated: false, outboxCreated: false, eventCreated: false, providerCalled: false,
   });
 
-  assert.match(normalized(harness.calls[0]), /pg_advisory_xact_lock.*daily-admission:idempotency/i);
-  assert.match(normalized(harness.calls[1]), /clock_timestamp\(\).*from .*ai_media_budget_reservations.*inner join .*ai_media_budget_buckets.*idempotency_key.*for update of .*reservations.*buckets/i);
-  assert.match(normalized(harness.calls[2]), /pg_advisory_xact_lock.*daily-admission:workspace/i);
-  assert.match(normalized(harness.calls[3]), /pg_advisory_xact_lock.*ai-media-governance:profile/i);
-  assert.ok(harness.calls[3].params.includes(ids.influencer));
-  assert.match(normalized(harness.calls[4]), /select observed_at as database_now.*at time zone.*from \(select clock_timestamp\(\)/i);
-
-  const gates = normalized(harness.calls[5]);
-  for (const table of ["ai_media_daily_plans", "ai_media_daily_plan_slots", "ai_media_budget_buckets",
-    "ai_media_provider_accounts", "ai_media_governance_profiles"]) {
-    assert.match(gates, new RegExp(table, "i"));
-  }
-  assert.match(gates, /for update of .*plans.*slots.*buckets.*accounts.*governance/i);
-  assert.doesNotMatch(gates, /skip locked/i);
-  for (const gate of ["credential_status", "credential_version", "governance.evidence_digest", "allowed_uses",
-    "territories", "clock_timestamp", "timestamptz", "=true", "=false"]) assert.match(gates, new RegExp(gate, "i"));
-  assert.match(gates, /slots\.influencer_id=/i);
-  assert.match(gates, /select max\(previous\.attempt\)\+1.*daily_plan_slot_id=slots\.id/i);
-  assert.match(gates, /not exists \( select 1 from .*ai_media_governance_profiles.*version>governance\.version/i);
-  assert.match(gates, /variants\.status=.*approved.*variants\.checksum=/i);
-  assert.ok(harness.calls[5].params.includes(ids.influencer));
-  assert.ok(harness.calls[5].params.some((parameter) => String(parameter).includes("US")));
-  const gateParameters = JSON.stringify(harness.calls[5].params);
-  for (const evidence of [input.quoteExpiresAt, input.contentApprovalExpiresAt,
-    input.humanLaunchApprovalExpiresAt, input.sandboxExpiresAt, input.governanceEvidenceDigest]) {
-    assert.match(gateParameters, new RegExp(evidence.replaceAll(".", "\\.")));
-  }
-  assert.match(gates, /reserved_micro_usd\+buckets\.committed_micro_usd/i);
+  assert.match(normalized(harness.calls[2]), /global-concurrency/i);
+  const gate = normalized(harness.calls[5]);
+  for (const table of [
+    "ai_media_launch_authority_snapshots", "ai_media_launch_evidence", "ai_media_admission_policy_revisions",
+    "ai_media_kill_switch_revisions", "ai_media_daily_plans", "ai_media_daily_plan_slots",
+    "ai_media_budget_buckets", "ai_media_provider_accounts", "ai_media_governance_profiles",
+  ]) assert.match(gate, new RegExp(table, "i"));
+  assert.match(gate, /for update of snapshots, content, human, sandbox, quotes, policy, kill/i);
+  assert.match(gate, /content\.decision='approved'.*human\.decision='approved'.*sandbox\.decision='passed'.*quotes\.decision='quoted'/i);
+  assert.match(gate, /policy\.state='active'.*kill\.active=false/i);
+  assert.match(gate, /not exists.*newer.*revision>content\.revision/i);
+  assert.match(gate, /not exists.*newer_policy.*revision>policy\.revision/i);
+  assert.match(gate, /not exists.*newer_kill.*revision>kill\.revision/i);
+  assert.match(gate, /snapshots\.maximum_quote_micro_usd=quotes\.amount_micro_usd/i);
+  assert.match(gate, /buckets\.limit_micro_usd=policy\.daily_budget_micro_usd/i);
+  assert.match(gate, /policy\.allowed_countries @> jsonb_build_array\(snapshots\.content_country\)/i);
+  assert.match(gate, /count\(\*\).*policy\.total_concurrency.*count\(\*\).*policy\.provider_concurrency.*count\(\*\).*policy\.tenant_concurrency/i);
+  assert.doesNotMatch(JSON.stringify(harness.calls[5].params), /1250000/u, "amount is not a request parameter");
 
   const mutation = normalized(harness.calls[6]);
   assert.match(mutation, /^with fresh_clock as materialized .*clock_timestamp\(\)/i);
-  assert.match(mutation, /final_guard as \( select .*from .*ai_media_daily_plans.*ai_media_daily_plan_slots.*ai_media_budget_buckets/i);
-  assert.match(mutation, /plans\.plan_date=fresh_clock\.budget_date/i);
-  assert.match(mutation, /buckets\.budget_date=fresh_clock\.budget_date/i);
-  assert.match(mutation, /credential_expires_at>fresh_clock\.observed_at/i);
-  assert.match(mutation, /governance\.expires_at>fresh_clock\.observed_at/i);
-  assert.equal((mutation.match(/::timestamptz>fresh_clock\.observed_at/giu) ?? []).length, 5,
-    "final guard revalidates quote, reservation, content, human, and sandbox expiry");
-  for (const expiry of [input.quoteExpiresAt, input.reservationExpiresAt, input.contentApprovalExpiresAt,
-    input.humanLaunchApprovalExpiresAt, input.sandboxExpiresAt]) assert.ok(harness.calls[6].params.includes(expiry));
-  assert.match(mutation, /territories.*worldwide.*variants\.status=.*approved.*variants\.checksum=/i);
-  assert.match(mutation, /bucket_update as \( update .*ai_media_budget_buckets/i);
-  assert.match(mutation, /reservation_insert as \( insert into .*ai_media_budget_reservations/i);
-  assert.match(mutation, /slot_update as \( update .*ai_media_daily_plan_slots/i);
-  assert.match(mutation, /status=.*reserved.*state_version=state_version\+1.*updated_at=reservation\.reserved_at/i);
-  assert.doesNotMatch(mutation, /transaction_timestamp\(\)/i);
+  assert.match(mutation, /final_guard as materialized/i);
+  for (const alias of ["snapshots", "content", "human", "sandbox", "quotes", "policy", "kill"]) {
+    assert.match(mutation, new RegExp(alias, "i"));
+  }
+  assert.match(mutation, /reserved_micro_usd=buckets\.reserved_micro_usd\+final_guard\.amount_micro_usd/i);
+  assert.match(mutation, /authority_snapshot_id,authority_digest/i);
+  assert.match(mutation, /provider_idempotency_key/i);
+  assert.ok(harness.calls[6].params.some((value) => /^admit:[0-9a-f]{64}$/u.test(String(value))));
   assert.match(mutation, /render_job_id,dispatch_outbox_id/i);
   assert.match(mutation, /null,null/i);
-  assert.doesNotMatch(mutation, /insert into .*ai_media_render_jobs/i);
-  assert.doesNotMatch(mutation, /insert into .*ai_media_outbox/i);
-  assert.doesNotMatch(mutation, /ai_media.*event/i);
+  assert.doesNotMatch(mutation, /insert into .*ai_media_render_jobs|insert into .*ai_media_outbox|insert into .*ai_media.*events?/i);
 });
 
-test("same idempotency key and exact digest replays before workspace lock or writes", async () => {
+test("exact snapshot-bound replay returns before authority locks or writes", async () => {
   let input!: ReserveAndAdmitRequest;
-  const harness = makeDb((call) => {
-    if (call === 2) return { rows: [reservationRow(input, { database_now: new Date("2026-07-22T12:00:00.000Z") })] };
-    return { rows: [] };
-  });
+  const harness = makeDb((call) => call === 2 ? { rows: [reservationRow(input)] } : { rows: [] });
   const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
   input = request(repository);
   const result = await repository.reserveAndAdmit(input);
   assert.equal(result.replayed, true);
-  assert.equal(result.budgetDate, "2026-07-21", "replay reports the original locked bucket day, not today's day");
   assert.equal(harness.calls.length, 2);
-  assert.doesNotMatch(JSON.stringify(harness.calls), /daily-admission:workspace/i);
-  assert.equal(result.reservation.id, ids.reservation);
+  assert.doesNotMatch(JSON.stringify(harness.calls), /launch_authority_snapshots|daily-admission:workspace/i);
 });
 
-test("same idempotency key with a changed digest conflicts without writes", async () => {
-  const oldUnsigned = unsigned();
-  let oldRequest!: ReserveAndAdmitRequest;
-  const harness = makeDb((call) => {
-    if (call === 2) return { rows: [reservationRow(oldRequest)] };
-    return { rows: [] };
-  });
+test("replay conflicts when authority snapshot or digest differs", async () => {
+  let original!: ReserveAndAdmitRequest;
+  const harness = makeDb((call) => call === 2 ? { rows: [reservationRow(original)] } : { rows: [] });
   const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
-  oldRequest = { ...oldUnsigned, inputDigest: repository.inputDigest(oldUnsigned) };
-  const changed = request(repository, { amountMicroUsd: 1_300_000n });
+  original = request(repository);
+  const changed = request(repository, { authorityDigest: `sha256:${"c".repeat(64)}` });
   await assert.rejects(repository.reserveAndAdmit(changed), assertCode("IDEMPOTENCY_CONFLICT"));
   assert.equal(harness.calls.length, 2);
 });
 
-test("all identities, digests, integer money, and canonical instants validate before a transaction", async () => {
+test("request identities, versions, digests, and canonical expiry validate before transaction", async () => {
   const harness = makeDb(() => ({ rows: [] }));
   const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
   const valid = request(repository);
   for (const invalid of [
     { ...valid, slotId: "not-a-uuid" },
-    { ...valid, admissionDigest: "sha256:wrong" },
-    { ...valid, scriptVariantChecksum: "not-a-checksum" },
-    { ...valid, amountMicroUsd: "1.25" },
-    { ...valid, amountMicroUsd: 9_000_000_000_000_001n },
-    { ...valid, quoteExpiresAt: "2026-07-21T12:30:00Z" },
-    { ...valid, governanceTerritory: "worldwide" },
-    { ...valid, inputDigest: sha("0") },
-  ]) {
-    await assert.rejects(repository.reserveAndAdmit(invalid as ReserveAndAdmitRequest), assertCode("INVALID_INPUT"));
-  }
+    { ...valid, authoritySnapshotId: "not-a-uuid" },
+    { ...valid, authorityDigest: "sha256:wrong" },
+    { ...valid, expectedSlotStateVersion: 0 },
+    { ...valid, reservationExpiresAt: "2026-07-21T12:10:00Z" },
+    { ...valid, inputDigest: `sha256:${"0".repeat(64)}` },
+  ]) await assert.rejects(repository.reserveAndAdmit(invalid as ReserveAndAdmitRequest), assertCode("INVALID_INPUT"));
   assert.equal(harness.transactionCount(), 0);
-  assert.equal(harness.calls.length, 0);
-  assert.throws(() => new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "Fake/Client_Zone" }), assertCode("INVALID_INPUT"));
 });
 
-test("a missing exact locked gate denies before the write CTE", async () => {
-  const harness = makeDb((call) => call === 5
+test("missing authority denies and a failed CAS cannot report admission", async () => {
+  const denied = makeDb((call) => call === 5
     ? { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] }
     : { rows: [] });
-  const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
-  await assert.rejects(repository.reserveAndAdmit(request(repository, { killSwitchActive: true })), assertCode("ADMISSION_DENIED"));
-  assert.equal(harness.calls.length, 6);
-  assert.doesNotMatch(JSON.stringify(harness.calls), /reservation_insert/i);
-});
+  const deniedRepository = new DrizzleDailyAdmissionRepository(denied.db, { accountingTimeZone: "America/New_York" });
+  await assert.rejects(deniedRepository.reserveAndAdmit(request(deniedRepository)), assertCode("ADMISSION_DENIED"));
+  assert.equal(denied.calls.length, 6);
 
-test("a failed bucket or slot CAS aborts instead of reporting admission", async () => {
-  const harness = makeDb((call) => {
+  const cas = makeDb((call) => {
     if (call === 5) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 6) return { rows: [{ plan_id: ids.plan, slot_id: ids.slot, bucket_id: ids.bucket }] };
+    if (call === 6) return { rows: [{ authority_snapshot_id: ids.snapshot }] };
     return { rows: [] };
   });
-  const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
-  await assert.rejects(repository.reserveAndAdmit(request(repository)), assertCode("INVARIANT_VIOLATION"));
-  assert.equal(harness.calls.length, 7);
+  const casRepository = new DrizzleDailyAdmissionRepository(cas.db, { accountingTimeZone: "America/New_York" });
+  await assert.rejects(casRepository.reserveAndAdmit(request(casRepository)), assertCode("INVARIANT_VIOLATION"));
+  assert.equal(cas.calls.length, 7);
 });

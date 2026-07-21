@@ -37,6 +37,10 @@ const expectedTableExports = [
   "aiMediaDailyPlans",
   "aiMediaDailyPlanSlots",
   "aiMediaBudgetBuckets",
+  "aiMediaAdmissionPolicyRevisions",
+  "aiMediaKillSwitchRevisions",
+  "aiMediaLaunchEvidence",
+  "aiMediaLaunchAuthoritySnapshots",
   "aiMediaBudgetReservations",
   "aiMediaSourceItems",
   "aiMediaOrchestrationRuns",
@@ -47,12 +51,12 @@ test("AI Media Studio exports the complete durable table set", () => {
   for (const tableExport of expectedTableExports) {
     assert.match(schemaSource, new RegExp(`export const ${tableExport} = pgTable\\(`));
   }
-  assert.equal((schemaSource.match(/export const aiMedia[A-Za-z]+ = pgTable\(/g) ?? []).length, 33);
+  assert.equal((schemaSource.match(/export const aiMedia[A-Za-z]+ = pgTable\(/g) ?? []).length, 37);
 });
 
 test("every durable table is owner and workspace scoped", () => {
   assert.match(schemaSource, /const tenantColumns = \(\) => \(\{[\s\S]*ownerUserId: text\("owner_user_id"\)\.notNull\(\)[\s\S]*workspaceId: text\("workspace_id"\)\.notNull\(\)/);
-  assert.equal((schemaSource.match(/\.\.\.tenantColumns\(\)/g) ?? []).length, 34);
+  assert.equal((schemaSource.match(/\.\.\.tenantColumns\(\)/g) ?? []).length, 38);
 });
 
 test("provider accounts persist only a secret reference", () => {
@@ -75,6 +79,10 @@ test("critical delivery paths have unique idempotency constraints", () => {
     "ai_media_outbox_owner_workspace_idempotency_uq",
     "ai_media_daily_plans_owner_workspace_idempotency_uq",
     "ai_media_budget_reservations_owner_workspace_idempotency_uq",
+    "ai_media_admission_policy_revisions_idempotency_uq",
+    "ai_media_kill_switch_revisions_idempotency_uq",
+    "ai_media_launch_evidence_idempotency_uq",
+    "ai_media_launch_authority_snapshots_idempotency_uq",
   ]) {
     assert.match(schemaSource, new RegExp(`uniqueIndex\\("${indexName}"\\)`));
   }

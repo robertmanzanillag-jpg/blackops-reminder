@@ -255,3 +255,20 @@ application, require a restorable backup, drained writers/workers, real
 PostgreSQL concurrency and rollback rehearsal, checker and App QA, followed by
 Robert's explicit migration and deployment approval. The rollback is
 application-only and preserves every counter and admission record for audit.
+
+## PR20 immutable launch authorities draft
+
+`20260721_pr20_launch_authorities_forward.sql` is an additive, unapplied migration
+for append-only admission-policy and kill-switch revisions, exact launch evidence,
+and immutable authority snapshots. A snapshot binds the exact plan, slot, attempt,
+provider credential version, script checksum, governance scope, four evidence records,
+policy revision, kill-switch revision, maximum micro-USD quote, and validity interval.
+
+Existing PR19 budget reservations remain valid with a nullable authority snapshot.
+New runtime admission will later require the exact composite snapshot binding; this
+migration does not add a route, worker, provider call, secret, spend, or deployment.
+Do not use `db:push` or apply it automatically. Require backup and staging rehearsal,
+checker and App QA gates, then Robert's explicit migration and deployment approval.
+Rollback is application-only and preserves every authority and reservation record.
+Every policy, kill-switch, evidence, and snapshot issuer must serialize on the same
+tenant/workspace advisory transaction lock so revision selection remains linear.
