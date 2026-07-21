@@ -10,6 +10,7 @@ import {
   mediaStudioOptionsResponseSchema,
   type MediaJob,
 } from "../../shared/ai-media-studio";
+import { aiMediaStudioAgentSnapshotSchema } from "../../shared/ai-media-studio-agent";
 import {
   createInfluencerRequestSchema,
   assetDeliverySchema,
@@ -55,6 +56,7 @@ import {
   type SourceItem,
 } from "../../shared/ai-media-studio-operations";
 import { getCurrentUserId } from "../user-context";
+import { createAiMediaStudioAgentSnapshot } from "./agent-control";
 import type { CoreCatalogRepositories } from "./core/runtime";
 import {
   createCoreCatalogRuntime,
@@ -862,6 +864,11 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     getCurrentUserId(req);
     const available = persistence.status.available && core.status.available && operations.status.available && governanceSelection.status.available;
     res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status, governance: governanceSelection.status, heyGenRoster: heyGenRosterSelection.status });
+  });
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
+    getCurrentUserId(req);
+    res.json(aiMediaStudioAgentSnapshotSchema.parse(createAiMediaStudioAgentSnapshot()));
   });
 
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");

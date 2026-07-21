@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T18:33:48.987Z",
+  "generatedAt": "2026-07-21T18:52:56.186Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,18 +86,44 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 742,
-    "filesIndexed": 625,
-    "imports": 2542,
-    "routes": 489,
-    "symbols": 12226
+    "filesVisible": 746,
+    "filesIndexed": 629,
+    "imports": 2556,
+    "routes": 491,
+    "symbols": 12247
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 131,
-      "indexed": 126,
+    "client/src": {
+      "files": 153,
+      "indexed": 151,
       "kinds": {
-        "server": 131
+        "client-page": 24,
+        "other": 43,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 132,
+      "indexed": 127,
+      "kinds": {
+        "server": 132
+      }
+    },
+    "shared": {
+      "files": 9,
+      "indexed": 9,
+      "kinds": {
+        "shared": 9
+      }
+    },
+    "tests": {
+      "files": 163,
+      "indexed": 156,
+      "kinds": {
+        "test": 163
       }
     },
     ".agents/skills": {
@@ -136,18 +162,6 @@
       "indexed": 2,
       "kinds": {
         "other": 13
-      }
-    },
-    "client/src": {
-      "files": 152,
-      "indexed": 150,
-      "kinds": {
-        "other": 43,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 23
       }
     },
     "docs/ai-media-studio": {
@@ -200,25 +214,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 8,
-      "indexed": 8,
-      "kinds": {
-        "shared": 8
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 162,
-      "indexed": 155,
-      "kinds": {
-        "test": 162
       }
     },
     "tests/fixtures": {
@@ -349,6 +349,7 @@
       ],
       "symbols": [
         "AgentsOfficePage",
+        "AiMediaStudioAgentPage",
         "AiMediaStudioPage",
         "App",
         "AppQaAgentPage",
@@ -394,6 +395,7 @@
         "/",
         "/agents-office",
         "/ai-media-studio",
+        "/ai-media-studio-agent",
         "/app-qa-agent",
         "/assistant",
         "/automations",
@@ -3843,6 +3845,28 @@
       "routes": []
     },
     {
+      "path": "client/src/pages/ai-media-studio-agent.tsx",
+      "kind": "client-page",
+      "imports": [
+        "@/components/ui/button",
+        "@shared/ai-media-studio-agent",
+        "@tanstack/react-query",
+        "lucide-react",
+        "wouter"
+      ],
+      "exports": [
+        "AiMediaStudioAgentPage"
+      ],
+      "symbols": [
+        "WorkItemCard",
+        "getAgentSnapshot",
+        "query",
+        "response",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/pages/ai-media-studio.tsx",
       "kind": "client-page",
       "imports": [
@@ -6765,6 +6789,21 @@
         "status",
         "trackedSpendUsd",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/agent-control.ts",
+      "kind": "server",
+      "imports": [
+        "../../shared/ai-media-studio-agent"
+      ],
+      "exports": [
+        "createAiMediaStudioAgentSnapshot"
+      ],
+      "symbols": [
+        "counts",
+        "createAiMediaStudioAgentSnapshot"
       ],
       "routes": []
     },
@@ -11005,12 +11044,14 @@
       "kind": "server",
       "imports": [
         "../../shared/ai-media-studio",
+        "../../shared/ai-media-studio-agent",
         "../../shared/ai-media-studio-core",
         "../../shared/ai-media-studio-governance",
         "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
+        "./agent-control",
         "./analytics/domain",
         "./assets",
         "./core/influencer-domain",
@@ -11198,6 +11239,7 @@
         "windowQuerySchema"
       ],
       "routes": [
+        "${AI_MEDIA_STUDIO_API_BASE}/agent",
         "${AI_MEDIA_STUDIO_API_BASE}/analytics/attribution",
         "${AI_MEDIA_STUDIO_API_BASE}/analytics/summary",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/policy",
@@ -18481,6 +18523,32 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-agent.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "AI_MEDIA_STUDIO_AGENT_API",
+        "AI_MEDIA_STUDIO_AGENT_ROUTE",
+        "AiMediaStudioAgentSnapshot",
+        "AiMediaStudioAgentWorkItem",
+        "AiMediaStudioAgentWorkState",
+        "aiMediaStudioAgentSnapshotSchema",
+        "aiMediaStudioAgentWorkItemSchema",
+        "aiMediaStudioAgentWorkStateSchema"
+      ],
+      "symbols": [
+        "AI_MEDIA_STUDIO_AGENT_API",
+        "AI_MEDIA_STUDIO_AGENT_ROUTE",
+        "aiMediaStudioAgentSnapshotSchema",
+        "aiMediaStudioAgentWorkItemSchema",
+        "aiMediaStudioAgentWorkStateSchema",
+        "counts"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-core.ts",
       "kind": "shared",
       "imports": [
@@ -19392,6 +19460,28 @@
         "resolver",
         "restartedWorker",
         "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-agent-control.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/agent-control",
+        "../shared/ai-media-studio-agent",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "appSource",
+        "canary",
+        "officeSource",
+        "pageSource",
+        "routesSource",
+        "sandbox",
+        "snapshot"
       ],
       "routes": []
     },
@@ -24169,6 +24259,7 @@
     "tests/ai-cost-notifications.test.ts",
     "tests/ai-media-studio-admitted-render-terminal-worker.test.ts",
     "tests/ai-media-studio-admitted-render-worker.test.ts",
+    "tests/ai-media-studio-agent-control.test.ts",
     "tests/ai-media-studio-analytics.test.ts",
     "tests/ai-media-studio-asset-delivery-client.test.ts",
     "tests/ai-media-studio-asset-ingest-drizzle.test.ts",

@@ -2,6 +2,16 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local checkpoint: PR28 dedicated AI Media Studio Agent
+
+- Branch: `codex/ai-media-studio-agent-control`, stacked on draft PR #112. The next checkpoint will add inert production composition; it is intentionally kept out of this control-plane slice.
+- Dedicated area: authenticated route `/ai-media-studio-agent` presents the delivery mission, exact launch target, work-state totals, owners, acceptance criteria, merge gates, evidence, blockers, branches/PRs and next actions. Studio navigation links to it without replacing the product dashboard.
+- Dedicated agent: Agents Office now registers `AI Media Studio Agent`, places it in its own `Media Studio` room and describes its scope as roster, scripts, HeyGen, ingest, QA and approvals for the 5×10 launch. Existing saved office layouts merge the new default room and agent location without discarding user customization.
+- API boundary: authenticated `GET /api/ai-media-studio/agent` returns a strict typed snapshot only. Its safety literals require `spendAuthorized=false`, `deploymentAuthorized=false`, `migrationsApplied=false` and `liveProviderCallsEnabled=false`; there is no write endpoint.
+- Launch shape: the control pane fixes the initial range at 5–10 avatars, exactly 10 videos each and 50–100 blocked slots. The 5×10 canary remains behind reviewed composition, staging, one approved one-video sandbox, App QA and Robert's explicit batch cost approval.
+- Current evidence: focused contracts/routes/UI wiring pass 5/5, TypeScript passes, and browser QA confirms the control pane plus Agents Office entry with no browser warning/error. Independent checker and App QA are running before the draft PR is marked reviewed.
+- Safety boundary: this slice performs no provider, storage or database I/O beyond its authenticated read-only snapshot. It applies no migration, changes no secret, reserves no budget, creates no render job, publishes nothing and deploys nothing.
+
 ## Active local checkpoint: PR27 HeyGen terminal evidence
 
 - Branch: `codex/ai-media-studio-heygen-terminal-evidence`, draft PR #112, stacked on draft PR #109; initial implementation is preserved at commit `3119d017` and the review corrections are preserved as an incremental follow-up.

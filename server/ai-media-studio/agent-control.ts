@@ -1,0 +1,148 @@
+import {
+  AI_MEDIA_STUDIO_AGENT_ROUTE,
+  aiMediaStudioAgentSnapshotSchema,
+  type AiMediaStudioAgentSnapshot,
+  type AiMediaStudioAgentWorkItem,
+} from "../../shared/ai-media-studio-agent";
+
+const workItems: readonly AiMediaStudioAgentWorkItem[] = [
+  {
+    id: "ams-agent-pr27-terminal-evidence",
+    title: "HeyGen V3 terminal evidence boundary",
+    owner: "AI Media Studio backend squad",
+    state: "done",
+    branch: "codex/ai-media-studio-heygen-terminal-evidence",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/112",
+    acceptance: [
+      "Provider-authoritative terminal state is exact-account and credential bound",
+      "Completed MP4 ingest uses a renewable provider artifact identity",
+      "Committed money is never falsely refunded",
+    ],
+    mergeGate: "Independent checker and App QA report no P0-P2; PostgreSQL, full suite, typecheck and build pass.",
+    evidence: ["PR #112", "PostgreSQL 16: 4/4", "Full suite: 657 passed, 0 failed, 24 skipped of 681", "App QA: P0=0, P1=0, P2=0"],
+    blockers: [],
+    nextAction: "Keep this slice unmounted until production composition and staging gates pass.",
+  },
+  {
+    id: "ams-agent-pr28-control-pane",
+    title: "Dedicated AI Media Studio Agent control pane",
+    owner: "AI Media Studio product squad",
+    state: "running",
+    branch: "codex/ai-media-studio-agent-control",
+    pullRequestUrl: null,
+    acceptance: [
+      "Agents Office exposes one dedicated AI Media Studio Agent",
+      "The agent area shows owners, states, PRs, evidence, blockers and merge gates",
+      "The pane performs no deployment, spend, migration or provider action",
+    ],
+    mergeGate: "Focused contracts/UI/routes, TypeScript, build, independent checker and App QA all pass before the draft PR is presented as reviewed.",
+    evidence: ["Read-only architecture audit completed"],
+    blockers: [],
+    nextAction: "Finish the read-only control pane, run maker/checker and save the draft PR on GitHub.",
+  },
+  {
+    id: "ams-agent-pr29-production-composition",
+    title: "Inert HeyGen V3 production composition",
+    owner: "AI Media Studio runtime squad",
+    state: "ready",
+    branch: null,
+    pullRequestUrl: null,
+    acceptance: [
+      "Compose admitted submit, terminal observation and renewable ingest without autostart",
+      "Exact account, credential and tenant mismatches fail before provider I/O",
+      "Construction performs no database, network, storage or spend action",
+    ],
+    mergeGate: "Composition tests prove zero construction I/O and fail-closed behavior; no route, timer or loop is mounted.",
+    evidence: ["PR28 composition audit completed", "Existing PR27 primitives are independently reviewed"],
+    blockers: [],
+    nextAction: "Create a stacked branch after the agent-control checkpoint is saved.",
+  },
+  {
+    id: "ams-agent-staging-migrations",
+    title: "Ordered staging migration and restart rehearsal",
+    owner: "App QA + database release gate",
+    state: "blocked",
+    branch: null,
+    pullRequestUrl: null,
+    acceptance: [
+      "Backup and ordered migrations complete in staging",
+      "Restart, contention and evidence-preserving rollback are rehearsed",
+      "No warning or failure remains in App QA",
+    ],
+    mergeGate: "Requires reviewed composition, staging database access and explicit approval before applying migrations.",
+    evidence: ["Local disposable PostgreSQL proofs exist"],
+    blockers: ["Production composition not yet checked in", "Staging migration application is not authorized"],
+    nextAction: "Prepare the rehearsal runbook without applying anything; request approval only when the reviewed stack is ready.",
+  },
+  {
+    id: "ams-agent-one-video-sandbox",
+    title: "One-video HeyGen sandbox",
+    owner: "Robert + AI Media Studio release gate",
+    state: "blocked",
+    branch: null,
+    pullRequestUrl: null,
+    acceptance: [
+      "Real credential, quota, billing and callback behavior are verified",
+      "One vertical MP4 reaches owned storage and authenticated delivery",
+      "Actual cost and rollback evidence are recorded",
+    ],
+    mergeGate: "Robert approves the exact estimated cost and one provider generation after staging passes.",
+    evidence: [],
+    blockers: ["Real HeyGen credentials and quota are not verified", "Spend approval has not been granted"],
+    nextAction: "Do not call HeyGen yet; finish composition and staging evidence first.",
+  },
+  {
+    id: "ams-agent-five-by-ten-canary",
+    title: "Initial 5 avatars × 10 videos canary",
+    owner: "AI Media Studio launch squad",
+    state: "backlog",
+    branch: null,
+    pullRequestUrl: null,
+    acceptance: [
+      "Exactly five verified avatars receive ten approved scripts each",
+      "Budget, concurrency, quality, ingest and publishing queues remain within policy",
+      "Failures stop safely before expanding toward 100 videos",
+    ],
+    mergeGate: "One-video sandbox passes, Robert approves the batch cost, and App QA reports no warning or failure.",
+    evidence: ["Current no-spend roster preview already plans exactly 50 slots"],
+    blockers: ["Sandbox and human launch approval are pending"],
+    nextAction: "Keep all 50 slots not queued until the preceding gates are complete.",
+  },
+];
+
+export function createAiMediaStudioAgentSnapshot(
+  now: () => Date = () => new Date(),
+): AiMediaStudioAgentSnapshot {
+  const counts = {
+    done: workItems.filter((item) => item.state === "done").length,
+    running: workItems.filter((item) => item.state === "running").length,
+    ready: workItems.filter((item) => item.state === "ready").length,
+    blocked: workItems.filter((item) => item.state === "blocked").length,
+    backlog: workItems.filter((item) => item.state === "backlog").length,
+  };
+  return aiMediaStudioAgentSnapshotSchema.parse({
+    agent: {
+      id: "ai-media-studio-agent",
+      name: "AI Media Studio Agent",
+      status: "working",
+      route: AI_MEDIA_STUDIO_AGENT_ROUTE,
+      mission: "Coordinate the provider-neutral media platform from reviewed code to a safe 5–10-avatar launch, with ten videos per avatar and explicit human gates before spend or deployment.",
+    },
+    generatedAt: now().toISOString(),
+    safety: {
+      spendAuthorized: false,
+      deploymentAuthorized: false,
+      migrationsApplied: false,
+      liveProviderCallsEnabled: false,
+    },
+    launchTarget: {
+      minimumAvatars: 5,
+      maximumAvatars: 10,
+      videosPerAvatar: 10,
+      minimumVideos: 50,
+      maximumVideos: 100,
+    },
+    summary: { total: workItems.length, ...counts },
+    workItems: workItems.map((item) => ({ ...item, acceptance: [...item.acceptance], evidence: [...item.evidence], blockers: [...item.blockers] })),
+  });
+}
