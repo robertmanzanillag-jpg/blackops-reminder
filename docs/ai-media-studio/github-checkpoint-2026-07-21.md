@@ -1,13 +1,13 @@
 # AI Media Studio GitHub checkpoint — 2026-07-21
 
-Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. This is a documentation-only checkpoint. It does not deploy, apply migrations, call providers, post to social platforms, create OAuth sessions, or touch secrets.
+Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
 ## Current branch
 
 - Worktree: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 - Branch: `codex/ai-media-studio-managed-oauth-vault`
 - Base commit at checkpoint start: `a6cd2f31 feat(ai-media-studio): add social oauth foundation`
-- Intended PR10 scope: managed production OAuth vault foundation, provider authorization URL builders, and fail-closed runtime composition.
+- PR10 scope: managed production OAuth vault foundation, provider authorization URL builders, and fail-closed runtime composition.
 - Explicit PR10 safety decision: keep OAuth routes unmounted until token exchange, token vaulting, account CAS binding, callback semantics, and provider sandbox proof are complete.
 
 ## Stacked PR history already preserved
@@ -44,7 +44,7 @@ Reasoning:
 - S3 with a dedicated private bucket/prefix, exact-object access, SSE-KMS, Bucket Keys, app-level expiration, and immediate object deletion is a better fit for short-lived PKCE verifier storage.
 - Long-lived provider token bundles can still use a separate managed secret/token vault later.
 
-### PR10 intended files
+### PR10 files now present
 
 New implementation files:
 
@@ -104,22 +104,25 @@ Files intentionally out of scope for the first PR10 code slice:
   - construction performs no network I/O;
   - AWS credentials come from the default provider chain, not static app env keys.
 
+## PR10 local evidence recorded after code landed
+
+- Focused OAuth tests: `node --import tsx --test tests/ai-media-studio-oauth-s3-kms-vault.test.ts tests/ai-media-studio-oauth-authorization-url.test.ts tests/ai-media-studio-production-oauth-runtime.test.ts tests/ai-media-studio-oauth-service.test.ts tests/ai-media-studio-oauth-crypto.test.ts` passed 24/24.
+- TypeScript: `npm run check` passed.
+- `npm test` was attempted but this repo has no `test` script; the project-specific Node test runner above is the authoritative focused test command.
+- No live AWS, provider, OAuth route, token exchange, social post, migration apply, or deployment was performed.
+
 ## Current blockers / not done
 
-- PR10 code has not yet been merged into this branch at the time this checkpoint file was created.
 - OAuth routes remain intentionally absent.
 - Provider token exchange, refresh, revocation, sandbox account connection, and token vaulting remain future slices.
 - No database migration for PR10 is planned in this first code slice.
-- No App QA/live browser evidence for PR10 exists yet.
+- Independent checker/App QA evidence is still required before this PR10 slice is marked ready.
+- No App QA/live browser evidence for PR10 exists yet; this slice has no mounted route or UI to click.
 - No Replit deployment is requested or authorized.
 
 ## Next recovery steps if this Codex session stops
 
 1. Continue on branch `codex/ai-media-studio-managed-oauth-vault`.
-2. Implement the PR10 internal-only S3-KMS PKCE vault, authorization URL builders, and production runtime.
-3. Run focused tests for OAuth vault/URL/runtime.
-4. Run TypeScript and the AI Media Studio relevant test set.
-5. Refresh `docs/codebase-map.md` with `npm run codebase:map` after new server/tests files land.
-6. Run independent checker and App QA review before telling Robert PR10 is ready.
-7. Commit, push, and open a stacked PR against PR #83’s branch.
-8. Do not deploy or apply migrations without Robert’s explicit approval.
+2. Re-run independent checker and App QA review before telling Robert PR10 is ready.
+3. Push any follow-up fixes to the stacked PR10 branch against PR #83’s branch.
+4. Do not deploy or apply migrations without Robert’s explicit approval.
