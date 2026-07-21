@@ -1,20 +1,22 @@
 # PR16 provider activation remediation plan
 
-Status: **NO-GO / design evidence only**. This plan does not authorize a
+Status: **NO-GO / PR16A independently checked; PR16B blocked**. This plan does not authorize a
 database connection, migration, secret or vault operation, provider call,
 spend, deployment, or runtime mounting.
 
 ## Audit conclusion
 
-PR16 cannot be converted directly from its current Drizzle declarations into a
-release migration. It needs two separately reviewed, stacked PRs: first exact
-schema and relational integrity, then the durable activation/CAS repository.
-The staging rehearsal must continue to stop between PR15 and PR19 until both
-slices and their PostgreSQL evidence pass.
+PR16 requires two separately reviewed, stacked slices: first exact schema and
+relational integrity, then the durable activation/CAS repository. PR16A now has
+local additive forward/rollback SQL, field/state alignment coverage, and isolated
+PostgreSQL 16 integrity proof on this branch. Its final independent checker and
+App QA gates pass at P0=P1=P2=0, but it remains unapplied. PR16B is still absent. The
+staging rehearsal must stop after PR16A and before PR19 until both slices and
+their PostgreSQL evidence pass.
 
-## Missing reviewed SQL
+## PR16A local SQL inventory
 
-The current model contains no forward/rollback SQL for these PR16 declarations:
+The local PR16A pair now covers these PR16 declarations:
 
 - the provider-account `oauth_role_v2` provenance check and partial token-binding
   uniqueness;
@@ -25,10 +27,13 @@ The current model contains no forward/rollback SQL for these PR16 declarations:
 - `ai_media_provider_account_credential_bindings`;
 - `ai_media_oauth_vault_operations_v2`.
 
-The source inventory is in `shared/models/ai-media-studio-db.ts`. `db:push`,
-schema-diff generation, and inferred SQL are forbidden substitutes.
+The source inventory is in `shared/models/ai-media-studio-db.ts`. The local files
+are `20260721_pr16_provider_activation_integrity_forward.sql` and
+`20260721_pr16_provider_activation_integrity_rollback.sql`. They are unapplied
+and have passed independent checker review. `db:push`, schema-diff generation, and inferred SQL
+remain forbidden substitutes.
 
-## Relational blockers
+## Relational audit findings addressed locally by PR16A
 
 1. PR15's persisted stage constraint rejects `activation_indeterminate`, even
    though the application contract can produce that terminal uncertainty.
@@ -72,6 +77,9 @@ Required work:
 9. Keep SQL/Drizzle parity tests and execute the actual files on isolated
    PostgreSQL 16 with trusted `pgcrypto`.
 
+PR16A's final diff passes its checker, App QA, static/full suites and isolated
+PostgreSQL harness. This does not satisfy or waive PR16B.
+
 ## PR16B — durable activation and CAS
 
 Ownership: repository maker after PR16A passes. Keep the repository unmounted.
@@ -112,5 +120,5 @@ Required work:
 PR16 remains blocked until PR16A and PR16B each have a maker/checker cycle,
 focused/static tests, live isolated PostgreSQL 16 evidence, full AI Media Studio
 regressions, TypeScript/build evidence, and App QA at P0=P1=P2=0. Only then may
-the staging runbook replace its PR16 stop with reviewed filenames. Robert's
+the staging runbook remove its PR16B stop and authorize neither action by itself. Robert's
 staging, spend, HeyGen sandbox, and Replit/production approvals remain separate.

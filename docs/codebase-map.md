@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T19:47:51.690Z
+Generated: 2026-07-21T20:40:35.634Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -15,7 +15,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 751 | 634 | 2579 | 491 | 12300 |
+| 756 | 636 | 2591 | 491 | 12352 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 165 | 158 | test:165 |
+| `tests` | 167 | 160 | test:167 |
 | `client/src` | 153 | 151 | ui-component:55, other:43, client-page:24, client-component:21 |
 | `server/ai-media-studio` | 133 | 128 | server:133 |
 | `server` | 96 | 92 | server:96 |
@@ -45,10 +45,10 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 39 | 1 | other:38, docs:1 |
+| `migrations/ai-media-studio` | 41 | 1 | other:40, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
-| `tests/fixtures` | 1 | 0 | test:1 |
+| `tests/fixtures` | 2 | 0 | test:2 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/ai-media-studio`, `/ai-media-studio-agent`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/tools`
@@ -126,6 +126,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts`
 - `tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts`
 - `tests/ai-media-studio-pr15-provider-connection-migration.test.ts`
+- `tests/ai-media-studio-pr16-provider-activation-migration.test.ts`
+- `tests/ai-media-studio-pr16a-postgres-migration.test.ts`
 - `tests/ai-media-studio-pr19-daily-admission-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr20-launch-authority-migration.test.ts`

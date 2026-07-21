@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T19:47:51.690Z",
+  "generatedAt": "2026-07-21T20:40:35.634Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -86,18 +86,19 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 751,
-    "filesIndexed": 634,
-    "imports": 2579,
+    "filesVisible": 756,
+    "filesIndexed": 636,
+    "imports": 2591,
     "routes": 491,
-    "symbols": 12300
+    "symbols": 12352
   },
   "directories": {
-    "docs/ai-media-studio": {
-      "files": 12,
-      "indexed": 12,
+    "migrations/ai-media-studio": {
+      "files": 41,
+      "indexed": 1,
       "kinds": {
-        "docs": 12
+        "other": 40,
+        "docs": 1
       }
     },
     "server/ai-media-studio": {
@@ -105,6 +106,20 @@
       "indexed": 128,
       "kinds": {
         "server": 133
+      }
+    },
+    "tests": {
+      "files": 167,
+      "indexed": 160,
+      "kinds": {
+        "test": 167
+      }
+    },
+    "tests/fixtures": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "test": 2
       }
     },
     ".agents/skills": {
@@ -157,19 +172,18 @@
         "client-page": 24
       }
     },
+    "docs/ai-media-studio": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "docs": 12
+      }
+    },
     "docs": {
       "files": 12,
       "indexed": 11,
       "kinds": {
         "docs": 12
-      }
-    },
-    "migrations/ai-media-studio": {
-      "files": 39,
-      "indexed": 1,
-      "kinds": {
-        "other": 38,
-        "docs": 1
       }
     },
     "script": {
@@ -212,20 +226,6 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 165,
-      "indexed": 158,
-      "kinds": {
-        "test": 165
-      }
-    },
-    "tests/fixtures": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "test": 1
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -21443,6 +21443,89 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr16-provider-activation-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "executable",
+        "forward",
+        "migration",
+        "rollback",
+        "schema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr16a-postgres-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/oauth/provider-connection-contracts",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "StagedGraph",
+        "TEMP_PREFIX",
+        "account",
+        "activated",
+        "activationClient",
+        "activationRoles",
+        "actualScopes",
+        "artifact",
+        "artifactRows",
+        "artifacts",
+        "authorizationCodeReference",
+        "authorizeGraph",
+        "authorizedDigest",
+        "binding",
+        "catalog",
+        "client",
+        "contractDigest",
+        "contradictoryClient",
+        "controls",
+        "derived",
+        "digest",
+        "enabled",
+        "expectRejected",
+        "fixture",
+        "forwards",
+        "grantFamily",
+        "isMeta",
+        "lifetime",
+        "lifetimePolicy",
+        "manifestRevision",
+        "migration",
+        "ownedUrl",
+        "parsed",
+        "pool",
+        "requiredScopes",
+        "resolvedSocket",
+        "retained",
+        "rollback",
+        "seedStagedGraph",
+        "state",
+        "targetKind",
+        "terminalClient",
+        "tokenArtifacts",
+        "uuid",
+        "value",
+        "vaultReference"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
       "kind": "test",
       "imports": [
@@ -22745,7 +22828,8 @@
         "pr14",
         "pr14Forward",
         "pr16Plan",
-        "pr16Stop",
+        "pr16a",
+        "pr16bStop",
         "pr19",
         "pr26Forward",
         "reverseSection",
@@ -24444,6 +24528,8 @@
     "tests/ai-media-studio-pr12-oauth-callback-saga-migration.test.ts",
     "tests/ai-media-studio-pr14-oauth-vault-operations-migration.test.ts",
     "tests/ai-media-studio-pr15-provider-connection-migration.test.ts",
+    "tests/ai-media-studio-pr16-provider-activation-migration.test.ts",
+    "tests/ai-media-studio-pr16a-postgres-migration.test.ts",
     "tests/ai-media-studio-pr19-daily-admission-migration.test.ts",
     "tests/ai-media-studio-pr2-migration.test.ts",
     "tests/ai-media-studio-pr20-launch-authority-migration.test.ts",

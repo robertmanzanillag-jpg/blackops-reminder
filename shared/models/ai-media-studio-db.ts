@@ -234,6 +234,7 @@ export const aiMediaProviderAccounts = pgTable(
     credentialActorUserId: text("credential_actor_user_id"),
     credentialSourceSessionId: uuid("credential_source_session_id"),
     tokenBindingId: uuid("token_binding_id"),
+    credentialBindingId: uuid("credential_binding_id"),
     tokenKind: text("token_kind"),
     tokenManifestRevision: text("token_manifest_revision"),
     configuration: jsonb("configuration").$type<Record<string, unknown>>().notNull().default({}),
@@ -302,8 +303,8 @@ export const aiMediaProviderAccounts = pgTable(
     oauthCredentialProvenanceCheck: check(
       "ai_media_provider_accounts_oauth_credential_provenance_ck",
       sql`(
-        (${table.credentialSource} = 'not_bound' AND ${table.secretRef} IS NULL AND ${table.credentialVersion} = 0 AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
-        OR (${table.credentialSource} = 'legacy_authorized_unbound' AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
+        (${table.credentialSource} = 'not_bound' AND ${table.secretRef} IS NULL AND ${table.credentialVersion} = 0 AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.credentialBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
+        OR (${table.credentialSource} = 'legacy_authorized_unbound' AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.credentialBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
         OR (
           ${table.credentialSource} = 'oauth_authorization'
           AND ${table.status} = 'active'
@@ -314,6 +315,7 @@ export const aiMediaProviderAccounts = pgTable(
           AND ${table.externalAccountId} IS NOT NULL AND length(btrim(${table.externalAccountId})) BETWEEN 1 AND 255
           AND ${table.secretRef} ~ '^vault://ai-media-studio/oauth-token/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
           AND ${table.tokenBindingId} IS NOT NULL
+          AND ${table.credentialBindingId} IS NULL
           AND ${table.tokenKind} = 'Bearer'
           AND ${table.credentialExpiresAt} IS NOT NULL
           AND ${table.capabilities} @> '["publish_video"]'::jsonb
@@ -330,6 +332,7 @@ export const aiMediaProviderAccounts = pgTable(
           AND ${table.externalAccountId} IS NOT NULL AND length(btrim(${table.externalAccountId})) BETWEEN 1 AND 255
           AND ${table.secretRef} IS NULL
           AND ${table.tokenBindingId} IS NOT NULL
+          AND ${table.credentialBindingId} IS NOT NULL
           AND ${table.tokenKind} = 'role_v2'
           AND ${table.capabilities} @> '["publish_video"]'::jsonb
           AND jsonb_array_length(${table.grantedScopes}) > 0
@@ -621,6 +624,11 @@ export const aiMediaOAuthConnectionAttempts = pgTable(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
       table.platform, table.oauthSessionId, table.id, table.manifestRevision,
     ),
+    exactActivationSourceUnique: uniqueIndex("ai_media_oauth_connection_attempts_exact_activation_source_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
+      table.platform, table.oauthSessionId, table.id, table.tokenBindingId, table.manifestRevision,
+      table.expectedCredentialVersion, table.targetCredentialVersion,
+    ),
     sessionUnique: uniqueIndex("ai_media_oauth_connection_attempts_session_uq").on(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
       table.platform, table.oauthSessionId,
@@ -676,15 +684,19 @@ export const aiMediaOAuthConnectionAttempts = pgTable(
       AND ((${table.stage} IN ('exchange_in_progress','discovery_in_progress','activation_in_progress')) = (${table.leaseToken} IS NOT NULL))
     )`),
     terminalCheck: check("ai_media_oauth_connection_attempts_terminal_ck", sql`(
-      ((${table.stage} IN ('authorized','failed')) = (${table.terminalAt} IS NOT NULL))
-      AND ((${table.stage} IN ('authorized','failed')) = (${table.terminalOutcome} IS NOT NULL))
-      AND ((${table.stage} IN ('authorized','failed')) = (${table.terminalEvidenceDigest} IS NOT NULL))
-      AND (${table.terminalOutcome} IS NULL OR ${table.terminalOutcome} IN ('authorized','not_connectable','failed'))
+      ((${table.stage} IN ('activation_indeterminate','authorized','failed')) = (${table.terminalAt} IS NOT NULL))
+      AND ((${table.stage} IN ('activation_indeterminate','authorized','failed')) = (${table.terminalOutcome} IS NOT NULL))
+      AND ((${table.stage} IN ('activation_indeterminate','authorized','failed')) = (${table.terminalEvidenceDigest} IS NOT NULL))
+      AND (${table.terminalOutcome} IS NULL OR ${table.terminalOutcome} IN ('indeterminate','authorized','not_connectable','failed'))
       AND (${table.terminalEvidenceDigest} IS NULL OR ${table.terminalEvidenceDigest} ~ '^[0-9a-f]{64}$')
       AND (${table.failureCode} IS NULL OR ${table.failureCode} IN ('invalid_exchange','exchange_ambiguous','scope_mismatch',
-        'invalid_artifact','invalid_discovery','target_not_found','target_mismatch','activation_rejected','provider_rejected','internal_failure','no_targets'))
+        'invalid_artifact','invalid_discovery','target_not_found','target_mismatch','activation_rejected','activation_ambiguous','provider_rejected','internal_failure','no_targets'))
       AND (${table.stage} <> 'exchange_indeterminate' OR ${table.failureCode} = 'exchange_ambiguous')
-      AND (${table.stage} <> 'failed' OR ${table.failureCode} IS NOT NULL)
+      AND (${table.stage} <> 'activation_indeterminate' OR (${table.failureCode} = 'activation_ambiguous'
+        AND ${table.terminalOutcome} = 'indeterminate'))
+      AND (${table.stage} <> 'authorized' OR (${table.failureCode} IS NULL AND ${table.terminalOutcome} = 'authorized'))
+      AND (${table.stage} <> 'failed' OR (${table.failureCode} IS NOT NULL
+        AND ${table.terminalOutcome} IN ('failed','not_connectable')))
       AND ${table.expiresAt} > ${table.createdAt}
     )`),
     sessionSourceFk: foreignKey({
@@ -721,6 +733,11 @@ export const aiMediaOAuthTargetCandidates = pgTable(
     exactCandidateUnique: uniqueIndex("ai_media_oauth_target_candidates_exact_candidate_uq").on(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
       table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId,
+    ),
+    exactEvidenceUnique: uniqueIndex("ai_media_oauth_target_candidates_exact_evidence_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+      table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId,
+      table.eligibilityDigest, table.manifestRevision,
     ),
     attemptCandidateIdUnique: uniqueIndex("ai_media_oauth_target_candidates_attempt_candidate_id_uq").on(
       table.ownerUserId, table.workspaceId, table.attemptId, table.candidateId,
@@ -789,7 +806,7 @@ export const aiMediaOAuthTargetSelections = pgTable(
     exactSelectionUnique: uniqueIndex("ai_media_oauth_target_selections_exact_selection_uq").on(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId,
       table.platform, table.oauthSessionId, table.attemptId, table.candidateId,
-      table.targetKind, table.targetExternalId,
+      table.targetKind, table.targetExternalId, table.selectionDigest, table.selectedStageVersion,
     ),
     identityCheck: check("ai_media_oauth_target_selections_identity_ck", sql`(
       ${table.targetKind} IN ('tiktok_user','youtube_channel','facebook_page','instagram_professional_account')
@@ -823,6 +840,7 @@ export const aiMediaOAuthCredentialArtifacts = pgTable(
     platform: text("platform").notNull(),
     oauthSessionId: uuid("oauth_session_id").notNull(),
     attemptId: uuid("attempt_id").notNull(),
+    credentialBindingId: uuid("credential_binding_id").notNull(),
     candidateId: uuid("candidate_id").notNull(),
     targetKind: text("target_kind").notNull(),
     targetExternalId: text("target_external_id").notNull(),
@@ -836,6 +854,9 @@ export const aiMediaOAuthCredentialArtifacts = pgTable(
     manifestRevision: text("manifest_revision").notNull(),
     expectedCredentialVersion: integer("expected_credential_version").notNull(),
     targetCredentialVersion: integer("target_credential_version").notNull(),
+    selectionDigest: text("selection_digest").notNull(),
+    selectedStageVersion: integer("selected_stage_version").notNull(),
+    selectedEligibilityDigest: text("selected_eligibility_digest").notNull(),
     state: text("state").notNull().default("candidate"),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
     cleanupCompletedAt: timestamp("cleanup_completed_at", { withTimezone: true }),
@@ -848,7 +869,8 @@ export const aiMediaOAuthCredentialArtifacts = pgTable(
     vaultReferenceUnique: uniqueIndex("ai_media_oauth_credential_artifacts_vault_reference_uq").on(table.vaultReference),
     exactArtifactUnique: uniqueIndex("ai_media_oauth_credential_artifacts_exact_artifact_uq").on(
       table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
-      table.oauthSessionId, table.attemptId, table.artifactBindingId, table.role, table.id, table.vaultReference,
+      table.oauthSessionId, table.attemptId, table.credentialBindingId, table.artifactBindingId,
+      table.role, table.id, table.vaultReference,
     ),
     attemptStateIdx: index("ai_media_oauth_credential_artifacts_attempt_state_idx").on(
       table.ownerUserId, table.workspaceId, table.attemptId, table.state,
@@ -861,6 +883,9 @@ export const aiMediaOAuthCredentialArtifacts = pgTable(
       AND length(btrim(${table.manifestRevision})) BETWEEN 1 AND 100
       AND ${table.expectedCredentialVersion} >= 0
       AND ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1
+      AND ${table.selectionDigest} ~ '^[0-9a-f]{64}$'
+      AND ${table.selectedStageVersion} >= 1
+      AND ${table.selectedEligibilityDigest} ~ '^[0-9a-f]{64}$'
     )`),
     lifetimeCheck: check("ai_media_oauth_credential_artifacts_lifetime_ck", sql`(
       ${table.lifetimeKind} IN ('expires_at','provider_non_expiring','revocation_bound')
@@ -876,15 +901,18 @@ export const aiMediaOAuthCredentialArtifacts = pgTable(
       AND (${table.state} <> 'candidate' OR (${table.activatedAt} IS NULL AND ${table.cleanupCompletedAt} IS NULL))
       AND (${table.state} <> 'active' OR (${table.activatedAt} IS NOT NULL AND ${table.cleanupCompletedAt} IS NULL))
       AND (${table.state} <> 'deleted' OR ${table.cleanupCompletedAt} IS NOT NULL)
+      AND (${table.state} <> 'cleanup_dead_letter' OR ${table.cleanupCompletedAt} IS NULL)
     )`),
     exactSelectionFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
-        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId],
+        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId,
+        table.selectionDigest, table.selectedStageVersion],
       foreignColumns: [aiMediaOAuthTargetSelections.ownerUserId, aiMediaOAuthTargetSelections.workspaceId,
         aiMediaOAuthTargetSelections.actorUserId, aiMediaOAuthTargetSelections.providerAccountId,
         aiMediaOAuthTargetSelections.platform, aiMediaOAuthTargetSelections.oauthSessionId,
         aiMediaOAuthTargetSelections.attemptId, aiMediaOAuthTargetSelections.candidateId,
-        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId],
+        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId,
+        aiMediaOAuthTargetSelections.selectionDigest, aiMediaOAuthTargetSelections.selectedStageVersion],
       name: "ai_media_oauth_credential_artifacts_exact_selection_fk",
     }).onUpdate("no action").onDelete("no action"),
   }),
@@ -914,9 +942,12 @@ export const aiMediaProviderAccountCredentialBindings = pgTable(
     actualScopes: jsonb("actual_scopes").$type<string[]>().notNull(),
     capabilities: jsonb("capabilities").$type<string[]>().notNull(),
     manifestRevision: text("manifest_revision").notNull(),
-    authorizedDigest: text("authorized_digest").notNull(),
-    authorizedAt: timestamp("authorized_at", { withTimezone: true }).notNull(),
+    state: text("state").notNull().default("staged"),
+    authorizedDigest: text("authorized_digest"),
+    authorizedAt: timestamp("authorized_at", { withTimezone: true }),
+    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     accountVersionUnique: uniqueIndex("ai_media_provider_account_credential_bindings_account_version_uq").on(
@@ -924,30 +955,76 @@ export const aiMediaProviderAccountCredentialBindings = pgTable(
     ),
     tokenBindingUnique: uniqueIndex("ai_media_provider_account_credential_bindings_token_binding_uq").on(table.tokenBindingId),
     artifactBindingUnique: uniqueIndex("ai_media_provider_account_credential_bindings_artifact_binding_uq").on(table.artifactBindingId),
-    authorizedDigestUnique: uniqueIndex("ai_media_provider_account_credential_bindings_authorized_digest_uq").on(table.authorizedDigest),
+    exactAccountSourceUnique: uniqueIndex("ai_media_provider_account_credential_bindings_exact_account_source_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+      table.oauthSessionId, table.id, table.targetExternalId, table.tokenBindingId,
+      table.targetCredentialVersion, table.manifestRevision, table.actualScopes, table.capabilities,
+    ),
+    exactArtifactSourceUnique: uniqueIndex("ai_media_provider_account_credential_bindings_exact_artifact_source_uq").on(
+      table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+      table.oauthSessionId, table.attemptId, table.id, table.candidateId, table.targetKind,
+      table.targetExternalId, table.selectionDigest, table.selectedStageVersion,
+      table.selectedEligibilityDigest, table.tokenBindingId, table.artifactBindingId,
+      table.expectedCredentialVersion, table.targetCredentialVersion, table.manifestRevision,
+    ),
+    authorizedDigestUnique: uniqueIndex("ai_media_provider_account_credential_bindings_authorized_digest_uq")
+      .on(table.authorizedDigest).where(sql`${table.authorizedDigest} IS NOT NULL`),
     identityCheck: check("ai_media_provider_account_credential_bindings_identity_ck", sql`(
       length(btrim(${table.actorUserId})) BETWEEN 1 AND 255
       AND length(btrim(${table.targetExternalId})) BETWEEN 1 AND 255
       AND length(btrim(${table.manifestRevision})) BETWEEN 1 AND 100
       AND ${table.selectionDigest} ~ '^[0-9a-f]{64}$'
       AND ${table.selectedEligibilityDigest} ~ '^[0-9a-f]{64}$'
-      AND ${table.authorizedDigest} ~ '^[0-9a-f]{64}$'
+      AND (${table.authorizedDigest} IS NULL OR ${table.authorizedDigest} ~ '^[0-9a-f]{64}$')
       AND ${table.selectedStageVersion} >= 1 AND ${table.activationStageVersion} >= 1
       AND ${table.expectedCredentialVersion} >= 0
       AND ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1
       AND jsonb_typeof(${table.actualScopes}) = 'array' AND jsonb_array_length(${table.actualScopes}) BETWEEN 1 AND 50
       AND jsonb_typeof(${table.capabilities}) = 'array' AND jsonb_array_length(${table.capabilities}) BETWEEN 1 AND 20
       AND (${table.actualScopes}::text || ${table.capabilities}::text) !~* '"(reference|vaultreference|secret|clientsecret|client_secret|accesstoken|access_token|refreshtoken|refresh_token|tokenvalue|token_value|providerjson|provider_json|providerpayload|provider_payload|rawprovider|raw_provider)"'
+      AND ${table.state} IN ('staged','authorized','abandoned')
+      AND (${table.state} <> 'staged' OR (${table.authorizedDigest} IS NULL AND ${table.authorizedAt} IS NULL AND ${table.abandonedAt} IS NULL))
+      AND (${table.state} <> 'authorized' OR (${table.authorizedDigest} ~ '^[0-9a-f]{64}$'
+        AND ${table.authorizedAt} IS NOT NULL AND ${table.abandonedAt} IS NULL))
+      AND (${table.state} <> 'abandoned' OR (${table.authorizedDigest} IS NULL
+        AND ${table.authorizedAt} IS NULL AND ${table.abandonedAt} IS NOT NULL))
+      AND ${table.updatedAt} >= ${table.createdAt}
     )`),
     exactSelectionFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
-        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId],
+        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId,
+        table.selectionDigest, table.selectedStageVersion],
       foreignColumns: [aiMediaOAuthTargetSelections.ownerUserId, aiMediaOAuthTargetSelections.workspaceId,
         aiMediaOAuthTargetSelections.actorUserId, aiMediaOAuthTargetSelections.providerAccountId,
         aiMediaOAuthTargetSelections.platform, aiMediaOAuthTargetSelections.oauthSessionId,
         aiMediaOAuthTargetSelections.attemptId, aiMediaOAuthTargetSelections.candidateId,
-        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId],
+        aiMediaOAuthTargetSelections.targetKind, aiMediaOAuthTargetSelections.targetExternalId,
+        aiMediaOAuthTargetSelections.selectionDigest, aiMediaOAuthTargetSelections.selectedStageVersion],
       name: "ai_media_provider_account_credential_bindings_exact_selection_fk",
+    }).onUpdate("no action").onDelete("no action"),
+    attemptSourceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+        table.oauthSessionId, table.attemptId, table.tokenBindingId, table.manifestRevision,
+        table.expectedCredentialVersion, table.targetCredentialVersion],
+      foreignColumns: [aiMediaOAuthConnectionAttempts.ownerUserId, aiMediaOAuthConnectionAttempts.workspaceId,
+        aiMediaOAuthConnectionAttempts.actorUserId, aiMediaOAuthConnectionAttempts.providerAccountId,
+        aiMediaOAuthConnectionAttempts.platform, aiMediaOAuthConnectionAttempts.oauthSessionId,
+        aiMediaOAuthConnectionAttempts.id, aiMediaOAuthConnectionAttempts.tokenBindingId,
+        aiMediaOAuthConnectionAttempts.manifestRevision, aiMediaOAuthConnectionAttempts.expectedCredentialVersion,
+        aiMediaOAuthConnectionAttempts.targetCredentialVersion],
+      name: "ai_media_provider_account_credential_bindings_attempt_source_fk",
+    }).onUpdate("no action").onDelete("no action"),
+    candidateEvidenceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
+        table.oauthSessionId, table.attemptId, table.candidateId, table.targetKind, table.targetExternalId,
+        table.selectedEligibilityDigest, table.manifestRevision],
+      foreignColumns: [aiMediaOAuthTargetCandidates.ownerUserId, aiMediaOAuthTargetCandidates.workspaceId,
+        aiMediaOAuthTargetCandidates.actorUserId, aiMediaOAuthTargetCandidates.providerAccountId,
+        aiMediaOAuthTargetCandidates.platform, aiMediaOAuthTargetCandidates.oauthSessionId,
+        aiMediaOAuthTargetCandidates.attemptId, aiMediaOAuthTargetCandidates.candidateId,
+        aiMediaOAuthTargetCandidates.targetKind, aiMediaOAuthTargetCandidates.targetExternalId,
+        aiMediaOAuthTargetCandidates.eligibilityDigest, aiMediaOAuthTargetCandidates.manifestRevision],
+      name: "ai_media_provider_account_credential_bindings_candidate_evidence_fk",
     }).onUpdate("no action").onDelete("no action"),
     providerAccountFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.platform],
@@ -968,6 +1045,7 @@ export const aiMediaOAuthVaultOperationsV2 = pgTable(
     platform: text("platform").notNull(),
     oauthSessionId: uuid("oauth_session_id").notNull(),
     attemptId: uuid("attempt_id").notNull(),
+    credentialBindingId: uuid("credential_binding_id").notNull(),
     artifactId: uuid("artifact_id").notNull(),
     artifactBindingId: uuid("artifact_binding_id").notNull(),
     role: text("role").notNull(),
@@ -999,6 +1077,7 @@ export const aiMediaOAuthVaultOperationsV2 = pgTable(
       ${table.role} IN ('operational_access','refresh')
       AND ${table.vaultReference} ~ '^vault://ai-media-studio/oauth-role-token/v2/[0-9a-f]{64}$'
       AND ${table.targetCredentialVersion} > 0
+      AND ${table.availableAt} >= ${table.createdAt}
     )`),
     lifecycleCheck: check("ai_media_oauth_vault_operations_v2_lifecycle_ck", sql`(
       ${table.state} IN ('cleanup_pending','retained','leased','retry_wait','verify_wait','completed','dead_letter')
@@ -1008,20 +1087,25 @@ export const aiMediaOAuthVaultOperationsV2 = pgTable(
       AND ((${table.state} = 'leased') = (${table.leaseToken} IS NOT NULL))
       AND ((${table.leaseToken} IS NULL) = (${table.leaseOwner} IS NULL))
       AND ((${table.leaseToken} IS NULL) = (${table.leaseExpiresAt} IS NULL))
-      AND (${table.state} <> 'retained' OR (${table.availableAt} = 'infinity'::timestamptz AND ${table.quiescentUntil} = 'infinity'::timestamptz))
+      AND ((${table.state} = 'retained') = (${table.availableAt} = 'infinity'::timestamptz AND ${table.quiescentUntil} = 'infinity'::timestamptz))
+      AND (${table.state} = 'retained' OR (isfinite(${table.availableAt}) AND isfinite(${table.quiescentUntil})))
       AND (${table.state} <> 'verify_wait' OR ${table.deletePass} = 1)
       AND (${table.state} <> 'completed' OR (${table.deletePass} = 2 AND ${table.completedAt} IS NOT NULL))
       AND (${table.state} <> 'dead_letter' OR ${table.deadLetteredAt} IS NOT NULL)
+      AND (${table.state} NOT IN ('completed','dead_letter') OR ${table.leaseToken} IS NULL)
+      AND (${table.completedAt} IS NULL OR ${table.state} = 'completed')
+      AND (${table.deadLetteredAt} IS NULL OR ${table.state} = 'dead_letter')
       AND (${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} IN ('vault_rejected','vault_timeout','lease_lost','invalid_obligation'))
     )`),
     exactArtifactFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.actorUserId, table.providerAccountId, table.platform,
-        table.oauthSessionId, table.attemptId, table.artifactBindingId, table.role, table.artifactId, table.vaultReference],
+        table.oauthSessionId, table.attemptId, table.credentialBindingId, table.artifactBindingId,
+        table.role, table.artifactId, table.vaultReference],
       foreignColumns: [aiMediaOAuthCredentialArtifacts.ownerUserId, aiMediaOAuthCredentialArtifacts.workspaceId,
         aiMediaOAuthCredentialArtifacts.actorUserId, aiMediaOAuthCredentialArtifacts.providerAccountId,
         aiMediaOAuthCredentialArtifacts.platform, aiMediaOAuthCredentialArtifacts.oauthSessionId,
-        aiMediaOAuthCredentialArtifacts.attemptId, aiMediaOAuthCredentialArtifacts.artifactBindingId,
-        aiMediaOAuthCredentialArtifacts.role, aiMediaOAuthCredentialArtifacts.id,
+        aiMediaOAuthCredentialArtifacts.attemptId, aiMediaOAuthCredentialArtifacts.credentialBindingId,
+        aiMediaOAuthCredentialArtifacts.artifactBindingId, aiMediaOAuthCredentialArtifacts.role, aiMediaOAuthCredentialArtifacts.id,
         aiMediaOAuthCredentialArtifacts.vaultReference],
       name: "ai_media_oauth_vault_operations_v2_exact_artifact_fk",
     }).onUpdate("no action").onDelete("no action"),
