@@ -155,10 +155,13 @@ export async function scheduleBlackRoomMetricoolPost(
   const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
   const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   const payload = buildMetricoolTikTokPayload(input, mediaId);
+  const serializedPayload = JSON.stringify(payload);
+  const payloadBytes = Buffer.from(serializedPayload, "utf8");
+  const postHeaders = { ...headers, "content-length": String(payloadBytes.byteLength) };
   const scheduled = await metricoolJson(await fetcher(schedulerUrl, {
     method: "POST",
-    headers,
-    body: JSON.stringify(payload),
+    headers: postHeaders,
+    body: payloadBytes,
     signal: AbortSignal.timeout(120_000),
   }), "post scheduling");
 
