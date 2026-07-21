@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export const BLACKROOM_METRICOOL_BLOG_ID = 6585226;
 export const BLACKROOM_TIMEZONE = "America/New_York";
@@ -29,28 +32,48 @@ export async function postMetricoolJsonBytes(
 ): Promise<Response> {
   const target = new URL(url);
   if (!['http:', 'https:'].includes(target.protocol)) throw new Error("Invalid Metricool scheduler protocol");
+  if (/[\r\n]/.test(token)) throw new Error("Invalid Metricool scheduler token");
   const payloadBytes = Buffer.from(serializedPayload, "utf8");
+  const payloadDirectory = mkdtempSync(join(tmpdir(), "blackroom-metricool-"));
+  const payloadPath = join(payloadDirectory, "payload.json");
+  writeFileSync(payloadPath, payloadBytes, { mode: 0o600 });
+  const escapedToken = token.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const curlConfig = [
+    `header = "X-Mc-Auth: ${escapedToken}"`,
+    'header = "content-type: application/json"',
+    'header = "accept: application/json"',
+    "",
+  ].join("\n");
   return new Promise<Response>((resolve, reject) => {
-    const child = spawnProcess("curl", [
+    const spawnCurl = () => spawnProcess("curl", [
       "--silent",
       "--show-error",
       "--request", "POST",
       "--url", target.toString(),
-      "--header", "@/dev/fd/3",
-      "--data-binary", "@-",
+      "--config", "-",
+      "--data-binary", `@${payloadPath}`,
       "--output", "-",
       "--write-out", "\n%{http_code}",
     ], {
-      stdio: ["pipe", "pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    let child: ReturnType<typeof spawnCurl>;
+    try { child = spawnCurl(); }
+    catch (error) {
+      try { rmSync(payloadDirectory, { recursive: true, force: true }); }
+      catch { /* best-effort cleanup if curl cannot start */ }
+      reject(error);
+      return;
+    }
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
-    const headerStream = child.stdio[3];
     let settled = false;
     const finish = (error?: Error, response?: Response) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      try { rmSync(payloadDirectory, { recursive: true, force: true }); }
+      catch { /* best-effort cleanup after curl closes */ }
       if (error) reject(error);
       else resolve(response!);
     };
@@ -71,13 +94,6 @@ export async function postMetricoolJsonBytes(
     child.stdin.once("error", (error) => failStream("request", error));
     child.stdout.once("error", (error) => failStream("response", error));
     child.stderr.once("error", (error) => failStream("diagnostic", error));
-    if (!headerStream || typeof (headerStream as NodeJS.WritableStream).end !== "function") {
-      child.kill("SIGKILL");
-      finish(new Error("Metricool scheduler header stream is unavailable"));
-      return;
-    }
-    const writableHeaderStream = headerStream as NodeJS.WritableStream;
-    writableHeaderStream.once("error", (error) => failStream("header", error));
     child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
     child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
     child.once("close", (code) => {
@@ -94,8 +110,7 @@ export async function postMetricoolJsonBytes(
       const body = output.subarray(0, separator);
       finish(undefined, new Response(status === 204 ? null : body, { status }));
     });
-    writableHeaderStream.end(`X-Mc-Auth: ${token}\ncontent-type: application/json\naccept: application/json\n`);
-    child.stdin.end(payloadBytes);
+    child.stdin.end(curlConfig);
   });
 }
 

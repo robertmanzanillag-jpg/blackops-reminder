@@ -75,11 +75,10 @@ test("rejects reset curl streams without crashing the Node process", async () =>
     { index: 0, name: "request" },
     { index: 1, name: "response" },
     { index: 2, name: "diagnostic" },
-    { index: 3, name: "header" },
   ] as const;
 
   for (const streamCase of cases) {
-    const streams = [new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()];
+    const streams = [new PassThrough(), new PassThrough(), new PassThrough()];
     const child = Object.assign(new EventEmitter(), {
       stdin: streams[0],
       stdout: streams[1],
@@ -108,8 +107,11 @@ test("rejects reset curl streams without crashing the Node process", async () =>
   }
 });
 
-test("rejects a missing curl header stream without crashing", async () => {
+test("keeps Metricool auth out of curl arguments and sends it through standard input", async () => {
   const streams = [new PassThrough(), new PassThrough(), new PassThrough()];
+  const config: Buffer[] = [];
+  streams[0].on("data", (chunk) => config.push(Buffer.from(chunk)));
+  let args: readonly string[] = [];
   const child = Object.assign(new EventEmitter(), {
     stdin: streams[0],
     stdout: streams[1],
@@ -117,18 +119,28 @@ test("rejects a missing curl header stream without crashing", async () => {
     stdio: streams,
     kill: () => true,
   });
-  const spawnProcess = (() => child) as unknown as typeof import("node:child_process").spawn;
+  const spawnProcess = ((_command: string, receivedArgs: readonly string[]) => {
+    args = receivedArgs;
+    queueMicrotask(() => {
+      streams[1].end('{"id":991}\n201');
+      child.emit("close", 0);
+    });
+    return child;
+  }) as unknown as typeof import("node:child_process").spawn;
 
-  await assert.rejects(
-    () => postMetricoolJsonBytes(
-      "https://app.metricool.com/api/v2/scheduler/posts",
-      "valid-token-that-is-long-enough",
-      JSON.stringify({ text: "audio first" }),
-      1_000,
-      spawnProcess,
-    ),
-    /header stream is unavailable/,
+  const token = "valid-token-that-is-long-enough";
+  const response = await postMetricoolJsonBytes(
+    "https://app.metricool.com/api/v2/scheduler/posts",
+    token,
+    JSON.stringify({ text: "audio first" }),
+    1_000,
+    spawnProcess,
   );
+  assert.equal(response.status, 201);
+  assert.equal(args.some((value) => value.includes(token)), false);
+  assert.match(Buffer.concat(config).toString("utf8"), new RegExp(`X-Mc-Auth: ${token}`));
+  assert.equal(args.includes("--config"), true);
+  assert.equal(args.some((value) => value.startsWith("@") && value.endsWith("payload.json")), true);
 });
 
 test("finds exact caption and schedule evidence", () => {
