@@ -6175,3 +6175,36 @@ test("Clippers local operator expires preview confirmation tokens automatically"
     await writeFile(batchEvidenceCsvPath, originalEvidenceCsv);
   }
 });
+
+test("Clippers operator rebuilds Metricool upload prerequisites in dependency order", async () => {
+  const source = await readFile(scriptPath, "utf8");
+  const chainMatch = source.match(/const sourceDropMetricoolRefreshScriptPaths = \[([\s\S]*?)\n\];/);
+  assert.ok(chainMatch, "source-drop Metricool refresh chain should be declared");
+
+  const chain = chainMatch[1];
+  const orderedScripts = [
+    "script/clippers-metricool-operator-handoff.mjs",
+    "script/clippers-tiktok-mvp-go-live-packet.mjs",
+    "script/clippers-tiktok-launch-control.mjs",
+    "script/clippers-goal-completion-audit.mjs",
+    "script/clippers-tiktok-mvp-readiness-verifier.mjs",
+    "script/clippers-metricool-mcp-preflight.ts",
+    "script/clippers-metricool-current-batch-upload-pack.mjs",
+  ];
+  let previousIndex = -1;
+  for (const relativeScriptPath of orderedScripts) {
+    const currentIndex = chain.indexOf(relativeScriptPath);
+    assert.ok(currentIndex > previousIndex, `${relativeScriptPath} should run after its prerequisites`);
+    previousIndex = currentIndex;
+    await stat(path.join(process.cwd(), relativeScriptPath));
+  }
+
+  assert.match(source, /scriptPath\.endsWith\("\.ts"\)[\s\S]*?\["--import", "tsx"\]/);
+
+  const goLiveSource = await readFile(path.join(process.cwd(), "script/clippers-tiktok-mvp-go-live-packet.mjs"), "utf8");
+  const handoffIndex = goLiveSource.indexOf('"script/clippers-metricool-operator-handoff.mjs"');
+  const launchIndex = goLiveSource.indexOf('"script/clippers-tiktok-launch-control.mjs"');
+  const auditIndex = goLiveSource.indexOf('"script/clippers-goal-completion-audit.mjs"');
+  assert.ok(handoffIndex >= 0 && handoffIndex < launchIndex && launchIndex < auditIndex,
+    "go-live prerequisites should refresh handoff, launch control, then goal audit");
+});

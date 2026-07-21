@@ -13,8 +13,6 @@ const queueMarkdownPath = path.join(rootDir, "scheduled", "metricool-execution-q
 const queueCsvPath = path.join(rootDir, "scheduled", "metricool-execution-queue.csv");
 const regexEscape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const safePublicBaseUrl = "https://app.clipprreview.com";
-const metricoolApprovalRunFixture = await readFile(path.join(rootDir, "scheduled/metricool-100-approval-run.json"), "utf8");
-const metricoolRunSheetFixture = await readFile(path.join(rootDir, "scheduled/metricool-100-operator-run-sheet.csv"), "utf8");
 let workspaceBackupPath: string | null = null;
 
 const sliceRequired = (content: string, startNeedle: string, endNeedle: string) => {
@@ -1988,22 +1986,52 @@ test("Metricool handoff permits only guarded schedule roll-forward while approva
     await mkdir(isolatedScheduled, { recursive: true });
     await mkdir(isolatedReports, { recursive: true });
     await mkdir(isolatedEvidence, { recursive: true });
-    const approvalRun = JSON.parse(metricoolApprovalRunFixture);
-    approvalRun.status = "needs_review";
-    approvalRun.realPublishEnabled = false;
-    approvalRun.approvalRequired = true;
-    approvalRun.totals = {
-      ...(approvalRun.totals || {}),
+    const approvalRun = {
+      status: "needs_review",
+      mode: "metricool_approval_required_100",
+      realPublishEnabled: false,
+      approvalRequired: true,
+      directSocialApisRequired: false,
+      totals: {
       productionItems: 100,
       draftReady: 97,
       metricoolQueuedForApproval: 97,
       approvalSessionReadyForReview: 97,
       readyToSend: 0,
+      },
     };
     await writeFile(path.join(isolatedScheduled, "metricool-100-approval-run.json"), `${JSON.stringify(approvalRun, null, 2)}\n`);
-    const runSheetLines = metricoolRunSheetFixture.trimEnd().split(/\r?\n/);
-    assert.ok(runSheetLines.length >= 98);
-    await writeFile(path.join(isolatedScheduled, "metricool-100-operator-run-sheet.csv"), `${runSheetLines.slice(0, 98).join("\n")}\n`);
+    const runSheetHeader = [
+      "rank", "metricool_queue_item_id", "account_id", "account_name", "platform", "metricool_brand_name",
+      "metricool_blog_id", "publish_at", "source_file_name", "source_path", "caption_seed", "queue_status",
+      "metricool_action", "evidence_action",
+    ];
+    const runSheetRows = Array.from({ length: 97 }, (_, index) => {
+      const sports = index % 2 === 0;
+      const queueId = `queue${String(index + 1).padStart(4, "0")}`;
+      const publishAt = new Date(Date.UTC(2000, 0, 1, 0, index * 20, 0)).toISOString();
+      const sourceFileName = `${sports ? "sports" : "memes"}-${queueId}.mp4`;
+      return [
+        index + 1,
+        queueId,
+        sports ? "sports-daily" : "meme-radar",
+        sports ? "Streamer Highlights" : "Streamer Reactions",
+        "tiktok",
+        sports ? "SPORT" : "memes",
+        sports ? "111" : "222",
+        publishAt,
+        sourceFileName,
+        path.join(isolatedRoot, "sources", sourceFileName),
+        `Clip caption ${index + 1}`,
+        "queued_for_approval",
+        `Review ${sourceFileName} in Metricool`,
+        "Record approval evidence after manual review",
+      ];
+    });
+    const runSheetCsv = [runSheetHeader, ...runSheetRows]
+      .map((row) => row.map((value) => JSON.stringify(String(value))).join(","))
+      .join("\n") + "\n";
+    await writeFile(path.join(isolatedScheduled, "metricool-100-operator-run-sheet.csv"), runSheetCsv);
 
     const blocked = spawnSync(process.execPath, ["script/clippers-metricool-operator-handoff.mjs"], {
       cwd: process.cwd(),
@@ -2041,6 +2069,73 @@ test("Metricool handoff permits only guarded schedule roll-forward while approva
     const handoff = JSON.parse(await readFile(path.join(isolatedScheduled, "metricool-100-operator-handoff.json"), "utf8"));
     assert.equal(handoff.totals.readyToSend, 0);
     assert.ok(handoff.guardrails.some((guardrail: string) => guardrail.includes("approval_required")));
+
+    const verifierHandoff = {
+      ...handoff,
+      status: "ready_for_operator",
+      totals: { ...handoff.totals, rows: 97, readyToSend: 0 },
+      batches: Array.from({ length: 10 }, (_, index) => ({
+        id: `metricool-batch-${String(index + 1).padStart(2, "0")}`,
+        status: "ready_for_metricool_review",
+        platforms: ["tiktok"],
+        accounts: ["meme-radar", "sports-daily"],
+      })),
+      operatorConsole: {
+        ...(handoff.operatorConsole || {}),
+        status: "ready_for_metricool_review",
+        currentBatchId: "metricool-batch-01",
+        publishedRowsCounted: 0,
+        currentBatchOperatorSession: {
+          sourceGateTotals: { rows: 10, ready: 10, blocked: 0, pending: 0 },
+        },
+        paths: { currentBatchEvidenceCsv: path.join(isolatedEvidence, "batch.csv") },
+      },
+    };
+    await writeFile(path.join(isolatedScheduled, "metricool-100-operator-handoff.json"), `${JSON.stringify(verifierHandoff, null, 2)}\n`);
+    await writeFile(path.join(isolatedRoot, "account-permission-readiness.json"), `${JSON.stringify({
+      activeMvp: { status: "ready", platforms: ["tiktok"], accountIds: ["sports-daily", "meme-radar"], readyLanes: 2 },
+    }, null, 2)}\n`);
+    await writeFile(path.join(isolatedScheduled, "metricool-approval-session.json"), `${JSON.stringify({
+      totals: { tiktok: 97, instagram: 0, youtube: 0, blocked: 0 },
+    }, null, 2)}\n`);
+    await writeFile(path.join(isolatedReports, "clippers-tiktok-launch-control.json"), `${JSON.stringify({
+      status: "ready_for_metricool_review",
+      totals: { rows: 97, tiktok: 97, instagram: 0, youtube: 0, readyToImport: 0, scheduled: 0 },
+      currentBatch: { id: "metricool-batch-01", rows: 10 },
+    }, null, 2)}\n`);
+    await writeFile(path.join(isolatedReports, "clippers-tiktok-mvp-go-live-packet.json"), `${JSON.stringify({
+      operatingMode: {
+        scope: "tiktok_only_metricool_mvp",
+        activePlatforms: ["tiktok"],
+        deferredLanes: ["instagram", "youtube", "streamers"],
+        activeAccounts: [{ accountId: "sports-daily" }, { accountId: "meme-radar" }],
+        activeMetricoolBrands: ["SPORT", "memes"],
+        metricoolApprovalRequired: true,
+      },
+      realPublishEnabled: false,
+      directSocialApisRequired: false,
+    }, null, 2)}\n`);
+    const audited = spawnSync(process.execPath, ["script/clippers-goal-completion-audit.mjs"], {
+      cwd: process.cwd(),
+      env: { ...process.env, CLIPPERS_WORKSPACE_ROOT: isolatedRoot },
+      encoding: "utf8",
+    });
+    assert.equal(audited.status, 0, audited.stderr || audited.stdout);
+    const goalAudit = JSON.parse(await readFile(path.join(isolatedReports, "clippers-goal-completion-audit.json"), "utf8"));
+    assert.equal(goalAudit.status, "tiktok_mvp_ready_external_work_remaining");
+    assert.equal(goalAudit.operatingMode.weeklyGapRows, 3);
+
+    const verified = spawnSync(process.execPath, ["script/clippers-tiktok-mvp-readiness-verifier.mjs"], {
+      cwd: process.cwd(),
+      env: { ...process.env, CLIPPERS_WORKSPACE_ROOT: isolatedRoot },
+      encoding: "utf8",
+    });
+    assert.equal(verified.status, 0, verified.stderr || verified.stdout);
+    const verifier = JSON.parse(await readFile(path.join(isolatedReports, "clippers-tiktok-mvp-readiness-verifier.json"), "utf8"));
+    assert.equal(verifier.status, "pass", JSON.stringify(verifier.checks, null, 2));
+    assert.equal(verifier.active.totalRows, 97);
+    assert.equal(verifier.active.weeklyGapRows, 3);
+    assert.equal(verifier.active.readyToSend, 0);
   } finally {
     await rm(isolatedRoot, { recursive: true, force: true });
   }

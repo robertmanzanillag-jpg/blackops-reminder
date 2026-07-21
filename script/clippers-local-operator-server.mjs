@@ -68,6 +68,11 @@ const refreshScriptPaths = [
 ];
 const rollForwardScriptPaths = [
   "script/clippers-metricool-operator-handoff.mjs",
+  "script/clippers-tiktok-mvp-go-live-packet.mjs",
+  "script/clippers-tiktok-launch-control.mjs",
+  "script/clippers-goal-completion-audit.mjs",
+  "script/clippers-tiktok-mvp-readiness-verifier.mjs",
+  "script/clippers-metricool-mcp-preflight.ts",
   "script/clippers-metricool-current-batch-upload-pack.mjs",
   "script/clippers-tiktok-operator-cockpit.mjs",
   "script/clippers-tiktok-operator-cockpit-preflight.mjs",
@@ -75,6 +80,11 @@ const rollForwardScriptPaths = [
 ];
 const sourceDropMetricoolRefreshScriptPaths = [
   "script/clippers-metricool-operator-handoff.mjs",
+  "script/clippers-tiktok-mvp-go-live-packet.mjs",
+  "script/clippers-tiktok-launch-control.mjs",
+  "script/clippers-goal-completion-audit.mjs",
+  "script/clippers-tiktok-mvp-readiness-verifier.mjs",
+  "script/clippers-metricool-mcp-preflight.ts",
   "script/clippers-metricool-current-batch-upload-pack.mjs",
   "script/clippers-metricool-current-batch-session-packet.mjs",
   ...refreshScriptPaths,
@@ -1801,7 +1811,12 @@ async function recordNextExternalProof(input) {
 
 function runNodeScript(scriptPath, env = {}, args = [], nodeArgs = []) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [...nodeArgs, scriptPath, ...args], {
+    const effectiveNodeArgs = nodeArgs.length > 0
+      ? nodeArgs
+      : scriptPath.endsWith(".ts")
+        ? ["--import", "tsx"]
+        : [];
+    const child = spawn(process.execPath, [...effectiveNodeArgs, scriptPath, ...args], {
       cwd: root,
       env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
