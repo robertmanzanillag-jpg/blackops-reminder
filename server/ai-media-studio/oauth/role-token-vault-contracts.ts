@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { aiMediaOAuthPlatformSchema, type AiMediaOAuthPlatform } from "../../../shared/ai-media-studio-oauth";
 import {
   OAUTH_PROVIDER_TARGET_KINDS,
-  OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES,
   type OAuthProviderTargetKind,
   type OAuthProviderTokenArtifactRole,
   type OAuthProviderTokenLifetime,
@@ -10,6 +9,7 @@ import {
 
 export const OAUTH_ROLE_TOKEN_VAULT_VERSION = 2 as const;
 export const OAUTH_ROLE_TOKEN_REFERENCE_PREFIX = "vault://ai-media-studio/oauth-role-token/v2" as const;
+export const OAUTH_ROLE_TOKEN_VAULT_ROLES = ["operational_access", "refresh"] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -17,7 +17,7 @@ const SAFE_VALUE = /^[A-Za-z0-9._:/-]+$/u;
 const MAX_REVALIDATION_MS = 366 * 24 * 60 * 60 * 1_000;
 const CONTEXT_KEYS = [
   "artifactBindingId", "actorUserId", "attemptId", "candidateId", "ownerUserId", "platform",
-  "providerAccountId", "purpose", "role", "selectionDigest", "sessionId", "targetCredentialVersion",
+  "providerAccountId", "purpose", "role", "selectionDigest", "sessionId", "manifestRevision", "targetCredentialVersion",
   "targetId", "targetKind", "tokenBindingId", "workspaceId",
 ] as const;
 
@@ -38,6 +38,7 @@ export type OAuthRoleTokenVaultContext = Readonly<{
   targetKind: OAuthProviderTargetKind;
   targetId: string;
   selectionDigest: string;
+  manifestRevision: string;
 }>;
 
 /** Safe metadata only: never includes a secret or a durable vault reference. */
@@ -84,9 +85,11 @@ export function validateOAuthRoleTokenVaultContext(raw: unknown): OAuthRoleToken
     || !Number.isSafeInteger(value.targetCredentialVersion) || Number(value.targetCredentialVersion) < 1
     || !UUID.test(asString(value.tokenBindingId)) || !UUID.test(asString(value.artifactBindingId))
     || value.tokenBindingId === value.artifactBindingId
-    || !OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES.includes(value.role as OAuthProviderTokenArtifactRole)
+    || !OAUTH_ROLE_TOKEN_VAULT_ROLES.includes(value.role as typeof OAUTH_ROLE_TOKEN_VAULT_ROLES[number])
     || !safeField(value.candidateId) || !OAUTH_PROVIDER_TARGET_KINDS.includes(value.targetKind as OAuthProviderTargetKind)
     || !safeField(value.targetId) || !SHA256.test(asString(value.selectionDigest))
+    || !safeField(value.manifestRevision, 100)
+    || !platformAllowsRole(value.platform as AiMediaOAuthPlatform, value.role as OAuthProviderTokenArtifactRole)
     || !platformMatchesTargetKind(value.platform as AiMediaOAuthPlatform, value.targetKind as OAuthProviderTargetKind)) {
     throw rejected();
   }
@@ -107,6 +110,7 @@ export function validateOAuthRoleTokenVaultContext(raw: unknown): OAuthRoleToken
     targetKind: value.targetKind as OAuthProviderTargetKind,
     targetId: value.targetId as string,
     selectionDigest: value.selectionDigest as string,
+    manifestRevision: value.manifestRevision as string,
   });
 }
 
@@ -116,7 +120,7 @@ export function validateOAuthRoleTokenDescriptor(
   now?: string,
 ): OAuthRoleTokenDescriptor {
   const value = exactRecord(raw, ["lifetime", "manifestRevision", "role"] as const);
-  if (value.role !== expectedRole || !OAUTH_PROVIDER_TOKEN_ARTIFACT_ROLES.includes(value.role as OAuthProviderTokenArtifactRole)
+  if (value.role !== expectedRole || !OAUTH_ROLE_TOKEN_VAULT_ROLES.includes(value.role as typeof OAUTH_ROLE_TOKEN_VAULT_ROLES[number])
     || !safeField(value.manifestRevision, 200)) throw rejected();
   const lifetime = validateLifetime(value.lifetime, now);
   return Object.freeze({
@@ -124,6 +128,18 @@ export function validateOAuthRoleTokenDescriptor(
     lifetime,
     manifestRevision: value.manifestRevision as string,
   });
+}
+
+export function validateOAuthRoleTokenDescriptorForContext(
+  raw: unknown,
+  contextInput: OAuthRoleTokenVaultContext,
+  now?: string,
+): OAuthRoleTokenDescriptor {
+  const context = validateOAuthRoleTokenVaultContext(contextInput);
+  const descriptor = validateOAuthRoleTokenDescriptor(raw, context.role, now);
+  if (descriptor.manifestRevision !== context.manifestRevision
+    || !platformAllowsLifetime(context.platform, context.role, descriptor.lifetime.kind)) throw rejected();
+  return descriptor;
 }
 
 export function validateOAuthRoleTokenSecret(raw: unknown): string {
@@ -193,6 +209,22 @@ function platformMatchesTargetKind(platform: AiMediaOAuthPlatform, targetKind: O
     || (platform === "youtube_shorts" && targetKind === "youtube_channel")
     || (platform === "facebook" && targetKind === "facebook_page")
     || (platform === "instagram" && targetKind === "instagram_professional_account");
+}
+
+function platformAllowsRole(platform: AiMediaOAuthPlatform, role: OAuthProviderTokenArtifactRole): boolean {
+  return role === "operational_access" || (role === "refresh" && (platform === "tiktok" || platform === "youtube_shorts"));
+}
+
+function platformAllowsLifetime(
+  platform: AiMediaOAuthPlatform,
+  role: OAuthProviderTokenArtifactRole,
+  lifetimeKind: OAuthProviderTokenLifetime["kind"],
+): boolean {
+  if (lifetimeKind === "expires_at") return true;
+  if (lifetimeKind === "provider_non_expiring") {
+    return role === "operational_access" && (platform === "facebook" || platform === "instagram");
+  }
+  return lifetimeKind === "revocation_bound" && platform === "youtube_shorts" && role === "refresh";
 }
 
 function canonicalIso(value: unknown): string {

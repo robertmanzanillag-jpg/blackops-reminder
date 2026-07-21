@@ -4,7 +4,7 @@ import {
   OAuthRoleTokenVaultError,
   oauthRoleTokenReferenceFor,
   parseOAuthRoleTokenReference,
-  validateOAuthRoleTokenDescriptor,
+  validateOAuthRoleTokenDescriptorForContext,
   validateOAuthRoleTokenSecret,
   validateOAuthRoleTokenVaultContext,
   type OAuthRoleTokenDescriptor,
@@ -62,7 +62,7 @@ type RoleTokenPayload = Readonly<{
 
 class ExactRoleTokenObjectNotFound extends Error {}
 
-export class S3KmsRoleTokenVault implements OAuthRoleTokenVault {
+class S3KmsRoleTokenVaultCore implements OAuthRoleTokenVault {
   private readonly config: NormalizedConfig;
 
   constructor(config: S3KmsRoleTokenVaultConfig) {
@@ -74,13 +74,6 @@ export class S3KmsRoleTokenVault implements OAuthRoleTokenVault {
     }
   }
 
-  createSecretReader(): OAuthRoleTokenSecretReader {
-    return Object.freeze({
-      readSecret: async (reference: string, context: OAuthRoleTokenVaultContext) =>
-        (await this.readPayload(reference, context)).secret,
-    });
-  }
-
   async putOnce(input: Readonly<{
     context: OAuthRoleTokenVaultContext;
     secret: string;
@@ -89,7 +82,7 @@ export class S3KmsRoleTokenVault implements OAuthRoleTokenVault {
     try {
       assertExactInput(input);
       const context = validateOAuthRoleTokenVaultContext(input.context);
-      const descriptor = validateOAuthRoleTokenDescriptor(input.descriptor, context.role, nowIso(this.config.clock));
+      const descriptor = validateOAuthRoleTokenDescriptorForContext(input.descriptor, context, nowIso(this.config.clock));
       const payload = validatePayload({ v: OAUTH_ROLE_TOKEN_VAULT_VERSION, secret: input.secret, descriptor }, context);
       const aad = aadFor(context);
       const bindingDigest = digestContext(aad);
@@ -176,6 +169,10 @@ export class S3KmsRoleTokenVault implements OAuthRoleTokenVault {
     }
   }
 
+  async readSecret(reference: string, context: OAuthRoleTokenVaultContext): Promise<string> {
+    return (await this.readPayload(reference, context)).secret;
+  }
+
   private async readPayload(reference: string, context: OAuthRoleTokenVaultContext): Promise<RoleTokenPayload> {
     try {
       return await this.readPayloadRaw(reference, validateOAuthRoleTokenVaultContext(context));
@@ -219,6 +216,26 @@ export class S3KmsRoleTokenVault implements OAuthRoleTokenVault {
   }
 }
 
+export type S3KmsRoleTokenVaultCapabilities = Readonly<{
+  vault: OAuthRoleTokenVault;
+  secretReader: OAuthRoleTokenSecretReader;
+}>;
+
+export function createS3KmsRoleTokenVaultCapabilities(
+  config: S3KmsRoleTokenVaultConfig,
+): S3KmsRoleTokenVaultCapabilities {
+  const core = new S3KmsRoleTokenVaultCore(config);
+  return Object.freeze({
+    vault: Object.freeze({
+      putOnce: core.putOnce.bind(core),
+      find: core.find.bind(core),
+      readDescriptor: core.readDescriptor.bind(core),
+      delete: core.delete.bind(core),
+    }),
+    secretReader: Object.freeze({ readSecret: core.readSecret.bind(core) }),
+  });
+}
+
 function normalizeConfig(config: S3KmsRoleTokenVaultConfig): NormalizedConfig {
   const allowed = ["bucket", "clock", "expectedBucketOwner", "kmsClient", "kmsKeyArn", "prefix", "region", "s3Client"];
   if (!config || typeof config !== "object" || Array.isArray(config)
@@ -256,7 +273,7 @@ function validatePayload(raw: unknown, context: OAuthRoleTokenVaultContext): Rol
   return Object.freeze({
     v: OAUTH_ROLE_TOKEN_VAULT_VERSION,
     secret: validateOAuthRoleTokenSecret(value.secret),
-    descriptor: validateOAuthRoleTokenDescriptor(value.descriptor, context.role),
+    descriptor: validateOAuthRoleTokenDescriptorForContext(value.descriptor, context),
   });
 }
 
@@ -278,6 +295,7 @@ function aadFor(context: OAuthRoleTokenVaultContext): Buffer {
     context.targetKind,
     context.targetId,
     context.selectionDigest,
+    context.manifestRevision,
   ]);
 }
 

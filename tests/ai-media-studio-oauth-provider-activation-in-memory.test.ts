@@ -27,11 +27,13 @@ const tiktokArtifacts: readonly OAuthProviderActivationArtifactEvidence[] = [
   {
     role: "operational_access", artifactBindingId,
     vaultReference: oauthProviderActivationVaultReference(artifactBindingId, "operational_access"),
+    manifestRevision: "tiktok-v2",
     lifetime: { kind: "expires_at", expiresAt: "2026-07-21T14:00:00.000Z", revalidateAt: "2026-07-21T13:00:00.000Z" },
   },
   {
     role: "refresh", artifactBindingId,
     vaultReference: oauthProviderActivationVaultReference(artifactBindingId, "refresh"),
+    manifestRevision: "tiktok-v2",
     lifetime: { kind: "expires_at", expiresAt: "2026-07-22T14:00:00.000Z", revalidateAt: "2026-07-22T12:00:00.000Z" },
   },
 ];
@@ -110,6 +112,9 @@ test("activation atomically authorizes the exact selected target and exact repla
   assert.deepEqual(await repository.finalizeActivation({ ...command,
     leaseToken: "reconciliation-lease", leaseFencing: command.leaseFencing + 99,
     now: "2026-07-21T12:07:01.000Z" }), first);
+  assert.deepEqual(await repository.finalizeActivation({ ...command,
+    leaseToken: "late-reconciliation-lease", leaseFencing: command.leaseFencing + 100,
+    now: "2026-07-23T12:07:01.000Z" }), first);
   const persisted = JSON.stringify({ attempt: await repository.get(scope, "attempt-1"),
     account: await repository.getActivationAccount(scope, "account-1", "tiktok") });
   assert.doesNotMatch(persisted, /never-store|access_token|refresh_token|client_secret/i);
@@ -176,27 +181,32 @@ test("an ambiguous activation is terminal and is never reclaimed automatically",
 
 test("activation artifact contracts enforce provider-specific role sets and exact v2 references", () => {
   assert.deepEqual(validateOAuthProviderActivationArtifacts("tiktok_user", artifactBindingId,
-    [tiktokArtifacts[1]!, tiktokArtifacts[0]!], "2026-07-21T12:07:00.000Z").map((artifact) => artifact.role),
+    [tiktokArtifacts[1]!, tiktokArtifacts[0]!], "2026-07-21T12:07:00.000Z", "tiktok-v2").map((artifact) => artifact.role),
   ["operational_access", "refresh"]);
   assert.throws(() => validateOAuthProviderActivationArtifacts("google_user", artifactBindingId,
-    [tiktokArtifacts[0]!], "2026-07-21T12:07:00.000Z"), OAuthProviderConnectionError);
-  const google = [tiktokArtifacts[0]!, {
+    [tiktokArtifacts[0]!], "2026-07-21T12:07:00.000Z", "tiktok-v2"), OAuthProviderConnectionError);
+  const google = [{ ...tiktokArtifacts[0]!, manifestRevision: "google-youtube-v1" }, {
     role: "refresh" as const, artifactBindingId,
     vaultReference: oauthProviderActivationVaultReference(artifactBindingId, "refresh"),
+    manifestRevision: "google-youtube-v1",
     lifetime: { kind: "revocation_bound" as const, revalidateAt: "2026-08-21T12:00:00.000Z" },
   }];
   assert.deepEqual(validateOAuthProviderActivationArtifacts("google_user", artifactBindingId, google,
-    "2026-07-21T12:07:00.000Z").map((artifact) => artifact.role), ["operational_access", "refresh"]);
+    "2026-07-21T12:07:00.000Z", "google-youtube-v1").map((artifact) => artifact.role), ["operational_access", "refresh"]);
   const meta = [{ role: "operational_access" as const, artifactBindingId,
     vaultReference: oauthProviderActivationVaultReference(artifactBindingId, "operational_access"),
+    manifestRevision: "meta-graph-v23",
     lifetime: { kind: "provider_non_expiring" as const, revalidateAt: "2026-08-21T12:00:00.000Z" } }];
   assert.equal(validateOAuthProviderActivationArtifacts("meta_facebook_login", artifactBindingId, meta,
-    "2026-07-21T12:07:00.000Z").length, 1);
+    "2026-07-21T12:07:00.000Z", "meta-graph-v23").length, 1);
   assert.throws(() => validateOAuthProviderActivationArtifacts("meta_facebook_login", artifactBindingId,
-    tiktokArtifacts, "2026-07-21T12:07:00.000Z"), OAuthProviderConnectionError);
+    tiktokArtifacts, "2026-07-21T12:07:00.000Z", "meta-graph-v23"), OAuthProviderConnectionError);
   assert.throws(() => validateOAuthProviderActivationArtifacts("tiktok_user", artifactBindingId,
     [{ ...tiktokArtifacts[0]!, vaultReference: "vault://ai-media-studio/oauth-token/v1/legacy" }, tiktokArtifacts[1]!],
-    "2026-07-21T12:07:00.000Z"), OAuthProviderConnectionError);
+    "2026-07-21T12:07:00.000Z", "tiktok-v2"), OAuthProviderConnectionError);
+  assert.throws(() => validateOAuthProviderActivationArtifacts("tiktok_user", artifactBindingId,
+    [{ ...tiktokArtifacts[0]!, manifestRevision: "caller-v99" }, tiktokArtifacts[1]!],
+    "2026-07-21T12:07:00.000Z", "tiktok-v2"), OAuthProviderConnectionError);
 });
 
 test("Meta activation replaces grant evidence with exactly one target operational artifact", async () => {
@@ -241,6 +251,7 @@ test("Meta activation replaces grant evidence with exactly one target operationa
   const operational: OAuthProviderActivationArtifactEvidence = {
     role: "operational_access", artifactBindingId,
     vaultReference: oauthProviderActivationVaultReference(artifactBindingId, "operational_access"),
+    manifestRevision: "meta-graph-v23",
     lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-08-21T12:00:00.000Z" },
   };
   const command: FinalizeOAuthProviderActivation = {

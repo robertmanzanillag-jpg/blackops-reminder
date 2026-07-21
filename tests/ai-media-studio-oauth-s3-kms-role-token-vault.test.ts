@@ -4,7 +4,7 @@ import { DecryptCommand, GenerateDataKeyCommand } from "@aws-sdk/client-kms";
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   OAUTH_ROLE_TOKEN_OBJECT_PREFIX,
-  S3KmsRoleTokenVault,
+  createS3KmsRoleTokenVaultCapabilities,
 } from "../server/ai-media-studio/oauth/s3-kms-role-token-vault";
 import type {
   OAuthRoleTokenDescriptor,
@@ -31,6 +31,7 @@ const context: OAuthRoleTokenVaultContext = {
   targetKind: "youtube_channel",
   targetId: "channel-1",
   selectionDigest: "b".repeat(64),
+  manifestRevision: "google-youtube-v1",
 };
 const descriptor: OAuthRoleTokenDescriptor = {
   role: "refresh",
@@ -110,7 +111,7 @@ class S3Fake {
 function harness() {
   const s3 = new S3Fake();
   const kms = new KmsFake();
-  const vault = new S3KmsRoleTokenVault({
+  const capabilities = createS3KmsRoleTokenVaultCapabilities({
     bucket: "oauth-role-vault-bucket",
     region: "us-east-1",
     kmsKeyArn: KMS_KEY_ARN,
@@ -120,7 +121,7 @@ function harness() {
     kmsClient: kms,
     clock: { now: () => new Date(NOW) },
   });
-  return { vault, s3, kms };
+  return { ...capabilities, s3, kms };
 }
 
 test("v2 role vault is constructor-inert and exposes the secret only through its separate reader", async () => {
@@ -133,7 +134,8 @@ test("v2 role vault is constructor-inert and exposes the secret only through its
   assert.deepEqual(record.descriptor, descriptor);
   assert.equal("secret" in record, false);
   assert.deepEqual(await h.vault.readDescriptor(record.reference, context), descriptor);
-  assert.equal(await h.vault.createSecretReader().readSecret(record.reference, context), SECRET);
+  assert.equal(await h.secretReader.readSecret(record.reference, context), SECRET);
+  assert.equal("readSecret" in h.vault, false);
   assert.equal(JSON.stringify([...h.s3.calls, ...h.kms.calls]).includes(SECRET), false);
 });
 
@@ -156,7 +158,7 @@ test("AAD binds every tenant, actor, attempt, credential, role, and selected-tar
   const dimensions: Array<keyof OAuthRoleTokenVaultContext> = [
     "ownerUserId", "workspaceId", "actorUserId", "providerAccountId", "platform", "sessionId", "attemptId",
     "targetCredentialVersion", "tokenBindingId", "artifactBindingId", "role", "candidateId", "targetKind", "targetId",
-    "selectionDigest",
+    "selectionDigest", "manifestRevision",
   ];
   for (const dimension of dimensions) {
     const h = harness();
@@ -222,21 +224,20 @@ test("delete verifies the exact stored binding, is exact-404 idempotent, and nev
   await assert.rejects(redirect.vault.delete(oauthRoleTokenReferenceFor(context), context), /rejected/);
 });
 
-test("default clients pin official endpoints, disable region redirects, and construction sends no AWS calls", async () => {
-  const vault = new S3KmsRoleTokenVault({
+test("default capability construction is inert and does not expose secret-reader elevation on the vault", () => {
+  const capabilities = createS3KmsRoleTokenVaultCapabilities({
     bucket: "oauth-role-vault-bucket",
     region: "us-east-1",
     kmsKeyArn: KMS_KEY_ARN,
     expectedBucketOwner: "123456789012",
     prefix: OAUTH_ROLE_TOKEN_OBJECT_PREFIX,
-  }) as unknown as { config: { s3: { config: Record<string, unknown> }; kms: { kmsClient: { config: { endpoint(): Promise<{ hostname: string }> } } } } };
-  assert.equal((await (vault.config.s3.config.endpoint as () => Promise<{ hostname: string }>)()).hostname, "s3.us-east-1.amazonaws.com");
-  assert.equal(vault.config.s3.config.followRegionRedirects, false);
-  assert.equal((await vault.config.kms.kmsClient.config.endpoint()).hostname, "kms.us-east-1.amazonaws.com");
+  });
+  assert.deepEqual(Object.keys(capabilities.vault).sort(), ["delete", "find", "putOnce", "readDescriptor"]);
+  assert.deepEqual(Object.keys(capabilities.secretReader), ["readSecret"]);
 });
 
 test("configuration and write inputs are exact and lifetime checks use the injected clock", async () => {
-  assert.throws(() => new S3KmsRoleTokenVault({
+  assert.throws(() => createS3KmsRoleTokenVaultCapabilities({
     bucket: "oauth-role-vault-bucket",
     region: "us-east-1",
     kmsKeyArn: KMS_KEY_ARN,
@@ -244,7 +245,7 @@ test("configuration and write inputs are exact and lifetime checks use the injec
     prefix: OAUTH_ROLE_TOKEN_OBJECT_PREFIX,
   }), /role token vault request was rejected/);
   const h = harness();
-  assert.throws(() => new S3KmsRoleTokenVault({
+  assert.throws(() => createS3KmsRoleTokenVaultCapabilities({
     bucket: "oauth-role-vault-bucket",
     region: "us-east-1",
     kmsKeyArn: KMS_KEY_ARN,
@@ -257,6 +258,16 @@ test("configuration and write inputs are exact and lifetime checks use the injec
     context,
     secret: SECRET,
     descriptor: { ...descriptor, lifetime: { kind: "revocation_bound", revalidateAt: "2027-07-22T12:00:00.001Z" } },
+  }), /rejected/);
+  await assert.rejects(h.vault.putOnce({
+    context,
+    secret: SECRET,
+    descriptor: { ...descriptor, manifestRevision: "caller-v99" },
+  }), /rejected/);
+  await assert.rejects(h.vault.putOnce({
+    context: { ...context, platform: "tiktok", targetKind: "tiktok_user", manifestRevision: "tiktok-v2" },
+    secret: SECRET,
+    descriptor: { ...descriptor, manifestRevision: "tiktok-v2" },
   }), /rejected/);
 });
 
@@ -281,6 +292,7 @@ function mutateContext(source: OAuthRoleTokenVaultContext, key: keyof OAuthRoleT
     targetKind: "tiktok_user",
     targetId: "target-2",
     selectionDigest: "c".repeat(64),
+    manifestRevision: "google-youtube-v2",
   };
   return { ...source, [key]: replacements[key] } as OAuthRoleTokenVaultContext;
 }

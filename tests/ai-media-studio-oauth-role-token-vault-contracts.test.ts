@@ -30,6 +30,7 @@ const context: OAuthRoleTokenVaultContext = {
   targetKind: "tiktok_user",
   targetId: "target-1",
   selectionDigest: "a".repeat(64),
+  manifestRevision: "tiktok-v2",
 };
 const descriptor: OAuthRoleTokenDescriptor = {
   role: "operational_access",
@@ -76,11 +77,11 @@ test("descriptor is exact, role-bound, provider-neutral, and bounded to 366 days
     lifetime: { kind: "revocation_bound", revalidateAt: "2027-07-22T12:00:00.000Z" },
     manifestRevision: "google-youtube-v1",
   }, "refresh", NOW).lifetime.kind, "revocation_bound");
-  assert.deepEqual(validateOAuthRoleTokenDescriptor({
+  assert.throws(() => validateOAuthRoleTokenDescriptor({
     role: "grant_user_access",
     lifetime: { kind: "provider_non_expiring", revalidateAt: "2026-08-21T12:00:00.000Z" },
     manifestRevision: "meta-graph-v23",
-  }, "grant_user_access", NOW).lifetime.kind, "provider_non_expiring");
+  }, "grant_user_access", NOW), OAuthRoleTokenVaultError);
   assert.throws(() => validateOAuthRoleTokenDescriptor({ ...descriptor, role: "refresh" }, context.role, NOW), OAuthRoleTokenVaultError);
   assert.throws(() => validateOAuthRoleTokenDescriptor({ ...descriptor, extra: true }, context.role, NOW), OAuthRoleTokenVaultError);
   assert.throws(() => validateOAuthRoleTokenDescriptor(Object.assign(Object.create({ polluted: true }), descriptor), context.role, NOW), OAuthRoleTokenVaultError);

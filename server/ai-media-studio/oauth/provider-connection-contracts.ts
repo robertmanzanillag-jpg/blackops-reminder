@@ -39,6 +39,7 @@ export type OAuthProviderActivationArtifactEvidence = Readonly<{
   role: OAuthProviderTokenArtifactRole;
   artifactBindingId: string;
   vaultReference: string;
+  manifestRevision: string;
   lifetime: OAuthProviderTokenLifetime;
 }>;
 
@@ -376,8 +377,12 @@ export function validateOAuthProviderActivationArtifacts(
   artifactBindingId: string,
   artifacts: readonly OAuthProviderActivationArtifactEvidence[],
   now: string,
+  manifestRevision: string,
 ): readonly OAuthProviderActivationArtifactEvidence[] {
-  if (!UUID.test(artifactBindingId) || !Array.isArray(artifacts)) throw new OAuthProviderConnectionError();
+  if (!UUID.test(artifactBindingId) || !Array.isArray(artifacts)
+    || typeof manifestRevision !== "string" || manifestRevision.length < 1 || manifestRevision.length > 100) {
+    throw new OAuthProviderConnectionError();
+  }
   const expectedRoles: readonly OAuthProviderTokenArtifactRole[] = grantFamily === "meta_facebook_login"
     ? ["operational_access"]
     : ["operational_access", "refresh"];
@@ -386,6 +391,7 @@ export function validateOAuthProviderActivationArtifacts(
   for (const artifact of artifacts) {
     if (!artifact || !expectedRoles.includes(artifact.role) || byRole.has(artifact.role)
       || artifact.artifactBindingId !== artifactBindingId
+      || artifact.manifestRevision !== manifestRevision
       || artifact.vaultReference !== oauthProviderActivationVaultReference(artifactBindingId, artifact.role)) {
       throw new OAuthProviderConnectionError();
     }
@@ -399,6 +405,7 @@ export function validateOAuthProviderActivationArtifacts(
       role,
       artifactBindingId,
       vaultReference: oauthProviderActivationVaultReference(artifactBindingId, role),
+      manifestRevision,
       lifetime: cloneLifetime(artifact.lifetime),
     });
   });
@@ -454,7 +461,7 @@ export function deriveOAuthProviderAuthorizedDigest(input: FinalizeOAuthProvider
     input.selectedCandidateId, input.selectedTargetId, input.selectedTargetKind,
     input.selectedEligibilityDigest, input.selectedStageVersion, input.selectionDigest,
     input.tokenBindingId, input.artifactBindingId,
-    input.artifacts.map((artifact) => [artifact.role, artifact.artifactBindingId, artifact.vaultReference,
+    input.artifacts.map((artifact) => [artifact.role, artifact.artifactBindingId, artifact.vaultReference, artifact.manifestRevision,
       artifact.lifetime.kind, artifact.lifetime.revalidateAt,
       artifact.lifetime.kind === "expires_at" ? artifact.lifetime.expiresAt : null]),
     canonicalDigestList(input.actualScopes), canonicalDigestList(input.capabilities), input.manifestRevision,

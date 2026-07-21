@@ -322,7 +322,10 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderA
     const storageKey = key(input.scope, input.attemptId);
     const attempt = this.attempts.get(storageKey);
     if (!attempt) return undefined;
-    const canonical = validateActivationCommand(attempt, input);
+    const artifactValidationNow = attempt.stage === "authorized" && attempt.authorizedAt !== null
+      ? attempt.authorizedAt
+      : input.now;
+    const canonical = validateActivationCommand(attempt, input, artifactValidationNow);
     const authorizedDigest = deriveOAuthProviderAuthorizedDigest(canonical);
     const accountStorageKey = accountKey(attempt.scope, attempt.providerAccountId, attempt.platform);
     const account = this.accounts.get(accountStorageKey);
@@ -386,6 +389,7 @@ export class InMemoryOAuthProviderConnectionRepository implements OAuthProviderA
 function validateActivationCommand(
   attempt: OAuthProviderConnectionAttempt,
   input: FinalizeOAuthProviderActivation,
+  artifactValidationNow: string,
 ): FinalizeOAuthProviderActivation {
   required(input.actorUserId); required(input.selectedCandidateId); required(input.selectedTargetId);
   required(input.tokenBindingId); required(input.manifestRevision, 100);
@@ -397,7 +401,13 @@ function validateActivationCommand(
   timestamp(input.now);
   const actualScopes = canonicalSafeList(input.actualScopes);
   const capabilities = canonicalCapabilities(input.capabilities);
-  const artifacts = validateOAuthProviderActivationArtifacts(attempt.grantFamily, input.artifactBindingId, input.artifacts, input.now);
+  const artifacts = validateOAuthProviderActivationArtifacts(
+    attempt.grantFamily,
+    input.artifactBindingId,
+    input.artifacts,
+    artifactValidationNow,
+    attempt.manifestRevision,
+  );
   const candidate = attempt.candidates.find((item) => item.candidateId === input.selectedCandidateId);
   const localCapabilities = candidate
     ? canonicalCapabilities(deriveOAuthProviderCapabilities(candidate.kind, candidate.verifiedTasks, attempt.actualScopes))
@@ -480,7 +490,8 @@ function sameArtifacts(left: readonly OAuthProviderActivationArtifactEvidence[],
   return left.length === right.length && left.every((artifact, index) => {
     const other = right[index];
     return other !== undefined && artifact.role === other.role && artifact.artifactBindingId === other.artifactBindingId
-      && artifact.vaultReference === other.vaultReference && sameLifetime(artifact.lifetime, other.lifetime);
+      && artifact.vaultReference === other.vaultReference && artifact.manifestRevision === other.manifestRevision
+      && sameLifetime(artifact.lifetime, other.lifetime);
   });
 }
 

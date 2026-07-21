@@ -285,6 +285,8 @@ Final PR15 hardening checkpoint:
 
 ## PR16 checkpoint — provider activation CAS foundation
 
+GitHub PR: #97, `https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/97`.
+
 Branch: `codex/ai-media-studio-provider-activation-cas`, stacked on PR #94.
 
 This is an intentionally incomplete GitHub-preservation checkpoint. It adds exact
@@ -309,6 +311,18 @@ Evidence before preservation:
   pre-existing duplicate `@types/* 2` directories. PR16 therefore remains draft.
 - No route, worker, real AWS/provider call, migration apply, external post or deploy.
 - Legacy publishing remains fail-closed until exact target/binding integration.
+
+Independent review after preservation:
+
+- App QA passed 124 focused regressions and confirmed there is no route, UI, timer,
+  runtime composition or external call in this delta.
+- Replay reconciliation was hardened to validate artifact lifetime at the original
+  authorization time while retaining the original `authorizedAt`.
+- Artifact evidence and vault AAD now bind the exact manifest revision, v2 roles and
+  platform/lifetime semantics. Vault and secret reader are returned as separate frozen
+  capabilities so the ordinary vault object cannot elevate itself to read secrets.
+- Relation-exact artifact/binding provenance and cleanup-vs-activation fencing remain
+  explicit runtime blockers for the migration/Drizzle transaction slice.
 
 Next recovery slice: author and statically test the additive migration, implement
 prewrite-safe artifact/cleanup staging and the single-transaction Drizzle activation
