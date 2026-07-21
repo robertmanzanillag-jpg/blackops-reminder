@@ -31,6 +31,10 @@ test("the wired module exposes key migration tables", () => {
     ["aiMediaPublishingJobs", "ai_media_publishing_jobs"],
     ["aiMediaCostLedger", "ai_media_cost_ledger"],
     ["aiMediaOutbox", "ai_media_outbox"],
+    ["aiMediaDailyPlans", "ai_media_daily_plans"],
+    ["aiMediaDailyPlanSlots", "ai_media_daily_plan_slots"],
+    ["aiMediaBudgetBuckets", "ai_media_budget_buckets"],
+    ["aiMediaBudgetReservations", "ai_media_budget_reservations"],
   ] as const) {
     assert.match(
       model,
