@@ -212,6 +212,12 @@ export const aiMediaProviderAccounts = pgTable(
     credentialExpiresAt: timestamp("credential_expires_at", { withTimezone: true }),
     credentialRefreshExpiresAt: timestamp("credential_refresh_expires_at", { withTimezone: true }),
     credentialRefreshedAt: timestamp("credential_refreshed_at", { withTimezone: true }),
+    credentialSource: text("credential_source").notNull().default("not_bound"),
+    credentialActorUserId: text("credential_actor_user_id"),
+    credentialSourceSessionId: uuid("credential_source_session_id"),
+    tokenBindingId: uuid("token_binding_id"),
+    tokenKind: text("token_kind"),
+    tokenManifestRevision: text("token_manifest_revision"),
     configuration: jsonb("configuration").$type<Record<string, unknown>>().notNull().default({}),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
     ...auditColumns(),
@@ -241,6 +247,12 @@ export const aiMediaProviderAccounts = pgTable(
       table.id,
       table.providerKey,
     ),
+    oauthTokenBindingUnique: uniqueIndex("ai_media_provider_accounts_oauth_token_binding_uq")
+      .on(table.tokenBindingId)
+      .where(sql`${table.credentialSource} = 'oauth_authorization'`),
+    oauthSecretRefUnique: uniqueIndex("ai_media_provider_accounts_oauth_secret_ref_uq")
+      .on(table.secretRef)
+      .where(sql`${table.credentialSource} = 'oauth_authorization'`),
     webhookMetadataCheck: check(
       "ai_media_provider_accounts_webhook_metadata_ck",
       sql`(
@@ -266,6 +278,29 @@ export const aiMediaProviderAccounts = pgTable(
         AND (${table.credentialRefreshedAt} IS NULL OR ${table.credentialRefreshedAt} >= ${table.createdAt})
       )`,
     ),
+    oauthCredentialProvenanceCheck: check(
+      "ai_media_provider_accounts_oauth_credential_provenance_ck",
+      sql`(
+        (${table.credentialSource} = 'not_bound' AND ${table.secretRef} IS NULL AND ${table.credentialVersion} = 0 AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
+        OR (${table.credentialSource} = 'legacy_authorized_unbound' AND ${table.credentialActorUserId} IS NULL AND ${table.credentialSourceSessionId} IS NULL AND ${table.tokenBindingId} IS NULL AND ${table.tokenKind} IS NULL AND ${table.tokenManifestRevision} IS NULL)
+        OR (
+          ${table.credentialSource} = 'oauth_authorization'
+          AND ${table.status} = 'active'
+          AND ${table.credentialStatus} = 'active'
+          AND ${table.credentialVersion} > 0
+          AND ${table.credentialActorUserId} IS NOT NULL
+          AND ${table.credentialSourceSessionId} IS NOT NULL
+          AND ${table.externalAccountId} IS NOT NULL AND length(btrim(${table.externalAccountId})) BETWEEN 1 AND 255
+          AND ${table.secretRef} ~ '^vault://ai-media-studio/oauth-token/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          AND ${table.tokenBindingId} IS NOT NULL
+          AND ${table.tokenKind} = 'Bearer'
+          AND ${table.credentialExpiresAt} IS NOT NULL
+          AND ${table.capabilities} @> '["publish_video"]'::jsonb
+          AND jsonb_array_length(${table.grantedScopes}) > 0
+          AND length(btrim(${table.tokenManifestRevision})) BETWEEN 1 AND 100
+        )
+      )`,
+    ),
   }),
 );
 
@@ -285,6 +320,17 @@ export const aiMediaOAuthSessions = pgTable(
     codeChallengeMethod: text("code_challenge_method"),
     pkceVerifierRef: text("pkce_verifier_ref"),
     status: text("status").notNull().default("pending"),
+    exchangeStatus: text("exchange_status").notNull().default("not_started"),
+    leaseToken: uuid("lease_token"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    leaseFencing: integer("lease_fencing").notNull().default(0),
+    authorizationCodeDigest: text("authorization_code_digest"),
+    authorizationCodeRef: text("authorization_code_ref"),
+    expectedCredentialVersion: integer("expected_credential_version"),
+    targetCredentialVersion: integer("target_credential_version"),
+    tokenBindingId: uuid("token_binding_id"),
+    failureCode: text("failure_code"),
     outcome: text("outcome"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
@@ -292,6 +338,20 @@ export const aiMediaOAuthSessions = pgTable(
   },
   (table) => ({
     stateDigestUnique: uniqueIndex("ai_media_oauth_sessions_state_digest_uq").on(table.stateDigest),
+    authorizationCodeRefUnique: uniqueIndex("ai_media_oauth_sessions_authorization_code_ref_uq")
+      .on(table.authorizationCodeRef)
+      .where(sql`${table.authorizationCodeRef} IS NOT NULL`),
+    tokenBindingUnique: uniqueIndex("ai_media_oauth_sessions_token_binding_uq")
+      .on(table.tokenBindingId)
+      .where(sql`${table.tokenBindingId} IS NOT NULL`),
+    providerAccountAuthorizationSourceUnique: uniqueIndex("ai_media_oauth_sessions_provider_account_authorization_source_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.actorUserId,
+      table.providerAccountId,
+      table.platform,
+      table.id,
+    ),
     ownerWorkspacePlatformStatusIdx: index("ai_media_oauth_sessions_owner_workspace_platform_status_idx").on(
       table.ownerUserId,
       table.workspaceId,
@@ -305,7 +365,39 @@ export const aiMediaOAuthSessions = pgTable(
     ),
     statusCheck: check(
       "ai_media_oauth_sessions_status_ck",
-      sql`${table.status} IN ('pending', 'consumed')`,
+      sql`${table.status} IN ('pending', 'processing', 'consumed')`,
+    ),
+    exchangeStatusCheck: check(
+      "ai_media_oauth_sessions_exchange_status_ck",
+      sql`${table.exchangeStatus} IN ('not_started', 'ready', 'in_progress', 'succeeded', 'not_required', 'failed', 'indeterminate', 'legacy_authorized_unbound')`,
+    ),
+    authorizationSagaCheck: check(
+      "ai_media_oauth_sessions_authorization_saga_ck",
+      sql`(
+        ${table.leaseFencing} >= 0
+        AND ((${table.leaseToken} IS NULL) = (${table.leaseOwner} IS NULL))
+        AND ((${table.leaseToken} IS NULL) = (${table.leaseExpiresAt} IS NULL))
+        AND (${table.leaseToken} IS NULL OR (length(btrim(${table.leaseOwner})) BETWEEN 1 AND 255 AND ${table.leaseExpiresAt} > ${table.updatedAt} AND ${table.leaseExpiresAt} <= ${table.updatedAt} + interval '5 minutes'))
+        AND (${table.authorizationCodeDigest} IS NULL OR (${table.authorizationCodeDigest} ~ '^[0-9a-f]{64}$'))
+        AND (${table.authorizationCodeRef} IS NULL OR ${table.authorizationCodeRef} ~ '^vault://ai-media-studio/oauth-code/v1/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ((${table.expectedCredentialVersion} IS NULL) = (${table.targetCredentialVersion} IS NULL))
+        AND (${table.expectedCredentialVersion} IS NULL OR ${table.expectedCredentialVersion} >= 0)
+        AND (${table.targetCredentialVersion} IS NULL OR ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1)
+        AND ((${table.authorizationCodeDigest} IS NULL) = (${table.tokenBindingId} IS NULL))
+        AND (${table.failureCode} IS NULL OR ${table.failureCode} IN ('provider_rejected','vault_unavailable','candidate_missing','credential_conflict','identity_conflict','invalid_provider_result'))
+        AND (${table.status} <> 'pending' OR (${table.exchangeStatus} = 'not_started' AND ${table.leaseToken} IS NULL AND ${table.authorizationCodeDigest} IS NULL))
+        AND (${table.status} <> 'processing' OR (${table.exchangeStatus} IN ('not_started','ready','in_progress','indeterminate') AND ${table.authorizationCodeDigest} IS NOT NULL AND ${table.tokenBindingId} IS NOT NULL AND ${table.expectedCredentialVersion} IS NOT NULL))
+        AND (${table.status} <> 'processing' OR ${table.exchangeStatus} = 'indeterminate' OR ${table.leaseToken} IS NOT NULL)
+        AND (${table.status} <> 'consumed' OR ${table.leaseToken} IS NULL)
+        AND (${table.exchangeStatus} <> 'ready' OR ${table.authorizationCodeRef} IS NOT NULL)
+        AND (${table.exchangeStatus} <> 'in_progress' OR ${table.authorizationCodeRef} IS NOT NULL)
+        AND (${table.exchangeStatus} <> 'succeeded' OR (${table.status} = 'consumed' AND ${table.outcome} = 'authorized'))
+        AND (${table.exchangeStatus} <> 'not_required' OR (${table.status} = 'consumed' AND ${table.outcome} IN ('denied','error') AND ${table.authorizationCodeDigest} IS NULL))
+        AND (${table.exchangeStatus} NOT IN ('indeterminate','failed') OR (${table.status} = 'processing' AND ${table.leaseToken} IS NULL AND ${table.failureCode} IS NOT NULL))
+        AND (${table.outcome} <> 'authorized' OR ${table.exchangeStatus} IN ('succeeded','legacy_authorized_unbound'))
+        AND (${table.outcome} NOT IN ('denied','error') OR ${table.exchangeStatus} = 'not_required')
+        AND (${table.exchangeStatus} <> 'legacy_authorized_unbound' OR (${table.status} = 'consumed' AND ${table.outcome} = 'authorized' AND ${table.tokenBindingId} IS NULL))
+      )`,
     ),
     requestedScopesCheck: check(
       "ai_media_oauth_sessions_requested_scopes_ck",

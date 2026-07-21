@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 import {
   aiMediaOAuthStartRequestSchema,
   type AiMediaOAuthCallbackResponse,
-  type AiMediaOAuthOutcome,
   type AiMediaOAuthPlatform,
   type AiMediaOAuthStartResponse,
 } from "../../../shared/ai-media-studio-oauth";
 import type { TenantScope } from "../core/resource-domain";
 import {
   type OAuthAccountBindingVerifier,
+  type OAuthDeniedOrErrorOutcome,
   OAuthFlowError,
   type OAuthPlatformPolicies,
   type OAuthSessionRepository,
@@ -188,21 +188,22 @@ export function createOAuthService(dependencies: {
     };
   }
 
-  async function consume(input: {
+  async function consumeDeniedOrError(input: {
     state: string;
     platform: AiMediaOAuthPlatform;
-    outcome: AiMediaOAuthOutcome;
+    outcome: OAuthDeniedOrErrorOutcome;
   }): Promise<AiMediaOAuthCallbackResponse> {
     // Authorization needs an atomic claim/exchange/token-vault flow that is not
     // part of this foundation. Never burn a valid state before that exists.
-    if (input.outcome === "authorized" || (input.outcome !== "denied" && input.outcome !== "error")) {
+    const outcome = input.outcome as string;
+    if (outcome !== "denied" && outcome !== "error") {
       throw new OAuthFlowError();
     }
     policyFor(policies, input.platform);
     let stateDigest: string;
     try { stateDigest = digestOAuthState(input.state); } catch { throw new OAuthFlowError(); }
     const consumedAt = now().toISOString();
-    const session = await repository.consume({
+    const session = await repository.consumeDeniedOrError({
       stateDigest,
       platform: input.platform,
       outcome: input.outcome,
@@ -224,5 +225,7 @@ export function createOAuthService(dependencies: {
     return { sessionId: session.id, platform: session.platform, outcome: input.outcome, consumedAt };
   }
 
-  return { start, consume };
+  // `consume` remains an application compatibility alias, but the repository
+  // type cannot represent an authorized outcome. Authorization uses the saga.
+  return { start, consume: consumeDeniedOrError, consumeDeniedOrError };
 }

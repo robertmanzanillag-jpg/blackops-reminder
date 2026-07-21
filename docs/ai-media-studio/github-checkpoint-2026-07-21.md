@@ -150,3 +150,36 @@ Files intentionally out of scope for the first PR10 code slice:
 3. Confirm GitHub PR status and execute the reviewed migration in an approved staging/PostgreSQL rehearsal before calling the database change production-ready.
 4. Continue with a separate PR for callback-safe claim/exchange, long-lived token vaulting, account CAS binding, refresh/revocation and provider sandbox proof.
 5. Do not mount OAuth routes, deploy, apply migrations or post externally without the required release gates and Robert’s explicit approval.
+
+## PR12 checkpoint — durable OAuth callback saga
+
+Branch: `codex/ai-media-studio-oauth-callback-saga`, stacked on PR #85 (`codex/ai-media-studio-oauth-policy-hardening`).
+
+This slice adds a provider-neutral, fenced callback saga without mounting a route or making live provider calls. It separates authorization-code, PKCE, provider connector, and long-lived token-vault contracts; performs no database transaction across external I/O; claims work with leases and fencing; prevents automatic re-exchange after ambiguous provider I/O; and atomically binds a token-vault reference plus exact provider identity/provenance to the account with credential-version CAS.
+
+Security and recovery properties captured:
+
+- Raw authorization codes and tokens never enter the database, logs, callback errors, or durable session snapshots.
+- Vault references are purpose-scoped and bound to tenant, workspace, actor, account, platform, session, digest/version and token-binding context.
+- Stale workers cannot finalize, mark indeterminate, or clean vault material after a newer fence wins, including the pre-attach `putOnce` race.
+- Candidate token substitution, unknown capabilities, missing `publish_video`, identity conflicts, expired credentials, replay and wrong actor/account/platform are rejected generically.
+- Provider-account activation and callback completion occur in one short database transaction after all external I/O.
+- The additive reviewed migration contains strict preflight, backfill, constraints, indexes and exact OAuth source-session provenance. It remains unapplied; rollback is application-only and data-preserving.
+
+Evidence at checkpoint:
+
+- Focused PR12 OAuth suite: 32/32 passed after the stale pre-attach race regression was added.
+- TypeScript, production build and diff hygiene passed; the build retains only the pre-existing bundle-size and local `yt-dlp` warnings.
+- Full AI Media Studio suite: authoritative unrestricted rerun passed 401/401.
+- Independent security review found no P0/P1. Its only remaining P2 was packaging untracked files, resolved by staging the complete PR12 file set.
+- Independent checker found the pre-attach stale cleanup race; it was fixed and regression-tested before GitHub preservation.
+- Static App QA passed 51/51 OAuth regression tests and found no route, UI, timer, network, provider, migration-apply or deployment surface in this slice.
+
+Intentionally not done:
+
+- No production authorization-code or token-vault adapter is wired.
+- No live TikTok, Google/YouTube, Meta, Instagram or Facebook connector is wired.
+- No callback/start route is mounted.
+- No migration was applied, no external content was posted and no deployment was requested.
+
+Next safe slice: implement separate envelope-encrypted S3/KMS authorization-code and token-vault adapters plus immutable sandbox provider connectors; then add refresh, revocation and reconciliation. Routes remain blocked until provider sandbox proof and the normal checker/App QA gates pass.
