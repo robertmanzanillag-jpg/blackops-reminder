@@ -3036,6 +3036,16 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
         contactRequiresCaptcha: true,
       },
       {
+        handle: "VerifiedCampaignCreator",
+        youtubeOfficialUrl: "https://www.youtube.com/@VerifiedCampaignCreator",
+        rightsPolicy: "verified_campaign_only",
+        policyEvidenceUrl: "https://clipping.net/c/verified-creator",
+        campaignUrl: "https://clipping.net/c/verified-creator",
+        campaignOwner: "Verified Platform",
+        campaignStatus: "active",
+        campaignPayout: "$1 per 1k views",
+      },
+      {
         handle: "SearchPageMustFail",
         officialCreatorUrl: "https://www.youtube.com/results?search_query=creator",
       },
@@ -3061,7 +3071,7 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
 
   await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
     const campaign = await (await fetch(`http://127.0.0.1:${port}/api/clippers/streamer-100-campaign.json`)).json();
-    assert.equal(campaign.premiumRows.length, 6);
+    assert.equal(campaign.premiumRows.length, 7);
     const kick = campaign.premiumRows.find((row) => row.handle === "premiumkickcreator");
     const youtube = campaign.premiumRows.find((row) => row.handle === "PremiumYouTubeCreator");
     assert.equal(kick.platform, "kick");
@@ -3076,7 +3086,15 @@ test("Streamer campaign supports premium creators on Kick and YouTube without gr
     assert.equal(captcha.priority, "human_action_required");
     assert.equal(captcha.outreachStatus, "not_sent");
     assert.equal(campaign.humanActionRequiredRows, 1);
-    assert.equal(campaign.totalResearchPoolRows, 6);
+    const verifiedCampaign = campaign.premiumRows.find((row) => row.handle === "VerifiedCampaignCreator");
+    assert.equal(verifiedCampaign.campaignVerified, true);
+    assert.equal(verifiedCampaign.priority, "campaign_join_required");
+    assert.equal(verifiedCampaign.permissionScope, "verified_campaign_materials_and_brief_only");
+    assert.equal(verifiedCampaign.contentLane, "join_verified_campaign");
+    assert.equal(verifiedCampaign.canPublish, false);
+    assert.equal(campaign.verifiedCampaignRows, 1);
+    assert.match(campaign.nextAction, /Join and document the 1 verified campaign/);
+    assert.equal(campaign.totalResearchPoolRows, 7);
     assert.equal(campaign.premiumRows.some((row) => row.handle === "SearchPageMustFail"), false);
     assert.equal(campaign.premiumRows.some((row) => row.handle === "WrongCreator"), false);
     assert.ok(campaign.premiumRows.some((row) => row.handle === "foo-bar"));

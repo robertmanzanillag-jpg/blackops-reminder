@@ -7524,11 +7524,18 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
     || String(nestedPolicy.summary || "").trim();
   const rightsPolicy = requestedPolicy === "public_blanket_allow" && /(separate|direct|written|business|commercial).{0,50}(approval|permission|required|contact)|larger[- ]scale/i.test(policySummary)
     ? "request_required"
-    : new Set(["public_blanket_allow", "request_required", "no_evidence", "forbidden"]).has(requestedPolicy)
+    : new Set(["public_blanket_allow", "verified_campaign_only", "request_required", "no_evidence", "forbidden"]).has(requestedPolicy)
       ? requestedPolicy
     : "no_evidence";
+  const campaignUrl = safeCampaignHttpsUrl(firstCampaignValue(raw, ["campaignUrl", "campaign_url", "verifiedCampaignUrl", "verified_campaign_url"]));
+  const campaignOwner = firstCampaignValue(raw, ["campaignOwner", "campaign_owner", "campaignPlatform", "campaign_platform"]);
+  const campaignStatus = firstCampaignValue(raw, ["campaignStatus", "campaign_status"]);
+  const campaignPayout = firstCampaignValue(raw, ["campaignPayout", "campaign_payout", "payout", "reward"]);
+  const campaignVerified = rightsPolicy === "verified_campaign_only" && Boolean(campaignUrl && policyEvidenceUrl);
   const hasVerifiedContact = Boolean((contactEmail || contactUrl) && contactEvidenceUrl);
-  const priority = rightsPolicy === "forbidden"
+  const priority = campaignVerified
+    ? "campaign_join_required"
+    : rightsPolicy === "forbidden"
     ? "exclude"
     : requiresHumanVerification
       ? "human_action_required"
@@ -7558,6 +7565,11 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
     rightsPolicy,
     policyEvidenceUrl,
     policySummary,
+    campaignUrl,
+    campaignOwner,
+    campaignStatus,
+    campaignPayout,
+    campaignVerified,
     risk: typeof raw?.risk === "object" && raw.risk
       ? [raw.risk.level, raw.risk.notes].filter(Boolean).join(": ")
       : [firstCampaignValue(raw, ["risk", "riskNote", "risk_note", "riesgo"]), firstCampaignValue(raw, ["riskNotes", "risk_notes"])].filter(Boolean).join(": "),
@@ -7566,8 +7578,11 @@ function normalizeStreamerCampaignRow(raw, cohort, sourceFile) {
     priority,
     permissionStatus: "not_requested",
     canPublish: false,
-    permissionScope: "blanket_creator_tiktok_commercial",
-    outreachMessage: `Hi ${handle}, we run two TikTok streamer pages and are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams. We will credit/tag you, follow your restrictions, remove posts on request, and stop future use if permission is revoked. Please confirm TikTok, commercial use, edits, future clips, and required credit. We will not post without written approval.`,
+    permissionScope: campaignVerified ? "verified_campaign_materials_and_brief_only" : "blanket_creator_tiktok_commercial",
+    contentLane: campaignVerified ? "join_verified_campaign" : rightsPolicy === "forbidden" ? "original_commentary_only" : "permission_required",
+    outreachMessage: campaignVerified
+      ? `Join the verified ${campaignOwner || "clipping"} campaign for ${handle}, capture the accepted terms and campaign brief locally, and use only campaign-supplied or campaign-authorized source material.`
+      : `Hi ${handle}, we run two TikTok streamer pages and are requesting written blanket permission to select, edit, caption, crop, publish, and monetize current and future clips from your official streams. We will credit/tag you, follow your restrictions, remove posts on request, and stop future use if permission is revoked. Please confirm TikTok, commercial use, edits, future clips, and required credit. We will not post without written approval.`,
   };
 }
 
@@ -7658,7 +7673,7 @@ async function buildStreamer100Campaign() {
       canPublish: false,
     };
   }));
-  const priorityOrder = { policy_review_first: 0, outreach_ready: 1, human_action_required: 2, needs_verified_contact: 3, exclude: 4 };
+  const priorityOrder = { campaign_join_required: 0, policy_review_first: 1, outreach_ready: 2, human_action_required: 3, needs_verified_contact: 4, exclude: 5 };
   const outreachOrder = { sent: 0, responded: 0, delivered: 0, not_sent: 1, "": 1, bounced: 2, failed: 2 };
   const permissionLedgerRows = mergedRows.sort((a, b) => {
     const aOutreach = outreachOrder[a.outreachStatus] ?? 1;
@@ -7677,6 +7692,7 @@ async function buildStreamer100Campaign() {
   const outreachSentRows = rows.filter((row) => ["sent", "responded", "delivered"].includes(row.outreachStatus)).length;
   const responsesReceivedRows = rows.filter((row) => row.outreachStatus === "responded").length;
   const blanketApprovedRows = rows.filter((row) => row.permissionStatus === "approved_blanket").length;
+  const verifiedCampaignRows = permissionLedgerRows.filter((row) => row.campaignVerified).length;
   return {
     status: rows.length >= 100 ? "research_complete_outreach_review_required" : "building_100_streamer_research_pool",
     generatedAt: new Date().toISOString(),
@@ -7692,14 +7708,17 @@ async function buildStreamer100Campaign() {
     outreachSentRows,
     responsesReceivedRows,
     blanketApprovedRows,
+    verifiedCampaignRows,
     deniedRows: rows.filter((row) => row.permissionStatus === "denied").length,
     unverifiedOutreachRows: rows.filter((row) => row.outreachStatus === "unverified_claim").length,
     sourceFiles,
     premiumRows,
     rows,
     permissionLedgerRows,
-    nextAction: rows.length < 100
-      ? `Complete ${100 - rows.length} more verified streamer research rows.`
+    nextAction: verifiedCampaignRows > 0
+      ? `Join and document the ${verifiedCampaignRows} verified campaign(s), then ingest only campaign-authorized source material. Public listings alone do not unlock Metricool.`
+      : rows.length < 100
+        ? `Complete ${100 - rows.length} more verified streamer research rows.`
       : blanketApprovedRows > 0
         ? "Use only approved creators for source review, enforce every creator restriction, and keep monitoring the remaining replies."
         : outreachSentRows >= rows.length
@@ -7709,6 +7728,7 @@ async function buildStreamer100Campaign() {
       "Research, public contact details, and sent outreach never count as permission.",
       "A public clipping policy must explicitly cover the intended TikTok and commercial use before it can become allowlist evidence.",
       "Blanket approval must be written, locally evidenced, and include TikTok, edits, monetization, future clips, credit, and revocation terms.",
+      "A verified campaign is campaign-scoped, not blanket permission. Join it, capture its terms and brief, and use only authorized campaign material.",
       "Each published clip still requires an exact source URL, a real local source file, and Metricool approval.",
     ],
   };
@@ -7717,7 +7737,7 @@ async function buildStreamer100Campaign() {
 function buildStreamer100CampaignCsv(campaign) {
   return renderCsv([
     "handle", "display_name", "creator_url", "platform", "twitch_url", "cohort", "language", "country", "category", "contact_email", "contact_url",
-    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
+    "contact_evidence_url", "requires_human_verification", "rights_policy", "policy_evidence_url", "campaign_url", "campaign_owner", "campaign_status", "campaign_payout", "content_lane", "priority", "outreach_status", "outreach_claim_status", "outreach_evidence_link", "permission_status",
     "permission_scope", "evidence_link", "updated_at", "no_ai", "min_publish_delay_hours", "context_review_required",
     "creator_credit_required", "allowed_account_names", "can_publish", "risk", "reason_to_prioritize", "outreach_message",
   ], campaign.rows.map((row) => ({
@@ -7736,6 +7756,11 @@ function buildStreamer100CampaignCsv(campaign) {
     requires_human_verification: row.requiresHumanVerification ? "yes" : "no",
     rights_policy: workspaceSafeCsvText(row.rightsPolicy),
     policy_evidence_url: workspaceSafeCsvText(row.policyEvidenceUrl),
+    campaign_url: workspaceSafeCsvText(row.campaignUrl),
+    campaign_owner: workspaceSafeCsvText(row.campaignOwner),
+    campaign_status: workspaceSafeCsvText(row.campaignStatus),
+    campaign_payout: workspaceSafeCsvText(row.campaignPayout),
+    content_lane: workspaceSafeCsvText(row.contentLane),
     priority: workspaceSafeCsvText(row.priority),
     outreach_status: workspaceSafeCsvText(row.outreachStatus),
     outreach_claim_status: workspaceSafeCsvText(row.outreachClaimStatus),
@@ -7757,7 +7782,7 @@ function buildStreamer100CampaignCsv(campaign) {
 }
 
 function renderStreamerCampaignRows(rows) {
-  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div></td><td>${escapeHtml(row.priority)}<div class="small">outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
+  return rows.map((row) => `<tr><td><a href="${escapeHtml(row.creatorUrl)}">${escapeHtml(row.displayName || row.handle)}</a><div class="small">@${escapeHtml(row.handle)} / ${escapeHtml([row.platform, row.country, row.language, row.category].filter(Boolean).join(" / "))}</div></td><td>${escapeHtml(row.cohort)}</td><td>${escapeHtml(row.contactEmail || row.contactUrl || "Falta contacto verificado")}<div class="small">${row.contactEvidenceUrl ? `<a href="${escapeHtml(row.contactEvidenceUrl)}">evidencia</a>` : "sin evidencia"}</div></td><td>${escapeHtml(row.rightsPolicy)}<div class="small">${row.policyEvidenceUrl ? `<a href="${escapeHtml(row.policyEvidenceUrl)}">revisar politica</a>` : "sin politica verificable"}</div>${row.campaignVerified ? `<div class="small"><a href="${escapeHtml(row.campaignUrl)}">abrir campana verificada</a> / ${escapeHtml(row.campaignOwner || "plataforma")} / ${escapeHtml(row.campaignPayout || "ver brief")}</div>` : ""}</td><td>${escapeHtml(row.priority)}<div class="small">lane: ${escapeHtml(row.contentLane)} / outreach: ${escapeHtml(row.outreachStatus)} / permission: ${escapeHtml(row.permissionStatus)} / publish: blocked</div>${row.outreachEvidenceLink ? `<div class="small"><a href="${escapeHtml(row.outreachEvidenceLink)}">evidencia de envio</a></div>` : ""}${row.permissionStatus === "approved_blanket" ? `<div class="small">restricciones: ${escapeHtml([row.restrictions?.noAi ? "no AI" : "", row.restrictions?.minimumPublishDelayHours ? `${row.restrictions.minimumPublishDelayHours}h delay` : "", row.restrictions?.contextReviewRequired ? "context review" : "", row.restrictions?.creatorCreditRequired ? "credit" : ""].filter(Boolean).join(" / "))}</div>` : ""}</td></tr>`).join("");
 }
 
 function renderStreamer100CampaignPage(campaign) {
@@ -7771,6 +7796,7 @@ function renderStreamer100CampaignPage(campaign) {
     <div class="card"><div class="label">Contacto verificado</div><div class="value">${escapeHtml(campaign.contactableRows)}</div></div>
     <div class="card"><div class="label">Solicitudes enviadas</div><div class="value">${escapeHtml(campaign.outreachSentRows)}</div></div>
     <div class="card"><div class="label">Respuestas</div><div class="value">${escapeHtml(campaign.responsesReceivedRows)}</div></div>
+    <div class="card"><div class="label">Campanas verificadas</div><div class="value">${escapeHtml(campaign.verifiedCampaignRows)}</div></div>
     <div class="card"><div class="label">Permiso general</div><div class="value">${escapeHtml(campaign.blanketApprovedRows)}</div></div>
     <div class="card"><div class="label">Denegados</div><div class="value">${escapeHtml(campaign.deniedRows)}</div></div>
     <div class="card"><div class="label">Publicables</div><div class="value">0</div></div>
