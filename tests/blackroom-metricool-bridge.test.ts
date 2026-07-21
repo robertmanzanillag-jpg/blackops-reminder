@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { createServer } from "node:http";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 import {
   buildMetricoolTikTokPayload,
@@ -66,6 +68,44 @@ test("sends Metricool scheduler JSON as exact UTF-8 bytes", async () => {
   assert.equal(received.headers["x-mc-auth"], "valid-token-that-is-long-enough");
   assert.equal(received.headers["content-type"], "application/json");
   assert.equal(received.headers["content-length"], String(Buffer.byteLength(received.body, "utf8")));
+});
+
+test("rejects reset curl streams without crashing the Node process", async () => {
+  const cases = [
+    { index: 0, name: "request" },
+    { index: 1, name: "response" },
+    { index: 2, name: "diagnostic" },
+    { index: 3, name: "header" },
+  ] as const;
+
+  for (const streamCase of cases) {
+    const streams = [new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()];
+    const child = Object.assign(new EventEmitter(), {
+      stdin: streams[0],
+      stdout: streams[1],
+      stderr: streams[2],
+      stdio: streams,
+      kill: () => true,
+    });
+    const spawnProcess = (() => {
+      queueMicrotask(() => {
+        const error = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+        streams[streamCase.index].destroy(error);
+      });
+      return child;
+    }) as unknown as typeof import("node:child_process").spawn;
+
+    await assert.rejects(
+      () => postMetricoolJsonBytes(
+        "https://app.metricool.com/api/v2/scheduler/posts",
+        "valid-token-that-is-long-enough",
+        JSON.stringify({ text: "audio first" }),
+        1_000,
+        spawnProcess,
+      ),
+      new RegExp(`${streamCase.name} stream failed: read ECONNRESET`),
+    );
+  }
 });
 
 test("finds exact caption and schedule evidence", () => {
