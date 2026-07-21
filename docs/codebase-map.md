@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T11:47:07.664Z
+Generated: 2026-07-21T12:25:10.963Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 698 | 595 | 2388 | 489 | 11370 |
+| 705 | 601 | 2420 | 489 | 11579 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,10 +30,10 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `client/src` | 152 | 150 | ui-component:55, other:43, client-page:23, client-component:21 |
-| `tests` | 144 | 137 | test:144 |
-| `server/ai-media-studio` | 119 | 115 | server:119 |
+| `tests` | 147 | 140 | test:147 |
+| `server/ai-media-studio` | 121 | 117 | server:121 |
 | `server` | 96 | 92 | server:96 |
-| `script` | 38 | 36 | script:38 |
+| `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs` | 12 | 11 | docs:12 |
 | `docs/ai-media-studio` | 10 | 10 | docs:10 |
@@ -47,6 +47,7 @@ Package: `rest-express`
 | `migrations/ai-media-studio` | 27 | 1 | other:26, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
+| `tests/fixtures` | 1 | 0 | test:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/ai-media-studio`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/tools`
@@ -69,6 +70,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-asset-ingest-drizzle.test.ts`
 - `tests/ai-media-studio-asset-ingest.test.ts`
 - `tests/ai-media-studio-assets.test.ts`
+- `tests/ai-media-studio-authority-route-surface.test.ts`
 - `tests/ai-media-studio-backend.test.ts`
 - `tests/ai-media-studio-core-client.test.ts`
 - `tests/ai-media-studio-core-persistence.test.ts`
@@ -87,7 +89,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-roster-service.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
-- `tests/ai-media-studio-launch-authority-domain.test.ts`
+- `tests/ai-media-studio-launch-authority-drizzle.test.ts`
+- `tests/ai-media-studio-launch-authority-service.test.ts`
 - `tests/ai-media-studio-oauth-authorization-saga.test.ts`
 - `tests/ai-media-studio-oauth-authorization-url.test.ts`
 - `tests/ai-media-studio-oauth-aws-vault-preflight.test.ts`
@@ -119,6 +122,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr19-daily-admission-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr20-launch-authority-migration.test.ts`
+- `tests/ai-media-studio-pr21-postgres-integration.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
@@ -230,6 +234,7 @@ Package: `rest-express`
 - `client/src/pages/radio.tsx` (client-page; 19 symbols, 12 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
+- `script/ai-media-studio-pr21-postgres-test.ts` (script; 20 symbols, 6 imports)
 - `script/ai-media-studio-worker.ts` (script; 19 symbols, 3 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
@@ -287,7 +292,6 @@ Package: `rest-express`
 - `server/ai-media-studio/assets/worker.ts` (server; 27 symbols, 3 imports)
 - `server/ai-media-studio/core/asset-domain.ts` (server; 21 symbols, 1 imports)
 - `server/ai-media-studio/core/in-memory-asset-repository.ts` (server; 17 symbols, 1 imports)
-- `server/ai-media-studio/core/in-memory-core-repositories.ts` (server; 17 symbols, 2 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

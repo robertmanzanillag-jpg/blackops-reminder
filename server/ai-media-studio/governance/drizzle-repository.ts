@@ -16,6 +16,7 @@ import {
   type InfluencerGovernanceProfile,
   type TenantScope,
 } from "./contracts";
+import { governanceProfileLockKey } from "../planning/authority-locks";
 
 export type GovernanceDatabase = Pick<NodePgDatabase, "execute" | "transaction">;
 type GovernanceExecutor = Pick<NodePgDatabase, "execute">;
@@ -99,7 +100,9 @@ async function lockSubject(
   scope: TenantScope,
   subjectId: string,
 ): Promise<void> {
-  const lockKey = `ai-media-governance:${kind}:${scope.ownerUserId}:${scope.workspaceId}:${subjectId}`;
+  const lockKey = kind === "profile"
+    ? governanceProfileLockKey(scope, subjectId)
+    : `ai-media-governance:review:${scope.ownerUserId}:${scope.workspaceId}:${subjectId}`;
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
 }
 

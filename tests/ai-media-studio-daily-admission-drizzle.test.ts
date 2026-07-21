@@ -18,6 +18,7 @@ const ids = {
   bucket: "33333333-3333-4333-8333-333333333333",
   snapshot: "44444444-4444-4444-8444-444444444444",
   reservation: "55555555-5555-4555-8555-555555555555",
+  influencer: "66666666-6666-4666-8666-666666666666",
 } as const;
 const scope = { ownerUserId: "owner-1", workspaceId: "workspace-1" } as const;
 const databaseNow = new Date("2026-07-21T12:00:00.000Z");
@@ -116,9 +117,10 @@ test("PR20 admission repository remains unexported and request has no self-certi
 test("locks exact durable authority, derives money/provider facts, and writes no activation effects", async () => {
   let input!: ReserveAndAdmitRequest;
   const harness = makeDb((call) => {
-    if (call === 5) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 6) return { rows: [{ authority_snapshot_id: ids.snapshot, amount_micro_usd: "1250000" }] };
-    if (call === 7) return { rows: [reservationRow(input)] };
+    if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 7) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
+    if (call === 8) return { rows: [{ authority_snapshot_id: ids.snapshot, amount_micro_usd: "1250000" }] };
+    if (call === 9) return { rows: [reservationRow(input)] };
     return { rows: [] };
   });
   const repository = new DrizzleDailyAdmissionRepository(harness.db, { accountingTimeZone: "America/New_York" });
@@ -126,7 +128,7 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   const result = await repository.reserveAndAdmit(input);
 
   assert.equal(harness.transactionCount(), 1);
-  assert.equal(harness.calls.length, 7);
+  assert.equal(harness.calls.length, 9);
   assert.equal(result.reservation.amountMicroUsd, "1250000");
   assert.equal(result.replayed, false);
   assert.deepEqual(result.effects, {
@@ -134,7 +136,11 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   });
 
   assert.match(normalized(harness.calls[2]), /global-concurrency/i);
-  const gate = normalized(harness.calls[5]);
+  assert.ok(harness.calls[3].params.some((value) => String(value).includes("daily-admission:workspace")));
+  assert.match(normalized(harness.calls[4]), /select slots\.influencer_id/i);
+  assert.ok(harness.calls[5].params.some((value) => String(value).includes("ai-media-governance:profile")));
+  assert.match(normalized(harness.calls[6]), /clock_timestamp\(\)/i);
+  const gate = normalized(harness.calls[7]);
   for (const table of [
     "ai_media_launch_authority_snapshots", "ai_media_launch_evidence", "ai_media_admission_policy_revisions",
     "ai_media_kill_switch_revisions", "ai_media_daily_plans", "ai_media_daily_plan_slots",
@@ -150,9 +156,9 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   assert.match(gate, /buckets\.limit_micro_usd=policy\.daily_budget_micro_usd/i);
   assert.match(gate, /policy\.allowed_countries @> jsonb_build_array\(snapshots\.content_country\)/i);
   assert.match(gate, /count\(\*\).*policy\.total_concurrency.*count\(\*\).*policy\.provider_concurrency.*count\(\*\).*policy\.tenant_concurrency/i);
-  assert.doesNotMatch(JSON.stringify(harness.calls[5].params), /1250000/u, "amount is not a request parameter");
+  assert.doesNotMatch(JSON.stringify(harness.calls[7].params), /1250000/u, "amount is not a request parameter");
 
-  const mutation = normalized(harness.calls[6]);
+  const mutation = normalized(harness.calls[8]);
   assert.match(mutation, /^with fresh_clock as materialized .*clock_timestamp\(\)/i);
   assert.match(mutation, /final_guard as materialized/i);
   for (const alias of ["snapshots", "content", "human", "sandbox", "quotes", "policy", "kill"]) {
@@ -161,7 +167,7 @@ test("locks exact durable authority, derives money/provider facts, and writes no
   assert.match(mutation, /reserved_micro_usd=buckets\.reserved_micro_usd\+final_guard\.amount_micro_usd/i);
   assert.match(mutation, /authority_snapshot_id,authority_digest/i);
   assert.match(mutation, /provider_idempotency_key/i);
-  assert.ok(harness.calls[6].params.some((value) => /^admit:[0-9a-f]{64}$/u.test(String(value))));
+  assert.ok(harness.calls[8].params.some((value) => /^admit:[0-9a-f]{64}$/u.test(String(value))));
   assert.match(mutation, /render_job_id,dispatch_outbox_id/i);
   assert.match(mutation, /null,null/i);
   assert.doesNotMatch(mutation, /insert into .*ai_media_render_jobs|insert into .*ai_media_outbox|insert into .*ai_media.*events?/i);
@@ -204,19 +210,18 @@ test("request identities, versions, digests, and canonical expiry validate befor
 });
 
 test("missing authority denies and a failed CAS cannot report admission", async () => {
-  const denied = makeDb((call) => call === 5
-    ? { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] }
-    : { rows: [] });
+  const denied = makeDb(() => ({ rows: [] }));
   const deniedRepository = new DrizzleDailyAdmissionRepository(denied.db, { accountingTimeZone: "America/New_York" });
   await assert.rejects(deniedRepository.reserveAndAdmit(request(deniedRepository)), assertCode("ADMISSION_DENIED"));
-  assert.equal(denied.calls.length, 6);
+  assert.equal(denied.calls.length, 5);
 
   const cas = makeDb((call) => {
-    if (call === 5) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
-    if (call === 6) return { rows: [{ authority_snapshot_id: ids.snapshot }] };
+    if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 7) return { rows: [{ database_now: databaseNow, budget_date: "2026-07-21" }] };
+    if (call === 8) return { rows: [{ authority_snapshot_id: ids.snapshot }] };
     return { rows: [] };
   });
   const casRepository = new DrizzleDailyAdmissionRepository(cas.db, { accountingTimeZone: "America/New_York" });
   await assert.rejects(casRepository.reserveAndAdmit(request(casRepository)), assertCode("INVARIANT_VIOLATION"));
-  assert.equal(cas.calls.length, 7);
+  assert.equal(cas.calls.length, 9);
 });

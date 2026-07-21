@@ -3,6 +3,7 @@ import test from "node:test";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { GovernanceConflictError } from "../server/ai-media-studio/governance/contracts";
 import { DrizzleGovernanceRepository } from "../server/ai-media-studio/governance/drizzle-repository";
+import { governanceProfileLockKey } from "../server/ai-media-studio/planning/authority-locks";
 
 const scope = { ownerUserId: "owner-a", workspaceId: "workspace-a" } as const;
 const digestA = `sha256:${"a".repeat(64)}` as const;
@@ -92,7 +93,7 @@ test("profile append locks its tenant subject, validates ownership/chain, and on
   assert.equal(result.created, true);
   assert.equal(db.queries.length, 5);
   assert.match(db.queries[0]!.sql, /pg_advisory_xact_lock\(hashtextextended/i);
-  assert.ok(db.queries[0]!.params.some((entry) => String(entry).includes(`${scope.ownerUserId}:${scope.workspaceId}`)));
+  assert.ok(db.queries[0]!.params.includes(governanceProfileLockKey(scope, profile().influencerId)));
   const ownership = db.queries[2]!;
   assert.match(ownership.sql, /ai_media_influencers/i);
   assert.match(ownership.sql, /ai_media_provider_resources/i);

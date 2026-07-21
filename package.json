@@ -44,6 +44,7 @@
     "test:ceo-operational-health": "node --import tsx --test tests/ceo-operational-health.test.ts",
     "test:automation-registry": "node --import tsx --test tests/automation-registry.test.ts",
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
+    "test:ai-media-postgres": "node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
     "test:revenue-engine-ui": "node --import tsx --test tests/revenue-engine-delivery-qa.test.ts",
