@@ -2,7 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Active local checkpoint: PR25 dedicated admitted worker
+## Active local checkpoint: PR26 database capability and race proof
+
+- Branch: `codex/ai-media-studio-db-capability-races`, draft PR #109, stacked on draft PR #108; preserved in GitHub through incremental commits while validation continues.
+- Database boundary: the admitted-worker adapter is function-only. Separate submit and reconciliation database lanes call versioned `ai_media_worker_api` functions; every capability is bound to `SESSION_USER`, exact owner plus workspace, lane, operation, timezone and bounded lease/batch limits. Executors have no direct table privileges, function ownership is NOLOGIN, `PUBLIC` execution is revoked and fixed `pg_catalog` search paths plus fully qualified relations close shadowing paths.
+- Exactness: returned claims and authorizations are bound back to the requested scope and immutable work identity before COMMIT. Invalid payloads, multiple rows, cross-owner `personal` workspaces, decorated submit objects, stale fences and structurally forged reconciliation claims fail closed.
+- Capacity and money: active render capacity is durable state separate from committed money. Ambiguous or confirmed-but-not-terminal work remains capacity-held; exact negative finality releases capacity and refunds once, while an exact provider terminal result releases capacity without pretending committed provider cost disappeared. Retry requires a new reservation/capacity admission.
+- Current evidence: function-only/security checks pass 15/15, migration checks pass 8/8, the full AI Media Studio suite passes 615 checks with 20 PostgreSQL-only skips, the inherited isolated PostgreSQL 16 suite passes 13/13 and PR26 passes 7/7 across ACL/search-path controls, same-workspace tenant isolation, two-claimer exclusion, stale-fence reclaim, ambiguous/unknown recovery, concurrent exact no-submit refund, terminal capacity release and live fail-closed rollback. TypeScript, production build, generated codebase map and diff hygiene pass. The independent SQL checker found no P0/P1 and corrected one P2 submit-authorization shape guard; independent App QA passes with no P0-P2 and confirms that PR26 exposes no route, UI, runtime or provider path.
+- Safety boundary: the SQL is checked in but unapplied. No route, barrel, timer, runtime composition, provider call, terminal webhook, real reservation/commit, credit spend, publication, secret change or deployment is enabled. Production additionally requires DBA-controlled safe role/login provisioning, separate submit/reconcile connections, exact HeyGen reconciliation/terminal evidence, an approved small sandbox and Robert's explicit spend/deployment approval.
+- Launch shape remains 5–10 configured HeyGen avatars with exactly 10 planned videos each (50–100 slots). PR26 makes that batch safer to admit later; it does not generate it or contact HeyGen.
+
+## Preserved checkpoint: PR25 dedicated admitted worker
 
 - Branch: `codex/ai-media-studio-admitted-worker`, draft PR #108, stacked on draft PR #107; preserved as an inert GitHub checkpoint.
 - Scope: a provider-neutral admitted-worker contract, dedicated Drizzle repository, append-only submission-attempt/event ledgers, guarded forward/rollback SQL, and an orchestration loop with no timer or runtime composition.
