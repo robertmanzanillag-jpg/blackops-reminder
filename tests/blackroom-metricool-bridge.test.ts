@@ -63,7 +63,8 @@ test("sends Metricool scheduler JSON as exact UTF-8 bytes", async () => {
     });
   });
   assert.deepEqual(JSON.parse(received.body), { text: "Café", providers: [{ network: "tiktok" }] });
-  assert.equal(received.headers["content-type"], "application/json; charset=utf-8");
+  assert.equal(received.headers["x-mc-auth"], "valid-token-that-is-long-enough");
+  assert.equal(received.headers["content-type"], "application/json");
   assert.equal(received.headers["content-length"], String(Buffer.byteLength(received.body, "utf8")));
 });
 
