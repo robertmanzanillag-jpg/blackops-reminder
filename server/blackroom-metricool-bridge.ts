@@ -18,6 +18,40 @@ export interface BlackRoomMetricoolReceipt {
 
 type FetchLike = typeof fetch;
 
+export async function postMetricoolJsonBytes(
+  url: string,
+  token: string,
+  serializedPayload: string,
+  timeoutMs = 120_000,
+): Promise<Response> {
+  const target = new URL(url);
+  if (!['http:', 'https:'].includes(target.protocol)) throw new Error("Invalid Metricool scheduler protocol");
+  const payloadBytes = Buffer.from(serializedPayload, "utf8");
+  const request = target.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise<Response>((resolve, reject) => {
+    const upstream = request(target, {
+      method: "POST",
+      headers: {
+        "X-Mc-Auth": token,
+        "Content-Type": "application/json; charset=utf-8",
+        Accept: "application/json",
+        "Content-Length": payloadBytes.byteLength,
+      },
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      response.on("end", () => {
+        const status = response.statusCode || 502;
+        const body = Buffer.concat(chunks);
+        resolve(new Response(status === 204 ? null : body, { status }));
+      });
+    });
+    upstream.once("error", reject);
+    upstream.setTimeout(timeoutMs, () => upstream.destroy(new Error("Metricool scheduler request timed out")));
+    upstream.end(payloadBytes);
+  });
+}
+
 function requiredEnv(env: NodeJS.ProcessEnv, name: "METRICOOL_USER_TOKEN" | "METRICOOL_USER_ID"): string {
   const value = String(env[name] || "").trim();
   if (!value || /replace|example|your[-_ ]?token/i.test(value)) throw new Error(`${name} is not configured`);
@@ -156,14 +190,18 @@ export async function scheduleBlackRoomMetricoolPost(
   const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   const payload = buildMetricoolTikTokPayload(input, mediaId);
   const serializedPayload = JSON.stringify(payload);
-  const payloadBytes = Buffer.from(serializedPayload, "utf8");
-  const postHeaders = { ...headers, "content-length": String(payloadBytes.byteLength) };
-  const scheduled = await metricoolJson(await fetcher(schedulerUrl, {
-    method: "POST",
-    headers: postHeaders,
-    body: payloadBytes,
-    signal: AbortSignal.timeout(120_000),
-  }), "post scheduling");
+  // Metricool's scheduler has returned an empty parsed body for otherwise
+  // valid Node fetch requests. Send the JSON over a direct HTTP request so the
+  // exact UTF-8 bytes and Content-Length reach the upstream parser unchanged.
+  const scheduledResponse = options.fetch
+    ? await fetcher(schedulerUrl, {
+        method: "POST",
+        headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
+        body: serializedPayload,
+        signal: AbortSignal.timeout(120_000),
+      })
+    : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
+  const scheduled = await metricoolJson(scheduledResponse, "post scheduling");
 
   const verification = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "post verification");
   const matched = findVerifiedMetricoolPost(verification, input.caption, input.publicationDateTime);
@@ -172,3 +210,5 @@ export async function scheduleBlackRoomMetricoolPost(
   if (id == null || String(id).trim() === "") throw new Error("Metricool scheduled post has no identifier");
   return { metricoolId: String(id), publicationDateTime: input.publicationDateTime, caption: input.caption, verified: true };
 }
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
