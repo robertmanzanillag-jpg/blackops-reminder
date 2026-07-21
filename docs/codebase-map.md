@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-21T20:40:35.634Z
+Generated: 2026-07-21T21:43:09.795Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4`
 Package: `rest-express`
 
@@ -10,12 +10,11 @@ Package: `rest-express`
 - Does not index SQL files or filenames that look like dumps, backups, credentials, secrets, or tokens.
 - On macOS, skips iCloud placeholders marked dataless instead of blocking while their contents download.
 - Use this map to narrow exploration; verify behavior in source files before editing.
-- Omitted 1 macOS dataless file(s); hydrate them and regenerate for a complete local index.
 
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 756 | 636 | 2591 | 491 | 12352 |
+| 768 | 641 | 2618 | 491 | 12535 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,9 +29,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 167 | 160 | test:167 |
+| `tests` | 172 | 163 | test:172 |
 | `client/src` | 153 | 151 | ui-component:55, other:43, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 133 | 128 | server:133 |
+| `server/ai-media-studio` | 138 | 130 | server:138 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 39 | 37 | script:39 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -45,7 +44,7 @@ Package: `rest-express`
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `.upm` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `migrations/ai-media-studio` | 41 | 1 | other:40, docs:1 |
+| `migrations/ai-media-studio` | 43 | 1 | other:42, docs:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `tests/fixtures` | 2 | 0 | test:2 |
@@ -100,6 +99,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts`
 - `tests/ai-media-studio-oauth-authorization-saga.test.ts`
 - `tests/ai-media-studio-oauth-authorization-url.test.ts`
+- `tests/ai-media-studio-oauth-aws-vault-preflight-v2.test.ts`
 - `tests/ai-media-studio-oauth-aws-vault-preflight.test.ts`
 - `tests/ai-media-studio-oauth-crypto.test.ts`
 - `tests/ai-media-studio-oauth-drizzle.test.ts`
@@ -107,6 +107,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-oauth-provider-connection-contracts.test.ts`
 - `tests/ai-media-studio-oauth-provider-connection-drizzle.test.ts`
 - `tests/ai-media-studio-oauth-provider-connection-in-memory.test.ts`
+- `tests/ai-media-studio-oauth-role-token-cleanup-drizzle.test.ts`
+- `tests/ai-media-studio-oauth-role-token-cleanup-worker.test.ts`
 - `tests/ai-media-studio-oauth-role-token-vault-contracts.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-code-vault.test.ts`
 - `tests/ai-media-studio-oauth-s3-kms-role-token-vault.test.ts`
@@ -128,6 +130,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr15-provider-connection-migration.test.ts`
 - `tests/ai-media-studio-pr16-provider-activation-migration.test.ts`
 - `tests/ai-media-studio-pr16a-postgres-migration.test.ts`
+- `tests/ai-media-studio-pr16b-durable-activation.test.ts`
+- `tests/ai-media-studio-pr16b-postgres-activation.test.ts`
 - `tests/ai-media-studio-pr19-daily-admission-migration.test.ts`
 - `tests/ai-media-studio-pr2-migration.test.ts`
 - `tests/ai-media-studio-pr20-launch-authority-migration.test.ts`

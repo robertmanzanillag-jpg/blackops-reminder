@@ -5,6 +5,7 @@ import {
   aiMediaOAuthSessions,
   aiMediaOAuthTargetCandidates,
   aiMediaOAuthTargetSelections,
+  aiMediaProviderAccountCredentialBindings,
   aiMediaProviderAccounts,
 } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
@@ -13,6 +14,7 @@ import {
   OAUTH_PROVIDER_MANIFEST_REVISIONS,
   OAuthProviderConnectionError,
   deriveOAuthProviderCapabilities,
+  deriveOAuthProviderSelectionDigest,
   isCompatibleOAuthProviderTarget,
   validateOAuthProviderScopes,
   validateOAuthProviderTokenArtifacts,
@@ -176,7 +178,7 @@ const IN_PROGRESS = {
 } as const;
 
 export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderConnectionRepository {
-  constructor(private readonly db: OAuthProviderConnectionTransactionalDatabase) {}
+  constructor(protected readonly db: OAuthProviderConnectionTransactionalDatabase) {}
 
   async create(input: CreateOAuthProviderConnectionAttempt): Promise<OAuthProviderConnectionAttempt> {
     const createdMs = parseIso(input.createdAt);
@@ -236,7 +238,11 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
         AND expires_at>clock_timestamp() AND ${new Date(input.leaseExpiresAt)}>clock_timestamp()
         AND ${new Date(input.leaseExpiresAt)}<=clock_timestamp()+interval '5 minutes'
         AND ${new Date(input.leaseExpiresAt)}<=expires_at AND length(btrim(${input.leaseOwner})) BETWEEN 1 AND 255
-        AND (stage=${input.stage} OR (stage=${inProgress} AND lease_expires_at<=clock_timestamp()))
+        AND (stage=${input.stage} OR (stage=${inProgress} AND lease_expires_at<=clock_timestamp()
+          AND (${input.stage}<>'activation_pending' OR NOT EXISTS (
+            SELECT 1 FROM ${aiMediaProviderAccountCredentialBindings} bindings
+            WHERE bindings.attempt_id=${aiMediaOAuthConnectionAttempts.id} AND bindings.state='staged'
+          ))))
       RETURNING *
     `);
     const claimed = rows(result)[0];
@@ -371,7 +377,7 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
       }
       if (attempt.stage !== "awaiting_target" || attempt.stageVersion !== input.expectedStageVersion
         || Date.parse(attempt.expiresAt) <= parseIso(iso(value(attemptRow, "databaseNow", "database_now")))) return undefined;
-      const candidateResult = await tx.execute(sql`SELECT eligibility_digest FROM ${aiMediaOAuthTargetCandidates}
+      const candidateResult = await tx.execute(sql`SELECT * FROM ${aiMediaOAuthTargetCandidates}
         WHERE owner_user_id=${attempt.scope.ownerUserId} AND workspace_id=${attempt.scope.workspaceId}
           AND actor_user_id=${attempt.actorUserId} AND provider_account_id=${attempt.providerAccountId}
           AND platform=${attempt.platform} AND oauth_session_id=${attempt.oauthSessionId} AND attempt_id=${attempt.id}
@@ -379,15 +385,25 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
       const candidate = rows(candidateResult)[0];
       if (!candidate) return undefined;
       const eligibilityDigest = String(value(candidate, "eligibilityDigest", "eligibility_digest"));
-      const selectionDigest = digest({ attemptId: attempt.id, actorUserId: input.actorUserId,
-        candidateId: input.candidateId, targetKind: input.targetKind, targetId: input.targetId,
-        eligibilityDigest, stageVersion: input.expectedStageVersion });
+      const selectedAt = iso(value(attemptRow, "databaseNow", "database_now"));
+      const candidateCapabilities = stringArray(candidate.capabilities, true) as OAuthProviderTargetCandidate["capabilities"];
+      const selectionDigest = deriveOAuthProviderSelectionDigest({
+        attemptId: attempt.id, scope: attempt.scope, actorUserId: input.actorUserId,
+        providerAccountId: attempt.providerAccountId, oauthSessionId: attempt.oauthSessionId,
+        platform: attempt.platform, grantFamily: attempt.grantFamily, candidateId: input.candidateId,
+        targetId: input.targetId, targetKind: input.targetKind, eligibilityDigest,
+        selectedStageVersion: input.expectedStageVersion, selectedAt,
+        manifestRevision: attempt.manifestRevision, tokenBindingId: attempt.tokenBindingId,
+        expectedCredentialVersion: attempt.expectedCredentialVersion,
+        targetCredentialVersion: attempt.targetCredentialVersion, actualScopes: attempt.actualScopes,
+        capabilities: candidateCapabilities,
+      });
       const inserted = await tx.execute(sql`INSERT INTO ${aiMediaOAuthTargetSelections} (
           owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,oauth_session_id,attempt_id,candidate_id,
           target_kind,target_external_id,selected_actor_user_id,selected_at,selection_digest,selection_version,selected_stage_version,created_at
         ) VALUES (${attempt.scope.ownerUserId},${attempt.scope.workspaceId},${attempt.actorUserId},${attempt.providerAccountId},
           ${attempt.platform},${attempt.oauthSessionId},${attempt.id},${input.candidateId},${input.targetKind},${input.targetId},
-          ${input.actorUserId},clock_timestamp(),${selectionDigest},1,${input.expectedStageVersion},clock_timestamp())
+          ${input.actorUserId},${new Date(selectedAt)},${selectionDigest},1,${input.expectedStageVersion},clock_timestamp())
         ON CONFLICT (owner_user_id,workspace_id,actor_user_id,provider_account_id,platform,oauth_session_id,attempt_id)
         DO NOTHING RETURNING selection_digest`);
       if (rows(inserted).length !== 1) return undefined;
@@ -427,7 +443,7 @@ export class DrizzleOAuthProviderConnectionRepository implements OAuthProviderCo
     return updated ? this.readAttempt(this.db, input.scope, input.attemptId, updated) : undefined;
   }
 
-  private async readAttempt(
+  protected async readAttempt(
     db: OAuthProviderConnectionDatabase,
     scope: TenantScope,
     attemptId: string,

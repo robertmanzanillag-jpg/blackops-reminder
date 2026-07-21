@@ -78,8 +78,10 @@ async function main(): Promise<void> {
     throw new Error("Refusing an external TEST_DATABASE_URL; this harness always creates its own mktemp PostgreSQL cluster");
   }
   const selectedSuite = process.env.AI_MEDIA_POSTGRES_SUITE?.trim() || "all";
-  if (!(["all", "pr21", "pr26", "pr16a"] as const).includes(selectedSuite as "all" | "pr21" | "pr26" | "pr16a")) {
-    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, or pr16a");
+  if (!(["all", "pr21", "pr26", "pr16a", "pr16b"] as const).includes(
+    selectedSuite as "all" | "pr21" | "pr26" | "pr16a" | "pr16b",
+  )) {
+    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, pr16a, or pr16b");
   }
 
   const temporaryRoot = await mkdtemp(join(testTemporaryDirectory(), TEMP_PREFIX));
@@ -177,6 +179,15 @@ async function main(): Promise<void> {
       }
       await runCommand("node", ["--import", "tsx", "--test", "--test-concurrency=1",
         "tests/ai-media-studio-pr16a-postgres-migration.test.ts"], childEnvironment);
+    }
+    if (selectedSuite === "all" || selectedSuite === "pr16b") {
+      if (selectedSuite === "all") {
+        await runCommand("dropdb", ["-h", socketDirectory, "-p", TEST_PORT, "-U", "postgres", TEST_DATABASE_NAME]);
+        await runCommand("createdb", ["-h", socketDirectory, "-p", TEST_PORT, "-U", "postgres", "-T", "template0",
+          "--encoding=UTF8", "--locale=C", TEST_DATABASE_NAME]);
+      }
+      await runCommand("node", ["--import", "tsx", "--test", "--test-concurrency=1",
+        "tests/ai-media-studio-pr16b-postgres-activation.test.ts"], childEnvironment);
     }
   } catch (error) {
     const log = testProcessStarted ? "" : await readFile(logPath, "utf8").catch(() => "");
