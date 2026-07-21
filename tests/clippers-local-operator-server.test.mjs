@@ -583,7 +583,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(home, /TikTok batch by account/);
       assert.match(home, /Accounts 2 · Clips 10 · Upload files 10\/10 · Missing scheduled proof 10/);
       assert.match(home, /SPORT/);
-      assert.match(home, /Meme Radar/);
+      assert.match(home, /Streamer Reactions/);
       assert.match(home, /Metricool scheduling run sheet/);
       assert.match(home, /Next Metricool action/);
       assert.match(home, /Next action packet/);
@@ -1869,8 +1869,8 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(accountSummaryCsvResponse.headers.get("content-disposition") || "", /clippers-tiktok-batch-account-summary\.csv/);
       const accountSummaryCsv = await accountSummaryCsvResponse.text();
       assert.match(accountSummaryCsv, /account_id,brand,account_name,platform,total_rows/);
-      assert.match(accountSummaryCsv, /sports-daily,SPORT,Sports Daily Clips,tiktok,8,8,0,0,8,0,0,7129d59b5f5e/);
-      assert.match(accountSummaryCsv, /meme-radar,memes,Meme Radar,tiktok,2,2,0,0,2,0,0,53467d8f7dad/);
+      assert.match(accountSummaryCsv, /sports-daily,SPORT,Streamer Highlights,tiktok,8,8,0,0,8,0,0,7129d59b5f5e/);
+      assert.match(accountSummaryCsv, /meme-radar,memes,Streamer Reactions,tiktok,2,2,0,0,2,0,0,53467d8f7dad/);
       assert.doesNotMatch(accountSummaryCsv, /app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
 
       const accountSummaryMarkdownResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/tiktok-batch-account-summary.md`);
@@ -1880,7 +1880,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       const accountSummaryMarkdown = await accountSummaryMarkdownResponse.text();
       assert.match(accountSummaryMarkdown, /# Clippers TikTok Batch Account Summary/);
       assert.match(accountSummaryMarkdown, /Missing scheduled proof: 10/);
-      assert.match(accountSummaryMarkdown, /\| SPORT \| Sports Daily Clips \| 8 \| 8\/8 \| 0\/8/);
+      assert.match(accountSummaryMarkdown, /\| SPORT \| Streamer Highlights \| 8 \| 8\/8 \| 0\/8/);
       assert.match(accountSummaryMarkdown, /realPublishEnabled=false/);
       assert.doesNotMatch(accountSummaryMarkdown, /app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
       assert.equal(await readFile(batchEvidenceCsvPath, "utf8"), accountSummaryBeforeDownload);
@@ -1915,8 +1915,8 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(accountQueuesCsvResponse.headers.get("content-disposition") || "", /clippers-tiktok-account-queues\.csv/);
       const accountQueuesCsv = await accountQueuesCsvResponse.text();
       assert.match(accountQueuesCsv, /account_id,brand,account_name,account_order,queue_item_id,rank,platform/);
-      assert.match(accountQueuesCsv, /sports-daily,SPORT,Sports Daily Clips,1,7129d59b5f5e,2,tiktok/);
-      assert.match(accountQueuesCsv, /meme-radar,memes,Meme Radar,1,53467d8f7dad,1,tiktok/);
+      assert.match(accountQueuesCsv, /sports-daily,SPORT,Streamer Highlights,1,7129d59b5f5e,2,tiktok/);
+      assert.match(accountQueuesCsv, /meme-radar,memes,Streamer Reactions,1,53467d8f7dad,1,tiktok/);
       assert.doesNotMatch(accountQueuesCsv, /app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
 
       const accountQueuesMarkdownResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/tiktok-account-queues.md`);
@@ -1925,9 +1925,9 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(accountQueuesMarkdownResponse.headers.get("content-disposition") || "", /clippers-tiktok-account-queues\.md/);
       const accountQueuesMarkdown = await accountQueuesMarkdownResponse.text();
       assert.match(accountQueuesMarkdown, /# Clippers TikTok Account Queues/);
-      assert.match(accountQueuesMarkdown, /## SPORT \/ Sports Daily Clips/);
+      assert.match(accountQueuesMarkdown, /## SPORT \/ Streamer Highlights/);
       assert.match(accountQueuesMarkdown, /\| 1 \| 7129d59b5f5e \|/);
-      assert.match(accountQueuesMarkdown, /## memes \/ Meme Radar/);
+      assert.match(accountQueuesMarkdown, /## memes \/ Streamer Reactions/);
       assert.match(accountQueuesMarkdown, /realPublishEnabled=false/);
       assert.doesNotMatch(accountQueuesMarkdown, /app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
       assert.equal(await readFile(batchEvidenceCsvPath, "utf8"), accountQueuesBeforeDownload);
@@ -2028,7 +2028,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(currentAccountNowResponse.headers.get("content-type") || "", /text\/html/);
       const currentAccountNowHtml = await currentAccountNowResponse.text();
       assert.match(currentAccountNowHtml, /SPORT TikTok Now/);
-      assert.match(currentAccountNowHtml, /Sports Daily Clips/);
+      assert.match(currentAccountNowHtml, /Streamer Highlights/);
       assert.match(currentAccountNowHtml, /7129d59b5f5e/);
       assert.match(currentAccountNowHtml, /No programes hasta resolver el bloqueo/);
       assert.match(currentAccountNowHtml, /Real clip intake/);
@@ -2072,7 +2072,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(currentUploadCsvResponse.headers.get("content-disposition") || "", /clippers-current-tiktok-next-upload-checklist\.csv/);
       const currentUploadCsv = await currentUploadCsvResponse.text();
       assert.match(currentUploadCsv, /order,metricool_queue_item_id,metricool_brand,account_name,platform,publish_at_local,publish_at_iso,upload_file_name,caption_seed,scheduled_note_template/);
-      assert.match(currentUploadCsv, /1,7129d59b5f5e,SPORT,Sports Daily Clips,tiktok/);
+      assert.match(currentUploadCsv, /1,7129d59b5f5e,SPORT,Streamer Highlights,tiktok/);
       assert.match(currentUploadCsv, /02_sport_sports-daily_7129d59b5f5e\.mp4/);
       assert.doesNotMatch(currentUploadCsv, /53467d8f7dad|cf33ed488e40|app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
       assert.equal(currentUploadCsv.trim().split("\n").length, 2);
@@ -2100,7 +2100,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(sportsNowResponse.headers.get("content-type") || "", /text\/html/);
       const sportsNowHtml = await sportsNowResponse.text();
       assert.match(sportsNowHtml, /SPORT TikTok Now/);
-      assert.match(sportsNowHtml, /Sports Daily Clips/);
+      assert.match(sportsNowHtml, /Streamer Highlights/);
       assert.match(sportsNowHtml, /7129d59b5f5e/);
       assert.match(sportsNowHtml, /02_sport_sports-daily_7129d59b5f5e\.mp4/);
       assert.match(sportsNowHtml, /No programes hasta resolver el bloqueo/);
@@ -2115,7 +2115,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(memesNowResponse.headers.get("content-type") || "", /text\/html/);
       const memesNowHtml = await memesNowResponse.text();
       assert.match(memesNowHtml, /memes TikTok Now/);
-      assert.match(memesNowHtml, /Meme Radar/);
+      assert.match(memesNowHtml, /Streamer Reactions/);
       assert.match(memesNowHtml, /53467d8f7dad/);
       assert.match(memesNowHtml, /01_memes_meme-radar_53467d8f7dad\.mp4/);
       assert.match(memesNowHtml, /No programes hasta resolver el bloqueo/);
@@ -2130,7 +2130,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(sportsNextUploadCsvResponse.headers.get("content-disposition") || "", /clippers-sports-daily-next-upload-checklist\.csv/);
       const sportsNextUploadCsv = await sportsNextUploadCsvResponse.text();
       assert.match(sportsNextUploadCsv, /order,metricool_queue_item_id,metricool_brand,account_name,platform,publish_at_local,publish_at_iso,upload_file_name,caption_seed,scheduled_note_template/);
-      assert.match(sportsNextUploadCsv, /1,7129d59b5f5e,SPORT,Sports Daily Clips,tiktok/);
+      assert.match(sportsNextUploadCsv, /1,7129d59b5f5e,SPORT,Streamer Highlights,tiktok/);
       assert.match(sportsNextUploadCsv, /02_sport_sports-daily_7129d59b5f5e\.mp4/);
       assert.doesNotMatch(sportsNextUploadCsv, /53467d8f7dad|cf33ed488e40|app\.metricool\.com\/planner|published_post_url|metricool_approval_url/);
       assert.equal(sportsNextUploadCsv.trim().split("\n").length, 2);
@@ -2250,7 +2250,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(sportsRunbookResponse.headers.get("content-type") || "", /text\/markdown/);
       assert.match(sportsRunbookResponse.headers.get("content-disposition") || "", /clippers-sports-daily-runbook\.md/);
       const sportsRunbook = await sportsRunbookResponse.text();
-      assert.match(sportsRunbook, /# Clippers TikTok Runbook: SPORT \/ Sports Daily Clips/);
+      assert.match(sportsRunbook, /# Clippers TikTok Runbook: SPORT \/ Streamer Highlights/);
       assert.match(sportsRunbook, /Queue item: 7129d59b5f5e/);
       assert.match(sportsRunbook, /Upload file: 02_sport_sports-daily_7129d59b5f5e\.mp4/);
       assert.match(sportsRunbook, /Account next scheduled proof CSV:/);
@@ -2264,7 +2264,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       const memesRunbookResponse = await fetch(`http://127.0.0.1:${port}/api/clippers/tiktok-account-runbook.md?accountId=meme-radar`);
       assert.equal(memesRunbookResponse.status, 200);
       const memesRunbook = await memesRunbookResponse.text();
-      assert.match(memesRunbook, /# Clippers TikTok Runbook: memes \/ Meme Radar/);
+      assert.match(memesRunbook, /# Clippers TikTok Runbook: memes \/ Streamer Reactions/);
       assert.match(memesRunbook, /Queue item: 53467d8f7dad/);
       assert.match(memesRunbook, /Upload file: 01_memes_meme-radar_53467d8f7dad\.mp4/);
       assert.match(memesRunbook, /Do not open Metricool for this row yet/);
@@ -2301,7 +2301,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(operatorBrief, /## Deadline Queue/);
       assert.match(operatorBrief, /Upload pack: ready \(10\/10 files ready\)/);
       assert.match(operatorBrief, /\| Order \| Queue item \| Brand \| Account \| Publish local \| File \| Caption \| Proof note \|/);
-      assert.match(operatorBrief, /\| 1 \| 7129d59b5f5e \| SPORT \| Sports Daily Clips/);
+      assert.match(operatorBrief, /\| 1 \| 7129d59b5f5e \| SPORT \| Streamer Highlights/);
       assert.match(operatorBrief, /Do not use direct TikTok\/Instagram\/YouTube APIs/);
       assert.match(operatorBrief, /Needs roll-forward: no|Needs roll-forward: yes/);
       assert.match(operatorBrief, /Ready to schedule now: no|Ready to schedule now: yes/);
@@ -2365,7 +2365,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.match(operatorReport, /Auto roll-forward threshold: /);
       assert.match(operatorReport, /Next scheduled proof CSV/);
       assert.match(operatorReport, /realPublishEnabled: false/);
-      assert.match(operatorReport, /\| 1 \| 7129d59b5f5e \| SPORT \| Sports Daily Clips/);
+      assert.match(operatorReport, /\| 1 \| 7129d59b5f5e \| SPORT \| Streamer Highlights/);
       assert.doesNotMatch(operatorReport, /app\.metricool\.com\/planner/);
       assert.equal(await readFile(batchEvidenceCsvPath, "utf8"), reportBeforeDownload);
 
@@ -2405,7 +2405,7 @@ test("Clippers local operator server serves status and guarded workspace files",
       assert.equal(currentTikTokJson.scheduleReady, false);
       assert.equal(currentTikTokJson.queueItemId, "7129d59b5f5e");
       assert.equal(currentTikTokJson.brand, "SPORT");
-      assert.equal(currentTikTokJson.accountName, "Sports Daily Clips");
+      assert.equal(currentTikTokJson.accountName, "Streamer Highlights");
       assert.equal(currentTikTokJson.accountId, "sports-daily");
       assert.equal(currentTikTokJson.platform, "tiktok");
       assert.equal(currentTikTokJson.uploadFileName, "02_sport_sports-daily_7129d59b5f5e.mp4");
@@ -2904,6 +2904,45 @@ test("Streamer campaign permanently excludes a creator with evidenced denial", a
     assert.equal(campaign.deniedRows, 1);
     assert.equal(campaign.blanketApprovedRows, 0);
     assert.equal(campaign.rows[0].canPublish, false);
+  });
+});
+
+test("Clippers canonicalizes repurposed TikTok account names without changing Metricool identifiers", async () => {
+  await withServer({ HOST: "127.0.0.1", PORT: "5577" }, async () => {
+    const origin = "http://127.0.0.1:5577";
+    const response = await fetch(`${origin}/api/clippers/status`);
+    assert.equal(response.status, 200);
+    const status = await response.json();
+    const highlights = status.tiktokAccountQueues.accounts.find((account) => account.accountId === "sports-daily");
+    const reactions = status.tiktokAccountQueues.accounts.find((account) => account.accountId === "meme-radar");
+
+    assert.equal(highlights.accountName, "Streamer Highlights");
+    assert.equal(highlights.brand, "SPORT");
+    assert.equal(reactions.accountName, "Streamer Reactions");
+    assert.equal(reactions.brand, "memes");
+    assert.ok(status.rows.every((row) => !["Sports Daily Clips", "Meme Radar"].includes(row.accountName)));
+    assert.equal(status.metricoolApprovalRequired, true);
+    assert.equal(status.realPublishEnabled, false);
+
+    const endpointExpectations = [
+      ["/api/clippers/tiktok-batch-account-summary.csv", ["Streamer Highlights", "Streamer Reactions"]],
+      ["/api/clippers/tiktok-batch-account-summary.md", ["Streamer Highlights", "Streamer Reactions"]],
+      ["/api/clippers/tiktok-account-queues.csv", ["Streamer Highlights", "Streamer Reactions"]],
+      ["/api/clippers/tiktok-account-queues.md", ["Streamer Highlights", "Streamer Reactions"]],
+      ["/api/clippers/tiktok-account-now.html?accountId=sports-daily", ["Streamer Highlights"]],
+      ["/api/clippers/tiktok-account-now.html?accountId=meme-radar", ["Streamer Reactions"]],
+      ["/api/clippers/tiktok-account-runbook.md?accountId=sports-daily", ["Streamer Highlights"]],
+      ["/api/clippers/tiktok-account-runbook.md?accountId=meme-radar", ["Streamer Reactions"]],
+      ["/api/clippers/operator-brief.md", ["Streamer Highlights", "Streamer Reactions"]],
+      ["/api/clippers/operator-report.md", ["Streamer Highlights", "Streamer Reactions"]],
+    ];
+    for (const [pathname, expectedNames] of endpointExpectations) {
+      const endpointResponse = await fetch(`${origin}${pathname}`);
+      assert.equal(endpointResponse.status, 200, pathname);
+      const body = await endpointResponse.text();
+      for (const expectedName of expectedNames) assert.match(body, new RegExp(expectedName), pathname);
+      assert.doesNotMatch(body, /Sports Daily Clips|Meme Radar/, pathname);
+    }
   });
 });
 
@@ -5465,7 +5504,7 @@ test("Clippers local operator unlocks published metrics UI after scheduled proof
       assert.equal(publishedSinglePreview.wouldImport, 1);
       assert.equal(publishedSinglePreview.rows[0].metricoolQueueItemId, "53467d8f7dad");
       assert.equal(publishedSinglePreview.rows[0].brand, "memes");
-      assert.equal(publishedSinglePreview.rows[0].accountName, "Meme Radar");
+      assert.equal(publishedSinglePreview.rows[0].accountName, "Streamer Reactions");
       assert.doesNotMatch(JSON.stringify(publishedSinglePreview), /3234567890123456789/);
       assert.doesNotMatch(await readFile(batchEvidenceCsvPath, "utf8"), /3234567890123456789/);
 

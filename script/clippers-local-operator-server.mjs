@@ -2493,7 +2493,7 @@ function buildMetricoolOperatorChecklist(rows, status) {
         : blockers.includes("schedule_needs_roll_forward")
         ? "Click Roll forward schedule before opening Metricool."
         : "Open the Upload pack and schedule the earliest deadline rows first.",
-      "Use the Metricool brand shown on each row: SPORT for sports, memes for Meme Radar.",
+      "Use the Metricool brand shown on each row: SPORT for Streamer Highlights, memes for Streamer Reactions.",
       "After each row is scheduled in Metricool, paste the real Metricool planner URL and a concrete note in Save scheduled proof.",
       "Do not enter public TikTok URLs or 24h metrics until the video is live and metrics are real.",
     ].filter(Boolean),
@@ -3561,6 +3561,12 @@ function classifyClipSource(row = {}) {
   };
 }
 
+function canonicalTikTokAccountName(accountId, fallback = "") {
+  if (accountId === "sports-daily") return "Streamer Highlights";
+  if (accountId === "meme-radar") return "Streamer Reactions";
+  return fallback;
+}
+
 function buildRealClipGapSummary(rows = [], uploadPackIntegrity = {}) {
   const uploadRowsByQueueId = new Map((uploadPackIntegrity.rows || []).map((row) => [String(row.queueItemId || ""), row]));
   const rowSummaries = rows.map((row) => {
@@ -3571,11 +3577,7 @@ function buildRealClipGapSummary(rows = [], uploadPackIntegrity = {}) {
       rank: row.rank || "",
       accountId: row.accountId || "",
       brand: row.metricoolBrandName || "",
-      accountName: row.accountId === "sports-daily"
-        ? "Streamer Highlights"
-        : row.accountId === "meme-radar"
-          ? "Streamer Reactions"
-          : row.accountName || "",
+      accountName: canonicalTikTokAccountName(row.accountId, row.accountName || ""),
       platform: row.platform || "",
       publishAt: row.publishAt || "",
       uploadFileName: row.uploadFileName || "",
@@ -9518,7 +9520,7 @@ async function buildStatus() {
       rank: row.rank || "",
       status: row.status || "",
       queueItemId,
-      accountName: row.accountName || "",
+      accountName: canonicalTikTokAccountName(row.accountId, row.accountName || ""),
       accountId: row.accountId || "",
       metricoolBrandName: row.metricoolBrandName || "",
       platform: row.platform || "",
