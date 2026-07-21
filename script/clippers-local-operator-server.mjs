@@ -7285,7 +7285,7 @@ function trustedStreamerRoutingProof(input) {
   const platform = String(input?.platform || "").trim().toLowerCase();
   const sportsProfileUrl = String(input?.sportsProfileUrl || "").trim();
   const memesProfileUrl = String(input?.memesProfileUrl || "").trim();
-  const confirmed = ["user_confirmed", "metricool_ui_verified"].includes(source)
+  const connectionsVerified = ["user_confirmed", "metricool_ui_verified"].includes(source)
     && Number.isFinite(confirmedAtMs)
     && confirmedAtMs <= Date.now() + 5 * 60_000
     && platform === "tiktok"
@@ -7293,20 +7293,23 @@ function trustedStreamerRoutingProof(input) {
     && input?.memesConnected === true
     && input?.publicProfileVerified === true
     && exactTikTokProfileUrl(sportsProfileUrl, "@streamersclipusa")
-    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips")
+    && exactTikTokProfileUrl(memesProfileUrl, "@streamersclips");
+  const confirmed = connectionsVerified
     && sportsAccountName.toLowerCase() === "streamer highlights"
     && memesAccountName.toLowerCase() === "streamer reactions";
   return {
     confirmed,
-    source: confirmed ? source : "not_confirmed",
+    connectionsVerified,
+    source: connectionsVerified ? source : "not_confirmed",
     confirmedAt: confirmed ? confirmedAt : "",
+    connectionsVerifiedAt: connectionsVerified ? confirmedAt : "",
     accountNames: {
-      sportsConnection: confirmed ? sportsAccountName : "SPORT",
-      memesConnection: confirmed ? memesAccountName : "memes",
+      sportsConnection: connectionsVerified ? sportsAccountName : "SPORT",
+      memesConnection: connectionsVerified ? memesAccountName : "memes",
     },
     profileUrls: {
-      sportsConnection: confirmed ? sportsProfileUrl : "",
-      memesConnection: confirmed ? memesProfileUrl : "",
+      sportsConnection: connectionsVerified ? sportsProfileUrl : "",
+      memesConnection: connectionsVerified ? memesProfileUrl : "",
     },
   };
 }
@@ -7845,8 +7848,12 @@ function buildStreamerGrowthCeo(status) {
     measuredAt: metrics.measuredAt,
     routingConfirmation: {
       confirmed: rebrandConfirmed,
+      connectionsVerified: metrics.rebrandConfirmed || routingProof.connectionsVerified,
       source: metrics.rebrandConfirmed ? "metricool" : routingProof.source,
       confirmedAt: metrics.rebrandConfirmed ? metrics.measuredAt : routingProof.confirmedAt,
+      connectionsVerifiedAt: metrics.rebrandConfirmed ? metrics.measuredAt : routingProof.connectionsVerifiedAt,
+      accountNames: routingProof.accountNames,
+      profileUrls: routingProof.profileUrls,
     },
     views30d: metrics.views30d,
     followersByAccount: metrics.followersByAccount,

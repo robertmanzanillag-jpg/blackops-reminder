@@ -2752,6 +2752,36 @@ test("Streamer Growth CEO rejects routing proof for the wrong TikTok handles", a
   await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
     const status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
     assert.equal(status.streamerGrowthCeo.routingConfirmation.confirmed, false);
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.connectionsVerified, false);
+  });
+});
+
+test("Streamer Growth CEO preserves verified Metricool connections while rebrand remains pending", async () => {
+  const port = "5572";
+  await writeFile(streamerGrowthRoutingPath, `${JSON.stringify({
+    source: "metricool_ui_verified",
+    confirmedAt: new Date().toISOString(),
+    platform: "tiktok",
+    sportsAccountName: "streamersclipusa",
+    memesAccountName: "streamersclips",
+    sportsConnected: true,
+    memesConnected: true,
+    publicProfileVerified: true,
+    sportsProfileUrl: "https://www.tiktok.com/@streamersclipusa",
+    memesProfileUrl: "https://www.tiktok.com/@streamersclips",
+  }, null, 2)}\n`);
+
+  await withServer({ HOST: "127.0.0.1", PORT: port }, async () => {
+    const status = await (await fetch(`http://127.0.0.1:${port}/api/clippers/status`)).json();
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.confirmed, false);
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.connectionsVerified, true);
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.source, "metricool_ui_verified");
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.confirmedAt, "");
+    assert.match(status.streamerGrowthCeo.routingConfirmation.connectionsVerifiedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.accountNames.sportsConnection, "streamersclipusa");
+    assert.equal(status.streamerGrowthCeo.routingConfirmation.accountNames.memesConnection, "streamersclips");
+    assert.equal(status.streamerGrowthCeo.status, "external_rebrand_required");
+    assert.equal(status.streamerGrowthCeo.nextAction.stage, "rebrand_connected_accounts");
   });
 });
 
