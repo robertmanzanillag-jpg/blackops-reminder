@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { storageTenantSegment } from "./object-keys";
 import type {
   AssetIngestErrorCode,
   AssetIngestJob,
@@ -6,6 +7,7 @@ import type {
   BoundedArtifactReader,
   ExactHostSsrfPolicy,
   OwnedObjectStorage,
+  ArtifactReadStream,
 } from "./contracts";
 import { AssetIngestFailure } from "./contracts";
 
@@ -52,8 +54,9 @@ export class AssetIngestWorker {
     if (!claim) return { outcome: "idle" };
     const temporaryObjectKey = temporaryAssetKey(claim.job);
     let upload: Awaited<ReturnType<OwnedObjectStorage["beginUpload"]>> | undefined;
+    let artifact: ArtifactReadStream | undefined;
     try {
-      const artifact = await this.options.reader.open({
+      artifact = await this.options.reader.open({
         url: claim.job.sourceUrl,
         policy: this.options.sourcePolicy,
         maxBytes: this.options.maxArtifactBytes,
@@ -97,7 +100,7 @@ export class AssetIngestWorker {
       if (!this.options.hooks?.onCompleted) return { outcome: "completed", job: completed };
       try {
         const materialized = await this.options.hooks.onCompleted(completed);
-        if (!materialized?.mediaAssetId) return { outcome: "completed_unlinked", job: completed };
+        if (!materialized || !materialized.mediaAssetId) return { outcome: "completed_unlinked", job: completed };
         const linked = await this.options.repository.attachMediaAsset({
           tenantId: completed.tenantId,
           jobId: completed.id,
@@ -110,6 +113,11 @@ export class AssetIngestWorker {
         return { outcome: "completed_unlinked", job: completed };
       }
     } catch (error) {
+      try {
+        artifact?.abort();
+      } catch {
+        // The primary safe ingest failure must not be replaced by a transport cleanup error.
+      }
       await upload?.abort().catch(() => undefined);
       const failure = classifyFailure(error);
       const failed = await this.options.repository.fail({
@@ -136,7 +144,7 @@ export class AssetIngestWorker {
     for (const job of jobs) {
       try {
         const materialized = await this.options.hooks.onCompleted(job);
-        if (!materialized?.mediaAssetId) continue;
+        if (!materialized || !materialized.mediaAssetId) continue;
         const attached = await this.options.repository.attachMediaAsset({
           tenantId: job.tenantId,
           jobId: job.id,
@@ -154,7 +162,15 @@ export class AssetIngestWorker {
 
 export function temporaryAssetKey(job: Pick<AssetIngestJob, "tenantId" | "renderJobId" | "id">) {
   const safe = (value: string) => encodeURIComponent(value).replaceAll("%", "_");
-  return `ai-media-studio/${safe(job.tenantId)}/ingest/${safe(job.renderJobId)}-${safe(job.id)}.tmp`;
+  let tenantSegment: string;
+  try {
+    tenantSegment = storageTenantSegment(job.tenantId);
+  } catch {
+    // Legacy in-memory repositories may still use a plain tenant key. Production S3
+    // validates structured tenants and fails closed if such a key reaches its boundary.
+    tenantSegment = safe(job.tenantId);
+  }
+  return `ai-media-studio/${tenantSegment}/ingest/${safe(job.renderJobId)}-${safe(job.id)}.tmp`;
 }
 
 function normalizeMime(value: string) { return value.split(";", 1)[0].trim().toLowerCase(); }

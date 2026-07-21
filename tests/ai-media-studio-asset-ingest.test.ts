@@ -35,6 +35,7 @@ function stream(overrides: Partial<ArtifactReadStream> = {}): ArtifactReadStream
     mimeType: "video/mp4",
     declaredSizeBytes: mp4.byteLength,
     chunks: (async function* () { yield mp4.subarray(0, 7); yield mp4.subarray(7); })(),
+    abort: () => undefined,
     ...overrides,
   };
 }
@@ -151,6 +152,30 @@ test("MIME, declared/streamed size, chunk, and MP4 signature violations are perm
     if (result.outcome === "dead_letter") assert.equal(result.job.lastErrorCode, entry.code);
     assert.equal(storage.abortedKeys.length, entry.name === "mime" || entry.name === "declared size" ? 0 : 1);
   });
+});
+
+test("MIME rejection aborts the artifact response without consuming its body", async () => {
+  const repository = new InMemoryAssetIngestRepository();
+  let aborted = 0;
+  let iterated = false;
+  const chunks: AsyncIterable<Uint8Array> = {
+    async *[Symbol.asyncIterator]() {
+      iterated = true;
+      yield mp4;
+    },
+  };
+  await enqueue(repository);
+  const result = await createWorker({
+    repository,
+    reader: new FakeBoundedArtifactReader(stream({
+      mimeType: "text/plain",
+      chunks,
+      abort: () => { aborted += 1; },
+    })),
+  }).runNext();
+  assert.equal(result.outcome, "dead_letter");
+  assert.equal(aborted, 1);
+  assert.equal(iterated, false);
 });
 
 test("transient failures retry with backoff, dead-letter at the bound, and redact provider details", async () => {

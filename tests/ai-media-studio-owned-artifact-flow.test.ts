@@ -65,6 +65,7 @@ test("provider completion becomes a tenant-owned canonical asset only after boun
       mimeType: "video/mp4",
       declaredSizeBytes: mp4Header.byteLength,
       chunks: (async function* () { yield mp4Header; })(),
+      abort: () => undefined,
     }),
     sourcePolicy: {
       allowedHosts: new Set(["cdn.example.com"]), requireHttps: true, requireStandardPort: true,

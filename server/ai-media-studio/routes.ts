@@ -111,7 +111,10 @@ import type { CanonicalSourceItem } from "./sources/contracts";
 import { SourceCursorError } from "./sources/source-pagination";
 import {
   InMemoryAssetIngestRepository,
+  createProductionAssetRuntimeFromEnvironment,
   type AssetDeliverySigner,
+  type ProductionAssetAdapterDependencies,
+  type ProductionAssetEnvironment,
   type AssetIngestJob,
   type AssetIngestRepository,
   type AssetIngestWorkerHooks,
@@ -153,6 +156,10 @@ export interface AiMediaStudioDependencies {
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
+  /** Server-only production asset configuration; never serialized into Studio DTOs. */
+  productionAssetEnvironment?: ProductionAssetEnvironment;
+  /** Transport/client seams for construction tests; production callers normally omit this. */
+  productionAssetAdapterDependencies?: ProductionAssetAdapterDependencies;
   /** Must probe the live reader, owned storage, signer, and worker process; absent by default. */
   assetIngestWorkerReadiness?: { isReady(): boolean | Promise<boolean> };
 }
@@ -524,6 +531,13 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
   const environment = runtimeEnvironment?.trim().toLowerCase();
+  const assetDeliverySigner = dependencies.assetDeliverySigner ?? (() => {
+    const productionAssets = createProductionAssetRuntimeFromEnvironment(
+      dependencies.productionAssetEnvironment ?? process.env,
+      dependencies.productionAssetAdapterDependencies,
+    );
+    return productionAssets.available ? productionAssets.signer : undefined;
+  })();
   const assetIngestRepository = dependencies.assetIngestRepository
     ?? (persistence.status.durable
       ? createDefaultDurableAssetIngestRepository()
@@ -934,12 +948,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const asset = await core.repositories.assets.get(scope.ownerUserId, idSchema.parse(req.params.id));
     if (!asset || asset.workspaceId !== scope.workspaceId) throw new CoreDomainNotFoundError("Media asset not found");
     if (asset.status !== "ready" || !asset.storageKey) throw new CoreDomainValidationError("Only ready owned media assets can be delivered");
-    if (!dependencies.assetDeliverySigner || asset.storageProvider !== "owned-object-storage") {
+    if (!assetDeliverySigner || asset.storageProvider !== "owned-object-storage") {
       throw new MediaStudioPersistenceUnavailableError("Owned media delivery is unavailable");
     }
     const expiresInSeconds = 300;
     const issuedAt = Date.now();
-    const url = await dependencies.assetDeliverySigner.sign({ tenantId: JSON.stringify([scope.workspaceId, scope.ownerUserId]), objectKey: asset.storageKey, expiresInSeconds });
+    const url = await assetDeliverySigner.sign({ tenantId: JSON.stringify([scope.workspaceId, scope.ownerUserId]), objectKey: asset.storageKey, expiresInSeconds });
     res.json(assetDeliverySchema.parse({ url, expiresAt: new Date(issuedAt + expiresInSeconds * 1_000).toISOString() }));
   }));
 

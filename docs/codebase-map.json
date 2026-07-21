@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T03:28:49.644Z",
+  "generatedAt": "2026-07-21T04:12:15.647Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-pr4",
   "packageName": "rest-express",
   "scripts": {
@@ -85,35 +85,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 598,
-    "filesIndexed": 517,
-    "imports": 2049,
+    "filesVisible": 605,
+    "filesIndexed": 524,
+    "imports": 2090,
     "routes": 487,
-    "symbols": 9695
+    "symbols": 9884
   },
   "directories": {
-    "migrations/ai-media-studio": {
-      "files": 11,
-      "indexed": 1,
-      "kinds": {
-        "other": 10,
-        "docs": 1
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 80,
-      "indexed": 79,
-      "kinds": {
-        "server": 80
-      }
-    },
-    "tests": {
-      "files": 104,
-      "indexed": 100,
-      "kinds": {
-        "test": 104
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -178,6 +156,14 @@
         "docs": 12
       }
     },
+    "migrations/ai-media-studio": {
+      "files": 11,
+      "indexed": 1,
+      "kinds": {
+        "other": 10,
+        "docs": 1
+      }
+    },
     "script": {
       "files": 38,
       "indexed": 36,
@@ -199,6 +185,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 84,
+      "indexed": 83,
+      "kinds": {
+        "server": 84
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -218,6 +211,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 107,
+      "indexed": 103,
+      "kinds": {
+        "test": 107
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6957,6 +6957,64 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/assets/http-artifact-reader.ts",
+      "kind": "server",
+      "imports": [
+        "../core/safe-media-downloader",
+        "./contracts",
+        "node:dns/promises",
+        "node:http",
+        "node:https",
+        "node:net",
+        "node:url"
+      ],
+      "exports": [
+        "NodeHttpsArtifactReader",
+        "NodeHttpsArtifactReaderOptions",
+        "NodeHttpsStreamingTransport",
+        "PinnedHttpsRequest",
+        "StreamingHttpsResponse",
+        "StreamingHttpsTransport",
+        "isPublicIp",
+        "resolvePublicAddresses"
+      ],
+      "symbols": [
+        "DEFAULT_REQUEST_TIMEOUT_MS",
+        "NodeHttpsArtifactReader",
+        "NodeHttpsStreamingTransport",
+        "REDIRECT_STATUSES",
+        "address",
+        "bytes",
+        "discard",
+        "family",
+        "hostname",
+        "isPublicIp",
+        "location",
+        "normalizedHostname",
+        "parseAndValidateUrl",
+        "parseContentLength",
+        "parseRedirect",
+        "parsed",
+        "pinned",
+        "raw",
+        "records",
+        "redactUrl",
+        "req",
+        "resolvePinnedAddress",
+        "resolvePublicAddresses",
+        "response",
+        "retryable",
+        "safeFailure",
+        "singleHeader",
+        "status",
+        "toBytes",
+        "validateReadBounds",
+        "visited",
+        "wrapIncomingMessage"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/assets/in-memory-repository.ts",
       "kind": "server",
       "imports": [
@@ -6987,7 +7045,10 @@
         "./contracts",
         "./drizzle-ingest-repository",
         "./fakes",
+        "./http-artifact-reader",
         "./in-memory-repository",
+        "./production-runtime",
+        "./s3-compatible-storage",
         "./worker"
       ],
       "exports": [],
@@ -6995,10 +7056,148 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/assets/object-keys.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "storageTenantSegment"
+      ],
+      "symbols": [
+        "canonicalTenantId",
+        "storageTenantSegment"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/assets/production-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./http-artifact-reader",
+        "./s3-compatible-storage",
+        "./worker"
+      ],
+      "exports": [
+        "AvailableProductionAssetRuntime",
+        "CreateProductionAssetIngestWorkerInput",
+        "ProductionAssetAdapterDependencies",
+        "ProductionAssetEnvironment",
+        "ProductionAssetRuntime",
+        "createProductionAssetIngestWorker",
+        "createProductionAssetRuntimeFromEnvironment"
+      ],
+      "symbols": [
+        "DEFAULTS",
+        "ENV",
+        "KNOWN_ENV_NAMES",
+        "ParsedProductionAssetConfiguration",
+        "SAFE_CONFIGURATION_ERROR",
+        "accessKeyId",
+        "bucket",
+        "config",
+        "configuredNames",
+        "createProductionAssetIngestWorker",
+        "createProductionAssetRuntimeFromEnvironment",
+        "endpoint",
+        "forcePathStyle",
+        "invalidConfiguration",
+        "isExactHostname",
+        "isSafeWorkerId",
+        "labels",
+        "maxBytes",
+        "maxChunkBytes",
+        "maxRedirects",
+        "multipartPartSizeBytes",
+        "optional",
+        "parseBoolean",
+        "parseBoundedInteger",
+        "parseConfiguration",
+        "parseHosts",
+        "parsed",
+        "raw",
+        "region",
+        "requestTimeoutMs",
+        "required",
+        "runtime",
+        "s3Config",
+        "secretAccessKey",
+        "sessionToken",
+        "sourceHosts",
+        "unique",
+        "validateEndpoint",
+        "value",
+        "values"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/assets/s3-compatible-storage.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts",
+        "./object-keys",
+        "@aws-sdk/client-s3",
+        "@aws-sdk/s3-request-presigner",
+        "node:crypto"
+      ],
+      "exports": [
+        "S3CommandClient",
+        "S3CompatibleAssetDeliverySigner",
+        "S3CompatibleCredentials",
+        "S3CompatibleObjectStorageConfig",
+        "S3CompatibleOwnedObjectStorage",
+        "S3CompatiblePresign"
+      ],
+      "symbols": [
+        "MAX_DELIVERY_TTL_SECONDS",
+        "MAX_MULTIPART_PARTS",
+        "MIN_MULTIPART_PART_BYTES",
+        "MultipartOwnedObjectUpload",
+        "NormalizedConfig",
+        "S3CompatibleAssetDeliverySigner",
+        "S3CompatibleOwnedObjectStorage",
+        "actualSha256",
+        "assertContentAddressedTenantKey",
+        "assertObjectMatches",
+        "assertTenantObjectKey",
+        "body",
+        "candidate",
+        "client",
+        "contentAddressedObjectKey",
+        "copySource",
+        "created",
+        "existing",
+        "finalObjectKey",
+        "headObject",
+        "initialPartBuffer",
+        "isNotFound",
+        "isSafeLocalUploadError",
+        "length",
+        "lowerCaseMetadata",
+        "metadata",
+        "normalizeConfig",
+        "normalizeMime",
+        "objectMetadata",
+        "partNumber",
+        "partSizeBytes",
+        "promoted",
+        "safeEqualSha256",
+        "sendOrThrow",
+        "signedUrl",
+        "signingDate",
+        "suffix",
+        "suppliedCredentials",
+        "tenantPrefix",
+        "uploaded"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/assets/worker.ts",
       "kind": "server",
       "imports": [
         "./contracts",
+        "./object-keys",
         "node:crypto"
       ],
       "exports": [
@@ -7012,7 +7211,6 @@
       "symbols": [
         "AssetIngestWorker",
         "appendPrefix",
-        "artifact",
         "attached",
         "boxSize",
         "claim",
@@ -8656,6 +8854,7 @@
         "assertPublishingGovernance",
         "assertRenderGovernance",
         "asset",
+        "assetDeliverySigner",
         "assetId",
         "assetIngestRepository",
         "asyncRoute",
@@ -8727,6 +8926,7 @@
         "persistence",
         "preview",
         "previewInput",
+        "productionAssets",
         "profile",
         "providerAccountId",
         "providerKey",
@@ -17075,6 +17275,48 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-http-artifact-reader.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeTransport",
+        "PUBLIC_V4",
+        "aborted",
+        "artifact",
+        "atLimit",
+        "bodyArtifact",
+        "chunkArtifact",
+        "collect",
+        "expectFailure",
+        "failed",
+        "loopA",
+        "loopB",
+        "loopTransport",
+        "next",
+        "ok",
+        "open",
+        "oversizedBody",
+        "oversizedChunk",
+        "policy",
+        "privateTransport",
+        "promise",
+        "providerSecret",
+        "reader",
+        "redirect",
+        "response",
+        "sourcePolicy",
+        "streaming",
+        "transport",
+        "urls"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-influencers.test.ts",
       "kind": "test",
       "imports": [
@@ -17549,6 +17791,46 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-production-asset-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets",
+        "../server/ai-media-studio/core/in-memory-asset-repository",
+        "../server/ai-media-studio/core/in-memory-core-repositories",
+        "../server/ai-media-studio/core/runtime",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NoNetworkS3Client",
+        "address",
+        "app",
+        "client",
+        "coreRepositories",
+        "explicit",
+        "explicitResponse",
+        "previousFallback",
+        "repositories",
+        "runtime",
+        "secret",
+        "server",
+        "signed",
+        "startDeliveryRuntime",
+        "tenantId",
+        "tenantSegment",
+        "unavailable",
+        "unavailableResponse",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-publishing-drizzle.test.ts",
       "kind": "test",
       "imports": [
@@ -17887,6 +18169,49 @@
       "symbols": [
         "durableRepository",
         "selection"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-s3-storage.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/object-keys",
+        "../server/ai-media-studio/assets/s3-compatible-storage",
+        "../server/ai-media-studio/assets/worker",
+        "@aws-sdk/client-s3",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MultipartSuccessClient",
+        "PART_SIZE",
+        "TEMPORARY_KEY",
+        "TENANT",
+        "TENANT_SEGMENT",
+        "body",
+        "bytes",
+        "client",
+        "commandName",
+        "committed",
+        "complete",
+        "copy",
+        "error",
+        "finalKey",
+        "makeStorage",
+        "matches",
+        "notFound",
+        "now",
+        "objectKey",
+        "oneCommand",
+        "sha256",
+        "signed",
+        "signer",
+        "storage",
+        "upload",
+        "whitespaceVariant"
       ],
       "routes": []
     },
@@ -19600,6 +19925,7 @@
     "tests/ai-media-studio-core-schema.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
+    "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
@@ -19614,6 +19940,7 @@
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
+    "tests/ai-media-studio-production-asset-runtime.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",
     "tests/ai-media-studio-publishing.test.ts",
     "tests/ai-media-studio-render-flow-integration.test.ts",
@@ -19621,6 +19948,7 @@
     "tests/ai-media-studio-render-worker.test.ts",
     "tests/ai-media-studio-routes.test.ts",
     "tests/ai-media-studio-runtime-persistence.test.ts",
+    "tests/ai-media-studio-s3-storage.test.ts",
     "tests/ai-media-studio-schema-wiring.test.ts",
     "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-media-studio-sources.test.ts",
