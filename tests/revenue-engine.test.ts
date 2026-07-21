@@ -4469,7 +4469,7 @@ test("website sales packet queue keeps older ready packages visible", () => {
     mockupSlug: "older-sales-packet-cafe",
   });
 
-  for (let index = 1; index <= 11; index += 1) {
+  for (let index = 1; index <= 101; index += 1) {
     createApprovedWebsiteDraftForTest({
       businessName: `Newer Sales Packet Cafe ${index}`,
       contactEmail: `owner${index}@salespacket.example`,
@@ -4481,14 +4481,14 @@ test("website sales packet queue keeps older ready packages visible", () => {
   const snapshot = getRevenueEngineSnapshot();
 
   assert.equal(snapshot.recentLeads.some((item) => item.id === older.lead.id), false);
-  assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 12);
-  assert.equal(snapshot.websiteSalesPacketQueue.items.length, 12);
+  assert.equal(snapshot.websiteSalesPacketQueue.readyCount, 102);
+  assert.equal(snapshot.websiteSalesPacketQueue.items.length, 102);
   assert.equal(snapshot.websiteSalesPacketQueue.items.some((item) => item.leadId === older.lead.id), true);
   const olderPacket = snapshot.websiteSalesPacketQueue.items.find((item) => item.leadId === older.lead.id)!;
   assert.equal(olderPacket.outreachDraftId, older.draft.id);
   assert.match(olderPacket.copyableSalesPacket, /Older Sales Packet Cafe/);
   assert.equal(snapshot.dailyMoneyCommand.status, "contact");
-  assert.equal(snapshot.dailyMoneyCommand.funnel.salesPacketsReady, 12);
+  assert.equal(snapshot.dailyMoneyCommand.funnel.salesPacketsReady, 102);
 });
 
 test("public scout evidence reaches PR-first website delivery handoff", () => {
