@@ -228,8 +228,14 @@ function stored(record: ConfigureHeyGenRosterRecord): StoredRoster {
   };
 }
 
-function resourceMetadata(member: HeyGenRosterNativeMember, rosterId: string, kind: "avatar" | "voice"): Record<string, unknown> {
-  if (kind === "voice") return { source: "heygen_roster" };
+function resourceMetadata(
+  member: HeyGenRosterNativeMember,
+  rosterId: string,
+  kind: "avatar" | "voice",
+  credentialVersion: number,
+  liveVerified: boolean,
+): Record<string, unknown> {
+  if (kind === "voice") return { source: "heygen_roster", credentialVersion, liveVerified };
   return {
     language: member.language,
     accent: member.accent,
@@ -237,6 +243,8 @@ function resourceMetadata(member: HeyGenRosterNativeMember, rosterId: string, ki
     source: "heygen_roster",
     rosterId,
     memberId: member.memberId,
+    credentialVersion,
+    liveVerified,
   };
 }
 
@@ -248,14 +256,18 @@ async function upsertResource(input: {
   member: HeyGenRosterNativeMember;
   kind: "avatar" | "voice";
   externalId: string;
+  credentialVersion: number;
+  pendingVerification: boolean;
 }): Promise<string> {
-  const { tx, scope, providerAccountId, rosterId, member, kind, externalId } = input;
+  const { tx, scope, providerAccountId, rosterId, member, kind, externalId, credentialVersion, pendingVerification } = input;
   const displayName = kind === "avatar" ? member.name : "HeyGen voice";
-  const metadata = resourceMetadata(member, rosterId, kind);
+  const metadata = resourceMetadata(member, rosterId, kind, credentialVersion, !pendingVerification);
+  const status = pendingVerification ? "pending_verification" : "active";
+  const synchronizedAt = pendingVerification ? sql`NULL` : sql`clock_timestamp()`;
   const existing = rows(await tx.execute(sql`
     UPDATE ${aiMediaProviderResources}
-    SET display_name=${displayName}, status='active', metadata=COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb,
-        synchronized_at=clock_timestamp(), updated_at=clock_timestamp()
+    SET display_name=${displayName}, status=${status}, metadata=COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb,
+        synchronized_at=${synchronizedAt}, updated_at=clock_timestamp()
     WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
       AND provider_account_id=${providerAccountId} AND provider_key='heygen'
       AND resource_type=${kind} AND external_resource_id=${externalId}
@@ -271,8 +283,8 @@ async function upsertResource(input: {
       canonical_key, external_resource_id, display_name, status, metadata, synchronized_at, created_at, updated_at
     ) VALUES (
       ${id}, ${scope.ownerUserId}, ${scope.workspaceId}, ${providerAccountId}, 'heygen', ${kind},
-      ${canonicalKey}, ${externalId}, ${displayName}, 'active', ${JSON.stringify(metadata)}::jsonb,
-      clock_timestamp(), clock_timestamp(), clock_timestamp()
+      ${canonicalKey}, ${externalId}, ${displayName}, ${status}, ${JSON.stringify(metadata)}::jsonb,
+      ${synchronizedAt}, clock_timestamp(), clock_timestamp()
     ) ON CONFLICT DO NOTHING RETURNING id
   `))[0];
   if (inserted) return text(inserted, "id", "id");
@@ -337,7 +349,7 @@ async function createInfluencer(input: {
   return text(updated, "id", "id");
 }
 
-/** Resolves exactly one usable HeyGen account without selecting configuration or secret material. */
+/** Resolves exactly one static-key HeyGen account without selecting configuration or secret material. */
 export function createDrizzleHeyGenRosterAccountResolver(db: HeyGenRosterExecutor): HeyGenRosterAccountResolver {
   return {
     async resolve(scope: TenantScope): Promise<HeyGenResolvedAccountContext | undefined> {
@@ -345,8 +357,9 @@ export function createDrizzleHeyGenRosterAccountResolver(db: HeyGenRosterExecuto
         SELECT id, credential_version
         FROM ${aiMediaProviderAccounts}
         WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-          AND provider_key='heygen' AND status IN ('active', 'connected')
-          AND credential_status='active' AND credential_version >= 1
+          AND provider_key='heygen' AND credential_source='static_api_key' AND credential_version >= 1
+          AND ((status='disconnected' AND credential_status='unverified')
+            OR (status IN ('active', 'connected') AND credential_status='active'))
         ORDER BY id ASC LIMIT 2
       `));
       if (result.length !== 1) return undefined;
@@ -371,15 +384,18 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
     return this.db.transaction(async (tx) => {
       const accountingTimeZone = canonicalTimeZone(input.accountingTimeZone);
       const account = rows(await tx.execute(sql`
-        SELECT id, credential_version, configuration
+        SELECT id, credential_version, credential_status, configuration
         FROM ${aiMediaProviderAccounts}
         WHERE id=${input.providerAccountId} AND owner_user_id=${input.scope.ownerUserId}
           AND workspace_id=${input.scope.workspaceId} AND provider_key='heygen'
-          AND status IN ('active', 'connected') AND credential_status='active'
+          AND credential_source='static_api_key'
+          AND ((status='disconnected' AND credential_status='unverified')
+            OR (status IN ('active', 'connected') AND credential_status='active'))
           AND credential_version=${input.credentialVersion}
         FOR UPDATE
       `))[0];
       if (!account) throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
+      const pendingVerification = text(account, "credentialStatus", "credential_status") !== "active";
       const parsed = parseNamespace(account.configuration, input.scope);
       const replay = parsed.records.get(input.rosterId);
       if (replay) {
@@ -416,10 +432,12 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
         const avatarResourceId = await upsertResource({
           tx, scope: record.scope, providerAccountId: record.providerAccountId,
           rosterId: record.rosterId, member, kind: "avatar", externalId: member.avatarId,
+          credentialVersion: record.credentialVersion, pendingVerification,
         });
         const voiceResourceId = await upsertResource({
           tx, scope: record.scope, providerAccountId: record.providerAccountId,
           rosterId: record.rosterId, member, kind: "voice", externalId: member.voiceId,
+          credentialVersion: record.credentialVersion, pendingVerification,
         });
         const influencerId = await createInfluencer({
           tx, scope: record.scope, rosterId: record.rosterId, member,
@@ -508,7 +526,9 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
           ${JSON.stringify(nextNamespace)}::jsonb, true), updated_at=clock_timestamp()
         WHERE id=${input.providerAccountId} AND owner_user_id=${input.scope.ownerUserId}
           AND workspace_id=${input.scope.workspaceId} AND provider_key='heygen'
-          AND status IN ('active', 'connected') AND credential_status='active'
+          AND credential_source='static_api_key'
+          AND ((status='disconnected' AND credential_status='unverified')
+            OR (status IN ('active', 'connected') AND credential_status='active'))
           AND credential_version=${input.credentialVersion}
         RETURNING id
       `))[0];
@@ -520,14 +540,14 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
   }
 
   async get(scope: TenantScope, rosterId: string): Promise<HeyGenRosterRecord | undefined> {
-    const account = await this.activeAccount(scope);
+    const account = await this.usableAccount(scope);
     if (!account) return undefined;
     const record = parseNamespace(account.configuration, scope).records.get(rosterId);
     return this.requireAccountBinding(account, record);
   }
 
   async getCurrent(scope: TenantScope): Promise<HeyGenRosterRecord | undefined> {
-    const account = await this.activeAccount(scope);
+    const account = await this.usableAccount(scope);
     if (!account) return undefined;
     const parsed = parseNamespace(account.configuration, scope);
     const record = parsed.namespace ? parsed.records.get(parsed.namespace.activeRosterId) : undefined;
@@ -535,7 +555,7 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
   }
 
   async getCurrentDailyPlan(scope: TenantScope): Promise<HeyGenRosterDailyPlan | undefined> {
-    const account = await this.activeAccount(scope);
+    const account = await this.usableAccount(scope);
     if (!account) return undefined;
     const parsed = parseNamespace(account.configuration, scope);
     const record = parsed.namespace ? parsed.records.get(parsed.namespace.activeRosterId) : undefined;
@@ -683,13 +703,14 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
     return record;
   }
 
-  private async activeAccount(scope: TenantScope): Promise<Record<string, unknown> | undefined> {
+  private async usableAccount(scope: TenantScope): Promise<Record<string, unknown> | undefined> {
     const candidates = rows(await this.db.execute(sql`
       SELECT id, credential_version, configuration
       FROM ${aiMediaProviderAccounts}
       WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-        AND provider_key='heygen' AND status IN ('active', 'connected')
-        AND credential_status='active' AND credential_version >= 1
+        AND provider_key='heygen' AND credential_source='static_api_key' AND credential_version >= 1
+        AND ((status='disconnected' AND credential_status='unverified')
+          OR (status IN ('active', 'connected') AND credential_status='active'))
       ORDER BY id ASC LIMIT 2
     `));
     if (candidates.length > 1) throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");

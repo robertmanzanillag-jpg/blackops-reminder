@@ -30,8 +30,9 @@ class FakeRosterDatabase {
     if (/SELECT id, credential_version FROM .*ai_media_provider_accounts/iu.test(entry.text)) {
       return { rows: [{ id: "11111111-1111-4111-8111-111111111111", credential_version: 3 }] };
     }
-    if (/SELECT id, credential_version, configuration/iu.test(entry.text)) {
-      return { rows: [{ id: "11111111-1111-4111-8111-111111111111", credential_version: 3, configuration: this.configuration }] };
+    if (/SELECT id, credential_version, credential_status, configuration/iu.test(entry.text)) {
+      return { rows: [{ id: "11111111-1111-4111-8111-111111111111", credential_version: 3,
+        credential_status: "unverified", configuration: this.configuration }] };
     }
     if (/SELECT observed_at, .* AS plan_date FROM \(SELECT clock_timestamp\(\)/iu.test(entry.text)) {
       return { rows: [{ observed_at: new Date("2026-07-21T15:00:00.000Z"), plan_date: "2026-07-21" }] };
@@ -135,7 +136,7 @@ function requestWithCount(count: number, idempotencyKey = `launch-roster-${count
   };
 }
 
-test("durable roster setup locks the exact active account and atomically writes resources, influencers and configuration", async () => {
+test("durable roster setup locks the exact pending static account and atomically writes pending resources, influencers and configuration", async () => {
   const fake = new FakeRosterDatabase();
   const db = fake.asDatabase();
   const service = new HeyGenRosterService(
@@ -148,16 +149,19 @@ test("durable roster setup locks the exact active account and atomically writes 
   assert.equal(configured.roster.plannedVideoCount, 50);
   assert.equal(fake.transactionCalls, 1);
 
-  const lock = fake.queries.find((query) => /SELECT id, credential_version, configuration/iu.test(query.text));
+  const lock = fake.queries.find((query) => /SELECT id, credential_version, credential_status, configuration/iu.test(query.text));
   assert.ok(lock);
   assert.match(lock.text, /owner_user_id/iu);
   assert.match(lock.text, /workspace_id/iu);
   assert.match(lock.text, /provider_key.*heygen/iu);
-  assert.match(lock.text, /credential_status.*active/iu);
+  assert.match(lock.text, /credential_source.*static_api_key/iu);
+  assert.match(lock.text, /credential_status.*unverified/iu);
   assert.match(lock.text, /credential_version/iu);
   assert.match(lock.text, /FOR UPDATE/iu);
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_influencers/iu.test(query.text)).length, 5);
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_provider_resources/iu.test(query.text)).length, 10);
+  assert.ok(fake.queries.filter((query) => /^INSERT INTO .*ai_media_provider_resources/iu.test(query.text))
+    .every((query) => query.params.includes("pending_verification")));
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plans/iu.test(query.text)).length, 1);
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plan_slots/iu.test(query.text)).length, 50);
   const durablePlan = await new DrizzleHeyGenRosterRepository(db).getCurrentDailyPlan({ ownerUserId: "owner-a", workspaceId: "personal" });
@@ -314,6 +318,7 @@ test("account resolver selects no secret/configuration columns and fails closed 
   const normalized = compiled.sql.replace(/\s+/gu, " ");
   assert.match(normalized, /owner_user_id.*workspace_id.*provider_key/iu);
   assert.match(normalized, /status IN \('active', 'connected'\)/iu);
-  assert.match(normalized, /credential_status.*active/iu);
+  assert.match(normalized, /credential_source.*static_api_key/iu);
+  assert.match(normalized, /credential_status.*unverified/iu);
   assert.doesNotMatch(normalized, /secret_ref|configuration|external_account_id/iu);
 });

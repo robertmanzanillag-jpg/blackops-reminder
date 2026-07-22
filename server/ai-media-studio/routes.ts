@@ -29,8 +29,10 @@ import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-laun
 import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
 import {
   configureHeyGenRosterResponseSchema,
+  createHeyGenRosterRequestSchema,
   heyGenRosterDailyPlanResponseSchema,
 } from "../../shared/ai-media-studio-heygen-roster";
+import { heyGenOnboardingReadinessSchema } from "../../shared/ai-media-studio-heygen-onboarding";
 import {
   assetQualityReviewResponseSchema,
   createAssetQualityReviewRequestSchema,
@@ -91,6 +93,12 @@ import type {
 import { HeyGenRosterError } from "./providers/heygen-roster-contracts";
 import { HeyGenRosterService } from "./providers/heygen-roster-service";
 import { HeyGenRosterDailyPlanService } from "./providers/heygen-roster-daily-plan-service";
+import {
+  DrizzleHeyGenOnboardingReadinessRepository,
+  HeyGenOnboardingReadinessError,
+  HeyGenOnboardingReadinessService,
+  type HeyGenOnboardingReadinessRepository,
+} from "./providers/heygen-onboarding-readiness";
 import { DeterministicScriptService } from "./script-service";
 import { ProductionBatchError, type ProductionBatchRepository } from "./production-batches/contracts";
 import { ProductionBatchService } from "./production-batches/service";
@@ -181,6 +189,8 @@ export interface AiMediaStudioDependencies {
     repository: HeyGenRosterRepository;
     accountResolver: HeyGenRosterAccountResolver;
   };
+  heyGenOnboardingReadinessRepository?: HeyGenOnboardingReadinessRepository;
+  createDurableHeyGenOnboardingReadinessRepository?: () => HeyGenOnboardingReadinessRepository;
   /** Trusted server-owned calendar zone for the planning-only daily roster preview. */
   heyGenRosterDailyPlanTimeZone?: string;
   productionBatchRepository?: ProductionBatchRepository;
@@ -210,6 +220,8 @@ export interface AiMediaStudioRuntime {
   heyGenRoster: HeyGenRosterService | undefined;
   heyGenRosterDailyPlan: HeyGenRosterDailyPlanService | undefined;
   heyGenRosterPersistence: MediaStudioPersistenceStatus;
+  heyGenOnboardingReadiness: HeyGenOnboardingReadinessService | undefined;
+  heyGenOnboardingReadinessPersistence: MediaStudioPersistenceStatus;
   productionBatches: ProductionBatchService | undefined;
   productionBatchPersistence: MediaStudioPersistenceStatus;
   launchPreflight: LaunchPreflightService | undefined;
@@ -383,6 +395,15 @@ function createDefaultDurableHeyGenRosterRuntime(): {
   };
 }
 
+function createDefaultDurableHeyGenOnboardingReadinessRepository(): HeyGenOnboardingReadinessRepository {
+  let pending: Promise<HeyGenOnboardingReadinessRepository> | undefined;
+  const load = () => pending ??= import("../db")
+    .then(({ db }) => new DrizzleHeyGenOnboardingReadinessRepository(db));
+  return {
+    observe: async (...args) => (await load()).observe(...args),
+  };
+}
+
 function createDefaultDurableProductionBatchRepository(): ProductionBatchRepository {
   let pending: Promise<ProductionBatchRepository> | undefined;
   const load = () => pending ??= Promise.all([
@@ -540,6 +561,39 @@ function selectHeyGenRosterRuntime(
   return {
     service: undefined,
     status: { mode: "unavailable", available: false, durable: false, reason: "DATABASE_URL or an injected HeyGen roster runtime is required" },
+  };
+}
+
+function selectHeyGenOnboardingReadinessRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: HeyGenOnboardingReadinessService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.heyGenOnboardingReadinessRepository) {
+    return {
+      service: new HeyGenOnboardingReadinessService(dependencies.heyGenOnboardingReadinessRepository),
+      status: { mode: "injected", available: true, durable: false, reason: "HeyGen onboarding readiness repository supplied by the composition caller" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableHeyGenOnboardingReadinessRepository
+        ?? createDefaultDurableHeyGenOnboardingReadinessRepository)();
+      return {
+        service: new HeyGenOnboardingReadinessService(repository),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle read-only HeyGen onboarding readiness selected" },
+      };
+    } catch (error) {
+      return {
+        service: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `HeyGen onboarding readiness initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
+  }
+  return {
+    service: undefined,
+    status: { mode: "unavailable", available: false, durable: false,
+      reason: "DATABASE_URL or an injected HeyGen onboarding readiness repository is required" },
   };
 }
 
@@ -753,6 +807,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const heyGenRosterDailyPlan = heyGenRosterSelection.service
     ? new HeyGenRosterDailyPlanService(heyGenRosterSelection.service)
     : undefined;
+  const heyGenOnboardingReadinessSelection = selectHeyGenOnboardingReadinessRuntime(dependencies, databaseUrl);
   const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
@@ -998,6 +1053,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Operations", operations.status.mode);
     res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-HeyGen-Roster", heyGenRosterSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-HeyGen-Onboarding", heyGenOnboardingReadinessSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
     next();
@@ -1009,7 +1065,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       && governanceSelection.status.available;
     res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status,
       operations: operations.status, governance: governanceSelection.status,
-      heyGenRoster: heyGenRosterSelection.status, productionBatches: productionBatchSelection.status,
+      heyGenRoster: heyGenRosterSelection.status, heyGenOnboardingReadiness: heyGenOnboardingReadinessSelection.status,
+      productionBatches: productionBatchSelection.status,
       sandboxReadiness: sandboxReadinessSelection.status });
   });
 
@@ -1023,6 +1080,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
+  const requireHeyGenOnboardingReadiness = requireCapability(heyGenOnboardingReadinessSelection.status, "HeyGen onboarding readiness");
   const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
   const requireLaunchPreflight = requireCapability(launchPreflightSelection.status, "AI Media Studio launch preflight");
   const requireSandboxReadiness = requireCapability(sandboxReadinessSelection.status, "AI Media Studio sandbox readiness");
@@ -1053,6 +1111,19 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     }));
   }));
 
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/onboarding-readiness`, (req, res, next) => {
+    res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next();
+  }, requireHeyGenOnboardingReadiness, asyncRoute(async (req, res) => {
+    const contentLength = req.get("content-length");
+    if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+      || (contentLength !== undefined && contentLength !== "0")) {
+      throw new HeyGenOnboardingReadinessError("INVALID_REQUEST");
+    }
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const readiness = await heyGenOnboardingReadinessSelection.service!.get(scope);
+    res.json(heyGenOnboardingReadinessSchema.parse(readiness));
+  }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenRoster, asyncRoute(async (req, res) => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     const roster = await heyGenRosterSelection.service!.currentStatus(scope);
@@ -1063,8 +1134,15 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(configureHeyGenRosterResponseSchema.parse({ roster }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenRoster, asyncRoute(async (req, res) => {
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenOnboardingReadiness, requireHeyGenRoster, asyncRoute(async (req, res) => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    if (!createHeyGenRosterRequestSchema.safeParse(req.body).success) {
+      throw new HeyGenRosterError("INVALID_REQUEST");
+    }
+    const readiness = await heyGenOnboardingReadinessSelection.service!.get(scope);
+    if (!["ready_for_roster_ids", "roster_configured_blocked", "stale_roster_binding"].includes(readiness.status)) {
+      throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
+    }
     const configured = await heyGenRosterSelection.service!.configure(scope, req.body);
     res.status(201).json(configureHeyGenRosterResponseSchema.parse(configured));
   }));
@@ -1547,6 +1625,13 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof HeyGenOnboardingReadinessError) {
+      const message = error.code === "INVALID_REQUEST"
+        ? "Invalid HeyGen onboarding readiness request"
+        : "HeyGen onboarding readiness is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof SandboxReadinessError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid sandbox readiness request"
         : error.code === "NOT_FOUND" ? "Production plan or slot not found" : "Sandbox readiness is unavailable";
@@ -1622,6 +1707,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     heyGenRoster: heyGenRosterSelection.service,
     heyGenRosterDailyPlan,
     heyGenRosterPersistence: heyGenRosterSelection.status,
+    heyGenOnboardingReadiness: heyGenOnboardingReadinessSelection.service,
+    heyGenOnboardingReadinessPersistence: heyGenOnboardingReadinessSelection.status,
     productionBatches: productionBatchSelection.service,
     productionBatchPersistence: productionBatchSelection.status,
     launchPreflight: launchPreflightSelection.service,

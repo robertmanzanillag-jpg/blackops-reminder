@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PaginationError } from "./pagination-feedback";
+import { selectableProviderResources } from "./provider-resource-selection";
 import {
   emptyInfluencerForm,
   commaList,
@@ -101,6 +102,10 @@ export function InfluencerForm({ influencer, avatars, voices, hasMoreAvatars, ha
   }, [serverError]);
 
   const minimumAge = Number(watch("minimumAge"));
+  const selectedAvatarResourceId = watch("avatarResourceId");
+  const selectedVoiceResourceId = watch("voiceResourceId");
+  const { active: activeAvatars, selectedUnavailable: selectedAvatarUnavailable } = selectableProviderResources(avatars, selectedAvatarResourceId);
+  const { active: activeVoices, selectedUnavailable: selectedVoiceUnavailable } = selectableProviderResources(voices, selectedVoiceResourceId);
 
   const invalid = (invalidFields: FieldErrors<InfluencerFormValues>) => requestAnimationFrame(() => {
     const fieldName = Object.keys(invalidFields)[0];
@@ -137,16 +142,22 @@ export function InfluencerForm({ influencer, avatars, voices, hasMoreAvatars, ha
             <div>
               <Label htmlFor="influencer-avatar">Avatar</Label>
               <select id="influencer-avatar" className={inputClass} {...register("avatarResourceId")}>
-                <option value="">Assign later</option>{avatars.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
+                <option value="">Assign later</option>
+                {selectedAvatarUnavailable && <option value={selectedAvatarResourceId} disabled>Current avatar · unavailable</option>}
+                {activeAvatars.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
               </select>
+              {selectedAvatarUnavailable && <p className="mt-1 text-xs leading-5 text-amber-200">This avatar is not verified or is not loaded. Choose an active avatar or Assign later before saving.</p>}
               {hasMoreAvatars && <Button type="button" size="sm" variant="ghost" className="mt-1 px-1 text-emerald-200" disabled={loadingMoreAvatars} onClick={onLoadMoreAvatars}>{loadingMoreAvatars ? "Loading avatars…" : "Load more avatars"}</Button>}
               {avatarPaginationError && <PaginationError label="More avatars could not be loaded" message={avatarPaginationError} pending={loadingMoreAvatars} onRetry={onLoadMoreAvatars} />}
             </div>
             <div>
               <Label htmlFor="influencer-voice">Voice</Label>
               <select id="influencer-voice" className={inputClass} {...register("voiceResourceId")}>
-                <option value="">Assign later</option>{voices.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}{resource.accent ? ` · ${resource.accent}` : ""}</option>)}
+                <option value="">Assign later</option>
+                {selectedVoiceUnavailable && <option value={selectedVoiceResourceId} disabled>Current voice · unavailable</option>}
+                {activeVoices.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}{resource.accent ? ` · ${resource.accent}` : ""}</option>)}
               </select>
+              {selectedVoiceUnavailable && <p className="mt-1 text-xs leading-5 text-amber-200">This voice is not verified or is not loaded. Choose an active voice or Assign later before saving.</p>}
               {hasMoreVoices && <Button type="button" size="sm" variant="ghost" className="mt-1 px-1 text-emerald-200" disabled={loadingMoreVoices} onClick={onLoadMoreVoices}>{loadingMoreVoices ? "Loading voices…" : "Load more voices"}</Button>}
               {voicePaginationError && <PaginationError label="More voices could not be loaded" message={voicePaginationError} pending={loadingMoreVoices} onRetry={onLoadMoreVoices} />}
             </div>

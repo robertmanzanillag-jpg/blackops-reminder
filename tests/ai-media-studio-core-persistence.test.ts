@@ -225,6 +225,10 @@ test("core row mappings materialize persona fields and redact provider identity"
   assert.equal("providerAccountId" in resource, false);
   assert.equal("providerKey" in resource, false);
   assert.equal("secretRef" in resource, false);
+
+  const pending = mapCanonicalResourceRow({ ...resourceRow, status: "pending_verification", synchronizedAt: null });
+  assert.equal(pending.status, "inactive");
+  assert.equal(pending.synchronizedAt, null);
 });
 
 test("asset mapping supports all nine kinds and never materializes bytes", () => {

@@ -236,21 +236,27 @@ function SandboxReadinessPanel({ batch }: { batch: ProductionBatch }) {
         <span className="font-semibold">No spend · No provider call · No execution.</span> Connecting the provider API remains a separate, later approval step.
       </div>
 
-      <div className="max-w-2xl">
-        <label htmlFor="sandbox-approved-slot" className="text-sm font-medium text-zinc-100">Approved public slot</label>
-        <p id="sandbox-approved-slot-help" className="mt-1 text-xs text-zinc-400">Selection changes only the credentialed read-only packet below.</p>
-        <select
-          id="sandbox-approved-slot"
-          value={selectedSlotId}
-          onChange={(event) => setSelectedSlotId(event.currentTarget.value)}
-          aria-describedby="sandbox-approved-slot-help"
-          className="mt-2 min-h-11 w-full rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-        >
-          {approvedSlots.map(({ group, item }) => (
-            <option key={item.slotId} value={item.slotId}>{group.creatorName} · Video {item.videoNumber} · {item.script.title}</option>
-          ))}
-        </select>
-      </div>
+      {approvedSlots.length === 0 ? (
+        <div role="status" className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-6 text-zinc-300">
+          No approved public slot is available. Approve the complete script batch before inspecting one-video sandbox readiness.
+        </div>
+      ) : (
+        <div className="max-w-2xl">
+          <label htmlFor="sandbox-approved-slot" className="text-sm font-medium text-zinc-100">Approved public slot</label>
+          <p id="sandbox-approved-slot-help" className="mt-1 text-xs text-zinc-400">Selection changes only the credentialed read-only packet below.</p>
+          <select
+            id="sandbox-approved-slot"
+            value={selectedSlotId}
+            onChange={(event) => setSelectedSlotId(event.currentTarget.value)}
+            aria-describedby="sandbox-approved-slot-help"
+            className="mt-2 min-h-11 w-full rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+          >
+            {approvedSlots.map(({ group, item }) => (
+              <option key={item.slotId} value={item.slotId}>{group.creatorName} · Video {item.videoNumber} · {item.script.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {query.isFetching && !query.isLoading && <p role="status" aria-live="polite" className="text-sm text-cyan-100">Refreshing the selected slot packet…</p>}
       {query.isLoading ? (

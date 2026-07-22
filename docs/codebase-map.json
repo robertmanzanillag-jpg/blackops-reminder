@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T03:40:12.659Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-sandbox-readiness",
+  "generatedAt": "2026-07-22T04:50:11.524Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-onboarding-readiness",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -44,6 +44,7 @@
     "test:automation-registry": "node --import tsx --test tests/automation-registry.test.ts",
     "test:migration": "node --import tsx --test tests/user-migration-plan.test.ts",
     "test:ai-media-postgres": "node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
+    "test:ai-media-heygen-static-postgres": "node --import tsx script/ai-media-studio-static-heygen-postgres-test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
@@ -87,53 +88,23 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 812,
-    "filesIndexed": 684,
-    "imports": 2890,
-    "routes": 496,
-    "symbols": 13608
+    "filesVisible": 833,
+    "filesIndexed": 698,
+    "imports": 2958,
+    "routes": 497,
+    "symbols": 13774
   },
   "directories": {
-    "script": {
-      "files": 42,
-      "indexed": 40,
+    "client/src": {
+      "files": 154,
+      "indexed": 152,
       "kinds": {
-        "script": 42
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 147,
-      "indexed": 140,
-      "kinds": {
-        "server": 147
-      }
-    },
-    "shared": {
-      "files": 12,
-      "indexed": 12,
-      "kinds": {
-        "shared": 12
-      }
-    },
-    "tests": {
-      "files": 197,
-      "indexed": 188,
-      "kinds": {
-        "test": 197
-      }
-    },
-    "tests/fixtures": {
-      "files": 3,
-      "indexed": 1,
-      "kinds": {
-        "test": 3
-      }
-    },
-    "tests/helpers": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "test": 1
+        "other": 44,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
       }
     },
     ".agents/skills": {
@@ -174,18 +145,6 @@
         "other": 13
       }
     },
-    "client/src": {
-      "files": 152,
-      "indexed": 150,
-      "kinds": {
-        "other": 42,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 24
-      }
-    },
     "docs/ai-media-studio": {
       "files": 12,
       "indexed": 12,
@@ -201,11 +160,18 @@
       }
     },
     "migrations/ai-media-studio": {
-      "files": 46,
-      "indexed": 2,
+      "files": 49,
+      "indexed": 3,
       "kinds": {
-        "other": 45,
-        "docs": 1
+        "other": 47,
+        "docs": 2
+      }
+    },
+    "script": {
+      "files": 43,
+      "indexed": 41,
+      "kinds": {
+        "script": 43
       }
     },
     "scripts": {
@@ -222,6 +188,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 151,
+      "indexed": 141,
+      "kinds": {
+        "server": 151
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -229,11 +202,39 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 13,
+      "indexed": 13,
+      "kinds": {
+        "shared": 13
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 206,
+      "indexed": 195,
+      "kinds": {
+        "test": 206
+      }
+    },
+    "tests/fixtures": {
+      "files": 4,
+      "indexed": 2,
+      "kinds": {
+        "test": 4
+      }
+    },
+    "tests/helpers": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -2373,6 +2374,7 @@
       "kind": "other",
       "imports": [
         "./types",
+        "@shared/ai-media-studio-heygen-onboarding",
         "@shared/ai-media-studio-heygen-roster",
         "@shared/ai-media-studio-launch-preflight",
         "@shared/ai-media-studio-production-batches",
@@ -2464,7 +2466,7 @@
       "path": "client/src/features/ai-media-studio/core/core-studio-workspace.tsx",
       "kind": "other",
       "imports": [
-        "./heygen-roster-setup",
+        "./heygen-onboarding-panel",
         "./influencer-workspace",
         "./media-library",
         "lucide-react"
@@ -2478,13 +2480,36 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/core/heygen-onboarding-panel.tsx",
+      "kind": "other",
+      "imports": [
+        "./heygen-roster-setup",
+        "./hooks",
+        "@/components/ui/button",
+        "@shared/ai-media-studio-heygen-onboarding",
+        "lucide-react"
+      ],
+      "exports": [
+        "HeyGenOnboardingPanel"
+      ],
+      "symbols": [
+        "HeyGenOnboardingPanel",
+        "ReadinessPanel",
+        "metadataPrepared",
+        "query"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/features/ai-media-studio/core/heygen-roster-setup.tsx",
       "kind": "other",
       "imports": [
         "./hooks",
         "./types",
+        "@/components/ui/alert-dialog",
         "@/components/ui/button",
         "@/components/ui/label",
+        "@shared/ai-media-studio-heygen-onboarding",
         "@shared/ai-media-studio-heygen-roster",
         "lucide-react",
         "react",
@@ -2502,6 +2527,7 @@
         "TextField",
         "attemptRef",
         "bytes",
+        "canCollectProviderIds",
         "controlCharacterPattern",
         "currentRoster",
         "dailyPlan",
@@ -2526,8 +2552,11 @@
         "parsed",
         "plannedVideoCount",
         "prefix",
+        "rosterObservationAllowed",
         "rosterQuery",
         "setupBlocked",
+        "showRosterForm",
+        "staleRoster",
         "statusRef",
         "submit"
       ],
@@ -2546,6 +2575,7 @@
         "useApproveProductionBatchScripts",
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
+        "useHeyGenOnboardingReadiness",
         "useHeyGenRoster",
         "useHeyGenRosterDailyPlan",
         "useInfluencerMutations",
@@ -2567,6 +2597,7 @@
         "useApproveProductionBatchScripts",
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
+        "useHeyGenOnboardingReadiness",
         "useHeyGenRoster",
         "useHeyGenRosterDailyPlan",
         "useInfluencerMutations",
@@ -2610,6 +2641,7 @@
       "kind": "other",
       "imports": [
         "./pagination-feedback",
+        "./provider-resource-selection",
         "./types",
         "@/components/ui/button",
         "@/components/ui/label",
@@ -2633,6 +2665,8 @@
         "inputClass",
         "invalid",
         "minimumAge",
+        "selectedAvatarResourceId",
+        "selectedVoiceResourceId",
         "submit",
         "textareaClass"
       ],
@@ -2800,6 +2834,21 @@
         "reviewedBatchRef",
         "scriptReadiness",
         "selectedSlot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/features/ai-media-studio/core/provider-resource-selection.ts",
+      "kind": "other",
+      "imports": [
+        "./types"
+      ],
+      "exports": [
+        "selectableProviderResources"
+      ],
+      "symbols": [
+        "active",
+        "selectableProviderResources"
       ],
       "routes": []
     },
@@ -5008,6 +5057,14 @@
       "routes": []
     },
     {
+      "path": "migrations/ai-media-studio/pending/README.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "migrations/ai-media-studio/README.md",
       "kind": "docs",
       "imports": [],
@@ -5195,6 +5252,37 @@
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "waitForPostgres"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-static-heygen-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
       ],
       "routes": []
     },
@@ -11208,6 +11296,7 @@
         "parseNamespace",
         "parseStoredRoster",
         "parsed",
+        "pendingVerification",
         "persona",
         "planDate",
         "planDigest",
@@ -11236,7 +11325,9 @@
         "slotUuid",
         "slots",
         "slug",
+        "status",
         "stored",
+        "synchronizedAt",
         "text",
         "timeZone",
         "updated",
@@ -11274,6 +11365,63 @@
         "rawStatus",
         "status",
         "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-onboarding-readiness.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-heygen-onboarding",
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleHeyGenOnboardingReadinessRepository",
+        "HeyGenOnboardingDatabase",
+        "HeyGenOnboardingExecutor",
+        "HeyGenOnboardingObservation",
+        "HeyGenOnboardingReadinessError",
+        "HeyGenOnboardingReadinessRepository",
+        "HeyGenOnboardingReadinessService"
+      ],
+      "symbols": [
+        "AccountObservation",
+        "DrizzleHeyGenOnboardingReadinessRepository",
+        "EFFECTS",
+        "ExecuteResult",
+        "HeyGenOnboardingReadinessError",
+        "HeyGenOnboardingReadinessService",
+        "PlanObservation",
+        "ReadinessStatus",
+        "TARGET",
+        "account",
+        "accountRows",
+        "bindingMatches",
+        "clockRows",
+        "countsInRange",
+        "credentialComplete",
+        "date",
+        "integer",
+        "iso",
+        "item",
+        "latest",
+        "pendingVerification",
+        "planRows",
+        "requiredText",
+        "rosterComplete",
+        "rows",
+        "stale",
+        "staticMetadata",
+        "steps",
+        "summarize",
+        "summary",
+        "unavailable",
+        "validScope",
+        "value",
+        "values",
+        "verified"
       ],
       "routes": []
     },
@@ -11826,6 +11974,7 @@
         "../../shared/ai-media-studio-agent",
         "../../shared/ai-media-studio-core",
         "../../shared/ai-media-studio-governance",
+        "../../shared/ai-media-studio-heygen-onboarding",
         "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-launch-preflight",
         "../../shared/ai-media-studio-operations",
@@ -11855,6 +12004,7 @@
         "./production-batches/service",
         "./provider-webhooks",
         "./providers/fake-video-provider",
+        "./providers/heygen-onboarding-readiness",
         "./providers/heygen-roster-contracts",
         "./providers/heygen-roster-daily-plan-service",
         "./providers/heygen-roster-service",
@@ -11901,6 +12051,7 @@
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
         "createDefaultDurableGovernanceRepository",
+        "createDefaultDurableHeyGenOnboardingReadinessRepository",
         "createDefaultDurableHeyGenRosterRuntime",
         "createDefaultDurableLaunchPreflightRepository",
         "createDefaultDurableProductionBatchRepository",
@@ -11931,6 +12082,7 @@
         "governanceSeeds",
         "governanceSelection",
         "hasMore",
+        "heyGenOnboardingReadinessSelection",
         "heyGenProvider",
         "heyGenRosterDailyPlan",
         "heyGenRosterSelection",
@@ -11979,6 +12131,7 @@
         "queue",
         "rawBody",
         "rawStatus",
+        "readiness",
         "reason",
         "reconcileCompletedArtifact",
         "reconcileCompletedAssetIngests",
@@ -11989,6 +12142,7 @@
         "requireCapability",
         "requireCatalog",
         "requireGovernance",
+        "requireHeyGenOnboardingReadiness",
         "requireHeyGenRoster",
         "requireJobs",
         "requireLaunchPreflight",
@@ -12013,6 +12167,7 @@
         "secret",
         "seedGovernance",
         "selectGovernanceRepository",
+        "selectHeyGenOnboardingReadinessRuntime",
         "selectHeyGenRosterRuntime",
         "selectLaunchPreflightRuntime",
         "selectProductionBatchRuntime",
@@ -12066,6 +12221,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
+        "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/onboarding-readiness",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-resources",
@@ -19530,6 +19686,40 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-heygen-onboarding.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "HeyGenOnboardingReadiness",
+        "HeyGenOnboardingReadinessResponse",
+        "heyGenOnboardingActionCodeSchema",
+        "heyGenOnboardingReadinessResponseSchema",
+        "heyGenOnboardingReadinessSchema",
+        "heyGenOnboardingReasonCodeSchema",
+        "heyGenOnboardingStatusSchema",
+        "heyGenOnboardingStepIdSchema",
+        "heyGenOnboardingStepSchema"
+      ],
+      "symbols": [
+        "effectsSchema",
+        "expected",
+        "hasCounts",
+        "heyGenOnboardingActionCodeSchema",
+        "heyGenOnboardingReadinessResponseSchema",
+        "heyGenOnboardingReadinessSchema",
+        "heyGenOnboardingReasonCodeSchema",
+        "heyGenOnboardingStatusSchema",
+        "heyGenOnboardingStepIdSchema",
+        "heyGenOnboardingStepSchema",
+        "rosterSchema",
+        "secretHandlingSchema",
+        "targetSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-heygen-roster.ts",
       "kind": "shared",
       "imports": [
@@ -20020,6 +20210,7 @@
         "aiMediaScriptVariants",
         "aiMediaScripts",
         "aiMediaSourceItems",
+        "aiMediaStaticCredentialBindings",
         "aiMediaStudioTables",
         "aiMediaVideoProjects",
         "aiMediaVideos",
@@ -20068,6 +20259,7 @@
         "aiMediaScriptVariants",
         "aiMediaScripts",
         "aiMediaSourceItems",
+        "aiMediaStaticCredentialBindings",
         "aiMediaStudioTables",
         "aiMediaVideoProjects",
         "aiMediaVideos",
@@ -20464,6 +20656,7 @@
         "pageSource",
         "routesSource",
         "sandbox",
+        "sandboxReadiness",
         "snapshot",
         "staging"
       ],
@@ -20750,6 +20943,7 @@
         "../client/src/features/ai-media-studio/core/api.ts",
         "../client/src/features/ai-media-studio/core/archive-dialog-state.ts",
         "../client/src/features/ai-media-studio/core/influencer-selection.ts",
+        "../client/src/features/ai-media-studio/core/provider-resource-selection.ts",
         "../client/src/features/ai-media-studio/core/types.ts",
         "node:assert/strict",
         "node:fs/promises",
@@ -20773,6 +20967,7 @@
         "pending",
         "repositoryRoot",
         "request",
+        "resource",
         "resources",
         "source",
         "workbench",
@@ -20821,6 +21016,7 @@
         "page",
         "pageDb",
         "paged",
+        "pending",
         "promotion",
         "query",
         "raceDb",
@@ -21181,6 +21377,138 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-heygen-onboarding-browser.test.ts",
+      "kind": "test",
+      "imports": [
+        "@vitejs/plugin-react",
+        "node:assert/strict",
+        "node:fs",
+        "node:http",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright",
+        "vite"
+      ],
+      "exports": [
+        "useConfigureHeyGenRoster",
+        "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan"
+      ],
+      "symbols": [
+        "address",
+        "browser",
+        "browserHarnessPlugin",
+        "bundledBrowser",
+        "cacheDir",
+        "entryPath",
+        "httpServer",
+        "observations",
+        "page",
+        "repositoryRoot",
+        "roster",
+        "systemChrome",
+        "useConfigureHeyGenRoster",
+        "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan",
+        "virtualHooksId",
+        "virtualHooksSource",
+        "vite"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-onboarding-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/core/api.ts",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "originalFetch",
+        "readiness",
+        "repositoryRoot",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-onboarding-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/heygen-onboarding-readiness",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "observed",
+        "queryText",
+        "repository",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-onboarding-readiness.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/providers/heygen-onboarding-readiness",
+        "../shared/ai-media-studio-heygen-onboarding",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "cases",
+        "observedAt",
+        "plan",
+        "result",
+        "scope",
+        "service",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-onboarding-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/providers/heygen-onboarding-readiness",
+        "../server/ai-media-studio/routes",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "getWithBody",
+        "harness",
+        "id",
+        "observation",
+        "previous",
+        "req",
+        "response",
+        "runtime",
+        "server",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-heygen-roster-client.test.ts",
       "kind": "test",
       "imports": [
@@ -21415,6 +21743,7 @@
       "symbols": [
         "address",
         "app",
+        "body",
         "configured",
         "configuredResponse",
         "crossTenant",
@@ -21427,6 +21756,7 @@
         "plan",
         "planResponse",
         "previous",
+        "response",
         "restoreDevFallback",
         "rosterRequest",
         "runtime",
@@ -23732,6 +24062,22 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr28-static-heygen-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "forward",
+        "rollback",
+        "staticBranch"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr3-contracts.test.ts",
       "kind": "test",
       "imports": [
@@ -24965,6 +25311,44 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-static-heygen-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "TEMP_PREFIX",
+        "accountId",
+        "bytes",
+        "client",
+        "enabled",
+        "graph",
+        "integrationTest",
+        "manifest",
+        "migrationRoot",
+        "ownedUrl",
+        "parsed",
+        "pendingForward",
+        "pendingRollback",
+        "pool",
+        "resolvedSocket",
+        "reviewedForward",
+        "socket",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-webhook-resolver.test.ts",
       "kind": "test",
       "imports": [
@@ -25916,6 +26300,24 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/ai-media-studio-heygen-onboarding-browser-entry.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/features/ai-media-studio/core/heygen-roster-setup",
+        "../../shared/ai-media-studio-heygen-onboarding",
+        "react",
+        "react-dom/client"
+      ],
+      "exports": [],
+      "symbols": [
+        "harness",
+        "readiness",
+        "render",
+        "root"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/fixtures/ai-media-studio-sandbox-readiness-browser-entry.tsx",
       "kind": "test",
       "imports": [
@@ -26657,6 +27059,11 @@
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-held-work-activation.test.ts",
+    "tests/ai-media-studio-heygen-onboarding-browser.test.ts",
+    "tests/ai-media-studio-heygen-onboarding-client.test.ts",
+    "tests/ai-media-studio-heygen-onboarding-drizzle.test.ts",
+    "tests/ai-media-studio-heygen-onboarding-readiness.test.ts",
+    "tests/ai-media-studio-heygen-onboarding-routes.test.ts",
     "tests/ai-media-studio-heygen-roster-client.test.ts",
     "tests/ai-media-studio-heygen-roster-contracts.test.ts",
     "tests/ai-media-studio-heygen-roster-daily-plan-service.test.ts",
@@ -26730,6 +27137,7 @@
     "tests/ai-media-studio-pr27-postgres-migration.test.ts",
     "tests/ai-media-studio-pr27-terminal-migration.test.ts",
     "tests/ai-media-studio-pr27-terminal-repository.test.ts",
+    "tests/ai-media-studio-pr28-static-heygen-migration.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
@@ -26766,6 +27174,9 @@
     "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-media-studio-sources.test.ts",
     "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
+    "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",
+    "tests/ai-media-studio-static-heygen-credentials.test.ts",
+    "tests/ai-media-studio-static-heygen-postgres.test.ts",
     "tests/ai-media-studio-webhook-env-secret.test.ts",
     "tests/ai-media-studio-webhook-resolver.test.ts",
     "tests/ai-media-studio-webhook-security.test.ts",

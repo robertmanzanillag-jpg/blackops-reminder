@@ -43,7 +43,7 @@ function numberOrUndefined(value: unknown): number | undefined {
 function resourceStatus(value: string): CanonicalResourceStatus {
   // Older provider syncs used `unavailable`; the public contract uses
   // `inactive`. Keep the compatibility conversion inside persistence.
-  if (value === "unavailable") return "inactive";
+  if (value === "unavailable" || value === "pending_verification") return "inactive";
   if (value === "active" || value === "inactive" || value === "archived") return value;
   throw new Error(`Unsupported canonical resource status in persistence: ${value}`);
 }
