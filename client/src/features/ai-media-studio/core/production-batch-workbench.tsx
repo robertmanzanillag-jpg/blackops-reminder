@@ -300,7 +300,8 @@ function OneVideoExecutionControlPanel({
       ) : query.isError ? (
         <ErrorPanel message={query.error.message} onRetry={() => query.refetch().then(() => undefined)} />
       ) : control ? (
-        <div className="space-y-4" aria-live="polite" aria-atomic="true">
+        <div className="space-y-4">
+          <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">Execution evidence loaded for {control.selection.creator.label}. Execution remains disabled.</p>
           <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Creator</dt><dd className="mt-1 font-medium text-white">{control.selection.creator.label}</dd></div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Public avatar</dt><dd className="mt-1 font-medium text-white">{control.selection.avatar.label}</dd></div>
@@ -429,7 +430,8 @@ function SandboxReadinessPanel({ batch }: { batch: ProductionBatch }) {
       ) : query.isError ? (
         <ErrorPanel message={query.error.message} onRetry={() => query.refetch().then(() => undefined)} />
       ) : packet ? (
-        <div className="space-y-4" aria-live="polite" aria-atomic="true">
+        <div className="space-y-4">
+          <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">Sandbox readiness loaded for {packet.preview.creatorName}, video {packet.preview.videoNumber}. No provider call or spend occurred.</p>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
             <div className="mx-auto flex aspect-[9/16] w-full max-w-[240px] flex-col justify-between rounded-2xl border border-cyan-200/25 bg-gradient-to-b from-cyan-400/15 to-black/30 p-4 shadow-inner" aria-label="Vertical 9 by 16 video preview">
               <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Vertical · 9:16</p><p className="mt-3 text-lg font-semibold text-white">{packet.preview.creatorName}</p><p className="mt-1 text-sm text-zinc-300">Video {packet.preview.videoNumber}</p></div>

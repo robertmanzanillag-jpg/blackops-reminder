@@ -51,7 +51,7 @@ A future explicitly approved read-only verification must prove all of the follow
 
 The read-only verification can contact HeyGen but cannot create a video. It requires a separate Robert approval because it resolves the secret and performs provider network requests.
 
-The static V3 verifier is intentionally unmounted and inert until its explicit `verify` method is called with a server-only `StaticHeyGenApiKey`. It may use only `GET /v3/users/me`, `GET /v3/avatars/looks/{look_id}`, `GET /v3/avatars/{group_id}`, and `GET /v3/voices/{voice_id}`. It must verify 5-10 exact avatar looks, deduplicate voices before provider I/O, cap streamed response bodies at 256 KiB, enforce per-request and overall time bounds, and fail closed for malformed, oversized, unauthorized, forbidden, not-found, rate-limited, timeout, transport, or untrusted provider responses. Verification outcomes are server-side evidence only: they may carry exact selected avatar look IDs and voice IDs for repository matching, plus digests and bounded statuses/support fields, but no provider URLs, raw payloads, raw error messages, credentials, or browser-visible provider-native identifiers.
+The static V3 verifier is inert until its explicit `verify` method is called with a server-only `StaticHeyGenApiKey`. The guided runtime exposes a POST action, but its capability remains unavailable unless the server composition injects a separate `heygen_static_verification:execute` authorizer. Authorization runs before database context, secret resolution, or provider I/O. It may use only `GET /v3/users/me`, `GET /v3/avatars/looks/{look_id}`, `GET /v3/avatars/{group_id}`, and `GET /v3/voices/{voice_id}`. It must verify 5-10 exact avatar looks, deduplicate voices before provider I/O, cap streamed response bodies at 256 KiB, enforce per-request and overall time bounds, and fail closed for malformed, oversized, unauthorized, forbidden, not-found, rate-limited, timeout, transport, or untrusted provider responses. Verification outcomes are server-side evidence only: they may carry exact selected avatar look IDs and voice IDs for repository matching, plus digests and bounded statuses/support fields, but no provider URLs, raw payloads, raw error messages, credentials, or browser-visible provider-native identifiers. Internal roster locales are not converted into guessed HeyGen language labels; the exact voice is verified and the provider-observed language is retained as evidence.
 
 ## Cost policy
 
@@ -66,9 +66,11 @@ Polling `GET /v3/videos/{video_id}` remains the fallback when callback delivery 
 ## Current hard stops
 
 - No API key or live HeyGen account has been verified.
-- Static credentials cannot yet transition from unverified to active with immutable provider-verification evidence.
+- The reviewed code can register a fixed deployment-secret reference, resolve the exact current 5x10 or 10x10 roster graph, and transition a passed verification into immutable evidence. The required PR28/PR29 migrations remain unapplied and the live authorizer is absent, so no transition can run in the current environment.
+- The current account evidence proves a supported billing model, not account-specific price terms, wallet authority, quota, or a maximum charge.
 - There is no exact one-shot executor that guarantees only the selected slot is submitted.
-- Robert-bound approval authentication is not yet proven.
+- Robert-bound live-verification and spend-approval authentication is not yet proven in the deployed environment.
+- Human launch approval is not yet bound to the exact quote ID/digest/amount; no quote or spend route may be mounted until that is corrected.
 - Owned storage and callback readiness have not been verified against a deployed environment.
 - Actual billed-cost settlement is not yet modeled.
 - No migration, provider call, video generation, spend, publishing, or deployment is authorized by this profile.
