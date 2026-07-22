@@ -249,7 +249,11 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   await confirm.click();
   await assert.doesNotReject(page.getByText("Exact quote approval recorded. Generation and spending remain disabled.").waitFor());
   assert.equal(await executeButton.isDisabled(), true);
-  const approvalCall = await page.evaluate(() => (window as any).__sandboxHarness.approvalCalls.at(-1));
+  const approvalCalls = await page.evaluate(() => (window as any).__sandboxHarness.approvalCalls);
+  assert.equal(approvalCalls.length, 2);
+  assert.equal(approvalCalls[0].input.idempotencyKey, approvalCalls[1].input.idempotencyKey,
+    "a deliberate retry must preserve the exact operation idempotency key");
+  const approvalCall = approvalCalls.at(-1);
   assert.deepEqual(approvalCall.input, {
     expectedBatchId: "batch_000000000000000000000001",
     expectedQuoteKey: "quote_000000000000000000000001",
