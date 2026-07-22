@@ -98,6 +98,35 @@ test("cost approval is unavailable without an injected authorized coordinator", 
   assert.equal(response.status, 503);
 });
 
+test("configured durable runtime composes the server-authorized approval coordinator lazily", async (t) => {
+  let createAiMediaStudioRuntime: typeof import("../server/ai-media-studio/routes")["createAiMediaStudioRuntime"];
+  try {
+    ({ createAiMediaStudioRuntime } = await import("../server/ai-media-studio/routes"));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
+      t.skip("optional route dependency is not installed in this worktree"); return;
+    }
+    throw error;
+  }
+  let factoryCalls = 0; let recordCalls = 0;
+  const runtime = createAiMediaStudioRuntime({
+    repository: new InMemoryMediaJobRepository(), providers: [new FakeVideoProvider()],
+    runtimeEnvironment: "test", operations: { runtimeEnvironment: "test" },
+    databaseUrl: "postgresql://runtime-selection.invalid/ai_media",
+    createDurableOneVideoCostApprovalCoordinator: () => {
+      factoryCalls += 1;
+      return { async record() { recordCalls += 1; throw new OneVideoCostApprovalError("UNAVAILABLE"); } };
+    },
+  });
+  assert.equal(factoryCalls, 1);
+  assert.equal(recordCalls, 0);
+  assert.ok(runtime.oneVideoCostApproval);
+  assert.deepEqual(runtime.oneVideoCostApprovalPersistence, {
+    mode: "drizzle", available: true, durable: true,
+    reason: "PostgreSQL/Drizzle server-authorized one-video cost approval selected",
+  });
+});
+
 test("cost approval returns a redacted 409 when the exact batch or quote changed", async (t) => {
   let server: Awaited<ReturnType<typeof harness>>;
   try {

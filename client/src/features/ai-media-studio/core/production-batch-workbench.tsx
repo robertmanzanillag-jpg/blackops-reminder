@@ -279,7 +279,7 @@ function OneVideoExecutionControlPanel({
   const approvalRuntime = useOneVideoCostApprovalRuntime(Boolean(control));
   const approvalMutation = useRecordOneVideoCostApproval({ planId, batchId, slotId });
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-  const operationRef = useRef<{ quoteKey: string; idempotencyKey: string }>();
+  const operationRef = useRef<{ quoteKey: string; idempotencyKey: string } | undefined>(undefined);
   const quoteKey = control?.maximumQuote.quoteKey;
   const renderSpecKey = control?.maximumQuote.renderSpecKey;
   const quoteIsExact = control?.maximumQuote.state === "quoted"

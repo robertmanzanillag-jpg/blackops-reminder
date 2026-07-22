@@ -240,6 +240,8 @@ export interface AiMediaStudioDependencies {
   createDurableOneVideoExecutionControlRepository?: () => OneVideoExecutionControlRepository;
   /** Explicit server-authorized write coordinator. Absent means approval remains fail-closed. */
   oneVideoCostApprovalCoordinator?: Pick<OneVideoCostApprovalCoordinator, "record">;
+  /** Durable default composition seam; construction must remain inert. */
+  createDurableOneVideoCostApprovalCoordinator?: () => Pick<OneVideoCostApprovalCoordinator, "record">;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -525,6 +527,38 @@ function createDefaultDurableOneVideoExecutionControlRepository(): OneVideoExecu
   return { observe: async (...args) => (await load()).observe(...args) };
 }
 
+function createDefaultDurableOneVideoCostApprovalCoordinator(): Pick<OneVideoCostApprovalCoordinator, "record"> {
+  let pending: Promise<OneVideoCostApprovalCoordinator> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./planning/drizzle-one-video-execution-control-repository"),
+    import("./planning/drizzle-one-video-cost-approval-context-loader"),
+    import("./planning/drizzle-launch-authority-repository"),
+    import("./planning/launch-authority-service"),
+    import("./planning/one-video-cost-approval-coordinator"),
+    import("./planning/server-owned-one-video-cost-approval-authorization"),
+  ]).then(([database, executionAdapter, contextAdapter, authorityAdapter, authorityService,
+    approvalCoordinator, authorizationAdapter]) => {
+    const authorization = authorizationAdapter.createServerOwnedOneVideoCostApprovalAuthorization(
+      (context) => getCurrentUserId(context as Request),
+    );
+    const executionControl = new executionAdapter.DrizzleOneVideoExecutionControlRepository(database.db);
+    const launchAuthority = new authorityService.LaunchAuthorityService({
+      repository: new authorityAdapter.DrizzleLaunchAuthorityRepository(database.db, {
+        runtimeAttestationVerifier: { async verify() { return undefined; } },
+        validityPolicy: { ttlSeconds() { return 15 * 60; } },
+      }),
+      authenticator: authorization.authenticator,
+    });
+    return new approvalCoordinator.OneVideoCostApprovalCoordinator({
+      authorizer: authorization.authorizer,
+      contextLoader: new contextAdapter.DrizzleOneVideoCostApprovalContextLoader(database.db, executionControl),
+      launchAuthority,
+    });
+  });
+  return { record: async (...args) => (await load()).record(...args) };
+}
+
 function selectOneVideoExecutionControlRuntime(
   dependencies: AiMediaStudioDependencies,
   databaseUrl: string | undefined,
@@ -551,6 +585,7 @@ function selectOneVideoExecutionControlRuntime(
 
 function selectOneVideoCostApprovalRuntime(
   dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
 ): { coordinator: Pick<OneVideoCostApprovalCoordinator, "record"> | undefined; status: MediaStudioPersistenceStatus } {
   if (dependencies.oneVideoCostApprovalCoordinator) {
     return {
@@ -558,6 +593,23 @@ function selectOneVideoCostApprovalRuntime(
       status: { mode: "injected", available: true, durable: false,
         reason: "Explicit server-authorized one-video cost-approval coordinator supplied by the composition caller" },
     };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const coordinator = (dependencies.createDurableOneVideoCostApprovalCoordinator
+        ?? createDefaultDurableOneVideoCostApprovalCoordinator)();
+      return {
+        coordinator,
+        status: { mode: "drizzle", available: true, durable: true,
+          reason: "PostgreSQL/Drizzle server-authorized one-video cost approval selected" },
+      };
+    } catch (error) {
+      return {
+        coordinator: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `One-video cost approval initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
   }
   return {
     coordinator: undefined,
@@ -1058,7 +1110,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
-  const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies);
+  const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
