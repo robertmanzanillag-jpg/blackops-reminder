@@ -14,7 +14,10 @@ import type {
 } from "./types";
 import type { MediaAsset } from "@shared/ai-media-studio-core";
 import type { PublishingPreview } from "@shared/ai-media-studio-operations";
+import { sourceEligibilityReviewResponseSchema } from "@shared/ai-media-studio-source-eligibility";
+import { sourceScriptPreviewResponseSchema } from "@shared/ai-media-studio-source-to-script";
 import { actionableApiError } from "../governance/errors";
+import type { SourceEligibilityReviewInput, SourceScriptPreviewRequest } from "./types";
 
 const API_ROOT = "/api/ai-media-studio";
 
@@ -79,6 +82,17 @@ export const operationsApi = {
   sources: async (filters: SourceFilters) => {
     const response = await requestJson<SourcesResponse | { items: SourcesResponse["sources"]; nextCursor: string | null; hasMore: boolean }>(`/automation/sources${queryString(filters)}`);
     return "items" in response ? { sources: response.items, nextCursor: response.nextCursor, hasMore: response.hasMore } : response;
+  },
+  reviewSourceEligibility: async ({ sourceItemId, ...input }: SourceEligibilityReviewInput) => {
+    const response = await post<unknown>(
+      `/automation/sources/${encodeURIComponent(sourceItemId)}/eligibility-review`,
+      input,
+    );
+    return sourceEligibilityReviewResponseSchema.parse(response);
+  },
+  previewSourceScript: async (input: SourceScriptPreviewRequest) => {
+    const response = await post<unknown>("/automation/sources/scripts/preview", input);
+    return sourceScriptPreviewResponseSchema.parse(response);
   },
   automationPolicy: async () => {
     const response = await requestJson<{ policy: AutomationPolicy }>("/automation/policy");

@@ -64,11 +64,12 @@ function sourceAdapter(counters: { calls: number; scopes: string[]; limits: numb
 }
 
 async function startHarness(options: {
-  canonicalAppUrl?: string; includeAdapter?: boolean; adapterFailureMessage?: string;
+  canonicalAppUrl?: string; includeAdapter?: boolean; adapterFailureMessage?: string; useInjectedKongReader?: boolean;
 } = {}) {
   const restoreDevFallback = forceNoDevFallback();
   const sources = new InMemorySourceRepository();
   const counters = { calls: 0, scopes: [] as string[], limits: [] as number[] };
+  const kongReaderCounters = { calls: 0 };
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -87,6 +88,17 @@ async function startHarness(options: {
       runtimeEnvironment: "test",
     },
     sourceAdapters: options.includeAdapter === false ? [] : [sourceAdapter(counters, options.adapterFailureMessage)],
+    ...(options.useInjectedKongReader ? { kongSourceReader: {
+      async read(scope, input) {
+        kongReaderCounters.calls += 1;
+        return { capturedAt: "2026-07-22T14:00:00.000Z", records: [{
+          id: `kong-event-${scope.ownerUserId}`,
+          category: "events" as const,
+          title: "Kong-owned event",
+          summary: `Bounded source read with limit ${input.limit}`,
+        }] };
+      },
+    } } : {}),
   });
   app.use(runtime.router);
   const server = createServer(app);
@@ -96,6 +108,7 @@ async function startHarness(options: {
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     counters,
+    kongReaderCounters,
     sources,
     close: async () => {
       try {
@@ -106,6 +119,22 @@ async function startHarness(options: {
     },
   };
 }
+
+test("an injected Kong reader registers the real provider-neutral adapter without construction I/O", async (t) => {
+  const harness = await startHarness({ includeAdapter: false, useInjectedKongReader: true });
+  t.after(harness.close);
+  assert.equal(harness.kongReaderCounters.calls, 0);
+  const response = await fetch(`${harness.baseUrl}${endpoint}`, {
+    method: "POST",
+    headers: mutationHeaders,
+    body: JSON.stringify({ adapterKey: "kong-owned-catalog", limit: 10 }),
+  });
+  assert.equal(response.status, 200);
+  const parsed = sourceAutomationSyncResponseSchema.parse(await response.json());
+  assert.equal(parsed.createdCount, 1);
+  assert.equal(harness.kongReaderCounters.calls, 1);
+  assert.equal(parsed.effects.scriptsGenerated, false);
+});
 
 async function rawRequest(url: string, options: Readonly<{
   method: string; headers: Record<string, string>; body?: string;

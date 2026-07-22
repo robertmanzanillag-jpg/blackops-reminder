@@ -50,7 +50,7 @@ export interface PublicSourceAdapterDescriptor {
 export class SourceAutomationSyncService {
   private readonly adapters: ReadonlyMap<string, SourceAdapter>;
 
-  constructor(adapters: readonly SourceAdapter[], private readonly repository: SourceRepository) {
+  constructor(adapters: readonly SourceAdapter[], private readonly repository: Pick<SourceRepository, "upsertByContentHash">) {
     if (!repository || typeof repository.upsertByContentHash !== "function") {
       throw new SourceAutomationSyncError("INVALID_CONFIGURATION");
     }

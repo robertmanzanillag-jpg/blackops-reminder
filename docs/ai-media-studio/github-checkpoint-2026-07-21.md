@@ -9,7 +9,16 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 - Data behavior: the complete snapshot is validated and copied into plain DTOs before any content-hash upsert. Replays deduplicate within one tenant and the public result exposes only Studio-owned IDs, category and blocked governance states.
 - Review corrections: private adapter/repository errors are normalized to redacted 503 responses without generic logging; impossible dates cannot create partial writes; mutable adapter configuration, getters and nested payloads are copied in one pass before persistence.
 - Evidence: root final 44/44; checker 26/26 plus HTTP 4/4; security recheck 17/17; App QA 36/36; P0=P1=P2=P3=0; TypeScript, production build, codebase map and diff hygiene pass.
-- Safety and next gates: no production adapter or scheduler was activated. The sync creates no scripts, render/outbox, video-provider/HeyGen call, secret resolution, spend, publishing, migration or deployment. A real Kong adapter, durable server-side cursor/scheduler, rights/moderation and source-to-script orchestration remain separate reviewed slices.
+- Safety and next gates: no production reader or scheduler was activated. The sync creates no scripts, render/outbox, video-provider/HeyGen call, secret resolution, spend, publishing, migration or deployment. The stacked source-to-script slice adds an injected provider-neutral Kong adapter boundary; a production reader, durable server-side cursor/scheduler and durable source-to-batch consumer remain separate reviewed slices.
+
+## Source eligibility and script preview checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-kong-source-to-script`, stacked on PR #171.
+- Implemented locally: an injected provider-neutral Kong reader adapter for all eight source categories, exact-content source eligibility review, deterministic source-to-script preview over persisted Studio sources and the operator UI for those safe actions.
+- Safety: review requires strict real-session exact-origin JSON, current `contentHash`, tenant scope and idempotency. Script preview accepts only Studio source IDs and bounded script options, and rejects sources unless they are accepted plus owned/licensed and moderation-approved.
+- Effects remain blocked: no durable script insert, orchestration run, render/outbox, video-provider/HeyGen call, secret resolution, spend, publishing, migration application or deployment.
+- Evidence: 75/75 focused non-HTTP checks and 18/18 authenticated HTTP checks pass; TypeScript, production build, codebase map and diff hygiene pass. Independent checker/App QA reports P0=P1=P2=P3=0 and no remaining actionable finding.
+- Remaining gates: preserve this slice in a stacked draft PR, then separately implement and rehearse the production Kong reader, durable scheduler and source-to-batch consumer. HeyGen verification, generation, spend, publishing, migrations and deployment remain separately approved gates.
 
 ## HeyGen roster mutation hardening checkpoint (2026-07-22)
 

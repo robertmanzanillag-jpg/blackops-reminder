@@ -8,6 +8,14 @@ import type {
   SocialPlatform,
   SourceItem,
 } from "@shared/ai-media-studio-operations";
+import type {
+  SourceEligibilityReviewRequest,
+  SourceEligibilityReviewResponse,
+} from "@shared/ai-media-studio-source-eligibility";
+import type {
+  SourceScriptPreviewRequest,
+  SourceScriptPreviewResponse,
+} from "@shared/ai-media-studio-source-to-script";
 
 export type {
   AnalyticsSummary,
@@ -18,6 +26,10 @@ export type {
   PublishingMode,
   SocialPlatform,
   SourceItem,
+  SourceEligibilityReviewRequest,
+  SourceEligibilityReviewResponse,
+  SourceScriptPreviewRequest,
+  SourceScriptPreviewResponse,
 };
 
 export type PublishingJobStatus = PublishingJob["status"];
@@ -45,6 +57,17 @@ export type AnalyticsDateWindow = { from: string; to: string };
 export type AttributionDimension = "avatar" | "hook" | "cta" | "posting_time" | "category";
 export type AttributionFilters = AnalyticsFilters & { dimension: AttributionDimension; cursor?: string; limit: number };
 export type SourceFilters = { status?: SourceStatus; rightsStatus?: SourceRightsStatus; cursor?: string; limit: number };
+export type SourceEligibilityReviewInput = SourceEligibilityReviewRequest & { sourceItemId: string };
+
+export function createSourceActionIdempotencyKey(
+  action: "owned" | "licensed" | "reject" | "preview",
+  sourceItemId: string,
+  contentHash: string,
+): string {
+  const sourcePart = sourceItemId.replace(/[^A-Za-z0-9._:-]/gu, "-");
+  const hashPart = contentHash.replace(/^sha256:/u, "").slice(0, 24);
+  return `ams-${action}-${hashPart}-${sourcePart}`.slice(0, 128);
+}
 
 export type RankedAttribution = { label: string; count: number };
 

@@ -64,6 +64,17 @@ export function useSources(filters: Omit<SourceFilters, "cursor">) {
   });
 }
 
+export function useSourceReviewMutations() {
+  const queryClient = useQueryClient();
+  const refreshSources = () => queryClient.invalidateQueries({
+    queryKey: ["ai-media-studio", "operations", "sources"],
+  });
+  return {
+    review: useMutation({ mutationFn: operationsApi.reviewSourceEligibility, onSuccess: refreshSources }),
+    preview: useMutation({ mutationFn: operationsApi.previewSourceScript }),
+  };
+}
+
 export function useAutomationPolicy() {
   return useQuery({ queryKey: operationsKeys.policy, queryFn: operationsApi.automationPolicy, staleTime: 30_000 });
 }

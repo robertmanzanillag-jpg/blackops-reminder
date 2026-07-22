@@ -17,7 +17,7 @@ function boundedLimit(limit: number | undefined): number {
 export async function ingestSourceSnapshot(
   scope: TenantScope,
   adapter: SourceAdapter,
-  repository: SourceRepository,
+  repository: Pick<SourceRepository, "upsertByContentHash">,
   options: { cursor?: string; limit?: number } = {},
 ): Promise<IngestSourceSnapshotResult> {
   const limit = boundedLimit(options.limit);

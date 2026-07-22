@@ -457,6 +457,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep PR #170 draft and unmerged; next rehearse the approved database chain before requesting any live HeyGen verification, cost approval, canary generation or deployment.",
   },
   {
+    id: "ams-agent-kong-source-to-script",
+    title: "Kong-owned source eligibility and script preview bridge",
+    owner: "AI Media Studio source governance squad",
+    state: "running",
+    branch: "codex/ai-media-studio-kong-source-to-script",
+    pullRequestUrl: null,
+    acceptance: [
+      "An injected provider-neutral Kong-owned reader adapter covers all eight requested source categories without construction I/O",
+      "Tenant-scoped source review requires exact content identity before rights, moderation and acceptance can change",
+      "Only accepted owned-or-licensed and moderation-approved sources can produce a source-to-script preview",
+      "The browser can send only Studio source IDs and bounded script options, never provider IDs, cursors, source payloads or native metadata",
+      "The Automation UI exposes explicit review decisions and only redacted title, hook and caption previews",
+      "Eligibility review and script preview create no durable script, orchestration run, render, outbox, video-provider, secret, spend, publishing, migration or deployment effect",
+    ],
+    mergeGate: "Focused source eligibility, source-to-script, HTTP/regression tests, TypeScript, build, independent checker, security and App QA must pass before a stacked draft PR is ready.",
+    evidence: [
+      "Read-only local inventory found the existing durable source-to-script batch and the missing source eligibility boundary",
+      "Local implementation adds the Kong-owned reader adapter, exact-content eligibility review, deterministic preview and operator controls",
+    ],
+    blockers: [
+      "No production Kong reader implementation or durable source scheduler is configured or activated",
+      "The preview is intentionally not a durable script-batch approval and does not admit render work",
+      "HeyGen, spend, publishing, migrations and deployment remain separately blocked",
+    ],
+    nextAction: "Finish checker/security/App QA and open a stacked draft PR; keep the production Kong reader and durable scheduling as separate reviewed work.",
+  },
+  {
     id: "ams-agent-source-automation-sync",
     title: "Tenant-safe source automation sync",
     owner: "AI Media Studio source automation squad",

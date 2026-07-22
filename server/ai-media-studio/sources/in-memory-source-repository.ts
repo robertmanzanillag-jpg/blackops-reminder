@@ -4,9 +4,12 @@ import {
   MAX_SOURCE_SNAPSHOT_ITEMS,
   type CanonicalSourceItem,
   type SourceCategory,
+  type SourceEligibilityReviewInput,
+  type SourceEligibilityReviewResult,
   type SourcePage,
   type SourcePageRequest,
   type SourceRepository,
+  SourceEligibilityRepositoryError,
 } from "./contracts";
 import { boundedSourcePageLimit, decodeSourceCursor, encodeSourceCursor, sourceListFilter } from "./source-pagination";
 
@@ -21,6 +24,11 @@ function clone(item: CanonicalSourceItem): CanonicalSourceItem {
 export class InMemorySourceRepository implements SourceRepository {
   private readonly tenants = new Map<string, Map<string, CanonicalSourceItem>>();
   private readonly identities = new Map<string, Map<string, string>>();
+  private readonly reviews = new Map<string, Map<string, {
+    idempotencyKey: string;
+    inputDigest: string;
+    reviewedAt: string;
+  }>>();
 
   async upsertByContentHash(
     scope: TenantScope,
@@ -44,6 +52,7 @@ export class InMemorySourceRepository implements SourceRepository {
         updatedAt: now,
       };
       byId.set(existing.id, updated);
+      this.reviews.get(key)?.delete(existing.id);
       return { item: clone(updated), created: false };
     }
     const item: CanonicalSourceItem = {
@@ -94,5 +103,54 @@ export class InMemorySourceRepository implements SourceRepository {
       nextCursor: hasMore && items.length > 0 ? encodeSourceCursor(scope, filter, items.at(-1)!) : null,
       hasMore,
     };
+  }
+
+  async reviewEligibility(
+    scope: TenantScope,
+    input: SourceEligibilityReviewInput,
+  ): Promise<SourceEligibilityReviewResult> {
+    const key = tenantKey(scope);
+    const byId = this.tenants.get(key);
+    const existing = byId?.get(input.sourceItemId);
+    if (!existing) throw new SourceEligibilityRepositoryError("NOT_FOUND");
+    if (existing.contentHash !== input.expectedContentHash) {
+      throw new SourceEligibilityRepositoryError("SOURCE_REFRESHED");
+    }
+    const reviews = this.reviews.get(key) ?? new Map();
+    this.reviews.set(key, reviews);
+    const prior = reviews.get(existing.id);
+    if (prior) {
+      if (prior.idempotencyKey !== input.idempotencyKey || prior.inputDigest !== input.inputDigest) {
+        throw new SourceEligibilityRepositoryError("REVIEW_CONFLICT");
+      }
+      return { item: clone(existing), replayed: true, reviewedAt: prior.reviewedAt };
+    }
+    if (existing.status !== "discovered" || existing.rightsStatus !== "unknown"
+      || existing.moderationStatus !== "pending") {
+      throw new SourceEligibilityRepositoryError("REVIEW_CONFLICT");
+    }
+    const reviewedAt = new Date().toISOString();
+    const updated: CanonicalSourceItem = input.review.decision === "approve"
+      ? {
+          ...existing,
+          status: "accepted",
+          rightsStatus: input.review.rightsStatus,
+          moderationStatus: "approved",
+          updatedAt: reviewedAt,
+        }
+      : {
+          ...existing,
+          status: "rejected",
+          rightsStatus: "rejected",
+          moderationStatus: "rejected",
+          updatedAt: reviewedAt,
+        };
+    byId!.set(existing.id, updated);
+    reviews.set(existing.id, {
+      idempotencyKey: input.idempotencyKey,
+      inputDigest: input.inputDigest,
+      reviewedAt,
+    });
+    return { item: clone(updated), replayed: false, reviewedAt };
   }
 }
