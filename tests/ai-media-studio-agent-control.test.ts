@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 6);
+  assert.equal(snapshot.summary.done, 7);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -53,6 +53,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const durablePlan = snapshot.workItems.find((item) => item.id === "ams-agent-durable-roster-plan");
   const durableScriptBatch = snapshot.workItems.find((item) => item.id === "ams-agent-durable-script-batch");
   const launchReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-launch-readiness");
+  const offlinePreflight = snapshot.workItems.find((item) => item.id === "ams-agent-offline-launch-preflight");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -78,6 +79,12 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(launchReadiness?.evidence.join(" ") ?? "", /722 passed[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(launchReadiness?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
   assert.match(launchReadiness?.nextAction ?? "", /PR #144 unmerged[\s\S]*do not call HeyGen/u);
+  assert.equal(offlinePreflight?.state, "done");
+  assert.equal(offlinePreflight?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/146");
+  assert.match(offlinePreflight?.acceptance.join(" ") ?? "", /5–10 × 10[\s\S]*14 launch gates[\s\S]*No provider call/u);
+  assert.match(offlinePreflight?.evidence.join(" ") ?? "", /54\/54[\s\S]*749 passed[\s\S]*P0=P1=P2=P3=0/u);
+  assert.match(offlinePreflight?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
+  assert.match(offlinePreflight?.nextAction ?? "", /PR #146 unmerged[\s\S]*one-video HeyGen sandbox/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

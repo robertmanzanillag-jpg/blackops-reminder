@@ -112,6 +112,7 @@ test("prepare locks plan, ordered slots, and exactly ten sources without advisor
   assert.match(queries[0]!, /for update/iu);
   assert.match(queries[1]!, /order by .*source_member_key.*video_number.*for update of/iu);
   assert.match(queries[2]!, /order by .*created_at.*limit 10 for update/iu);
+  assert.match(queries[2]!, /title=btrim\(title\).*title !~ '\[\[:cntrl:\]\]'/iu);
   const all = queries.join(" ");
   assert.doesNotMatch(all, /advisory|budget|render|outbox|launch_intent|provider_submission/iu);
 });

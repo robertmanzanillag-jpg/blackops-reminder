@@ -25,6 +25,7 @@ import {
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
 import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
+import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-launch-preflight";
 import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
@@ -92,6 +93,8 @@ import { HeyGenRosterDailyPlanService } from "./providers/heygen-roster-daily-pl
 import { DeterministicScriptService } from "./script-service";
 import { ProductionBatchError, type ProductionBatchRepository } from "./production-batches/contracts";
 import { ProductionBatchService } from "./production-batches/service";
+import { LaunchPreflightError, type LaunchPreflightRepository } from "./planning/launch-preflight-contracts";
+import { LaunchPreflightService } from "./planning/launch-preflight-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -179,6 +182,8 @@ export interface AiMediaStudioDependencies {
   heyGenRosterDailyPlanTimeZone?: string;
   productionBatchRepository?: ProductionBatchRepository;
   createDurableProductionBatchRepository?: () => ProductionBatchRepository;
+  launchPreflightRepository?: LaunchPreflightRepository;
+  createDurableLaunchPreflightRepository?: () => LaunchPreflightRepository;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -202,6 +207,8 @@ export interface AiMediaStudioRuntime {
   heyGenRosterPersistence: MediaStudioPersistenceStatus;
   productionBatches: ProductionBatchService | undefined;
   productionBatchPersistence: MediaStudioPersistenceStatus;
+  launchPreflight: LaunchPreflightService | undefined;
+  launchPreflightPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -380,6 +387,40 @@ function createDefaultDurableProductionBatchRepository(): ProductionBatchReposit
     prepare: async (...args) => (await load()).prepare(...args),
     approve: async (...args) => (await load()).approve(...args),
   };
+}
+
+function createDefaultDurableLaunchPreflightRepository(): LaunchPreflightRepository {
+  let pending: Promise<LaunchPreflightRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./planning/drizzle-launch-preflight-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleLaunchPreflightRepository(database.db));
+  return { observe: async (...args) => (await load()).observe(...args) };
+}
+
+function selectLaunchPreflightRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: LaunchPreflightService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.launchPreflightRepository) {
+    return {
+      service: new LaunchPreflightService(dependencies.launchPreflightRepository),
+      status: { mode: "injected", available: true, durable: false,
+        reason: "Launch-preflight repository supplied by the composition caller; durability is not inferred" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableLaunchPreflightRepository ?? createDefaultDurableLaunchPreflightRepository)();
+      return { service: new LaunchPreflightService(repository), status: { mode: "drizzle", available: true, durable: true,
+        reason: "PostgreSQL/Drizzle read-only launch-preflight persistence selected" } };
+    } catch (error) {
+      return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+        reason: `Launch-preflight persistence initialization failed: ${error instanceof Error ? error.message : "unknown error"}` } };
+    }
+  }
+  return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+    reason: "DATABASE_URL or an injected durable launch-preflight repository is required" } };
 }
 
 function selectProductionBatchRuntime(
@@ -674,6 +715,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     ? new HeyGenRosterDailyPlanService(heyGenRosterSelection.service)
     : undefined;
   const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
+  const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -940,6 +982,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
   const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
+  const requireLaunchPreflight = requireCapability(launchPreflightSelection.status, "AI Media Studio launch preflight");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1013,6 +1056,18 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     const batch = await productionBatchSelection.service!.approve(scope, req.params.planId, req.body);
     res.json(productionBatchResponseSchema.parse({ batch }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight`, (_req, res, next) => {
+    res.set("Cache-Control", "private, no-store"); next();
+  }, requireLaunchPreflight, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const contentLength = req.get("content-length");
+    if (req.get("transfer-encoding") || (contentLength !== undefined && contentLength !== "0")) {
+      throw new LaunchPreflightError("INVALID_REQUEST");
+    }
+    const preflight = await launchPreflightSelection.service!.observe(scope, req.params.planId);
+    res.json(launchPreflightResponseSchema.parse({ preflight }));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1436,6 +1491,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof LaunchPreflightError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid launch preflight request"
+        : error.code === "NOT_FOUND" ? "Production plan not found" : "Launch preflight is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof ProductionBatchError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid production batch request"
         : error.code === "NOT_FOUND" ? "Production plan not found"
@@ -1501,6 +1562,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     heyGenRosterPersistence: heyGenRosterSelection.status,
     productionBatches: productionBatchSelection.service,
     productionBatchPersistence: productionBatchSelection.status,
+    launchPreflight: launchPreflightSelection.service,
+    launchPreflightPersistence: launchPreflightSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

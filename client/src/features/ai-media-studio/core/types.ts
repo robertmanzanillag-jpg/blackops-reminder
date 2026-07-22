@@ -28,6 +28,10 @@ import type {
   ProductionBatch,
   ProductionBatchResponse,
 } from "@shared/ai-media-studio-production-batches";
+import type {
+  LaunchPreflight,
+  LaunchPreflightGate,
+} from "@shared/ai-media-studio-launch-preflight";
 
 export type {
   CreateInfluencerRequest,
@@ -60,6 +64,11 @@ export type {
   PrepareProductionBatchRequest,
   ProductionBatch,
   ProductionBatchResponse,
+};
+
+export type {
+  LaunchPreflight,
+  LaunchPreflightGate,
 };
 
 export type MediaAssetKind = MediaAsset["kind"];

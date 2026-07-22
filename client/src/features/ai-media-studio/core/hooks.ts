@@ -11,6 +11,9 @@ export const coreStudioKeys = {
   heyGenRoster: ["ai-media-studio", "core", "heygen-roster"] as const,
   heyGenRosterDailyPlan: ["ai-media-studio", "core", "heygen-roster", "daily-plan"] as const,
   productionBatch: ["ai-media-studio", "core", "production-batch", "current"] as const,
+  productionBatchLaunchPreflight: (planId: string, batchId: string) => [
+    "ai-media-studio", "core", "production-batch", "launch-preflight", planId, batchId,
+  ] as const,
 };
 
 export function useHeyGenRoster() {
@@ -37,6 +40,24 @@ export function useProductionBatch() {
   });
 }
 
+export function useProductionBatchLaunchPreflight({
+  planId,
+  batchId,
+  enabled,
+}: {
+  planId: string;
+  batchId: string;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: coreStudioKeys.productionBatchLaunchPreflight(planId, batchId),
+    queryFn: () => mediaStudioCoreApi.productionBatchLaunchPreflight({ planId, batchId }),
+    enabled: enabled && Boolean(planId) && Boolean(batchId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function usePrepareProductionBatchScripts() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -53,6 +74,9 @@ export function useApproveProductionBatchScripts() {
     mutationFn: mediaStudioCoreApi.approveProductionBatchScripts,
     onSuccess: (response) => {
       queryClient.setQueryData(coreStudioKeys.productionBatch, response);
+      queryClient.removeQueries({
+        queryKey: ["ai-media-studio", "core", "production-batch", "launch-preflight"],
+      });
       return queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatch });
     },
   });

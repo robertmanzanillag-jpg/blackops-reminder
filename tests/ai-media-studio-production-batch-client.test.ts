@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mediaStudioCoreApi } from "../client/src/features/ai-media-studio/core/api.ts";
+import { approvalResultMatchesBatch } from "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx";
 
 function publicKey(prefix: string, value: number): string {
   return `${prefix}_${value.toString(16).padStart(24, "0")}`;
 }
 
-function productionBatchResponse(status: "not_started" | "draft_ready" | "approved_ready" | "stale" = "draft_ready") {
-  const avatarCount = 5;
+function productionBatchResponse(
+  status: "not_started" | "draft_ready" | "approved_ready" | "stale" = "draft_ready",
+  avatarCount = 5,
+) {
   const groups = Array.from({ length: avatarCount }, (_, groupIndex) => ({
     memberId: publicKey("member", groupIndex + 1),
     creatorName: `Creator ${groupIndex + 1}`,
@@ -51,7 +54,7 @@ function productionBatchResponse(status: "not_started" | "draft_ready" | "approv
       status,
       avatarCount,
       videosPerAvatar: 10,
-      plannedVideoCount: 50,
+      plannedVideoCount: avatarCount * 10,
       canGenerate: false,
       noSpend: true,
       preparedAt: status === "not_started" ? null : "2026-07-21T12:00:00.000Z",
@@ -64,6 +67,64 @@ function productionBatchResponse(status: "not_started" | "draft_ready" | "approv
         "human_launch_approval_required",
       ],
       groups,
+    },
+  };
+}
+
+const launchGateCodes = [
+  "batch_integrity", "plan_window", "source_eligibility", "provider_binding_local",
+  "governance_coverage", "launch_intent", "content_approval", "policy_kill_switch",
+  "provider_live_verification", "maximum_quote", "sandbox_proof", "human_launch_approval",
+  "authority_snapshot", "budget_admission_capacity",
+] as const;
+
+function launchPreflightResponse(avatarCount = 5) {
+  const requiredSlots = avatarCount * 10;
+  return {
+    preflight: {
+      version: 1,
+      source: "derived_read_only",
+      subject: {
+        planId: publicKey("plan", 1),
+        batchId: publicKey("batch", 1),
+        avatarCount,
+        videosPerAvatar: 10,
+        plannedVideoCount: requiredSlots,
+      },
+      observedAt: "2026-07-21T12:10:00.000Z",
+      status: "ready_at_observation",
+      canGenerate: false,
+      sandboxExecutionAllowed: false,
+      spendAuthorized: false,
+      noSpend: true,
+      authoritativeForAdmission: false,
+      effects: {
+        intentCreated: false,
+        evidenceCreated: false,
+        snapshotCreated: false,
+        reservationCreated: false,
+        renderCreated: false,
+        outboxCreated: false,
+        providerCalled: false,
+      },
+      summary: {
+        totalGates: 14,
+        passedGates: 14,
+        blockedGates: 0,
+        pendingExternalGates: 0,
+        pendingHumanGates: 0,
+        unavailableGates: 0,
+        readySlots: requiredSlots,
+        requiredSlots,
+      },
+      gates: launchGateCodes.map((code) => ({
+        code,
+        state: "passed",
+        readySlots: requiredSlots,
+        requiredSlots,
+        reasonCode: "ready",
+        nextActionCode: "none",
+      })),
     },
   };
 }
@@ -96,6 +157,108 @@ test("missing current production batch is an explicit empty state", async () => 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("approved production batch launch preflight is a credentialed read validated against both cache identities", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: string; init?: RequestInit } | undefined;
+  globalThis.fetch = (async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(launchPreflightResponse()), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const response = await mediaStudioCoreApi.productionBatchLaunchPreflight({
+      planId: publicKey("plan", 1),
+      batchId: publicKey("batch", 1),
+    });
+    assert.equal(request?.input, "/api/ai-media-studio/production-batches/plan_000000000000000000000001/launch-preflight");
+    assert.equal(request?.init?.credentials, "include");
+    assert.equal(request?.init?.method, undefined);
+    assert.equal(request?.init?.body, undefined);
+    assert.equal(response.preflight.gates.length, 14);
+    assert.equal(response.preflight.noSpend, true);
+    assert.equal(response.preflight.authoritativeForAdmission, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("production batch and launch preflight boundaries preserve the 10 creator by 10 video shape", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify(productionBatchResponse("approved_ready", 10)), { status: 200 })) as typeof fetch;
+    const batch = await mediaStudioCoreApi.productionBatch();
+    assert.equal(batch?.batch.avatarCount, 10);
+    assert.equal(batch?.batch.groups.length, 10);
+    assert.equal(batch?.batch.plannedVideoCount, 100);
+    assert.ok(batch?.batch.groups.every((group) => group.items.length === 10));
+
+    globalThis.fetch = (async () => new Response(JSON.stringify(launchPreflightResponse(10)), { status: 200 })) as typeof fetch;
+    const observation = await mediaStudioCoreApi.productionBatchLaunchPreflight({
+      planId: publicKey("plan", 1),
+      batchId: publicKey("batch", 1),
+    });
+    assert.equal(observation.preflight.subject.avatarCount, 10);
+    assert.equal(observation.preflight.summary.readySlots, 100);
+    assert.equal(observation.preflight.summary.requiredSlots, 100);
+    assert.ok(observation.preflight.gates.every((gate) => gate.requiredSlots === 100));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("launch preflight rejects stale identity and successful-looking private fields", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const stale = launchPreflightResponse();
+    stale.preflight.subject.batchId = publicKey("batch", 2);
+    globalThis.fetch = (async () => new Response(JSON.stringify(stale), { status: 200 })) as typeof fetch;
+    await assert.rejects(
+      mediaStudioCoreApi.productionBatchLaunchPreflight({
+        planId: publicKey("plan", 1),
+        batchId: publicKey("batch", 1),
+      }),
+      /identity did not match/u,
+    );
+
+    const unsafe = launchPreflightResponse();
+    const privateResponse = unsafe.preflight as typeof unsafe.preflight & { providerAccountId?: string };
+    privateResponse.providerAccountId = "must-not-cross-boundary";
+    globalThis.fetch = (async () => new Response(JSON.stringify(unsafe), { status: 200 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.productionBatchLaunchPreflight({
+      planId: publicKey("plan", 1),
+      batchId: publicKey("batch", 1),
+    }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+for (const [status, expected] of [
+  [404, "Launch preflight was not found for this approved batch."],
+  [409, "Launch preflight is not available for the current batch state."],
+  [503, "Launch preflight observation is temporarily unavailable."],
+] as const) {
+  test(`launch preflight ${status} errors are actionable without exposing server response fields`, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(
+      JSON.stringify({ error: "private internal error", providerAccountId: "private-id" }),
+      { status },
+    )) as typeof fetch;
+    try {
+      await assert.rejects(
+        mediaStudioCoreApi.productionBatchLaunchPreflight({
+          planId: publicKey("plan", 1),
+          batchId: publicKey("batch", 1),
+        }),
+        (error: unknown) => error instanceof Error
+          && error.message === expected
+          && !error.message.includes("private"),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
 
 test("current production batch preserves safe server error text", async () => {
   const originalFetch = globalThis.fetch;
@@ -165,6 +328,23 @@ test("atomic production batch approval sends a UUID idempotency key and exact ex
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("an approval success belongs only to its exact current batch identity", () => {
+  const approved = productionBatchResponse("approved_ready").batch;
+  assert.equal(approvalResultMatchesBatch(approved, approved), true);
+
+  const externalBatch = structuredClone(approved);
+  externalBatch.batchId = publicKey("batch", 2);
+  assert.equal(approvalResultMatchesBatch(approved, externalBatch), false);
+
+  externalBatch.batchId = approved.batchId;
+  externalBatch.preparedAt = "2026-07-21T12:01:00.000Z";
+  assert.equal(approvalResultMatchesBatch(approved, externalBatch), false);
+
+  externalBatch.preparedAt = approved.preparedAt;
+  externalBatch.approvedAt = "2026-07-21T12:06:00.000Z";
+  assert.equal(approvalResultMatchesBatch(approved, externalBatch), false);
 });
 
 test("successful-looking unsafe or private batch responses are rejected", async () => {

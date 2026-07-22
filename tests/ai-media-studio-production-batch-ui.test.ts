@@ -35,16 +35,29 @@ test("production batch UI is preparation-only, accessible, and explicit about ze
   assert.match(workbench, /item\.script\.selectedVariant\.caption/);
   assert.match(workbench, /item\.script\.selectedVariant\.hashtags\.join/);
   assert.match(workbench, /item\.script\.selectedVariant\.seoKeywords\.join/);
-  assert.match(workbench, /I reviewed the complete content/);
+  assert.match(workbench, /I reviewed all 10 complete scripts for \{group\.creatorName\}/);
+  assert.match(workbench, /Creator review progress:/);
   assert.match(workbench, /Approve all \$\{batch\.plannedVideoCount\} scripts/);
   assert.match(workbench, /expectedBatchId: batch\.batchId/);
-  assert.match(workbench, /disabled=\{!approvalAcknowledged \|\| !allReviewsAvailable \|\| approve\.isPending\}/);
-  assert.match(workbench, /const identity = batch \? `\$\{batch\.planId\}:\$\{batch\.batchId\}` : undefined/);
-  assert.match(workbench, /reviewedBatchRef\.current !== identity[\s\S]*setApprovalAcknowledged\(false\)[\s\S]*approvalAttemptRef\.current = undefined/);
-  assert.match(workbench, /\[batch\?\.batchId, batch\?\.planId\]/);
+  assert.match(workbench, /disabled=\{!allCreatorsConfirmed \|\| !allReviewsAvailable \|\| approve\.isPending\}/);
+  assert.match(workbench, /`\$\{batch\.planId\}:\$\{batch\.batchId\}:\$\{batch\.status\}:\$\{batch\.preparedAt \?\? "unprepared"\}`/);
+  assert.match(workbench, /reviewedBatchRef\.current !== identity[\s\S]*setConfirmedMemberIds\(\[\]\)[\s\S]*approvalAttemptRef\.current = undefined/);
+  assert.match(workbench, /const approvalMatchesCurrentBatch = approve\.isSuccess[\s\S]*approvalResultMatchesBatch\(approve\.data\.batch, batch\)/);
+  assert.match(workbench, /function approvalResultMatchesBatch\([\s\S]*approval\.planId === batch\.planId[\s\S]*approval\.batchId === batch\.batchId[\s\S]*approval\.preparedAt === batch\.preparedAt[\s\S]*approval\.approvedAt === batch\.approvedAt/);
+  assert.match(workbench, /const ownApprovalTransition = Boolean\([\s\S]*batch\.status === "approved_ready"[\s\S]*approve\.isPending[\s\S]*approve\.variables\.planId === batch\.planId[\s\S]*approve\.variables\.input\.expectedBatchId === batch\.batchId[\s\S]*\|\| approvalMatchesCurrentBatch/);
+  assert.match(workbench, /if \(!ownApprovalTransition\) approve\.reset\(\)/);
+  assert.doesNotMatch(workbench, /reviewedBatchRef\.current !== identity[\s\S]{0,180}approvalAttemptRef\.current = undefined;\s*approve\.reset\(\)/);
+  assert.match(workbench, /approve\.data\?\.batch\.approvedAt/);
+  assert.match(workbench, /approve\.variables\?\.input\.expectedBatchId/);
+  assert.match(workbench, /batch\?\.approvedAt/);
+  assert.match(workbench, /batch\.groups\.every\(\(group\) => confirmedMembers\.has\(group\.memberId\)\)/);
+  assert.match(workbench, /checked=\{confirmedMembers\.has\(group\.memberId\)\}/);
+  assert.match(workbench, /confirmCreatorReview\(group\.memberId, event\.currentTarget\.checked\)/);
   assert.match(workbench, /prepare\.reset\(\);[\s\S]*approve\.reset\(\);/);
   assert.match(workbench, /prepare\.isSuccess && batch\.status === "draft_ready"/);
-  assert.match(workbench, /approve\.isSuccess && batch\.status === "approved_ready"/);
+  assert.match(workbench, /if \(approvalMatchesCurrentBatch\)[\s\S]*resultRef\.current\?\.focus\(\)/);
+  assert.match(workbench, /\{approvalMatchesCurrentBatch && <div ref=\{resultRef\}/);
+  assert.doesNotMatch(workbench, /approve\.isSuccess && batch\.status === "approved_ready"/);
   assert.match(workbench, /Complete selected-variant content is required for every slot/);
   assert.match(workbench, /This batch cannot be approved because its source content changed/);
   assert.match(workbench, /href="#heygen-roster"/);
@@ -57,6 +70,11 @@ test("production batch UI is preparation-only, accessible, and explicit about ze
   assert.match(workbench, /EmptyPanel/);
   assert.doesNotMatch(workbench, />\s*(Generate|Queue|Retry)\b/);
   assert.doesNotMatch(workbench, /providerAccountId|avatarResourceId|voiceResourceId|nativeId/);
+  const creatorListIndex = workbench.indexOf('<ul className="space-y-3" aria-label={`${batch.avatarCount} creator production groups`}>');
+  const approvalControlIndex = workbench.indexOf("Atomic script approval");
+  const launchPreflightIndex = workbench.indexOf("<LaunchPreflightPanel", approvalControlIndex);
+  assert.ok(creatorListIndex >= 0 && approvalControlIndex > creatorListIndex, "approval control must follow every creator group");
+  assert.ok(launchPreflightIndex >= 0, "read-only launch preflight must be present");
 });
 
 test("approval client action is one batch mutation and refreshes authoritative state", async () => {
@@ -70,6 +88,62 @@ test("approval client action is one batch mutation and refreshes authoritative s
   assert.match(hooks, /setQueryData\(coreStudioKeys\.productionBatch, response\)/);
   assert.match(hooks, /invalidateQueries\(\{ queryKey: coreStudioKeys\.productionBatch \}\)/);
   assert.doesNotMatch(api, /approve-(slot|item|video|script)\//);
+});
+
+test("launch preflight query is read-only, batch-scoped, disabled before approval, and exposes safe recovery", async () => {
+  const [api, hooks, workbench] = await Promise.all([
+    read("client/src/features/ai-media-studio/core/api.ts"),
+    read("client/src/features/ai-media-studio/core/hooks.ts"),
+    read("client/src/features/ai-media-studio/core/production-batch-workbench.tsx"),
+  ]);
+  assert.match(api, /\/production-batches\/\$\{encodeURIComponent\(planId\)\}\/launch-preflight/);
+  assert.match(api, /launchPreflightResponseSchema\.parse/);
+  assert.match(api, /subject\.planId !== planId \|\| parsed\.preflight\.subject\.batchId !== batchId/);
+  assert.match(api, /404: "Launch preflight was not found for this approved batch\."/);
+  assert.match(api, /409: "Launch preflight is not available for the current batch state\."/);
+  assert.match(api, /503: "Launch preflight observation is temporarily unavailable\."/);
+  assert.doesNotMatch(api, /productionBatchLaunchPreflight[\s\S]{0,500}method:\s*"(POST|PUT|PATCH|DELETE)"/);
+  assert.match(hooks, /productionBatchLaunchPreflight: \(planId: string, batchId: string\)/);
+  assert.match(hooks, /"launch-preflight", planId, batchId/);
+  assert.match(hooks, /enabled: enabled && Boolean\(planId\) && Boolean\(batchId\)/);
+  assert.match(hooks, /retry: false/);
+  assert.match(hooks, /refetchOnWindowFocus: false/);
+  assert.match(workbench, /enabled=\{batch\.status === "approved_ready"\}/);
+  assert.match(workbench, /query\.refetch\(\)/);
+  assert.match(workbench, /Refresh read-only check/);
+  assert.match(workbench, /Refreshing the read-only observation/);
+  assert.match(workbench, /Script approval is not launch approval and does not authorize spend/);
+  assert.match(workbench, /Offline foundation ready/);
+  assert.match(workbench, /preflight\.summary\.readySlots/);
+  assert.match(workbench, /preflight\.summary\.requiredSlots/);
+  assert.match(workbench, /preflight\.summary\.pendingExternalGates/);
+  assert.match(workbench, /preflight\.summary\.pendingHumanGates/);
+  assert.match(workbench, /preflight\.summary\.unavailableGates/);
+  assert.match(workbench, /preflight\.gates\.map/);
+  assert.match(workbench, /launchGateStateLabels\[gate\.state\]/);
+  assert.match(workbench, /launchNextActions\[gate\.nextActionCode\]/);
+  assert.match(workbench, /aria-label="Fourteen launch preflight gates"/);
+  assert.match(workbench, /role="status" aria-live="polite"/);
+  assert.match(workbench, /ErrorPanel message=\{query\.error\.message\}/);
+  assert.match(workbench, /grid gap-3 lg:grid-cols-2/);
+  assert.doesNotMatch(workbench, /<table/);
+  const buttonBlocks = Array.from(workbench.matchAll(/<Button\b[\s\S]*?<\/Button>/g), (match) => match[0]);
+  assert.ok(buttonBlocks.length > 0);
+  for (const button of buttonBlocks) assert.doesNotMatch(button, />\s*(Generate|Launch|Spend)\b/);
+});
+
+test("launch preflight maps every contract next action locally and only to safe in-page links", async () => {
+  const [contract, workbench] = await Promise.all([
+    read("shared/ai-media-studio-launch-preflight.ts"),
+    read("client/src/features/ai-media-studio/core/production-batch-workbench.tsx"),
+  ]);
+  const actionList = contract.match(/export const launchPreflightNextActionCodes = \[([\s\S]*?)\] as const;/)?.[1] ?? "";
+  const actions = Array.from(actionList.matchAll(/"([a-z_]+)"/g), (match) => match[1]);
+  assert.equal(actions.length, 22);
+  for (const action of actions) assert.match(workbench, new RegExp(`\\b${action}: \\{`));
+  const hrefs = Array.from(workbench.matchAll(/href: "([^"]+)"/g), (match) => match[1]);
+  assert.ok(hrefs.length > 0);
+  assert.ok(hrefs.every((href) => href === "#production-batch" || href === "#heygen-roster"));
 });
 
 test("studio navigation replaces legacy creation and exposes no generation or retry mutation", async () => {

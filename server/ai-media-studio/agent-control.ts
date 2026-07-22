@@ -135,6 +135,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #144 unmerged and implement the offline authority/admission preflight as a separately reviewed slice; do not call HeyGen or authorize spend.",
   },
   {
+    id: "ams-agent-offline-launch-preflight",
+    title: "Offline launch preflight and exact approval bridge",
+    owner: "AI Media Studio launch safety squad",
+    state: "done",
+    branch: "codex/ai-media-studio-offline-launch-preflight",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/146",
+    acceptance: [
+      "The approved 5–10 × 10 batch is revalidated from exact tenant, source, creative and approval metadata",
+      "One authenticated read-only observation reports all 14 launch gates without minting authority",
+      "Creator confirmations and approval success belong only to the exact visible batch identity",
+      "No provider call, budget reservation, render, outbox, migration, deployment or spend is authorized",
+    ],
+    mergeGate: "Focused, HTTP, PostgreSQL, TypeScript, build, independent checker, security and App QA must pass with no P0-P3 before the draft checkpoint is ready.",
+    evidence: [
+      "Draft PR #146 is stacked on draft PR #144",
+      "Focused checks 54/54; authenticated HTTP routes 2/2; owned PostgreSQL 16 exact 22-pair chain 1/1",
+      "Full suite: 749 passed, one inherited PR26 wording-regex failure and 41 controlled skips of 791",
+      "TypeScript and production build pass",
+      "Independent checker, security and App QA final gates: P0=P1=P2=P3=0",
+    ],
+    blockers: [
+      "Merge, migration rehearsal, live provider verification, authority/evidence, one-video sandbox, batch spend and deployment remain separately blocked",
+      "The inherited Clippers chunk warning blocks deployment; no deployment is requested",
+    ],
+    nextAction: "Keep draft PR #146 unmerged; obtain separate approvals before staging, a one-video HeyGen sandbox, any spend, or Replit deployment.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

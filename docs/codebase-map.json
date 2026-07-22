@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T01:56:24.665Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-launch-readiness",
+  "generatedAt": "2026-07-22T02:39:09.857Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-offline-launch-preflight",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -87,13 +87,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 787,
-    "filesIndexed": 659,
-    "imports": 2728,
-    "routes": 494,
-    "symbols": 13037
+    "filesVisible": 799,
+    "filesIndexed": 671,
+    "imports": 2801,
+    "routes": 495,
+    "symbols": 13320
   },
   "directories": {
+    "script": {
+      "files": 41,
+      "indexed": 39,
+      "kinds": {
+        "script": 41
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 144,
+      "indexed": 137,
+      "kinds": {
+        "server": 144
+      }
+    },
+    "shared": {
+      "files": 11,
+      "indexed": 11,
+      "kinds": {
+        "shared": 11
+      }
+    },
+    "tests": {
+      "files": 191,
+      "indexed": 182,
+      "kinds": {
+        "test": 191
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -166,13 +194,6 @@
         "docs": 1
       }
     },
-    "script": {
-      "files": 40,
-      "indexed": 38,
-      "kinds": {
-        "script": 40
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -187,13 +208,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 140,
-      "indexed": 133,
-      "kinds": {
-        "server": 140
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -201,25 +215,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 10,
-      "indexed": 10,
-      "kinds": {
-        "shared": 10
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 185,
-      "indexed": 176,
-      "kinds": {
-        "test": 185
       }
     },
     "tests/fixtures": {
@@ -2367,6 +2367,7 @@
       "imports": [
         "./types",
         "@shared/ai-media-studio-heygen-roster",
+        "@shared/ai-media-studio-launch-preflight",
         "@shared/ai-media-studio-production-batches"
       ],
       "exports": [
@@ -2384,6 +2385,7 @@
         "fallback",
         "mediaStudioCoreApi",
         "params",
+        "parsed",
         "query",
         "queryString",
         "requestJson",
@@ -2542,6 +2544,7 @@
         "useMediaAssets",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
+        "useProductionBatchLaunchPreflight",
         "useProviderResources"
       ],
       "symbols": [
@@ -2561,6 +2564,7 @@
         "useMediaAssets",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
+        "useProductionBatchLaunchPreflight",
         "useProviderResources"
       ],
       "routes": []
@@ -2750,7 +2754,11 @@
         "newProductionBatchAttemptKey"
       ],
       "symbols": [
+        "LaunchGateIcon",
+        "LaunchPreflightPanel",
         "ProductionBatchWorkbench",
+        "action",
+        "allCreatorsConfirmed",
         "allReviewsAvailable",
         "approvalAttemptRef",
         "approve",
@@ -2758,12 +2766,16 @@
         "attemptRef",
         "batch",
         "batchQuery",
+        "confirmCreatorReview",
+        "confirmedMembers",
         "errorMessage",
         "identity",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey",
+        "ownApprovalTransition",
         "prepare",
         "prepareScripts",
+        "query",
         "readyScripts",
         "resultRef",
         "reviewedBatchRef",
@@ -2777,6 +2789,7 @@
       "imports": [
         "@shared/ai-media-studio-core",
         "@shared/ai-media-studio-heygen-roster",
+        "@shared/ai-media-studio-launch-preflight",
         "@shared/ai-media-studio-production-batches"
       ],
       "exports": [
@@ -5054,6 +5067,37 @@
         "root",
         "run",
         "socketDirectory",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-offline-launch-preflight-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
         "stop",
         "temporaryDirectory",
         "testUrl",
@@ -10162,6 +10206,7 @@
       "imports": [
         "../../../shared/models/ai-media-studio-db",
         "../core/resource-domain",
+        "../production-batches/metadata-integrity",
         "./authority-locks",
         "./launch-authority-contracts",
         "./launch-authority-service",
@@ -10196,7 +10241,6 @@
         "SAFE",
         "SHA256",
         "UUID",
-        "actualKeys",
         "admissionDigest",
         "amount",
         "assertAuthorized",
@@ -10208,7 +10252,6 @@
         "authorityDigest",
         "base",
         "baseExpiry",
-        "candidate",
         "canonicalJson",
         "conflict",
         "content",
@@ -10223,14 +10266,12 @@
         "derivedDigest",
         "digest",
         "display",
-        "envelope",
         "evidence",
         "evidenceBinding",
         "evidenceDigest",
         "evidenceIdentity",
         "existingIntent",
         "expected",
-        "expectedKeys",
         "expiresAt",
         "expiry",
         "expiryCandidates",
@@ -10252,13 +10293,14 @@
         "launchFacts",
         "launchIntentDigest",
         "launchSubjectDigest",
+        "locked",
         "lockedSource",
-        "metadata",
         "microUsd",
         "normalized",
         "normalizedStrings",
         "nullableDate",
         "parsed",
+        "planSlots",
         "policy",
         "policyBinding",
         "policyDigest",
@@ -10269,7 +10311,6 @@
         "previousEvidenceRevision",
         "previousRevision",
         "previousRevisionId",
-        "productionBatchSourceBindingIsCurrent",
         "provider",
         "publicSubject",
         "quote",
@@ -10310,6 +10351,96 @@
         "value",
         "verified",
         "zones"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-launch-preflight-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-launch-preflight",
+        "../core/resource-domain",
+        "../production-batches/metadata-integrity",
+        "./launch-preflight-contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleLaunchPreflightRepository",
+        "LaunchPreflightDatabase",
+        "LaunchPreflightTransactionalDatabase",
+        "launchPreflightWindowIsCurrent"
+      ],
+      "symbols": [
+        "DrizzleLaunchPreflightRepository",
+        "ExecuteResult",
+        "GateInput",
+        "Row",
+        "approvedScripts",
+        "authorityBySlot",
+        "authorityRows",
+        "avatarCount",
+        "batchId",
+        "batchIds",
+        "blocked",
+        "bool",
+        "bucketAvailable",
+        "cap",
+        "capacityPassed",
+        "capacityRows",
+        "clockRows",
+        "concurrencyReady",
+        "content",
+        "count",
+        "databaseNow",
+        "decision",
+        "envelope",
+        "evidence",
+        "evidenceGate",
+        "exactShape",
+        "foundation",
+        "from",
+        "gate",
+        "governanceReady",
+        "human",
+        "id",
+        "influencerCounts",
+        "instant",
+        "intentReady",
+        "internalPlanId",
+        "killExists",
+        "killValid",
+        "launchPreflightWindowIsCurrent",
+        "metadata",
+        "metadataReady",
+        "offlineReady",
+        "parsed",
+        "passed",
+        "passedCount",
+        "plan",
+        "planReady",
+        "planRows",
+        "policy",
+        "policyExists",
+        "policyGatePassed",
+        "policyRows",
+        "policyValid",
+        "presentIntents",
+        "presentSnapshots",
+        "providerReady",
+        "quote",
+        "quotesTotal",
+        "required",
+        "rows",
+        "sandbox",
+        "slotRows",
+        "snapshotReady",
+        "sourceReady",
+        "states",
+        "validAt",
+        "value",
+        "variantRows",
+        "variantsByScript"
       ],
       "routes": []
     },
@@ -10471,6 +10602,41 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/launch-preflight-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-launch-preflight",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "LaunchPreflightError",
+        "LaunchPreflightErrorCode",
+        "LaunchPreflightRepository"
+      ],
+      "symbols": [
+        "LaunchPreflightError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/launch-preflight-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-launch-preflight",
+        "../core/resource-domain",
+        "./launch-preflight-contracts"
+      ],
+      "exports": [
+        "LaunchPreflightService"
+      ],
+      "symbols": [
+        "LaunchPreflightService",
+        "PLAN_KEY",
+        "parsed"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/launch-runtime-attestation-verifier.ts",
       "kind": "server",
       "imports": [
@@ -10569,6 +10735,7 @@
         "../../../shared/models/ai-media-studio-db",
         "../sources/contracts",
         "./contracts",
+        "./metadata-integrity",
         "drizzle-orm",
         "node:crypto"
       ],
@@ -10578,23 +10745,16 @@
         "ProductionBatchExecutor"
       ],
       "symbols": [
-        "APPROVAL_KEYS",
         "ApprovalEnvelope",
-        "CREATIVE_KEYS",
         "CreativeReview",
         "DrizzleProductionBatchRepository",
-        "ENVELOPE_KEYS",
         "Envelope",
         "ExecuteResult",
         "StoredCreativeReview",
-        "VARIANT_KEYS",
-        "actual",
-        "allowed",
         "approval",
         "approvalDigest",
         "approvalInputDigest",
         "approvedAt",
-        "baseRecord",
         "batch",
         "batchId",
         "blockers",
@@ -10611,7 +10771,6 @@
         "digest",
         "envelope",
         "envelopes",
-        "exactKeys",
         "expectedScriptStatus",
         "expectedVariantStatus",
         "first",
@@ -10629,11 +10788,8 @@
         "lockedSlots",
         "memberId",
         "members",
-        "metadata",
         "numbers",
-        "object",
         "observed",
-        "parsed",
         "plan",
         "planStatus",
         "plans",
@@ -10655,7 +10811,6 @@
         "slotId",
         "slotRows",
         "slots",
-        "sorted",
         "source",
         "sourceCategory",
         "sourceEligible",
@@ -10665,7 +10820,6 @@
         "uniqueSlots",
         "validApproval",
         "validEnvelope",
-        "validMetadataKeys",
         "validVariantEnvelope",
         "value",
         "values",
@@ -10676,6 +10830,76 @@
         "variants",
         "verified",
         "videoNumber"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/production-batches/metadata-integrity.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-production-batches",
+        "../sources/contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "ApprovedProductionBatchSlotFacts",
+        "ProductionBatchApprovalEnvelope",
+        "ProductionBatchEnvelope",
+        "VerifiedProductionBatchApprovalBinding",
+        "VerifiedProductionVariant",
+        "productionApprovalInputDigest",
+        "productionCreativeDigest",
+        "readProductionApproval",
+        "readProductionBatchEnvelope",
+        "readProductionVariantMetadata",
+        "verifiedProductionBatchApprovalBinding",
+        "verifyApprovedProductionBatchSlotMetadata"
+      ],
+      "symbols": [
+        "APPROVAL_KEYS",
+        "CREATIVE_KEYS",
+        "ENVELOPE_KEYS",
+        "IDEMPOTENCY_KEY",
+        "ProductionBatchCreativeReview",
+        "RAW_SHA256",
+        "SHA256",
+        "VARIANT_KEYS",
+        "VERIFIED_PRODUCTION_BATCH_APPROVAL",
+        "actual",
+        "allowed",
+        "approval",
+        "base",
+        "baseRecord",
+        "creative",
+        "digest",
+        "envelope",
+        "exactIso",
+        "exactKeys",
+        "expectedKeys",
+        "hash",
+        "knownMetadataKeys",
+        "members",
+        "metadata",
+        "metadataKeys",
+        "ordered",
+        "parsed",
+        "productionApprovalInputDigest",
+        "productionCreativeDigest",
+        "readProductionApproval",
+        "readProductionBatchEnvelope",
+        "readProductionVariantMetadata",
+        "record",
+        "scriptApproval",
+        "scriptMetadata",
+        "selected",
+        "selectedMetadata",
+        "selectedVerified",
+        "sorted",
+        "variantApproval",
+        "verified",
+        "verifiedProductionBatchApprovalBinding",
+        "verifyApprovedProductionBatchSlotMetadata",
+        "videos"
       ],
       "routes": []
     },
@@ -11456,6 +11680,7 @@
         "../../shared/ai-media-studio-core",
         "../../shared/ai-media-studio-governance",
         "../../shared/ai-media-studio-heygen-roster",
+        "../../shared/ai-media-studio-launch-preflight",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
         "../../shared/ai-media-studio-scripts",
@@ -11473,6 +11698,8 @@
         "./in-memory",
         "./operations-runtime",
         "./persistence/runtime",
+        "./planning/launch-preflight-contracts",
+        "./planning/launch-preflight-service",
         "./ports",
         "./production-batches/contracts",
         "./production-batches/service",
@@ -11519,11 +11746,13 @@
         "candidate",
         "configured",
         "configuredDatabase",
+        "contentLength",
         "core",
         "createAiMediaStudioRuntime",
         "createDefaultDurableAssetIngestRepository",
         "createDefaultDurableGovernanceRepository",
         "createDefaultDurableHeyGenRosterRuntime",
+        "createDefaultDurableLaunchPreflightRepository",
         "createDefaultDurableProductionBatchRepository",
         "createDefaultProviderWebhookAccountResolver",
         "created",
@@ -11567,6 +11796,7 @@
         "jobs",
         "key",
         "languageCodes",
+        "launchPreflightSelection",
         "load",
         "materializeOwnedAsset",
         "materialized",
@@ -11581,6 +11811,7 @@
         "pending",
         "persistence",
         "plan",
+        "preflight",
         "preview",
         "previewInput",
         "productionAssets",
@@ -11609,6 +11840,7 @@
         "requireGovernance",
         "requireHeyGenRoster",
         "requireJobs",
+        "requireLaunchPreflight",
         "requireOperations",
         "requireProductionBatches",
         "resolveProviderWebhookAccount",
@@ -11628,6 +11860,7 @@
         "seedGovernance",
         "selectGovernanceRepository",
         "selectHeyGenRosterRuntime",
+        "selectLaunchPreflightRuntime",
         "selectProductionBatchRuntime",
         "service",
         "sourceType",
@@ -11674,6 +11907,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
@@ -19210,6 +19444,43 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-launch-preflight.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "LaunchPreflight",
+        "LaunchPreflightGate",
+        "launchPreflightGateCodes",
+        "launchPreflightGateSchema",
+        "launchPreflightGateStates",
+        "launchPreflightNextActionCodes",
+        "launchPreflightReasonCodes",
+        "launchPreflightResponseSchema",
+        "launchPreflightSchema"
+      ],
+      "symbols": [
+        "allPassed",
+        "counts",
+        "expectedStatus",
+        "foundation",
+        "invalidGate",
+        "launchPreflightGateCodes",
+        "launchPreflightGateSchema",
+        "launchPreflightGateStates",
+        "launchPreflightNextActionCodes",
+        "launchPreflightReasonCodes",
+        "launchPreflightResponseSchema",
+        "launchPreflightSchema",
+        "minimumReady",
+        "offlineReady",
+        "required",
+        "summaryInvalid"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-oauth.ts",
       "kind": "shared",
       "imports": [
@@ -21122,20 +21393,25 @@
         "../server/ai-media-studio/planning/drizzle-launch-authority-repository",
         "../server/ai-media-studio/planning/launch-authority-contracts",
         "../server/ai-media-studio/planning/launch-authority-service",
+        "../server/ai-media-studio/production-batches/metadata-integrity",
         "drizzle-orm/pg-core",
         "node:assert/strict",
+        "node:crypto",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "Rendered",
         "allText",
+        "approval",
         "authorized",
+        "base",
         "changedCommand",
         "command",
         "conflictHarness",
         "conflictRepository",
         "conflicting",
+        "creative",
         "decision",
         "dialect",
         "digest",
@@ -21153,13 +21429,20 @@
         "makeDb",
         "now",
         "options",
+        "planShapeRows",
         "policy",
         "previous",
         "principal",
+        "productionBatchId",
+        "productionPlanId",
+        "productionSlotId",
+        "rawHash",
         "rendered",
         "repository",
         "result",
+        "row",
         "scope",
+        "sourceRow",
         "sqlText",
         "subject",
         "subjectBase",
@@ -21200,6 +21483,99 @@
         "slotId",
         "userService",
         "workloadService"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-preflight-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-launch-preflight",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "badPassed",
+        "badSummary",
+        "blockedReport",
+        "parsed",
+        "required",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-preflight-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-launch-preflight-repository",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "now",
+        "repository",
+        "source",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-preflight-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/planning/launch-preflight-contracts",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio-launch-preflight",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "harness",
+        "missing",
+        "missingResponse",
+        "planId",
+        "previous",
+        "report",
+        "response",
+        "runtime",
+        "server",
+        "unavailable",
+        "unavailableResponse",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-preflight-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/launch-preflight-contracts",
+        "../server/ai-media-studio/planning/launch-preflight-service",
+        "../shared/ai-media-studio-launch-preflight",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "corrupt",
+        "missing",
+        "planId",
+        "report",
+        "required",
+        "service"
       ],
       "routes": []
     },
@@ -21800,6 +22176,93 @@
         "item",
         "token",
         "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-offline-launch-preflight-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-launch-authority-repository",
+        "../server/ai-media-studio/planning/drizzle-launch-preflight-repository",
+        "../server/ai-media-studio/planning/launch-authority-contracts",
+        "../server/ai-media-studio/planning/launch-authority-service",
+        "../server/ai-media-studio/planning/launch-preflight-contracts",
+        "../server/ai-media-studio/planning/launch-preflight-service",
+        "../server/ai-media-studio/production-batches/drizzle-repository",
+        "../server/ai-media-studio/production-batches/service",
+        "../shared/ai-media-studio-launch-preflight",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Fixture",
+        "Manifest",
+        "MigrationFile",
+        "PORT",
+        "Scope",
+        "TEMP_PREFIX",
+        "account",
+        "applyFullChain",
+        "authorityRepository",
+        "authorityService",
+        "before",
+        "bridgeAfter",
+        "bridgeBefore",
+        "bridgeCommand",
+        "bytes",
+        "changed",
+        "content",
+        "count",
+        "database",
+        "digest",
+        "enabled",
+        "five",
+        "gate",
+        "hash",
+        "hex",
+        "influencer",
+        "integrationTest",
+        "key",
+        "lowerClock",
+        "manifest",
+        "member",
+        "migration",
+        "migrationRoot",
+        "observationBaseline",
+        "originalPlanClock",
+        "parsed",
+        "planUuid",
+        "pool",
+        "preflight",
+        "prepared",
+        "production",
+        "receipt",
+        "repeated",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "scope",
+        "seedFixture",
+        "sideEffects",
+        "slot",
+        "socket",
+        "tables",
+        "tamperedSlot",
+        "ten",
+        "upperClock",
+        "uuid",
+        "value"
       ],
       "routes": []
     },
@@ -23167,14 +23630,20 @@
       ],
       "exports": [],
       "symbols": [
-        "avatarCount",
+        "batch",
         "first",
         "groups",
+        "launchGateCodes",
+        "launchPreflightResponse",
+        "observation",
         "originalFetch",
         "position",
+        "privateResponse",
         "productionBatchResponse",
         "publicKey",
+        "requiredSlots",
         "response",
+        "stale",
         "unsafe",
         "unsafeBatch"
       ],
@@ -23240,6 +23709,42 @@
         "text",
         "unique",
         "variantTitle"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-metadata-integrity.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/metadata-integrity",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approvedAt",
+        "approvedFacts",
+        "base",
+        "batchId",
+        "binding",
+        "changed",
+        "content",
+        "creative",
+        "facts",
+        "mutations",
+        "planId",
+        "preparedAt",
+        "rawHash",
+        "scope",
+        "scriptKey",
+        "selected",
+        "selectedCreative",
+        "slotId",
+        "sourceId",
+        "title",
+        "variants"
       ],
       "routes": []
     },
@@ -23398,6 +23903,13 @@
       ],
       "exports": [],
       "symbols": [
+        "actionList",
+        "actions",
+        "approvalControlIndex",
+        "buttonBlocks",
+        "creatorListIndex",
+        "hrefs",
+        "launchPreflightIndex",
         "read",
         "repositoryRoot",
         "workbench"
@@ -25614,6 +26126,10 @@
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
+    "tests/ai-media-studio-launch-preflight-contracts.test.ts",
+    "tests/ai-media-studio-launch-preflight-drizzle.test.ts",
+    "tests/ai-media-studio-launch-preflight-routes.test.ts",
+    "tests/ai-media-studio-launch-preflight-service.test.ts",
     "tests/ai-media-studio-launch-readiness-postgres.test.ts",
     "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
     "tests/ai-media-studio-migration-manifest.test.ts",
@@ -25637,6 +26153,7 @@
     "tests/ai-media-studio-oauth-service.test.ts",
     "tests/ai-media-studio-oauth-vault-cleanup-drizzle.test.ts",
     "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
+    "tests/ai-media-studio-offline-launch-preflight-postgres.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",
@@ -25680,6 +26197,7 @@
     "tests/ai-media-studio-production-batch-client.test.ts",
     "tests/ai-media-studio-production-batch-contracts.test.ts",
     "tests/ai-media-studio-production-batch-drizzle.test.ts",
+    "tests/ai-media-studio-production-batch-metadata-integrity.test.ts",
     "tests/ai-media-studio-production-batch-postgres.test.ts",
     "tests/ai-media-studio-production-batch-routes.test.ts",
     "tests/ai-media-studio-production-batch-service.test.ts",
