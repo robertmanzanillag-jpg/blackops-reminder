@@ -12,6 +12,8 @@ const routesSource = readFileSync(new URL("../server/ai-media-studio/routes.ts",
 const appSource = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8");
 const officeSource = readFileSync(new URL("../client/src/pages/agents-office.tsx", import.meta.url), "utf8");
 const pageSource = readFileSync(new URL("../client/src/pages/ai-media-studio-agent.tsx", import.meta.url), "utf8");
+const kanbanSource = readFileSync(new URL("../docs/ai-media-studio/kanban.md", import.meta.url), "utf8");
+const readmeSource = readFileSync(new URL("../docs/ai-media-studio/README.md", import.meta.url), "utf8");
 
 test("dedicated media agent snapshot exposes exact ownership, gates, evidence and launch bounds", () => {
   const snapshot = createAiMediaStudioAgentSnapshot(() => new Date("2026-07-21T20:00:00.000Z"));
@@ -26,7 +28,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 21);
+  assert.equal(snapshot.summary.done, 23);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 3);
@@ -44,6 +46,34 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     assert.ok(item.acceptance.length > 0);
     assert.ok(item.mergeGate.length > 0);
     assert.ok(item.nextAction.length > 0);
+  }
+});
+
+test("agent control records the real draft checkpoint chain and separately approved launch gates", () => {
+  const snapshot = createAiMediaStudioAgentSnapshot(() => new Date("2026-07-22T20:00:00.000Z"));
+  const setup = snapshot.workItems.find((item) => item.id === "ams-agent-heygen-setup-ux-checkpoint");
+  const security = snapshot.workItems.find((item) => item.id === "ams-agent-production-batch-security-checkpoint");
+
+  assert.equal(setup?.state, "done");
+  assert.equal(setup?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/175");
+  assert.match(setup?.mergeGate ?? "", /draft PR #175 stacked on draft PR #174 and unmerged/u);
+  assert.match(setup?.acceptance.join(" ") ?? "", /5–10 avatars[\s\S]*ten videos[\s\S]*AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY/u);
+
+  assert.equal(security?.state, "done");
+  assert.equal(security?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/178");
+  assert.match(security?.mergeGate ?? "", /draft PR #174 → #175 → #178[\s\S]*stacked and unmerged/u);
+  assert.match(security?.blockers.join(" ") ?? "", /not stored[\s\S]*Migration[\s\S]*GET verification[\s\S]*maximum quote[\s\S]*one real generation[\s\S]*5 avatars × 10 videos[\s\S]*Publishing[\s\S]*Replit deployment/u);
+  assert.deepEqual(snapshot.safety, {
+    spendAuthorized: false,
+    deploymentAuthorized: false,
+    migrationsApplied: false,
+    liveProviderCallsEnabled: false,
+  });
+
+  for (const document of [kanbanSource, readmeSource]) {
+    assert.match(document, /#174[\s\S]*#175[\s\S]*#178/u);
+    assert.match(document, /AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY[\s\S]*migration[\s\S]*GET[\s\S]*quote[\s\S]*one real generation[\s\S]*5[^\n]*10[\s\S]*publishing[\s\S]*Replit/u);
+    assert.match(document, /draft[\s\S]*unmerged/u);
   }
 });
 

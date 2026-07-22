@@ -10,6 +10,10 @@ The current source-to-batch automation slice connects those approved sources to 
 
 This production source scheduler is code-only until the stacked PRs are merged, the existing migrations are separately rehearsed/applied and both applications are explicitly deployed in dependency order (KONG feed first, BlackOps consumer second). Agent Control shows its safe durable state and counters and marks exhausted retries as a terminal operator-review blocker without exposing the cursor. It adds no migration and never resolves the HeyGen secret or invokes render, outbox, video-provider, spend or publishing capabilities. HeyGen GET verification, an authoritative maximum quote, exact one-video approval, the first real video, the 5×10 canary, publishing and Replit deployment remain separate Robert approvals.
 
+The current GitHub chain is open, draft, stacked and unmerged: [PR #174](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/174) → [PR #175](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/175) → [PR #178](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/178). PR #175 guides the initial 5–10 avatars × 10 videos; PR #178 completes the production-batch security checkpoint. This is reviewed code evidence, not readiness or deployment evidence.
+
+`AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY` has not been stored and only its name belongs in code/docs. The separately approved gates are: secret-manager storage, migration rehearsal/application, read-only live HeyGen `GET` verification, authoritative maximum quote, exactly one real generation, the initial 5 avatars × 10 videos canary, publishing, and Replit deployment. No earlier gate implies a later one; a provider-neutral content-plan policy is the next safe code slice, not authority to execute any gate.
+
 ## Ownership
 
 The AI Media Studio Lead owns the contracts, architecture decisions, roadmap, and integration gates in this directory. Backend, frontend, automation/data, and QA agents work in non-overlapping file areas and hand changes back to the Lead for integration.
