@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-21T23:53:11.663Z
-Repo: `/private/tmp/asistente-newsroom-growth`
+Generated: 2026-07-22T02:15:15.797Z
+Repo: `/private/tmp/asistente-news-growth`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 482 | 401 | 1515 | 483 | 8659 |
+| 492 | 411 | 1566 | 483 | 9010 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 121 | 117 | server:121 |
+| `server` | 122 | 118 | server:122 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 80 | 77 | test:80 |
-| `script` | 44 | 41 | script:44 |
+| `tests` | 85 | 82 | test:85 |
+| `script` | 48 | 45 | script:48 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 13 | 12 | docs:13 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -92,6 +92,7 @@ Package: `rest-express`
 - `tests/ceo-smoke-cli.test.ts`
 - `tests/clippers-agent.test.ts`
 - `tests/clippers-local-news-agent.test.ts`
+- `tests/clippers-local-news-growth.test.ts`
 - `tests/clippers-local-news-metricool.test.ts`
 - `tests/clippers-local-news-routes.test.ts`
 - `tests/clippers-local-news-scheduler.test.ts`
@@ -157,7 +158,7 @@ Package: `rest-express`
 - `client/src/pages/github-agent.tsx` (client-page; 29 symbols, 7 imports)
 - `client/src/pages/investment-detail.tsx` (client-page; 41 symbols, 9 imports)
 - `client/src/pages/legal-compliance.tsx` (client-page; 5 symbols, 7 imports)
-- `client/src/pages/local-news-public.tsx` (client-page; 62 symbols, 4 imports)
+- `client/src/pages/local-news-public.tsx` (client-page; 63 symbols, 4 imports)
 - `client/src/pages/marketing-command-center.tsx` (client-page; 10 symbols, 9 imports)
 - `client/src/pages/not-found.tsx` (client-page; 2 imports)
 - `client/src/pages/portfolio.tsx` (client-page; 35 symbols, 14 imports)
@@ -182,15 +183,19 @@ Package: `rest-express`
 - `script/ceo-smoke.ts` (script; 29 symbols, 15 imports)
 - `script/ceo-verify-local.mjs` (script; 2 symbols, 1 imports)
 - `script/clippers-account-permission-readiness.mjs` (script; 82 symbols, 2 imports)
+- `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 117 symbols, 3 imports)
+- `script/clippers-local-subtitles.mjs` (script; 47 symbols, 5 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
+- `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
+- `script/clippers-streamer-growth-ceo.mjs` (script; 118 symbols, 5 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
@@ -218,10 +223,6 @@ Package: `rest-express`
 - `server/._user-context.ts` (server)
 - `server/._youtube-downloader.ts` (server)
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
-- `server/ai-cost-notifications.ts` (server; 26 symbols)
-- `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-router.ts` (server; 13 symbols)
-- `server/app-qa-agent.ts` (server; 187 symbols, 11 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, RefreshCw, Share2, ShieldCheck } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 
 type NewsLanguage = "en" | "es";
@@ -55,6 +55,7 @@ type Copy = {
   standardsBody: string;
   standardsRoles: string;
   skip: string;
+  share: string;
 };
 
 const COPY: Record<NewsLanguage, Copy> = {
@@ -84,6 +85,7 @@ const COPY: Record<NewsLanguage, Copy> = {
     standardsBody: "Each sensitive update is checked independently for official-source evidence, public-safety risk and monetization suitability. Publication requires consensus; conflicting or incomplete claims are quarantined automatically.",
     standardsRoles: "Source Verifier · Safety Editor · Monetization Editor",
     skip: "Skip to news",
+    share: "Share update",
   },
   es: {
     independent: "Mesa local independiente",
@@ -111,6 +113,7 @@ const COPY: Record<NewsLanguage, Copy> = {
     standardsBody: "Cada noticia sensible se revisa de forma independiente por evidencia oficial, seguridad pública y aptitud para monetización. Publicar exige consenso; las afirmaciones incompletas o contradictorias se aíslan automáticamente.",
     standardsRoles: "Verificador de fuentes · Editor de seguridad · Editor de monetización",
     skip: "Ir a las noticias",
+    share: "Compartir actualización",
   },
 };
 
@@ -503,6 +506,15 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
   if (!article) return <ArticleNotFound language={language} />;
   const paragraphs = article.body.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
   const meta = CITY_META[article.city];
+  const shareArticle = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) await navigator.share({ title: article.title, text: article.summary, url });
+      else await navigator.clipboard.writeText(url);
+    } catch {
+      // Dismissal or unavailable clipboard should not interrupt reading.
+    }
+  };
 
   return (
     <article className="mx-auto max-w-4xl">
@@ -515,7 +527,12 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
       </div>
       <h1 className="mt-7 font-serif text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[#102a43] sm:text-6xl">{article.title}</h1>
       {article.summary && <p className="mt-6 border-l-4 border-[#e35d44] pl-5 text-xl leading-8 text-[#455462] sm:text-2xl">{article.summary}</p>}
-      <div className="mt-7 border-y border-[#17395c]/20 py-4"><ArticleMeta article={article} language={language} /></div>
+      <div className="mt-7 flex flex-col gap-4 border-y border-[#17395c]/20 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <ArticleMeta article={article} language={language} />
+        <button type="button" onClick={() => void shareArticle()} className="inline-flex w-fit items-center gap-2 rounded-full border border-[#17395c] px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-[#17395c] hover:bg-[#17395c] hover:text-white">
+          <Share2 className="h-4 w-4" aria-hidden="true" />{COPY[language].share}
+        </button>
+      </div>
       <div className="mx-auto mt-10 max-w-3xl space-y-6 font-serif text-lg leading-8 text-[#253b4f] sm:text-xl sm:leading-9">
         {(paragraphs.length ? paragraphs : [article.summary]).map((paragraph, index) => <p key={`${article.slug}-${index}`}>{paragraph}</p>)}
       </div>

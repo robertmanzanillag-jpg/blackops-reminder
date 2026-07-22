@@ -100,22 +100,36 @@ test("status exposes built-in official sources and fetches optional sources only
 
 test("professional newsroom classifies desks and produces attributed Facebook text without media", async (t) => {
   const workspaceDir = await fixture(t);
-  const result = await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [{
+  const result = await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { PUBLIC_BASE_URL: "https://news.example.com" }, events: [{
     sourceEventId: "traffic-1", source: "Notify NYC", sourceUrl: "https://notify.nyc/traffic-1", lane: "ny-news",
     title: "Road closure on Broadway", description: "Two lanes are closed near Canal Street.", instruction: "Use an alternate route.",
     location: "Broadway at Canal Street", eventType: "Traffic closure", urgency: "Expected",
   }] });
   const persisted = JSON.parse(await readFile(path.join(workspaceDir, "events.json"), "utf8")).events[0];
-  const facebook = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items.find((item: any) => item.platform === "facebook");
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const facebook = queue.find((item: any) => item.platform === "facebook");
+  const x = queue.find((item: any) => item.platform === "x");
   assert.equal(persisted.section, "traffic");
   assert.equal(persisted.editorialUrgency, "developing");
   assert.deepEqual({ textOnly: facebook.textOnly, mediaRequired: facebook.mediaRequired }, { textOnly: true, mediaRequired: false });
   assert.match(facebook.copy, /TRÁFICO:/);
   assert.match(facebook.copy, /Qué hacer: Use an alternate route/);
   assert.match(facebook.copy, /Según Notify NYC/);
+  assert.match(facebook.copy, /https:\/\/news\.example\.com\/news\/article\//);
+  assert.match(facebook.copy, /utm_source=metricool/);
+  assert.match(x.copy, /https:\/\/notify\.nyc\/traffic-1/);
+  assert.ok(x.copy.length <= 280);
+  assert.equal(facebook.organicGrowth.zeroCost, true);
+  assert.equal(facebook.organicGrowth.shortForm.renderMode, "local_template");
   assert.equal(result.status.editorial.owner, "Local News CEO");
   assert.equal(result.status.editorial.sections.traffic.events, 1);
   assert.equal(result.status.editorial.textOnlyFacebook, 1);
+  assert.deepEqual(
+    { mode: result.status.editorial.growth.mode, paidAds: result.status.editorial.growth.paidAds, paidAi: result.status.editorial.growth.paidAiPerPost },
+    { mode: "zero_cost_organic", paidAds: false, paidAi: false },
+  );
+  const growth = JSON.parse(await readFile(path.join(workspaceDir, "organic-growth.json"), "utf8"));
+  assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" });
 });
 
 test("adaptive Facebook cadence allows relevant developing coverage and defers conservative overflow", async (t) => {

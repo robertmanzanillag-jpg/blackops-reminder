@@ -96,7 +96,23 @@ test.before(async () => {
     events: [miamiEvent, nyEvent, highRiskEvent],
     queue: [
       queueItem({ id: "miami-x", platform: "x" }),
-      queueItem({ id: "miami-facebook", platform: "facebook" }),
+      queueItem({
+        id: "miami-facebook",
+        platform: "facebook",
+        organicGrowth: {
+          zeroCost: true,
+          experiment: "deterministic_observed_metrics",
+          variantId: "utility",
+          headline: { es: "Tiempo en Miami-Dade: Flood Watch", en: "Weather in Miami-Dade: Flood Watch" },
+          headlineVariants: {
+            utility: { es: "Tiempo en Miami-Dade: Flood Watch", en: "Weather in Miami-Dade: Flood Watch" },
+            impact: { es: "Lo que debes saber en Miami-Dade: Flood Watch", en: "What to know in Miami-Dade: Flood Watch" },
+          },
+          ownedArticleUrl: "https://news.example.com/news/article/miami-update-test?utm_source=metricool",
+          hashtags: ["#Miami", "#Tiempo"],
+          shortForm: { ready: true, format: "9:16", durationSeconds: 8, soundRequired: true, renderMode: "local_template", scenes: [] },
+        },
+      }),
       queueItem({ id: "ny-x", eventId: nyEvent.id, lane: "ny-news", risk: "low" }),
       queueItem({ id: "high-x", eventId: highRiskEvent.id, eventRevision: 1 }),
       queueItem({ id: "quarantined-ny", eventId: nyEvent.id, eventRevision: 2, lane: "ny-news", platform: "facebook", risk: "low", status: "quarantined", approvalRequired: false, autoEligible: false }),
@@ -149,8 +165,18 @@ test("ledger evidence gates articles and X/Facebook rows deduplicate to one bili
   assert.equal(article.city, "miami");
   assert.equal(article.lang, "es");
   assert.deepEqual(article.publicationEvidence.platforms, ["facebook", "x"]);
-  assert.match(article.translations.en.title, /Weather update/);
-  assert.match(article.translations.es.title, /Actualización meteorológica/);
+  assert.equal(article.translations.en.title, "Weather in Miami-Dade: Flood Watch");
+  assert.equal(article.translations.es.title, "Tiempo en Miami-Dade: Flood Watch");
+  assert.deepEqual(article.organicGrowth, {
+    zeroCost: true,
+    variantId: "utility",
+    headlineVariants: {
+      utility: { es: "Tiempo en Miami-Dade: Flood Watch", en: "Weather in Miami-Dade: Flood Watch" },
+      impact: { es: "Lo que debes saber en Miami-Dade: Flood Watch", en: "What to know in Miami-Dade: Flood Watch" },
+    },
+    hashtags: ["#Miami", "#Tiempo"],
+    shortFormReady: true,
+  });
   assert.match(article.translations.es.body, /no pretende ser una traducción completa/);
 
   const serialized = JSON.stringify(feed);
@@ -179,6 +205,15 @@ test("city filters, language projection, detail lookup, and safe share metadata 
   assert.match(html, /property="og:title"/);
   assert.match(html, /https:\/\/example.com\/news\/miami\/story/);
   assert.match(html, /property="og:image"/);
+  assert.match(html, /property="og:locale"/);
+  assert.match(html, /hreflang="es"/);
+  assert.match(html, /hreflang="en"/);
+  assert.match(html, /hreflang="x-default"/);
+  assert.match(html, /"@type":"NewsArticle"/);
+  assert.match(html, /id="share-update"/);
+  assert.match(html, /navigator\.share/);
+  assert.match(html, /navigator\.clipboard\.writeText/);
+  assert.match(html, /role="status" aria-live="polite"/);
   assert.doesNotMatch(html, /private-blog-id|INTERNAL QUEUE COPY/);
 });
 
