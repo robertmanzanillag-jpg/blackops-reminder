@@ -7,12 +7,14 @@ import {
 import { INITIAL_CREATOR_CANARY_PROFILE } from "../../shared/ai-media-studio-launch-plan-profile";
 import type { SourceSyncTask } from "./sources/source-sync-scheduler";
 
+const AGENT_DATA_AS_OF = "2026-07-22T20:11:43.000Z" as const;
+
 const workItems: readonly AiMediaStudioAgentWorkItem[] = [
   {
     id: "ams-agent-pr27-terminal-evidence",
     title: "HeyGen V3 terminal evidence boundary",
     owner: "AI Media Studio backend squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-heygen-terminal-evidence",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/112",
     acceptance: [
@@ -29,7 +31,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-pr28-control-pane",
     title: "Dedicated AI Media Studio Agent control pane",
     owner: "AI Media Studio product squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-agent-control",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/115",
     acceptance: [
@@ -46,7 +48,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-pr29-production-composition",
     title: "Inert HeyGen V3 production composition",
     owner: "AI Media Studio runtime squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-production-composition",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/116",
     acceptance: [
@@ -63,7 +65,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-durable-roster-plan",
     title: "Durable roster to ten-slots-per-avatar bridge",
     owner: "AI Media Studio planning squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-durable-roster-plan-bridge",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/136",
     acceptance: [
@@ -87,7 +89,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-durable-script-batch",
     title: "Durable production script batch workbench",
     owner: "AI Media Studio content planning squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-durable-script-batch",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/141",
     acceptance: [
@@ -114,7 +116,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-launch-readiness",
     title: "Durable script review and launch readiness",
     owner: "AI Media Studio content approval squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-launch-readiness",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/144",
     acceptance: [
@@ -140,7 +142,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-offline-launch-preflight",
     title: "Offline launch preflight and exact approval bridge",
     owner: "AI Media Studio launch safety squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-offline-launch-preflight",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/146",
     acceptance: [
@@ -167,7 +169,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-one-video-sandbox-readiness",
     title: "One-video sandbox readiness packet and offline runtime proof",
     owner: "AI Media Studio sandbox readiness squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-one-video-sandbox-readiness",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/147",
     acceptance: [
@@ -194,7 +196,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-static-heygen-onboarding",
     title: "Secure static HeyGen credential and roster onboarding",
     owner: "AI Media Studio provider onboarding squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-heygen-onboarding-readiness",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/148",
     acceptance: [
@@ -220,7 +222,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-one-video-execution-control",
     title: "Inert one-video verification and execution control",
     owner: "AI Media Studio provider execution squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-one-video-execution-control",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/149",
     acceptance: [
@@ -247,7 +249,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-heygen-verification-evidence",
     title: "Immutable HeyGen V3 verification evidence",
     owner: "AI Media Studio credential verification squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-heygen-verification-evidence",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/154",
     acceptance: [
@@ -273,7 +275,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-one-video-verification-read-model",
     title: "Exact one-video HeyGen verification read model",
     owner: "AI Media Studio read-model squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-one-video-verification-read-model",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/156",
     acceptance: [
@@ -298,7 +300,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-secure-heygen-setup-runtime",
     title: "Guided secure HeyGen setup and explicit verification runtime",
     owner: "Dedicated HeyGen onboarding and verification agents",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-secure-heygen-setup-runtime",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/161",
     acceptance: [
@@ -325,7 +327,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-quote-bound-human-approval",
     title: "Exact maximum-quote to human-approval binding",
     owner: "Quote authority, schema, security and App QA agents",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-quote-bound-approval",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/165",
     acceptance: [
@@ -352,7 +354,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-heygen-account-maximum-quote",
     title: "Fail-closed HeyGen account maximum-quote adapter",
     owner: "Quote provider, documentation, security and review agents",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-heygen-account-quote",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/166",
     acceptance: [
@@ -379,7 +381,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-quote-readiness",
     title: "Provider-neutral maximum-quote readiness",
     owner: "Quote readiness maker, checker and App QA agents",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-quote-readiness",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/168",
     acceptance: [
@@ -406,7 +408,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-one-video-held-admission",
     title: "One-video held admission and expiry safety",
     owner: "Admission, database safety, authorization, UI, security and App QA agents",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-one-video-held-admission",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/169",
     acceptance: [
@@ -436,7 +438,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-roster-mutation-hardening",
     title: "HeyGen roster mutation boundary hardening",
     owner: "Roster API security maker, independent checker and App QA",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-roster-mutation-hardening",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/170",
     acceptance: [
@@ -462,7 +464,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-kong-source-to-script",
     title: "Kong-owned source eligibility and script preview bridge",
     owner: "AI Media Studio source governance squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-kong-source-to-script",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/172",
     acceptance: [
@@ -491,7 +493,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-source-automation-sync",
     title: "Tenant-safe source automation sync",
     owner: "AI Media Studio source automation squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-source-automation-sync",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/171",
     acceptance: [
@@ -519,7 +521,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-source-to-batch-automation",
     title: "Durable source-to-batch script automation",
     owner: "AI Media Studio source automation squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-source-to-batch-automation",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/173",
     acceptance: [
@@ -548,9 +550,12 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-kong-source-scheduler",
     title: "Production KONG source reader and scheduler",
     owner: "AI Media Studio source automation squad",
-    state: "running",
+    state: "review",
     branch: "codex/ai-media-studio-kong-http-scheduler",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/174",
+    baseBranch: "codex/ai-media-studio-source-to-batch-automation",
+    headBranch: "codex/ai-media-studio-kong-http-scheduler",
+    commit: "0224c8d7",
     acceptance: [
       "The exact curated KONG HTTPS feed is DNS-pinned, TLS-hostname verified, redirect-free and JSON/body/cursor bounded",
       "One tenant-scoped orchestration row persists the server cursor with SKIP LOCKED claims, leases, fencing and safe retry recovery",
@@ -576,9 +581,12 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-heygen-setup-ux-checkpoint",
     title: "Guided secure HeyGen setup checkpoint",
     owner: "AI Media Studio provider onboarding squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-heygen-setup-ux",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/175",
+    baseBranch: "codex/ai-media-studio-kong-http-scheduler",
+    headBranch: "codex/ai-media-studio-heygen-setup-ux",
+    commit: "3f52c23b",
     acceptance: [
       "Guide the initial 5–10 avatars with exactly ten videos each through one stable setup area",
       "Name AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY without accepting, displaying or storing its value",
@@ -596,9 +604,12 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-production-batch-security-checkpoint",
     title: "Production-batch mutation security checkpoint",
     owner: "AI Media Studio security and release squad",
-    state: "done",
+    state: "review",
     branch: "codex/ai-media-studio-production-batch-route-hardening",
     pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/178",
+    baseBranch: "codex/ai-media-studio-heygen-setup-ux",
+    headBranch: "codex/ai-media-studio-production-batch-route-hardening",
+    commit: "287abacc",
     acceptance: [
       "Authenticate prepare and approve before parsing and require exact trusted same-origin JSON",
       "Reject raw query, ambiguous-body and bounded parser failures before tenant-scoped service or persistence calls",
@@ -620,6 +631,108 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "7. Publishing and Replit deployment each require separate explicit approval",
     ],
     nextAction: "Keep PRs #174, #175 and #178 draft/unmerged; clear secret, migration, GET verification, quote, one video, 5 × 10 canary, publishing and deployment one gate at a time.",
+  },
+  {
+    id: "ams-agent-control-checkpoint-pr180",
+    title: "Dedicated agent control checkpoint refresh",
+    owner: "AI Media Studio control-plane squad",
+    state: "review",
+    branch: "codex/ai-media-studio-agent-control-checkpoint",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/180",
+    baseBranch: "codex/ai-media-studio-production-batch-route-hardening",
+    headBranch: "codex/ai-media-studio-agent-control-checkpoint",
+    commit: "4bc7da3a",
+    acceptance: ["Record the reviewed draft chain without representing open work as merged or deployed"],
+    mergeGate: "Draft PR #180 remains unmerged and requires its own GitHub merge decision.",
+    evidence: ["Checkpoint commit 4bc7da3a is stacked directly after PR #178"],
+    blockers: ["The stacked draft chain has not been merged"],
+    nextAction: "Keep the checkpoint in review while the later stacked drafts are evaluated.",
+  },
+  {
+    id: "ams-agent-content-plan-policy-pr181",
+    title: "Deterministic content-plan policy",
+    owner: "AI Media Studio content policy squad",
+    state: "review",
+    branch: "codex/ai-media-studio-content-plan-policy",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/181",
+    baseBranch: "codex/ai-media-studio-agent-control-checkpoint",
+    headBranch: "codex/ai-media-studio-content-plan-policy",
+    commit: "b812f837",
+    acceptance: ["Expose a deterministic no-spend content plan for the initial creator batch"],
+    mergeGate: "Draft PR #181 remains unmerged pending GitHub review of the stacked chain.",
+    evidence: ["Checkpoint commit b812f837 is stacked directly after PR #180"],
+    blockers: ["No merge, generation, publishing or deployment authority exists"],
+    nextAction: "Preserve the reviewed policy while later launch-profile work remains stacked.",
+  },
+  {
+    id: "ams-agent-launch-profile-pr182",
+    title: "Initial launch profile",
+    owner: "AI Media Studio launch planning squad",
+    state: "review",
+    branch: "codex/ai-media-studio-launch-plan-profile",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/182",
+    baseBranch: "codex/ai-media-studio-content-plan-policy",
+    headBranch: "codex/ai-media-studio-launch-plan-profile",
+    commit: "f1fe9bda",
+    acceptance: ["Centralize the exact 5–10 creators and ten videos per creator launch bounds"],
+    mergeGate: "Draft PR #182 remains unmerged pending review of its base PRs.",
+    evidence: ["Checkpoint commit f1fe9bda is stacked directly after PR #181"],
+    blockers: ["The launch profile grants no provider, spend, publishing or deployment permission"],
+    nextAction: "Use the profile as the single no-spend planning contract while the chain is reviewed.",
+  },
+  {
+    id: "ams-agent-dashboard-published-metric-pr183",
+    title: "Confirmed publishing dashboard metric",
+    owner: "AI Media Studio dashboard squad",
+    state: "review",
+    branch: "codex/ai-media-studio-dashboard-published-metric",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/183",
+    baseBranch: "codex/ai-media-studio-launch-plan-profile",
+    headBranch: "codex/ai-media-studio-dashboard-published-metric",
+    commit: "c465fa71",
+    acceptance: ["Report confirmed publishing totals without claiming that publishing is authorized"],
+    mergeGate: "Draft PR #183 remains unmerged pending review of the stacked chain.",
+    evidence: ["Checkpoint commit c465fa71 is stacked directly after PR #182"],
+    blockers: ["Publishing remains separately approval-bound and disabled"],
+    nextAction: "Keep the metric read-only until publishing authority and runtime evidence exist.",
+  },
+  {
+    id: "ams-agent-reusable-script-assets-pr184",
+    title: "Reusable script assets",
+    owner: "AI Media Studio script library squad",
+    state: "review",
+    branch: "codex/ai-media-studio-reusable-script-assets",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/184",
+    baseBranch: "codex/ai-media-studio-dashboard-published-metric",
+    headBranch: "codex/ai-media-studio-reusable-script-assets",
+    commit: "4f9992ea",
+    acceptance: ["Persist tenant-safe reusable script variants without invoking a video provider"],
+    mergeGate: "Draft PR #184 remains unmerged pending GitHub review and its inherited bases.",
+    evidence: ["Checkpoint commit 4f9992ea is stacked directly after PR #183"],
+    blockers: ["Provider calls, spend, publishing, migrations and deployment remain blocked"],
+    nextAction: "Keep reusable assets in review and preserve their no-provider boundary.",
+  },
+  {
+    id: "ams-agent-provider-neutral-persona-pr185",
+    title: "Provider-neutral roster persona activation",
+    owner: "AI Media Studio creator platform squad",
+    state: "review",
+    branch: "codex/ai-media-studio-provider-neutral-persona-activation",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/185",
+    baseBranch: "codex/ai-media-studio-reusable-script-assets",
+    headBranch: "codex/ai-media-studio-provider-neutral-persona-activation",
+    commit: "90bae351",
+    gates: {
+      checker: { status: "passed", evidence: ["Independent checker reported P0=P1=P2=P3=0 for checkpoint 90bae351"] },
+      appQa: { status: "passed", evidence: ["App QA reported P0=P1=P2=P3=0 for checkpoint 90bae351"] },
+      ci: { status: "pending", evidence: ["GitHub statusCheckRollup did not report a completed CI check"] },
+      human: { status: "pending", evidence: ["Draft PR #185 is open and unmerged"] },
+    },
+    acceptance: ["Provision schema-valid provider-neutral starter personas and repair exact roster replays without provider I/O"],
+    mergeGate: "Draft PR #185 remains unmerged pending checker, App QA, CI and human merge gates.",
+    evidence: ["Checkpoint commit 90bae351 is stacked directly after PR #184"],
+    blockers: ["The draft chain is unmerged; live provider verification, spend, publishing, migrations and deployment remain separately blocked"],
+    nextAction: "Complete independent review evidence; do not call HeyGen or authorize spend.",
   },
   {
     id: "ams-agent-staging-migrations",
@@ -678,25 +791,35 @@ export function createAiMediaStudioAgentSnapshot(
   now: () => Date = () => new Date(),
   sourceScheduler?: SourceSyncTask | "unavailable",
 ): AiMediaStudioAgentSnapshot {
+  const observedAt = now().toISOString();
   const visibleItems = workItems.map((item) => item.id === "ams-agent-kong-source-scheduler"
     ? schedulerWorkItem(item, sourceScheduler)
-    : item);
+    : item).map(materializeWorkItem);
   const counts = {
-    done: visibleItems.filter((item) => item.state === "done").length,
+    review: visibleItems.filter((item) => item.state === "review").length,
+    merged: visibleItems.filter((item) => item.state === "merged").length,
     running: visibleItems.filter((item) => item.state === "running").length,
     ready: visibleItems.filter((item) => item.state === "ready").length,
     blocked: visibleItems.filter((item) => item.state === "blocked").length,
     backlog: visibleItems.filter((item) => item.state === "backlog").length,
   };
+  const status = counts.running > 0
+    ? "working"
+    : counts.review > 0 || counts.ready > 0
+      ? "awaiting_human"
+      : counts.blocked > 0
+        ? "blocked"
+        : "idle";
   return aiMediaStudioAgentSnapshotSchema.parse({
     agent: {
       id: "ai-media-studio-agent",
       name: "AI Media Studio Agent",
-      status: "working",
+      status,
       route: AI_MEDIA_STUDIO_AGENT_ROUTE,
       mission: "Coordinate the provider-neutral media platform from reviewed code to a safe 5–10-avatar launch, with ten videos per avatar and explicit human gates before spend or deployment.",
     },
-    generatedAt: now().toISOString(),
+    generatedAt: observedAt,
+    dataAsOf: AGENT_DATA_AS_OF,
     safety: {
       spendAuthorized: false,
       deploymentAuthorized: false,
@@ -711,23 +834,64 @@ export function createAiMediaStudioAgentSnapshot(
       maximumVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.maximum,
     },
     summary: { total: visibleItems.length, ...counts },
-    workItems: visibleItems.map((item) => ({ ...item, acceptance: [...item.acceptance], evidence: [...item.evidence], blockers: [...item.blockers] })),
+    workItems: visibleItems,
   });
+}
+
+function materializeWorkItem(item: AiMediaStudioAgentWorkItem): AiMediaStudioAgentWorkItem {
+  const gates = item.gates ?? {
+    checker: { status: "pending" as const, evidence: [] },
+    appQa: { status: "pending" as const, evidence: [] },
+    ci: { status: "pending", evidence: [] },
+    human: {
+      status: item.state === "blocked" ? "blocked" as const : "pending" as const,
+      evidence: [],
+    },
+  };
+  return {
+    ...item,
+    baseBranch: item.baseBranch ?? null,
+    headBranch: item.headBranch ?? item.branch,
+    gates: {
+      checker: { ...gates.checker, evidence: [...gates.checker.evidence] },
+      appQa: { ...gates.appQa, evidence: [...gates.appQa.evidence] },
+      ci: { ...gates.ci, evidence: [...gates.ci.evidence] },
+      human: { ...gates.human, evidence: [...gates.human.evidence] },
+    },
+    harness: item.harness ?? null,
+    worktree: item.worktree ?? null,
+    heartbeatAt: item.heartbeatAt ?? null,
+    handoff: item.handoff ?? null,
+    commit: item.commit ?? null,
+    evidenceLinks: item.evidenceLinks ?? (item.pullRequestUrl ? [item.pullRequestUrl] : []),
+    ...(item.runtime ? { runtime: { ...item.runtime, evidence: [...item.runtime.evidence] } } : {}),
+    acceptance: [...item.acceptance],
+    evidence: [...item.evidence],
+    blockers: [...item.blockers],
+  };
 }
 
 function schedulerWorkItem(item: AiMediaStudioAgentWorkItem, task?: SourceSyncTask | "unavailable"): AiMediaStudioAgentWorkItem {
   const runtimeState = task === "unavailable" ? "unavailable" : task?.status ?? "not_initialized";
-  const blocked = runtimeState === "dead_letter" || runtimeState === "unavailable" || runtimeState === "not_initialized";
+  const stopped = runtimeState === "dead_letter" || runtimeState === "unavailable" || runtimeState === "not_initialized";
   const evidence = [...item.evidence, `Runtime scheduler state: ${runtimeState}`];
+  const runtimeEvidence = [`Runtime scheduler state: ${runtimeState}`];
   if (task && task !== "unavailable") {
     evidence.push(`Durable cursor page ${task.payload.page}; cycle ${task.payload.cycle}; attempts ${task.attempts}/${task.maxAttempts}`);
+    runtimeEvidence.push(`Durable cursor page ${task.payload.page}; cycle ${task.payload.cycle}; attempts ${task.attempts}/${task.maxAttempts}`);
     if (task.failureCode) evidence.push(`Safe failure code: ${task.failureCode}`);
+    if (task.failureCode) runtimeEvidence.push(`Safe failure code: ${task.failureCode}`);
   }
   return {
     ...item,
-    state: blocked ? "blocked" : item.state,
+    runtime: {
+      component: "source_scheduler",
+      status: runtimeState,
+      health: runtimeState === "dead_letter" ? "attention" : stopped ? "stopped" : "healthy",
+      evidence: runtimeEvidence,
+    },
     evidence,
-    blockers: blocked
+    blockers: stopped
       ? [...item.blockers, runtimeState === "dead_letter"
         ? "The durable source scheduler is dead-lettered and requires an operator review before any retry"
         : runtimeState === "unavailable"
