@@ -27,11 +27,13 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
   assert.equal(snapshot.summary.done, 16);
-  assert.equal(snapshot.summary.running, 0);
+  assert.equal(snapshot.summary.running, 1);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-quote-readiness")?.branch,
     "codex/ai-media-studio-quote-readiness");
+  assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-one-video-held-admission")?.branch,
+    "codex/ai-media-studio-one-video-held-admission");
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
   for (const item of snapshot.workItems) {
     assert.ok(item.owner.length > 0);

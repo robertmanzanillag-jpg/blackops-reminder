@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   CheckCircle2,
@@ -22,10 +23,15 @@ import {
   useProductionBatchLaunchPreflight,
   useProductionBatchSandboxReadiness,
   useRecordOneVideoCostApproval,
+  coreStudioKeys,
 } from "./hooks";
 import type { LaunchPreflight, LaunchPreflightGate, ProductionBatch, SandboxReadinessGate } from "./types";
 import type { OneVideoExecutionControl } from "@shared/ai-media-studio-one-video-execution-control";
 import { OneVideoCostApprovalDialog } from "./one-video-cost-approval-dialog";
+import { OneVideoHeldAdmissionDialog } from "./one-video-held-admission-dialog";
+import { mediaStudioCoreApi } from "./api";
+import type { OneVideoHeldAdmissionReadiness } from "@shared/ai-media-studio-one-video-held-admission-readiness";
+import type { OneVideoHeldAdmissionResponse } from "@shared/ai-media-studio-one-video-held-admission";
 
 const blockerLabels: Record<ProductionBatch["blockers"][number], string> = {
   script_batch_required: "Script batch preparation required",
@@ -278,6 +284,37 @@ const approvalStateLabels: Record<OneVideoExecutionControl["humanApproval"]["sta
   unavailable: "Unavailable",
 };
 
+const heldAdmissionReasonLabels: Record<OneVideoHeldAdmissionReadiness["reasonCodes"][number], string> = {
+  batch_not_approved: "The complete production batch is not approved.",
+  batch_changed: "The approved batch changed after the last observation.",
+  slot_not_approved: "The selected slot is not approved.",
+  slot_attempt_changed: "The selected slot attempt changed.",
+  launch_intent_missing: "Current launch intent is missing.",
+  launch_intent_stale: "Launch intent is stale.",
+  content_approval_missing: "Current content approval is missing.",
+  content_approval_stale: "Content approval is stale.",
+  sandbox_proof_missing: "Current sandbox proof is missing.",
+  sandbox_proof_stale: "Sandbox proof is stale.",
+  policy_inactive: "The admission policy is inactive.",
+  policy_stale: "The admission policy changed.",
+  kill_switch_active: "The kill switch is active.",
+  governance_stale: "Governance evidence is stale.",
+  credential_stale: "Credential evidence is stale.",
+  source_stale: "Source evidence is stale.",
+  provider_verification_missing: "Persisted provider verification is missing.",
+  provider_verification_stale: "Persisted provider verification is stale.",
+  maximum_quote_missing: "An exact maximum quote is missing.",
+  maximum_quote_stale: "The exact maximum quote is stale.",
+  human_approval_missing: "Exact human cost approval is missing.",
+  human_approval_stale: "Exact human cost approval is stale.",
+  authority_snapshot_missing: "A sealed authority snapshot is missing.",
+  authority_snapshot_stale: "The sealed authority snapshot is stale.",
+  budget_unavailable: "Approved internal budget capacity is unavailable.",
+  concurrency_unavailable: "One-video admission capacity is unavailable.",
+  existing_attempt: "This slot attempt already has admission work.",
+  observation_unavailable: "The server could not adjudicate every admission gate.",
+};
+
 export function formatMaximumQuoteUsd(amountMicroUsd: string): string {
   const micros = BigInt(amountMicroUsd);
   const whole = micros / 1_000_000n;
@@ -291,6 +328,10 @@ function evidenceTime(value: string | undefined): string {
 
 export function createCostApprovalIdempotencyKey(): string {
   return `approval_${globalThis.crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+export function createHeldAdmissionIdempotencyKey(): string {
+  return `held_admission_${globalThis.crypto.randomUUID().replaceAll("-", "")}`;
 }
 
 function OneVideoExecutionControlPanel({
@@ -311,10 +352,16 @@ function OneVideoExecutionControlPanel({
     ? candidate
     : undefined;
   const blockerId = `one-video-execution-blockers-${slotId}`;
+  const heldAdmissionHeadingId = `one-video-held-admission-heading-${slotId}`;
+  const heldAdmissionDescriptionId = `one-video-held-admission-description-${slotId}`;
   const approvalRuntime = useOneVideoCostApprovalRuntime(Boolean(control));
   const approvalMutation = useRecordOneVideoCostApproval({ planId, batchId, slotId });
+  const queryClient = useQueryClient();
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [heldAdmissionDialogOpen, setHeldAdmissionDialogOpen] = useState(false);
+  const [heldAdmissionReceipt, setHeldAdmissionReceipt] = useState<OneVideoHeldAdmissionResponse>();
   const operationRef = useRef<{ quoteKey: string; idempotencyKey: string } | undefined>(undefined);
+  const heldAdmissionOperationRef = useRef<{ casKey: string; idempotencyKey: string } | undefined>(undefined);
   const quoteKey = control?.maximumQuote.quoteKey;
   const renderSpecKey = control?.maximumQuote.renderSpecKey;
   const quoteIsExact = control?.maximumQuote.state === "quoted"
@@ -329,12 +376,54 @@ function OneVideoExecutionControlPanel({
     && control.humanApproval.renderSpecKey === renderSpecKey);
   const runtimeAvailable = approvalRuntime.data?.available === true;
   const approvalEnabled = quoteIsExact && runtimeAvailable && !alreadyApproved;
+  const heldAdmissionReadinessKey = [
+    "ai-media-studio", "core", "production-batch", "one-video-held-admission-readiness", planId, batchId, slotId,
+  ] as const;
+  const heldAdmissionReadinessQuery = useQuery({
+    queryKey: heldAdmissionReadinessKey,
+    queryFn: () => mediaStudioCoreApi.oneVideoHeldAdmissionReadiness({ planId, batchId, slotId }),
+    enabled: Boolean(planId && batchId && slotId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const readinessCandidate = heldAdmissionReadinessQuery.data?.readiness;
+  const heldAdmissionReadiness = readinessCandidate
+    && readinessCandidate.subject.planId === planId
+    && readinessCandidate.subject.batchId === batchId
+    && readinessCandidate.subject.slotId === slotId
+    ? readinessCandidate
+    : undefined;
+  const heldAdmissionCas = heldAdmissionReadiness?.postAvailable === true
+    ? heldAdmissionReadiness.cas
+    : undefined;
+  const heldAdmissionEnabled = Boolean(heldAdmissionCas);
+  const heldAdmissionMutation = useMutation({
+    mutationFn: mediaStudioCoreApi.createOneVideoHeldAdmission,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: heldAdmissionReadinessKey, exact: true }),
+        queryClient.invalidateQueries({ queryKey: coreStudioKeys.oneVideoExecutionControl(planId, batchId, slotId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatchSandboxReadiness(planId, batchId, slotId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatchLaunchPreflight(planId, batchId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatch, exact: true }),
+      ]);
+    },
+  });
 
   useEffect(() => {
     setApprovalDialogOpen(false);
     operationRef.current = undefined;
     approvalMutation.reset();
   }, [quoteKey, renderSpecKey]);
+
+  const heldAdmissionCasKey = heldAdmissionCas
+    ? `${heldAdmissionCas.expectedBatchId}:${heldAdmissionCas.expectedQuoteKey}:${heldAdmissionCas.expectedRenderSpecKey}:${heldAdmissionCas.expectedSlotAttempt}`
+    : "";
+  useEffect(() => {
+    setHeldAdmissionDialogOpen(false);
+    heldAdmissionOperationRef.current = undefined;
+    heldAdmissionMutation.reset();
+  }, [heldAdmissionCasKey]);
 
   const recordExactApproval = async () => {
     if (!control || !quoteKey || !renderSpecKey || !quoteIsExact || !approvalEnabled) return;
@@ -352,10 +441,38 @@ function OneVideoExecutionControlPanel({
           idempotencyKey: operationRef.current.idempotencyKey,
         },
       });
+      await heldAdmissionReadinessQuery.refetch();
       setApprovalDialogOpen(false);
     } catch {
       // React Query owns the sanitized error rendered inside the dialog. Keep
       // the same quote and idempotency key available for a deliberate retry.
+    }
+  };
+
+  const createHeldAdmission = async () => {
+    if (!heldAdmissionCas || !heldAdmissionEnabled) return;
+    if (!heldAdmissionOperationRef.current || heldAdmissionOperationRef.current.casKey !== heldAdmissionCasKey) {
+      heldAdmissionOperationRef.current = {
+        casKey: heldAdmissionCasKey,
+        idempotencyKey: createHeldAdmissionIdempotencyKey(),
+      };
+    }
+    try {
+      const receipt = await heldAdmissionMutation.mutateAsync({
+        planId,
+        slotId,
+        input: {
+          expectedBatchId: heldAdmissionCas.expectedBatchId,
+          expectedQuoteKey: heldAdmissionCas.expectedQuoteKey,
+          expectedRenderSpecKey: heldAdmissionCas.expectedRenderSpecKey,
+          expectedSlotAttempt: heldAdmissionCas.expectedSlotAttempt,
+          idempotencyKey: heldAdmissionOperationRef.current.idempotencyKey,
+        },
+      });
+      setHeldAdmissionReceipt(receipt);
+      setHeldAdmissionDialogOpen(false);
+    } catch {
+      // Keep the exact CAS tuple and idempotency key for a deliberate retry.
     }
   };
 
@@ -452,6 +569,66 @@ function OneVideoExecutionControlPanel({
             )}
           </div>
 
+          <section aria-labelledby={heldAdmissionHeadingId} className="rounded-lg border border-cyan-300/25 bg-cyan-400/[0.06] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Held sandbox admission</p>
+            <h5 id={heldAdmissionHeadingId} className="mt-2 text-sm font-medium text-white">Reserve one internal held slot without provider contact</h5>
+            <p id={heldAdmissionDescriptionId} className="mt-1 text-sm leading-6 text-zinc-300">
+              {heldAdmissionReadinessQuery.isLoading
+                ? "The server is adjudicating every current admission gate…"
+                : heldAdmissionReadinessQuery.isError
+                  ? "Disabled because the held-admission gate is not installed or its observation is unavailable."
+                  : heldAdmissionReadiness?.state === "available"
+                    ? "Every gate is current at the server observation. The POST will lock and revalidate them before creating held work."
+                    : heldAdmissionReadiness?.state === "held"
+                      ? "One internal reservation is already held for this slot. Activation, provider contact, and generation remain disabled."
+                      : heldAdmissionReadiness?.state === "expired"
+                        ? "The previous held reservation expired. No provider call or external spend occurred."
+                        : "Disabled until the server adjudicates every admission gate as current."}
+            </p>
+
+            {heldAdmissionReadinessQuery.isError && (
+              <p role="alert" className="mt-2 text-sm text-amber-100">{heldAdmissionReadinessQuery.error.message}</p>
+            )}
+            {heldAdmissionReadiness?.state === "blocked" && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-100" aria-label="Held-admission blockers">
+                {heldAdmissionReadiness.reasonCodes.map((reason) => <li key={reason}>{heldAdmissionReasonLabels[reason]}</li>)}
+              </ul>
+            )}
+            {heldAdmissionReadiness?.currentReservation && (
+              <dl className="mt-3 grid gap-2 rounded-md border border-white/10 bg-black/20 p-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-zinc-400">Internal maximum reservation</dt><dd className="mt-1 font-medium text-white">{formatMaximumQuoteUsd(heldAdmissionReadiness.currentReservation.maximumQuoteMicroUsd)} USD</dd></div>
+                <div><dt className="text-zinc-400">Reservation expiry</dt><dd className="mt-1 break-all font-medium text-white"><time dateTime={heldAdmissionReadiness.currentReservation.expiresAt}>{heldAdmissionReadiness.currentReservation.expiresAt}</time></dd></div>
+              </dl>
+            )}
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                disabled={!heldAdmissionEnabled || heldAdmissionMutation.isPending}
+                aria-busy={heldAdmissionMutation.isPending}
+                aria-describedby={heldAdmissionDescriptionId}
+                onClick={() => setHeldAdmissionDialogOpen(true)}
+              >
+                Review held admission
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/10 bg-white/5"
+                disabled={heldAdmissionReadinessQuery.isFetching}
+                aria-busy={heldAdmissionReadinessQuery.isFetching}
+                onClick={() => heldAdmissionReadinessQuery.refetch().then(() => undefined)}
+              >
+                <RefreshCcw className={`mr-2 h-4 w-4 ${heldAdmissionReadinessQuery.isFetching ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+                Refresh admission gate
+              </Button>
+            </div>
+            {heldAdmissionReceipt && (
+              <p role="status" aria-live="polite" aria-atomic="true" className="mt-3 rounded-md border border-emerald-300/20 bg-emerald-400/[0.07] p-3 text-sm leading-6 text-emerald-100">
+                Internal budget reserved until <time dateTime={heldAdmissionReceipt.admission.reservationExpiresAt}>{heldAdmissionReceipt.admission.reservationExpiresAt}</time>. Provider not contacted · External spend $0 · Video not generated. Activation remains disabled.
+              </p>
+            )}
+          </section>
+
           <div className="rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-4">
             <p className="text-sm font-medium text-amber-100">Execution blockers</p>
             <ul id={blockerId} className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-100">
@@ -480,6 +657,15 @@ function OneVideoExecutionControlPanel({
               isPending={approvalMutation.isPending}
               error={approvalMutation.error?.message}
               onConfirm={() => { void recordExactApproval(); }}
+            />
+          )}
+          {heldAdmissionCas && (
+            <OneVideoHeldAdmissionDialog
+              open={heldAdmissionDialogOpen}
+              onOpenChange={setHeldAdmissionDialogOpen}
+              isPending={heldAdmissionMutation.isPending}
+              error={heldAdmissionMutation.error?.message}
+              onConfirm={() => { void createHeldAdmission(); }}
             />
           )}
         </div>

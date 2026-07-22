@@ -102,9 +102,14 @@ export function allowsDevUserFallback(): boolean {
   return DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "development");
 }
 
-export function resolveCurrentUserId(req: Request): string | null {
+/**
+ * Resolve only authenticated, request-bound identity sources.
+ *
+ * Money- or authority-bearing routes must use this resolver so development
+ * bridges such as x-user-id and the mock user can never become authorization.
+ */
+export function resolveAuthenticatedUserId(req: Request): string | null {
   const authReq = req as RequestWithAuth;
-  const requestFallbackAllowed = allowsDevUserFallback();
 
   return (
     cleanUserId(authReq.user?.id) ||
@@ -114,7 +119,15 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
-    readSignedLocalAuthCookie(req) ||
+    readSignedLocalAuthCookie(req)
+  );
+}
+
+export function resolveCurrentUserId(req: Request): string | null {
+  const requestFallbackAllowed = allowsDevUserFallback();
+
+  return (
+    resolveAuthenticatedUserId(req) ||
     (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
     (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
   );

@@ -9,6 +9,7 @@ import {
   isPublicApiPath,
   isPublicApiRequest,
   requireAppUser,
+  resolveAuthenticatedUserId,
   resolveCurrentUserId,
 } from "../server/user-context";
 
@@ -72,6 +73,32 @@ test("resolves user id from signed local auth cookie", () => {
   });
 
   assert.equal(userId, "user-from-cookie");
+});
+
+test("strict authenticated identity never accepts development request fallbacks", () => {
+  withEnv({ NODE_ENV: "development", ALLOW_DEV_USER_FALLBACK: "true" }, () => {
+    assert.equal(resolveCurrentUserId(requestWithHeader("dev-bridge-user")), "dev-bridge-user");
+    assert.equal(resolveAuthenticatedUserId(requestWithHeader("dev-bridge-user")), null);
+    assert.equal(resolveAuthenticatedUserId(requestWithHeader()), null);
+  });
+});
+
+test("strict authenticated identity accepts session and signed cookie sources", () => {
+  withEnv({ NODE_ENV: "development", ALLOW_DEV_USER_FALLBACK: "true", SESSION_SECRET: "strict-session-secret" }, () => {
+    assert.equal(
+      resolveAuthenticatedUserId(requestWithHeader("ignored-dev-bridge", { session: { userId: "signed-in-user" } })),
+      "signed-in-user",
+    );
+
+    const cookieValue = createSignedLocalAuthCookieValue("cookie-user");
+    assert.ok(cookieValue);
+    assert.equal(
+      resolveAuthenticatedUserId(requestWithHeader("ignored-dev-bridge", {
+        headers: { cookie: `${LOCAL_AUTH_USER_COOKIE_NAME}=${encodeURIComponent(cookieValue)}` },
+      })),
+      "cookie-user",
+    );
+  });
 });
 
 test("rejects tampered signed local auth cookies", () => {

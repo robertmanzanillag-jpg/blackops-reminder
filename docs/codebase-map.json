@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T11:54:07.070Z",
+  "generatedAt": "2026-07-22T13:17:52.068Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -94,32 +94,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 893,
-    "filesIndexed": 745,
-    "imports": 3194,
-    "routes": 501,
-    "symbols": 14667
+    "filesVisible": 923,
+    "filesIndexed": 773,
+    "imports": 3305,
+    "routes": 503,
+    "symbols": 15196
   },
   "directories": {
-    "docs/ai-media-studio": {
-      "files": 17,
-      "indexed": 17,
-      "kinds": {
-        "docs": 17
-      }
-    },
     "server/ai-media-studio": {
-      "files": 172,
-      "indexed": 153,
+      "files": 182,
+      "indexed": 163,
       "kinds": {
-        "server": 172
+        "server": 182
       }
     },
-    "shared": {
-      "files": 17,
-      "indexed": 17,
+    "tests": {
+      "files": 240,
+      "indexed": 229,
       "kinds": {
-        "shared": 17
+        "test": 240
       }
     },
     ".agents/skills": {
@@ -161,15 +154,22 @@
       }
     },
     "client/src": {
-      "files": 157,
-      "indexed": 155,
+      "files": 158,
+      "indexed": 156,
       "kinds": {
-        "other": 47,
+        "other": 48,
         "client-component": 21,
         "ui-component": 55,
         "client-hook": 3,
         "client-lib": 7,
         "client-page": 24
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "docs": 17
       }
     },
     "docs": {
@@ -180,10 +180,10 @@
       }
     },
     "migrations/ai-media-studio": {
-      "files": 53,
+      "files": 55,
       "indexed": 3,
       "kinds": {
-        "other": 51,
+        "other": 53,
         "docs": 2
       }
     },
@@ -215,18 +215,18 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 19,
+      "indexed": 19,
+      "kinds": {
+        "shared": 19
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 225,
-      "indexed": 214,
-      "kinds": {
-        "test": 225
       }
     },
     "tests/fixtures": {
@@ -2385,12 +2385,16 @@
         "@shared/ai-media-studio-launch-preflight",
         "@shared/ai-media-studio-one-video-cost-approval",
         "@shared/ai-media-studio-one-video-execution-control",
+        "@shared/ai-media-studio-one-video-held-admission",
+        "@shared/ai-media-studio-one-video-held-admission-readiness",
         "@shared/ai-media-studio-production-batches",
         "@shared/ai-media-studio-sandbox-readiness"
       ],
       "exports": [
         "CoreApiBoundary",
         "InfluencerMutationResult",
+        "OneVideoHeldAdmissionClientError",
+        "OneVideoHeldAdmissionClientErrorCode",
         "mediaStudioCoreApi"
       ],
       "symbols": [
@@ -2398,9 +2402,11 @@
         "InfluencerListResponse",
         "InfluencerResponse",
         "MediaLibraryResponse",
+        "OneVideoHeldAdmissionClientError",
         "ProviderResourceListResponse",
         "body",
         "candidate",
+        "failure",
         "fallback",
         "mediaStudioCoreApi",
         "params",
@@ -2858,6 +2864,24 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/core/one-video-held-admission-dialog.tsx",
+      "kind": "other",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/checkbox",
+        "@/components/ui/dialog",
+        "react"
+      ],
+      "exports": [
+        "OneVideoHeldAdmissionDialog"
+      ],
+      "symbols": [
+        "OneVideoHeldAdmissionDialog",
+        "checkboxId"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/features/ai-media-studio/core/pagination-feedback.tsx",
       "kind": "other",
       "imports": [
@@ -2877,12 +2901,17 @@
       "kind": "other",
       "imports": [
         "../feedback",
+        "./api",
         "./hooks",
         "./one-video-cost-approval-dialog",
+        "./one-video-held-admission-dialog",
         "./types",
         "@/components/ui/button",
         "@/components/ui/card",
         "@shared/ai-media-studio-one-video-execution-control",
+        "@shared/ai-media-studio-one-video-held-admission",
+        "@shared/ai-media-studio-one-video-held-admission-readiness",
+        "@tanstack/react-query",
         "lucide-react",
         "react"
       ],
@@ -2890,6 +2919,7 @@
         "ProductionBatchWorkbench",
         "approvalResultMatchesBatch",
         "createCostApprovalIdempotencyKey",
+        "createHeldAdmissionIdempotencyKey",
         "formatMaximumQuoteUsd",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey"
@@ -2923,11 +2953,23 @@
         "confirmedMembers",
         "control",
         "createCostApprovalIdempotencyKey",
+        "createHeldAdmission",
+        "createHeldAdmissionIdempotencyKey",
         "errorMessage",
         "evidenceTime",
         "externalRequirementLabels",
         "formatMaximumQuoteUsd",
         "fraction",
+        "heldAdmissionCas",
+        "heldAdmissionCasKey",
+        "heldAdmissionDescriptionId",
+        "heldAdmissionEnabled",
+        "heldAdmissionHeadingId",
+        "heldAdmissionMutation",
+        "heldAdmissionOperationRef",
+        "heldAdmissionReadiness",
+        "heldAdmissionReadinessKey",
+        "heldAdmissionReadinessQuery",
         "identity",
         "micros",
         "newProductionBatchApprovalKey",
@@ -2938,9 +2980,12 @@
         "prepare",
         "prepareScripts",
         "query",
+        "queryClient",
         "quoteIsExact",
         "quoteKey",
+        "readinessCandidate",
         "readyScripts",
+        "receipt",
         "recordExactApproval",
         "renderSpecKey",
         "resultRef",
@@ -10990,6 +11035,232 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-held-admission-context-loader.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./one-video-execution-control-contracts",
+        "./one-video-held-admission-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOneVideoHeldAdmissionContextLoader",
+        "OneVideoHeldAdmissionContextDatabase"
+      ],
+      "symbols": [
+        "DrizzleOneVideoHeldAdmissionContextLoader",
+        "ExecuteResult",
+        "Row",
+        "UUID",
+        "approval",
+        "budgetBucketId",
+        "control",
+        "dailyPlanSlotId",
+        "databaseNow",
+        "expectedBucketStateVersion",
+        "expectedSlotStateVersion",
+        "found",
+        "instant",
+        "number",
+        "parsed",
+        "planId",
+        "quote",
+        "quoteExpiresAt",
+        "reservationExpiresAt",
+        "row",
+        "rows",
+        "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-held-admission-readiness-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../production-batches/metadata-integrity",
+        "./one-video-execution-control-contracts",
+        "./one-video-held-admission-contracts",
+        "./one-video-held-admission-readiness-service",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOneVideoHeldAdmissionReadinessRepository",
+        "OneVideoHeldAdmissionReadinessDatabase"
+      ],
+      "symbols": [
+        "DrizzleOneVideoHeldAdmissionReadinessRepository",
+        "ExecuteResult",
+        "PUBLIC_KEY",
+        "Row",
+        "STATES",
+        "SUBMISSION_STATES",
+        "UUID",
+        "ambiguous",
+        "amount",
+        "array",
+        "assertInput",
+        "attempt",
+        "batchGate",
+        "blockedGate",
+        "bool",
+        "bridge",
+        "candidateAmbiguity",
+        "candidates",
+        "count",
+        "currency",
+        "declared",
+        "envelope",
+        "evidenceGate",
+        "exactQuoteCas",
+        "first",
+        "human",
+        "humanGate",
+        "id",
+        "instant",
+        "number",
+        "observedAt",
+        "overOne",
+        "parsed",
+        "presenceGate",
+        "projectReservations",
+        "projected",
+        "providerVerificationGate",
+        "renderSpecDigest",
+        "reservations",
+        "rows",
+        "state",
+        "submissionState",
+        "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-held-admission-replay-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../production-batches/metadata-integrity",
+        "./one-video-execution-control-contracts",
+        "./one-video-held-admission-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOneVideoHeldAdmissionReplayRepository",
+        "OneVideoHeldAdmissionReplayDatabase"
+      ],
+      "symbols": [
+        "DrizzleOneVideoHeldAdmissionReplayRepository",
+        "ExecuteResult",
+        "MONEY",
+        "PUBLIC_KEY",
+        "Row",
+        "SHA256",
+        "UUID",
+        "amount",
+        "assertExactHeldTuple",
+        "assertScopeAndCas",
+        "assertScopeAndPath",
+        "attempt",
+        "baseValid",
+        "bridgeQuoteExpiresAt",
+        "durableState",
+        "envelope",
+        "exact",
+        "expired",
+        "expiresAt",
+        "found",
+        "handoff",
+        "instant",
+        "metadata",
+        "nullable",
+        "number",
+        "observedAt",
+        "outboxId",
+        "parsed",
+        "planId",
+        "project",
+        "publicPlanKey",
+        "publicQuoteKey",
+        "publicRenderSpecKey",
+        "publicSlotKey",
+        "quoteDigest",
+        "quoteExpiresAt",
+        "quoteId",
+        "quoteRevision",
+        "renderId",
+        "renderSpecDigest",
+        "reservationId",
+        "rows",
+        "sealed",
+        "slotId",
+        "snapshotId",
+        "submissionState",
+        "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-held-admission-repository.ts",
+      "kind": "server",
+      "imports": [
+        "./drizzle-daily-admission-repository",
+        "./one-video-held-admission-contracts"
+      ],
+      "exports": [
+        "DrizzleOneVideoHeldAdmissionRepository"
+      ],
+      "symbols": [
+        "DailyAdmissionRepositoryPort",
+        "DrizzleOneVideoHeldAdmissionRepository",
+        "assertExactHeldResult",
+        "created",
+        "inputDigest",
+        "replayed",
+        "reservation",
+        "result",
+        "validDigest",
+        "validPositiveMicroUsd",
+        "validUuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-held-admission-snapshot-repository.ts",
+      "kind": "server",
+      "imports": [
+        "./one-video-held-admission-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOneVideoHeldAdmissionSnapshotRepository",
+        "OneVideoHeldAdmissionSnapshotDatabase"
+      ],
+      "symbols": [
+        "DrizzleOneVideoHeldAdmissionSnapshotRepository",
+        "ExecuteResult",
+        "Row",
+        "SHA256",
+        "UUID",
+        "assertInput",
+        "candidate",
+        "context",
+        "instant",
+        "observedAt",
+        "parsed",
+        "result",
+        "row",
+        "rows",
+        "scope",
+        "snapshot",
+        "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/drizzle-sandbox-readiness-repository.ts",
       "kind": "server",
       "imports": [
@@ -11432,6 +11703,125 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/one-video-held-admission-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-held-admission",
+        "../core/resource-domain",
+        "node:crypto"
+      ],
+      "exports": [
+        "ONE_VIDEO_HELD_ADMISSION_OPERATION",
+        "OneVideoHeldAdmissionAuthenticationContext",
+        "OneVideoHeldAdmissionAuthoritySnapshot",
+        "OneVideoHeldAdmissionAuthorizer",
+        "OneVideoHeldAdmissionCommand",
+        "OneVideoHeldAdmissionContext",
+        "OneVideoHeldAdmissionContextLoader",
+        "OneVideoHeldAdmissionError",
+        "OneVideoHeldAdmissionErrorCode",
+        "OneVideoHeldAdmissionExistingAttempt",
+        "OneVideoHeldAdmissionOperation",
+        "OneVideoHeldAdmissionPersistenceRequest",
+        "OneVideoHeldAdmissionPersistenceResult",
+        "OneVideoHeldAdmissionPrincipalAuthenticator",
+        "OneVideoHeldAdmissionPublicCas",
+        "OneVideoHeldAdmissionReceipt",
+        "OneVideoHeldAdmissionReplayRepository",
+        "OneVideoHeldAdmissionRepository",
+        "OneVideoHeldAdmissionSnapshotRepository",
+        "TrustedOneVideoHeldAdmissionPrincipal",
+        "deriveOneVideoHeldAdmissionReservationKey"
+      ],
+      "symbols": [
+        "ONE_VIDEO_HELD_ADMISSION_OPERATION",
+        "OneVideoHeldAdmissionError",
+        "deriveOneVideoHeldAdmissionReservationKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/one-video-held-admission-coordinator.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-held-admission",
+        "./one-video-held-admission-contracts"
+      ],
+      "exports": [
+        "OneVideoHeldAdmissionCoordinator"
+      ],
+      "symbols": [
+        "MAXIMUM_MICRO_USD",
+        "OneVideoHeldAdmissionCoordinator",
+        "POSITIVE_MICRO_USD",
+        "SHA256",
+        "UUID",
+        "assertExactContext",
+        "assertExactReplay",
+        "body",
+        "canonicalInstant",
+        "cas",
+        "created",
+        "expiresAt",
+        "observedAt",
+        "parsePublicCas",
+        "parsed",
+        "path",
+        "quoteExpiry",
+        "receipt",
+        "reservationExpiry",
+        "safeDependencyError",
+        "sameCas",
+        "sameScope",
+        "scope",
+        "validMoney"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/one-video-held-admission-readiness-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-held-admission-readiness",
+        "../core/resource-domain",
+        "./one-video-held-admission-contracts"
+      ],
+      "exports": [
+        "OneVideoHeldAdmissionGateObservation",
+        "OneVideoHeldAdmissionObservedReservation",
+        "OneVideoHeldAdmissionReadinessGates",
+        "OneVideoHeldAdmissionReadinessObservation",
+        "OneVideoHeldAdmissionReadinessObservationRepository",
+        "OneVideoHeldAdmissionReadinessService"
+      ],
+      "symbols": [
+        "EFFECTS",
+        "OneVideoHeldAdmissionReadinessService",
+        "PUBLIC_KEY",
+        "ReasonCode",
+        "UUID",
+        "assertContext",
+        "assertPublicInput",
+        "blocked",
+        "canonicalInstant",
+        "existing",
+        "expired",
+        "expiresAt",
+        "gateReasons",
+        "observedAt",
+        "parsed",
+        "projectDurableAttempt",
+        "projectExistingReservation",
+        "projected",
+        "reasons",
+        "safeError",
+        "state",
+        "subject",
+        "uniqueReasons"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/sandbox-readiness-contracts.ts",
       "kind": "server",
       "imports": [
@@ -11485,6 +11875,34 @@
         "createServerOwnedOneVideoCostApprovalAuthorization",
         "sealed",
         "validScope"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/server-owned-one-video-held-admission-authorization.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./one-video-held-admission-contracts"
+      ],
+      "exports": [
+        "createServerOwnedOneVideoHeldAdmissionAuthorization"
+      ],
+      "symbols": [
+        "IDEMPOTENCY_KEY",
+        "PUBLIC_KEYS",
+        "SealedAuthorization",
+        "authorization",
+        "context",
+        "createServerOwnedOneVideoHeldAdmissionAuthorization",
+        "frozenCas",
+        "frozenScope",
+        "sameCas",
+        "sameScope",
+        "sealed",
+        "validCas",
+        "validIdentity",
+        "validPersonalScope"
       ],
       "routes": []
     },
@@ -12704,6 +13122,8 @@
         "../../shared/ai-media-studio-launch-preflight",
         "../../shared/ai-media-studio-one-video-cost-approval",
         "../../shared/ai-media-studio-one-video-execution-control",
+        "../../shared/ai-media-studio-one-video-held-admission",
+        "../../shared/ai-media-studio-one-video-held-admission-readiness",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
         "../../shared/ai-media-studio-sandbox-readiness",
@@ -12728,6 +13148,9 @@
         "./planning/one-video-cost-approval-coordinator",
         "./planning/one-video-execution-control-contracts",
         "./planning/one-video-execution-control-service",
+        "./planning/one-video-held-admission-contracts",
+        "./planning/one-video-held-admission-coordinator",
+        "./planning/one-video-held-admission-readiness-service",
         "./planning/sandbox-readiness-contracts",
         "./planning/sandbox-readiness-service",
         "./ports",
@@ -12750,6 +13173,7 @@
         "./service",
         "./sources/contracts",
         "./sources/source-pagination",
+        "./strict-money-action-request",
         "./webhook-security",
         "express",
         "zod"
@@ -12761,9 +13185,13 @@
         "registerAiMediaStudioRoutes"
       ],
       "symbols": [
+        "OneVideoHeldAdmissionRuntimePort",
+        "OneVideoHeldAdmissionSelection",
         "account",
+        "accountingTimeZone",
         "actorId",
         "aiMediaStudioOriginMatchesRequest",
+        "allowInsecureLoopback",
         "analyticsWindow",
         "approval",
         "assertPublishingGovernance",
@@ -12781,10 +13209,12 @@
         "available",
         "batch",
         "candidate",
+        "canonicalAppUrl",
         "configured",
         "configuredDatabase",
         "configuredOrigins",
         "contentLength",
+        "contextLoader",
         "coordinator",
         "core",
         "createAiMediaStudioRuntime",
@@ -12795,12 +13225,14 @@
         "createDefaultDurableLaunchPreflightRepository",
         "createDefaultDurableOneVideoCostApprovalCoordinator",
         "createDefaultDurableOneVideoExecutionControlRepository",
+        "createDefaultDurableOneVideoHeldAdmissionRuntime",
         "createDefaultDurableProductionBatchRepository",
         "createDefaultDurableSandboxReadinessRepository",
         "createDefaultDurableSecureHeyGenSetupRepository",
         "createDefaultDurableStaticHeyGenLiveVerificationCoordinator",
         "createDefaultProviderWebhookAccountResolver",
         "created",
+        "dailyAdmission",
         "dashboard",
         "databaseUrl",
         "decidedAt",
@@ -12839,6 +13271,7 @@
         "influencerId",
         "ingest",
         "input",
+        "isExplicitHttpLoopbackOrigin",
         "issuedAt",
         "job",
         "jobResponseSchema",
@@ -12848,13 +13281,16 @@
         "launchAuthority",
         "launchPreflightSelection",
         "load",
+        "loaded",
         "materializeOwnedAsset",
         "materialized",
         "mediaAssetId",
         "message",
         "method",
+        "observationRepository",
         "oneVideoCostApprovalSelection",
         "oneVideoExecutionControlSelection",
+        "oneVideoHeldAdmissionSelection",
         "operations",
         "origin",
         "originUrl",
@@ -12870,6 +13306,7 @@
         "preflight",
         "preview",
         "previewInput",
+        "principal",
         "productionAssets",
         "productionBatchSelection",
         "profile",
@@ -12891,6 +13328,7 @@
         "reconcileCompletedAssetIngests",
         "registerAiMediaStudioRoutes",
         "rejectActionSchema",
+        "replayRepository",
         "repository",
         "requestWithRawBody",
         "requireCapability",
@@ -12902,12 +13340,16 @@
         "requireLaunchPreflight",
         "requireOneVideoCostApproval",
         "requireOneVideoExecutionControl",
+        "requireOneVideoHeldAdmission",
         "requireOperations",
         "requireProductionBatches",
         "requireSameOriginJsonAiMediaStudioMutation",
         "requireSandboxReadiness",
         "requireSecureHeyGenSetup",
         "requireStaticHeyGenLiveVerification",
+        "requireStrictHeldAdmissionMutation",
+        "requireStrictHeldAdmissionSession",
+        "reservationTtlSeconds",
         "resolveProviderWebhookAccount",
         "resources",
         "result",
@@ -12932,11 +13374,13 @@
         "selectLaunchPreflightRuntime",
         "selectOneVideoCostApprovalRuntime",
         "selectOneVideoExecutionControlRuntime",
+        "selectOneVideoHeldAdmissionRuntime",
         "selectProductionBatchRuntime",
         "selectSandboxReadinessRuntime",
         "selectSecureHeyGenSetupRuntime",
         "selectStaticHeyGenLiveVerificationRuntime",
         "service",
+        "snapshotRepository",
         "sourceType",
         "sourcesQuerySchema",
         "sourcesResponseSchema",
@@ -12985,6 +13429,8 @@
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission-readiness/:slotId",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
@@ -13303,6 +13749,36 @@
         "rightBytes",
         "sourceListFilter",
         "unsigned",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/strict-money-action-request.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "StrictMoneyActionHttpRequest",
+        "StrictMoneyActionPrincipal",
+        "StrictMoneyActionRequestError",
+        "StrictMoneyActionRequestErrorCode",
+        "StrictMoneyActionRequestGuard",
+        "StrictMoneyActionRequestGuardOptions",
+        "createStrictMoneyActionRequestGuard"
+      ],
+      "symbols": [
+        "StrictMoneyActionRequestError",
+        "allowedProtocol",
+        "canonicalOrigin",
+        "configuredCanonicalOrigin",
+        "contentType",
+        "createStrictMoneyActionRequestGuard",
+        "isApplicationJson",
+        "isLoopbackHost",
+        "origin",
+        "safeHeader",
+        "url",
+        "validAuthenticatedUserId",
         "value"
       ],
       "routes": []
@@ -20049,6 +20525,7 @@
         "isPublicApiPath",
         "isPublicApiRequest",
         "requireAppUser",
+        "resolveAuthenticatedUserId",
         "resolveCurrentUserId",
         "resolveRequestApiPath"
       ],
@@ -20087,6 +20564,7 @@
         "request",
         "requestFallbackAllowed",
         "requireAppUser",
+        "resolveAuthenticatedUserId",
         "resolveCurrentUserId",
         "resolveRequestApiPath",
         "secret",
@@ -20725,6 +21203,64 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-one-video-held-admission-readiness.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "OneVideoHeldAdmissionReadiness",
+        "oneVideoHeldAdmissionReadinessReasonCodes",
+        "oneVideoHeldAdmissionReadinessResponseSchema",
+        "oneVideoHeldAdmissionReadinessSchema"
+      ],
+      "symbols": [
+        "available",
+        "blocked",
+        "casMatchesSubject",
+        "casSchema",
+        "currentReservationSchema",
+        "hasCurrentReservation",
+        "instant",
+        "microUsd",
+        "oneVideoHeldAdmissionReadinessReasonCodes",
+        "oneVideoHeldAdmissionReadinessResponseSchema",
+        "oneVideoHeldAdmissionReadinessSchema",
+        "publicKey",
+        "readinessEffectsSchema",
+        "reservationStateMatches",
+        "subjectSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/ai-media-studio-one-video-held-admission.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "OneVideoHeldAdmissionRequest",
+        "OneVideoHeldAdmissionResponse",
+        "oneVideoHeldAdmissionPathSchema",
+        "oneVideoHeldAdmissionRequestSchema",
+        "oneVideoHeldAdmissionResponseSchema"
+      ],
+      "symbols": [
+        "created",
+        "externalEffectsSchema",
+        "idempotencyKey",
+        "instant",
+        "internalEffectsSchema",
+        "microUsd",
+        "oneVideoHeldAdmissionPathSchema",
+        "oneVideoHeldAdmissionRequestSchema",
+        "oneVideoHeldAdmissionResponseSchema",
+        "publicKey"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-operations.ts",
       "kind": "shared",
       "imports": [
@@ -21061,6 +21597,8 @@
         "aiMediaDailyPlans",
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
+        "aiMediaHeldAdmissionExpirations",
+        "aiMediaHeldExpiryCapabilities",
         "aiMediaInfluencers",
         "aiMediaKillSwitchRevisions",
         "aiMediaLaunchAuthoritySnapshots",
@@ -21113,6 +21651,8 @@
         "aiMediaDailyPlans",
         "aiMediaGenerationHistory",
         "aiMediaGovernanceProfiles",
+        "aiMediaHeldAdmissionExpirations",
+        "aiMediaHeldExpiryCapabilities",
         "aiMediaInfluencers",
         "aiMediaKillSwitchRevisions",
         "aiMediaLaunchAuthoritySnapshots",
@@ -21152,6 +21692,7 @@
         "aiMediaWebhookEvents",
         "aiMediaWorkActivations",
         "auditColumns",
+        "pgName",
         "tenantColumns"
       ],
       "routes": []
@@ -22102,6 +22643,36 @@
         "unsigned",
         "valid",
         "workHandoffDigest"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
+        "../server/ai-media-studio/planning/drizzle-one-video-held-admission-repository",
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "corrupt",
+        "created",
+        "dailyResult",
+        "digest",
+        "fake",
+        "fakeRepository",
+        "ids",
+        "malformedDigestResult",
+        "mappings",
+        "replayed",
+        "repository",
+        "result",
+        "signedDigest",
+        "unavailable"
       ],
       "routes": []
     },
@@ -24265,6 +24836,351 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-one-video-held-admission-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/core/api",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "batchId",
+        "effects",
+        "input",
+        "key",
+        "originalFetch",
+        "planId",
+        "quoteKey",
+        "renderSpecKey",
+        "result",
+        "slotId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-context-loader.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-one-video-held-admission-context-loader",
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "candidate",
+        "cases",
+        "control",
+        "executionControl",
+        "expired",
+        "invalid",
+        "key",
+        "loader",
+        "missing",
+        "planId",
+        "result",
+        "row",
+        "scope",
+        "sqlText",
+        "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-one-video-held-admission",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "admitted",
+        "created",
+        "key",
+        "path",
+        "replayed",
+        "request",
+        "response",
+        "serialized"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-coordinator.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "../server/ai-media-studio/planning/one-video-held-admission-coordinator",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "command",
+        "coordinator",
+        "key",
+        "principal",
+        "replay",
+        "result",
+        "scope",
+        "sealed",
+        "serialized",
+        "snapshot",
+        "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-readiness-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-one-video-held-admission-readiness",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "blocked",
+        "effects",
+        "expired",
+        "key",
+        "parsed",
+        "subject"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-readiness-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-one-video-held-admission-readiness-repository",
+        "../server/ai-media-studio/planning/one-video-execution-control-contracts",
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "../server/ai-media-studio/production-batches/metadata-integrity",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "approval",
+        "approvedBatchFields",
+        "base",
+        "batchKey",
+        "candidate",
+        "changed",
+        "changedEnvelope",
+        "content",
+        "creative",
+        "observed",
+        "planKey",
+        "query",
+        "queryText",
+        "quoteEvidenceDigest",
+        "quoteEvidenceId",
+        "quoteExpiresAt",
+        "rawHash",
+        "readyRow",
+        "renderSpecDigest",
+        "repository",
+        "repositoryWith",
+        "reservation",
+        "scope",
+        "scriptKey",
+        "scripted",
+        "second",
+        "selected",
+        "selectedCreative",
+        "slotKey",
+        "source",
+        "sourceContent",
+        "sourceId",
+        "title",
+        "variants"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-readiness-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "../server/ai-media-studio/planning/one-video-held-admission-readiness-service",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "baseReservation",
+        "blockedAttempt",
+        "blockedHarness",
+        "blockedResult",
+        "cases",
+        "committed",
+        "digest",
+        "expired",
+        "harness",
+        "instance",
+        "key",
+        "missing",
+        "observation",
+        "observed",
+        "readiness",
+        "reservationId",
+        "scope",
+        "service",
+        "snapshot",
+        "stale",
+        "unavailable",
+        "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-replay-repository.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-one-video-held-admission-replay-repository",
+        "../server/ai-media-studio/planning/one-video-execution-control-contracts",
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "committed",
+        "digest",
+        "existing",
+        "expired",
+        "harness",
+        "heldRow",
+        "ids",
+        "key",
+        "metadata",
+        "publicQuoteKey",
+        "quoteEvidenceDigest",
+        "quoteExpiry",
+        "renderSpecDigest",
+        "replay",
+        "repository",
+        "scope",
+        "sqlText",
+        "unavailable",
+        "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "express",
+        "node:assert/strict",
+        "node:fs",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "admitted",
+        "app",
+        "baseHeaders",
+        "canonicalOrigin",
+        "composition",
+        "created",
+        "end",
+        "getResponse",
+        "getUrl",
+        "harness",
+        "headers",
+        "insecureProduction",
+        "installRuntime",
+        "key",
+        "loopbackWithSlash",
+        "missingOrigin",
+        "missingRuntime",
+        "optionalHarness",
+        "path",
+        "planId",
+        "postBody",
+        "postPath",
+        "postResponse",
+        "postUrl",
+        "previousFallback",
+        "privateMessage",
+        "quoteKey",
+        "rawRequest",
+        "readiness",
+        "receipt",
+        "replay",
+        "req",
+        "response",
+        "runtime",
+        "runtimeResponse",
+        "runtimeText",
+        "server",
+        "source",
+        "start",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-snapshot-repository.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-one-video-held-admission-snapshot-repository",
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "digest",
+        "key",
+        "missing",
+        "query",
+        "repository",
+        "result",
+        "row",
+        "scope",
+        "sqlText",
+        "unavailable",
+        "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-held-admission-ui.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "mutation",
+        "read",
+        "serializedRequest"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-operations-client.test.ts",
       "kind": "test",
       "imports": [
@@ -25612,6 +26528,29 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "bucket",
+        "evidence",
+        "fn",
+        "forward",
+        "model",
+        "outbox",
+        "render",
+        "reservation",
+        "rollback",
+        "slot"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr4-assets-migration.test.ts",
       "kind": "test",
       "imports": [
@@ -26571,6 +27510,8 @@
         "executionControlFor",
         "gateCodes",
         "harness",
+        "heldAdmissionMutationCalls",
+        "heldAdmissionReadinessCalls",
         "html",
         "httpServer",
         "mediaStudioCoreApi",
@@ -26581,6 +27522,7 @@
         "requestNumber",
         "resetCall",
         "reviewApproval",
+        "reviewHeldAdmission",
         "selectedCall",
         "selector",
         "systemChrome",
@@ -26895,6 +27837,31 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-server-owned-held-admission-authorization.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/one-video-held-admission-contracts",
+        "../server/ai-media-studio/planning/server-owned-one-video-held-admission-authorization",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "authenticatedSessions",
+        "authenticationPair",
+        "authorization",
+        "key",
+        "pair",
+        "principal",
+        "request",
+        "scope",
+        "subjectId",
+        "validRequest",
+        "wrongUserRequest"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-sources.test.ts",
       "kind": "test",
       "imports": [
@@ -27039,6 +28006,34 @@
         "replay",
         "rotated",
         "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-strict-money-action-request.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/strict-money-action-request",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "TestRequest",
+        "canonicalOrigin",
+        "guard",
+        "headerFallback",
+        "headers",
+        "localGuard",
+        "localRequest",
+        "malformedSession",
+        "missingFetchSite",
+        "missingOrigin",
+        "nonBrowser",
+        "principal",
+        "rejectsWith",
+        "request",
+        "spoofed"
       ],
       "routes": []
     },
@@ -28768,6 +29763,7 @@
     "tests/ai-media-studio-core-schema.test.ts",
     "tests/ai-media-studio-daily-admission-domain.test.ts",
     "tests/ai-media-studio-daily-admission-drizzle.test.ts",
+    "tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts",
     "tests/ai-media-studio-full-chain-postgres.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
@@ -28829,6 +29825,17 @@
     "tests/ai-media-studio-one-video-cost-approval.test.ts",
     "tests/ai-media-studio-one-video-execution-control-postgres.test.ts",
     "tests/ai-media-studio-one-video-execution-control.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-client.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-context-loader.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-contracts.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-coordinator.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-readiness-contracts.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-readiness-drizzle.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-readiness-service.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-replay-repository.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-routes.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-snapshot-repository.test.ts",
+    "tests/ai-media-studio-one-video-held-admission-ui.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",
@@ -28867,6 +29874,7 @@
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr30-quote-bound-human-approval-migration.test.ts",
     "tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts",
+    "tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
@@ -28903,12 +29911,14 @@
     "tests/ai-media-studio-secure-heygen-setup.test.ts",
     "tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts",
     "tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts",
+    "tests/ai-media-studio-server-owned-held-admission-authorization.test.ts",
     "tests/ai-media-studio-sources.test.ts",
     "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
     "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",
     "tests/ai-media-studio-static-heygen-credentials.test.ts",
     "tests/ai-media-studio-static-heygen-postgres.test.ts",
     "tests/ai-media-studio-static-heygen-verification-evidence.test.ts",
+    "tests/ai-media-studio-strict-money-action-request.test.ts",
     "tests/ai-media-studio-webhook-env-secret.test.ts",
     "tests/ai-media-studio-webhook-resolver.test.ts",
     "tests/ai-media-studio-webhook-security.test.ts",
