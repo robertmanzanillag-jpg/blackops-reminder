@@ -52,7 +52,8 @@ function executionControlFor(input, requestNumber, mode) {
     format: { aspectRatio: "9:16", container: "mp4" },
     binding: { state: mode === "blocked" ? "stale" : "current", credentialVersion: 1 },
     providerVerification: mode === "blocked" ? { state: "not_requested" }
-      : { state: "verified", observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2030-07-21T13:00:00.000Z" },
+      : { state: "verified", evidenceKey: "evidence_000000000000000000000003",
+        observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2030-07-21T13:00:00.000Z" },
     maximumQuote: mode === "blocked" ? { state: "missing" }
       : { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
         evidenceKey: "evidence_000000000000000000000001", observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2030-07-21T13:01:00.000Z" },

@@ -194,7 +194,7 @@ function executionControlResponse() {
       },
       format: { aspectRatio: "9:16", container: "mp4" },
       binding: { state: "current", credentialVersion: 1 },
-      providerVerification: { state: "verified", observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2026-07-21T13:00:00.000Z" },
+      providerVerification: { state: "verified", evidenceKey: publicKey("evidence", 3), observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2026-07-21T13:00:00.000Z" },
       maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD", evidenceKey: publicKey("evidence", 1), observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2026-07-21T13:01:00.000Z" },
       humanApproval: { state: "approved", evidenceKey: publicKey("evidence", 2), observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2026-07-21T13:02:00.000Z" },
       execute: { state: "disabled", postAvailable: false, reasonCodes: ["one_shot_executor_not_installed"] },

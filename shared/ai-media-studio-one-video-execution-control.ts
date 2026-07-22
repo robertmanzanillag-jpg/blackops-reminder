@@ -16,7 +16,7 @@ export const oneVideoExecutionReasonCodes = [
 const resourceSchema = z.object({ key: publicKey("resource"), label: cleanLabel }).strict();
 const providerVerificationSchema = z.object({
   state: z.enum(["not_requested", "verified", "failed", "stale", "unavailable"]),
-  observedAt: instant.optional(), expiresAt: instant.optional(),
+  evidenceKey: publicKey("evidence").optional(), observedAt: instant.optional(), expiresAt: instant.optional(),
 }).strict();
 const maximumQuoteSchema = z.object({
   state: z.enum(["missing", "quoted", "declined", "expired", "stale", "unavailable"]),
@@ -61,10 +61,14 @@ export const oneVideoExecutionControlSchema = z.object({
   const quoteHasMoney = packet.maximumQuote.amountMicroUsd !== undefined || packet.maximumQuote.currency !== undefined;
   const quoteHasEvidence = packet.maximumQuote.evidenceKey !== undefined;
   const humanHasEvidence = packet.humanApproval.evidenceKey !== undefined;
+  const verificationHasEvidence = packet.providerVerification.evidenceKey !== undefined;
   const currentEvidenceAllowed = packet.binding.state === "current" && packet.providerVerification.state === "verified";
   if ((packet.maximumQuote.state === "quoted") !== quoteHasMoney
     || (packet.maximumQuote.state !== "missing" && packet.maximumQuote.state !== "unavailable") !== quoteHasEvidence
     || (packet.humanApproval.state !== "not_requested" && packet.humanApproval.state !== "unavailable") !== humanHasEvidence
+    || (packet.providerVerification.state === "verified") !== verificationHasEvidence
+    || (packet.providerVerification.state === "verified"
+      && (!packet.providerVerification.observedAt || !packet.providerVerification.expiresAt))
     || (["quoted", "declined", "expired"].includes(packet.maximumQuote.state) && !currentEvidenceAllowed)
     || (["approved", "rejected", "revoked", "expired"].includes(packet.humanApproval.state) && !currentEvidenceAllowed)
     || (packet.humanApproval.state === "approved" && packet.maximumQuote.state !== "quoted")

@@ -8,7 +8,11 @@ import {
   type OneVideoExecutionControl,
 } from "../shared/ai-media-studio-one-video-execution-control";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
-import { DrizzleOneVideoExecutionControlRepository, derivePersistedProviderVerificationState } from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
+import {
+  DrizzleOneVideoExecutionControlRepository,
+  deriveExactStaticProviderVerificationState,
+  derivePersistedProviderVerificationState,
+} from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
 import { OneVideoExecutionControlError } from "../server/ai-media-studio/planning/one-video-execution-control-contracts";
 import { OneVideoExecutionControlService } from "../server/ai-media-studio/planning/one-video-execution-control-service";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
@@ -26,7 +30,8 @@ function packet(overrides: Partial<OneVideoExecutionControl> = {}): OneVideoExec
       avatar: { key: `resource_${"5".repeat(24)}`, label: "Safe avatar" },
       voice: { key: `resource_${"6".repeat(24)}`, label: "Safe voice" } },
     format: { aspectRatio: "9:16", container: "mp4" }, binding: { state: "current", credentialVersion: 1 },
-    providerVerification: { state: "verified", observedAt: "2026-07-22T11:50:00.000Z",
+    providerVerification: { state: "verified", evidenceKey: `evidence_${"9".repeat(24)}`,
+      observedAt: "2026-07-22T11:50:00.000Z",
       expiresAt: "2026-07-22T13:00:00.000Z" },
     maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
       evidenceKey: `evidence_${"7".repeat(24)}`, observedAt: "2026-07-22T11:51:00.000Z",
@@ -63,6 +68,12 @@ test("schema rejects private/native fields, money outside a quote, forged effect
   const noQuote = structuredClone(packet()) as any;
   noQuote.maximumQuote = { state: "missing" };
   assert.equal(oneVideoExecutionControlSchema.safeParse(noQuote).success, false);
+  const noVerificationEvidence = structuredClone(packet()) as any;
+  delete noVerificationEvidence.providerVerification.evidenceKey;
+  assert.equal(oneVideoExecutionControlSchema.safeParse(noVerificationEvidence).success, false);
+  const forgedVerificationEvidence = structuredClone(packet()) as any;
+  forgedVerificationEvidence.providerVerification = { state: "not_requested", evidenceKey: `evidence_${"a".repeat(24)}` };
+  assert.equal(oneVideoExecutionControlSchema.safeParse(forgedVerificationEvidence).success, false);
 });
 
 test("service reparses repository output and verifies requested identity plus all denied effects", async () => {
@@ -107,6 +118,13 @@ test("repository source has no network, secret resolver, mutation, budget admiss
   assert.match(source, /isolationLevel: "repeatable read", accessMode: "read only"/u);
   assert.match(source, /ORDER BY slots\.source_member_key,slots\.video_number\s+LIMIT 101/u);
   assert.match(source, /static_api_key.*disconnected.*unverified/su);
+  assert.match(source, /ai_media_static_heygen_verification_headers/u);
+  assert.match(source, /ai_media_static_heygen_resource_verifications/u);
+  assert.match(source, /accounts\.granted_scopes='\[\]'::jsonb/u);
+  assert.match(source, /accounts\.capabilities='\["render_video"\]'::jsonb/u);
+  assert.match(source, /verification_resource_evidence_id=avatar_evidence\.id/u);
+  assert.match(source, /verification_resource_evidence_id=voice_evidence\.id/u);
+  assert.match(source, /AS static_current/u);
   assert.match(source, /one_shot_executor_not_installed/u);
 });
 
@@ -125,6 +143,32 @@ test("static disconnected/unverified metadata is explicitly not_requested even w
     accountStatus: "disconnected", credentialStatus: "unverified" }), "unavailable");
   assert.equal(derivePersistedProviderVerificationState({ bindingState: "current", credentialSource: "static_api_key",
     accountStatus: "active", credentialStatus: "active" }), "unavailable");
+});
+
+test("exact static verification state can become verified only from unexpired immutable header and both resource evidence rows", () => {
+  const databaseNow = new Date("2026-07-22T12:00:00.000Z");
+  const base = {
+    bindingState: "current" as const,
+    credentialSource: "static_api_key",
+    accountStatus: "active",
+    credentialStatus: "active",
+    evidenceId: "4f79de93-90fe-4d6b-9939-95d67a250f34",
+    evidenceObservedAt: "2026-07-22T11:50:00.000Z",
+    evidenceExpiresAt: "2026-07-22T13:00:00.000Z",
+    databaseNow,
+  };
+  const verified = deriveExactStaticProviderVerificationState({ ...base, evidenceCurrent: true });
+  assert.equal(verified.state, "verified");
+  assert.match(verified.evidenceKey ?? "", /^evidence_[a-f0-9]{24}$/u);
+  assert.equal(deriveExactStaticProviderVerificationState({ ...base, evidenceCurrent: false }).state, "stale");
+  assert.equal(deriveExactStaticProviderVerificationState({ ...base, evidenceCurrent: true,
+    evidenceExpiresAt: "2026-07-22T12:00:00.000Z" }).state, "stale");
+  assert.equal(deriveExactStaticProviderVerificationState({ ...base, evidenceCurrent: true,
+    evidenceId: "" }).state, "stale");
+  assert.equal(deriveExactStaticProviderVerificationState({ ...base, bindingState: "invalid",
+    evidenceCurrent: true }).state, "unavailable");
+  assert.equal(deriveExactStaticProviderVerificationState({ ...base, accountStatus: "disconnected",
+    credentialStatus: "unverified", evidenceCurrent: true }).state, "not_requested");
 });
 
 test("route surface is GET-only and installs no prepare, execute, generate, or retry mutation for the exact slot", () => {

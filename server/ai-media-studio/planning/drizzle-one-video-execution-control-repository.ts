@@ -42,6 +42,10 @@ type EvidenceState = {
   state: string; evidenceKey?: string; observedAt?: string; expiresAt?: string;
   amountMicroUsd?: string; currency?: "USD";
 };
+type ProviderVerificationState = {
+  state: "not_requested" | "verified" | "failed" | "stale" | "unavailable";
+  evidenceKey?: string; observedAt?: string; expiresAt?: string;
+};
 
 export function derivePersistedProviderVerificationState(input: Readonly<{
   bindingState: "current" | "stale" | "invalid";
@@ -54,6 +58,36 @@ export function derivePersistedProviderVerificationState(input: Readonly<{
   if (["revoked", "expired", "attention"].includes(input.credentialStatus)) return "failed";
   // No current table is immutable exact-slot live-verification evidence.
   return "unavailable";
+}
+
+export function deriveExactStaticProviderVerificationState(input: Readonly<{
+  bindingState: "current" | "stale" | "invalid";
+  credentialSource: string; accountStatus: string; credentialStatus: string;
+  evidenceId: string; evidenceObservedAt?: string; evidenceExpiresAt?: string;
+  evidenceCurrent: boolean; databaseNow: Date;
+}>): ProviderVerificationState {
+  if (input.bindingState === "invalid") return { state: "unavailable" };
+  if (input.credentialSource !== "static_api_key") return { state: "unavailable" };
+  if (input.accountStatus === "disconnected" && input.credentialStatus === "unverified") {
+    return { state: "not_requested" };
+  }
+  if (["revoked", "expired", "attention"].includes(input.credentialStatus)) return { state: "failed" };
+  if (input.bindingState === "stale") return { state: "stale" };
+  if (!input.evidenceId || !input.evidenceObservedAt || !input.evidenceExpiresAt) return { state: "stale" };
+  const expiresAt = date(input.evidenceExpiresAt);
+  const observedAt = date(input.evidenceObservedAt);
+  if (expiresAt.getTime() <= input.databaseNow.getTime() || expiresAt.getTime() <= observedAt.getTime()) {
+    return { state: "stale" };
+  }
+  if (!input.evidenceCurrent) {
+    return { state: "stale" };
+  }
+  return {
+    state: "verified",
+    evidenceKey: opaque("evidence", input.evidenceId),
+    observedAt: observedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  };
 }
 
 /** Read-only exact-slot projection. It deliberately has no provider, vault, budget, render, outbox, or publishing dependency. */
@@ -100,6 +134,8 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
         accounts.id AS account_id,accounts.provider_key AS account_provider_key,accounts.status AS account_status,
         accounts.credential_status,accounts.credential_version,accounts.credential_expires_at,
         accounts.credential_source,accounts.last_verified_at,
+        accounts.static_credential_verification_id,accounts.static_credential_verification_digest,
+        accounts.static_credential_verified_at,accounts.static_credential_verification_expires_at,
         avatar.id AS avatar_id,avatar.resource_type AS avatar_type,avatar.display_name AS avatar_label,
         avatar.status AS avatar_status,avatar.synchronized_at AS avatar_synchronized_at,
         voice.id AS voice_id,voice.resource_type AS voice_type,voice.display_name AS voice_label,
@@ -225,6 +261,100 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     const evidence = evidenceRows[0]!; const slotAttempt = number(evidence, "slotAttempt", "slot_attempt");
     if (!Number.isInteger(slotAttempt) || slotAttempt < 1) throw new OneVideoExecutionControlError("UNAVAILABLE");
 
+    const staticVerificationRows = rows(await tx.execute(sql`
+      SELECT header.id AS static_header_id,header.observed_at AS static_header_observed_at,
+        header.expires_at AS static_header_expires_at,
+        (accounts.credential_source='static_api_key' AND accounts.status='active' AND accounts.credential_status='active'
+          AND accounts.provider_key='heygen' AND accounts.granted_scopes='[]'::jsonb
+          AND accounts.capabilities='["render_video"]'::jsonb
+          AND accounts.credential_version=slots.provider_credential_version
+          AND accounts.credential_version=plans.provider_credential_version
+          AND accounts.static_credential_verification_id=header.id
+          AND accounts.static_credential_verification_digest=header.evidence_digest
+          AND accounts.static_credential_verified_at=header.observed_at
+          AND accounts.static_credential_verification_expires_at=header.expires_at
+          AND accounts.last_verified_at=header.observed_at
+          AND accounts.credential_expires_at=header.expires_at
+          AND accounts.credential_expires_at>${databaseNow}::timestamptz
+          AND header.provider_account_id=accounts.id AND header.provider_key='heygen'
+          AND header.provider_credential_version=accounts.credential_version
+          AND header.daily_plan_id=plans.id
+          AND header.source_roster_key=plans.source_roster_key
+          AND header.source_roster_digest=plans.source_roster_digest
+          AND header.plan_digest=plans.plan_digest
+          AND header.verification_state='verified'
+          AND header.expires_at>${databaseNow}::timestamptz
+          AND avatar.status='active' AND avatar.verification_header_id=header.id
+          AND avatar.verified_credential_version=header.provider_credential_version
+          AND avatar.verification_resource_evidence_id=avatar_evidence.id
+          AND avatar.verification_evidence_digest=avatar_evidence.evidence_digest
+          AND avatar.verified_at=avatar_evidence.observed_at
+          AND avatar.verification_expires_at=avatar_evidence.expires_at
+          AND avatar_evidence.observed_at=header.observed_at
+          AND avatar_evidence.expires_at=header.expires_at
+          AND avatar_evidence.provider_resource_id=avatar.id
+          AND avatar_evidence.resource_type='avatar'
+          AND avatar_evidence.provider_account_id=accounts.id
+          AND avatar_evidence.provider_key='heygen'
+          AND avatar_evidence.provider_credential_version=header.provider_credential_version
+          AND avatar_evidence.verification_header_id=header.id
+          AND avatar_evidence.avatar_look_status='completed'
+          AND avatar_evidence.avatar_group_status='completed'
+          AND avatar_evidence.avatar_group_consent_status='approved'
+          AND avatar_evidence.expires_at>${databaseNow}::timestamptz
+          AND voice.status='active' AND voice.verification_header_id=header.id
+          AND voice.verified_credential_version=header.provider_credential_version
+          AND voice.verification_resource_evidence_id=voice_evidence.id
+          AND voice.verification_evidence_digest=voice_evidence.evidence_digest
+          AND voice.verified_at=voice_evidence.observed_at
+          AND voice.verification_expires_at=voice_evidence.expires_at
+          AND voice_evidence.observed_at=header.observed_at
+          AND voice_evidence.expires_at=header.expires_at
+          AND voice_evidence.provider_resource_id=voice.id
+          AND voice_evidence.resource_type='voice'
+          AND voice_evidence.provider_account_id=accounts.id
+          AND voice_evidence.provider_key='heygen'
+          AND voice_evidence.provider_credential_version=header.provider_credential_version
+          AND voice_evidence.verification_header_id=header.id
+          AND voice_evidence.voice_id_digest=voice_evidence.provider_resource_external_id_digest
+          AND voice_evidence.voice_support_digest IS NOT NULL
+          AND voice_evidence.expires_at>${databaseNow}::timestamptz) AS static_current
+      FROM ai_media_daily_plan_slots slots
+      JOIN ai_media_daily_plans plans ON plans.owner_user_id=slots.owner_user_id AND plans.workspace_id=slots.workspace_id
+        AND plans.id=slots.daily_plan_id
+      LEFT JOIN ai_media_provider_accounts accounts ON accounts.owner_user_id=slots.owner_user_id
+        AND accounts.workspace_id=slots.workspace_id AND accounts.id=slots.provider_account_id
+        AND accounts.provider_key=slots.provider_key
+      LEFT JOIN ai_media_provider_resources avatar ON avatar.owner_user_id=slots.owner_user_id
+        AND avatar.workspace_id=slots.workspace_id AND avatar.provider_account_id=slots.provider_account_id
+        AND avatar.provider_key=slots.provider_key AND avatar.id=slots.avatar_resource_id
+      LEFT JOIN ai_media_provider_resources voice ON voice.owner_user_id=slots.owner_user_id
+        AND voice.workspace_id=slots.workspace_id AND voice.provider_account_id=slots.provider_account_id
+        AND voice.provider_key=slots.provider_key AND voice.id=slots.voice_resource_id
+      LEFT JOIN ai_media_static_heygen_verification_headers header ON header.owner_user_id=accounts.owner_user_id
+        AND header.workspace_id=accounts.workspace_id AND header.id=accounts.static_credential_verification_id
+        AND header.provider_account_id=accounts.id AND header.provider_key=accounts.provider_key
+        AND header.provider_credential_version=accounts.credential_version
+      LEFT JOIN ai_media_static_heygen_resource_verifications avatar_evidence
+        ON avatar_evidence.owner_user_id=avatar.owner_user_id AND avatar_evidence.workspace_id=avatar.workspace_id
+        AND avatar_evidence.id=avatar.verification_resource_evidence_id
+        AND avatar_evidence.verification_header_id=avatar.verification_header_id
+        AND avatar_evidence.provider_account_id=avatar.provider_account_id
+        AND avatar_evidence.provider_key=avatar.provider_key
+        AND avatar_evidence.provider_resource_id=avatar.id
+      LEFT JOIN ai_media_static_heygen_resource_verifications voice_evidence
+        ON voice_evidence.owner_user_id=voice.owner_user_id AND voice_evidence.workspace_id=voice.workspace_id
+        AND voice_evidence.id=voice.verification_resource_evidence_id
+        AND voice_evidence.verification_header_id=voice.verification_header_id
+        AND voice_evidence.provider_account_id=voice.provider_account_id
+        AND voice_evidence.provider_key=voice.provider_key
+        AND voice_evidence.provider_resource_id=voice.id
+      WHERE slots.owner_user_id=${scope.ownerUserId} AND slots.workspace_id=${scope.workspaceId}
+        AND plans.public_plan_key=${publicPlanKey} AND slots.public_slot_key=${publicSlotKey}
+    `));
+    if (staticVerificationRows.length !== 1) throw new OneVideoExecutionControlError("UNAVAILABLE");
+    const staticVerification = staticVerificationRows[0]!;
+
     const accountPresent = text(slot, "accountId", "account_id").length > 0;
     const resourceShape = text(slot, "avatarId", "avatar_id").length > 0 && text(slot, "voiceId", "voice_id").length > 0
       && text(slot, "avatarType", "avatar_type") === "avatar" && text(slot, "voiceType", "voice_type") === "voice";
@@ -241,25 +371,23 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     const accountStatus = text(slot, "accountStatus", "account_status");
     const credentialStatus = text(slot, "credentialStatus", "credential_status");
     const credentialSource = text(slot, "credentialSource", "credential_source");
-    const lastVerified = value(slot, "lastVerifiedAt", "last_verified_at");
-    const verificationState = derivePersistedProviderVerificationState({
+    const providerVerification = deriveExactStaticProviderVerificationState({
       bindingState, credentialSource, accountStatus, credentialStatus,
+      evidenceId: text(staticVerification, "staticHeaderId", "static_header_id"),
+      evidenceObservedAt: optionalIso(value(staticVerification, "staticHeaderObservedAt", "static_header_observed_at")),
+      evidenceExpiresAt: optionalIso(value(staticVerification, "staticHeaderExpiresAt", "static_header_expires_at")),
+      evidenceCurrent: bool(staticVerification, "staticCurrent", "static_current"),
+      databaseNow,
     });
-    const providerVerification = {
-      state: verificationState,
-      ...(lastVerified == null ? {} : { observedAt: optionalIso(lastVerified) }),
-      ...(value(slot, "credentialExpiresAt", "credential_expires_at") == null ? {}
-        : { expiresAt: optionalIso(value(slot, "credentialExpiresAt", "credential_expires_at")) }),
-    };
 
-    const exactEvidenceBase = bindingState === "current" && verificationState === "verified"
+    const exactEvidenceBase = bindingState === "current" && providerVerification.state === "verified"
       && productionMetadataCurrent && bool(evidence, "intentCurrent", "intent_current");
     const quote = this.quoteState(evidence, databaseNow, exactEvidenceBase && bool(evidence, "quoteCurrent", "quote_current"));
     const human = this.humanState(evidence, databaseNow,
       exactEvidenceBase && bool(evidence, "humanCurrent", "human_current") && quote.state === "quoted");
     const reasonCodes = new Set<OneVideoExecutionControl["execute"]["reasonCodes"][number]>();
     if (bindingState !== "current") reasonCodes.add(bindingState === "stale" ? "binding_stale" : "binding_invalid");
-    if (verificationState !== "verified") reasonCodes.add(`provider_verification_${verificationState}` as
+    if (providerVerification.state !== "verified") reasonCodes.add(`provider_verification_${providerVerification.state}` as
       OneVideoExecutionControl["execute"]["reasonCodes"][number]);
     if (quote.state !== "quoted") reasonCodes.add(`maximum_quote_${quote.state}` as
       OneVideoExecutionControl["execute"]["reasonCodes"][number]);
