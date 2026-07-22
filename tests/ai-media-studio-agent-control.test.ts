@@ -26,8 +26,8 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 17);
-  assert.equal(snapshot.summary.running, 1);
+  assert.equal(snapshot.summary.done, 18);
+  assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-quote-readiness")?.branch,
@@ -148,12 +148,13 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.equal(heldAdmission?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/169");
   assert.match(heldAdmission?.evidence.join(" ") ?? "", /c9d7b63d[\s\S]*83\/83[\s\S]*62\/62[\s\S]*13\/13[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(heldAdmission?.blockers.join(" ") ?? "", /PostgreSQL observation\/replay rehearsal[\s\S]*migrations[\s\S]*Live HeyGen[\s\S]*quote[\s\S]*spend[\s\S]*publishing[\s\S]*Replit deployment/u);
-  assert.equal(rosterMutationHardening?.state, "running");
+  assert.equal(rosterMutationHardening?.state, "done");
   assert.equal(rosterMutationHardening?.branch, "codex/ai-media-studio-roster-mutation-hardening");
-  assert.equal(rosterMutationHardening?.pullRequestUrl, null);
+  assert.equal(rosterMutationHardening?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/170");
   assert.match(rosterMutationHardening?.acceptance.join(" ") ?? "", /real authenticated session[\s\S]*same-origin JSON/u);
   assert.match(rosterMutationHardening?.acceptance.join(" ") ?? "", /fallback identities[\s\S]*cross-site[\s\S]*private fields[\s\S]*before persistence/u);
   assert.match(rosterMutationHardening?.acceptance.join(" ") ?? "", /no provider call[\s\S]*secret resolution[\s\S]*external spend/u);
+  assert.match(rosterMutationHardening?.evidence.join(" ") ?? "", /954bd9f7[\s\S]*41\/41[\s\S]*14\/14[\s\S]*P0=P1=P2=P3=0[\s\S]*43\/43[\s\S]*17\/17/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T13:38:38.699Z
+Generated: 2026-07-22T13:40:41.186Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 

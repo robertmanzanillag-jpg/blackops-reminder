@@ -15,8 +15,10 @@ migration, publishing, or deployment is authorized.
    pre-generation quote is available; it performs no provider request or effect.
 5. Daily admission repository that can atomically create a budget reservation,
    render job, and held outbox work after a complete authority snapshot.
-6. Held-work activation repository with a branded activation principal.
-7. Admitted submit, terminal observation, renewable artifact resolution, and
+6. Strict authenticated, exact-origin one-slot held-admission coordinator and
+   HTTP boundary. It creates held work only and cannot activate or call HeyGen.
+7. Held-work activation repository with a branded activation principal.
+8. Admitted submit, terminal observation, renewable artifact resolution, and
    owned-storage ingest workers, composed with `autostart: false`.
 
 ## Missing dependency order
@@ -24,7 +26,8 @@ migration, publishing, or deployment is authorized.
 1. Authoritative account-specific maximum quote terms or provider quote.
 2. Durable maximum-quote coordinator and trusted attestation source.
 3. Current exact quote approval and authority snapshot.
-4. Operator-authorized one-slot admission coordinator.
+4. Real PostgreSQL observation/replay rehearsal for the mounted held-admission
+   boundary before its draft PR can merge.
 5. Operator-authorized held-work activation coordinator.
 6. Production runtime binding for the static HeyGen secret, account and
    credential version, database capability lanes, owned object storage, and
