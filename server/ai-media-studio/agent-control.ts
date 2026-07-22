@@ -530,16 +530,17 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     mergeGate: "Draft PR #173 stays stacked on PR #172; keep it unmerged until checker/App QA review, production reader, durable scheduling and later live-provider gates are separately reviewed and approved.",
     evidence: [
       "Source-to-batch focused group passes 12/12 with HTTP rerun outside sandbox",
-      "Production-batch/source-to-script/source-sync regression passes 41/41 with HTTP rerun outside sandbox",
+      "Production-batch/source/source-to-script regression passes 110/110 with HTTP rerun outside sandbox",
       "TypeScript, production build, regenerated codebase map and diff hygiene pass",
       "Read-only design audit identified missing kong-owned-catalog filtering; service/repository/tests now enforce that server-owned adapter constraint",
+      "Independent final recheck closed the HTTP guard coverage gap with P0=P1=P2=P3=0",
     ],
     blockers: [
-      "Production KongSourceReader remains unimplemented because the repo has no authoritative live Kong catalog tables or internal API contract",
+      "Curated Kong source feed is preserved in draft PR kong-nightlife#117, but its HTTP reader and production composition are not yet connected here",
       "No durable scheduler/cursor loop is configured; this route is operator-triggered only",
       "HeyGen, render admission, spend, publishing, migrations and deployment remain separately blocked",
     ],
-    nextAction: "Keep PR #173 draft and unmerged; separately implement the production Kong reader and durable scheduler after the source catalog authority is identified.",
+    nextAction: "Keep PR #173 draft and unmerged; next connect a fail-closed HTTP reader to kong-nightlife#117 and add the durable scheduler/cursor loop.",
   },
   {
     id: "ams-agent-staging-migrations",

@@ -8,8 +8,9 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 - Implemented locally: strict source automation endpoint `POST /api/ai-media-studio/automation/sources/production-batch/prepare` that reads the current 5–10 creator production batch and, only when it is `not_started`, invokes the existing durable production batch preparation with a server-owned idempotency key.
 - Safety: the browser sends an empty JSON body only. It cannot choose plan IDs, source IDs, provider IDs, cursors, idempotency keys, render/spend/publish flags or adapter configuration. The server constrains source selection to `kong-owned-catalog` rows that are accepted/ready, owned/licensed and moderation-approved.
 - Effects remain blocked: the endpoint may persist deterministic draft scripts and selected variants for blocked slots. It records no script approval, render job, outbox command, video-provider/HeyGen call, secret resolution, spend, publishing job, migration application or deployment.
-- Evidence so far: source-to-batch focused group 12/12; production-batch/source-to-script/source-sync regression 41/41; TypeScript pass; production build pass; codebase map and diff hygiene pass. The build retains inherited warnings for large Clippers chunk and local yt-dlp/Python packaging.
-- Remaining gates: independent final checker/App QA, production Kong reader implementation, durable scheduler/cursor loop, PostgreSQL rehearsal and every HeyGen/spend/publishing/migration/deploy approval remain separate.
+- Evidence so far: source-to-batch focused group 12/12; production-batch/source/source-to-script regression 110/110; TypeScript pass; production build pass; codebase map and diff hygiene pass. The build retains inherited warnings for large Clippers chunk and local yt-dlp/Python packaging.
+- Independent final checker: P0=P1=P2=P3=0 after explicit missing-Origin and non-JSON route coverage. The curated upstream KONG feed is preserved separately in draft PR [kong-nightlife#117](https://github.com/robertmanzanillag-jpg/kong-nightlife/pull/117), also with independent P0=P1=P2=P3=0 and 8/8 focused tests.
+- Remaining gates: fail-closed HTTP reader/composition, durable scheduler/cursor loop, PostgreSQL rehearsal and every HeyGen/spend/publishing/migration/deploy approval remain separate.
 
 ## Tenant-safe source automation sync checkpoint (2026-07-22)
 

@@ -118,6 +118,13 @@ test("source-to-batch route is replay-safe and rejects unauthenticated, cross-si
   assert.equal((await fetch(`${server.baseUrl}${endpoint}`, {
     method: "POST", headers: { ...headers, origin: "https://evil.example", "sec-fetch-site": "cross-site" }, body: "{}",
   })).status, 403);
+  const { origin: _missingOrigin, ...headersWithoutOrigin } = headers;
+  assert.equal((await fetch(`${server.baseUrl}${endpoint}`, {
+    method: "POST", headers: headersWithoutOrigin, body: "{}",
+  })).status, 403);
+  assert.equal((await fetch(`${server.baseUrl}${endpoint}`, {
+    method: "POST", headers: { ...headers, "content-type": "text/plain" }, body: "{}",
+  })).status, 415);
   assert.equal((await fetch(`${server.baseUrl}${endpoint}?planId=${key("plan", 3)}`, {
     method: "POST", headers, body: "{}",
   })).status, 400);
