@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { mediaStudioApi } from "./api";
-import type { CreateGenerationInput, MediaJob } from "./types";
+import type { MediaJob } from "./types";
 
 export const studioQueryKeys = {
   dashboard: ["ai-media-studio", "dashboard"] as const,
@@ -51,12 +51,7 @@ export function useStudioMutations() {
     queryClient.invalidateQueries({ queryKey: studioQueryKeys.dashboard });
   };
 
-  const create = useMutation({
-    mutationFn: (input: CreateGenerationInput) => mediaStudioApi.createGeneration(input),
-    onSuccess: (response) => syncJob(response.job),
-  });
-  const retry = useMutation({ mutationFn: mediaStudioApi.retryJob, onSuccess: syncJob });
   const cancel = useMutation({ mutationFn: mediaStudioApi.cancelJob, onSuccess: syncJob });
 
-  return { create, retry, cancel };
+  return { cancel };
 }

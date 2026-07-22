@@ -237,7 +237,8 @@ test("core catalog routes enforce auth, tenant isolation, full CRUD, pagination 
       idempotencyKey: "core-route-mismatch-001",
     }),
   });
-  assert.equal(mismatchedGeneration.status, 400);
+  assert.equal(mismatchedGeneration.status, 409);
+  assert.equal((await mismatchedGeneration.json() as { code: string }).code, "PLAN_ADMISSION_REQUIRED");
 
   const updated = await fetch(`${harness.baseUrl}/api/ai-media-studio/influencers/${target.id}`, {
     method: "PATCH", headers: userHeaders, body: JSON.stringify({ tone: ["premium"] }),

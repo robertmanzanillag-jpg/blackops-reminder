@@ -11,7 +11,7 @@ Kong needs an AI media platform that can start with HeyGen but replace or combin
 
 Build AI Media Studio as an isolated domain module inside the current repository. HTTP handlers call application use cases; use cases call provider, queue, repository, clock, ID, and asset-storage ports. Only adapters know provider payloads and identifiers.
 
-The UI and shared DTOs expose provider-neutral jobs. Provider health may identify an adapter by key for operations, but generation requests do not choose a provider. A selection policy chooses an enabled provider with the required capabilities.
+The UI and shared DTOs expose provider-neutral jobs. Provider health may identify an adapter by key for operations, but generation requests do not choose a provider. A future reviewed selection policy will choose an enabled provider with the required capabilities; the current admitted production composition remains HeyGen-specific and deny-by-default.
 
 PR 1 uses a fake provider and process-local state by default. HeyGen and publishing flags are deny-by-default. PR 2 must add durable persistence/outbox/queue semantics before autonomous source workflows are enabled.
 

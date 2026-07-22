@@ -1,6 +1,4 @@
 import type {
-  CreateGenerationInput,
-  CreateGenerationResponse,
   MediaJob,
   StudioDashboard,
   StudioOptions,
@@ -39,15 +37,6 @@ export const mediaStudioApi = {
   },
   job: async (id: string) => {
     const response = await requestJson<{ job: MediaJob }>(`/jobs/${encodeURIComponent(id)}`);
-    return response.job;
-  },
-  createGeneration: (input: CreateGenerationInput) =>
-    requestJson<CreateGenerationResponse>("/generations", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  retryJob: async (id: string) => {
-    const response = await requestJson<{ job: MediaJob }>(`/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" });
     return response.job;
   },
   cancelJob: async (id: string) => {

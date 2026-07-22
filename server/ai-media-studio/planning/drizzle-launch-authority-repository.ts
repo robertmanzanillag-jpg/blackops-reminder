@@ -111,6 +111,25 @@ function value(row: Row, camel: string, snake: string): unknown {
   return row[camel] ?? row[snake];
 }
 
+function productionBatchSourceBindingIsCurrent(scriptMetadata: unknown, source: Row): boolean {
+  if (scriptMetadata === null || typeof scriptMetadata !== "object" || Array.isArray(scriptMetadata)) return true;
+  const metadata = scriptMetadata as Record<string, unknown>;
+  if (!("productionBatchV1" in metadata)) return true;
+  if (Object.keys(metadata).length !== 1) return false;
+  const candidate = metadata.productionBatchV1;
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+  const envelope = candidate as Record<string, unknown>;
+  const expectedKeys = ["batchId", "generatorVersion", "idempotencyKey", "inputDigest", "planId", "preparedAt",
+    "scriptKey", "slotId", "sourceCategory", "sourceContentChecksum", "sourceContentHash", "sourceTitle",
+    "variantCount", "version"].sort();
+  const actualKeys = Object.keys(envelope).sort();
+  if (actualKeys.length !== expectedKeys.length || actualKeys.some((key, index) => key !== expectedKeys[index])) return false;
+  const content = String(value(source, "content", "content") ?? "");
+  return envelope.version === 1
+    && String(envelope.sourceContentHash) === String(value(source, "contentHash", "content_hash") ?? "")
+    && String(envelope.sourceContentChecksum) === createHash("sha256").update(content).digest("hex");
+}
+
 function canonicalJson(input: unknown): unknown {
   if (Array.isArray(input)) return input.map(canonicalJson);
   if (input && typeof input === "object") {
@@ -362,6 +381,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           slots.id AS daily_plan_slot_id,slots.slot_digest,slots.source_member_key,slots.provider_account_id,
           slots.provider_key,slots.provider_credential_version,variants.id AS script_variant_id,
           variants.checksum AS script_variant_checksum,scripts.id AS script_id,scripts.source_type,
+          scripts.metadata AS script_metadata,
           scripts.source_item_id,sources.content_hash AS source_content_hash,
           governance.id AS governance_profile_id,governance.evidence_digest AS governance_evidence_digest
         FROM ${aiMediaDailyPlans} plans
@@ -421,14 +441,15 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       if (facts.length !== 1) throw denied();
       const row = facts[0];
       if (String(value(row, "sourceType", "source_type")) !== "manual") {
-        const lockedSource = rows(await tx.execute(sql`SELECT id FROM ${aiMediaSourceItems}
+        const lockedSource = rows(await tx.execute(sql`SELECT id,content_hash,content FROM ${aiMediaSourceItems}
           WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
             AND id=${value(row, "sourceItemId", "source_item_id")}
             AND source_type=${value(row, "sourceType", "source_type")}
             AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
             AND status IN ('accepted','ready') AND moderation_status='approved'
             AND rights_status IN ('owned','licensed') FOR UPDATE`));
-        if (lockedSource.length !== 1) throw denied();
+        if (lockedSource.length !== 1
+          || !productionBatchSourceBindingIsCurrent(value(row, "scriptMetadata", "script_metadata"), lockedSource[0])) throw denied();
       }
       const base = subjectFromLaunchRow(row, command.scope, command.slotAttempt, governanceUse,
         governanceTerritory, command.contentCountry, id, digest("pending"));
@@ -701,7 +722,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     const result = rows(await tx.execute(sql`
       SELECT intents.*,plans.plan_date::text,plans.accounting_time_zone,
         ((plans.plan_date+1)::timestamp AT TIME ZONE plans.accounting_time_zone) AS plan_expires_at,
-        slots.influencer_id,scripts.language,
+        slots.influencer_id,scripts.language,scripts.metadata AS script_metadata,
         governance.expires_at AS governance_expires_at,accounts.credential_expires_at
       FROM ${aiMediaLaunchIntents} intents
       INNER JOIN ${aiMediaDailyPlans} plans
@@ -777,14 +798,15 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     if (result.length !== 1) throw denied();
     const row = result[0];
     if (String(value(row, "sourceType", "source_type")) !== "manual") {
-      const lockedSource = rows(await tx.execute(sql`SELECT id FROM ${aiMediaSourceItems}
+      const lockedSource = rows(await tx.execute(sql`SELECT id,content_hash,content FROM ${aiMediaSourceItems}
         WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
           AND id=${value(row, "sourceItemId", "source_item_id")}
           AND source_type=${value(row, "sourceType", "source_type")}
           AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
           AND status IN ('accepted','ready') AND moderation_status='approved'
           AND rights_status IN ('owned','licensed') FOR UPDATE`));
-      if (lockedSource.length !== 1) throw denied();
+      if (lockedSource.length !== 1
+        || !productionBatchSourceBindingIsCurrent(value(row, "scriptMetadata", "script_metadata"), lockedSource[0])) throw denied();
     }
     const subject = subjectFromLaunchRow(row, command.scope, command.slotAttempt,
       String(value(row, "governanceUse", "governance_use")),

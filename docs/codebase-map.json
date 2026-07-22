@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-21T23:48:57.377Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-roster-plan-bridge",
+  "generatedAt": "2026-07-22T00:32:17.334Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-durable-script-batch",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -87,13 +87,46 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 775,
-    "filesIndexed": 647,
-    "imports": 2653,
-    "routes": 491,
-    "symbols": 12699
+    "filesVisible": 787,
+    "filesIndexed": 657,
+    "imports": 2710,
+    "routes": 493,
+    "symbols": 12906
   },
   "directories": {
+    "client/src": {
+      "files": 154,
+      "indexed": 150,
+      "kinds": {
+        "other": 44,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 140,
+      "indexed": 133,
+      "kinds": {
+        "server": 140
+      }
+    },
+    "shared": {
+      "files": 10,
+      "indexed": 10,
+      "kinds": {
+        "shared": 10
+      }
+    },
+    "tests": {
+      "files": 184,
+      "indexed": 175,
+      "kinds": {
+        "test": 184
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -130,18 +163,6 @@
       "indexed": 2,
       "kinds": {
         "other": 13
-      }
-    },
-    "client/src": {
-      "files": 153,
-      "indexed": 151,
-      "kinds": {
-        "other": 43,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 24
       }
     },
     "docs/ai-media-studio": {
@@ -187,13 +208,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 137,
-      "indexed": 130,
-      "kinds": {
-        "server": 137
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -201,25 +215,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 9,
-      "indexed": 9,
-      "kinds": {
-        "shared": 9
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 177,
-      "indexed": 168,
-      "kinds": {
-        "test": 177
       }
     },
     "tests/fixtures": {
@@ -2366,7 +2366,8 @@
       "kind": "other",
       "imports": [
         "./types",
-        "@shared/ai-media-studio-heygen-roster"
+        "@shared/ai-media-studio-heygen-roster",
+        "@shared/ai-media-studio-production-batches"
       ],
       "exports": [
         "CoreApiBoundary",
@@ -2538,6 +2539,8 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "usePrepareProductionBatchScripts",
+        "useProductionBatch",
         "useProviderResources"
       ],
       "symbols": [
@@ -2554,6 +2557,8 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "usePrepareProductionBatchScripts",
+        "useProductionBatch",
         "useProviderResources"
       ],
       "routes": []
@@ -2568,12 +2573,14 @@
         "./influencer-selection",
         "./influencer-workspace",
         "./media-library",
+        "./production-batch-workbench",
         "./types"
       ],
       "exports": [
         "CoreStudioWorkspace ",
         "InfluencerWorkspace ",
         "MediaLibrary ",
+        "ProductionBatchWorkbench ",
         "archiveDialogReducer, initialArchiveDialogState ",
         "eligibleGenerationInfluencers, reconcileGenerationInfluencer ",
         "mediaStudioCoreApi, type CoreApiBoundary "
@@ -2724,11 +2731,42 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/core/production-batch-workbench.tsx",
+      "kind": "other",
+      "imports": [
+        "../feedback",
+        "./hooks",
+        "./types",
+        "@/components/ui/button",
+        "@/components/ui/card",
+        "lucide-react",
+        "react"
+      ],
+      "exports": [
+        "ProductionBatchWorkbench",
+        "newProductionBatchAttemptKey"
+      ],
+      "symbols": [
+        "ProductionBatchWorkbench",
+        "attemptRef",
+        "batch",
+        "batchQuery",
+        "newProductionBatchAttemptKey",
+        "prepare",
+        "prepareScripts",
+        "readyScripts",
+        "resultRef",
+        "scriptReadiness"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/features/ai-media-studio/core/types.ts",
       "kind": "other",
       "imports": [
         "@shared/ai-media-studio-core",
-        "@shared/ai-media-studio-heygen-roster"
+        "@shared/ai-media-studio-heygen-roster",
+        "@shared/ai-media-studio-production-batches"
       ],
       "exports": [
         "AssetDelivery",
@@ -2745,55 +2783,6 @@
         "commaList",
         "influencerToForm",
         "toInfluencerRequest"
-      ],
-      "routes": []
-    },
-    {
-      "path": "client/src/features/ai-media-studio/create-video-workbench.tsx",
-      "kind": "other",
-      "imports": [
-        "./core/influencer-selection",
-        "./feedback",
-        "./governance/hooks",
-        "./hooks",
-        "./script-api",
-        "@/components/ui/button",
-        "@/components/ui/card",
-        "@/components/ui/label",
-        "@/components/ui/textarea",
-        "@shared/ai-media-studio-scripts",
-        "@tanstack/react-query",
-        "lucide-react",
-        "react"
-      ],
-      "exports": [
-        "CreateVideoWorkbench"
-      ],
-      "symbols": [
-        "CreateVideoWorkbench",
-        "availableVoices",
-        "chooseInfluencer",
-        "chooseVariant",
-        "copyVariant",
-        "eligibleInfluencers",
-        "fieldClass",
-        "focusField",
-        "generateScripts",
-        "governanceNowMs",
-        "governanceProfile",
-        "governanceQuery",
-        "governanceReadyForPreview",
-        "governanceStatusText",
-        "idempotencyKey",
-        "influencer",
-        "next",
-        "options",
-        "optionsQuery",
-        "scripts",
-        "selectedInfluencer",
-        "sourceId",
-        "submit",
-        "text"
       ],
       "routes": []
     },
@@ -3031,11 +3020,9 @@
       ],
       "symbols": [
         "cancel",
-        "create",
         "jobs",
         "queryClient",
         "replaceJob",
-        "retry",
         "studioQueryKeys",
         "syncJob",
         "useStudioDashboard",
@@ -3072,8 +3059,7 @@
         "jobs",
         "jobsQuery",
         "money",
-        "progress",
-        "retrying"
+        "progress"
       ],
       "routes": []
     },
@@ -3340,22 +3326,6 @@
         "scheduledPublishingError",
         "validateAnalyticsDateWindow",
         "value"
-      ],
-      "routes": []
-    },
-    {
-      "path": "client/src/features/ai-media-studio/script-api.ts",
-      "kind": "other",
-      "imports": [
-        "@shared/ai-media-studio-scripts"
-      ],
-      "exports": [
-        "generateScriptVariants"
-      ],
-      "symbols": [
-        "body",
-        "generateScriptVariants",
-        "response"
       ],
       "routes": []
     },
@@ -3873,7 +3843,6 @@
       "imports": [
         "@/components/ui/button",
         "@/features/ai-media-studio/core",
-        "@/features/ai-media-studio/create-video-workbench",
         "@/features/ai-media-studio/dashboard-overview",
         "@/features/ai-media-studio/feedback",
         "@/features/ai-media-studio/hooks",
@@ -10184,6 +10153,7 @@
         "SAFE",
         "SHA256",
         "UUID",
+        "actualKeys",
         "admissionDigest",
         "amount",
         "assertAuthorized",
@@ -10195,6 +10165,7 @@
         "authorityDigest",
         "base",
         "baseExpiry",
+        "candidate",
         "canonicalJson",
         "conflict",
         "content",
@@ -10209,12 +10180,14 @@
         "derivedDigest",
         "digest",
         "display",
+        "envelope",
         "evidence",
         "evidenceBinding",
         "evidenceDigest",
         "evidenceIdentity",
         "existingIntent",
         "expected",
+        "expectedKeys",
         "expiresAt",
         "expiry",
         "expiryCandidates",
@@ -10237,6 +10210,7 @@
         "launchIntentDigest",
         "launchSubjectDigest",
         "lockedSource",
+        "metadata",
         "microUsd",
         "normalized",
         "normalizedStrings",
@@ -10252,6 +10226,7 @@
         "previousEvidenceRevision",
         "previousRevision",
         "previousRevisionId",
+        "productionBatchSourceBindingIsCurrent",
         "provider",
         "publicSubject",
         "quote",
@@ -10520,6 +10495,129 @@
         "VideoSubmission"
       ],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/production-batches/contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-production-batches",
+        "../../../shared/ai-media-studio-scripts",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "PrepareProductionBatchInput",
+        "ProductionBatchError",
+        "ProductionBatchErrorCode",
+        "ProductionBatchRepository",
+        "ProductionScriptGenerator"
+      ],
+      "symbols": [
+        "ProductionBatchError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/production-batches/drizzle-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-production-batches",
+        "../../../shared/models/ai-media-studio-db",
+        "../sources/contracts",
+        "./contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleProductionBatchRepository",
+        "ProductionBatchDatabase",
+        "ProductionBatchExecutor"
+      ],
+      "symbols": [
+        "DrizzleProductionBatchRepository",
+        "ENVELOPE_KEYS",
+        "Envelope",
+        "ExecuteResult",
+        "VARIANT_KEYS",
+        "actual",
+        "batchId",
+        "blockers",
+        "bound",
+        "boundCount",
+        "bySlot",
+        "candidate",
+        "category",
+        "clock",
+        "content",
+        "date",
+        "digest",
+        "envelope",
+        "envelopes",
+        "exactKeys",
+        "generated",
+        "group",
+        "groups",
+        "hash",
+        "inputDigest",
+        "insertedScript",
+        "insertedVariant",
+        "integer",
+        "iso",
+        "lockedReplaySources",
+        "lockedSlots",
+        "memberId",
+        "members",
+        "metadata",
+        "numbers",
+        "object",
+        "plan",
+        "plans",
+        "preparedAt",
+        "publicKey",
+        "result",
+        "row",
+        "rows",
+        "scriptKey",
+        "scriptUuid",
+        "selected",
+        "selectedVariantId",
+        "slotId",
+        "slotRows",
+        "sorted",
+        "source",
+        "sourceCategory",
+        "sources",
+        "status",
+        "text",
+        "validEnvelope",
+        "validVariantEnvelope",
+        "value",
+        "values",
+        "variantMetadata",
+        "variantUuids",
+        "verified",
+        "videoNumber"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/production-batches/service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-production-batches",
+        "../core/resource-domain",
+        "../script-service",
+        "./contracts"
+      ],
+      "exports": [
+        "ProductionBatchService"
+      ],
+      "symbols": [
+        "ProductionBatchService",
+        "batch",
+        "planId",
+        "request"
+      ],
       "routes": []
     },
     {
@@ -11280,6 +11378,7 @@
         "../../shared/ai-media-studio-governance",
         "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-operations",
+        "../../shared/ai-media-studio-production-batches",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
         "./agent-control",
@@ -11296,6 +11395,8 @@
         "./operations-runtime",
         "./persistence/runtime",
         "./ports",
+        "./production-batches/contracts",
+        "./production-batches/service",
         "./provider-webhooks",
         "./providers/fake-video-provider",
         "./providers/heygen-roster-contracts",
@@ -11335,6 +11436,7 @@
         "attributionResponseSchema",
         "authenticatedPayload",
         "available",
+        "batch",
         "candidate",
         "configured",
         "configuredDatabase",
@@ -11343,6 +11445,7 @@
         "createDefaultDurableAssetIngestRepository",
         "createDefaultDurableGovernanceRepository",
         "createDefaultDurableHeyGenRosterRuntime",
+        "createDefaultDurableProductionBatchRepository",
         "createDefaultProviderWebhookAccountResolver",
         "created",
         "dashboard",
@@ -11392,7 +11495,6 @@
         "message",
         "method",
         "operations",
-        "options",
         "ownerUserId",
         "page",
         "paginate",
@@ -11403,6 +11505,7 @@
         "preview",
         "previewInput",
         "productionAssets",
+        "productionBatchSelection",
         "profile",
         "providerAccountId",
         "providerKey",
@@ -11428,6 +11531,7 @@
         "requireHeyGenRoster",
         "requireJobs",
         "requireOperations",
+        "requireProductionBatches",
         "resolveProviderWebhookAccount",
         "resources",
         "result",
@@ -11445,6 +11549,7 @@
         "seedGovernance",
         "selectGovernanceRepository",
         "selectHeyGenRosterRuntime",
+        "selectProductionBatchRuntime",
         "service",
         "sourceType",
         "sourcesQuerySchema",
@@ -11489,6 +11594,8 @@
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets",
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-resources",
@@ -19167,6 +19274,56 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-production-batches.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-scripts",
+        "zod"
+      ],
+      "exports": [
+        "PRODUCTION_BATCH_FIXED_BLOCKERS",
+        "PRODUCTION_BATCH_GENERATOR_VERSION",
+        "PRODUCTION_BATCH_MAX_AVATARS",
+        "PRODUCTION_BATCH_MAX_VIDEOS",
+        "PRODUCTION_BATCH_MIN_AVATARS",
+        "PRODUCTION_BATCH_MIN_VIDEOS",
+        "PRODUCTION_BATCH_VIDEOS_PER_AVATAR",
+        "PrepareProductionBatchRequest",
+        "ProductionBatch",
+        "ProductionBatchResponse",
+        "prepareProductionBatchRequestSchema",
+        "productionBatchBlockerSchema",
+        "productionBatchGroupSchema",
+        "productionBatchItemSchema",
+        "productionBatchPreparationBlockerSchema",
+        "productionBatchResponseSchema",
+        "productionBatchSchema"
+      ],
+      "symbols": [
+        "PRODUCTION_BATCH_FIXED_BLOCKERS",
+        "PRODUCTION_BATCH_GENERATOR_VERSION",
+        "PRODUCTION_BATCH_MAX_AVATARS",
+        "PRODUCTION_BATCH_MAX_VIDEOS",
+        "PRODUCTION_BATCH_MIN_AVATARS",
+        "PRODUCTION_BATCH_MIN_VIDEOS",
+        "PRODUCTION_BATCH_VIDEOS_PER_AVATAR",
+        "cleanText",
+        "exactBlockers",
+        "expectedPreparationBlocker",
+        "plainObject",
+        "prepareProductionBatchRequestSchema",
+        "productionBatchBlockerSchema",
+        "productionBatchGroupSchema",
+        "productionBatchItemSchema",
+        "productionBatchPreparationBlockerSchema",
+        "productionBatchResponseSchema",
+        "productionBatchSchema",
+        "productionBatchSlotIdentitySchema",
+        "publicKey"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-scripts.ts",
       "kind": "shared",
       "imports": [
@@ -19749,6 +19906,7 @@
         "appSource",
         "canary",
         "durablePlan",
+        "durableScriptBatch",
         "officeSource",
         "pageSource",
         "routesSource",
@@ -22832,6 +22990,246 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-production-batch-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/core/api.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "avatarCount",
+        "first",
+        "groups",
+        "originalFetch",
+        "position",
+        "productionBatchResponse",
+        "publicKey",
+        "response",
+        "unsafe",
+        "unsafeBatch"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-production-batches",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "hex",
+        "invalid",
+        "items",
+        "parsed",
+        "pendingBatch"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/production-batches/drizzle-repository",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "all",
+        "batchId",
+        "content",
+        "corrupt",
+        "dialect",
+        "durable",
+        "durableRows",
+        "envelope",
+        "fresh",
+        "lockedSources",
+        "planId",
+        "preparedAt",
+        "publicKey",
+        "rawHash",
+        "readDatabase",
+        "ready",
+        "refreshed",
+        "scope",
+        "scriptKey",
+        "slotId",
+        "slots",
+        "stale",
+        "text",
+        "unique"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/production-batches/drizzle-repository",
+        "../server/ai-media-studio/production-batches/service",
+        "../server/ai-media-studio/script-service",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Fixture",
+        "Manifest",
+        "MigrationFile",
+        "Scope",
+        "TEMP_PREFIX",
+        "account",
+        "applyFullChain",
+        "avatar",
+        "badContent",
+        "badHash",
+        "batchB",
+        "blocker",
+        "bytes",
+        "changed",
+        "client",
+        "content",
+        "count",
+        "counts",
+        "deterministic",
+        "digest",
+        "enabled",
+        "expectCode",
+        "five",
+        "fiveRequest",
+        "hex",
+        "influencer",
+        "integrationTest",
+        "key",
+        "manifest",
+        "member",
+        "migration",
+        "migrationRoot",
+        "parallelA",
+        "parallelB",
+        "parsed",
+        "pendingA",
+        "planId",
+        "planUuid",
+        "pool",
+        "rawHash",
+        "refresh",
+        "refreshService",
+        "rejectedContent",
+        "repository",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "rollback",
+        "row",
+        "scope",
+        "seedFixture",
+        "sideEffects",
+        "socket",
+        "sourceUse",
+        "tables",
+        "ten",
+        "tenBatch",
+        "uuid",
+        "value",
+        "voice"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio-production-batches",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "current",
+        "endpoint",
+        "generation",
+        "harness",
+        "headers",
+        "pendingBatch",
+        "prepare",
+        "previous",
+        "publicKey",
+        "retry",
+        "runtime",
+        "server",
+        "spoofed"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/production-batches/service",
+        "../shared/ai-media-studio-production-batches",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CapturingRepository",
+        "generated",
+        "key",
+        "readyBatch",
+        "repository",
+        "result",
+        "service"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-batch-ui.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "read",
+        "repositoryRoot",
+        "workbench"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-production-oauth-runtime.test.ts",
       "kind": "test",
       "imports": [
@@ -25102,6 +25500,13 @@
     "tests/ai-media-studio-pr9-oauth-migration.test.ts",
     "tests/ai-media-studio-production-admitted-render-runtime.test.ts",
     "tests/ai-media-studio-production-asset-runtime.test.ts",
+    "tests/ai-media-studio-production-batch-client.test.ts",
+    "tests/ai-media-studio-production-batch-contracts.test.ts",
+    "tests/ai-media-studio-production-batch-drizzle.test.ts",
+    "tests/ai-media-studio-production-batch-postgres.test.ts",
+    "tests/ai-media-studio-production-batch-routes.test.ts",
+    "tests/ai-media-studio-production-batch-service.test.ts",
+    "tests/ai-media-studio-production-batch-ui.test.ts",
     "tests/ai-media-studio-production-oauth-runtime.test.ts",
     "tests/ai-media-studio-publishing-accounts.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",

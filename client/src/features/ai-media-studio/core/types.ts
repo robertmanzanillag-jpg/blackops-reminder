@@ -22,6 +22,11 @@ import type {
   HeyGenRosterPublicMember,
   HeyGenRosterStatus,
 } from "@shared/ai-media-studio-heygen-roster";
+import type {
+  PrepareProductionBatchRequest,
+  ProductionBatch,
+  ProductionBatchResponse,
+} from "@shared/ai-media-studio-production-batches";
 
 export type {
   CreateInfluencerRequest,
@@ -47,6 +52,12 @@ export type {
   HeyGenRosterGender,
   HeyGenRosterPublicMember,
   HeyGenRosterStatus,
+};
+
+export type {
+  PrepareProductionBatchRequest,
+  ProductionBatch,
+  ProductionBatchResponse,
 };
 
 export type MediaAssetKind = MediaAsset["kind"];

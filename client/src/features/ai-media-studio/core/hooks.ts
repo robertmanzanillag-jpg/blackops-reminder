@@ -10,6 +10,7 @@ export const coreStudioKeys = {
   assets: (filters: MediaLibraryRequest) => ["ai-media-studio", "core", "media-assets", filters] as const,
   heyGenRoster: ["ai-media-studio", "core", "heygen-roster"] as const,
   heyGenRosterDailyPlan: ["ai-media-studio", "core", "heygen-roster", "daily-plan"] as const,
+  productionBatch: ["ai-media-studio", "core", "production-batch", "current"] as const,
 };
 
 export function useHeyGenRoster() {
@@ -28,6 +29,24 @@ export function useHeyGenRosterDailyPlan() {
   });
 }
 
+export function useProductionBatch() {
+  return useQuery({
+    queryKey: coreStudioKeys.productionBatch,
+    queryFn: mediaStudioCoreApi.productionBatch,
+    staleTime: 30_000,
+  });
+}
+
+export function usePrepareProductionBatchScripts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: mediaStudioCoreApi.prepareProductionBatchScripts,
+    onSuccess: (response) => {
+      queryClient.setQueryData(coreStudioKeys.productionBatch, response);
+    },
+  });
+}
+
 export function useConfigureHeyGenRoster() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -38,6 +57,7 @@ export function useConfigureHeyGenRoster() {
       queryClient.invalidateQueries({ queryKey: ["ai-media-studio", "options"] }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRoster }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRosterDailyPlan }),
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatch }),
     ]),
   });
 }
