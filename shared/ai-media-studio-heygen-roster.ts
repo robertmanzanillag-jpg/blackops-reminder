@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "./ai-media-studio-launch-plan-profile";
 
-export const HEYGEN_ROSTER_MIN_AVATARS = 5 as const;
-export const HEYGEN_ROSTER_MAX_AVATARS = 10 as const;
-export const HEYGEN_ROSTER_VIDEOS_PER_AVATAR = 10 as const;
-export const HEYGEN_ROSTER_MIN_PLANNED_VIDEOS = 50 as const;
-export const HEYGEN_ROSTER_MAX_PLANNED_VIDEOS = 100 as const;
+export const HEYGEN_ROSTER_MIN_AVATARS = INITIAL_CREATOR_CANARY_PROFILE.creators.minimum;
+export const HEYGEN_ROSTER_MAX_AVATARS = INITIAL_CREATOR_CANARY_PROFILE.creators.maximum;
+export const HEYGEN_ROSTER_VIDEOS_PER_AVATAR = INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator;
+export const HEYGEN_ROSTER_MIN_PLANNED_VIDEOS = INITIAL_CREATOR_CANARY_PROFILE.slots.minimum;
+export const HEYGEN_ROSTER_MAX_PLANNED_VIDEOS = INITIAL_CREATOR_CANARY_PROFILE.slots.maximum;
 export const HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS = [
   "script_batch_required",
   "governance_approval_required",
@@ -140,8 +141,8 @@ export const heyGenRosterDailyPlanSchema = z.object({
   avatarCount: z.number().int().min(HEYGEN_ROSTER_MIN_AVATARS).max(HEYGEN_ROSTER_MAX_AVATARS),
   videosPerAvatar: z.literal(HEYGEN_ROSTER_VIDEOS_PER_AVATAR),
   plannedVideoCount: z.number().int().min(HEYGEN_ROSTER_MIN_PLANNED_VIDEOS).max(HEYGEN_ROSTER_MAX_PLANNED_VIDEOS),
-  canGenerate: z.literal(false),
-  noSpendGuarantee: z.literal(true),
+  canGenerate: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate),
+  noSpendGuarantee: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend),
   generatedAt: z.string().datetime({ offset: true }),
   blockers: heyGenRosterDailyPlanBlockersSchema,
   slots: z.array(heyGenRosterDailyPlanSlotSchema)

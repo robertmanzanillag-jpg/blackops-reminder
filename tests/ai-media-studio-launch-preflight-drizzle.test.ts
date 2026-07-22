@@ -36,8 +36,9 @@ test("repository source has no authority write, reservation, adapter, network, p
   assert.match(source, /ORDER BY evidence\.revision DESC LIMIT 1/iu);
   assert.match(source, /credential_status='active'/u);
   assert.match(source, /snapshot_current/u);
-  assert.match(source, /ORDER BY slots\.public_slot_key\s+LIMIT 101/u);
-  assert.match(source, /slotRows\.length > 100/u);
+  assert.match(source, /const launchSlotReadLimit = launchSlots\.maximum \+ 1/u);
+  assert.match(source, /ORDER BY slots\.public_slot_key[\s\S]*LIMIT \$\{sql\.raw\(String\(launchSlotReadLimit\)\)\}/u);
+  assert.match(source, /slotRows\.length > launchSlots\.maximum/u);
   assert.match(source, /content\.valid_from AS content_valid_from/iu);
   assert.match(source, /snapshot\.valid_from AS snapshot_valid_from/iu);
   assert.match(source, /active\.state='committed'\s+OR \(active\.state='reserved' AND active\.expires_at>transaction_timestamp\(\)\)/iu);

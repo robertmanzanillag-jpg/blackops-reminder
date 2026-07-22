@@ -4,6 +4,7 @@ import {
   type AiMediaStudioAgentSnapshot,
   type AiMediaStudioAgentWorkItem,
 } from "../../shared/ai-media-studio-agent";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../shared/ai-media-studio-launch-plan-profile";
 import type { SourceSyncTask } from "./sources/source-sync-scheduler";
 
 const workItems: readonly AiMediaStudioAgentWorkItem[] = [
@@ -703,11 +704,11 @@ export function createAiMediaStudioAgentSnapshot(
       liveProviderCallsEnabled: false,
     },
     launchTarget: {
-      minimumAvatars: 5,
-      maximumAvatars: 10,
-      videosPerAvatar: 10,
-      minimumVideos: 50,
-      maximumVideos: 100,
+      minimumAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.minimum,
+      maximumAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.maximum,
+      videosPerAvatar: INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator,
+      minimumVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.minimum,
+      maximumVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.maximum,
     },
     summary: { total: visibleItems.length, ...counts },
     workItems: visibleItems.map((item) => ({ ...item, acceptance: [...item.acceptance], evidence: [...item.evidence], blockers: [...item.blockers] })),

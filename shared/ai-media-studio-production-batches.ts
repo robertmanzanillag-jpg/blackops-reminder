@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "./ai-media-studio-launch-plan-profile";
 import { mediaSourceTypeSchema } from "./ai-media-studio-scripts";
 
-export const PRODUCTION_BATCH_MIN_AVATARS = 5 as const;
-export const PRODUCTION_BATCH_MAX_AVATARS = 10 as const;
-export const PRODUCTION_BATCH_VIDEOS_PER_AVATAR = 10 as const;
-export const PRODUCTION_BATCH_SOURCE_TOPIC_COUNT = 10 as const;
-export const PRODUCTION_BATCH_MIN_VIDEOS = 50 as const;
-export const PRODUCTION_BATCH_MAX_VIDEOS = 100 as const;
-export const PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY = "topic_deck_by_video_number" as const;
+export const PRODUCTION_BATCH_MIN_AVATARS = INITIAL_CREATOR_CANARY_PROFILE.creators.minimum;
+export const PRODUCTION_BATCH_MAX_AVATARS = INITIAL_CREATOR_CANARY_PROFILE.creators.maximum;
+export const PRODUCTION_BATCH_VIDEOS_PER_AVATAR = INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator;
+export const PRODUCTION_BATCH_SOURCE_TOPIC_COUNT = INITIAL_CREATOR_CANARY_PROFILE.contentDeck.topicCount;
+export const PRODUCTION_BATCH_MIN_VIDEOS = INITIAL_CREATOR_CANARY_PROFILE.slots.minimum;
+export const PRODUCTION_BATCH_MAX_VIDEOS = INITIAL_CREATOR_CANARY_PROFILE.slots.maximum;
+export const PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY = INITIAL_CREATOR_CANARY_PROFILE.contentDeck.strategy;
 
 export const PRODUCTION_BATCH_GENERATOR_VERSION = "deterministic-script-v1" as const;
 export const PRODUCTION_BATCH_FIXED_BLOCKERS = [
@@ -66,7 +67,7 @@ export const productionBatchContentPlanSchema = z.object({
   strategy: z.literal(PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY),
   sourceTopicCount: z.literal(PRODUCTION_BATCH_SOURCE_TOPIC_COUNT),
   slotCount: z.number().int().min(PRODUCTION_BATCH_MIN_VIDEOS).max(PRODUCTION_BATCH_MAX_VIDEOS),
-  reuseAcrossCreators: z.literal(true),
+  reuseAcrossCreators: z.literal(INITIAL_CREATOR_CANARY_PROFILE.contentDeck.reuseAcrossCreators),
 }).strict();
 
 const productionBatchSlotIdentitySchema = z.object({
@@ -114,8 +115,8 @@ export const productionBatchSchema = z.object({
   videosPerAvatar: z.literal(PRODUCTION_BATCH_VIDEOS_PER_AVATAR),
   plannedVideoCount: z.number().int().min(PRODUCTION_BATCH_MIN_VIDEOS).max(PRODUCTION_BATCH_MAX_VIDEOS),
   contentPlan: productionBatchContentPlanSchema,
-  canGenerate: z.literal(false),
-  noSpend: z.literal(true),
+  canGenerate: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate),
+  noSpend: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend),
   preparedAt: z.string().datetime({ offset: true }).nullable(),
   approvedAt: z.string().datetime({ offset: true }).nullable(),
   blockers: z.union([exactBlockers, z.tuple([

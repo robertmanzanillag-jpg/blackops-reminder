@@ -9,12 +9,17 @@ import {
 } from "../../../shared/models/ai-media-studio-db";
 import {
   HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS,
+  HEYGEN_ROSTER_MAX_AVATARS,
+  HEYGEN_ROSTER_MAX_PLANNED_VIDEOS,
+  HEYGEN_ROSTER_MIN_AVATARS,
+  HEYGEN_ROSTER_MIN_PLANNED_VIDEOS,
   HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
   createHeyGenRosterMemberSchema,
   createHeyGenRosterRequestSchema,
   heyGenRosterDailyPlanSchema,
   type HeyGenRosterDailyPlan,
 } from "../../../shared/ai-media-studio-heygen-roster";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import type { TenantScope } from "../core/resource-domain";
 import {
   HeyGenRosterError,
@@ -159,7 +164,8 @@ function parseStoredRoster(value: unknown, scope: TenantScope): HeyGenRosterReco
     || typeof candidate.requestDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(candidate.requestDigest)
     || typeof candidate.idempotencyKey !== "string"
     || typeof candidate.configuredAt !== "string" || !validDate(candidate.configuredAt)
-    || members.length < 5 || members.length > 10 || members.some((member) => !member)) return undefined;
+    || members.length < HEYGEN_ROSTER_MIN_AVATARS || members.length > HEYGEN_ROSTER_MAX_AVATARS
+    || members.some((member) => !member)) return undefined;
   const validMembers = members as HeyGenRosterNativeMember[];
   const request = createHeyGenRosterRequestSchema.safeParse({
     members: validMembers.map(({ memberId: _memberId, ...member }) => member),
@@ -448,7 +454,9 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
       }
 
       const plannedSlotCount = bindings.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR;
-      if (bindings.length < 5 || bindings.length > 10 || plannedSlotCount < 50 || plannedSlotCount > 100) {
+      if (bindings.length < HEYGEN_ROSTER_MIN_AVATARS || bindings.length > HEYGEN_ROSTER_MAX_AVATARS
+        || plannedSlotCount < HEYGEN_ROSTER_MIN_PLANNED_VIDEOS
+        || plannedSlotCount > HEYGEN_ROSTER_MAX_PLANNED_VIDEOS) {
         throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
       }
       const planKey = publicPlanKey(record.rosterId, planDate, accountingTimeZone);
@@ -685,7 +693,8 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
       planId: planKey, rosterId: roster.rosterId, planDate, timeZone,
       status: "blocked_before_generation", avatarCount: roster.members.length,
       videosPerAvatar: HEYGEN_ROSTER_VIDEOS_PER_AVATAR, plannedVideoCount: plannedSlotCount,
-      canGenerate: false, noSpendGuarantee: true, generatedAt: createdAt,
+      canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+      noSpendGuarantee: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend, generatedAt: createdAt,
       blockers: [...HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS], slots,
     });
   }

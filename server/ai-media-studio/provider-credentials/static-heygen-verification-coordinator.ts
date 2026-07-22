@@ -1,5 +1,9 @@
 import type { TenantScope } from "../core/resource-domain";
 import {
+  INITIAL_CREATOR_CANARY_PROFILE,
+  isInitialCreatorCanaryShape,
+} from "../../../shared/ai-media-studio-launch-plan-profile";
+import {
   HeyGenV3StaticVerificationHttpProvider,
   type HeyGenV3StaticVerificationProviderOptions,
 } from "../providers/heygen-v3-static-verification-provider";
@@ -315,11 +319,11 @@ export class StaticHeyGenLiveVerificationCoordinator {
         || !Number.isSafeInteger(replay.verification.providerCredentialVersion)
         || replay.verification.providerCredentialVersion < 1
         || !Number.isSafeInteger(replay.verification.avatarCount)
-        || replay.verification.avatarCount < 5
-        || replay.verification.avatarCount > 10
+        || replay.verification.avatarCount < INITIAL_CREATOR_CANARY_PROFILE.creators.minimum
+        || replay.verification.avatarCount > INITIAL_CREATOR_CANARY_PROFILE.creators.maximum
         || !Number.isSafeInteger(replay.verification.voiceCount)
         || replay.verification.voiceCount < 1
-        || replay.verification.voiceCount > 10
+        || replay.verification.voiceCount > INITIAL_CREATOR_CANARY_PROFILE.creators.maximum
         || !Number.isFinite(Date.parse(replay.verification.verifiedAt))
         || !Number.isFinite(Date.parse(replay.verification.expiresAt))
         || Date.parse(replay.verification.expiresAt) <= Date.parse(replay.verification.verifiedAt)) {
@@ -378,9 +382,11 @@ function validContext(context: StaticHeyGenLiveVerificationContext, scope: Tenan
     && SHA256.test(context.planDigest)
     && context.planStatus === "blocked"
     && Number.isSafeInteger(context.plannedSlotCount)
-    && context.plannedSlotCount === context.selections.length * 10
-    && context.selections.length >= 5
-    && context.selections.length <= 10
+    && isInitialCreatorCanaryShape({
+      creatorCount: context.selections.length,
+      videosPerCreator: INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator,
+      slotCount: context.plannedSlotCount,
+    })
     && new Set(context.selections.map((selection) => selection.avatarLookId)).size === context.selections.length
     && context.selections.every((selection) => SAFE_PROVIDER_ID.test(selection.avatarLookId)
       && SAFE_PROVIDER_ID.test(selection.voiceId));

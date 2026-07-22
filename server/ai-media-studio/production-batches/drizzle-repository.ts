@@ -11,11 +11,17 @@ import {
 import {
   PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY,
   PRODUCTION_BATCH_FIXED_BLOCKERS,
+  PRODUCTION_BATCH_MAX_AVATARS,
+  PRODUCTION_BATCH_MAX_VIDEOS,
+  PRODUCTION_BATCH_MIN_AVATARS,
+  PRODUCTION_BATCH_MIN_VIDEOS,
   PRODUCTION_BATCH_SOURCE_TOPIC_COUNT,
+  PRODUCTION_BATCH_VIDEOS_PER_AVATAR,
   productionBatchCreativeReviewSchema,
   productionBatchSchema,
   type ProductionBatch,
 } from "../../../shared/ai-media-studio-production-batches";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import { SOURCE_CATEGORIES, type SourceCategory } from "../sources/contracts";
 import {
   ProductionBatchError,
@@ -123,7 +129,7 @@ function contentPlan(slotCount: number): ProductionBatch["contentPlan"] {
     strategy: PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY,
     sourceTopicCount: PRODUCTION_BATCH_SOURCE_TOPIC_COUNT,
     slotCount,
-    reuseAcrossCreators: true,
+    reuseAcrossCreators: INITIAL_CREATOR_CANARY_PROFILE.contentDeck.reuseAcrossCreators,
   };
 }
 
@@ -135,7 +141,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       SELECT public_plan_key
       FROM ${aiMediaDailyPlans}
       WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-        AND status IN ('blocked','planned') AND planned_slot_count BETWEEN 50 AND 100
+        AND status IN ('blocked','planned')
+        AND planned_slot_count BETWEEN ${PRODUCTION_BATCH_MIN_VIDEOS} AND ${PRODUCTION_BATCH_MAX_VIDEOS}
       ORDER BY created_at DESC, id DESC LIMIT 2
     `));
     if (plans.length === 0) return undefined;
@@ -225,10 +232,10 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
           AND content IS NOT NULL AND length(btrim(content)) BETWEEN 1 AND 4000
           AND content_hash ~ '^sha256:[a-f0-9]{64}$'
           AND source_type IN ('events','restaurants','hotels','nightclubs','deals','travel_packages','beach_clubs','experiences')
-        ORDER BY created_at ASC, id ASC LIMIT 10
+        ORDER BY created_at ASC, id ASC LIMIT ${sql.raw(String(PRODUCTION_BATCH_SOURCE_TOPIC_COUNT))}
         FOR UPDATE
       `));
-      if (sources.length !== 10 || sources.some((source) => !category(source))) {
+      if (sources.length !== PRODUCTION_BATCH_SOURCE_TOPIC_COUNT || sources.some((source) => !category(source))) {
         throw new ProductionBatchError("SOURCE_INELIGIBLE");
       }
       const clock = rows(await tx.execute(sql`SELECT transaction_timestamp() AS observed_at`))[0];
@@ -528,9 +535,11 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       const groups = this.group(slotRows.map((row) => ({ row })));
       return productionBatchSchema.parse({
         batchId: publicKey("batch", `${scope.ownerUserId}\0${scope.workspaceId}\0${planId}\0not-started`),
-        planId, status: "not_started", avatarCount: groups.length, videosPerAvatar: 10,
+        planId, status: "not_started", avatarCount: groups.length,
+        videosPerAvatar: PRODUCTION_BATCH_VIDEOS_PER_AVATAR,
         plannedVideoCount: slotRows.length, contentPlan: contentPlan(slotRows.length),
-        canGenerate: false, noSpend: true, preparedAt: null,
+        canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+        noSpend: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend, preparedAt: null,
         approvedAt: null,
         blockers: blockers("not_started"), groups,
       });
@@ -607,8 +616,11 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       : stale ? "stale" as const : "draft_ready" as const;
     const groups = this.group(verified);
     return productionBatchSchema.parse({
-      batchId: batchEnvelope.batchId, planId, status, avatarCount: groups.length, videosPerAvatar: 10,
-      plannedVideoCount: verified.length, contentPlan: contentPlan(verified.length), canGenerate: false, noSpend: true,
+      batchId: batchEnvelope.batchId, planId, status, avatarCount: groups.length,
+      videosPerAvatar: PRODUCTION_BATCH_VIDEOS_PER_AVATAR,
+      plannedVideoCount: verified.length, contentPlan: contentPlan(verified.length),
+      canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+      noSpend: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend,
       preparedAt: batchEnvelope.preparedAt, approvedAt: batchApproval?.approvedAt ?? null,
       blockers: blockers(status), groups,
     });
@@ -645,12 +657,15 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       numbers.add(videoNumber);
       members.set(memberId, numbers);
       if (!/^member_[a-f0-9]{24}$/u.test(memberId) || !/^slot_[a-f0-9]{24}$/u.test(text(slot, "publicSlotKey", "public_slot_key"))
-        || videoNumber < 1 || videoNumber > 10 || text(slot, "slotStatus", "slot_status") !== expectedStatus) {
+        || videoNumber < 1 || videoNumber > PRODUCTION_BATCH_VIDEOS_PER_AVATAR
+        || text(slot, "slotStatus", "slot_status") !== expectedStatus) {
         throw new ProductionBatchError("BATCH_UNAVAILABLE");
       }
     }
-    if (slots.length !== planned || planned < 50 || planned > 100 || members.size < 5 || members.size > 10
-      || [...members.values()].some((numbers) => numbers.size !== 10) || planned !== members.size * 10) {
+    if (slots.length !== planned || planned < PRODUCTION_BATCH_MIN_VIDEOS || planned > PRODUCTION_BATCH_MAX_VIDEOS
+      || members.size < PRODUCTION_BATCH_MIN_AVATARS || members.size > PRODUCTION_BATCH_MAX_AVATARS
+      || [...members.values()].some((numbers) => numbers.size !== PRODUCTION_BATCH_VIDEOS_PER_AVATAR)
+      || planned !== members.size * PRODUCTION_BATCH_VIDEOS_PER_AVATAR) {
       throw new ProductionBatchError("BATCH_UNAVAILABLE");
     }
   }

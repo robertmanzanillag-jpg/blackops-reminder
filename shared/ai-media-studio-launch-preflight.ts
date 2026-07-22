@@ -1,5 +1,9 @@
 import { z } from "zod";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "./ai-media-studio-launch-plan-profile";
 import { quoteReadinessSchema } from "./ai-media-studio-quote-readiness";
+
+const launchCreators = INITIAL_CREATOR_CANARY_PROFILE.creators;
+const launchSlots = INITIAL_CREATOR_CANARY_PROFILE.slots;
 
 export const launchPreflightGateCodes = [
   "batch_integrity", "plan_window", "source_eligibility", "provider_binding_local",
@@ -40,8 +44,8 @@ export const launchPreflightNextActionCodes = [
 export const launchPreflightGateSchema = z.object({
   code: z.enum(launchPreflightGateCodes),
   state: z.enum(launchPreflightGateStates),
-  readySlots: z.number().int().min(0).max(100),
-  requiredSlots: z.number().int().min(50).max(100),
+  readySlots: z.number().int().min(0).max(launchSlots.maximum),
+  requiredSlots: z.number().int().min(launchSlots.minimum).max(launchSlots.maximum),
   reasonCode: z.enum(launchPreflightReasonCodes),
   nextActionCode: z.enum(launchPreflightNextActionCodes),
 }).strict();
@@ -52,17 +56,17 @@ export const launchPreflightSchema = z.object({
   subject: z.object({
     planId: z.string().regex(/^plan_[0-9a-f]{24}$/u),
     batchId: z.string().regex(/^batch_[0-9a-f]{24}$/u),
-    avatarCount: z.number().int().min(5).max(10),
-    videosPerAvatar: z.literal(10),
-    plannedVideoCount: z.number().int().min(50).max(100),
+    avatarCount: z.number().int().min(launchCreators.minimum).max(launchCreators.maximum),
+    videosPerAvatar: z.literal(launchCreators.videosPerCreator),
+    plannedVideoCount: z.number().int().min(launchSlots.minimum).max(launchSlots.maximum),
   }).strict(),
   observedAt: z.string().datetime({ offset: true }),
   quoteReadiness: quoteReadinessSchema,
   status: z.enum(["blocked", "offline_ready_for_external_setup", "ready_at_observation"]),
-  canGenerate: z.literal(false),
+  canGenerate: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate),
   sandboxExecutionAllowed: z.literal(false),
   spendAuthorized: z.literal(false),
-  noSpend: z.literal(true),
+  noSpend: z.literal(INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend),
   authoritativeForAdmission: z.literal(false),
   effects: z.object({
     intentCreated: z.literal(false), evidenceCreated: z.literal(false), snapshotCreated: z.literal(false),
@@ -73,7 +77,8 @@ export const launchPreflightSchema = z.object({
     totalGates: z.literal(14), passedGates: z.number().int().min(0).max(14),
     blockedGates: z.number().int().min(0).max(14), pendingExternalGates: z.number().int().min(0).max(14),
     pendingHumanGates: z.number().int().min(0).max(14), unavailableGates: z.number().int().min(0).max(14),
-    readySlots: z.number().int().min(0).max(100), requiredSlots: z.number().int().min(50).max(100),
+    readySlots: z.number().int().min(0).max(launchSlots.maximum),
+    requiredSlots: z.number().int().min(launchSlots.minimum).max(launchSlots.maximum),
   }).strict(),
   gates: z.tuple(launchPreflightGateCodes.map((code) => launchPreflightGateSchema.extend({ code: z.literal(code) })) as unknown as [
     typeof launchPreflightGateSchema, typeof launchPreflightGateSchema, typeof launchPreflightGateSchema,

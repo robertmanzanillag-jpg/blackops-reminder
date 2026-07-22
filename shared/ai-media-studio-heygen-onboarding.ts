@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "./ai-media-studio-launch-plan-profile";
+
+const launchCreators = INITIAL_CREATOR_CANARY_PROFILE.creators;
+const launchSlots = INITIAL_CREATOR_CANARY_PROFILE.slots;
 
 export const heyGenOnboardingStatusSchema = z.enum([
   "awaiting_secure_credential",
@@ -52,11 +56,11 @@ export const heyGenOnboardingStepSchema = z.object({
 }).strict();
 
 const targetSchema = z.object({
-  minAvatars: z.literal(5),
-  maxAvatars: z.literal(10),
-  videosPerAvatar: z.literal(10),
-  minVideos: z.literal(50),
-  maxVideos: z.literal(100),
+  minAvatars: z.literal(launchCreators.minimum),
+  maxAvatars: z.literal(launchCreators.maximum),
+  videosPerAvatar: z.literal(launchCreators.videosPerCreator),
+  minVideos: z.literal(launchSlots.minimum),
+  maxVideos: z.literal(launchSlots.maximum),
 }).strict();
 
 const secretHandlingSchema = z.object({
@@ -69,12 +73,12 @@ const secretHandlingSchema = z.object({
 
 const rosterSchema = z.object({
   state: z.enum(["not_configured", "configured", "stale", "unavailable"]),
-  avatarCount: z.number().int().min(5).max(10).optional(),
-  plannedVideoCount: z.number().int().min(50).max(100).optional(),
+  avatarCount: z.number().int().min(launchCreators.minimum).max(launchCreators.maximum).optional(),
+  plannedVideoCount: z.number().int().min(launchSlots.minimum).max(launchSlots.maximum).optional(),
 }).strict().superRefine((value, context) => {
   const hasCounts = value.avatarCount !== undefined || value.plannedVideoCount !== undefined;
   if ((value.state === "configured" || value.state === "stale") !== hasCounts
-    || (hasCounts && value.plannedVideoCount !== value.avatarCount! * 10)) {
+    || (hasCounts && value.plannedVideoCount !== value.avatarCount! * launchCreators.videosPerCreator)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Roster summary is inconsistent" });
   }
 });

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "./ai-media-studio-launch-plan-profile";
+
+const launchCreators = INITIAL_CREATOR_CANARY_PROFILE.creators;
+const launchSlots = INITIAL_CREATOR_CANARY_PROFILE.slots;
 
 export const AI_MEDIA_STUDIO_AGENT_ROUTE = "/ai-media-studio-agent" as const;
 export const AI_MEDIA_STUDIO_AGENT_API = "/api/ai-media-studio/agent" as const;
@@ -41,11 +45,11 @@ export const aiMediaStudioAgentSnapshotSchema = z.object({
     liveProviderCallsEnabled: z.literal(false),
   }).strict(),
   launchTarget: z.object({
-    minimumAvatars: z.literal(5),
-    maximumAvatars: z.literal(10),
-    videosPerAvatar: z.literal(10),
-    minimumVideos: z.literal(50),
-    maximumVideos: z.literal(100),
+    minimumAvatars: z.literal(launchCreators.minimum),
+    maximumAvatars: z.literal(launchCreators.maximum),
+    videosPerAvatar: z.literal(launchCreators.videosPerCreator),
+    minimumVideos: z.literal(launchSlots.minimum),
+    maximumVideos: z.literal(launchSlots.maximum),
   }).strict(),
   summary: z.object({
     total: z.number().int().nonnegative(),

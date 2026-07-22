@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T18:41:42.342Z",
+  "generatedAt": "2026-07-22T18:57:01.728Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -96,13 +96,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 957,
-    "filesIndexed": 807,
-    "imports": 3526,
+    "filesVisible": 959,
+    "filesIndexed": 809,
+    "imports": 3545,
     "routes": 507,
-    "symbols": 15852
+    "symbols": 15865
   },
   "directories": {
+    "shared": {
+      "files": 23,
+      "indexed": 23,
+      "kinds": {
+        "shared": 23
+      }
+    },
+    "tests": {
+      "files": 261,
+      "indexed": 250,
+      "kinds": {
+        "test": 261
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -210,25 +224,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 22,
-      "indexed": 22,
-      "kinds": {
-        "shared": 22
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 260,
-      "indexed": 249,
-      "kinds": {
-        "test": 260
       }
     },
     "tests/fixtures": {
@@ -7344,6 +7344,7 @@
       "kind": "server",
       "imports": [
         "../../shared/ai-media-studio-agent",
+        "../../shared/ai-media-studio-launch-plan-profile",
         "./sources/source-sync-scheduler"
       ],
       "exports": [
@@ -10854,6 +10855,7 @@
       "path": "server/ai-media-studio/planning/drizzle-launch-preflight-repository.ts",
       "kind": "server",
       "imports": [
+        "../../../shared/ai-media-studio-launch-plan-profile",
         "../../../shared/ai-media-studio-launch-preflight",
         "../core/resource-domain",
         "../production-batches/metadata-integrity",
@@ -10910,7 +10912,10 @@
         "invalidBatchShapeReport",
         "killExists",
         "killValid",
+        "launchCreators",
         "launchPreflightWindowIsCurrent",
+        "launchSlotReadLimit",
+        "launchSlots",
         "member",
         "memberInfluencers",
         "memberVideos",
@@ -11982,6 +11987,7 @@
       "path": "server/ai-media-studio/production-batches/drizzle-repository.ts",
       "kind": "server",
       "imports": [
+        "../../../shared/ai-media-studio-launch-plan-profile",
         "../../../shared/ai-media-studio-production-batches",
         "../../../shared/models/ai-media-studio-db",
         "../sources/contracts",
@@ -12248,6 +12254,7 @@
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-heygen-roster",
+        "../../../shared/ai-media-studio-launch-plan-profile",
         "../../../shared/models/ai-media-studio-db",
         "../core/resource-domain",
         "./heygen-roster-contracts",
@@ -12412,6 +12419,7 @@
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-heygen-onboarding",
+        "../../../shared/ai-media-studio-launch-plan-profile",
         "../../../shared/models/ai-media-studio-db",
         "../core/resource-domain",
         "drizzle-orm"
@@ -12514,6 +12522,7 @@
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-heygen-roster",
+        "../../../shared/ai-media-studio-launch-plan-profile",
         "../core/resource-domain",
         "./heygen-roster-contracts",
         "node:crypto"
@@ -21296,6 +21305,7 @@
       "path": "shared/ai-media-studio-agent.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-launch-plan-profile",
         "zod"
       ],
       "exports": [
@@ -21314,7 +21324,9 @@
         "aiMediaStudioAgentSnapshotSchema",
         "aiMediaStudioAgentWorkItemSchema",
         "aiMediaStudioAgentWorkStateSchema",
-        "counts"
+        "counts",
+        "launchCreators",
+        "launchSlots"
       ],
       "routes": []
     },
@@ -21455,6 +21467,7 @@
       "path": "shared/ai-media-studio-heygen-onboarding.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-launch-plan-profile",
         "zod"
       ],
       "exports": [
@@ -21479,6 +21492,8 @@
         "heyGenOnboardingStatusSchema",
         "heyGenOnboardingStepIdSchema",
         "heyGenOnboardingStepSchema",
+        "launchCreators",
+        "launchSlots",
         "rosterSchema",
         "secretHandlingSchema",
         "targetSchema"
@@ -21489,6 +21504,7 @@
       "path": "shared/ai-media-studio-heygen-roster.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-launch-plan-profile",
         "zod"
       ],
       "exports": [
@@ -21586,9 +21602,31 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-launch-plan-profile.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "DeepReadonly",
+        "INITIAL_CREATOR_CANARY_PROFILE",
+        "InitialCreatorCanaryProfile",
+        "InitialCreatorCanaryShape",
+        "initialCreatorCanaryProfileSchema",
+        "isInitialCreatorCanaryShape"
+      ],
+      "symbols": [
+        "deepFreeze",
+        "initialCreatorCanaryProfileSchema",
+        "isInitialCreatorCanaryShape"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-launch-preflight.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-launch-plan-profile",
         "./ai-media-studio-quote-readiness",
         "zod"
       ],
@@ -21609,6 +21647,7 @@
         "expectedStatus",
         "foundation",
         "invalidGate",
+        "launchCreators",
         "launchPreflightGateCodes",
         "launchPreflightGateSchema",
         "launchPreflightGateStates",
@@ -21616,6 +21655,7 @@
         "launchPreflightReasonCodes",
         "launchPreflightResponseSchema",
         "launchPreflightSchema",
+        "launchSlots",
         "maximumQuoteGate",
         "minimumReady",
         "offlineReady",
@@ -21902,6 +21942,7 @@
       "path": "shared/ai-media-studio-production-batches.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-launch-plan-profile",
         "./ai-media-studio-scripts",
         "zod"
       ],
@@ -22680,6 +22721,7 @@
       "imports": [
         "../server/ai-media-studio/agent-control",
         "../shared/ai-media-studio-agent",
+        "../shared/ai-media-studio-launch-plan-profile",
         "node:assert/strict",
         "node:fs",
         "node:test"
@@ -24374,6 +24416,23 @@
         "slotId",
         "userService",
         "workloadService"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-plan-profile.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-heygen-roster",
+        "../shared/ai-media-studio-launch-plan-profile",
+        "../shared/ai-media-studio-production-batches",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "databaseModel"
       ],
       "routes": []
     },
@@ -31118,6 +31177,7 @@
     "tests/ai-media-studio-kong-owned-source-adapter.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
+    "tests/ai-media-studio-launch-plan-profile.test.ts",
     "tests/ai-media-studio-launch-preflight-contracts.test.ts",
     "tests/ai-media-studio-launch-preflight-drizzle.test.ts",
     "tests/ai-media-studio-launch-preflight-routes.test.ts",

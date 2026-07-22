@@ -6,6 +6,10 @@ import {
   type LaunchPreflight,
   type LaunchPreflightGate,
 } from "../../../shared/ai-media-studio-launch-preflight";
+import {
+  INITIAL_CREATOR_CANARY_PROFILE,
+  isInitialCreatorCanaryShape,
+} from "../../../shared/ai-media-studio-launch-plan-profile";
 import type { TenantScope } from "../core/resource-domain";
 import { readProductionBatchEnvelope, verifyApprovedProductionBatchSlotMetadata } from "../production-batches/metadata-integrity";
 import { LaunchPreflightError, type LaunchPreflightRepository } from "./launch-preflight-contracts";
@@ -20,6 +24,10 @@ export type LaunchPreflightTransactionalDatabase = LaunchPreflightDatabase & {
   }>): Promise<T>;
 };
 type Row = Record<string, unknown>;
+
+const launchCreators = INITIAL_CREATOR_CANARY_PROFILE.creators;
+const launchSlots = INITIAL_CREATOR_CANARY_PROFILE.slots;
+const launchSlotReadLimit = launchSlots.maximum + 1;
 
 const rows = (result: ExecuteResult): Row[] => (Array.isArray(result) ? result : result.rows ?? []) as Row[];
 const value = (row: Row, camel: string, snake: string): unknown => row[camel] ?? row[snake];
@@ -126,9 +134,9 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
       WHERE slots.owner_user_id=${scope.ownerUserId} AND slots.workspace_id=${scope.workspaceId}
         AND slots.daily_plan_id=${internalPlanId}
       ORDER BY slots.public_slot_key
-      LIMIT 101
+      LIMIT ${sql.raw(String(launchSlotReadLimit))}
     `));
-    if (slotRows.length > 100) throw new LaunchPreflightError("UNAVAILABLE");
+    if (slotRows.length > launchSlots.maximum) throw new LaunchPreflightError("UNAVAILABLE");
     const variantRows = rows(await tx.execute(sql`
       SELECT variants.id,variants.script_id,variants.version,variants.label,variants.content,
         variants.status,variants.checksum,variants.metadata
@@ -309,11 +317,17 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
   private derive(scope: TenantScope, publicPlanKey: string, now: Date, plan: Row, slots: Row[], variants: Row[],
     authority: Row[], policies: Row[], capacity: Row[]): LaunchPreflight {
     const required = count(plan, "plannedSlotCount", "planned_slot_count");
-    if (required < 50 || required > 100 || required % 10 !== 0) {
+    if (required < launchSlots.minimum || required > launchSlots.maximum
+      || required % launchCreators.videosPerCreator !== 0) {
       // The public contract cannot truthfully represent any other planned shape.
       throw new LaunchPreflightError("UNAVAILABLE");
     }
-    const avatarCount = required / 10;
+    const avatarCount = required / launchCreators.videosPerCreator;
+    if (!isInitialCreatorCanaryShape({
+      creatorCount: avatarCount,
+      videosPerCreator: launchCreators.videosPerCreator,
+      slotCount: required,
+    })) throw new LaunchPreflightError("UNAVAILABLE");
     const memberVideos = new Map<string, Set<number>>();
     const memberInfluencers = new Map<string, Set<string>>();
     for (const slot of slots) {
@@ -328,7 +342,9 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
     }
     const exactShape = slots.length === required && memberVideos.size === avatarCount
       && [...memberVideos.entries()].every(([member, videos]) => /^member_[0-9a-f]{24}$/u.test(member)
-        && videos.size === 10 && [...videos].every((video) => Number.isInteger(video) && video >= 1 && video <= 10)
+        && videos.size === launchCreators.videosPerCreator
+        && [...videos].every((video) => Number.isInteger(video)
+          && video >= 1 && video <= launchCreators.videosPerCreator)
         && memberInfluencers.get(member)?.size === 1)
       && new Set(slots.map((slot) => String(value(slot, "influencerId", "influencer_id")))).size === avatarCount;
 
@@ -503,11 +519,16 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
       : ["passed", "pending_external", "pending_human"].includes(entry.state));
     return launchPreflightSchema.parse({
       version: 1, source: "derived_read_only",
-      subject: { planId: publicPlanKey, batchId, avatarCount, videosPerAvatar: 10, plannedVideoCount: required },
+      subject: {
+        planId: publicPlanKey, batchId, avatarCount,
+        videosPerAvatar: launchCreators.videosPerCreator, plannedVideoCount: required,
+      },
       observedAt: now.toISOString(),
       quoteReadiness,
       status: passedCount === 14 ? "ready_at_observation" : offlineReady ? "offline_ready_for_external_setup" : "blocked",
-      canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
+      canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+      sandboxExecutionAllowed: false, spendAuthorized: false,
+      noSpend: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend,
       authoritativeForAdmission: false,
       effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,
         renderCreated: false, outboxCreated: false, providerCalled: false },
@@ -526,10 +547,15 @@ function invalidBatchShapeReport(publicPlanKey: string, batchId: string, avatarC
     : blocked(code, 0, "observation_unavailable", "retry_observation", "unavailable"))) as LaunchPreflight["gates"];
   return launchPreflightSchema.parse({
     version: 1, source: "derived_read_only",
-    subject: { planId: publicPlanKey, batchId, avatarCount, videosPerAvatar: 10, plannedVideoCount: required },
+    subject: {
+      planId: publicPlanKey, batchId, avatarCount,
+      videosPerAvatar: launchCreators.videosPerCreator, plannedVideoCount: required,
+    },
     observedAt: now.toISOString(), status: "blocked",
     quoteReadiness: { state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider" },
-    canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
+    canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+    sandboxExecutionAllowed: false, spendAuthorized: false,
+    noSpend: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend,
     authoritativeForAdmission: false,
     effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,
       renderCreated: false, outboxCreated: false, providerCalled: false },
