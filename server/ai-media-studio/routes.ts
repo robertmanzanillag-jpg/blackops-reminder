@@ -25,6 +25,11 @@ import {
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
 import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
+import { sourceEligibilityReviewResponseSchema } from "../../shared/ai-media-studio-source-eligibility";
+import {
+  sourceScriptPreviewRequestSchema,
+  sourceScriptPreviewResponseSchema,
+} from "../../shared/ai-media-studio-source-to-script";
 import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-launch-preflight";
 import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
 import { oneVideoExecutionControlResponseSchema } from "../../shared/ai-media-studio-one-video-execution-control";
@@ -188,8 +193,11 @@ import {
 } from "./publishing/domain";
 import type { PublishingSubmissionGate } from "./publishing/worker";
 import type { CanonicalSourceItem, SourceAdapter } from "./sources/contracts";
+import { KongOwnedSourceAdapter, type KongSourceReader } from "./sources/kong-owned-source-adapter";
 import { SourceCursorError } from "./sources/source-pagination";
 import { SourceAutomationSyncError, SourceAutomationSyncService } from "./sources/sync-service";
+import { SourceEligibilityReviewError, SourceEligibilityReviewService } from "./sources/eligibility-review-service";
+import { SourceToScriptPreviewError, SourceToScriptPreviewService } from "./sources/source-to-script-preview-service";
 import {
   InMemoryAssetIngestRepository,
   createProductionAssetRuntimeFromEnvironment,
@@ -284,6 +292,8 @@ export interface AiMediaStudioDependencies {
   operations?: OperationsRuntimeDependencies;
   /** Server-owned source adapters selectable only by their public stable key. */
   sourceAdapters?: readonly SourceAdapter[];
+  /** Injected server-side Kong data reader. Supplying it only registers the inert adapter; it performs no construction I/O. */
+  kongSourceReader?: KongSourceReader;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
   /** Server-only production asset configuration; never serialized into Studio DTOs. */
@@ -1366,10 +1376,16 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
     databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
+  const scriptService = new DeterministicScriptService();
   const sourceAutomationSync = new SourceAutomationSyncService(
-    dependencies.sourceAdapters ?? [],
+    [
+      ...(dependencies.kongSourceReader ? [new KongOwnedSourceAdapter(dependencies.kongSourceReader)] : []),
+      ...(dependencies.sourceAdapters ?? []),
+    ],
     operations.sources,
   );
+  const sourceEligibilityReview = new SourceEligibilityReviewService(operations.sources);
+  const sourceToScriptPreview = new SourceToScriptPreviewService(operations.sources, scriptService);
   const environment = runtimeEnvironment?.trim().toLowerCase();
   const assetDeliverySigner = dependencies.assetDeliverySigner ?? (() => {
     const productionAssets = createProductionAssetRuntimeFromEnvironment(
@@ -1517,7 +1533,6 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     workspaceId: core.workspaceId,
     governanceGate: { assertRenderAllowed: assertRenderGovernance },
   });
-  const scriptService = new DeterministicScriptService();
   const router = Router();
   const materializeOwnedAsset = async (ingest: AssetIngestJob): Promise<string> => {
       if (!ingest.ownedObjectKey || !ingest.sha256 || ingest.sizeBytes === undefined) {
@@ -1696,6 +1711,28 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
       }
       res.locals.sourceAutomationSyncPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+  const requireStrictSourceEligibilityReview = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.sourceEligibilityReviewPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+  const requireStrictSourceScriptPreview = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.sourceScriptPreviewPrincipal = sensitiveMutationRequestGuard.authorize(req);
       next();
     } catch (error) {
       next(error);
@@ -2168,6 +2205,24 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(scriptService.generate(generateScriptVariantsRequestSchema.parse(req.body)));
   }));
 
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview`,
+    requireStrictSourceScriptPreview,
+    requireOperations,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.sourceScriptPreviewPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId) throw new SourceToScriptPreviewError("INVALID_REQUEST");
+      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")) {
+        throw new SourceToScriptPreviewError("INVALID_REQUEST");
+      }
+      const input = sourceScriptPreviewRequestSchema.safeParse(req.body);
+      if (!input.success) throw new SourceToScriptPreviewError("INVALID_REQUEST");
+      const result = await sourceToScriptPreview.preview({
+        ownerUserId: principal.authenticatedUserId,
+        workspaceId: core.workspaceId,
+      }, input.data);
+      res.json(sourceScriptPreviewResponseSchema.parse(result));
+    }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, asyncRoute(async (req, res) => {
     const input = publishingJobListRequestSchema.parse(req.query);
     const values = (await operations.publishing.list(await tenant(req))).map(toPublishingJob)
@@ -2322,6 +2377,25 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
       const result = await sourceAutomationSync.sync(scope, input.data);
       res.json(sourceAutomationSyncResponseSchema.parse(result));
+    }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review`,
+    requireStrictSourceEligibilityReview,
+    requireOperations,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.sourceEligibilityReviewPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId) throw new SourceEligibilityReviewError("INVALID_REQUEST");
+      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")) {
+        throw new SourceEligibilityReviewError("INVALID_REQUEST");
+      }
+      const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
+      const result = await sourceEligibilityReview.review(
+        scope,
+        principal.authenticatedUserId,
+        req.params.sourceItemId,
+        req.body,
+      );
+      res.status(result.review.replayed ? 200 : 201).json(sourceEligibilityReviewResponseSchema.parse(result));
     }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources`, requireOperations, asyncRoute(async (req, res) => {
@@ -2482,6 +2556,23 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         : error.code === "ADAPTER_UNAVAILABLE"
           ? "Source automation adapter is unavailable"
           : "Source automation sync is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
+    if (error instanceof SourceToScriptPreviewError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid source script preview request"
+        : error.code === "NOT_FOUND" ? "Source item not found"
+          : error.code === "SOURCE_INELIGIBLE" ? "Source item is not eligible for script preview"
+            : "Source script preview is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
+    if (error instanceof SourceEligibilityReviewError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid source eligibility review request"
+        : error.code === "NOT_FOUND" ? "Source item not found"
+          : error.code === "SOURCE_REFRESHED" ? "Source content changed; review the current version"
+            : error.code === "REVIEW_CONFLICT" ? "Source eligibility review conflicts with an existing decision"
+              : "Source eligibility review is unavailable";
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }

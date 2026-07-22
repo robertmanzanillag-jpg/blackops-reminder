@@ -8,9 +8,12 @@ import {
   SOURCE_CATEGORIES,
   type CanonicalSourceItem,
   type SourceCategory,
+  type SourceEligibilityReviewInput,
+  type SourceEligibilityReviewResult,
   type SourcePage,
   type SourcePageRequest,
   type SourceRepository,
+  SourceEligibilityRepositoryError,
 } from "./contracts";
 import { boundedSourcePageLimit, decodeSourceCursor, encodeSourceCursor, sourceListFilter } from "./source-pagination";
 
@@ -189,4 +192,88 @@ export class DrizzleSourceRepository implements SourceRepository {
       hasMore,
     };
   }
+
+  async reviewEligibility(
+    scope: TenantScope,
+    input: SourceEligibilityReviewInput,
+  ): Promise<SourceEligibilityReviewResult> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [existing] = await tx.select().from(aiMediaSourceItems).where(and(
+          eq(aiMediaSourceItems.id, input.sourceItemId),
+          eq(aiMediaSourceItems.ownerUserId, scope.ownerUserId),
+          eq(aiMediaSourceItems.workspaceId, scope.workspaceId),
+          categoryPredicate(),
+        )).limit(1).for("update");
+        if (!existing) throw new SourceEligibilityRepositoryError("NOT_FOUND");
+        if (existing.contentHash !== input.expectedContentHash) {
+          throw new SourceEligibilityRepositoryError("SOURCE_REFRESHED");
+        }
+        const prior = eligibilityEvidence(existing.moderationEvidence);
+        if (prior) {
+          if (prior.idempotencyKey !== input.idempotencyKey || prior.inputDigest !== input.inputDigest) {
+            throw new SourceEligibilityRepositoryError("REVIEW_CONFLICT");
+          }
+          return { item: mapSourceRow(existing), replayed: true, reviewedAt: prior.reviewedAt };
+        }
+        if (existing.status !== "discovered" || existing.rightsStatus !== "unknown"
+          || existing.moderationStatus !== "pending") {
+          throw new SourceEligibilityRepositoryError("REVIEW_CONFLICT");
+        }
+        const reviewedAt = new Date().toISOString();
+        const evidence = {
+          sourceEligibilityReviewV1: {
+            version: 1,
+            sourceItemId: input.sourceItemId,
+            expectedContentHash: input.expectedContentHash,
+            idempotencyKey: input.idempotencyKey,
+            inputDigest: input.inputDigest,
+            actorUserId: input.actorUserId,
+            decision: input.review.decision,
+            ...(input.review.decision === "approve"
+              ? { rightsStatus: input.review.rightsStatus }
+              : { reasonCode: input.review.reasonCode }),
+            reviewedAt,
+          },
+        };
+        const [updated] = await tx.update(aiMediaSourceItems).set(input.review.decision === "approve" ? {
+          status: "accepted",
+          rightsStatus: input.review.rightsStatus,
+          moderationStatus: "approved",
+          moderationEvidence: evidence,
+          updatedAt: new Date(reviewedAt),
+        } : {
+          status: "rejected",
+          rightsStatus: "rejected",
+          moderationStatus: "rejected",
+          moderationEvidence: evidence,
+          updatedAt: new Date(reviewedAt),
+        }).where(and(
+          eq(aiMediaSourceItems.id, existing.id),
+          eq(aiMediaSourceItems.ownerUserId, scope.ownerUserId),
+          eq(aiMediaSourceItems.workspaceId, scope.workspaceId),
+          eq(aiMediaSourceItems.contentHash, input.expectedContentHash),
+          eq(aiMediaSourceItems.status, "discovered"),
+          eq(aiMediaSourceItems.rightsStatus, "unknown"),
+          eq(aiMediaSourceItems.moderationStatus, "pending"),
+        )).returning();
+        if (!updated) throw new SourceEligibilityRepositoryError("REVIEW_CONFLICT");
+        return { item: mapSourceRow(updated), replayed: false, reviewedAt };
+      });
+    } catch (error) {
+      if (error instanceof SourceEligibilityRepositoryError) throw error;
+      throw new SourceEligibilityRepositoryError("REVIEW_UNAVAILABLE");
+    }
+  }
+}
+
+function eligibilityEvidence(input: unknown): { idempotencyKey: string; inputDigest: string; reviewedAt: string } | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const envelope = (input as Record<string, unknown>).sourceEligibilityReviewV1;
+  if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) return undefined;
+  const record = envelope as Record<string, unknown>;
+  if (record.version !== 1 || typeof record.idempotencyKey !== "string"
+    || typeof record.inputDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.inputDigest)
+    || typeof record.reviewedAt !== "string" || !Number.isFinite(Date.parse(record.reviewedAt))) return undefined;
+  return { idempotencyKey: record.idempotencyKey, inputDigest: record.inputDigest, reviewedAt: record.reviewedAt };
 }

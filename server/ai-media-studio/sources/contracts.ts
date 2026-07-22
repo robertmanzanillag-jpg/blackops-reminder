@@ -89,6 +89,32 @@ export interface SourcePage {
   hasMore: boolean;
 }
 
+export type SourceEligibilityReviewDecision =
+  | { decision: "approve"; rightsStatus: "owned" | "licensed" }
+  | { decision: "reject"; reasonCode: "rights_unverified" | "moderation_rejected" | "source_invalid" };
+
+export interface SourceEligibilityReviewInput {
+  sourceItemId: string;
+  expectedContentHash: `sha256:${string}`;
+  idempotencyKey: string;
+  actorUserId: string;
+  inputDigest: `sha256:${string}`;
+  review: SourceEligibilityReviewDecision;
+}
+
+export interface SourceEligibilityReviewResult {
+  item: CanonicalSourceItem;
+  replayed: boolean;
+  reviewedAt: string;
+}
+
+export class SourceEligibilityRepositoryError extends Error {
+  constructor(readonly code: "NOT_FOUND" | "SOURCE_REFRESHED" | "REVIEW_CONFLICT" | "REVIEW_UNAVAILABLE") {
+    super("Source eligibility review repository is unavailable");
+    this.name = "SourceEligibilityRepositoryError";
+  }
+}
+
 export interface SourceRepository {
   upsertByContentHash(
     scope: TenantScope,
@@ -98,6 +124,7 @@ export interface SourceRepository {
   list(scope: TenantScope, options?: { limit?: number; category?: SourceCategory }): Promise<CanonicalSourceItem[]>;
   /** Filters in durable storage before applying the page limit. */
   listPage(scope: TenantScope, request?: SourcePageRequest): Promise<SourcePage>;
+  reviewEligibility?(scope: TenantScope, input: SourceEligibilityReviewInput): Promise<SourceEligibilityReviewResult>;
 }
 
 export const MAX_SOURCE_SNAPSHOT_ITEMS = 100;

@@ -6,3 +6,6 @@ export * from "./in-memory-source-repository";
 export * from "./ingest";
 export * from "./source-pagination";
 export * from "./sync-service";
+export * from "./source-to-script-preview-service";
+export * from "./kong-owned-source-adapter";
+export * from "./eligibility-review-service";

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T14:16:42.235Z",
+  "generatedAt": "2026-07-22T14:56:23.113Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -94,11 +94,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 927,
-    "filesIndexed": 777,
-    "imports": 3333,
-    "routes": 504,
-    "symbols": 15311
+    "filesVisible": 941,
+    "filesIndexed": 791,
+    "imports": 3419,
+    "routes": 506,
+    "symbols": 15521
   },
   "directories": {
     ".agents/skills": {
@@ -195,10 +195,10 @@
       }
     },
     "server/ai-media-studio": {
-      "files": 183,
-      "indexed": 164,
+      "files": 186,
+      "indexed": 167,
       "kinds": {
-        "server": 183
+        "server": 186
       }
     },
     "server/replit_integrations": {
@@ -209,10 +209,10 @@
       }
     },
     "shared": {
-      "files": 19,
-      "indexed": 19,
+      "files": 21,
+      "indexed": 21,
       "kinds": {
-        "shared": 19
+        "shared": 21
       }
     },
     "shared/models": {
@@ -223,10 +223,10 @@
       }
     },
     "tests": {
-      "files": 243,
-      "indexed": 232,
+      "files": 252,
+      "indexed": 241,
       "kinds": {
-        "test": 243
+        "test": 252
       }
     },
     "tests/fixtures": {
@@ -3374,7 +3374,9 @@
         "../governance/errors",
         "./types",
         "@shared/ai-media-studio-core",
-        "@shared/ai-media-studio-operations"
+        "@shared/ai-media-studio-operations",
+        "@shared/ai-media-studio-source-eligibility",
+        "@shared/ai-media-studio-source-to-script"
       ],
       "exports": [
         "operationsApi"
@@ -3412,9 +3414,17 @@
       "symbols": [
         "AutomationWorkspace",
         "dateTime",
+        "firstVariant",
         "inputClass",
         "policy",
         "policyQuery",
+        "previewPending",
+        "previewScript",
+        "previewable",
+        "reviewPending",
+        "reviewSource",
+        "reviewable",
+        "sourcePreview",
         "sources",
         "sourcesQuery"
       ],
@@ -3454,12 +3464,14 @@
         "usePublishingJobs",
         "usePublishingMutations",
         "useReadyPublishingAssets",
+        "useSourceReviewMutations",
         "useSources"
       ],
       "symbols": [
         "operationsKeys",
         "queryClient",
         "refresh",
+        "refreshSources",
         "useAnalyticsSummary",
         "useAttributions",
         "useAutomationPolicy",
@@ -3467,6 +3479,7 @@
         "usePublishingJobs",
         "usePublishingMutations",
         "useReadyPublishingAssets",
+        "useSourceReviewMutations",
         "useSources"
       ],
       "routes": []
@@ -3550,7 +3563,9 @@
       "path": "client/src/features/ai-media-studio/operations/types.ts",
       "kind": "other",
       "imports": [
-        "@shared/ai-media-studio-operations"
+        "@shared/ai-media-studio-operations",
+        "@shared/ai-media-studio-source-eligibility",
+        "@shared/ai-media-studio-source-to-script"
       ],
       "exports": [
         "AnalyticsDateWindow",
@@ -3565,19 +3580,24 @@
         "PublishingJobStatus",
         "PublishingJobsResponse",
         "RankedAttribution",
+        "SourceEligibilityReviewInput",
         "SourceFilters",
         "SourceRightsStatus",
         "SourceStatus",
         "SourcesResponse",
+        "createSourceActionIdempotencyKey",
         "rankAttributions",
         "scheduledPublishingError",
         "validateAnalyticsDateWindow"
       ],
       "symbols": [
         "counts",
+        "createSourceActionIdempotencyKey",
+        "hashPart",
         "rankAttributions",
         "scheduledMs",
         "scheduledPublishingError",
+        "sourcePart",
         "validateAnalyticsDateWindow",
         "value"
       ],
@@ -13128,6 +13148,8 @@
         "../../shared/ai-media-studio-production-batches",
         "../../shared/ai-media-studio-sandbox-readiness",
         "../../shared/ai-media-studio-scripts",
+        "../../shared/ai-media-studio-source-eligibility",
+        "../../shared/ai-media-studio-source-to-script",
         "../user-context",
         "./agent-control",
         "./analytics/domain",
@@ -13172,7 +13194,10 @@
         "./script-service",
         "./service",
         "./sources/contracts",
+        "./sources/eligibility-review-service",
+        "./sources/kong-owned-source-adapter",
         "./sources/source-pagination",
+        "./sources/source-to-script-preview-service",
         "./sources/sync-service",
         "./strict-money-action-request",
         "./webhook-security",
@@ -13355,6 +13380,8 @@
         "requireStrictHeldAdmissionSession",
         "requireStrictHeyGenRosterMutation",
         "requireStrictSourceAutomationSync",
+        "requireStrictSourceEligibilityReview",
+        "requireStrictSourceScriptPreview",
         "reservationTtlSeconds",
         "resolveProviderWebhookAccount",
         "resources",
@@ -13389,6 +13416,8 @@
         "service",
         "snapshotRepository",
         "sourceAutomationSync",
+        "sourceEligibilityReview",
+        "sourceToScriptPreview",
         "sourceType",
         "sourcesQuerySchema",
         "sourcesResponseSchema",
@@ -13419,6 +13448,8 @@
         "${AI_MEDIA_STUDIO_API_BASE}/analytics/summary",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/policy",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources",
+        "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review",
+        "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync",
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
         "${AI_MEDIA_STUDIO_API_BASE}/generations",
@@ -13576,6 +13607,10 @@
         "SourceAdapterItem",
         "SourceAdapterSnapshot",
         "SourceCategory",
+        "SourceEligibilityRepositoryError",
+        "SourceEligibilityReviewDecision",
+        "SourceEligibilityReviewInput",
+        "SourceEligibilityReviewResult",
         "SourceListFilter",
         "SourcePage",
         "SourcePageRequest",
@@ -13588,7 +13623,8 @@
         "DEFAULT_SOURCE_SNAPSHOT_ITEMS",
         "MAX_SOURCE_SNAPSHOT_ITEMS",
         "ModerationStatus",
-        "SOURCE_CATEGORIES"
+        "SOURCE_CATEGORIES",
+        "SourceEligibilityRepositoryError"
       ],
       "routes": []
     },
@@ -13615,6 +13651,9 @@
         "categoryPredicate",
         "contentHash",
         "cursor",
+        "eligibilityEvidence",
+        "envelope",
+        "evidence",
         "externalId",
         "filter",
         "hasMore",
@@ -13625,9 +13664,39 @@
         "now",
         "payload",
         "predicates",
+        "prior",
+        "record",
+        "reviewedAt",
         "rows",
         "sourceExternalIdentity",
         "storedCategory"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/eligibility-review-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-source-eligibility",
+        "../core/resource-domain",
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "SourceEligibilityReviewError",
+        "SourceEligibilityReviewErrorCode",
+        "SourceEligibilityReviewService"
+      ],
+      "symbols": [
+        "SourceEligibilityReviewError",
+        "SourceEligibilityReviewService",
+        "digest",
+        "eligible",
+        "inputDigest",
+        "publicResponse",
+        "request",
+        "result",
+        "sourceItemId"
       ],
       "routes": []
     },
@@ -13678,6 +13747,9 @@
         "key",
         "limit",
         "now",
+        "prior",
+        "reviewedAt",
+        "reviews",
         "rows",
         "tenantKey"
       ],
@@ -13690,10 +13762,13 @@
         "./content-hash",
         "./contracts",
         "./drizzle-source-repository",
+        "./eligibility-review-service",
         "./fake-source-adapter",
         "./in-memory-source-repository",
         "./ingest",
+        "./kong-owned-source-adapter",
         "./source-pagination",
+        "./source-to-script-preview-service",
         "./sync-service"
       ],
       "exports": [],
@@ -13719,6 +13794,47 @@
         "saved",
         "selected",
         "snapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/kong-owned-source-adapter.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./contracts"
+      ],
+      "exports": [
+        "KONG_OWNED_SOURCE_ADAPTER_KEY",
+        "KongOwnedSourceAdapter",
+        "KongOwnedSourcePage",
+        "KongOwnedSourceRecord",
+        "KongSourceReader"
+      ],
+      "symbols": [
+        "KONG_OWNED_SOURCE_ADAPTER_KEY",
+        "KongOwnedSourceAdapter",
+        "attributes",
+        "candidate",
+        "canonicalUrl",
+        "capturedAt",
+        "category",
+        "clone",
+        "cloneRecord",
+        "fingerprint",
+        "id",
+        "items",
+        "nextCursor",
+        "normalizeRecord",
+        "page",
+        "publishedAt",
+        "rawRecords",
+        "readCanonicalDate",
+        "readHttps",
+        "readText",
+        "summary",
+        "title",
+        "url"
       ],
       "routes": []
     },
@@ -13760,6 +13876,42 @@
         "sourceListFilter",
         "unsigned",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/source-to-script-preview-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-scripts",
+        "../../../shared/ai-media-studio-source-to-script",
+        "../core/resource-domain",
+        "../script-service",
+        "./contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "SourceToScriptPreviewError",
+        "SourceToScriptPreviewErrorCode",
+        "SourceToScriptPreviewService"
+      ],
+      "symbols": [
+        "ALLOWED_RIGHTS",
+        "ALLOWED_STATUSES",
+        "EligibleSource",
+        "SHA256",
+        "SOURCE_CONTENT_LIMIT",
+        "SourceToScriptPreviewError",
+        "SourceToScriptPreviewService",
+        "canonicalIso",
+        "date",
+        "digest",
+        "eligible",
+        "generated",
+        "normalizeEligibleSource",
+        "previewDigest",
+        "scriptRequest",
+        "toMediaSourceSnapshot"
       ],
       "routes": []
     },
@@ -21590,6 +21742,57 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-source-eligibility.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-operations",
+        "zod"
+      ],
+      "exports": [
+        "SourceEligibilityReviewRequest",
+        "SourceEligibilityReviewResponse",
+        "sourceEligibilityReviewRequestSchema",
+        "sourceEligibilityReviewResponseSchema"
+      ],
+      "symbols": [
+        "canonicalIdSchema",
+        "eligible",
+        "isoDateSchema",
+        "sha256DigestSchema",
+        "sourceEligibilityReviewRequestSchema",
+        "sourceEligibilityReviewResponseSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/ai-media-studio-source-to-script.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-operations",
+        "./ai-media-studio-scripts",
+        "zod"
+      ],
+      "exports": [
+        "ParsedSourceScriptPreviewRequest",
+        "SourceScriptPreviewRequest",
+        "SourceScriptPreviewResponse",
+        "sourceScriptPreviewEffectsSchema",
+        "sourceScriptPreviewRequestSchema",
+        "sourceScriptPreviewResponseSchema",
+        "sourceScriptPreviewSourceSchema"
+      ],
+      "symbols": [
+        "canonicalIdSchema",
+        "isoDateSchema",
+        "sha256DigestSchema",
+        "sourceScriptPreviewEffectsSchema",
+        "sourceScriptPreviewRequestSchema",
+        "sourceScriptPreviewResponseSchema",
+        "sourceScriptPreviewSourceSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio.ts",
       "kind": "shared",
       "imports": [
@@ -22158,6 +22361,7 @@
         "heldAdmission",
         "heyGenAccountMaximumQuote",
         "heyGenVerificationEvidence",
+        "kongSourceToScript",
         "launchReadiness",
         "officeSource",
         "offlinePreflight",
@@ -23623,6 +23827,24 @@
         "sequentialIds",
         "updated",
         "voice"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-kong-owned-source-adapter.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "adapter",
+        "capturedAt",
+        "scope",
+        "snapshot",
+        "valid"
       ],
       "routes": []
     },
@@ -28002,11 +28224,13 @@
         "firstText",
         "forceNoDevFallback",
         "harness",
+        "kongReaderCounters",
         "marker",
         "mutationHeaders",
         "operationsRepositories",
         "originalError",
         "otherTenant",
+        "parsed",
         "previous",
         "rawRequest",
         "replay",
@@ -28057,6 +28281,254 @@
         "service",
         "storageFailure",
         "stored"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-eligibility-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-source-eligibility",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "parsed",
+        "serialized"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-eligibility-review.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/eligibility-review-service",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../shared/ai-media-studio-source-eligibility",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "current",
+        "first",
+        "hashA",
+        "hashB",
+        "refreshed",
+        "rejected",
+        "replay",
+        "repository",
+        "request",
+        "scopeA",
+        "scopeB",
+        "seed",
+        "service",
+        "source",
+        "stored",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-eligibility-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/analytics/in-memory-repository",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/operations-runtime",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/publishing/in-memory",
+        "../server/ai-media-studio/routes",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../shared/ai-media-studio-source-eligibility",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "harness",
+        "hash",
+        "headers",
+        "origin",
+        "otherTenant",
+        "parsed",
+        "previousFallback",
+        "raw",
+        "replay",
+        "repositories",
+        "req",
+        "response",
+        "server",
+        "source",
+        "sources",
+        "stale",
+        "startHarness",
+        "stored",
+        "text",
+        "userId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-eligibility-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/eligibility-review-service",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "content",
+        "digest",
+        "error",
+        "first",
+        "replay",
+        "repository",
+        "request",
+        "scopeA",
+        "scopeB",
+        "seed",
+        "service",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-operator-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/features/ai-media-studio/operations/api.ts",
+        "../client/src/features/ai-media-studio/operations/types.ts",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "automation",
+        "first",
+        "hash",
+        "hooks",
+        "operationsRoot",
+        "originalFetch",
+        "readOperationsSource",
+        "result",
+        "second",
+        "variant"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-script-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-source-to-script",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "parsed",
+        "serialized",
+        "variant"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-script-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/analytics/in-memory-repository",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/operations-runtime",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/publishing/in-memory",
+        "../server/ai-media-studio/routes",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../shared/ai-media-studio-source-to-script",
+        "express",
+        "node:assert/strict",
+        "node:crypto",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "canonicalOrigin",
+        "content",
+        "digest",
+        "eligibilityEndpoint",
+        "endpoint",
+        "forceNoDevFallback",
+        "harness",
+        "mutationHeaders",
+        "operationsRepositories",
+        "parsed",
+        "preview",
+        "previous",
+        "privateField",
+        "rawRequest",
+        "req",
+        "response",
+        "restoreDevFallback",
+        "review",
+        "reviewBody",
+        "reviewText",
+        "runtime",
+        "server",
+        "source",
+        "sources",
+        "stale",
+        "startHarness",
+        "text",
+        "url",
+        "userId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-script-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/contracts",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../server/ai-media-studio/sources/source-to-script-preview-service",
+        "../shared/ai-media-studio-source-to-script",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "digest",
+        "error",
+        "first",
+        "isolated",
+        "isolatedService",
+        "otherTenantSource",
+        "replay",
+        "repository",
+        "scopeA",
+        "scopeB",
+        "seed",
+        "serialized",
+        "service",
+        "source"
       ],
       "routes": []
     },
@@ -29989,6 +30461,7 @@
     "tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
+    "tests/ai-media-studio-kong-owned-source-adapter.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
     "tests/ai-media-studio-launch-preflight-contracts.test.ts",
@@ -30114,6 +30587,14 @@
     "tests/ai-media-studio-source-automation-sync-contracts.test.ts",
     "tests/ai-media-studio-source-automation-sync-routes.test.ts",
     "tests/ai-media-studio-source-automation-sync-service.test.ts",
+    "tests/ai-media-studio-source-eligibility-contracts.test.ts",
+    "tests/ai-media-studio-source-eligibility-review.test.ts",
+    "tests/ai-media-studio-source-eligibility-routes.test.ts",
+    "tests/ai-media-studio-source-eligibility-service.test.ts",
+    "tests/ai-media-studio-source-operator-client.test.ts",
+    "tests/ai-media-studio-source-to-script-contracts.test.ts",
+    "tests/ai-media-studio-source-to-script-routes.test.ts",
+    "tests/ai-media-studio-source-to-script-service.test.ts",
     "tests/ai-media-studio-sources.test.ts",
     "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
     "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",
