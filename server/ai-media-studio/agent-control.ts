@@ -519,7 +519,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     owner: "AI Media Studio source automation squad",
     state: "done",
     branch: "codex/ai-media-studio-source-to-batch-automation",
-    pullRequestUrl: null,
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/173",
     acceptance: [
       "A strict same-origin source automation endpoint prepares the current 5-10 creator batch with an empty browser body only",
       "Server-owned idempotency and adapter selection constrain durable script preparation to eligible kong-owned-catalog source rows",
@@ -527,7 +527,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "The Automation UI exposes a no-credits batch preparation control and refreshes source plus production-batch state",
       "The boundary records no script approval, render, outbox, video-provider, secret, spend, publishing, migration or deployment effect",
     ],
-    mergeGate: "Focused source-to-batch tests, source/production regression, TypeScript, build, diff hygiene and checker/App QA handoff must pass before a stacked draft PR is ready.",
+    mergeGate: "Draft PR #173 stays stacked on PR #172; keep it unmerged until checker/App QA review, production reader, durable scheduling and later live-provider gates are separately reviewed and approved.",
     evidence: [
       "Source-to-batch focused group passes 12/12 with HTTP rerun outside sandbox",
       "Production-batch/source-to-script/source-sync regression passes 41/41 with HTTP rerun outside sandbox",
@@ -539,7 +539,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "No durable scheduler/cursor loop is configured; this route is operator-triggered only",
       "HeyGen, render admission, spend, publishing, migrations and deployment remain separately blocked",
     ],
-    nextAction: "Open a stacked draft PR, then separately implement the production Kong reader and durable scheduler after the source catalog authority is identified.",
+    nextAction: "Keep PR #173 draft and unmerged; separately implement the production Kong reader and durable scheduler after the source catalog authority is identified.",
   },
   {
     id: "ams-agent-staging-migrations",
