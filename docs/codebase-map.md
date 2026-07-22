@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T11:54:07.070Z
+Generated: 2026-07-22T12:45:13.539Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 893 | 745 | 3194 | 501 | 14667 |
+| 918 | 768 | 3270 | 501 | 14972 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,17 +29,17 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 225 | 214 | test:225 |
-| `client/src` | 157 | 155 | ui-component:55, other:47, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 172 | 153 | server:172 |
+| `tests` | 237 | 226 | test:237 |
+| `server/ai-media-studio` | 180 | 161 | server:180 |
+| `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 46 | 44 | script:46 |
+| `shared` | 19 | 19 | shared:19 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs/ai-media-studio` | 17 | 17 | docs:17 |
-| `shared` | 17 | 17 | shared:17 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
-| `migrations/ai-media-studio` | 53 | 3 | other:51, docs:2 |
+| `migrations/ai-media-studio` | 55 | 3 | other:53, docs:2 |
 | `tests/fixtures` | 5 | 3 | test:5 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
@@ -82,6 +82,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-core-schema.test.ts`
 - `tests/ai-media-studio-daily-admission-domain.test.ts`
 - `tests/ai-media-studio-daily-admission-drizzle.test.ts`
+- `tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts`
 - `tests/ai-media-studio-full-chain-postgres.test.ts`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
 - `tests/ai-media-studio-governance.test.ts`
@@ -143,6 +144,14 @@ Package: `rest-express`
 - `tests/ai-media-studio-one-video-cost-approval.test.ts`
 - `tests/ai-media-studio-one-video-execution-control-postgres.test.ts`
 - `tests/ai-media-studio-one-video-execution-control.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-client.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-context-loader.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-contracts.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-coordinator.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-readiness-contracts.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-readiness-service.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-snapshot-repository.test.ts`
+- `tests/ai-media-studio-one-video-held-admission-ui.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
 - `tests/ai-media-studio-operations-http.test.ts`
@@ -181,6 +190,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr30-quote-bound-human-approval-migration.test.ts`
 - `tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts`
+- `tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
@@ -217,12 +227,14 @@ Package: `rest-express`
 - `tests/ai-media-studio-secure-heygen-setup.test.ts`
 - `tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts`
 - `tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts`
+- `tests/ai-media-studio-server-owned-held-admission-authorization.test.ts`
 - `tests/ai-media-studio-sources.test.ts`
 - `tests/ai-media-studio-staging-rehearsal-runbook.test.ts`
 - `tests/ai-media-studio-static-heygen-credential-drizzle.test.ts`
 - `tests/ai-media-studio-static-heygen-credentials.test.ts`
 - `tests/ai-media-studio-static-heygen-postgres.test.ts`
 - `tests/ai-media-studio-static-heygen-verification-evidence.test.ts`
+- `tests/ai-media-studio-strict-money-action-request.test.ts`
 - `tests/ai-media-studio-webhook-env-secret.test.ts`
 - `tests/ai-media-studio-webhook-resolver.test.ts`
 - `tests/ai-media-studio-webhook-security.test.ts`

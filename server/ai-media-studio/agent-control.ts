@@ -401,6 +401,32 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #168 unmerged; obtain authoritative account terms before implementing durable quote acquisition, then request separate approvals for live verification and one-video sandbox generation.",
   },
   {
+    id: "ams-agent-one-video-held-admission",
+    title: "One-video held admission and expiry safety",
+    owner: "Admission, database safety, authorization, UI, security and App QA agents",
+    state: "running",
+    branch: "codex/ai-media-studio-one-video-held-admission",
+    pullRequestUrl: null,
+    acceptance: [
+      "An authenticated personal-workspace operator can request one exact held admission using public CAS keys only",
+      "The server derives all internal identifiers, authority, budget, versions, money and expiry before a locked revalidation",
+      "Admission creates only a reserved budget record plus sealed render/outbox work in held states",
+      "Expired never-activated held admissions release budget exactly once through reviewed database evidence",
+      "Provider activation, secret resolution, external spend, rendering, publishing, migration apply and deployment remain unavailable",
+    ],
+    mergeGate: "Pending PR31 expiry migration, contracts, PostgreSQL races, auth-first routes, UI, independent security/checker and App QA must pass before the stacked draft PR is ready.",
+    evidence: [
+      "Existing DrizzleDailyAdmissionRepository already revalidates exact authority and creates atomic held work without provider I/O",
+      "Multi-agent audit found the missing safe-expiry transition and prohibited mounting admission until it is represented durably",
+    ],
+    blockers: [
+      "Pending migration PR31 must be reviewed but must not be applied without separate approval",
+      "Authoritative quote terms, live verification and a current authority snapshot are still absent in production",
+      "Provider activation and one-shot workers remain deliberately unmounted",
+    ],
+    nextAction: "Implement and review held-expiry evidence, then mount one strict admission-only workflow; never activate or call HeyGen in this checkpoint.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

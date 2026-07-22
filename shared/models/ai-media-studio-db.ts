@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -32,6 +33,12 @@ const tenantColumns = () => ({
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+const pgName = customType<{ data: string }>({
+  dataType() {
+    return "name";
+  },
 });
 
 export const aiMediaInfluencers = pgTable(
@@ -1819,13 +1826,19 @@ export const aiMediaRenderJobs = pgTable(
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ((${table.sourceItemId} IS NULL AND ${table.sourceContentHash} IS NULL)
           OR (${table.sourceItemId} IS NOT NULL AND ${table.sourceContentHash} ~ '^sha256:[0-9a-f]{64}$'))
-        AND ${table.stage} IN ('admission_held','queued','leased','submitted','reconciling','artifact_ingest_queued',
+        AND ${table.stage} IN ('admission_held','admission_expired','queued','leased','submitted','reconciling','artifact_ingest_queued',
           'artifact_ingest_retrying','artifact_ingest_failed','completed','failed')
         AND ${table.retryCount}=0
         AND ((${table.stage} IN ('admission_held','queued') AND ${table.status}='pending'
           AND ${table.attempts}=0 AND ${table.providerJobId} IS NULL
           AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL
           AND ${table.providerTerminalState} IS NULL)
+        OR (${table.stage}='admission_expired' AND ${table.status}='cancelled'
+          AND ${table.attempts}=0 AND ${table.progress}=0 AND ${table.providerJobId} IS NULL
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.providerTerminalState} IS NULL AND ${table.completedAt} IS NOT NULL
+          AND ${table.errorCode}='admission_expired'
+          AND ${table.errorMessage}='Held admission expired before activation')
         OR (${table.stage}='leased' AND ${table.status}='rendering' AND ${table.providerJobId} IS NULL
           AND ${table.attempts} IN (0,1)
           AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL
@@ -2623,6 +2636,10 @@ export const aiMediaOutbox = pgTable(
       table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
       table.renderJobId, table.workHandoffDigest,
     ),
+    heldExpiryIdentityUnique: uniqueIndex("ai_media_outbox_held_expiry_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetReservationId,
+      table.renderJobId, table.workHandoffDigest, table.sealedRequestDigest,
+    ),
     providerTerminalCheck: check("ai_media_outbox_provider_terminal_ck", sql`(
       (${table.providerTerminalState} IS NULL AND ${table.providerTerminalEvidenceDigest} IS NULL
         AND ${table.providerTerminalObservedAt} IS NULL)
@@ -2636,12 +2653,17 @@ export const aiMediaOutbox = pgTable(
       OR (${table.budgetReservationId} IS NOT NULL AND ${table.renderJobId} IS NOT NULL
         AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
         AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.status} IN ('held','pending','leased','reconciling','dispatched','dead_letter','cancelled')
         AND (${table.status}<>'held' OR (
         ${table.attempts}=0 AND ${table.lockedAt} IS NULL AND ${table.leaseOwner} IS NULL
         AND ${table.leaseExpiresAt} IS NULL AND ${table.processedAt} IS NULL
         AND ${table.fencingToken}=0 AND ${table.deadLetterAt} IS NULL AND ${table.lastError} IS NULL
         AND isfinite(${table.availableAt}) AND isfinite(${table.createdAt}) AND isfinite(${table.updatedAt})
-      )))
+      ))
+        AND (${table.status}<>'cancelled' OR (${table.attempts}=0 AND ${table.lockedAt} IS NULL
+          AND ${table.leaseOwner} IS NULL AND ${table.leaseExpiresAt} IS NULL
+          AND ${table.fencingToken}=0 AND ${table.deadLetterAt} IS NULL
+          AND ${table.processedAt} IS NOT NULL AND ${table.lastError} IS NULL)))
     )`),
     exactRenderJobFk: foreignKey({
       columns: [table.ownerUserId, table.workspaceId, table.renderJobId,
@@ -3687,6 +3709,12 @@ export const aiMediaBudgetReservations = pgTable(
     dispatchOutboxUnique: uniqueIndex("ai_media_budget_reservations_dispatch_outbox_uq").on(
       table.dispatchOutboxId,
     ).where(sql`${table.dispatchOutboxId} IS NOT NULL`),
+    heldExpiryIdentityUnique: uniqueIndex("ai_media_budget_reservations_held_expiry_identity_uq").on(
+      table.ownerUserId, table.workspaceId, table.id, table.budgetBucketId,
+      table.renderJobId, table.dispatchOutboxId, table.dailyPlanSlotId, table.attempt,
+      table.providerAccountId, table.providerKey, table.providerCredentialVersion,
+      table.amountMicroUsd, table.currency, table.expiresAt, table.workHandoffDigest,
+    ),
     tenantStateIdx: index("ai_media_budget_reservations_tenant_state_idx").on(
       table.ownerUserId, table.workspaceId, table.state, table.expiresAt,
     ),
@@ -3916,6 +3944,159 @@ export const aiMediaWorkActivations = pgTable(
         aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.providerAccountId,
         aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion],
       name: "ai_media_work_activations_exact_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+export const aiMediaHeldExpiryCapabilities = pgTable(
+  "ai_media_held_expiry_capabilities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    databasePrincipal: pgName("database_principal").notNull(),
+    ...tenantColumns(),
+    maxExpirations: integer("max_expirations").notNull().default(1),
+    validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    evidenceDigest: text("evidence_digest").notNull(),
+    revocationEvidenceDigest: text("revocation_evidence_digest"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    scopeUnique: uniqueIndex("ai_media_held_expiry_capabilities_scope_uq").on(
+      table.databasePrincipal, table.ownerUserId, table.workspaceId, table.id,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_held_expiry_capabilities_exact_identity_uq").on(
+      table.id, table.ownerUserId, table.workspaceId,
+    ),
+    lifecycleCheck: check("ai_media_held_expiry_capabilities_ck", sql`(
+      length(btrim(${table.databasePrincipal})) BETWEEN 1 AND 63
+      AND length(btrim(${table.ownerUserId})) BETWEEN 1 AND 200
+      AND length(btrim(${table.workspaceId})) BETWEEN 1 AND 200
+      AND ${table.maxExpirations}=1 AND ${table.expiresAt}>${table.validFrom}
+      AND isfinite(${table.validFrom}) AND isfinite(${table.expiresAt}) AND isfinite(${table.createdAt})
+      AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ((${table.revokedAt} IS NULL AND ${table.revocationEvidenceDigest} IS NULL)
+        OR (isfinite(${table.revokedAt}) AND ${table.revocationEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'))
+    )`),
+  }),
+);
+
+/**
+ * Append-only evidence for the database-clock transition that closes an
+ * admitted-held tuple after its reservation expires. The pending PR31 SQL owns
+ * the atomic function and deferred cross-table terminal-state assertion.
+ */
+export const aiMediaHeldAdmissionExpirations = pgTable(
+  "ai_media_held_admission_expirations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    expiryCapabilityId: uuid("expiry_capability_id").notNull(),
+    budgetReservationId: uuid("budget_reservation_id").notNull(),
+    budgetBucketId: uuid("budget_bucket_id").notNull(),
+    renderJobId: uuid("render_job_id").notNull(),
+    dispatchOutboxId: uuid("dispatch_outbox_id").notNull(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    slotAttempt: integer("slot_attempt").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    amountMicroUsd: numeric("amount_micro_usd", { precision: 20, scale: 0 }).notNull(),
+    currency: text("currency").notNull(),
+    workHandoffDigest: text("work_handoff_digest").notNull(),
+    sealedRequestDigest: text("sealed_request_digest").notNull(),
+    reservationExpiresAt: timestamp("reservation_expires_at", { withTimezone: true }).notNull(),
+    slotStateVersionBefore: integer("slot_state_version_before").notNull(),
+    slotStateVersionAfter: integer("slot_state_version_after").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    expirationEvidenceDigest: text("expiration_evidence_digest").notNull(),
+    expiredAt: timestamp("expired_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    reservationUnique: uniqueIndex("ai_media_held_admission_expirations_reservation_uq").on(
+      table.ownerUserId, table.workspaceId, table.budgetReservationId,
+    ),
+    idempotencyUnique: uniqueIndex("ai_media_held_admission_expirations_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    evidenceDigestUnique: uniqueIndex("ai_media_held_admission_expirations_evidence_digest_uq").on(
+      table.expirationEvidenceDigest,
+    ),
+    capabilityUnique: uniqueIndex("ai_media_held_admission_expirations_capability_uq").on(
+      table.expiryCapabilityId,
+    ),
+    lifecycleCheck: check("ai_media_held_admission_expirations_ck", sql`(
+      ${table.slotAttempt}>=1 AND ${table.providerCredentialVersion}>=1
+      AND length(btrim(${table.providerKey})) BETWEEN 1 AND 80
+      AND ${table.amountMicroUsd} BETWEEN 1 AND 9000000000000000 AND ${table.currency}='USD'
+      AND ${table.workHandoffDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.sealedRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.slotStateVersionBefore}>=1
+      AND ${table.slotStateVersionAfter}=${table.slotStateVersionBefore}+1
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 200
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.expirationEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND isfinite(${table.reservationExpiresAt}) AND isfinite(${table.expiredAt})
+      AND isfinite(${table.createdAt}) AND ${table.expiredAt}>=${table.reservationExpiresAt}
+      AND ${table.createdAt}=${table.expiredAt}
+    )`),
+    exactCapabilityFk: foreignKey({
+      columns: [table.expiryCapabilityId, table.ownerUserId, table.workspaceId],
+      foreignColumns: [aiMediaHeldExpiryCapabilities.id,
+        aiMediaHeldExpiryCapabilities.ownerUserId, aiMediaHeldExpiryCapabilities.workspaceId],
+      name: "ai_media_held_admission_expirations_exact_capability_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactReservationFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.budgetReservationId,
+        table.budgetBucketId, table.renderJobId, table.dispatchOutboxId,
+        table.dailyPlanSlotId, table.slotAttempt, table.providerAccountId, table.providerKey,
+        table.providerCredentialVersion, table.amountMicroUsd, table.currency,
+        table.reservationExpiresAt, table.workHandoffDigest],
+      foreignColumns: [aiMediaBudgetReservations.ownerUserId, aiMediaBudgetReservations.workspaceId,
+        aiMediaBudgetReservations.id, aiMediaBudgetReservations.budgetBucketId,
+        aiMediaBudgetReservations.renderJobId, aiMediaBudgetReservations.dispatchOutboxId,
+        aiMediaBudgetReservations.dailyPlanSlotId, aiMediaBudgetReservations.attempt,
+        aiMediaBudgetReservations.providerAccountId, aiMediaBudgetReservations.providerKey,
+        aiMediaBudgetReservations.providerCredentialVersion, aiMediaBudgetReservations.amountMicroUsd,
+        aiMediaBudgetReservations.currency, aiMediaBudgetReservations.expiresAt,
+        aiMediaBudgetReservations.workHandoffDigest],
+      name: "ai_media_held_admission_expirations_exact_reservation_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactRenderFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.renderJobId,
+        table.budgetReservationId, table.workHandoffDigest, table.sealedRequestDigest],
+      foreignColumns: [aiMediaRenderJobs.ownerUserId, aiMediaRenderJobs.workspaceId,
+        aiMediaRenderJobs.id, aiMediaRenderJobs.budgetReservationId,
+        aiMediaRenderJobs.workHandoffDigest, aiMediaRenderJobs.sealedRequestDigest],
+      name: "ai_media_held_admission_expirations_exact_render_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactOutboxFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dispatchOutboxId,
+        table.budgetReservationId, table.renderJobId, table.workHandoffDigest,
+        table.sealedRequestDigest],
+      foreignColumns: [aiMediaOutbox.ownerUserId, aiMediaOutbox.workspaceId,
+        aiMediaOutbox.id, aiMediaOutbox.budgetReservationId, aiMediaOutbox.renderJobId,
+        aiMediaOutbox.workHandoffDigest, aiMediaOutbox.sealedRequestDigest],
+      name: "ai_media_held_admission_expirations_exact_outbox_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactSlotFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
+        table.providerAccountId, table.providerKey, table.providerCredentialVersion],
+      foreignColumns: [aiMediaDailyPlanSlots.ownerUserId, aiMediaDailyPlanSlots.workspaceId,
+        aiMediaDailyPlanSlots.id, aiMediaDailyPlanSlots.providerAccountId,
+        aiMediaDailyPlanSlots.providerKey, aiMediaDailyPlanSlots.providerCredentialVersion],
+      name: "ai_media_held_admission_expirations_exact_slot_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    exactBucketFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.budgetBucketId, table.currency],
+      foreignColumns: [aiMediaBudgetBuckets.ownerUserId, aiMediaBudgetBuckets.workspaceId,
+        aiMediaBudgetBuckets.id, aiMediaBudgetBuckets.currency],
+      name: "ai_media_held_admission_expirations_exact_bucket_fk",
     }).onUpdate("no action").onDelete("restrict"),
   }),
 );
@@ -4311,6 +4492,8 @@ export const aiMediaStudioTables = {
   launchAuthoritySnapshots: aiMediaLaunchAuthoritySnapshots,
   budgetReservations: aiMediaBudgetReservations,
   workActivations: aiMediaWorkActivations,
+  heldExpiryCapabilities: aiMediaHeldExpiryCapabilities,
+  heldAdmissionExpirations: aiMediaHeldAdmissionExpirations,
   providerSubmissionAttempts: aiMediaProviderSubmissionAttempts,
   providerSubmissionEvents: aiMediaProviderSubmissionEvents,
   providerTerminalChecks: aiMediaProviderTerminalChecks,

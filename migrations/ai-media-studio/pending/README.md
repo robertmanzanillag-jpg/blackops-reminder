@@ -16,6 +16,19 @@ PR28 and PR29 are exact prerequisites for PR30; all three pairs remain pending
 and outside `manifest.json`. None may be applied without its own PostgreSQL 16
 rehearsal, cross-agent review, and explicit migration approval.
 
+The PR31 pair prepares the fail-closed, database-clock expiration of an exact
+admitted-held handoff that was never activated or submitted. Its append-only
+evidence binds the reservation, bucket, render, outbox, slot, tenant, provider
+credential version, amount, expiry, and sealed request. The atomic transition
+expires the reserved/not-started reservation and slot, moves the render to
+`admission_expired`, cancels the held outbox, and releases only that reservation
+from the bucket counter. Its only executable grant is the precreated,
+table-blind `ai_media_held_expiry_executor`; every call additionally needs one
+unexpired, unrevoked, tenant-bound, single-use capability for the session
+principal. No role membership or capability row is provisioned by PR31. It has
+no provider I/O, worker start, spend, publication, backfill, deployment, or
+migration application.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh

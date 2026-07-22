@@ -28,6 +28,16 @@ import {
   type OneVideoCostApprovalResponse,
 } from "@shared/ai-media-studio-one-video-cost-approval";
 import {
+  oneVideoHeldAdmissionRequestSchema,
+  oneVideoHeldAdmissionResponseSchema,
+  type OneVideoHeldAdmissionRequest,
+  type OneVideoHeldAdmissionResponse,
+} from "@shared/ai-media-studio-one-video-held-admission";
+import {
+  oneVideoHeldAdmissionReadinessResponseSchema,
+  type OneVideoHeldAdmissionReadiness,
+} from "@shared/ai-media-studio-one-video-held-admission-readiness";
+import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
 } from "@shared/ai-media-studio-heygen-roster";
@@ -71,6 +81,22 @@ const oneVideoCostApprovalErrorMessages: Readonly<Record<number, string>> = {
   404: "The approved plan or slot was not found.",
   409: "The batch or quote changed. Refresh the exact quote before deciding.",
   503: "Exact one-video cost approval is not available in this runtime.",
+};
+
+const oneVideoHeldAdmissionErrorMessages: Readonly<Record<number, string>> = {
+  400: "The held-admission request was invalid.",
+  401: "Sign in again before creating a held admission.",
+  403: "You are not authorized to create this held admission.",
+  404: "The approved plan or slot was not found.",
+  409: "The batch, quote, render specification, or slot attempt changed. Refresh execution control before trying again.",
+  429: "The approved internal budget or one-video capacity is not currently available.",
+  503: "Held one-video admission is not available in this runtime.",
+};
+
+const oneVideoHeldAdmissionReadinessErrorMessages: Readonly<Record<number, string>> = {
+  404: "Held-admission readiness was not found for this approved slot.",
+  409: "Held-admission readiness is not available for the current batch or slot state.",
+  503: "The held-admission gate is not installed in this runtime.",
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -206,6 +232,29 @@ export const mediaStudioCoreApi = {
     }
     return parsed;
   },
+  oneVideoHeldAdmissionReadiness: async ({
+    planId,
+    batchId,
+    slotId,
+  }: {
+    planId: string;
+    batchId: string;
+    slotId: string;
+  }): Promise<{ readiness: OneVideoHeldAdmissionReadiness }> => {
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/one-video-held-admission-readiness/${encodeURIComponent(slotId)}`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(oneVideoHeldAdmissionReadinessErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = oneVideoHeldAdmissionReadinessResponseSchema.parse(await response.json());
+    const subject = parsed.readiness.subject;
+    if (subject.planId !== planId || subject.batchId !== batchId || subject.slotId !== slotId) {
+      throw new Error("Held-admission readiness identity did not match the selected approved slot.");
+    }
+    return parsed;
+  },
   oneVideoCostApprovalRuntime: async (): Promise<{ available: boolean; reason: string }> => {
     const response = await fetch(`${API_ROOT}/runtime`, { credentials: "include", cache: "no-store" });
     let body: unknown;
@@ -251,6 +300,40 @@ export const mediaStudioCoreApi = {
       || parsed.approval.approvedQuoteKey !== input.expectedQuoteKey
       || parsed.approval.decision !== input.decision) {
       throw new Error("Cost-approval receipt did not match the exact submitted quote.");
+    }
+    return parsed;
+  },
+  createOneVideoHeldAdmission: async ({
+    planId,
+    slotId,
+    input,
+  }: {
+    planId: string;
+    slotId: string;
+    input: OneVideoHeldAdmissionRequest;
+  }): Promise<OneVideoHeldAdmissionResponse> => {
+    const request = oneVideoHeldAdmissionRequestSchema.parse(input);
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/one-video-held-admission/${encodeURIComponent(slotId)}`,
+      {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(oneVideoHeldAdmissionErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = oneVideoHeldAdmissionResponseSchema.parse(await response.json());
+    if (parsed.admission.planId !== planId
+      || parsed.admission.slotId !== slotId
+      || parsed.admission.batchId !== input.expectedBatchId
+      || parsed.admission.slotAttempt !== input.expectedSlotAttempt
+      || parsed.admission.quoteKey !== input.expectedQuoteKey
+      || parsed.admission.renderSpecKey !== input.expectedRenderSpecKey) {
+      throw new Error("Held-admission receipt did not match the exact submitted slot and evidence.");
     }
     return parsed;
   },
