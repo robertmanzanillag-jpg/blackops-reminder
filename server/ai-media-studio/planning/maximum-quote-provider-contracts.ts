@@ -9,6 +9,21 @@ export const MAXIMUM_QUOTE_UNAVAILABLE_REASON_CODES = [
 ] as const;
 export type MaximumQuoteUnavailableReasonCode = (typeof MAXIMUM_QUOTE_UNAVAILABLE_REASON_CODES)[number];
 
+export type MaximumQuoteProviderReadiness = Readonly<{
+  state: "quote_request_available";
+  reasonCode: "authoritative_quote_request_available";
+}> | Readonly<{
+  state: "provider_terms_required";
+  reasonCode: "authoritative_account_quote_unavailable";
+}> | Readonly<{
+  state: "unavailable";
+  reasonCode: "provider_readiness_unavailable";
+}>;
+
+export interface MaximumQuoteReadinessResolver {
+  resolve(providerKey: string): MaximumQuoteProviderReadiness;
+}
+
 /** Server-owned locked records only; no secret or provider payload belongs here. */
 export interface LockedMaximumQuoteRequest {
   readonly subject: Readonly<{ dailyPlanId: string; dailyPlanSlotId: string; slotAttempt: number; subjectDigest: Sha256Digest }>;
@@ -26,6 +41,7 @@ export type MaximumQuoteOutcome = Readonly<{
 }>;
 
 export interface MaximumQuoteProvider {
+  readonly readiness: MaximumQuoteProviderReadiness;
   requestMaximumQuote(request: Readonly<LockedMaximumQuoteRequest>): Promise<MaximumQuoteOutcome>;
 }
 

@@ -506,7 +506,14 @@ function createDefaultDurableLaunchPreflightRepository(): LaunchPreflightReposit
   const load = () => pending ??= Promise.all([
     import("../db"),
     import("./planning/drizzle-launch-preflight-repository"),
-  ]).then(([database, adapter]) => new adapter.DrizzleLaunchPreflightRepository(database.db));
+    import("./planning/maximum-quote-readiness-registry"),
+    import("./providers/heygen-account-maximum-quote-provider"),
+  ]).then(([database, adapter, registryAdapter, heygenAdapter]) =>
+    new adapter.DrizzleLaunchPreflightRepository(database.db,
+      new registryAdapter.MaximumQuoteReadinessRegistry([
+        [heygenAdapter.HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY,
+          new heygenAdapter.HeyGenAccountMaximumQuoteUnavailableProvider()],
+      ])));
   return { observe: async (...args) => (await load()).observe(...args) };
 }
 
@@ -523,7 +530,14 @@ function createDefaultDurableOneVideoExecutionControlRepository(): OneVideoExecu
   let pending: Promise<OneVideoExecutionControlRepository> | undefined;
   const load = () => pending ??= Promise.all([
     import("../db"), import("./planning/drizzle-one-video-execution-control-repository"),
-  ]).then(([database, adapter]) => new adapter.DrizzleOneVideoExecutionControlRepository(database.db));
+    import("./planning/maximum-quote-readiness-registry"),
+    import("./providers/heygen-account-maximum-quote-provider"),
+  ]).then(([database, adapter, registryAdapter, heygenAdapter]) =>
+    new adapter.DrizzleOneVideoExecutionControlRepository(database.db,
+      new registryAdapter.MaximumQuoteReadinessRegistry([
+        [heygenAdapter.HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY,
+          new heygenAdapter.HeyGenAccountMaximumQuoteUnavailableProvider()],
+      ])));
   return { observe: async (...args) => (await load()).observe(...args) };
 }
 
@@ -537,12 +551,18 @@ function createDefaultDurableOneVideoCostApprovalCoordinator(): Pick<OneVideoCos
     import("./planning/launch-authority-service"),
     import("./planning/one-video-cost-approval-coordinator"),
     import("./planning/server-owned-one-video-cost-approval-authorization"),
+    import("./planning/maximum-quote-readiness-registry"),
+    import("./providers/heygen-account-maximum-quote-provider"),
   ]).then(([database, executionAdapter, contextAdapter, authorityAdapter, authorityService,
-    approvalCoordinator, authorizationAdapter]) => {
+    approvalCoordinator, authorizationAdapter, registryAdapter, heygenAdapter]) => {
     const authorization = authorizationAdapter.createServerOwnedOneVideoCostApprovalAuthorization(
       (context) => getCurrentUserId(context as Request),
     );
-    const executionControl = new executionAdapter.DrizzleOneVideoExecutionControlRepository(database.db);
+    const executionControl = new executionAdapter.DrizzleOneVideoExecutionControlRepository(database.db,
+      new registryAdapter.MaximumQuoteReadinessRegistry([
+        [heygenAdapter.HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY,
+          new heygenAdapter.HeyGenAccountMaximumQuoteUnavailableProvider()],
+      ]));
     const launchAuthority = new authorityService.LaunchAuthorityService({
       repository: new authorityAdapter.DrizzleLaunchAuthorityRepository(database.db, {
         runtimeAttestationVerifier: { async verify() { return undefined; } },

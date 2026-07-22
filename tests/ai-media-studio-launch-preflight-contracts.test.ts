@@ -7,7 +7,9 @@ function blockedReport(avatars: 5 | 10) {
   return {
     version: 1, source: "derived_read_only", subject: { planId: `plan_${"a".repeat(24)}`,
       batchId: `batch_${"b".repeat(24)}`, avatarCount: avatars, videosPerAvatar: 10, plannedVideoCount: required },
-    observedAt: "2026-07-22T00:00:00.000Z", status: "blocked",
+    observedAt: "2026-07-22T00:00:00.000Z",
+    quoteReadiness: { state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider" },
+    status: "blocked",
     canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
     authoritativeForAdmission: false,
     effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,
@@ -37,4 +39,8 @@ test("public contract rejects internal identifiers, secrets, native handles, and
   badPassed.gates[0] = { ...badPassed.gates[0], state: "passed", reasonCode: "ready", nextActionCode: "none", readySlots: 49 };
   badPassed.summary.passedGates = 1; badPassed.summary.blockedGates = 13;
   assert.equal(launchPreflightSchema.safeParse(badPassed).success, false);
+  const forgedQuoteReadiness = structuredClone(blockedReport(5)) as any;
+  forgedQuoteReadiness.quoteReadiness = { state: "evidence_present",
+    reasonCode: "exact_quote_evidence_present", actionCode: "review_exact_quote" };
+  assert.equal(launchPreflightSchema.safeParse(forgedQuoteReadiness).success, false);
 });

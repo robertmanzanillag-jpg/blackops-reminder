@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteReadinessSchema } from "./ai-media-studio-quote-readiness";
 
 const publicKey = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[a-f0-9]{24}$`, "u"));
 const cleanLabel = z.string().trim().min(1).max(200).refine((value) => !/[\u0000-\u001f\u007f]/u.test(value));
@@ -47,6 +48,7 @@ export const oneVideoExecutionControlSchema = z.object({
   }).strict(),
   providerVerification: providerVerificationSchema,
   maximumQuote: maximumQuoteSchema,
+  quoteReadiness: quoteReadinessSchema,
   humanApproval: humanApprovalSchema,
   execute: z.object({
     state: z.literal("disabled"), postAvailable: z.literal(false),
@@ -81,6 +83,10 @@ export const oneVideoExecutionControlSchema = z.object({
     || (["quoted", "declined", "expired"].includes(packet.maximumQuote.state) && !currentEvidenceAllowed)
     || (["approved", "rejected", "revoked", "expired"].includes(packet.humanApproval.state) && !currentEvidenceAllowed)
     || (packet.humanApproval.state === "approved" && packet.maximumQuote.state !== "quoted")
+    || (packet.maximumQuote.state === "quoted") !== (packet.quoteReadiness.state === "evidence_present")
+    || (packet.quoteReadiness.state === "quote_request_available" && !currentEvidenceAllowed)
+    || (packet.quoteReadiness.state === "provider_terms_required" && !currentEvidenceAllowed)
+    || (packet.quoteReadiness.reasonCode === "provider_not_configured" && currentEvidenceAllowed)
     || !packet.execute.reasonCodes.includes("one_shot_executor_not_installed")
     || Object.values(packet.effects).some(Boolean)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "One-video execution-control invariants are inconsistent" });

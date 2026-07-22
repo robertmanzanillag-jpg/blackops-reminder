@@ -15,6 +15,11 @@ export const HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY = "heygen" as const;
  * dependency. Construction and quote requests therefore cannot cause effects.
  */
 export class HeyGenAccountMaximumQuoteUnavailableProvider implements MaximumQuoteProvider {
+  readonly readiness = Object.freeze({
+    state: "provider_terms_required" as const,
+    reasonCode: "authoritative_account_quote_unavailable" as const,
+  });
+
   async requestMaximumQuote(request: Readonly<LockedMaximumQuoteRequest>): Promise<MaximumQuoteOutcome> {
     if (!isLockedMaximumQuoteRequest(request)) return unavailable("invalid_locked_request");
     if (request.account.providerKey !== HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY) return unavailable("unsupported_provider");

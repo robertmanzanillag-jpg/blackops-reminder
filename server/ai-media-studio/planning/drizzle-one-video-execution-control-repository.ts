@@ -4,6 +4,7 @@ import {
   oneVideoExecutionControlSchema,
   type OneVideoExecutionControl,
 } from "../../../shared/ai-media-studio-one-video-execution-control";
+import type { QuoteReadiness } from "../../../shared/ai-media-studio-quote-readiness";
 import type { TenantScope } from "../core/resource-domain";
 import {
   readProductionBatchEnvelope,
@@ -17,6 +18,8 @@ import {
   OneVideoExecutionControlError,
   type OneVideoExecutionControlRepository,
 } from "./one-video-execution-control-contracts";
+import type { MaximumQuoteReadinessResolver } from "./maximum-quote-provider-contracts";
+import { projectMaximumQuoteReadiness, unavailableMaximumQuoteReadinessResolver } from "./maximum-quote-readiness-registry";
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type OneVideoExecutionControlDatabase = { execute(query: SQL): Promise<ExecuteResult> };
@@ -69,9 +72,27 @@ export function derivePersistedProviderVerificationState(input: Readonly<{
   return "unavailable";
 }
 
+export function deriveQuoteReadiness(input: Readonly<{
+  quoteState: EvidenceState["state"];
+  bindingState: "current" | "stale" | "invalid";
+  verificationState: ProviderVerificationState;
+  providerKey: string;
+  resolver: MaximumQuoteReadinessResolver;
+}>): QuoteReadiness {
+  return projectMaximumQuoteReadiness({
+    exactEvidencePresent: input.quoteState === "quoted",
+    providerConfigured: input.bindingState === "current" && input.verificationState === "verified",
+    providerKey: input.providerKey,
+    resolver: input.resolver,
+  });
+}
+
 /** Read-only exact-slot projection. It deliberately has no provider, vault, budget, render, outbox, or publishing dependency. */
 export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecutionControlRepository {
-  constructor(private readonly db: OneVideoExecutionControlTransactionalDatabase) {}
+  constructor(
+    private readonly db: OneVideoExecutionControlTransactionalDatabase,
+    private readonly quoteReadinessResolver: MaximumQuoteReadinessResolver = unavailableMaximumQuoteReadinessResolver,
+  ) {}
 
   async observe(scope: TenantScope, publicPlanKey: string, publicSlotKey: string): Promise<OneVideoExecutionControl | undefined> {
     try {
@@ -428,6 +449,13 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     });
     const quote = this.quoteState(evidence, databaseNow,
       exactEvidenceBase && bool(evidence, "quoteCurrent", "quote_current"), renderSpecDigest);
+    const quoteReadiness = deriveQuoteReadiness({
+      quoteState: quote.state,
+      bindingState,
+      verificationState,
+      providerKey: text(slot, "providerKey", "provider_key"),
+      resolver: this.quoteReadinessResolver,
+    });
     const exactApprovalBridge = bool(evidence, "approvalBridgeCurrent", "approval_bridge_current")
       && INTERNAL_UUID.test(text(evidence, "approvalBridgeId", "approval_bridge_id"))
       && SHA256.test(text(evidence, "approvalBindingDigest", "approval_binding_digest"))
@@ -462,7 +490,7 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
           label: text(slot, "voiceLabel", "voice_label") },
       },
       format: { aspectRatio: "9:16", container: "mp4" }, binding: { state: bindingState, credentialVersion },
-      providerVerification, maximumQuote: quote, humanApproval: human,
+      providerVerification, maximumQuote: quote, quoteReadiness, humanApproval: human,
       execute: { state: "disabled", postAvailable: false, reasonCodes: [...reasonCodes] },
       effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false,
         approvalRecorded: false, reservationCreated: false, renderCreated: false, outboxCreated: false,

@@ -9,7 +9,10 @@ import {
   type OneVideoExecutionControl,
 } from "../shared/ai-media-studio-one-video-execution-control";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
-import { DrizzleOneVideoExecutionControlRepository, derivePersistedProviderVerificationState } from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
+import { DrizzleOneVideoExecutionControlRepository, derivePersistedProviderVerificationState,
+  deriveQuoteReadiness } from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
+import { MaximumQuoteReadinessRegistry } from "../server/ai-media-studio/planning/maximum-quote-readiness-registry";
+import { HeyGenAccountMaximumQuoteUnavailableProvider } from "../server/ai-media-studio/providers/heygen-account-maximum-quote-provider";
 import {
   deriveLaunchRenderSpecDigest,
   OneVideoExecutionControlError,
@@ -54,6 +57,8 @@ function packet(overrides: Partial<OneVideoExecutionControl> = {}): OneVideoExec
     maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
       evidenceKey: `evidence_${"7".repeat(24)}`, observedAt: "2026-07-22T11:51:00.000Z",
       expiresAt: "2026-07-22T12:30:00.000Z", quoteKey, renderSpecKey },
+    quoteReadiness: { state: "evidence_present", reasonCode: "exact_quote_evidence_present",
+      actionCode: "review_exact_quote" },
     humanApproval: { state: "approved", evidenceKey: `evidence_${"8".repeat(24)}`,
       observedAt: "2026-07-22T11:52:00.000Z", expiresAt: "2026-07-22T12:30:00.000Z",
       approvedQuoteKey: quoteKey, renderSpecKey },
@@ -91,6 +96,25 @@ test("schema rejects private/native fields, money outside a quote, forged effect
     staleApproval.humanApproval.approvedQuoteKey = `quote_${"c".repeat(24)}`;
     assert.equal(oneVideoExecutionControlSchema.safeParse(staleApproval).success, false);
   });
+
+test("quote readiness is provider-neutral, explanatory only, and cannot impersonate exact evidence", () => {
+  const resolver = new MaximumQuoteReadinessRegistry([
+    ["heygen", new HeyGenAccountMaximumQuoteUnavailableProvider()],
+  ]);
+  assert.deepEqual(deriveQuoteReadiness({ quoteState: "missing", bindingState: "current",
+    verificationState: "verified", providerKey: "heygen", resolver }), {
+    state: "provider_terms_required", reasonCode: "authoritative_account_quote_unavailable",
+    actionCode: "provide_authoritative_quote_terms",
+  });
+  assert.deepEqual(deriveQuoteReadiness({ quoteState: "missing", bindingState: "stale",
+    verificationState: "not_requested", providerKey: "heygen", resolver }), {
+    state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider",
+  });
+  const forged = structuredClone(packet()) as any;
+  forged.quoteReadiness = { state: "provider_terms_required",
+    reasonCode: "authoritative_account_quote_unavailable", actionCode: "provide_authoritative_quote_terms" };
+  assert.equal(oneVideoExecutionControlSchema.safeParse(forged).success, false);
+});
 
 test("service reparses repository output and verifies requested identity plus all denied effects", async () => {
   const calls: unknown[] = [];
@@ -363,6 +387,9 @@ test("repository projects exact PR29 static HeyGen account, avatar, and voice ev
   assert.equal(control.providerVerification.observedAt, verifiedAt.toISOString());
   assert.equal(control.providerVerification.expiresAt, verificationExpiresAt.toISOString());
   assert.equal(control.binding.state, "current");
+  assert.deepEqual(control.quoteReadiness, {
+    state: "unavailable", reasonCode: "provider_readiness_unavailable", actionCode: "configure_provider",
+  });
   assert.deepEqual(control.execute.reasonCodes, [
     "maximum_quote_missing", "human_approval_not_requested", "one_shot_executor_not_installed",
   ]);
@@ -399,6 +426,7 @@ test("read model exposes opaque quote/render keys only for the exact latest quot
   ).observe(scope, planId, slotId);
   assert.ok(control);
   assert.equal(control.maximumQuote.state, "quoted");
+  assert.equal(control.quoteReadiness.state, "evidence_present");
   assert.match(control.maximumQuote.quoteKey ?? "", /^quote_[a-f0-9]{24}$/u);
   assert.match(control.maximumQuote.renderSpecKey ?? "", /^render_spec_[a-f0-9]{24}$/u);
   assert.equal(control.humanApproval.state, "approved");

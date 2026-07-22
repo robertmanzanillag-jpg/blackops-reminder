@@ -6,6 +6,7 @@ import {
   type LockedMaximumQuoteRequest,
 } from "../server/ai-media-studio/planning/maximum-quote-provider-contracts";
 import { HeyGenAccountMaximumQuoteUnavailableProvider } from "../server/ai-media-studio/providers/heygen-account-maximum-quote-provider";
+import { MaximumQuoteReadinessRegistry } from "../server/ai-media-studio/planning/maximum-quote-readiness-registry";
 
 const digest = (hex: string) => `sha256:${hex.repeat(64)}` as const;
 const request = (): LockedMaximumQuoteRequest => ({
@@ -23,6 +24,8 @@ test("inert HeyGen adapter returns explicit unavailable without network or quote
   globalThis.fetch = async () => { fetchCalls += 1; throw new Error("network must not be used"); };
   try {
     const adapter = new HeyGenAccountMaximumQuoteUnavailableProvider();
+    assert.deepEqual(adapter.readiness, { state: "provider_terms_required",
+      reasonCode: "authoritative_account_quote_unavailable" });
     assert.equal(fetchCalls, 0);
     const outcome = await adapter.requestMaximumQuote(request());
     assert.deepEqual(outcome, { kind: "unavailable", providerKey: "heygen",
@@ -31,6 +34,15 @@ test("inert HeyGen adapter returns explicit unavailable without network or quote
     for (const key of ["amountMicroUsd", "sourceDigest", "expiresAt", "evidenceDigest", "quoteKey"])
       assert.equal(key in outcome, false);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("provider-neutral readiness registry reports inert HeyGen terms and fails closed for unknown providers", () => {
+  const heygen = new HeyGenAccountMaximumQuoteUnavailableProvider();
+  const registry = new MaximumQuoteReadinessRegistry([["heygen", heygen]]);
+  assert.deepEqual(registry.resolve("heygen"), heygen.readiness);
+  assert.deepEqual(registry.resolve("unknown"), {
+    state: "unavailable", reasonCode: "provider_readiness_unavailable",
+  });
 });
 
 test("locked request validation rejects added and malformed subject/render/account/credential input", async (t) => {

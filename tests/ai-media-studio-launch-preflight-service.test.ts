@@ -9,7 +9,9 @@ function report() {
   const required = 50;
   return launchPreflightSchema.parse({ version: 1, source: "derived_read_only",
     subject: { planId, batchId: `batch_${"b".repeat(24)}`, avatarCount: 5, videosPerAvatar: 10, plannedVideoCount: required },
-    observedAt: "2026-07-22T00:00:00.000Z", status: "blocked", canGenerate: false,
+    observedAt: "2026-07-22T00:00:00.000Z",
+    quoteReadiness: { state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider" },
+    status: "blocked", canGenerate: false,
     sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true, authoritativeForAdmission: false,
     effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,
       renderCreated: false, outboxCreated: false, providerCalled: false },

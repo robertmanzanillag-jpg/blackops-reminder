@@ -148,6 +148,12 @@ function LaunchPreflightPanel({
             <div className="rounded-lg border border-white/10 bg-black/20 p-3"><p className="text-xs uppercase tracking-wide text-zinc-500">Ready slots</p><p className="mt-1 font-semibold text-white">{preflight.summary.readySlots}/{preflight.summary.requiredSlots}</p></div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-3"><p className="text-xs uppercase tracking-wide text-zinc-500">Generation / spend</p><p className="mt-1 font-semibold text-amber-200">Disabled / unauthorized</p></div>
           </div>
+          <div className="rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">Maximum-quote readiness</p>
+            <p className="mt-2 font-semibold text-white">{quoteReadinessCopy[preflight.quoteReadiness.state].title}</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-300">{quoteReadinessCopy[preflight.quoteReadiness.state].body}</p>
+            <p className="mt-2 text-sm font-medium text-amber-100">Next safe action: {quoteReadinessActions[preflight.quoteReadiness.actionCode]}</p>
+          </div>
           <p className="text-sm text-zinc-300">Blocked: {preflight.summary.blockedGates} · External setup pending: {preflight.summary.pendingExternalGates} · Human decision pending: {preflight.summary.pendingHumanGates} · Unavailable: {preflight.summary.unavailableGates}</p>
           <ol className="grid gap-3 lg:grid-cols-2" aria-label="Fourteen launch preflight gates">
             {preflight.gates.map((gate, index) => {
@@ -231,6 +237,35 @@ const quoteStateLabels: Record<OneVideoExecutionControl["maximumQuote"]["state"]
   expired: "Expired",
   stale: "Stale",
   unavailable: "Unavailable",
+};
+
+const quoteReadinessCopy: Record<OneVideoExecutionControl["quoteReadiness"]["state"], {
+  title: string;
+  body: string;
+}> = {
+  evidence_present: {
+    title: "Exact quote evidence present",
+    body: "Review the amount, expiry, quote key, and render specification. No generation or spend occurs here.",
+  },
+  quote_request_available: {
+    title: "Authoritative quote request available",
+    body: "Quote acquisition belongs to a separate approved workflow. This read-only screen does not contact the provider.",
+  },
+  provider_terms_required: {
+    title: "Provider terms required",
+    body: "The current provider does not expose an authoritative pre-generation quote. Public rates, wallet balance, and script length are not quote evidence; generation remains blocked.",
+  },
+  unavailable: {
+    title: "Quote readiness unavailable",
+    body: "Configure and verify the provider roster before quote readiness can be evaluated. No secret is requested on this screen.",
+  },
+};
+
+const quoteReadinessActions: Record<OneVideoExecutionControl["quoteReadiness"]["actionCode"], string> = {
+  review_exact_quote: "Review exact quote",
+  request_authoritative_quote: "Use the separately approved quote workflow",
+  provide_authoritative_quote_terms: "Add account-specific quote terms",
+  configure_provider: "Configure provider roster",
 };
 
 const approvalStateLabels: Record<OneVideoExecutionControl["humanApproval"]["state"], string> = {
@@ -375,6 +410,11 @@ function OneVideoExecutionControlPanel({
               <p className="mt-1 text-xs leading-5 text-zinc-400">Absolute expiry: <span className="break-all">{control.maximumQuote.expiresAt ?? "Not recorded"}</span></p>
               <p className="mt-2 break-all font-mono text-xs text-fuchsia-100">Quote key: {control.maximumQuote.quoteKey ?? "Unavailable"}</p>
               <p className="mt-1 break-all font-mono text-xs text-fuchsia-100">Render spec key: {control.maximumQuote.renderSpecKey ?? "Unavailable"}</p>
+              <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-400/[0.06] p-3">
+                <p className="text-sm font-semibold text-amber-100">{quoteReadinessCopy[control.quoteReadiness.state].title}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-300">{quoteReadinessCopy[control.quoteReadiness.state].body}</p>
+                <p className="mt-2 text-xs font-medium text-amber-100">Next safe action: {quoteReadinessActions[control.quoteReadiness.actionCode]}</p>
+              </div>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-wide text-zinc-500">Human one-video approval</p>

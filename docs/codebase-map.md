@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T11:27:13.858Z
+Generated: 2026-07-22T11:54:07.070Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 890 | 742 | 3181 | 501 | 14648 |
+| 893 | 745 | 3194 | 501 | 14667 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -31,12 +31,12 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `tests` | 225 | 214 | test:225 |
 | `client/src` | 157 | 155 | ui-component:55, other:47, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 171 | 152 | server:171 |
+| `server/ai-media-studio` | 172 | 153 | server:172 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 46 | 44 | script:46 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
-| `docs/ai-media-studio` | 16 | 16 | docs:16 |
-| `shared` | 16 | 16 | shared:16 |
+| `docs/ai-media-studio` | 17 | 17 | docs:17 |
+| `shared` | 17 | 17 | shared:17 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `migrations/ai-media-studio` | 53 | 3 | other:51, docs:2 |
