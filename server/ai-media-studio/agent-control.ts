@@ -242,6 +242,32 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #149 unmerged; Robert supplies the API key only through the deployment secret manager plus 5–10 avatar-look/voice ID pairs, then separately approve read-only live verification before quote or generation.",
   },
   {
+    id: "ams-agent-heygen-verification-evidence",
+    title: "Immutable HeyGen V3 verification evidence",
+    owner: "AI Media Studio credential verification squad",
+    state: "done",
+    branch: "codex/ai-media-studio-heygen-verification-evidence",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/154",
+    acceptance: [
+      "Persist immutable tenant- and credential-version-bound account verification evidence without credential material",
+      "Bind every configured avatar resource to an exact HeyGen V3 avatar look and keep parent-group consent/status evidence separate",
+      "Bind every configured voice to an exact verified V3 voice response and make rotation stale by construction",
+      "Keep provider transport, secret resolution, account activation, migration application, spend and rendering disabled until separate approval",
+    ],
+    mergeGate: "Draft PR #154 stays unmerged; live verification, migration application, quote, spend, generation and deployment remain separate Robert approvals.",
+    evidence: [
+      "Draft PR #154 is stacked on draft PR #149 with the PR29 migration outside the manifest and unapplied",
+      "Provider 25/25, coordinator 4/4, migration 7/7, disposable PostgreSQL 16 1/1, TypeScript and production build pass",
+      "Final checker, security and App QA report P0-P3 clean; full suite records 840 pass, one inherited PR26 mismatch and 44 controlled skips",
+    ],
+    blockers: [
+      "No API key has been placed in the deployment secret manager and no provider request is approved",
+      "No live account, avatar look, parent group, voice, quota, wallet or billing evidence exists",
+      "Migration application, credential resolution, provider verification, account activation, quote, generation, spend and Replit deployment require separate approvals",
+    ],
+    nextAction: "Keep draft PR #154 unmerged; Robert places the API key only in the deployment secret manager, provides 5–10 exact avatar-look/voice pairs, then separately approves live read-only verification.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-22T05:24:45.587Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-execution-control`
+Generated: 2026-07-22T06:25:24.948Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-verification-evidence`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 839 | 704 | 2986 | 498 | 13890 |
+| 850 | 710 | 3015 | 498 | 14081 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,9 +29,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 207 | 196 | test:207 |
+| `tests` | 211 | 200 | test:211 |
 | `client/src` | 154 | 152 | ui-component:55, other:44, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 154 | 144 | server:154 |
+| `server/ai-media-studio` | 159 | 146 | server:159 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 43 | 41 | script:43 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
@@ -39,7 +39,7 @@ Package: `rest-express`
 | `docs/ai-media-studio` | 13 | 13 | docs:13 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
-| `migrations/ai-media-studio` | 49 | 3 | other:47, docs:2 |
+| `migrations/ai-media-studio` | 51 | 3 | other:49, docs:2 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `tests/fixtures` | 4 | 2 | test:4 |
@@ -100,6 +100,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-roster-routes.test.ts`
 - `tests/ai-media-studio-heygen-roster-service.test.ts`
 - `tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts`
+- `tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-launch-authority-drizzle.test.ts`
@@ -166,6 +167,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr27-terminal-migration.test.ts`
 - `tests/ai-media-studio-pr27-terminal-repository.test.ts`
 - `tests/ai-media-studio-pr28-static-heygen-migration.test.ts`
+- `tests/ai-media-studio-pr29-static-heygen-verification-evidence-migration.test.ts`
+- `tests/ai-media-studio-pr29-static-heygen-verification-evidence-postgres.test.ts`
 - `tests/ai-media-studio-pr3-contracts.test.ts`
 - `tests/ai-media-studio-pr3-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
@@ -205,6 +208,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-static-heygen-credential-drizzle.test.ts`
 - `tests/ai-media-studio-static-heygen-credentials.test.ts`
 - `tests/ai-media-studio-static-heygen-postgres.test.ts`
+- `tests/ai-media-studio-static-heygen-verification-evidence.test.ts`
 - `tests/ai-media-studio-webhook-env-secret.test.ts`
 - `tests/ai-media-studio-webhook-resolver.test.ts`
 - `tests/ai-media-studio-webhook-security.test.ts`

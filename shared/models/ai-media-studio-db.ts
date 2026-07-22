@@ -237,6 +237,10 @@ export const aiMediaProviderAccounts = pgTable(
     credentialBindingId: uuid("credential_binding_id"),
     tokenKind: text("token_kind"),
     tokenManifestRevision: text("token_manifest_revision"),
+    staticCredentialVerificationId: uuid("static_credential_verification_id"),
+    staticCredentialVerificationDigest: text("static_credential_verification_digest"),
+    staticCredentialVerifiedAt: timestamp("static_credential_verified_at", { withTimezone: true }),
+    staticCredentialVerificationExpiresAt: timestamp("static_credential_verification_expires_at", { withTimezone: true }),
     configuration: jsonb("configuration").$type<Record<string, unknown>>().notNull().default({}),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
     ...auditColumns(),
@@ -356,8 +360,37 @@ export const aiMediaProviderAccounts = pgTable(
           AND ${table.credentialRefreshExpiresAt} IS NULL
           AND ${table.credentialRefreshedAt} IS NULL
           AND ${table.lastVerifiedAt} IS NULL
+          AND ${table.staticCredentialVerificationId} IS NULL
+          AND ${table.staticCredentialVerificationDigest} IS NULL
+          AND ${table.staticCredentialVerifiedAt} IS NULL
+          AND ${table.staticCredentialVerificationExpiresAt} IS NULL
           AND ${table.grantedScopes} = '[]'::jsonb
           AND ${table.capabilities} = '[]'::jsonb
+        )
+        OR (
+          ${table.credentialSource} = 'static_api_key'
+          AND ${table.providerKey} = 'heygen'
+          AND ${table.status} = 'active'
+          AND ${table.credentialStatus} = 'active'
+          AND ${table.credentialVersion} > 0
+          AND ${table.credentialActorUserId} IS NOT NULL
+          AND ${table.secretRef} ~ '^env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY(_[A-Z0-9]{1,32})?$'
+          AND ${table.credentialSourceSessionId} IS NULL
+          AND ${table.tokenBindingId} IS NULL
+          AND ${table.credentialBindingId} IS NULL
+          AND ${table.tokenKind} IS NULL
+          AND ${table.tokenManifestRevision} IS NULL
+          AND ${table.externalAccountId} IS NULL
+          AND ${table.credentialExpiresAt} IS NOT NULL
+          AND ${table.credentialRefreshExpiresAt} IS NULL
+          AND ${table.credentialRefreshedAt} IS NULL
+          AND ${table.lastVerifiedAt} IS NOT NULL
+          AND ${table.staticCredentialVerificationId} IS NOT NULL
+          AND ${table.staticCredentialVerificationDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND ${table.staticCredentialVerifiedAt} = ${table.lastVerifiedAt}
+          AND ${table.staticCredentialVerificationExpiresAt} = ${table.credentialExpiresAt}
+          AND ${table.grantedScopes} = '[]'::jsonb
+          AND ${table.capabilities} = '["render_video"]'::jsonb
         )
       )`,
     ),
@@ -408,6 +441,15 @@ export const aiMediaStaticCredentialBindings = pgTable(
     currentUnique: uniqueIndex("ai_media_static_credential_bindings_current_uq")
       .on(table.ownerUserId, table.workspaceId, table.providerAccountId)
       .where(sql`${table.lifecycleState} = 'pending'`),
+    exactVersionUnique: uniqueIndex("ai_media_static_credential_bindings_exact_version_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.providerAccountId,
+      table.providerKey,
+      table.targetCredentialVersion,
+      table.requestDigest,
+    ),
     integrityCheck: check(
       "ai_media_static_credential_bindings_integrity_ck",
       sql`(
@@ -1212,9 +1254,25 @@ export const aiMediaProviderResources = pgTable(
     status: text("status").notNull().default("active"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     synchronizedAt: timestamp("synchronized_at", { withTimezone: true }),
+    verificationHeaderId: uuid("verification_header_id"),
+    verificationResourceEvidenceId: uuid("verification_resource_evidence_id"),
+    verificationEvidenceDigest: text("verification_evidence_digest"),
+    verifiedCredentialVersion: integer("verified_credential_version"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => ({
+    accountTenantProviderFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_provider_resources_account_tenant_provider_fk",
+    }).onUpdate("no action").onDelete("restrict"),
     providerExternalUnique: uniqueIndex("ai_media_provider_resources_provider_external_uq").on(
       table.ownerUserId,
       table.workspaceId,
@@ -1245,6 +1303,239 @@ export const aiMediaProviderResources = pgTable(
       table.providerKey,
       table.id,
     ),
+    verificationPointerCheck: check("ai_media_provider_resources_verification_pointer_ck", sql`(
+      ((${table.verificationHeaderId} IS NULL) = (${table.verificationResourceEvidenceId} IS NULL))
+      AND ((${table.verificationHeaderId} IS NULL) = (${table.verificationEvidenceDigest} IS NULL))
+      AND ((${table.verificationHeaderId} IS NULL) = (${table.verifiedCredentialVersion} IS NULL))
+      AND ((${table.verificationHeaderId} IS NULL) = (${table.verifiedAt} IS NULL))
+      AND ((${table.verificationHeaderId} IS NULL) = (${table.verificationExpiresAt} IS NULL))
+      AND (${table.verificationEvidenceDigest} IS NULL OR ${table.verificationEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$')
+      AND (${table.verifiedCredentialVersion} IS NULL OR ${table.verifiedCredentialVersion} >= 1)
+      AND (${table.verificationExpiresAt} IS NULL OR ${table.verificationExpiresAt} > ${table.verifiedAt})
+    )`),
+  }),
+);
+
+export const aiMediaStaticHeyGenVerificationHeaders = pgTable(
+  "ai_media_static_heygen_verification_headers",
+  {
+    id: uuid("id").primaryKey(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    staticCredentialBindingId: uuid("static_credential_binding_id").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    credentialBindingRequestDigest: text("credential_binding_request_digest").notNull(),
+    dailyPlanId: uuid("daily_plan_id").notNull(),
+    sourceRosterKey: text("source_roster_key").notNull(),
+    sourceRosterDigest: text("source_roster_digest").notNull(),
+    planDigest: text("plan_digest").notNull(),
+    verificationState: text("verification_state").notNull(),
+    accountEvidenceDigest: text("account_evidence_digest").notNull(),
+    billingModel: text("billing_model").notNull(),
+    verificationRequestDigest: text("verification_request_digest").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    accountFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_static_heygen_verification_headers_account_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    credentialBindingExactFk: foreignKey({
+      columns: [
+        table.ownerUserId,
+        table.workspaceId,
+        table.staticCredentialBindingId,
+        table.providerAccountId,
+        table.providerKey,
+        table.providerCredentialVersion,
+        table.credentialBindingRequestDigest,
+      ],
+      foreignColumns: [
+        aiMediaStaticCredentialBindings.ownerUserId,
+        aiMediaStaticCredentialBindings.workspaceId,
+        aiMediaStaticCredentialBindings.id,
+        aiMediaStaticCredentialBindings.providerAccountId,
+        aiMediaStaticCredentialBindings.providerKey,
+        aiMediaStaticCredentialBindings.targetCredentialVersion,
+        aiMediaStaticCredentialBindings.requestDigest,
+      ],
+      name: "ai_media_static_heygen_verification_headers_credential_exact_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    idempotencyUnique: uniqueIndex("ai_media_static_heygen_verification_headers_idempotency_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.providerAccountId,
+      table.idempotencyKey,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_static_heygen_verification_headers_exact_identity_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.providerAccountId,
+      table.providerKey,
+      table.providerCredentialVersion,
+      table.evidenceDigest,
+    ),
+    headerIdentityUnique: uniqueIndex("ai_media_static_heygen_verification_headers_header_identity_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.providerAccountId,
+      table.providerKey,
+      table.providerCredentialVersion,
+    ),
+    integrityCheck: check("ai_media_static_heygen_verification_headers_ck", sql`(
+      ${table.providerKey} = 'heygen'
+      AND ${table.providerCredentialVersion} >= 1
+      AND length(btrim(${table.sourceRosterKey})) BETWEEN 1 AND 200
+      AND ${table.sourceRosterDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.planDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.verificationState} = 'verified'
+      AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 255
+      AND ${table.credentialBindingRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.accountEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.billingModel})) BETWEEN 1 AND 80
+      AND ${table.verificationRequestDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.expiresAt} > ${table.observedAt}
+    )`),
+  }),
+);
+
+export const aiMediaStaticHeyGenResourceVerifications = pgTable(
+  "ai_media_static_heygen_resource_verifications",
+  {
+    id: uuid("id").primaryKey(),
+    ...tenantColumns(),
+    verificationHeaderId: uuid("verification_header_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    providerCredentialVersion: integer("provider_credential_version").notNull(),
+    providerResourceId: uuid("provider_resource_id").notNull(),
+    resourceType: text("resource_type").notNull(),
+    providerResourceExternalIdDigest: text("provider_resource_external_id_digest").notNull(),
+    avatarLookIdDigest: text("avatar_look_id_digest"),
+    avatarLookStatus: text("avatar_look_status"),
+    avatarGroupIdDigest: text("avatar_group_id_digest"),
+    avatarGroupStatus: text("avatar_group_status"),
+    avatarGroupConsentStatus: text("avatar_group_consent_status"),
+    avatarEnginesDigest: text("avatar_engines_digest"),
+    voiceIdDigest: text("voice_id_digest"),
+    language: text("language"),
+    voiceSupportDigest: text("voice_support_digest"),
+    resourceResponseDigest: text("resource_response_digest").notNull(),
+    evidenceDigest: text("evidence_digest").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    headerFk: foreignKey({
+      columns: [
+        table.ownerUserId,
+        table.workspaceId,
+        table.verificationHeaderId,
+        table.providerAccountId,
+        table.providerKey,
+        table.providerCredentialVersion,
+      ],
+      foreignColumns: [
+        aiMediaStaticHeyGenVerificationHeaders.ownerUserId,
+        aiMediaStaticHeyGenVerificationHeaders.workspaceId,
+        aiMediaStaticHeyGenVerificationHeaders.id,
+        aiMediaStaticHeyGenVerificationHeaders.providerAccountId,
+        aiMediaStaticHeyGenVerificationHeaders.providerKey,
+        aiMediaStaticHeyGenVerificationHeaders.providerCredentialVersion,
+      ],
+      name: "ai_media_static_heygen_resource_verifications_header_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    resourceFk: foreignKey({
+      columns: [
+        table.ownerUserId,
+        table.workspaceId,
+        table.providerAccountId,
+        table.providerKey,
+        table.providerResourceId,
+      ],
+      foreignColumns: [
+        aiMediaProviderResources.ownerUserId,
+        aiMediaProviderResources.workspaceId,
+        aiMediaProviderResources.providerAccountId,
+        aiMediaProviderResources.providerKey,
+        aiMediaProviderResources.id,
+      ],
+      name: "ai_media_static_heygen_resource_verifications_resource_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    headerResourceUnique: uniqueIndex("ai_media_static_heygen_resource_verifications_header_resource_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.verificationHeaderId,
+      table.providerResourceId,
+    ),
+    idempotencyUnique: uniqueIndex("ai_media_static_heygen_resource_verifications_idempotency_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.providerAccountId,
+      table.idempotencyKey,
+    ),
+    exactIdentityUnique: uniqueIndex("ai_media_static_heygen_resource_verifications_exact_identity_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.id,
+      table.verificationHeaderId,
+      table.providerResourceId,
+      table.providerCredentialVersion,
+      table.evidenceDigest,
+    ),
+    integrityCheck: check("ai_media_static_heygen_resource_verifications_ck", sql`(
+      ${table.providerKey} = 'heygen'
+      AND ${table.providerCredentialVersion} >= 1
+      AND ${table.resourceType} IN ('avatar','voice')
+      AND ${table.providerResourceExternalIdDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.resourceResponseDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.evidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.expiresAt} > ${table.observedAt}
+      AND (
+        (${table.resourceType} = 'avatar'
+          AND ${table.avatarLookIdDigest} = ${table.providerResourceExternalIdDigest}
+          AND ${table.avatarLookIdDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND ${table.avatarLookStatus} = 'completed'
+          AND ${table.avatarGroupIdDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND ${table.avatarGroupIdDigest} <> ${table.avatarLookIdDigest}
+          AND ${table.avatarGroupStatus} = 'completed'
+          AND ${table.avatarGroupConsentStatus} = 'approved'
+          AND ${table.avatarEnginesDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND ${table.voiceIdDigest} IS NULL
+          AND ${table.language} IS NULL AND ${table.voiceSupportDigest} IS NULL)
+        OR (${table.resourceType} = 'voice'
+          AND ${table.voiceIdDigest} = ${table.providerResourceExternalIdDigest}
+          AND ${table.voiceIdDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND length(btrim(${table.language})) BETWEEN 2 AND 40
+          AND ${table.voiceSupportDigest} ~ '^sha256:[0-9a-f]{64}$'
+          AND ${table.avatarLookIdDigest} IS NULL AND ${table.avatarGroupIdDigest} IS NULL
+          AND ${table.avatarLookStatus} IS NULL AND ${table.avatarGroupStatus} IS NULL
+          AND ${table.avatarGroupConsentStatus} IS NULL AND ${table.avatarEnginesDigest} IS NULL)
+      )
+    )`),
   }),
 );
 
