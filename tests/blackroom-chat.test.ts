@@ -31,7 +31,13 @@ test("queues a specific YouTube source", () => {
 test("does not invent an analytics recommendation with too little data", () => {
   const result = parseBlackRoomChatCommand("¿debería subir más según analytics?", { now, analyticsSamples: 4, currentPostsPerDay: 10 });
   assert.equal(result.command, null);
-  assert.match(result.reply, /4\/20/);
+  assert.match(result.reply, /4\/21/);
+});
+
+test("enforces the seven-post daily campaign floor", () => {
+  const result = parseBlackRoomChatCommand("sube 3 videos por día", { now });
+  assert.equal(result.command, null);
+  assert.match(result.reply, /mínimo es 7/);
 });
 
 test("rejects extra-today requests that no longer fit safely", () => {
@@ -69,6 +75,12 @@ test("assistant routing recognizes BlackRoom orders without hijacking unrelated 
 test("start wording with para does not get mistaken for pause", () => {
   const result = parseBlackRoomChatCommand("activa el agente de BlackRoom para 3 semanas", { now });
   assert.deepEqual(result.control, { enabled: true, weeks: 3 });
+});
+
+test("one-week wording is normalized to the two-week campaign minimum", () => {
+  const result = parseBlackRoomChatCommand("activa el agente de BlackRoom por 1 semana", { now });
+  assert.deepEqual(result.control, { enabled: true, weeks: 2 });
+  assert.match(result.reply, /2 semanas/);
 });
 
 test("reports the BlackRoom queue status from the same assistant chat", () => {

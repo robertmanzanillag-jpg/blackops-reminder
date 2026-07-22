@@ -7,6 +7,7 @@ import {
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
   appendBlackRoomRemoteCommand,
+  appendBlackRoomCeoCommand,
 } from "../server/blackroom-remote-control";
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
@@ -19,6 +20,24 @@ test("remote command increments its monotonic generation", () => {
   assert.equal(state.desiredEnabled, true);
   assert.equal(state.weeks, 3);
   assert.equal(state.generation, 1);
+});
+
+test("remote control cannot reduce the campaign below two weeks", () => {
+  const state = createBlackRoomRemoteControlState();
+  setBlackRoomRemoteCommand(state, true, 1);
+  assert.equal(state.weeks, 2);
+});
+
+test("CEO schedule advances the generation without adding fake chat messages", () => {
+  const now = new Date("2026-07-22T12:00:00.000Z");
+  const state = createBlackRoomRemoteControlState(now);
+  appendBlackRoomCeoCommand(state, {
+    id: "ceo-1", type: "ceo_schedule", slotsByDate: { "2026-07-23": ["00:30", "04:00"] }, createdAt: now.toISOString(),
+    analytics: { sampleCount: 4, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting", networkSamples: { tiktok: 2, facebook: 1, youtube: 1 }, recommendedTimes: [], reason: "collecting" },
+  });
+  assert.equal(state.generation, 1);
+  assert.equal(state.commands.at(-1)?.type, "ceo_schedule");
+  assert.equal(state.chatHistory.length, 0);
 });
 
 test("BlackRoom shared controls accept only the configured owner", async () => {

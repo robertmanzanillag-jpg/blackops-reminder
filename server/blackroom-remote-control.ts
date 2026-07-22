@@ -46,7 +46,7 @@ export function setBlackRoomRemoteCommand(
   now = new Date(),
 ): BlackRoomRemoteControlState {
   state.desiredEnabled = enabled;
-  state.weeks = Math.max(1, Math.min(4, Math.floor(Number.isFinite(weeks) ? weeks : 2)));
+  state.weeks = Math.max(2, Math.min(4, Math.floor(Number.isFinite(weeks) ? weeks : 2)));
   state.generation += 1;
   state.updatedAt = now.toISOString();
   return state;
@@ -88,6 +88,18 @@ export function appendBlackRoomRemoteCommand(
   return state;
 }
 
+export function appendBlackRoomCeoCommand(
+  state: BlackRoomRemoteControlState,
+  command: Extract<BlackRoomRemoteCommand, { type: "ceo_schedule" }>,
+): BlackRoomRemoteControlState {
+  if (state.commands.some((item) => item.id === command.id)) return state;
+  state.commands.push(command);
+  state.commands = state.commands.slice(-100);
+  state.generation += 1;
+  state.updatedAt = command.createdAt;
+  return state;
+}
+
 export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState, now = new Date()): boolean {
   if (!state.device?.seenAt) return false;
   const seenAt = new Date(state.device.seenAt).getTime();
@@ -101,7 +113,7 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     ...parsed,
     version: 1,
     desiredEnabled: Boolean(parsed.desiredEnabled),
-    weeks: Math.max(1, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
+    weeks: Math.max(2, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
     generation: Math.max(0, Math.floor(Number(parsed.generation || 0))),
     device: parsed.device || null,
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],

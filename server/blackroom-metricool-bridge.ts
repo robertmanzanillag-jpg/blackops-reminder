@@ -364,7 +364,7 @@ async function metricoolJson(response: Response, operation: string): Promise<any
   return value;
 }
 
-async function callMetricoolMcpTool(
+export async function callMetricoolMcpTool(
   fetcher: FetchLike,
   token: string,
   name: string,
@@ -413,6 +413,40 @@ async function callMetricoolMcpTool(
     throw new Error(`Metricool MCP ${name} failed: ${detail}`);
   }
   return envelope?.result;
+}
+
+export async function listMetricoolMcpTools(
+  options: { env?: NodeJS.ProcessEnv; fetch?: FetchLike } = {},
+): Promise<Array<{ name: string; inputSchema?: Record<string, any> }>> {
+  const env = options.env || process.env;
+  const fetcher = options.fetch || fetch;
+  const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
+  const response = await fetcher(METRICOOL_MCP_URL, {
+    method: "POST",
+    headers: {
+      "X-Mc-Auth": token,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: "blackroom-tools", method: "tools/list", params: {} }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`Metricool MCP tools/list failed with HTTP ${response.status}`);
+  let envelope: any;
+  try {
+    if (/^text\/event-stream\b/i.test(response.headers.get("content-type") || "") || /^\s*(?:event:|data:)/m.test(raw)) {
+      const events = raw.split(/\r?\n\r?\n/).flatMap((event) => {
+        const data = event.split(/\r?\n/).filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim()).join("\n");
+        return !data || data === "[DONE]" ? [] : [JSON.parse(data)];
+      });
+      envelope = events.findLast((event) => event?.result || event?.error) || events.at(-1);
+    } else envelope = JSON.parse(raw);
+  } catch { throw new Error("Metricool MCP tools/list returned invalid JSON or SSE"); }
+  const tools = envelope?.result?.tools;
+  if (!Array.isArray(tools)) throw new Error("Metricool MCP tools/list returned no tools");
+  return tools.filter((tool: any) => typeof tool?.name === "string");
 }
 
 export async function scheduleBlackRoomMetricoolPost(

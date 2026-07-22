@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-22T02:15:15.797Z
-Repo: `/private/tmp/asistente-news-growth`
+Generated: 2026-07-22T07:04:53.453Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/blackroom-runtime`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 492 | 411 | 1566 | 483 | 9010 |
+| 494 | 413 | 1573 | 484 | 9131 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,9 +28,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 122 | 118 | server:122 |
+| `server` | 123 | 119 | server:123 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 85 | 82 | test:85 |
+| `tests` | 86 | 83 | test:86 |
 | `script` | 48 | 45 | script:48 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 13 | 12 | docs:13 |
@@ -48,7 +48,7 @@ Package: `rest-express`
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
-- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/blackroom`
+- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/blackroom`
 - `server/index.ts`: `/api/health`, `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
@@ -73,6 +73,7 @@ Package: `rest-express`
 - `tests/blackroom-chat.test.ts`
 - `tests/blackroom-content-agent.test.ts`
 - `tests/blackroom-daily-queue.test.ts`
+- `tests/blackroom-growth-ceo.test.ts`
 - `tests/blackroom-links.test.ts`
 - `tests/blackroom-local-worker.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`

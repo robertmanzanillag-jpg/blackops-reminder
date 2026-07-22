@@ -1,11 +1,12 @@
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BlackRoomRemoteCommand } from "./blackroom-chat";
+import { BLACKROOM_CEO_DAILY_POSTS, buildBlackRoomLearningSlots, type BlackRoomCeoAnalytics } from "./blackroom-growth-ceo";
 
-export const BLACKROOM_QUEUE_VERSION = 3;
+export const BLACKROOM_QUEUE_VERSION = 4;
 export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.json";
-export const BLACKROOM_DEFAULT_BUFFER_DAYS = 7;
-export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 10;
+export const BLACKROOM_DEFAULT_BUFFER_DAYS = 14;
+export const BLACKROOM_DEFAULT_POSTS_PER_DAY = BLACKROOM_CEO_DAILY_POSTS;
 export const BLACKROOM_DEFAULT_INTERVAL_MINUTES = 90;
 export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
@@ -70,6 +71,7 @@ export interface BlackRoomQueueState {
   prioritySources: Array<{ id: string; url: string; videoId: string | null; status: "pending" | "used"; createdAt: string }>;
   extraPostsByDate: Record<string, number>;
   adHocExtraDates: string[];
+  analytics: BlackRoomCeoAnalytics;
 }
 
 function iso(now: Date): string {
@@ -104,16 +106,10 @@ export function buildRotatingSlots(input: {
   intervalMinutes?: number;
   timezone?: string;
 }): Array<{ localTime: string; timezone: string }> {
-  const posts = Math.max(1, Math.min(20, Math.floor(input.posts || BLACKROOM_DEFAULT_POSTS_PER_DAY)));
-  const intervalMinutes = Math.max(30, Math.min(240, Math.floor(input.intervalMinutes || BLACKROOM_DEFAULT_INTERVAL_MINUTES)));
+  const posts = Math.max(1, Math.min(16, Math.floor(input.posts || BLACKROOM_DEFAULT_POSTS_PER_DAY)));
   const timezone = input.timezone || "America/New_York";
-  // Alternating windows cover overnight/morning and afternoon/late night while
-  // keeping the first experiment cadence at exactly 90 minutes.
-  const startMinutes = input.dayIndex % 2 === 0 ? 30 : 10 * 60;
-  return Array.from({ length: posts }, (_, index) => ({
-    localTime: minutesToTime(startMinutes + index * intervalMinutes),
-    timezone,
-  }));
+  return buildBlackRoomLearningSlots({ dayIndex: input.dayIndex, posts })
+    .map((localTime) => ({ localTime, timezone }));
 }
 
 export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState {
@@ -132,6 +128,15 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
     prioritySources: [],
     extraPostsByDate: {},
     adHocExtraDates: [],
+    analytics: {
+      sampleCount: 0,
+      lastCheckedAt: "",
+      nextCheckAt: iso(now),
+      confidence: "collecting",
+      networkSamples: { tiktok: 0, facebook: 0, youtube: 0 },
+      recommendedTimes: [],
+      reason: "Recolectando resultados comparables (0/21); los horarios siguen explorando las 24 horas.",
+    },
   };
 }
 
@@ -184,21 +189,9 @@ function youtubeVideoId(url: string): string | null {
 }
 
 function resizeJob(state: BlackRoomQueueState, job: BlackRoomDailyJob, posts: number): void {
-  const count = Math.max(1, Math.min(20, Math.floor(posts)));
-  if (count > 16) {
-    job.slots = buildRotatingSlots({ dayIndex: 0, posts: count, intervalMinutes: 60, timezone: state.timezone });
-  }
-  if (job.slots.length > count) job.slots = job.slots.slice(0, count);
-  const existing = new Set(job.slots.map((slot) => slot.localTime));
-  while (job.slots.length < count) {
-    const previous = job.slots.at(-1)?.localTime || "23:00";
-    const [hours, minutes] = previous.split(":").map(Number);
-    let nextMinutes = hours * 60 + minutes + state.intervalMinutes;
-    let candidate = minutesToTime(nextMinutes);
-    while (existing.has(candidate)) { nextMinutes += state.intervalMinutes; candidate = minutesToTime(nextMinutes); }
-    existing.add(candidate);
-    job.slots.push({ localTime: candidate, timezone: state.timezone });
-  }
+  const count = Math.max(1, Math.min(16, Math.floor(posts)));
+  const dayIndex = Math.floor(new Date(`${job.targetDate}T12:00:00.000Z`).getTime() / 86400_000);
+  job.slots = buildRotatingSlots({ dayIndex, posts: count, intervalMinutes: state.intervalMinutes, timezone: state.timezone });
   job.requirements.posts = count;
   job.requirements.djs = Math.min(5, count);
   job.requirements.postsPerDj = Math.ceil(count / job.requirements.djs);
@@ -244,7 +237,7 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
   for (const command of commands) {
     if (!command?.id || applied.has(command.id)) continue;
     if (command.type === "daily_target") {
-      state.postsPerDay = Math.max(1, Math.min(20, Math.floor(command.posts)));
+      state.postsPerDay = Math.max(BLACKROOM_DEFAULT_POSTS_PER_DAY, Math.min(16, Math.floor(command.posts)));
       for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
         const target = state.adHocExtraDates.includes(job.targetDate)
           ? Number(state.extraPostsByDate[job.targetDate] || job.requirements.posts)
@@ -259,7 +252,7 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
         state.jobs.push(job);
         state.adHocExtraDates.push(command.targetDate);
       }
-      const added = Math.max(1, Math.min(20, Math.floor(command.posts)));
+      const added = Math.max(1, Math.min(16, Math.floor(command.posts)));
       state.extraPostsByDate[command.targetDate] = Number(state.extraPostsByDate[command.targetDate] || 0) + added;
       if (createdAdHoc) {
         resizeJob(state, job, state.extraPostsByDate[command.targetDate]);
@@ -275,6 +268,16 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
     } else if (command.type === "priority_source") {
       state.prioritySources.push({ id: command.id, url: command.url, videoId: youtubeVideoId(command.url), status: "pending", createdAt: command.createdAt });
       state.prioritySources = state.prioritySources.slice(-50);
+    } else if (command.type === "ceo_schedule") {
+      state.analytics = command.analytics;
+      for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
+        const learnedSlots = command.slotsByDate[job.targetDate];
+        if (!learnedSlots?.length) continue;
+        const count = job.requirements.posts;
+        job.slots = learnedSlots.slice(0, count).map((localTime) => ({ localTime, timezone: state.timezone }));
+        if (job.slots.length < count) resizeJob(state, job, count);
+        job.updatedAt = iso(now);
+      }
     }
     applied.add(command.id);
     changes += 1;
@@ -344,7 +347,7 @@ export function startBlackRoomAgent(state: BlackRoomQueueState, weeks = 2, now =
   const normalizedWeeks = Number.isFinite(weeks) ? Math.floor(weeks) : 2;
   state.enabled = true;
   state.pausedAt = null;
-  state.bufferDays = Math.max(7, Math.min(28, normalizedWeeks * 7));
+  state.bufferDays = Math.max(BLACKROOM_DEFAULT_BUFFER_DAYS, Math.min(28, normalizedWeeks * 7));
   state.updatedAt = iso(now);
   return ensureBlackRoomScheduleBuffer(state, now);
 }
@@ -415,6 +418,7 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
         state.sourceHistory.filter((item) => item.durationSeconds === duration).length,
       ])),
     },
+    analytics: state.analytics,
     totals,
     nextJob: state.jobs.find((job) => ["queued", "retry", "processing"].includes(job.status)) || null,
   };
@@ -437,12 +441,14 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       ...createBlackRoomQueueState(now),
       ...parsed,
       version: BLACKROOM_QUEUE_VERSION,
+      bufferDays: Math.max(BLACKROOM_DEFAULT_BUFFER_DAYS, Number(parsed.bufferDays || 0)),
       jobs,
       sourceHistory: Array.isArray(parsed.sourceHistory) ? parsed.sourceHistory : [],
       appliedCommandIds: Array.isArray(parsed.appliedCommandIds) ? parsed.appliedCommandIds : [],
       prioritySources: Array.isArray(parsed.prioritySources) ? parsed.prioritySources : [],
       extraPostsByDate: parsed.extraPostsByDate && typeof parsed.extraPostsByDate === "object" ? parsed.extraPostsByDate : {},
       adHocExtraDates: Array.isArray(parsed.adHocExtraDates) ? parsed.adHocExtraDates : [],
+      analytics: parsed.analytics && typeof parsed.analytics === "object" ? parsed.analytics : createBlackRoomQueueState(now).analytics,
     };
   } catch (error: any) {
     if (error?.code === "ENOENT") return createBlackRoomQueueState(now);

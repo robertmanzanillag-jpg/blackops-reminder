@@ -28,7 +28,7 @@ export async function executeBlackRoomChatMessage(message: string): Promise<{
   const deviceQueue = current.device?.queue as { postsPerDay?: number; analytics?: { sampleCount?: number } } | undefined;
   const parsed = parseBlackRoomChatCommand(message, {
     analyticsSamples: Number(deviceQueue?.analytics?.sampleCount || 0),
-    currentPostsPerDay: Number(deviceQueue?.postsPerDay || 10),
+    currentPostsPerDay: Number(deviceQueue?.postsPerDay || 7),
   });
   const reply = parsed.statusRequested ? formatBlackRoomChatStatus(current) : parsed.reply;
   const remote = await mutateBlackRoomRemoteControl((state) => {

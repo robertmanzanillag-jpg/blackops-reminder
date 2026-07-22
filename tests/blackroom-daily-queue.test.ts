@@ -23,9 +23,9 @@ import path from "node:path";
 test("rotates 90-minute posting windows across the full day", () => {
   const overnight = buildRotatingSlots({ dayIndex: 0 });
   const late = buildRotatingSlots({ dayIndex: 1 });
-  assert.equal(overnight.length, 10);
-  assert.deepEqual(overnight.map((slot) => slot.localTime), ["00:30", "02:00", "03:30", "05:00", "06:30", "08:00", "09:30", "11:00", "12:30", "14:00"]);
-  assert.deepEqual(late.map((slot) => slot.localTime), ["10:00", "11:30", "13:00", "14:30", "16:00", "17:30", "19:00", "20:30", "22:00", "23:30"]);
+  assert.equal(overnight.length, 7);
+  assert.deepEqual(overnight.map((slot) => slot.localTime), ["00:30", "03:56", "07:21", "10:47", "14:13", "17:39", "21:04"]);
+  assert.deepEqual(late.map((slot) => slot.localTime), ["02:00", "05:26", "08:51", "12:17", "15:43", "19:09", "22:34"]);
 });
 
 test("records source videos once and tracks short and long-form experiments", () => {
@@ -41,13 +41,13 @@ test("records source videos once and tracks short and long-form experiments", ()
   assert.throws(() => recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-2", dj: "DJ C", format: "vertical", language: "es", durationSeconds: 15, segmentStartSeconds: 0, segmentEndSeconds: 15 }, now), /already used/);
 });
 
-test("keeps a one-week persistent scheduling buffer", () => {
+test("keeps a two-week persistent scheduling buffer", () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
-  assert.equal(ensureBlackRoomScheduleBuffer(state, now), 7);
+  assert.equal(ensureBlackRoomScheduleBuffer(state, now), 14);
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 0);
-  assert.equal(state.jobs.length, 7);
-  assert.equal(state.jobs[0].requirements.posts, 10);
+  assert.equal(state.jobs.length, 14);
+  assert.equal(state.jobs[0].requirements.posts, 7);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
@@ -58,6 +58,7 @@ test("recovers an interrupted job after its lease expires", () => {
   const state = createBlackRoomQueueState(now);
   ensureBlackRoomScheduleBuffer(state, now);
   startBlackRoomAgent(state, 1, now);
+  assert.equal(state.bufferDays, 14);
   const claimed = claimNextBlackRoomJob(state, now, 5);
   assert.equal(claimed?.status, "processing");
   assert.equal(recoverInterruptedBlackRoomJobs(state, new Date("2026-07-20T12:06:00.000Z")), 1);
@@ -108,6 +109,21 @@ test("applies remote quantity, extra-today and priority-source commands once", (
   assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 0);
 });
 
+test("applies CEO analytics and learned slots only to pending days", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  const targetDate = state.jobs[0].targetDate;
+  const command = {
+    id: "ceo-schedule", type: "ceo_schedule" as const, createdAt: now.toISOString(),
+    slotsByDate: { [targetDate]: ["01:00", "04:00", "07:00", "10:00", "13:00", "16:00", "20:00"] },
+    analytics: { sampleCount: 24, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "learning" as const, networkSamples: { tiktok: 24, facebook: 24, youtube: 24 }, recommendedTimes: ["13:00"], reason: "learning" },
+  };
+  assert.equal(applyBlackRoomRemoteCommands(state, [command], now), 1);
+  assert.equal(state.analytics.sampleCount, 24);
+  assert.deepEqual(state.jobs[0].slots.map((slot) => slot.localTime), command.slotsByDate[targetDate]);
+});
+
 test("daily target changes do not erase extra posts already requested for a date", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
@@ -116,6 +132,16 @@ test("daily target changes do not erase extra posts already requested for a date
   applyBlackRoomRemoteCommands(state, [{ id: "extra", type: "extra_posts", posts: 3, targetDate, createdAt: now.toISOString() }], now);
   applyBlackRoomRemoteCommands(state, [{ id: "daily", type: "daily_target", posts: 8, createdAt: now.toISOString() }], now);
   assert.equal(state.jobs[0].requirements.posts, 11);
+});
+
+test("daily target cannot reduce the two-week campaign below seven posts", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  applyBlackRoomRemoteCommands(state, [{ id: "daily-low", type: "daily_target", posts: 1, createdAt: now.toISOString() }], now);
+  assert.equal(state.postsPerDay, 7);
+  assert.equal(state.jobs[0].requirements.posts, 7);
+  assert.equal(state.jobs[0].slots.length, 7);
 });
 
 test("extra today creates exactly the requested future slots when today has no daily batch", () => {
@@ -147,11 +173,13 @@ test("migrates existing queued jobs into the long-form experiment", async () => 
   ensureBlackRoomScheduleBuffer(state, now);
   state.jobs[0].requirements.durationsSeconds = [15, 30, 60];
   state.jobs[0].requirements.minimumClipsPerDuration = 2;
+  state.bufferDays = 7;
   const directory = await mkdtemp(path.join(tmpdir(), "blackroom-queue-"));
   const queuePath = path.join(directory, "queue.json");
   await writeBlackRoomQueue(state, queuePath);
   const migrated = await readBlackRoomQueue(queuePath, now);
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
+  assert.equal(migrated.bufferDays, 14);
   assert.deepEqual(migrated.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
   assert.equal(migrated.jobs[0].requirements.minimumClipsPerDuration, 1);
 });
