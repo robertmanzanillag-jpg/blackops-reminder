@@ -45,14 +45,20 @@ export class InMemorySourceRepository implements SourceRepository {
     const now = new Date().toISOString();
     if (existing) {
       if (existing.contentHash === input.contentHash) return { item: clone(existing), created: false };
+      const governanceProtected = existing.status === "rejected" || existing.status === "archived";
       const updated: CanonicalSourceItem = {
         ...existing,
         ...input,
+        ...(governanceProtected ? {
+          rightsStatus: existing.rightsStatus,
+          moderationStatus: existing.moderationStatus,
+          status: existing.status,
+        } : {}),
         payload: structuredClone(input.payload),
         updatedAt: now,
       };
       byId.set(existing.id, updated);
-      this.reviews.get(key)?.delete(existing.id);
+      if (!governanceProtected) this.reviews.get(key)?.delete(existing.id);
       return { item: clone(updated), created: false };
     }
     const item: CanonicalSourceItem = {

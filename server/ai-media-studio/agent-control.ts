@@ -4,6 +4,7 @@ import {
   type AiMediaStudioAgentSnapshot,
   type AiMediaStudioAgentWorkItem,
 } from "../../shared/ai-media-studio-agent";
+import type { SourceSyncTask } from "./sources/source-sync-scheduler";
 
 const workItems: readonly AiMediaStudioAgentWorkItem[] = [
   {
@@ -543,6 +544,34 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep PR #173 draft and unmerged; next connect a fail-closed HTTP reader to kong-nightlife#117 and add the durable scheduler/cursor loop.",
   },
   {
+    id: "ams-agent-kong-source-scheduler",
+    title: "Production KONG source reader and scheduler",
+    owner: "AI Media Studio source automation squad",
+    state: "running",
+    branch: "codex/ai-media-studio-kong-http-scheduler",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/174",
+    acceptance: [
+      "The exact curated KONG HTTPS feed is DNS-pinned, TLS-hostname verified, redirect-free and JSON/body/cursor bounded",
+      "One tenant-scoped orchestration row persists the server cursor with SKIP LOCKED claims, leases, fencing and safe retry recovery",
+      "A production-only 15-minute loop resumes source pages without accepting browser endpoint or cursor configuration",
+      "Exact curated KONG content is content-hash attested and may prepare deterministic draft scripts only after a complete feed cycle",
+      "No HeyGen, secret resolution, render, outbox, spend, publishing, migration or deployment capability is invoked",
+    ],
+    mergeGate: "Keep draft PR #174 stacked on draft PR #173 until the KONG feed dependency/CI is green and the existing PostgreSQL chain is separately approved and rehearsed.",
+    evidence: [
+      "Focused HTTP reader, scheduler repository, replay and production-loop tests pass",
+      "Reader/scheduler/API 38/38, source-to-batch 12/12, Agent Control 6/6, TypeScript, build, map and diff hygiene pass",
+      "Independent checker and App QA rechecks report P0=P1=P2=P3=0",
+      "Uses the existing ai_media_orchestration_runs schema; no migration is added or applied",
+    ],
+    blockers: [
+      "The upstream curated feed remains unmerged in kong-nightlife#117 and KONG baseline lightweight checks need a separate repair",
+      "No staging migration/restart/recovery evidence or Replit deployment approval exists",
+      "HeyGen verification, quote, one-video, 5x10 spend and publishing approvals remain separate",
+    ],
+    nextAction: "Close checker/App QA findings, save the stacked draft PR, then clear the separate KONG CI repair before any merge or deployment request.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",
@@ -597,13 +626,17 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
 
 export function createAiMediaStudioAgentSnapshot(
   now: () => Date = () => new Date(),
+  sourceScheduler?: SourceSyncTask | "unavailable",
 ): AiMediaStudioAgentSnapshot {
+  const visibleItems = workItems.map((item) => item.id === "ams-agent-kong-source-scheduler"
+    ? schedulerWorkItem(item, sourceScheduler)
+    : item);
   const counts = {
-    done: workItems.filter((item) => item.state === "done").length,
-    running: workItems.filter((item) => item.state === "running").length,
-    ready: workItems.filter((item) => item.state === "ready").length,
-    blocked: workItems.filter((item) => item.state === "blocked").length,
-    backlog: workItems.filter((item) => item.state === "backlog").length,
+    done: visibleItems.filter((item) => item.state === "done").length,
+    running: visibleItems.filter((item) => item.state === "running").length,
+    ready: visibleItems.filter((item) => item.state === "ready").length,
+    blocked: visibleItems.filter((item) => item.state === "blocked").length,
+    backlog: visibleItems.filter((item) => item.state === "backlog").length,
   };
   return aiMediaStudioAgentSnapshotSchema.parse({
     agent: {
@@ -627,7 +660,29 @@ export function createAiMediaStudioAgentSnapshot(
       minimumVideos: 50,
       maximumVideos: 100,
     },
-    summary: { total: workItems.length, ...counts },
-    workItems: workItems.map((item) => ({ ...item, acceptance: [...item.acceptance], evidence: [...item.evidence], blockers: [...item.blockers] })),
+    summary: { total: visibleItems.length, ...counts },
+    workItems: visibleItems.map((item) => ({ ...item, acceptance: [...item.acceptance], evidence: [...item.evidence], blockers: [...item.blockers] })),
   });
+}
+
+function schedulerWorkItem(item: AiMediaStudioAgentWorkItem, task?: SourceSyncTask | "unavailable"): AiMediaStudioAgentWorkItem {
+  const runtimeState = task === "unavailable" ? "unavailable" : task?.status ?? "not_initialized";
+  const blocked = runtimeState === "dead_letter" || runtimeState === "unavailable" || runtimeState === "not_initialized";
+  const evidence = [...item.evidence, `Runtime scheduler state: ${runtimeState}`];
+  if (task && task !== "unavailable") {
+    evidence.push(`Durable cursor page ${task.payload.page}; cycle ${task.payload.cycle}; attempts ${task.attempts}/${task.maxAttempts}`);
+    if (task.failureCode) evidence.push(`Safe failure code: ${task.failureCode}`);
+  }
+  return {
+    ...item,
+    state: blocked ? "blocked" : item.state,
+    evidence,
+    blockers: blocked
+      ? [...item.blockers, runtimeState === "dead_letter"
+        ? "The durable source scheduler is dead-lettered and requires an operator review before any retry"
+        : runtimeState === "unavailable"
+          ? "The durable source scheduler status is unavailable; source automation must be treated as stopped"
+          : "The durable source scheduler has not initialized; source automation must be treated as stopped"]
+      : [...item.blockers],
+  };
 }

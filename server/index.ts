@@ -15,6 +15,7 @@ import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
+import { runProductionKongSourceSyncScheduler } from "./ai-media-studio/sources/production-source-sync-runtime";
 
 const app = express();
 const httpServer = createServer(app);
@@ -406,6 +407,16 @@ app.use((req, res, next) => {
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
       startAppQaScheduler();
+      if (process.env.NODE_ENV === "production") {
+        try {
+          const sourceSyncController = new AbortController();
+          runProductionKongSourceSyncScheduler(getSystemUserId(), sourceSyncController.signal).catch(() => {
+            log("AI Media Studio KONG source scheduler stopped after a safe runtime failure", "ai-media-studio");
+          });
+        } catch {
+          log("AI Media Studio KONG source scheduler did not start because its system owner is unavailable", "ai-media-studio");
+        }
+      }
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");

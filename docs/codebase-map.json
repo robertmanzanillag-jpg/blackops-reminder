@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T15:16:26.462Z",
+  "generatedAt": "2026-07-22T16:10:02.950Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -52,6 +52,7 @@
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
     "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
     "test:ai-media-source-to-batch": "node --import tsx --test tests/ai-media-studio-source-to-batch-contracts.test.ts tests/ai-media-studio-source-to-batch-automation.test.ts tests/ai-media-studio-source-to-batch-routes.test.ts tests/ai-media-studio-source-operator-client.test.ts",
+    "test:ai-media-source-scheduler": "node --import tsx --test tests/ai-media-studio-http-kong-source-reader.test.ts tests/ai-media-studio-kong-owned-source-adapter.test.ts tests/ai-media-studio-source-eligibility-review.test.ts tests/ai-media-studio-source-sync-scheduler.test.ts tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts tests/ai-media-studio-production-source-sync-runtime.test.ts tests/ai-media-studio-source-automation-sync-routes.test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
@@ -95,34 +96,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 946,
-    "filesIndexed": 796,
-    "imports": 3452,
+    "filesVisible": 954,
+    "filesIndexed": 804,
+    "imports": 3506,
     "routes": 507,
-    "symbols": 15565
+    "symbols": 15764
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 187,
-      "indexed": 168,
-      "kinds": {
-        "server": 187
-      }
-    },
-    "shared": {
-      "files": 22,
-      "indexed": 22,
-      "kinds": {
-        "shared": 22
-      }
-    },
-    "tests": {
-      "files": 255,
-      "indexed": 244,
-      "kinds": {
-        "test": 255
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -216,6 +196,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 191,
+      "indexed": 172,
+      "kinds": {
+        "server": 191
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -223,11 +210,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 22,
+      "indexed": 22,
+      "kinds": {
+        "shared": 22
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 259,
+      "indexed": 248,
+      "kinds": {
+        "test": 259
       }
     },
     "tests/fixtures": {
@@ -7339,14 +7340,20 @@
       "path": "server/ai-media-studio/agent-control.ts",
       "kind": "server",
       "imports": [
-        "../../shared/ai-media-studio-agent"
+        "../../shared/ai-media-studio-agent",
+        "./sources/source-sync-scheduler"
       ],
       "exports": [
         "createAiMediaStudioAgentSnapshot"
       ],
       "symbols": [
+        "blocked",
         "counts",
-        "createAiMediaStudioAgentSnapshot"
+        "createAiMediaStudioAgentSnapshot",
+        "evidence",
+        "runtimeState",
+        "schedulerWorkItem",
+        "visibleItems"
       ],
       "routes": []
     },
@@ -13200,8 +13207,10 @@
         "./service",
         "./sources/contracts",
         "./sources/eligibility-review-service",
+        "./sources/http-kong-source-reader",
         "./sources/kong-owned-source-adapter",
         "./sources/source-pagination",
+        "./sources/source-sync-scheduler",
         "./sources/source-to-batch-automation-service",
         "./sources/source-to-script-preview-service",
         "./sources/sync-service",
@@ -13261,6 +13270,7 @@
         "createDefaultDurableProductionBatchRepository",
         "createDefaultDurableSandboxReadinessRepository",
         "createDefaultDurableSecureHeyGenSetupRepository",
+        "createDefaultDurableSourceSyncSchedulerObserver",
         "createDefaultDurableStaticHeyGenLiveVerificationCoordinator",
         "createDefaultProviderWebhookAccountResolver",
         "createSensitiveMutationRequestGuard",
@@ -13311,6 +13321,7 @@
         "jobResponseSchema",
         "jobs",
         "key",
+        "kongSourceReader",
         "languageCodes",
         "launchAuthority",
         "launchPreflightSelection",
@@ -13424,6 +13435,7 @@
         "snapshotRepository",
         "sourceAutomationSync",
         "sourceEligibilityReview",
+        "sourceSyncSchedulerObserver",
         "sourceToBatchAutomation",
         "sourceToScriptPreview",
         "sourceType",
@@ -13665,6 +13677,7 @@
         "evidence",
         "externalId",
         "filter",
+        "governanceProtected",
         "hasMore",
         "items",
         "limit",
@@ -13679,6 +13692,43 @@
         "rows",
         "sourceExternalIdentity",
         "storedCategory"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/drizzle-source-sync-scheduler-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "./kong-owned-source-adapter",
+        "./source-sync-scheduler",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres"
+      ],
+      "exports": [
+        "DrizzleSourceSyncSchedulerRepository",
+        "SourceSyncSchedulerDatabase"
+      ],
+      "symbols": [
+        "DrizzleSourceSyncSchedulerRepository",
+        "FAILURE_CODES",
+        "IDEMPOTENCY_KEY",
+        "RawRow",
+        "at",
+        "failure",
+        "fence",
+        "mapTask",
+        "milliseconds",
+        "ownerUserId",
+        "parsed",
+        "payload",
+        "raw",
+        "result",
+        "rows",
+        "status",
+        "task",
+        "validateScope",
+        "workspaceId"
       ],
       "routes": []
     },
@@ -13729,6 +13779,87 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/sources/http-kong-source-reader.ts",
+      "kind": "server",
+      "imports": [
+        "../assets/http-artifact-reader",
+        "../core/resource-domain",
+        "./contracts",
+        "./kong-owned-source-adapter",
+        "node:net",
+        "node:util"
+      ],
+      "exports": [
+        "DEFAULT_KONG_SOURCE_FEED_ENDPOINT",
+        "HttpKongSourceReader",
+        "HttpKongSourceReaderError",
+        "HttpKongSourceReaderOptions"
+      ],
+      "symbols": [
+        "ATTRIBUTE_KEYS",
+        "BASE64URL",
+        "CANONICAL_ID",
+        "DEFAULT_KONG_SOURCE_FEED_ENDPOINT",
+        "DEFAULT_MAX_CHUNKS",
+        "DEFAULT_MAX_CHUNK_BYTES",
+        "DEFAULT_MAX_RESPONSE_BYTES",
+        "DEFAULT_TIMEOUT_MS",
+        "FEED_VERSION",
+        "FINGERPRINT",
+        "HttpKongSourceReader",
+        "HttpKongSourceReaderError",
+        "JSON_CONTENT_TYPE",
+        "MAX_CURSOR_LENGTH",
+        "abort",
+        "actual",
+        "address",
+        "addresses",
+        "asExactObject",
+        "asObject",
+        "attributes",
+        "body",
+        "bytes",
+        "capturedAt",
+        "category",
+        "cursor",
+        "declaredLength",
+        "decoded",
+        "endpoint",
+        "family",
+        "fingerprint",
+        "id",
+        "item",
+        "nextCursor",
+        "object",
+        "page",
+        "parseAttributes",
+        "parseContentLength",
+        "parseEndpoint",
+        "parseFeedResponse",
+        "parseItem",
+        "parsed",
+        "pinned",
+        "positiveBound",
+        "publishedAt",
+        "query",
+        "raw",
+        "readBoundedBody",
+        "readBoundedText",
+        "readIsoDate",
+        "readString",
+        "records",
+        "root",
+        "singleHeader",
+        "summary",
+        "text",
+        "title",
+        "validateCursor",
+        "validateRequest",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/sources/in-memory-source-repository.ts",
       "kind": "server",
       "imports": [
@@ -13750,6 +13881,7 @@
         "existingId",
         "filter",
         "found",
+        "governanceProtected",
         "hasMore",
         "identity",
         "items",
@@ -13771,12 +13903,16 @@
         "./content-hash",
         "./contracts",
         "./drizzle-source-repository",
+        "./drizzle-source-sync-scheduler-repository",
         "./eligibility-review-service",
         "./fake-source-adapter",
+        "./http-kong-source-reader",
         "./in-memory-source-repository",
         "./ingest",
         "./kong-owned-source-adapter",
+        "./production-source-sync-runtime",
         "./source-pagination",
+        "./source-sync-scheduler",
         "./source-to-batch-automation-service",
         "./source-to-script-preview-service",
         "./sync-service"
@@ -13849,6 +13985,50 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/sources/production-source-sync-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../production-batches/service",
+        "../workers/worker-loop",
+        "./eligibility-review-service",
+        "./http-kong-source-reader",
+        "./kong-owned-source-adapter",
+        "./source-sync-scheduler",
+        "./source-to-batch-automation-service",
+        "node:crypto"
+      ],
+      "exports": [
+        "KONG_SOURCE_SYNC_INTERVAL_MS",
+        "SourceSyncLoopOptions",
+        "runProductionKongSourceSyncScheduler",
+        "runSourceSyncLoop"
+      ],
+      "symbols": [
+        "KONG_SOURCE_SYNC_INTERVAL_MS",
+        "LEASE_RECONCILIATION_INTERVAL_MS",
+        "SourceSyncSchedulerPort",
+        "WORKER_IDLE_BACKOFF_MS",
+        "abortableSleep",
+        "assertLoopOptions",
+        "controller",
+        "done",
+        "loop",
+        "outcome",
+        "positive",
+        "productionBatches",
+        "requeue",
+        "runProductionKongSourceSyncScheduler",
+        "runSourceSyncLoop",
+        "scheduler",
+        "sleep",
+        "sources",
+        "stop",
+        "timeout"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/sources/source-pagination.ts",
       "kind": "server",
       "imports": [
@@ -13886,6 +14066,67 @@
         "sourceListFilter",
         "unsigned",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/source-sync-scheduler.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../production-batches/contracts",
+        "./contracts",
+        "./eligibility-review-service",
+        "./ingest",
+        "./kong-owned-source-adapter",
+        "./source-to-batch-automation-service",
+        "node:crypto"
+      ],
+      "exports": [
+        "ClaimedSourceSyncTask",
+        "SOURCE_SYNC_MODE",
+        "SOURCE_SYNC_PAYLOAD_VERSION",
+        "SOURCE_SYNC_RUN_TYPE",
+        "SourceSyncFailureCode",
+        "SourceSyncRunOutcome",
+        "SourceSyncRunPayloadV1",
+        "SourceSyncScheduler",
+        "SourceSyncSchedulerObserver",
+        "SourceSyncSchedulerOptions",
+        "SourceSyncSchedulerRepository",
+        "SourceSyncTask",
+        "SourceSyncTaskStatus",
+        "parseSourceSyncPayload"
+      ],
+      "symbols": [
+        "SOURCE_SYNC_MODE",
+        "SOURCE_SYNC_PAYLOAD_VERSION",
+        "SOURCE_SYNC_RUN_TYPE",
+        "SchedulerStageError",
+        "SourceSyncScheduler",
+        "adapter",
+        "assertClaim",
+        "assertScope",
+        "batch",
+        "claim",
+        "failed",
+        "failureCode",
+        "keys",
+        "nowMs",
+        "page",
+        "parseSourceSyncPayload",
+        "positiveInteger",
+        "protectedIdentities",
+        "protectedIds",
+        "raw",
+        "response",
+        "retryDelay",
+        "reviewIdempotency",
+        "seenCursors",
+        "snapshot",
+        "startedAt",
+        "suffix",
+        "task"
       ],
       "routes": []
     },
@@ -17540,6 +17781,7 @@
       "path": "server/index.ts",
       "kind": "server",
       "imports": [
+        "./ai-media-studio/sources/production-source-sync-runtime",
         "./app-qa-agent",
         "./cybersecurity-agent",
         "./health-check",
@@ -17590,6 +17832,7 @@
         "sample",
         "sessionMiddleware",
         "sessionSettings",
+        "sourceSyncController",
         "start",
         "status",
         "summarizeJsonForLog",
@@ -22417,6 +22660,7 @@
         "heldAdmission",
         "heyGenAccountMaximumQuote",
         "heyGenVerificationEvidence",
+        "item",
         "kongSourceToScript",
         "launchReadiness",
         "officeSource",
@@ -23846,6 +24090,41 @@
         "streaming",
         "transport",
         "urls"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-http-kong-source-reader.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeTransport",
+        "PUBLIC_V4",
+        "at",
+        "body",
+        "cases",
+        "cursor",
+        "digest",
+        "expectSafeFailure",
+        "failed",
+        "feed",
+        "invalidCursors",
+        "jsonResponse",
+        "malformed",
+        "operations",
+        "outcome",
+        "page",
+        "reader",
+        "response",
+        "scope",
+        "source",
+        "transport",
+        "validItem"
       ],
       "routes": []
     },
@@ -27426,6 +27705,22 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-production-source-sync-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/production-source-sync-runtime",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "calls",
+        "controller",
+        "scheduler"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-publishing-accounts.test.ts",
       "kind": "test",
       "imports": [
@@ -28482,6 +28777,73 @@
         "result",
         "second",
         "variant"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/drizzle-source-sync-scheduler-repository",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CompiledQuery",
+        "FakeDatabase",
+        "Responder",
+        "ambiguous",
+        "claimed",
+        "compiled",
+        "count",
+        "entry",
+        "failed",
+        "fake",
+        "query",
+        "repository",
+        "row",
+        "scope",
+        "task"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-sync-scheduler.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/resource-domain",
+        "../server/ai-media-studio/sources/contracts",
+        "../server/ai-media-studio/sources/eligibility-review-service",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../server/ai-media-studio/sources/source-sync-scheduler",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MemorySchedule",
+        "accepted",
+        "blocked",
+        "capturedAt",
+        "current",
+        "dead",
+        "first",
+        "item",
+        "old",
+        "page",
+        "refreshed",
+        "rejectedSeed",
+        "replay",
+        "result",
+        "schedule",
+        "scheduler",
+        "scope",
+        "second",
+        "service",
+        "sources"
       ],
       "routes": []
     },
@@ -30597,6 +30959,7 @@
     "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",
     "tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
+    "tests/ai-media-studio-http-kong-source-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-kong-owned-source-adapter.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
@@ -30700,6 +31063,7 @@
     "tests/ai-media-studio-production-batch-service.test.ts",
     "tests/ai-media-studio-production-batch-ui.test.ts",
     "tests/ai-media-studio-production-oauth-runtime.test.ts",
+    "tests/ai-media-studio-production-source-sync-runtime.test.ts",
     "tests/ai-media-studio-publishing-accounts.test.ts",
     "tests/ai-media-studio-publishing-drizzle.test.ts",
     "tests/ai-media-studio-publishing.test.ts",
@@ -30729,6 +31093,8 @@
     "tests/ai-media-studio-source-eligibility-routes.test.ts",
     "tests/ai-media-studio-source-eligibility-service.test.ts",
     "tests/ai-media-studio-source-operator-client.test.ts",
+    "tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts",
+    "tests/ai-media-studio-source-sync-scheduler.test.ts",
     "tests/ai-media-studio-source-to-batch-automation.test.ts",
     "tests/ai-media-studio-source-to-batch-contracts.test.ts",
     "tests/ai-media-studio-source-to-batch-routes.test.ts",

@@ -147,3 +147,31 @@ test("content refresh invalidates prior eligibility and requires a new exact rev
   assert.deepEqual([current.source.status, current.source.rightsStatus, current.source.moderationStatus],
     ["accepted", "licensed", "approved"]);
 });
+
+test("content refresh cannot reopen an explicitly rejected source identity", async () => {
+  const repository = new InMemorySourceRepository();
+  const source = await seed(repository);
+  const service = new SourceEligibilityReviewService(repository);
+  await service.review(scopeA, scopeA.ownerUserId, source.id, {
+    decision: "reject", expectedContentHash: hashA, idempotencyKey: "reject-a", reasonCode: "moderation_rejected",
+  });
+  const refreshed = (await repository.upsertByContentHash(scopeA, {
+    adapterKey: "kong-owned-catalog",
+    providerExternalId: "event-1",
+    category: "events",
+    canonicalUrl: "https://kong.example/events/1",
+    title: "Kong weekend changed after rejection",
+    content: "Changed content remains blocked",
+    contentHash: hashB,
+    rightsStatus: "unknown",
+    moderationStatus: "pending",
+    status: "discovered",
+    payload: {},
+  })).item;
+  assert.equal(refreshed.contentHash, hashB);
+  assert.deepEqual([refreshed.status, refreshed.rightsStatus, refreshed.moderationStatus],
+    ["rejected", "rejected", "rejected"]);
+  await assert.rejects(service.review(scopeA, scopeA.ownerUserId, refreshed.id, {
+    decision: "approve", expectedContentHash: hashB, idempotencyKey: "approve-after-reject", rightsStatus: "owned",
+  }), (error: unknown) => error instanceof SourceEligibilityReviewError && error.code === "REVIEW_CONFLICT");
+});

@@ -81,16 +81,17 @@ export class DrizzleSourceRepository implements SourceRepository {
       )).limit(1);
       if (existing) {
         if (existing.contentHash === input.contentHash) return { item: mapSourceRow(existing), created: false };
+        const governanceProtected = existing.status === "rejected" || existing.status === "archived";
         const [updated] = await tx.update(aiMediaSourceItems).set({
           canonicalUrl: input.canonicalUrl,
           title: input.title,
           content: input.content,
           contentHash: input.contentHash,
-          rightsStatus: input.rightsStatus,
-          moderationStatus: input.moderationStatus,
-          moderationEvidence: {},
-          automationEvidence: {},
-          status: input.status,
+          rightsStatus: governanceProtected ? existing.rightsStatus : input.rightsStatus,
+          moderationStatus: governanceProtected ? existing.moderationStatus : input.moderationStatus,
+          moderationEvidence: governanceProtected ? existing.moderationEvidence : {},
+          automationEvidence: governanceProtected ? existing.automationEvidence : {},
+          status: governanceProtected ? existing.status : input.status,
           sourcePublishedAt: input.sourcePublishedAt ? new Date(input.sourcePublishedAt) : null,
           payload: { adapterKey: input.adapterKey, providerExternalId: input.providerExternalId, data: input.payload },
           updatedAt: now,

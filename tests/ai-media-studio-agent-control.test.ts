@@ -29,7 +29,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
   assert.equal(snapshot.summary.done, 21);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
-  assert.equal(snapshot.summary.blocked, 2);
+  assert.equal(snapshot.summary.blocked, 3);
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-quote-readiness")?.branch,
     "codex/ai-media-studio-quote-readiness");
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-one-video-held-admission")?.branch,
@@ -45,6 +45,25 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     assert.ok(item.mergeGate.length > 0);
     assert.ok(item.nextAction.length > 0);
   }
+});
+
+test("agent control surfaces durable scheduler progress and dead-letter state without private payloads", () => {
+  const snapshot = createAiMediaStudioAgentSnapshot(() => new Date("2026-07-21T20:00:00.000Z"), {
+    id: "sync-1",
+    scope: { ownerUserId: "owner-a", workspaceId: "personal" },
+    status: "dead_letter",
+    payload: { version: 1, adapterKey: "kong-owned-catalog", cursor: "opaque-private-cursor", page: 2, cycle: 3, autoPrepareBatch: true },
+    attempts: 5,
+    maxAttempts: 5,
+    availableAtMs: 1_000,
+    fencingToken: 7,
+    failureCode: "source_sync_unavailable",
+  });
+  const item = snapshot.workItems.find((work) => work.id === "ams-agent-kong-source-scheduler");
+  assert.equal(item?.state, "blocked");
+  assert.match(item?.evidence.join(" ") ?? "", /dead_letter[\s\S]*page 2[\s\S]*cycle 3[\s\S]*source_sync_unavailable/u);
+  assert.match(item?.blockers.join(" ") ?? "", /requires an operator review/u);
+  assert.doesNotMatch(JSON.stringify(snapshot), /opaque-private-cursor/u);
 });
 
 test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-provider", () => {

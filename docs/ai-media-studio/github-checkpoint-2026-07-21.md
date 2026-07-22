@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Production KONG reader and source scheduler checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-kong-http-scheduler`, preserved in draft PR [#174](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/174) and stacked on draft PR #173.
+- Reader: production composition uses only the exact public HTTPS KONG feed from draft `kong-nightlife#117`. It rejects credentials, IP literals, non-443 ports, redirects, mixed/private DNS answers, non-JSON responses, oversized/chunked bodies, malformed v1 envelopes and non-canonical cursors. The selected public address is pinned while TLS retains the exact hostname.
+- Durable automation: one tenant-scoped `ai_media_orchestration_runs` row stores the opaque server cursor and uses atomic `SKIP LOCKED` claims, leases, fencing, bounded retry/backoff, terminal dead-letter and replay-safe content hashes. A production-only 15-minute loop runs after server startup and resumes pages without browser input. Agent Control exposes only safe runtime state, page/cycle counters, attempts and failure codes; it never exposes the cursor.
+- Draft-only effects: exact curated KONG rows receive content-hash-bound `owned`/`approved` attestation. After a complete feed cycle the existing server-owned source-to-batch service may persist deterministic draft scripts for the current 5–10 × 10 blocked plan. Script approval, render, outbox, HeyGen/video-provider calls, secret resolution, spend, publishing, migration application and deployment remain absent.
+- Evidence: reader/scheduler/API regression passes 38/38, source-to-batch passes 12/12, Agent Control passes 6/6, TypeScript, production build, regenerated codebase map and diff hygiene pass. Independent checker and App QA rechecks report P0=P1=P2=P3=0. Commit `c9c10d44` and draft PR #174 preserve the reviewed checkpoint remotely.
+- Release order: clear the separate KONG baseline CI repair, merge/review the feed, separately approve/rehearse the existing PostgreSQL migration chain, deploy KONG first and BlackOps second only after Robert approves each Replit deployment. Live HeyGen GET verification, maximum quote, exact one-video cost approval, one real generation, 5×10 spend and publishing remain separate approvals.
+
 ## Durable source-to-batch automation checkpoint (2026-07-22)
 
 - Branch: `codex/ai-media-studio-source-to-batch-automation`, draft PR [#173](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/173), stacked on draft PR #172.

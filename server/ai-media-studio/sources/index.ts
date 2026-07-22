@@ -9,4 +9,8 @@ export * from "./sync-service";
 export * from "./source-to-script-preview-service";
 export * from "./source-to-batch-automation-service";
 export * from "./kong-owned-source-adapter";
+export * from "./http-kong-source-reader";
+export * from "./source-sync-scheduler";
+export * from "./drizzle-source-sync-scheduler-repository";
+export * from "./production-source-sync-runtime";
 export * from "./eligibility-review-service";
