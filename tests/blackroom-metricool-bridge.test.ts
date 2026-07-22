@@ -12,6 +12,7 @@ import {
   buildMetricoolTikTokPayload,
   extractMetricoolMediaId,
   findVerifiedMetricoolPost,
+  formatMetricoolMcpDate,
   postMetricoolJsonBytes,
   scheduleBlackRoomMetricoolPost,
 } from "../server/blackroom-metricool-bridge";
@@ -38,6 +39,13 @@ const mcpSuccessSse = () => new Response(
 );
 
 const mcpInfo = (call: { body?: any }) => JSON.parse(call.body.params.arguments.info);
+
+test("formats Metricool MCP dates with the correct daylight-saving offset", () => {
+  assert.equal(formatMetricoolMcpDate("2026-07-22T05:00:00", "America/New_York"), "2026-07-22T05:00:00-04:00");
+  assert.equal(formatMetricoolMcpDate("2026-01-22T05:00:00", "America/New_York"), "2026-01-22T05:00:00-05:00");
+  assert.equal(formatMetricoolMcpDate("2026-07-22T05:00:00", "Europe/Madrid"), "2026-07-22T05:00:00+02:00");
+  assert.throws(() => formatMetricoolMcpDate("2026-03-08T02:30:00", "America/New_York"), /does not exist/);
+});
 
 test("extracts normalized media ids without accepting unrelated top-level ids", () => {
   assert.equal(extractMetricoolMediaId({ data: { mediaId: "media-123" } }), "media-123");
@@ -236,7 +244,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
   assert.deepEqual(mcpInfo(calls[3]).providers, [{ network: "facebook" }]);
   assert.deepEqual(mcpInfo(calls[5]).providers, [{ network: "youtube" }]);
   assert.equal(mcpInfo(calls[5]).youtubeData.type, "short");
-  assert.equal(calls[1].body.params.arguments.date, input.publicationDateTime);
+  assert.equal(calls[1].body.params.arguments.date, "2026-07-22T05:00:00-04:00");
   assert.equal(calls[1].body.params.arguments.blogId, "6585226");
   assert.deepEqual(calls[1].body.params.arguments.mediaFiles, [{
     download_url: input.mediaUrl,
