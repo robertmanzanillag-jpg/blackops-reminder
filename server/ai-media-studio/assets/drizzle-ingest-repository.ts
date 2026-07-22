@@ -232,7 +232,11 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
       UPDATE ${aiMediaAssetIngestJobs} AS job
       SET state = CASE WHEN ${input.retryable} AND job.attempts < job.max_attempts THEN 'retry_wait' ELSE 'dead_letter' END,
           available_at = ${new Date(input.retryAtMs)}, error_code = ${input.errorCode},
-          dead_letter_at = CASE WHEN ${input.retryable} AND job.attempts < job.max_attempts THEN NULL ELSE ${new Date(input.nowMs)} END,
+          dead_letter_at = CASE
+            WHEN ${input.retryable} AND job.attempts < job.max_attempts
+              THEN CAST(NULL AS timestamp with time zone)
+            ELSE CAST(${new Date(input.nowMs)} AS timestamp with time zone)
+          END,
           lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, updated_at = ${new Date(input.nowMs)}
       FROM candidate
       WHERE job.id = candidate.id AND job.owner_user_id = candidate.owner_user_id
@@ -259,7 +263,10 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
       SET state = CASE WHEN expired.must_dead_letter THEN 'dead_letter' ELSE 'queued' END,
           lease_recoveries = expired.next_recovery, available_at = ${new Date(nowMs)},
           error_code = CASE WHEN expired.must_dead_letter THEN 'ingest_failed' ELSE job.error_code END,
-          dead_letter_at = CASE WHEN expired.must_dead_letter THEN ${new Date(nowMs)} ELSE NULL END,
+          dead_letter_at = CASE
+            WHEN expired.must_dead_letter THEN CAST(${new Date(nowMs)} AS timestamp with time zone)
+            ELSE CAST(NULL AS timestamp with time zone)
+          END,
           lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, updated_at = ${new Date(nowMs)}
       FROM expired
       WHERE job.id = expired.id AND job.owner_user_id = expired.owner_user_id AND job.workspace_id = expired.workspace_id
@@ -349,10 +356,18 @@ export class DrizzleAssetIngestRepository implements AssetIngestRepository {
     const scope = parseStructuredTenantKey(job.tenantId);
     const render = rows(await db.execute(sql`
       UPDATE ${aiMediaRenderJobs} AS render
-      SET output_media_asset_id = ${mediaAssetId}, updated_at = ${new Date(nowMs)}
+      SET status = 'completed', stage = 'completed', progress = 100,
+          output_media_asset_id = ${mediaAssetId}, output_url = NULL,
+          completed_at = COALESCE(render.completed_at, ${new Date(nowMs)}),
+          error_code = NULL, error_message = NULL, updated_at = ${new Date(nowMs)}
       WHERE render.id = ${job.renderJobId}
         AND render.owner_user_id = ${scope.ownerUserId} AND render.workspace_id = ${scope.workspaceId}
-        AND (render.output_media_asset_id IS NULL OR render.output_media_asset_id = ${mediaAssetId})
+        AND (
+          (render.stage IN ('artifact_ingest_queued', 'artifact_ingest_retrying')
+            AND render.output_media_asset_id IS NULL)
+          OR (render.stage = 'completed' AND render.status = 'completed' AND render.progress = 100
+            AND render.output_media_asset_id = ${mediaAssetId})
+        )
       RETURNING render.id
     `))[0];
     if (!render) throw new Error("Render output is already attached to a different canonical media asset");

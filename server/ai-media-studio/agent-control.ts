@@ -162,6 +162,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #146 unmerged; obtain separate approvals before staging, a one-video HeyGen sandbox, any spend, or Replit deployment.",
   },
   {
+    id: "ams-agent-one-video-sandbox-readiness",
+    title: "One-video sandbox readiness packet and offline runtime proof",
+    owner: "AI Media Studio sandbox readiness squad",
+    state: "done",
+    branch: "codex/ai-media-studio-one-video-sandbox-readiness",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/147",
+    acceptance: [
+      "One explicitly selected slot from a genuine approved 5 × 10 batch exposes an authenticated read-only 9:16 readiness packet",
+      "A disposable exact-chain PostgreSQL rehearsal drives exactly one slot through fake submit, terminal completion and durable owned ingest with zero publishing",
+      "Generation, provider submission, admission, spend and every effect remain false; no real provider, migration or deployment action occurs",
+    ],
+    mergeGate: "Focused, HTTP, browser, PostgreSQL, TypeScript, build, independent checker, security and App QA pass with P0=P1=P2=P3=0 before the draft checkpoint is ready.",
+    evidence: [
+      "Draft PR #147 is stacked on draft PR #146",
+      "A genuine approved 5 × 10 fixture keeps all 50 scripts approved while exactly one selected slot completes the fake-provider runtime rehearsal",
+      "Focused 59/59; authenticated routes 4/4; browser 1/1; owned PostgreSQL 16 exact 22-pair chain 1/1",
+      "Full suite: 811/812 passed; the only failure is the inherited PR26 wording regex. TypeScript, production build and diff hygiene pass",
+      "Independent checker, security and App QA final gates: P0=P1=P2=P3=0 after one P3 test correction",
+    ],
+    blockers: [
+      "Merge, named staging migration rehearsal, live HeyGen credential/account/quota verification, maximum quote, owned storage, callbacks and explicit one-video cost approval remain separately blocked",
+      "The later 5 × 10 canary spend and Replit deployment require separate approvals; no provider call or spend is authorized",
+      "The inherited Clippers chunk warning blocks deployment; no deployment is requested",
+    ],
+    nextAction: "Keep draft PR #147 unmerged; accept the HeyGen API key only through the approved secret manager plus 5–10 avatar/voice IDs, and do not call HeyGen until live checks and Robert's explicit one-video cost approval pass.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

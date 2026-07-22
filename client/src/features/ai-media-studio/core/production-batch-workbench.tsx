@@ -18,8 +18,9 @@ import {
   usePrepareProductionBatchScripts,
   useProductionBatch,
   useProductionBatchLaunchPreflight,
+  useProductionBatchSandboxReadiness,
 } from "./hooks";
-import type { LaunchPreflight, LaunchPreflightGate, ProductionBatch } from "./types";
+import type { LaunchPreflight, LaunchPreflightGate, ProductionBatch, SandboxReadinessGate } from "./types";
 
 const blockerLabels: Record<ProductionBatch["blockers"][number], string> = {
   script_batch_required: "Script batch preparation required",
@@ -160,6 +161,141 @@ function LaunchPreflightPanel({
               );
             })}
           </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+const sandboxGateLabels: Record<SandboxReadinessGate["code"], string> = {
+  batch_approval: "Approved batch",
+  slot_binding: "Selected slot binding",
+  source_eligibility: "Source eligibility",
+  provider_binding_local: "Local provider binding",
+  governance_coverage: "Governance coverage",
+  external_requirements: "External requirements",
+};
+
+const sandboxGateStateLabels: Record<SandboxReadinessGate["state"], string> = {
+  passed: "Passed",
+  blocked: "Blocked",
+  pending_external: "External step pending",
+};
+
+const externalRequirementLabels = {
+  provider_live_verification: "Live provider verification",
+  maximum_quote: "Maximum cost quote",
+  human_sandbox_cost_approval: "Human sandbox cost approval",
+  owned_storage_readiness: "Owned storage readiness",
+  callback_readiness: "Callback readiness",
+} as const;
+
+function SandboxReadinessPanel({ batch }: { batch: ProductionBatch }) {
+  const approvedSlots = batch.groups.flatMap((group) => group.items.flatMap((item) =>
+    item.preparation === "draft" && item.script.status === "approved"
+      ? [{ group, item }]
+      : []));
+  const [selectedSlotId, setSelectedSlotId] = useState(approvedSlots[0]?.item.slotId ?? "");
+  const approvedSlotsKey = approvedSlots.map(({ item }) => item.slotId).join(":");
+  useEffect(() => {
+    if (!approvedSlots.some(({ item }) => item.slotId === selectedSlotId)) {
+      setSelectedSlotId(approvedSlots[0]?.item.slotId ?? "");
+    }
+  }, [approvedSlotsKey, selectedSlotId]);
+  const selectedSlot = approvedSlots.find(({ item }) => item.slotId === selectedSlotId);
+  const query = useProductionBatchSandboxReadiness({
+    planId: batch.planId,
+    batchId: batch.batchId,
+    slotId: selectedSlotId,
+    enabled: batch.status === "approved_ready" && Boolean(selectedSlot),
+  });
+  const packet = query.data?.sandboxReadiness;
+
+  return (
+    <section id="one-video-sandbox-readiness" aria-labelledby="one-video-sandbox-readiness-heading" className="space-y-4 rounded-xl border border-cyan-300/20 bg-cyan-400/[0.05] p-4 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">One-video sandbox readiness · read-only</p>
+          <h3 id="one-video-sandbox-readiness-heading" className="mt-2 text-lg font-semibold text-white">Inspect one approved public slot</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">This packet previews one provider-neutral vertical video and its gates. It cannot contact a provider, start execution, create a render, reserve budget, or spend credits.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0 border-white/10 bg-white/5"
+          disabled={!selectedSlot || query.isFetching}
+          aria-busy={query.isFetching}
+          onClick={() => query.refetch().then(() => undefined)}
+        >
+          <RefreshCcw className={`mr-2 h-4 w-4 ${query.isFetching ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+          Refresh readiness packet
+        </Button>
+      </div>
+
+      <div role="status" aria-live="polite" aria-atomic="true" className="rounded-lg border border-amber-300/30 bg-amber-400/[0.09] p-4 text-sm leading-6 text-amber-100">
+        <span className="font-semibold">No spend · No provider call · No execution.</span> Connecting the provider API remains a separate, later approval step.
+      </div>
+
+      <div className="max-w-2xl">
+        <label htmlFor="sandbox-approved-slot" className="text-sm font-medium text-zinc-100">Approved public slot</label>
+        <p id="sandbox-approved-slot-help" className="mt-1 text-xs text-zinc-400">Selection changes only the credentialed read-only packet below.</p>
+        <select
+          id="sandbox-approved-slot"
+          value={selectedSlotId}
+          onChange={(event) => setSelectedSlotId(event.currentTarget.value)}
+          aria-describedby="sandbox-approved-slot-help"
+          className="mt-2 min-h-11 w-full rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+        >
+          {approvedSlots.map(({ group, item }) => (
+            <option key={item.slotId} value={item.slotId}>{group.creatorName} · Video {item.videoNumber} · {item.script.title}</option>
+          ))}
+        </select>
+      </div>
+
+      {query.isFetching && !query.isLoading && <p role="status" aria-live="polite" className="text-sm text-cyan-100">Refreshing the selected slot packet…</p>}
+      {query.isLoading ? (
+        <LoadingPanel label="Loading the read-only sandbox readiness packet" />
+      ) : query.isError ? (
+        <ErrorPanel message={query.error.message} onRetry={() => query.refetch().then(() => undefined)} />
+      ) : packet ? (
+        <div className="space-y-4" aria-live="polite" aria-atomic="true">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
+            <div className="mx-auto flex aspect-[9/16] w-full max-w-[240px] flex-col justify-between rounded-2xl border border-cyan-200/25 bg-gradient-to-b from-cyan-400/15 to-black/30 p-4 shadow-inner" aria-label="Vertical 9 by 16 video preview">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Vertical · 9:16</p><p className="mt-3 text-lg font-semibold text-white">{packet.preview.creatorName}</p><p className="mt-1 text-sm text-zinc-300">Video {packet.preview.videoNumber}</p></div>
+              <div><p className="text-xs uppercase tracking-wide text-zinc-500">Hook preview</p><p className="mt-2 text-sm leading-6 text-zinc-100">{packet.preview.script.hook}</p></div>
+            </div>
+            <dl className="grid content-start gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3 sm:col-span-2"><dt className="text-xs uppercase tracking-wide text-zinc-500">Source</dt><dd className="mt-1 text-zinc-100">{packet.preview.source.title} · {packet.preview.source.category.replaceAll("_", " ")}</dd></div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3 sm:col-span-2"><dt className="text-xs uppercase tracking-wide text-zinc-500">Video title</dt><dd className="mt-1 text-zinc-100">{packet.preview.script.title}</dd></div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Angle</dt><dd className="mt-1 text-zinc-100">{packet.preview.script.angle}</dd></div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Call to action</dt><dd className="mt-1 text-zinc-100">{packet.preview.script.cta}</dd></div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3 sm:col-span-2"><dt className="text-xs uppercase tracking-wide text-zinc-500">Approved script</dt><dd className="mt-1 whitespace-pre-wrap leading-6 text-zinc-100">{packet.preview.script.script}</dd></div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3 sm:col-span-2"><dt className="text-xs uppercase tracking-wide text-zinc-500">Caption</dt><dd className="mt-1 whitespace-pre-wrap text-zinc-100">{packet.preview.script.caption}</dd></div>
+            </dl>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><p className="text-xs uppercase tracking-wide text-zinc-500">Packet status</p><p className="mt-1 font-semibold text-white">{packet.status === "locally_ready_for_external_sandbox" ? "Locally ready" : "Blocked"}</p></div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><p className="text-xs uppercase tracking-wide text-zinc-500">Passed gates</p><p className="mt-1 font-semibold text-white">{packet.summary.passedGates}/{packet.summary.totalGates}</p></div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><p className="text-xs uppercase tracking-wide text-zinc-500">Provider / spend</p><p className="mt-1 font-semibold text-amber-200">Not called / unauthorized</p></div>
+          </div>
+
+          <ol className="grid gap-3 lg:grid-cols-2" aria-label="Six one-video sandbox readiness gates">
+            {packet.gates.map((gate, index) => (
+              <li key={gate.code} className="rounded-lg border border-white/10 bg-black/20 p-4">
+                <div className="flex items-start gap-3">
+                  {gate.state === "passed" ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" aria-hidden="true" /> : gate.state === "blocked" ? <AlertCircle className="h-5 w-5 shrink-0 text-red-300" aria-hidden="true" /> : <Clock3 className="h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />}
+                  <div><p className="font-medium text-white"><span className="mr-2 text-xs text-zinc-500">{index + 1}/6</span>{sandboxGateLabels[gate.code]}</p><p className="mt-1 text-sm text-zinc-300">{sandboxGateStateLabels[gate.state]}</p></div>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-4">
+            <h4 className="font-medium text-amber-100">Required external steps — not performed here</h4>
+            <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+              {packet.externalRequirements.map((requirement) => <li key={requirement.code} className="rounded-full border border-amber-200/20 px-3 py-1.5 text-amber-100">{externalRequirementLabels[requirement.code]}</li>)}
+            </ul>
+          </div>
         </div>
       ) : null}
     </section>
@@ -467,6 +603,10 @@ export function ProductionBatchWorkbench() {
             </div>
           ) : <p className="mt-4 text-sm font-medium text-emerald-200">Complete script batch approved. Launch and spend authority remain closed and are evaluated separately below.</p>}
         </div>
+      )}
+
+      {batch.status === "approved_ready" && (
+        <SandboxReadinessPanel key={`${batch.planId}:${batch.batchId}`} batch={batch} />
       )}
 
       <LaunchPreflightPanel

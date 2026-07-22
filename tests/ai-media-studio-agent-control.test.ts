@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 7);
+  assert.equal(snapshot.summary.done, 8);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -54,6 +54,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const durableScriptBatch = snapshot.workItems.find((item) => item.id === "ams-agent-durable-script-batch");
   const launchReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-launch-readiness");
   const offlinePreflight = snapshot.workItems.find((item) => item.id === "ams-agent-offline-launch-preflight");
+  const sandboxReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-sandbox-readiness");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -85,6 +86,16 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(offlinePreflight?.evidence.join(" ") ?? "", /54\/54[\s\S]*749 passed[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(offlinePreflight?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
   assert.match(offlinePreflight?.nextAction ?? "", /PR #146 unmerged[\s\S]*one-video HeyGen sandbox/u);
+  assert.equal(sandboxReadiness?.state, "done");
+  assert.equal(sandboxReadiness?.branch, "codex/ai-media-studio-one-video-sandbox-readiness");
+  assert.equal(sandboxReadiness?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/147");
+  assert.match(sandboxReadiness?.acceptance.join(" ") ?? "", /5 × 10 batch[\s\S]*read-only 9:16 readiness packet/u);
+  assert.match(sandboxReadiness?.acceptance.join(" ") ?? "", /exactly one slot[\s\S]*fake submit[\s\S]*zero publishing/u);
+  assert.match(sandboxReadiness?.evidence.join(" ") ?? "", /Draft PR #147[\s\S]*all 50 scripts approved[\s\S]*exactly one selected slot/u);
+  assert.match(sandboxReadiness?.evidence.join(" ") ?? "", /811\/812 passed[\s\S]*P0=P1=P2=P3=0/u);
+  assert.match(sandboxReadiness?.blockers.join(" ") ?? "", /staging migration rehearsal[\s\S]*live HeyGen[\s\S]*maximum quote[\s\S]*owned storage[\s\S]*callbacks[\s\S]*one-video cost approval/u);
+  assert.match(sandboxReadiness?.blockers.join(" ") ?? "", /5 × 10 canary spend[\s\S]*Replit deployment[\s\S]*no provider call or spend/u);
+  assert.match(sandboxReadiness?.nextAction ?? "", /PR #147 unmerged[\s\S]*approved secret manager[\s\S]*explicit one-video cost approval/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

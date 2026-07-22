@@ -129,6 +129,57 @@ function launchPreflightResponse(avatarCount = 5) {
   };
 }
 
+function sandboxReadinessResponse() {
+  const gateCodes = [
+    "batch_approval", "slot_binding", "source_eligibility", "provider_binding_local",
+    "governance_coverage", "external_requirements",
+  ] as const;
+  return {
+    sandboxReadiness: {
+      version: 1,
+      source: "derived_read_only",
+      subject: {
+        planId: publicKey("plan", 1),
+        batchId: publicKey("batch", 1),
+        slotId: publicKey("slot", 1),
+      },
+      observedAt: "2026-07-21T12:11:00.000Z",
+      status: "locally_ready_for_external_sandbox",
+      format: { aspectRatio: "9:16", orientation: "vertical" },
+      preview: {
+        creatorName: "Creator 1",
+        videoNumber: 1,
+        source: { title: "Source 1", category: "experiences" },
+        script: {
+          key: publicKey("script", 1), title: "Draft 1", angle: "Angle 1", hook: "Hook 1",
+          script: "Complete script 1", cta: "CTA 1", caption: "Caption 1",
+          hashtags: ["#creator1", "#kong"], seoKeywords: ["creator 1", "kong media"],
+        },
+      },
+      canGenerate: false,
+      sandboxExecutionAllowed: false,
+      spendAuthorized: false,
+      noSpend: true,
+      authoritativeForAdmission: false,
+      effects: {
+        intentCreated: false, evidenceCreated: false, snapshotCreated: false,
+        reservationCreated: false, renderCreated: false, outboxCreated: false, providerCalled: false,
+      },
+      summary: { totalGates: 6, passedGates: 5, blockedGates: 0, pendingExternalGates: 1 },
+      gates: gateCodes.map((code, index) => index < 5
+        ? { code, state: "passed", reasonCode: "ready", nextActionCode: "none" }
+        : { code, state: "pending_external", reasonCode: "external_setup_required", nextActionCode: "complete_external_requirements" }),
+      externalRequirements: [
+        { code: "provider_live_verification", state: "required_external" },
+        { code: "maximum_quote", state: "required_external" },
+        { code: "human_sandbox_cost_approval", state: "required_external" },
+        { code: "owned_storage_readiness", state: "required_external" },
+        { code: "callback_readiness", state: "required_external" },
+      ],
+    },
+  };
+}
+
 test("current production batch is fetched with credentials and validated", async () => {
   const originalFetch = globalThis.fetch;
   let request: { input: string; init?: RequestInit } | undefined;
@@ -177,6 +228,55 @@ test("approved production batch launch preflight is a credentialed read validate
     assert.equal(response.preflight.gates.length, 14);
     assert.equal(response.preflight.noSpend, true);
     assert.equal(response.preflight.authoritativeForAdmission, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("one-video sandbox readiness is a credentialed GET validated against plan, batch, and selected slot", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: string; init?: RequestInit } | undefined;
+  globalThis.fetch = (async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(sandboxReadinessResponse()), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const response = await mediaStudioCoreApi.productionBatchSandboxReadiness({
+      planId: publicKey("plan", 1),
+      batchId: publicKey("batch", 1),
+      slotId: publicKey("slot", 1),
+    });
+    assert.equal(request?.input, "/api/ai-media-studio/production-batches/plan_000000000000000000000001/sandbox-readiness/slot_000000000000000000000001");
+    assert.equal(request?.init?.credentials, "include");
+    assert.equal(request?.init?.cache, "no-store");
+    assert.equal(request?.init?.method, undefined);
+    assert.equal(request?.init?.body, undefined);
+    assert.equal(response.sandboxReadiness.format.aspectRatio, "9:16");
+    assert.equal(response.sandboxReadiness.effects.providerCalled, false);
+    assert.equal(response.sandboxReadiness.spendAuthorized, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("one-video sandbox readiness rejects stale identity and provider-native fields", async () => {
+  const originalFetch = globalThis.fetch;
+  const request = {
+    planId: publicKey("plan", 1),
+    batchId: publicKey("batch", 1),
+    slotId: publicKey("slot", 1),
+  };
+  try {
+    const stale = sandboxReadinessResponse();
+    stale.sandboxReadiness.subject.slotId = publicKey("slot", 2);
+    globalThis.fetch = (async () => new Response(JSON.stringify(stale), { status: 200 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.productionBatchSandboxReadiness(request), /identity did not match/u);
+
+    const unsafe = sandboxReadinessResponse();
+    const privatePreview = unsafe.sandboxReadiness.preview as typeof unsafe.sandboxReadiness.preview & { providerAccountId?: string };
+    privatePreview.providerAccountId = "must-not-cross-boundary";
+    globalThis.fetch = (async () => new Response(JSON.stringify(unsafe), { status: 200 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.productionBatchSandboxReadiness(request));
   } finally {
     globalThis.fetch = originalFetch;
   }

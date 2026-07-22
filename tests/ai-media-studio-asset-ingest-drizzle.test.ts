@@ -185,6 +185,8 @@ test("complete and fail require a matching unexpired lease and never persist sig
     assert.doesNotMatch(query.text, /delivery_url/i);
   }
   assert.match(fake.queries[1].text, /job\.attempts < job\.max_attempts/i);
+  assert.match(fake.queries[1].text, /CAST\([^)]* AS timestamp with time zone\)/i);
+  assert.match(fake.queries[1].text, /CAST\(NULL AS timestamp with time zone\)/i);
 });
 
 test("expired lease reconciliation is locked, fenced by explicit scope, and bounded", async () => {
@@ -199,6 +201,9 @@ test("expired lease reconciliation is locked, fenced by explicit scope, and boun
   assert.match(query.text, /job\.owner_user_id = expired\.owner_user_id/i);
   assert.match(query.text, /job\.workspace_id = expired\.workspace_id/i);
   assert.match(query.text, /THEN 'dead_letter' ELSE 'queued'/i);
+  assert.match(query.text, /dead_letter_at = CASE/i);
+  assert.match(query.text, /CAST\([^)]* AS timestamp with time zone\)/i);
+  assert.match(query.text, /CAST\(NULL AS timestamp with time zone\)/i);
 });
 
 test("completed ingest attaches a tenant-owned canonical asset and updates its render atomically", async () => {
@@ -235,7 +240,14 @@ test("completed ingest attaches a tenant-owned canonical asset and updates its r
   assert.match(render.text, /output_media_asset_id =/i);
   assert.match(render.text, /render\.owner_user_id =/i);
   assert.match(render.text, /render\.workspace_id =/i);
-  assert.match(render.text, /render\.output_media_asset_id IS NULL OR render\.output_media_asset_id =/i);
+  assert.match(render.text, /status = 'completed', stage = 'completed', progress = 100/i);
+  assert.match(render.text, /output_url = NULL/i);
+  assert.match(render.text, /completed_at = COALESCE\(render\.completed_at,/i);
+  assert.match(render.text, /error_code = NULL, error_message = NULL/i);
+  assert.match(render.text, /render\.stage IN \('artifact_ingest_queued', 'artifact_ingest_retrying'\)/i);
+  assert.match(render.text, /render\.output_media_asset_id IS NULL/i);
+  assert.match(render.text, /render\.stage = 'completed' AND render\.status = 'completed' AND render\.progress = 100/i);
+  assert.match(render.text, /render\.output_media_asset_id =/i);
 });
 
 test("canonical asset attachment is same-id idempotent and rejects mismatches", async () => {

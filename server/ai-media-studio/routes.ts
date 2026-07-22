@@ -26,6 +26,7 @@ import {
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
 import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
 import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-launch-preflight";
+import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
 import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
@@ -95,6 +96,8 @@ import { ProductionBatchError, type ProductionBatchRepository } from "./producti
 import { ProductionBatchService } from "./production-batches/service";
 import { LaunchPreflightError, type LaunchPreflightRepository } from "./planning/launch-preflight-contracts";
 import { LaunchPreflightService } from "./planning/launch-preflight-service";
+import { SandboxReadinessError, type SandboxReadinessRepository } from "./planning/sandbox-readiness-contracts";
+import { SandboxReadinessService } from "./planning/sandbox-readiness-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -184,6 +187,8 @@ export interface AiMediaStudioDependencies {
   createDurableProductionBatchRepository?: () => ProductionBatchRepository;
   launchPreflightRepository?: LaunchPreflightRepository;
   createDurableLaunchPreflightRepository?: () => LaunchPreflightRepository;
+  sandboxReadinessRepository?: SandboxReadinessRepository;
+  createDurableSandboxReadinessRepository?: () => SandboxReadinessRepository;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -209,6 +214,8 @@ export interface AiMediaStudioRuntime {
   productionBatchPersistence: MediaStudioPersistenceStatus;
   launchPreflight: LaunchPreflightService | undefined;
   launchPreflightPersistence: MediaStudioPersistenceStatus;
+  sandboxReadiness: SandboxReadinessService | undefined;
+  sandboxReadinessPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -396,6 +403,38 @@ function createDefaultDurableLaunchPreflightRepository(): LaunchPreflightReposit
     import("./planning/drizzle-launch-preflight-repository"),
   ]).then(([database, adapter]) => new adapter.DrizzleLaunchPreflightRepository(database.db));
   return { observe: async (...args) => (await load()).observe(...args) };
+}
+
+function createDefaultDurableSandboxReadinessRepository(): SandboxReadinessRepository {
+  let pending: Promise<SandboxReadinessRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./planning/drizzle-sandbox-readiness-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleSandboxReadinessRepository(database.db));
+  return { observe: async (...args) => (await load()).observe(...args) };
+}
+
+function selectSandboxReadinessRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: SandboxReadinessService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.sandboxReadinessRepository) return {
+    service: new SandboxReadinessService(dependencies.sandboxReadinessRepository),
+    status: { mode: "injected", available: true, durable: false,
+      reason: "Sandbox-readiness repository supplied by the composition caller; durability is not inferred" },
+  };
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableSandboxReadinessRepository ?? createDefaultDurableSandboxReadinessRepository)();
+      return { service: new SandboxReadinessService(repository), status: { mode: "drizzle", available: true, durable: true,
+        reason: "PostgreSQL/Drizzle read-only sandbox-readiness persistence selected" } };
+    } catch (error) {
+      return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+        reason: `Sandbox-readiness persistence initialization failed: ${error instanceof Error ? error.message : "unknown error"}` } };
+    }
+  }
+  return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+    reason: "DATABASE_URL or an injected durable sandbox-readiness repository is required" } };
 }
 
 function selectLaunchPreflightRuntime(
@@ -716,6 +755,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     : undefined;
   const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
+  const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -959,6 +999,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-HeyGen-Roster", heyGenRosterSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
     next();
   });
 
@@ -968,7 +1009,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       && governanceSelection.status.available;
     res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status,
       operations: operations.status, governance: governanceSelection.status,
-      heyGenRoster: heyGenRosterSelection.status, productionBatches: productionBatchSelection.status });
+      heyGenRoster: heyGenRosterSelection.status, productionBatches: productionBatchSelection.status,
+      sandboxReadiness: sandboxReadinessSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
@@ -983,6 +1025,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
   const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
   const requireLaunchPreflight = requireCapability(launchPreflightSelection.status, "AI Media Studio launch preflight");
+  const requireSandboxReadiness = requireCapability(sandboxReadinessSelection.status, "AI Media Studio sandbox readiness");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1068,6 +1111,19 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     }
     const preflight = await launchPreflightSelection.service!.observe(scope, req.params.planId);
     res.json(launchPreflightResponseSchema.parse({ preflight }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId`, (req, res, next) => {
+    res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next();
+  }, requireSandboxReadiness, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const contentLength = req.get("content-length");
+    if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+      || (contentLength !== undefined && contentLength !== "0")) {
+      throw new SandboxReadinessError("INVALID_REQUEST");
+    }
+    const sandboxReadiness = await sandboxReadinessSelection.service!.observe(scope, req.params.planId, req.params.slotId);
+    res.json(sandboxReadinessResponseSchema.parse({ sandboxReadiness }));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1491,6 +1547,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof SandboxReadinessError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid sandbox readiness request"
+        : error.code === "NOT_FOUND" ? "Production plan or slot not found" : "Sandbox readiness is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof LaunchPreflightError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid launch preflight request"
         : error.code === "NOT_FOUND" ? "Production plan not found" : "Launch preflight is unavailable";
@@ -1564,6 +1626,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     productionBatchPersistence: productionBatchSelection.status,
     launchPreflight: launchPreflightSelection.service,
     launchPreflightPersistence: launchPreflightSelection.status,
+    sandboxReadiness: sandboxReadinessSelection.service,
+    sandboxReadinessPersistence: sandboxReadinessSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

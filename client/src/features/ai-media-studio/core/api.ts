@@ -9,6 +9,7 @@ import type {
   MediaAsset,
   MediaLibraryRequest,
   LaunchPreflight,
+  SandboxReadiness,
   ApproveProductionBatchRequest,
   PrepareProductionBatchRequest,
   ProductionBatchResponse,
@@ -22,6 +23,7 @@ import {
 } from "@shared/ai-media-studio-heygen-roster";
 import { productionBatchResponseSchema } from "@shared/ai-media-studio-production-batches";
 import { launchPreflightResponseSchema } from "@shared/ai-media-studio-launch-preflight";
+import { sandboxReadinessResponseSchema } from "@shared/ai-media-studio-sandbox-readiness";
 
 type InfluencerListResponse = { influencers: Influencer[]; nextCursor: string | null; hasMore: boolean };
 type InfluencerResponse = { influencer: Influencer };
@@ -34,6 +36,12 @@ const launchPreflightErrorMessages: Readonly<Record<number, string>> = {
   404: "Launch preflight was not found for this approved batch.",
   409: "Launch preflight is not available for the current batch state.",
   503: "Launch preflight observation is temporarily unavailable.",
+};
+
+const sandboxReadinessErrorMessages: Readonly<Record<number, string>> = {
+  404: "Sandbox readiness was not found for this approved slot.",
+  409: "Sandbox readiness is not available for the current batch or slot state.",
+  503: "Sandbox readiness observation is temporarily unavailable.",
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -112,6 +120,29 @@ export const mediaStudioCoreApi = {
     const parsed = launchPreflightResponseSchema.parse(await response.json());
     if (parsed.preflight.subject.planId !== planId || parsed.preflight.subject.batchId !== batchId) {
       throw new Error("Launch preflight identity did not match the current approved batch.");
+    }
+    return parsed;
+  },
+  productionBatchSandboxReadiness: async ({
+    planId,
+    batchId,
+    slotId,
+  }: {
+    planId: string;
+    batchId: string;
+    slotId: string;
+  }): Promise<{ sandboxReadiness: SandboxReadiness }> => {
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/sandbox-readiness/${encodeURIComponent(slotId)}`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(sandboxReadinessErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = sandboxReadinessResponseSchema.parse(await response.json());
+    const subject = parsed.sandboxReadiness.subject;
+    if (subject.planId !== planId || subject.batchId !== batchId || subject.slotId !== slotId) {
+      throw new Error("Sandbox readiness identity did not match the selected approved slot.");
     }
     return parsed;
   },
