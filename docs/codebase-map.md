@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T06:50:55.301Z
+Generated: 2026-07-22T06:55:22.009Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-verification-read-model`
 Package: `rest-express`
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T06:50:55.301Z",
+  "generatedAt": "2026-07-22T06:55:22.009Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-verification-read-model",
   "packageName": "rest-express",
   "scripts": {
@@ -96,20 +96,6 @@
     "symbols": 14230
   },
   "directories": {
-    "script": {
-      "files": 44,
-      "indexed": 42,
-      "kinds": {
-        "script": 44
-      }
-    },
-    "tests": {
-      "files": 212,
-      "indexed": 201,
-      "kinds": {
-        "test": 212
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -182,6 +168,13 @@
         "docs": 2
       }
     },
+    "script": {
+      "files": 44,
+      "indexed": 42,
+      "kinds": {
+        "script": 44
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -222,6 +215,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 212,
+      "indexed": 201,
+      "kinds": {
+        "test": 212
       }
     },
     "tests/fixtures": {

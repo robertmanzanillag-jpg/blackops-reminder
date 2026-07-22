@@ -273,7 +273,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     owner: "AI Media Studio read-model squad",
     state: "done",
     branch: "codex/ai-media-studio-one-video-verification-read-model",
-    pullRequestUrl: null,
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/156",
     acceptance: [
       "Project verified state only from the exact immutable PR29 account, avatar-look and voice evidence graph",
       "Fail closed for expiry, credential rotation, tenant or plan mismatch, and incomplete resource evidence",
@@ -284,7 +284,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     evidence: [
       "Read-only control, data, test and App QA audits identified the exact PR29 evidence projection gap",
       "Focused control and authenticated route checks pass 12/12; disposable PostgreSQL 16 exact 5 x 10 and 10 x 10 proof passes 2/2",
-      "TypeScript and production build pass; independent checker and security are P0-P3 clean",
+      "TypeScript and production build pass; independent checker, security and App QA are P0-P3 clean",
     ],
     blockers: [
       "The PR29 migration remains pending and unapplied; this read model is stacked after that migration",
