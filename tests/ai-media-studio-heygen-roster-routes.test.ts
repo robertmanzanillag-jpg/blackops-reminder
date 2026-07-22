@@ -20,7 +20,7 @@ function forceNoDevFallback(): () => void {
   };
 }
 
-async function startRosterRuntime(accountAvailable = true) {
+async function startRosterRuntime(accountAvailable = true, credentialSource = "static_api_key") {
   const restoreDevFallback = forceNoDevFallback();
   const app = express();
   app.use(express.json());
@@ -39,6 +39,16 @@ async function startRosterRuntime(accountAvailable = true) {
       resolve: async (scope) => accountAvailable && scope.ownerUserId === "user-a"
         ? { providerAccountId: "private-heygen-account", credentialVersion: 1 }
         : undefined,
+    },
+    heyGenOnboardingReadinessRepository: {
+      observe: async (scope) => ({
+        observedAt: "2030-01-01T00:00:00.000Z",
+        accounts: accountAvailable && scope.ownerUserId === "user-a" ? [{
+          id: "private-heygen-account", status: "disconnected", credentialStatus: "unverified",
+          credentialVersion: 1, credentialSource,
+        }] : [],
+        plans: [],
+      }),
     },
     operations: { runtimeEnvironment: "test" },
   });
@@ -141,4 +151,17 @@ test("roster setup rejects client account and secret fields and fails closed wit
   assert.equal(unsafe.status, 400);
   assert.doesNotMatch(await unsafe.text(), /must-not-enter-http|client-selected/iu);
   assert.equal((await fetch(endpoint, { headers })).status, 503);
+});
+
+test("direct roster POST cannot bypass static credential onboarding with a legacy active account", async (t) => {
+  const harness = await startRosterRuntime(true, "legacy_authorized_unbound");
+  t.after(harness.close);
+  const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-test-user": "user-a" },
+    body: JSON.stringify(rosterRequest()),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.text();
+  assert.doesNotMatch(body, /legacy_authorized_unbound|private-heygen-account|native-avatar|native-shared-voice/iu);
 });

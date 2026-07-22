@@ -24,6 +24,10 @@ import {
 import { productionBatchResponseSchema } from "@shared/ai-media-studio-production-batches";
 import { launchPreflightResponseSchema } from "@shared/ai-media-studio-launch-preflight";
 import { sandboxReadinessResponseSchema } from "@shared/ai-media-studio-sandbox-readiness";
+import {
+  heyGenOnboardingReadinessSchema,
+  type HeyGenOnboardingReadiness,
+} from "@shared/ai-media-studio-heygen-onboarding";
 
 type InfluencerListResponse = { influencers: Influencer[]; nextCursor: string | null; hasMore: boolean };
 type InfluencerResponse = { influencer: Influencer };
@@ -95,6 +99,14 @@ function queryString(values: Record<string, string | number | readonly string[] 
 }
 
 export const mediaStudioCoreApi = {
+  heyGenOnboardingReadiness: async (): Promise<HeyGenOnboardingReadiness> => {
+    const response = await fetch(
+      `${API_ROOT}/provider-configurations/heygen/onboarding-readiness`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    return heyGenOnboardingReadinessSchema.parse(await response.json());
+  },
   heyGenRoster: async (): Promise<ConfigureHeyGenRosterResponse | null> => {
     const response = await requestOptionalJson("/provider-configurations/heygen/roster");
     return response === null ? null : configureHeyGenRosterResponseSchema.parse(response);

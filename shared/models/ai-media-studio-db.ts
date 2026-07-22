@@ -338,6 +338,92 @@ export const aiMediaProviderAccounts = pgTable(
           AND jsonb_array_length(${table.grantedScopes}) > 0
           AND length(btrim(${table.tokenManifestRevision})) BETWEEN 1 AND 100
         )
+        OR (
+          ${table.credentialSource} = 'static_api_key'
+          AND ${table.providerKey} = 'heygen'
+          AND ${table.status} = 'disconnected'
+          AND ${table.credentialStatus} = 'unverified'
+          AND ${table.credentialVersion} > 0
+          AND ${table.credentialActorUserId} IS NOT NULL
+          AND ${table.secretRef} ~ '^env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY(_[A-Z0-9]{1,32})?$'
+          AND ${table.credentialSourceSessionId} IS NULL
+          AND ${table.tokenBindingId} IS NULL
+          AND ${table.credentialBindingId} IS NULL
+          AND ${table.tokenKind} IS NULL
+          AND ${table.tokenManifestRevision} IS NULL
+          AND ${table.externalAccountId} IS NULL
+          AND ${table.credentialExpiresAt} IS NULL
+          AND ${table.credentialRefreshExpiresAt} IS NULL
+          AND ${table.credentialRefreshedAt} IS NULL
+          AND ${table.lastVerifiedAt} IS NULL
+          AND ${table.grantedScopes} = '[]'::jsonb
+          AND ${table.capabilities} = '[]'::jsonb
+        )
+      )`,
+    ),
+  }),
+);
+
+export const aiMediaStaticCredentialBindings = pgTable(
+  "ai_media_static_credential_bindings",
+  {
+    id: uuid("id").primaryKey(),
+    ...tenantColumns(),
+    actorUserId: text("actor_user_id").notNull(),
+    providerAccountId: uuid("provider_account_id").notNull(),
+    providerKey: text("provider_key").notNull(),
+    expectedCredentialVersion: integer("expected_credential_version").notNull(),
+    targetCredentialVersion: integer("target_credential_version").notNull(),
+    secretRef: text("secret_ref").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestDigest: text("request_digest").notNull(),
+    lifecycleState: text("lifecycle_state").notNull().default("pending"),
+    verificationState: text("verification_state").notNull().default("unverified"),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => ({
+    accountForeignKey: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.providerAccountId, table.providerKey],
+      foreignColumns: [
+        aiMediaProviderAccounts.ownerUserId,
+        aiMediaProviderAccounts.workspaceId,
+        aiMediaProviderAccounts.id,
+        aiMediaProviderAccounts.providerKey,
+      ],
+      name: "ai_media_static_credential_bindings_account_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    accountVersionUnique: uniqueIndex("ai_media_static_credential_bindings_account_version_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.providerAccountId,
+      table.targetCredentialVersion,
+    ),
+    idempotencyUnique: uniqueIndex("ai_media_static_credential_bindings_idempotency_uq").on(
+      table.ownerUserId,
+      table.workspaceId,
+      table.providerAccountId,
+      table.idempotencyKey,
+    ),
+    currentUnique: uniqueIndex("ai_media_static_credential_bindings_current_uq")
+      .on(table.ownerUserId, table.workspaceId, table.providerAccountId)
+      .where(sql`${table.lifecycleState} = 'pending'`),
+    integrityCheck: check(
+      "ai_media_static_credential_bindings_integrity_ck",
+      sql`(
+        ${table.providerKey} = 'heygen'
+        AND length(btrim(${table.actorUserId})) BETWEEN 1 AND 255
+        AND ${table.expectedCredentialVersion} >= 0
+        AND ${table.targetCredentialVersion} = ${table.expectedCredentialVersion} + 1
+        AND ${table.secretRef} ~ '^env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY(_[A-Z0-9]{1,32})?$'
+        AND length(${table.idempotencyKey}) BETWEEN 8 AND 128
+        AND ${table.idempotencyKey} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]+$'
+        AND ${table.requestDigest} ~ '^sha256:[0-9a-f]{64}$'
+        AND ${table.lifecycleState} IN ('pending','superseded','revoked')
+        AND ${table.verificationState} = 'unverified'
+        AND ((${table.lifecycleState} = 'superseded') = (${table.supersededAt} IS NOT NULL))
+        AND (${table.supersededAt} IS NULL OR ${table.supersededAt} >= ${table.createdAt})
+        AND ${table.updatedAt} >= ${table.createdAt}
       )`,
     ),
   }),

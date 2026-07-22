@@ -5,6 +5,7 @@ import test from "node:test";
 import { mediaStudioCoreApi } from "../client/src/features/ai-media-studio/core/api.ts";
 import { archiveDialogReducer, initialArchiveDialogState } from "../client/src/features/ai-media-studio/core/archive-dialog-state.ts";
 import { eligibleGenerationInfluencers, reconcileGenerationInfluencer } from "../client/src/features/ai-media-studio/core/influencer-selection.ts";
+import { selectableProviderResources } from "../client/src/features/ai-media-studio/core/provider-resource-selection.ts";
 import { commaList, emptyInfluencerForm, toInfluencerRequest } from "../client/src/features/ai-media-studio/core/types.ts";
 
 const repositoryRoot = process.cwd();
@@ -25,6 +26,20 @@ test("influencer form covers the complete provider-neutral creator profile", asy
   assert.match(form, /aria-required/);
   assert.match(form, /role="alert"/);
   assert.match(form, /motion-reduce:animate-none/);
+});
+
+test("influencer form never offers unverified provider resources as selectable", async () => {
+  const form = await source("influencer-form.tsx");
+  const resource = (id: string, status: "active" | "inactive") => ({ id, kind: "avatar" as const, name: id, status, language: null, accent: null, gender: null, previewUrl: null, thumbnailUrl: null, synchronizedAt: null });
+  assert.deepEqual(selectableProviderResources([resource("active-avatar", "active"), resource("pending-avatar", "inactive")], "pending-avatar"), {
+    active: [resource("active-avatar", "active")],
+    selectedUnavailable: true,
+  });
+  assert.equal(selectableProviderResources([resource("active-avatar", "active")], "missing-avatar").selectedUnavailable, true);
+  assert.equal(selectableProviderResources([resource("active-avatar", "active")], "active-avatar").selectedUnavailable, false);
+  assert.match(form, /selectedAvatarUnavailable.*disabled/s);
+  assert.match(form, /selectedVoiceUnavailable.*disabled/s);
+  assert.match(form, /not verified or is not loaded/);
 });
 
 test("core API boundary is limited to catalog routes and includes no publishing mutation", async () => {

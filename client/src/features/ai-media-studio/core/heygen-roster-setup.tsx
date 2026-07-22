@@ -1,8 +1,19 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm, type FieldErrors, type UseFormRegisterReturn } from "react-hook-form";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   HEYGEN_ROSTER_MAX_AVATARS,
   HEYGEN_ROSTER_MAX_PLANNED_VIDEOS,
@@ -17,6 +28,7 @@ import type {
   CreateHeyGenRosterRequest,
   HeyGenRosterGender,
 } from "./types";
+import type { HeyGenOnboardingReadiness } from "@shared/ai-media-studio-heygen-onboarding";
 
 const inputClass = "mt-2 h-11 w-full rounded-lg border border-white/15 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus-visible:border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-300/30 disabled:cursor-not-allowed disabled:opacity-50";
 const nativeIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u;
@@ -97,10 +109,12 @@ function firstInvalidMemberField(errors: FieldErrors<RosterFormValues>): string 
   return undefined;
 }
 
-export function HeyGenRosterSetup() {
-  const rosterQuery = useHeyGenRoster();
-  const dailyPlanQuery = useHeyGenRosterDailyPlan();
+export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness: HeyGenOnboardingReadiness }) {
+  const rosterObservationAllowed = onboardingReadiness.status === "ready_for_roster_ids"
+    || onboardingReadiness.status === "roster_configured_blocked";
+  const rosterQuery = useHeyGenRoster(rosterObservationAllowed);
   const mutation = useConfigureHeyGenRoster();
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const attemptRef = useRef<Attempt | undefined>(undefined);
   const statusRef = useRef<HTMLDivElement>(null);
   const {
@@ -114,8 +128,18 @@ export function HeyGenRosterSetup() {
   const { fields, append, remove } = useFieldArray({ control, name: "members" });
   const plannedVideoCount = fields.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR;
   const currentRoster = mutation.data?.roster ?? rosterQuery.data?.roster;
+  const dailyPlanQuery = useHeyGenRosterDailyPlan(rosterObservationAllowed && Boolean(currentRoster));
   const dailyPlan = dailyPlanQuery.data?.plan;
-  const setupBlocked = rosterQuery.isLoading || rosterQuery.isError;
+  const setupBlocked = rosterObservationAllowed && (rosterQuery.isLoading || rosterQuery.isError);
+  const staleRoster = onboardingReadiness.status === "stale_roster_binding";
+  const canCollectProviderIds = onboardingReadiness.status === "ready_for_roster_ids"
+    || onboardingReadiness.status === "roster_configured_blocked"
+    || staleRoster;
+  const showRosterForm = canCollectProviderIds && (staleRoster ? replaceConfirmed : !currentRoster || replaceConfirmed);
+
+  useEffect(() => {
+    setReplaceConfirmed(false);
+  }, [onboardingReadiness.status]);
 
   const invalid = (invalidFields: FieldErrors<RosterFormValues>) => {
     const id = firstInvalidMemberField(invalidFields);
@@ -152,6 +176,7 @@ export function HeyGenRosterSetup() {
       onSuccess: () => {
         attemptRef.current = undefined;
         reset(initialValues());
+        setReplaceConfirmed(false);
         requestAnimationFrame(() => statusRef.current?.focus());
       },
     });
@@ -183,7 +208,61 @@ export function HeyGenRosterSetup() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit(submit, invalid)} noValidate className="mt-6 space-y-5">
+      {currentRoster && (
+        <div ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mt-6 rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="font-semibold">Roster configured: {currentRoster.avatarCount} avatars and {currentRoster.plannedVideoCount} planned videos.</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-100/80">Saved provider IDs stay private. The form is closed until replacement is explicitly confirmed.</p>
+            </div>
+            {!replaceConfirmed && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild><Button type="button" size="sm" variant="outline" className="shrink-0 border-emerald-200/25 bg-transparent text-emerald-50">Replace roster</Button></AlertDialogTrigger>
+                <AlertDialogContent className="border-white/10 bg-zinc-950 text-white">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Replace the saved HeyGen roster?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-zinc-400">Cancel keeps the current roster unchanged. Confirm only opens a fresh ID form; it does not delete, generate, call HeyGen, or spend credits.{!canCollectProviderIds ? " Replacement remains unavailable until readiness returns ready for roster IDs." : ""}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-white/15 bg-white/5 text-white">Keep current roster</AlertDialogCancel>
+                    <AlertDialogAction disabled={!canCollectProviderIds} className="bg-emerald-400 text-zinc-950 hover:bg-emerald-300" onClick={() => setReplaceConfirmed(true)}>Open replacement form</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {currentRoster.members.map((member) => <li key={member.memberId} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2">{member.name} · {member.language} · {member.videosPlanned} planned</li>)}
+          </ul>
+          <p className="mt-3 text-xs leading-5 text-emerald-100/80">Next blocker: complete rights/governance and launch approvals before generation.</p>
+        </div>
+      )}
+
+      {staleRoster && !replaceConfirmed && (
+        <div role="status" className="mt-6 rounded-xl border border-amber-300/25 bg-amber-400/[0.08] p-4 text-sm text-amber-50">
+          <p className="font-semibold">The saved roster belongs to an older credential version.</p>
+          <p className="mt-1 text-xs leading-5 text-amber-100/80">Replace all 5–10 avatar and voice mappings before any live verification. The existing blocked plan remains inert.</p>
+          <AlertDialog>
+            <AlertDialogTrigger asChild><Button type="button" size="sm" variant="outline" className="mt-3 border-amber-200/30 bg-transparent text-amber-50">Replace stale roster</Button></AlertDialogTrigger>
+            <AlertDialogContent className="border-white/10 bg-zinc-950 text-white">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Open a fresh roster for the new credential version?</AlertDialogTitle>
+                <AlertDialogDescription className="text-zinc-400">Cancel preserves the existing blocked roster. Confirm only opens empty ID fields; it does not call HeyGen, generate, publish, or spend credits.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-white/15 bg-white/5 text-white">Keep blocked roster</AlertDialogCancel>
+                <AlertDialogAction className="bg-emerald-400 text-zinc-950 hover:bg-emerald-300" onClick={() => setReplaceConfirmed(true)}>Open replacement form</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
+
+      {!canCollectProviderIds && !currentRoster && !rosterQuery.isLoading && !rosterQuery.isError && (
+        <p role="status" className="mt-5 rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-3 text-sm text-amber-100">Avatar and voice ID entry remains closed until secure onboarding reports ready for roster IDs.</p>
+      )}
+
+      {showRosterForm && <form onSubmit={handleSubmit(submit, invalid)} noValidate className="mt-6 space-y-5">
         <fieldset disabled={mutation.isPending || setupBlocked} className="space-y-4">
           <legend className="sr-only">HeyGen avatar and voice roster</legend>
           {fields.map((field, index) => {
@@ -226,17 +305,7 @@ export function HeyGenRosterSetup() {
         </div>
 
         {(errors.root || mutation.isError) && <p role="alert" className="rounded-lg border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">{errors.root?.message ?? "The roster could not be saved. Check the setup and retry; no generation was started."}</p>}
-      </form>
-
-      {currentRoster && (
-        <div ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mt-6 rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-4 text-sm text-emerald-50">
-          <p className="font-semibold">Roster configured: {currentRoster.avatarCount} avatars and {currentRoster.plannedVideoCount} planned videos.</p>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-            {currentRoster.members.map((member) => <li key={member.memberId} className="rounded-lg border border-white/10 bg-black/15 px-3 py-2">{member.name} · {member.language} · {member.videosPlanned} planned</li>)}
-          </ul>
-          <p className="mt-3 text-xs leading-5 text-emerald-100/80">Next blocker: complete rights/governance and launch approvals before generation.</p>
-        </div>
-      )}
+      </form>}
 
       {currentRoster && !dailyPlan && (dailyPlanQuery.isLoading || dailyPlanQuery.isFetching) && (
         <p role="status" className="mt-4 text-sm text-zinc-400">Preparing the no-spend daily plan preview…</p>

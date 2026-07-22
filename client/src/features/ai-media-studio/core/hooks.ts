@@ -9,6 +9,7 @@ export const coreStudioKeys = {
   resources: (kind?: ProviderResourceKind) => ["ai-media-studio", "core", "provider-resources", kind ?? "all"] as const,
   assets: (filters: MediaLibraryRequest) => ["ai-media-studio", "core", "media-assets", filters] as const,
   heyGenRoster: ["ai-media-studio", "core", "heygen-roster"] as const,
+  heyGenOnboardingReadiness: ["ai-media-studio", "core", "heygen-onboarding-readiness"] as const,
   heyGenRosterDailyPlan: ["ai-media-studio", "core", "heygen-roster", "daily-plan"] as const,
   productionBatch: ["ai-media-studio", "core", "production-batch", "current"] as const,
   productionBatchLaunchPreflight: (planId: string, batchId: string) => [
@@ -19,19 +20,35 @@ export const coreStudioKeys = {
   ] as const,
 };
 
-export function useHeyGenRoster() {
+export function useHeyGenOnboardingReadiness() {
   return useQuery({
-    queryKey: coreStudioKeys.heyGenRoster,
-    queryFn: mediaStudioCoreApi.heyGenRoster,
-    staleTime: 5 * 60_000,
+    queryKey: coreStudioKeys.heyGenOnboardingReadiness,
+    queryFn: mediaStudioCoreApi.heyGenOnboardingReadiness,
+    staleTime: 30_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 
-export function useHeyGenRosterDailyPlan() {
+export function useHeyGenRoster(enabled = true) {
+  return useQuery({
+    queryKey: coreStudioKeys.heyGenRoster,
+    queryFn: mediaStudioCoreApi.heyGenRoster,
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useHeyGenRosterDailyPlan(enabled = true) {
   return useQuery({
     queryKey: coreStudioKeys.heyGenRosterDailyPlan,
     queryFn: mediaStudioCoreApi.heyGenRosterDailyPlan,
+    enabled,
     staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 
