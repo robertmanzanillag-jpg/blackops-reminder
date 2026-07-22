@@ -202,6 +202,14 @@ function addUtcCalendarDay(date: string): string {
   return value.toISOString().slice(0, 10);
 }
 
+function blackRoomLocalWallClock(now: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:00`;
+}
+
 export function nextBlackRoomPublicationDateTime(
   targetDate: string,
   slot: string,
@@ -209,14 +217,30 @@ export function nextBlackRoomPublicationDateTime(
   now = new Date(),
 ): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || !/^\d{2}:\d{2}$/.test(slot)) throw new Error("invalid BlackRoom target date or slot");
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const currentLocal = `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+  const currentLocal = blackRoomLocalWallClock(now, timezone).slice(0, 16);
   let candidate = `${targetDate}T${slot}`;
   while (candidate <= currentLocal) candidate = `${addUtcCalendarDay(candidate.slice(0, 10))}T${slot}`;
   return `${candidate}:00`;
+}
+
+export function resolveBlackRoomPublicationDateTime(
+  entry: {
+    status?: string;
+    slot?: string;
+    publicationDateTime?: string | null;
+    networkAttempts?: Record<string, unknown> | null;
+    networkReceipts?: Record<string, unknown> | null;
+  },
+  job: { targetDate?: string },
+  timezone = "America/New_York",
+  now = new Date(),
+): string {
+  const persisted = String(entry.publicationDateTime || "");
+  const hasNetworkEvidence = entry.status === "uncertain"
+    || Object.keys(entry.networkAttempts || {}).length > 0
+    || Object.keys(entry.networkReceipts || {}).length > 0;
+  if (persisted && (hasNetworkEvidence || persisted > blackRoomLocalWallClock(now, timezone))) return persisted;
+  return nextBlackRoomPublicationDateTime(String(job.targetDate || ""), String(entry.slot || ""), timezone, now);
 }
 
 export function validateBlackRoomRenderProbe(

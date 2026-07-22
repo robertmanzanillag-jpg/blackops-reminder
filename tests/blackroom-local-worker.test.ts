@@ -11,6 +11,7 @@ import {
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
   nextBlackRoomPublicationDateTime,
+  resolveBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
   markBlackRoomNetworkUncertain,
   reserveBlackRoomLedgerEntry,
@@ -123,6 +124,20 @@ test("past BlackRoom slots roll forward while future slots keep their target dat
   const now = new Date("2026-07-21T07:00:00.000Z"); // 03:00 in New York.
   assert.equal(nextBlackRoomPublicationDateTime("2026-07-21", "05:00", "America/New_York", now), "2026-07-21T05:00:00");
   assert.equal(nextBlackRoomPublicationDateTime("2026-07-21", "00:30", "America/New_York", now), "2026-07-22T00:30:00");
+});
+
+test("stale unattempted reservations roll forward but uncertain network attempts keep their exact date", () => {
+  const now = new Date("2026-07-22T07:30:00.000Z"); // 03:30 America/New_York
+  const job = { targetDate: "2026-07-21" };
+  assert.equal(resolveBlackRoomPublicationDateTime({
+    status: "reserved", slot: "14:00", publicationDateTime: "2026-07-21T23:45:00", networkAttempts: {}, networkReceipts: {},
+  }, job, "America/New_York", now), "2026-07-22T14:00:00");
+  assert.equal(resolveBlackRoomPublicationDateTime({
+    status: "uncertain", slot: "14:00", publicationDateTime: "2026-07-21T23:45:00", networkAttempts: { tiktok: "uncertain" }, networkReceipts: {},
+  }, job, "America/New_York", now), "2026-07-21T23:45:00");
+  assert.equal(resolveBlackRoomPublicationDateTime({
+    status: "reserved", slot: "14:00", publicationDateTime: "2026-07-22T16:00:00", networkAttempts: {}, networkReceipts: {},
+  }, job, "America/New_York", now), "2026-07-22T16:00:00");
 });
 
 test("validates Metricool and TikTok compatible MP4 renders", () => {

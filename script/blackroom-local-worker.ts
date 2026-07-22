@@ -9,7 +9,7 @@ import {
   buildBlackRoomCodexArgs,
   buildBlackRoomWorkerPrompt,
   createBlackRoomLocalWorkerState,
-  nextBlackRoomPublicationDateTime,
+  resolveBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
@@ -174,8 +174,11 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
-  const publicationDateTime = String(entry.publicationDateTime || "")
-    || nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
+  const publicationDateTime = resolveBlackRoomPublicationDateTime(
+    entry,
+    job,
+    queue.timezone || "America/New_York",
+  );
   entry.networkAttempts ||= {};
   entry.networkReceipts ||= {};
   const networks = requiredBlackRoomReceiptNetworks(entry);
