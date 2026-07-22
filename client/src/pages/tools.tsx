@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Store,
   Megaphone,
+  Music2,
   MousePointerClick,
   TrendingUp,
 } from "lucide-react";
@@ -44,6 +45,13 @@ const tools = [
     description: "Proyectos, estado, GitHub, alertas y checks.",
     href: "/projects",
     icon: Monitor,
+    primary: true,
+  },
+  {
+    title: "BlackRoom",
+    description: "Panel del agente de clips, cola, publicaciones y estado en vivo.",
+    href: "/blackroom",
+    icon: Music2,
     primary: true,
   },
   {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
 import {
@@ -12,6 +13,17 @@ import {
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
 import { isConfiguredSingleUserOwner } from "../server/single-user-owner";
+
+test("tools page links its BlackRoom card directly to the live panel", () => {
+  const toolsPage = readFileSync("client/src/pages/tools.tsx", "utf8");
+  const blackRoomCardStart = toolsPage.indexOf('title: "BlackRoom"');
+  const blackRoomCardEnd = toolsPage.indexOf("},", blackRoomCardStart);
+  const blackRoomCard = toolsPage.slice(blackRoomCardStart, blackRoomCardEnd);
+
+  assert.ok(blackRoomCardStart > 0, "BlackRoom card should be present in Herramientas");
+  assert.match(blackRoomCard, /href: "\/blackroom"/);
+  assert.match(toolsPage, /data-testid={`tool-\${tool\.title\.toLowerCase\(\)}`}/);
+});
 
 test("remote command increments its monotonic generation", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
