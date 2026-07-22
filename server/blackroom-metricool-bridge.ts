@@ -31,6 +31,8 @@ export interface BlackRoomMetricoolReceipt {
 
 type FetchLike = typeof fetch;
 
+const METRICOOL_MCP_URL = "https://ai.metricool.com/mcp";
+
 export class BlackRoomMetricoolUncertainError extends Error {
   readonly uncertain = true;
   constructor(message: string) {
@@ -304,6 +306,57 @@ async function metricoolJson(response: Response, operation: string): Promise<any
   return value;
 }
 
+async function callMetricoolMcpTool(
+  fetcher: FetchLike,
+  token: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<any> {
+  const response = await fetcher(METRICOOL_MCP_URL, {
+    method: "POST",
+    headers: {
+      "X-Mc-Auth": token,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `blackroom-${Date.now()}`,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    const detail = raw.replace(/(token|authorization|x-mc-auth)["'\s:=]+[^,"'\s}]+/gi, "$1=[redacted]").replace(/\s+/g, " ").trim().slice(0, 500);
+    throw new Error(`Metricool MCP ${name} failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
+  let envelope: any;
+  try {
+    if (/^text\/event-stream\b/i.test(response.headers.get("content-type") || "") || /^\s*(?:event:|data:)/m.test(raw)) {
+      const events = raw.split(/\r?\n\r?\n/).flatMap((event) => {
+        const data = event.split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+        if (!data || data === "[DONE]") return [];
+        return [JSON.parse(data)];
+      });
+      envelope = events.findLast((event) => event?.result || event?.error) || events.at(-1);
+    } else envelope = JSON.parse(raw);
+  } catch { throw new Error(`Metricool MCP ${name} returned invalid JSON or SSE`); }
+  if (!envelope) throw new Error(`Metricool MCP ${name} returned no result`);
+  if (envelope?.error) throw new Error(`Metricool MCP ${name} failed: ${String(envelope.error.message || "unknown error").slice(0, 500)}`);
+  if (envelope?.result?.isError) {
+    const detail = Array.isArray(envelope.result.content)
+      ? envelope.result.content.map((item: any) => String(item?.text || "")).filter(Boolean).join(" ").slice(0, 500)
+      : "unknown tool error";
+    throw new Error(`Metricool MCP ${name} failed: ${detail}`);
+  }
+  return envelope?.result;
+}
+
 export async function scheduleBlackRoomMetricoolPost(
   input: BlackRoomMetricoolScheduleInput,
   options: {
@@ -324,12 +377,9 @@ export async function scheduleBlackRoomMetricoolPost(
   if (!input.caption.trim() || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(input.publicationDateTime)) {
     throw new Error("Invalid Metricool caption or publication date");
   }
-  // Match Metricool's official MCP client request exactly. Its scheduler route
-  // uses the MCP integration source and sends a JSON body over HTTP/1.1.
+  // Read operations still use Metricool's scheduler API. Mutating operations
+  // go through the current official MCP endpoint and tool contract.
   const headers = { "X-Mc-Auth": token, "content-type": "application/json", accept: "application/json" };
-  // The normalize endpoint can return a plain URL. Advertising JSON-only in
-  // Accept makes Metricool answer 500 "No acceptable representation".
-  const normalizeHeaders = { "X-Mc-Auth": token, accept: "*/*" };
   const date = input.publicationDateTime.slice(0, 10);
   const timezone = encodeURIComponent(input.timezone || BLACKROOM_TIMEZONE);
   const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
@@ -366,27 +416,24 @@ export async function scheduleBlackRoomMetricoolPost(
   if (options.verifyOnly) {
     throw new BlackRoomMetricoolUncertainError(`Metricool verification is still pending for ${missingNetworks.join(", ")}`);
   }
-  const normalizeUrl = `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(input.mediaUrl)}`;
-  const mediaId = await metricoolMediaId(await fetcher(normalizeUrl, { headers: normalizeHeaders, signal: AbortSignal.timeout(120_000) }));
   for (const network of missingNetworks) {
-    const payload = buildMetricoolPayload(input, mediaId, network, captions[network]);
-    const serializedPayload = JSON.stringify(payload);
-    // Metricool has parsed Node fetch and node:https scheduler bodies as empty
-    // in production. Replit curl is verified against the same endpoint and sends
-    // the JSON intact. Auth is provided through curl config on stdin.
+    const payload = buildMetricoolPayload(input, "", network, captions[network]);
+    // The live MCP schema exposes mediaFiles for attached files. Keep the
+    // public MP4 in info.media too, so non-ChatGPT MCP clients retain media.
+    payload.media = [input.mediaUrl];
     let scheduled: any;
     try {
-      const scheduledResponse = options.fetch
-        ? await fetcher(schedulerUrl, {
-            method: "POST",
-            headers: { ...headers, "content-length": String(Buffer.byteLength(serializedPayload, "utf8")) },
-            body: serializedPayload,
-            signal: AbortSignal.timeout(120_000),
-          })
-        : await postMetricoolJsonBytes(schedulerUrl, token, serializedPayload);
-      scheduled = await metricoolJson(scheduledResponse, `${network} post scheduling`);
+      scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", {
+        date: input.publicationDateTime,
+        blogId: String(blogId),
+        info: JSON.stringify(payload),
+        mediaFiles: [{
+          download_url: input.mediaUrl,
+          file_id: `blackroom-${input.sourceVideoId}-${network}.mp4`,
+        }],
+      });
     } catch (error) {
-      if (error instanceof Error && /post scheduling failed with HTTP 4\d\d/.test(error.message)) throw error;
+      if (error instanceof Error && /MCP createScheduledPost failed(?: with HTTP 4\d\d|:)/.test(error.message)) throw error;
       throw new BlackRoomMetricoolUncertainError(
         `Metricool ${network} scheduling outcome is uncertain: ${error instanceof Error ? error.message : String(error)}`,
       );
