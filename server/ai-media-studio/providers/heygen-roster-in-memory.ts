@@ -5,6 +5,7 @@ import {
   heyGenRosterDailyPlanSchema,
   type HeyGenRosterDailyPlan,
 } from "../../../shared/ai-media-studio-heygen-roster";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import type { TenantScope } from "../core/resource-domain";
 import {
   HeyGenRosterError,
@@ -58,8 +59,8 @@ function materializePlan(input: HeyGenRosterConfigurationInput): HeyGenRosterDai
     avatarCount: input.members.length,
     videosPerAvatar: HEYGEN_ROSTER_VIDEOS_PER_AVATAR,
     plannedVideoCount: slots.length,
-    canGenerate: false,
-    noSpendGuarantee: true,
+    canGenerate: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate,
+    noSpendGuarantee: INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend,
     generatedAt: input.configuredAt,
     blockers: [...HEYGEN_ROSTER_DAILY_PLAN_BLOCKERS],
     slots,

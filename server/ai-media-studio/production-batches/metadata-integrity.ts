@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import {
+  PRODUCTION_BATCH_MAX_AVATARS,
+  PRODUCTION_BATCH_MAX_VIDEOS,
+  PRODUCTION_BATCH_MIN_AVATARS,
+  PRODUCTION_BATCH_MIN_VIDEOS,
+  PRODUCTION_BATCH_VIDEOS_PER_AVATAR,
   productionBatchCreativeReviewSchema,
 } from "../../../shared/ai-media-studio-production-batches";
 import { SOURCE_CATEGORIES, type SourceCategory } from "../sources/contracts";
@@ -247,16 +252,19 @@ export function verifyApprovedProductionBatchSlotMetadata(facts: ApprovedProduct
   const members = new Map<string, Set<number>>();
   for (const slot of facts.planSlots) {
     if (slot.status !== "planned" || !/^member_[a-f0-9]{24}$/u.test(slot.sourceMemberKey)
-      || !Number.isInteger(slot.videoNumber) || slot.videoNumber < 1 || slot.videoNumber > 10) return false;
+      || !Number.isInteger(slot.videoNumber) || slot.videoNumber < 1
+      || slot.videoNumber > PRODUCTION_BATCH_VIDEOS_PER_AVATAR) return false;
     const videos = members.get(slot.sourceMemberKey) ?? new Set<number>();
     videos.add(slot.videoNumber);
     members.set(slot.sourceMemberKey, videos);
   }
   if (!Number.isInteger(facts.plan.plannedSlotCount)
-    || facts.plan.plannedSlotCount < 50 || facts.plan.plannedSlotCount > 100
-    || facts.planSlots.length !== facts.plan.plannedSlotCount || members.size < 5 || members.size > 10
-    || facts.plan.plannedSlotCount !== members.size * 10
-    || [...members.values()].some((videos) => videos.size !== 10)) return false;
+    || facts.plan.plannedSlotCount < PRODUCTION_BATCH_MIN_VIDEOS
+    || facts.plan.plannedSlotCount > PRODUCTION_BATCH_MAX_VIDEOS
+    || facts.planSlots.length !== facts.plan.plannedSlotCount
+    || members.size < PRODUCTION_BATCH_MIN_AVATARS || members.size > PRODUCTION_BATCH_MAX_AVATARS
+    || facts.plan.plannedSlotCount !== members.size * PRODUCTION_BATCH_VIDEOS_PER_AVATAR
+    || [...members.values()].some((videos) => videos.size !== PRODUCTION_BATCH_VIDEOS_PER_AVATAR)) return false;
 
   const scriptMetadata = record(facts.script.metadata);
   if (!scriptMetadata || !metadataKeys(scriptMetadata, ["productionBatchApprovalV1", "productionBatchV1"])) return false;

@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import {
   aiMediaDailyPlans,
   aiMediaDailyPlanSlots,
@@ -28,6 +29,9 @@ export type StaticHeyGenVerificationDatabase = Database & {
     isolationLevel?: "serializable"; accessMode?: "read write";
   }>): Promise<T>;
 };
+
+const launchCreators = INITIAL_CREATOR_CANARY_PROFILE.creators;
+const launchSlots = INITIAL_CREATOR_CANARY_PROFILE.slots;
 
 const rows = (result: ExecuteResult): Row[] => (Array.isArray(result) ? result : result.rows ?? []) as Row[];
 const value = (row: Row, camel: string, snake: string): unknown => row[camel] ?? row[snake];
@@ -155,8 +159,8 @@ export class DrizzleStaticHeyGenVerificationRepository implements StaticHeyGenVe
       || text(bound, "lifecycleState", "lifecycle_state") !== "pending"
       || text(bound, "bindingVerificationState", "binding_verification_state") !== "unverified"
       || text(bound, "planStatus", "plan_status") !== "blocked"
-      || number(bound, "plannedSlotCount", "planned_slot_count") < 50
-      || number(bound, "plannedSlotCount", "planned_slot_count") > 100) {
+      || number(bound, "plannedSlotCount", "planned_slot_count") < launchSlots.minimum
+      || number(bound, "plannedSlotCount", "planned_slot_count") > launchSlots.maximum) {
       return undefined;
     }
 
@@ -167,7 +171,7 @@ export class DrizzleStaticHeyGenVerificationRepository implements StaticHeyGenVe
         WHERE owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
           AND daily_plan_id=${input.dailyPlanId} AND provider_account_id=${input.providerAccountId}
           AND provider_key='heygen' AND provider_credential_version=${input.providerCredentialVersion}
-        LIMIT 101
+        LIMIT ${sql.raw(String(launchSlots.maximum + 1))}
       ), per_avatar AS (
         SELECT avatar_resource_id,count(*)::integer AS slot_count,
           count(DISTINCT video_number)::integer AS video_count,
@@ -179,8 +183,10 @@ export class DrizzleStaticHeyGenVerificationRepository implements StaticHeyGenVe
         count(DISTINCT voice_resource_id)::integer AS voice_count,
         count(DISTINCT (avatar_resource_id,video_number))::integer AS avatar_video_pairs,
         bool_and(status='blocked') AS all_blocked,
-        bool_and(video_number BETWEEN 1 AND 10) AS video_numbers_bounded,
-        COALESCE((SELECT bool_and(slot_count=10 AND video_count=10 AND min_video=1 AND max_video=10)
+        bool_and(video_number BETWEEN 1 AND ${sql.raw(String(launchCreators.videosPerCreator))}) AS video_numbers_bounded,
+        COALESCE((SELECT bool_and(slot_count=${sql.raw(String(launchCreators.videosPerCreator))}
+          AND video_count=${sql.raw(String(launchCreators.videosPerCreator))}
+          AND min_video=1 AND max_video=${sql.raw(String(launchCreators.videosPerCreator))})
           FROM per_avatar), false) AS every_avatar_has_ten
       FROM exact_slots
     `));
@@ -189,10 +195,10 @@ export class DrizzleStaticHeyGenVerificationRepository implements StaticHeyGenVe
     const totalSlots = number(summary, "totalSlots", "total_slots");
     const avatarCount = number(summary, "avatarCount", "avatar_count");
     if (totalSlots !== number(bound, "plannedSlotCount", "planned_slot_count")
-      || totalSlots < 50
-      || totalSlots > 100
-      || avatarCount < 5
-      || avatarCount > 10
+      || totalSlots < launchSlots.minimum
+      || totalSlots > launchSlots.maximum
+      || avatarCount < launchCreators.minimum
+      || avatarCount > launchCreators.maximum
       || number(summary, "avatarVideoPairs", "avatar_video_pairs") !== totalSlots
       || value(summary, "allBlocked", "all_blocked") !== true
       || value(summary, "videoNumbersBounded", "video_numbers_bounded") !== true
@@ -223,7 +229,8 @@ export class DrizzleStaticHeyGenVerificationRepository implements StaticHeyGenVe
     const byExternal = new Map(planResources.map((row) => [resourceKey(text(row, "resourceType", "resource_type"), text(row, "externalResourceId", "external_resource_id")), row]));
     const avatarRows = planResources.filter((row) => text(row, "resourceType", "resource_type") === "avatar");
     const voiceRows = planResources.filter((row) => text(row, "resourceType", "resource_type") === "voice");
-    if (avatarRows.length < 5 || avatarRows.length > 10 || voiceRows.length < 1 || planResources.length !== input.resources.length) {
+    if (avatarRows.length < launchCreators.minimum || avatarRows.length > launchCreators.maximum
+      || voiceRows.length < 1 || planResources.length !== input.resources.length) {
       throw new StaticHeyGenVerificationError("MISMATCH");
     }
 

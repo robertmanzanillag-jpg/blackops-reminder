@@ -6,6 +6,7 @@ import {
   AI_MEDIA_STUDIO_AGENT_ROUTE,
   aiMediaStudioAgentSnapshotSchema,
 } from "../shared/ai-media-studio-agent";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../shared/ai-media-studio-launch-plan-profile";
 import { createAiMediaStudioAgentSnapshot } from "../server/ai-media-studio/agent-control";
 
 const routesSource = readFileSync(new URL("../server/ai-media-studio/routes.ts", import.meta.url), "utf8");
@@ -21,11 +22,11 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
   assert.equal(snapshot.agent.id, "ai-media-studio-agent");
   assert.equal(snapshot.agent.route, AI_MEDIA_STUDIO_AGENT_ROUTE);
   assert.deepEqual(snapshot.launchTarget, {
-    minimumAvatars: 5,
-    maximumAvatars: 10,
-    videosPerAvatar: 10,
-    minimumVideos: 50,
-    maximumVideos: 100,
+    minimumAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.minimum,
+    maximumAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.maximum,
+    videosPerAvatar: INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator,
+    minimumVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.minimum,
+    maximumVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.maximum,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
   assert.equal(snapshot.summary.done, 23);

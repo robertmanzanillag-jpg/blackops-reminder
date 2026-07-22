@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import type { HeyGenV3StaticVerificationPassed } from "../providers/heygen-v3-static-verification-contracts";
 import type { TenantScope } from "../core/resource-domain";
 
@@ -164,8 +165,8 @@ export function assertPreparedStaticHeyGenVerification(input: PreparedStaticHeyG
     || !Number.isFinite(expires)
     || expires <= observed
     || expires - observed > MAX_VERIFICATION_LIFETIME_MS
-    || avatarCount < 5
-    || avatarCount > 10
+    || avatarCount < INITIAL_CREATOR_CANARY_PROFILE.creators.minimum
+    || avatarCount > INITIAL_CREATOR_CANARY_PROFILE.creators.maximum
     || voiceCount < 1
     || new Set(input.resources.map((resource) => `${resource.resourceType}\0${resource.providerExternalId}`)).size !== input.resources.length
     || new Set(input.resources.map((resource) => resource.id)).size !== input.resources.length) {
@@ -235,8 +236,8 @@ export function assertStaticHeyGenVerificationCommand(input: StaticHeyGenVerific
     || !SAFE_BILLING.test(input.providerOutcome.billingModel)
     || input.providerOutcome.avatarLookCount !== input.providerOutcome.avatars.length
     || input.providerOutcome.voiceCount !== input.providerOutcome.voices.length
-    || input.providerOutcome.avatars.length < 5
-    || input.providerOutcome.avatars.length > 10
+    || input.providerOutcome.avatars.length < INITIAL_CREATOR_CANARY_PROFILE.creators.minimum
+    || input.providerOutcome.avatars.length > INITIAL_CREATOR_CANARY_PROFILE.creators.maximum
     || input.providerOutcome.voices.length < 1) {
     throw new StaticHeyGenVerificationError("INVALID_REQUEST");
   }

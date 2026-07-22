@@ -29,6 +29,10 @@ const manifest = JSON.parse(readFileSync(
   new URL("../migrations/ai-media-studio/manifest.json", import.meta.url),
   "utf8",
 )) as Manifest;
+const staticCredentialForward = readFileSync(
+  new URL("../migrations/ai-media-studio/pending/20260722_pr28_static_heygen_credentials_forward.sql", import.meta.url),
+  "utf8",
+);
 const sha256 = (value: Buffer): string => createHash("sha256").update(value).digest("hex");
 
 function requireOwnedUrl(): string {
@@ -106,16 +110,41 @@ async function applyFullChain(): Promise<void> {
     }
     await pool.query(migration(entry.forward));
   }
+  await pool.query(staticCredentialForward);
 }
 
 async function seedAccount(account: typeof accounts[keyof typeof accounts]): Promise<void> {
-  await pool.query(`
-    INSERT INTO ai_media_provider_accounts (
-      id,owner_user_id,workspace_id,provider_key,display_name,status,credential_status,
-      credential_version,credential_source,configuration
-    ) VALUES ($1,$2,$3,'heygen','HeyGen roster test','active','active',1,
-      'legacy_authorized_unbound','{}'::jsonb)
-  `, [account.id, account.owner, account.workspace]);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`
+      INSERT INTO ai_media_provider_accounts (
+        id,owner_user_id,workspace_id,provider_key,display_name,status,credential_status,
+        credential_version,credential_source,configuration
+      ) VALUES ($1,$2,$3,'heygen','HeyGen roster test','disconnected','unverified',0,
+        'not_bound','{}'::jsonb)
+    `, [account.id, account.owner, account.workspace]);
+    const bindingId = account.id.replace(/^1/u, "2");
+    const requestDigest = `sha256:${sha256(Buffer.from(`${account.owner}:${account.workspace}:static-binding`, "utf8"))}`;
+    await client.query(`
+      INSERT INTO ai_media_static_credential_bindings (
+        id,owner_user_id,workspace_id,actor_user_id,provider_account_id,provider_key,
+        expected_credential_version,target_credential_version,secret_ref,idempotency_key,request_digest
+      ) VALUES ($1,$2,$3,$2,$4,'heygen',0,1,'env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY',$5,$6)
+    `, [bindingId, account.owner, account.workspace, account.id, `pg-static-${account.id.slice(-12)}`, requestDigest]);
+    await client.query(`
+      UPDATE ai_media_provider_accounts
+      SET credential_source='static_api_key',secret_ref='env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY',
+        credential_version=1,credential_actor_user_id=$2
+      WHERE id=$1
+    `, [account.id, account.owner]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function service() {

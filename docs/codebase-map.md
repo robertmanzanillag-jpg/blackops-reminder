@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T18:41:42.342Z
+Generated: 2026-07-22T18:57:01.728Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 957 | 807 | 3526 | 507 | 15852 |
+| 959 | 809 | 3545 | 507 | 15865 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,12 +29,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 260 | 249 | test:260 |
+| `tests` | 261 | 250 | test:261 |
 | `server/ai-media-studio` | 191 | 172 | server:191 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 46 | 44 | script:46 |
-| `shared` | 22 | 22 | shared:22 |
+| `shared` | 23 | 23 | shared:23 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs/ai-media-studio` | 17 | 17 | docs:17 |
 | `docs` | 12 | 11 | docs:12 |
@@ -114,6 +114,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-kong-owned-source-adapter.test.ts`
 - `tests/ai-media-studio-launch-authority-drizzle.test.ts`
 - `tests/ai-media-studio-launch-authority-service.test.ts`
+- `tests/ai-media-studio-launch-plan-profile.test.ts`
 - `tests/ai-media-studio-launch-preflight-contracts.test.ts`
 - `tests/ai-media-studio-launch-preflight-drizzle.test.ts`
 - `tests/ai-media-studio-launch-preflight-routes.test.ts`
@@ -397,7 +398,7 @@ Package: `rest-express`
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-media-studio/agent-control.ts` (server; 7 symbols, 2 imports)
+- `server/ai-media-studio/agent-control.ts` (server; 7 symbols, 3 imports)
 - `server/ai-media-studio/analytics/domain.ts` (server; 65 symbols, 2 imports)
 - `server/ai-media-studio/analytics/drizzle-repository.ts` (server; 24 symbols, 5 imports)
 - `server/ai-media-studio/analytics/fake-ingestion-adapter.ts` (server; 2 symbols, 2 imports)

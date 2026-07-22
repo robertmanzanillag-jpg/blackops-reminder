@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { HeyGenOnboardingReadiness } from "../../../shared/ai-media-studio-heygen-onboarding";
 import { heyGenOnboardingReadinessSchema } from "../../../shared/ai-media-studio-heygen-onboarding";
+import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
 import { aiMediaDailyPlans, aiMediaDailyPlanSlots, aiMediaProviderAccounts } from "../../../shared/models/ai-media-studio-db";
 import type { TenantScope } from "../core/resource-domain";
 
@@ -146,10 +147,18 @@ export class DrizzleHeyGenOnboardingReadinessRepository implements HeyGenOnboard
   }
 }
 
-const TARGET = Object.freeze({ minAvatars: 5, maxAvatars: 10, videosPerAvatar: 10, minVideos: 50, maxVideos: 100 } as const);
+const TARGET = Object.freeze({
+  minAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.minimum,
+  maxAvatars: INITIAL_CREATOR_CANARY_PROFILE.creators.maximum,
+  videosPerAvatar: INITIAL_CREATOR_CANARY_PROFILE.creators.videosPerCreator,
+  minVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.minimum,
+  maxVideos: INITIAL_CREATOR_CANARY_PROFILE.slots.maximum,
+} as const);
 const EFFECTS = Object.freeze({
-  providerNetworkCall: false, liveVerification: false, generation: false, admission: false,
-  spend: false, deployment: false, migrationApply: false, publishing: false,
+  providerNetworkCall: false, liveVerification: false,
+  generation: INITIAL_CREATOR_CANARY_PROFILE.safety.canGenerate, admission: false,
+  spend: !INITIAL_CREATOR_CANARY_PROFILE.safety.noSpend,
+  deployment: false, migrationApply: false, publishing: false,
 } as const);
 
 type ReadinessStatus = HeyGenOnboardingReadiness["status"];
