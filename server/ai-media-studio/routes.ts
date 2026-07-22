@@ -71,6 +71,8 @@ import {
   publishingConnectionsResponseSchema,
   publishingPreviewSchema,
   socialPlatformSchema,
+  sourceAutomationSyncRequestSchema,
+  sourceAutomationSyncResponseSchema,
   sourceItemSchema,
   paginatedResponseSchema,
   type AnalyticsSummary as PublicAnalyticsSummary,
@@ -185,8 +187,9 @@ import {
   type PublicPublication,
 } from "./publishing/domain";
 import type { PublishingSubmissionGate } from "./publishing/worker";
-import type { CanonicalSourceItem } from "./sources/contracts";
+import type { CanonicalSourceItem, SourceAdapter } from "./sources/contracts";
 import { SourceCursorError } from "./sources/source-pagination";
+import { SourceAutomationSyncError, SourceAutomationSyncService } from "./sources/sync-service";
 import {
   InMemoryAssetIngestRepository,
   createProductionAssetRuntimeFromEnvironment,
@@ -279,6 +282,8 @@ export interface AiMediaStudioDependencies {
   oneVideoHeldAdmissionAccountingTimeZone?: string;
   oneVideoHeldAdmissionReservationTtlSeconds?: number;
   operations?: OperationsRuntimeDependencies;
+  /** Server-owned source adapters selectable only by their public stable key. */
+  sourceAdapters?: readonly SourceAdapter[];
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
   /** Server-only production asset configuration; never serialized into Studio DTOs. */
@@ -1361,6 +1366,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
     databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
+  const sourceAutomationSync = new SourceAutomationSyncService(
+    dependencies.sourceAdapters ?? [],
+    operations.sources,
+  );
   const environment = runtimeEnvironment?.trim().toLowerCase();
   const assetDeliverySigner = dependencies.assetDeliverySigner ?? (() => {
     const productionAssets = createProductionAssetRuntimeFromEnvironment(
@@ -1676,6 +1685,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
       }
       res.locals.heyGenRosterPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+  const requireStrictSourceAutomationSync = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.sourceAutomationSyncPrincipal = sensitiveMutationRequestGuard.authorize(req);
       next();
     } catch (error) {
       next(error);
@@ -2288,6 +2308,22 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(attributionResponseSchema.parse({ items: page.values.map((value) => value.item), nextCursor: page.nextCursor, hasMore: page.hasMore }));
   }));
 
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync`,
+    requireStrictSourceAutomationSync,
+    requireOperations,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.sourceAutomationSyncPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId) throw new SourceAutomationSyncError("INVALID_REQUEST");
+      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")) {
+        throw new SourceAutomationSyncError("INVALID_REQUEST");
+      }
+      const input = sourceAutomationSyncRequestSchema.safeParse(req.body);
+      if (!input.success) throw new SourceAutomationSyncError("INVALID_REQUEST");
+      const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
+      const result = await sourceAutomationSync.sync(scope, input.data);
+      res.json(sourceAutomationSyncResponseSchema.parse(result));
+    }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources`, requireOperations, asyncRoute(async (req, res) => {
     const input = sourcesQuerySchema.parse(req.query);
     const page = await operations.sources.listPage(await tenant(req), input);
@@ -2437,6 +2473,15 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
             : error.code === "STALE_OR_CONFLICT" ? "Held admission changed; refresh before retrying"
               : error.code === "ADMISSION_DENIED" ? "Held admission is not currently available"
                 : "One-video held admission is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
+    if (error instanceof SourceAutomationSyncError) {
+      const message = error.code === "INVALID_REQUEST"
+        ? "Invalid source automation sync request"
+        : error.code === "ADAPTER_UNAVAILABLE"
+          ? "Source automation adapter is unavailable"
+          : "Source automation sync is unavailable";
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }

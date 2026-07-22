@@ -251,6 +251,71 @@ export const publicationAnalyticsMappingSchema = z
 export const sourceTypeSchema = z.enum(["manual", "feed", "upload", "owned_library"]);
 export const sourceRightsStatusSchema = z.enum(["unknown", "owned", "licensed", "restricted", "rejected"]);
 export const moderationStatusSchema = z.enum(["pending", "approved", "rejected", "needs_review"]);
+export const sourceAutomationCategorySchema = z.enum([
+  "events",
+  "restaurants",
+  "hotels",
+  "nightclubs",
+  "deals",
+  "travel_packages",
+  "beach_clubs",
+  "experiences",
+]);
+
+/**
+ * Selects a server-owned source adapter without exposing provider cursors or
+ * accepting provider-native configuration from the caller.
+ */
+export const sourceAutomationSyncRequestSchema = z
+  .object({
+    adapterKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+    limit: z.number().int().min(1).max(100).default(25),
+  })
+  .strict();
+
+export const sourceAutomationSyncItemSchema = z
+  .object({
+    id: canonicalIdSchema,
+    category: sourceAutomationCategorySchema,
+    status: z.enum(["discovered", "accepted", "processing", "ready", "rejected", "archived"]),
+    rightsStatus: sourceRightsStatusSchema,
+    moderationStatus: moderationStatusSchema,
+    createdAt: isoDateSchema,
+    updatedAt: isoDateSchema,
+  })
+  .strict();
+
+export const sourceAutomationSyncEffectsSchema = z
+  .object({
+    sourceAdapterCalled: z.literal(true),
+    scriptsGenerated: z.literal(false),
+    renderQueued: z.literal(false),
+    outboxCreated: z.literal(false),
+    videoProviderCalled: z.literal(false),
+    secretResolved: z.literal(false),
+    spendCommitted: z.literal(false),
+    publishingCreated: z.literal(false),
+    migrationApplied: z.literal(false),
+    deploymentPerformed: z.literal(false),
+  })
+  .strict();
+
+export const sourceAutomationSyncResponseSchema = z
+  .object({
+    adapterKey: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+    capturedAt: isoDateSchema,
+    truncated: z.boolean(),
+    createdCount: nonNegativeIntegerSchema,
+    duplicateCount: nonNegativeIntegerSchema,
+    items: z.array(sourceAutomationSyncItemSchema).max(100),
+    downstreamState: z.literal("blocked"),
+    effects: sourceAutomationSyncEffectsSchema,
+  })
+  .strict()
+  .refine(({ createdCount, duplicateCount, items }) => createdCount + duplicateCount === items.length, {
+    message: "source sync counts must match the returned item count",
+    path: ["items"],
+  });
 
 const sourceIntakeFieldsSchema = z
   .object({
@@ -314,6 +379,11 @@ export type AnalyticsSummary = z.infer<typeof analyticsSummarySchema>;
 export type AttributionDimensions = z.infer<typeof attributionDimensionsSchema>;
 export type Attribution = z.infer<typeof attributionSchema>;
 export type PublicationAnalyticsMapping = z.infer<typeof publicationAnalyticsMappingSchema>;
+export type SourceAutomationCategory = z.infer<typeof sourceAutomationCategorySchema>;
+export type SourceAutomationSyncRequest = z.infer<typeof sourceAutomationSyncRequestSchema>;
+export type SourceAutomationSyncItem = z.infer<typeof sourceAutomationSyncItemSchema>;
+export type SourceAutomationSyncEffects = z.infer<typeof sourceAutomationSyncEffectsSchema>;
+export type SourceAutomationSyncResponse = z.infer<typeof sourceAutomationSyncResponseSchema>;
 export type SourceIntake = z.infer<typeof sourceIntakeSchema>;
 export type SourceItem = z.infer<typeof sourceItemSchema>;
 export type OrchestrationRun = z.infer<typeof orchestrationRunSchema>;

@@ -5,3 +5,4 @@ export * from "./fake-source-adapter";
 export * from "./in-memory-source-repository";
 export * from "./ingest";
 export * from "./source-pagination";
+export * from "./sync-service";

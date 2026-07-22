@@ -457,6 +457,27 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep PR #170 draft and unmerged; next rehearse the approved database chain before requesting any live HeyGen verification, cost approval, canary generation or deployment.",
   },
   {
+    id: "ams-agent-source-automation-sync",
+    title: "Tenant-safe source automation sync",
+    owner: "AI Media Studio source automation squad",
+    state: "running",
+    branch: "codex/ai-media-studio-source-automation-sync",
+    pullRequestUrl: null,
+    acceptance: [
+      "Server-owned adapters normalize source records without trusting caller-selected provider or storage authority",
+      "Each tenant-scoped sync is bounded and deduplicated so replay cannot multiply source records or cross tenant boundaries",
+      "The public source projection redacts provider payloads, private identifiers and internal synchronization metadata",
+      "Synchronization creates no script, render, provider, secret, spend, publishing, migration or deployment effect",
+    ],
+    mergeGate: "Focused source-sync and agent-control tests, TypeScript, production build, independent checker and App QA must pass before a draft PR is ready.",
+    evidence: [],
+    blockers: [
+      "Implementation and focused verification are still in progress",
+      "Independent checker and App QA have not run, and no pull request exists yet",
+    ],
+    nextAction: "Finish the bounded server-owned sync slice, run the focused tests, TypeScript and build, then obtain independent checker and App QA evidence before opening the PR.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",
