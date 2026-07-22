@@ -176,6 +176,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
             AND sources.id=scripts.source_item_id AND sources.source_type=scripts.source_type
           WHERE slots.owner_user_id=${input.scope.ownerUserId} AND slots.workspace_id=${input.scope.workspaceId}
             AND slots.daily_plan_id=${text(plan[0], "id", "id")} AND slots.status='blocked'
+            AND (${input.sourceAdapterKey ?? null}::text IS NULL OR sources.adapter_key=${input.sourceAdapterKey ?? null})
             AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
             AND sources.rights_status IN ('owned','licensed')
           ORDER BY slots.source_member_key ASC,slots.video_number ASC
@@ -203,6 +204,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         SELECT id, title, content, content_hash, source_type AS source_category
         FROM ${aiMediaSourceItems}
         WHERE owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
+          AND (${input.sourceAdapterKey ?? null}::text IS NULL OR adapter_key=${input.sourceAdapterKey ?? null})
           AND status IN ('accepted','ready') AND moderation_status='approved'
           AND rights_status IN ('owned','licensed')
           AND title IS NOT NULL AND length(btrim(title)) BETWEEN 1 AND 200

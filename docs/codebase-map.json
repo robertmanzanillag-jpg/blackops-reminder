@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T14:56:23.113Z",
+  "generatedAt": "2026-07-22T15:16:26.462Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -51,6 +51,7 @@
     "test:ai-media-heygen-secure-setup-browser": "node --import tsx --test tests/ai-media-studio-heygen-guided-setup-browser.test.ts",
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
     "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
+    "test:ai-media-source-to-batch": "node --import tsx --test tests/ai-media-studio-source-to-batch-contracts.test.ts tests/ai-media-studio-source-to-batch-automation.test.ts tests/ai-media-studio-source-to-batch-routes.test.ts tests/ai-media-studio-source-operator-client.test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
@@ -94,13 +95,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 941,
-    "filesIndexed": 791,
-    "imports": 3419,
-    "routes": 506,
-    "symbols": 15521
+    "filesVisible": 946,
+    "filesIndexed": 796,
+    "imports": 3452,
+    "routes": 507,
+    "symbols": 15565
   },
   "directories": {
+    "server/ai-media-studio": {
+      "files": 187,
+      "indexed": 168,
+      "kinds": {
+        "server": 187
+      }
+    },
+    "shared": {
+      "files": 22,
+      "indexed": 22,
+      "kinds": {
+        "shared": 22
+      }
+    },
+    "tests": {
+      "files": 255,
+      "indexed": 244,
+      "kinds": {
+        "test": 255
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -194,13 +216,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 186,
-      "indexed": 167,
-      "kinds": {
-        "server": 186
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -208,25 +223,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 21,
-      "indexed": 21,
-      "kinds": {
-        "shared": 21
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 252,
-      "indexed": 241,
-      "kinds": {
-        "test": 252
       }
     },
     "tests/fixtures": {
@@ -3376,6 +3377,7 @@
         "@shared/ai-media-studio-core",
         "@shared/ai-media-studio-operations",
         "@shared/ai-media-studio-source-eligibility",
+        "@shared/ai-media-studio-source-to-batch",
         "@shared/ai-media-studio-source-to-script"
       ],
       "exports": [
@@ -3565,6 +3567,7 @@
       "imports": [
         "@shared/ai-media-studio-operations",
         "@shared/ai-media-studio-source-eligibility",
+        "@shared/ai-media-studio-source-to-batch",
         "@shared/ai-media-studio-source-to-script"
       ],
       "exports": [
@@ -12157,7 +12160,8 @@
         "ProductionBatchService",
         "batch",
         "planId",
-        "request"
+        "request",
+        "sourceAdapterKey"
       ],
       "routes": []
     },
@@ -13149,6 +13153,7 @@
         "../../shared/ai-media-studio-sandbox-readiness",
         "../../shared/ai-media-studio-scripts",
         "../../shared/ai-media-studio-source-eligibility",
+        "../../shared/ai-media-studio-source-to-batch",
         "../../shared/ai-media-studio-source-to-script",
         "../user-context",
         "./agent-control",
@@ -13197,6 +13202,7 @@
         "./sources/eligibility-review-service",
         "./sources/kong-owned-source-adapter",
         "./sources/source-pagination",
+        "./sources/source-to-batch-automation-service",
         "./sources/source-to-script-preview-service",
         "./sources/sync-service",
         "./strict-money-action-request",
@@ -13382,6 +13388,7 @@
         "requireStrictSourceAutomationSync",
         "requireStrictSourceEligibilityReview",
         "requireStrictSourceScriptPreview",
+        "requireStrictSourceToBatchAutomation",
         "reservationTtlSeconds",
         "resolveProviderWebhookAccount",
         "resources",
@@ -13417,6 +13424,7 @@
         "snapshotRepository",
         "sourceAutomationSync",
         "sourceEligibilityReview",
+        "sourceToBatchAutomation",
         "sourceToScriptPreview",
         "sourceType",
         "sourcesQuerySchema",
@@ -13449,6 +13457,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/automation/policy",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review",
+        "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/production-batch/prepare",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync",
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
@@ -13768,6 +13777,7 @@
         "./ingest",
         "./kong-owned-source-adapter",
         "./source-pagination",
+        "./source-to-batch-automation-service",
         "./source-to-script-preview-service",
         "./sync-service"
       ],
@@ -13876,6 +13886,30 @@
         "sourceListFilter",
         "unsigned",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/source-to-batch-automation-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-production-batches",
+        "../../../shared/ai-media-studio-source-to-batch",
+        "../core/resource-domain",
+        "../production-batches/contracts",
+        "./kong-owned-source-adapter",
+        "node:crypto"
+      ],
+      "exports": [
+        "SourceToBatchAutomationService",
+        "SourceToBatchProductionService"
+      ],
+      "symbols": [
+        "SourceToBatchAutomationService",
+        "current",
+        "prepared",
+        "response",
+        "serverOwnedIdempotency"
       ],
       "routes": []
     },
@@ -21765,6 +21799,28 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-source-to-batch.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-production-batches",
+        "zod"
+      ],
+      "exports": [
+        "SourceToBatchAutomationRequest",
+        "SourceToBatchAutomationResponse",
+        "sourceToBatchAutomationRequestSchema",
+        "sourceToBatchAutomationResponseSchema"
+      ],
+      "symbols": [
+        "expectedStatus",
+        "newlyPrepared",
+        "plainObject",
+        "sourceToBatchAutomationRequestSchema",
+        "sourceToBatchAutomationResponseSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-source-to-script.ts",
       "kind": "shared",
       "imports": [
@@ -28415,6 +28471,7 @@
       ],
       "exports": [],
       "symbols": [
+        "api",
         "automation",
         "first",
         "hash",
@@ -28425,6 +28482,86 @@
         "result",
         "second",
         "variant"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-batch-automation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/sources/source-to-batch-automation-service",
+        "../shared/ai-media-studio-production-batches",
+        "../shared/ai-media-studio-source-to-batch",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeProductionService",
+        "approved",
+        "batch",
+        "draft",
+        "key",
+        "prepareCall",
+        "production",
+        "response",
+        "scope",
+        "service"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-batch-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-production-batches",
+        "../shared/ai-media-studio-source-to-batch",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "batch",
+        "parsed",
+        "publicKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-to-batch-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "../shared/ai-media-studio-production-batches",
+        "../shared/ai-media-studio-source-to-batch",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "batch",
+        "canonicalOrigin",
+        "endpoint",
+        "harness",
+        "headers",
+        "key",
+        "parsed",
+        "prepared",
+        "previousFallback",
+        "replay",
+        "response",
+        "runtime",
+        "server",
+        "text",
+        "userId"
       ],
       "routes": []
     },
@@ -30592,6 +30729,9 @@
     "tests/ai-media-studio-source-eligibility-routes.test.ts",
     "tests/ai-media-studio-source-eligibility-service.test.ts",
     "tests/ai-media-studio-source-operator-client.test.ts",
+    "tests/ai-media-studio-source-to-batch-automation.test.ts",
+    "tests/ai-media-studio-source-to-batch-contracts.test.ts",
+    "tests/ai-media-studio-source-to-batch-routes.test.ts",
     "tests/ai-media-studio-source-to-script-contracts.test.ts",
     "tests/ai-media-studio-source-to-script-routes.test.ts",
     "tests/ai-media-studio-source-to-script-service.test.ts",

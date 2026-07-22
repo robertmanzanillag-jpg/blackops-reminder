@@ -16,6 +16,7 @@ import type { MediaAsset } from "@shared/ai-media-studio-core";
 import type { PublishingPreview } from "@shared/ai-media-studio-operations";
 import { sourceEligibilityReviewResponseSchema } from "@shared/ai-media-studio-source-eligibility";
 import { sourceScriptPreviewResponseSchema } from "@shared/ai-media-studio-source-to-script";
+import { sourceToBatchAutomationResponseSchema } from "@shared/ai-media-studio-source-to-batch";
 import { actionableApiError } from "../governance/errors";
 import type { SourceEligibilityReviewInput, SourceScriptPreviewRequest } from "./types";
 
@@ -93,6 +94,10 @@ export const operationsApi = {
   previewSourceScript: async (input: SourceScriptPreviewRequest) => {
     const response = await post<unknown>("/automation/sources/scripts/preview", input);
     return sourceScriptPreviewResponseSchema.parse(response);
+  },
+  prepareSourceProductionBatch: async () => {
+    const response = await post<unknown>("/automation/sources/production-batch/prepare", {});
+    return sourceToBatchAutomationResponseSchema.parse(response);
   },
   automationPolicy: async () => {
     const response = await requestJson<{ policy: AutomationPolicy }>("/automation/policy");

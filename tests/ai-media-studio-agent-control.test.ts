@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 20);
+  assert.equal(snapshot.summary.done, 21);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -36,6 +36,8 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     "codex/ai-media-studio-one-video-held-admission");
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-roster-mutation-hardening")?.branch,
     "codex/ai-media-studio-roster-mutation-hardening");
+  assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-source-to-batch-automation")?.branch,
+    "codex/ai-media-studio-source-to-batch-automation");
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
   for (const item of snapshot.workItems) {
     assert.ok(item.owner.length > 0);

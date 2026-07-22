@@ -80,6 +80,7 @@ test("source clients reject provider-bearing responses instead of exposing them 
 });
 
 test("operator UI gates explicit decisions and exposes only compact preview fields", async () => {
+  const api = await readOperationsSource("api.ts");
   const automation = await readOperationsSource("automation.tsx");
   const hooks = await readOperationsSource("hooks.ts");
   assert.match(automation, /source\.status === "discovered" && source\.rightsStatus === "unknown" && source\.moderationStatus === "pending"/);
@@ -91,6 +92,12 @@ test("operator UI gates explicit decisions and exposes only compact preview fiel
   assert.match(automation, /aria-label=/);
   assert.match(hooks, /invalidateQueries/);
   assert.match(hooks, /"sources"/);
+  assert.match(api, /post<unknown>\("\/automation\/sources\/production-batch\/prepare", \{\}\)/);
+  assert.match(api, /sourceToBatchAutomationResponseSchema\.parse/);
+  assert.match(automation, /Prepare durable batch — no credits/);
+  assert.match(automation, /disabled=\{prepareBatch\.isPending\}/);
+  assert.match(automation, /render, HeyGen, spend and publishing stay blocked/);
+  assert.match(hooks, /"core", "production-batch"/);
 });
 
 test("client-generated action keys are bounded, canonical and stable across exact retries", () => {

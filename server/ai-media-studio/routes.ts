@@ -30,6 +30,10 @@ import {
   sourceScriptPreviewRequestSchema,
   sourceScriptPreviewResponseSchema,
 } from "../../shared/ai-media-studio-source-to-script";
+import {
+  sourceToBatchAutomationRequestSchema,
+  sourceToBatchAutomationResponseSchema,
+} from "../../shared/ai-media-studio-source-to-batch";
 import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-launch-preflight";
 import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
 import { oneVideoExecutionControlResponseSchema } from "../../shared/ai-media-studio-one-video-execution-control";
@@ -198,6 +202,7 @@ import { SourceCursorError } from "./sources/source-pagination";
 import { SourceAutomationSyncError, SourceAutomationSyncService } from "./sources/sync-service";
 import { SourceEligibilityReviewError, SourceEligibilityReviewService } from "./sources/eligibility-review-service";
 import { SourceToScriptPreviewError, SourceToScriptPreviewService } from "./sources/source-to-script-preview-service";
+import { SourceToBatchAutomationService } from "./sources/source-to-batch-automation-service";
 import {
   InMemoryAssetIngestRepository,
   createProductionAssetRuntimeFromEnvironment,
@@ -1386,6 +1391,9 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   );
   const sourceEligibilityReview = new SourceEligibilityReviewService(operations.sources);
   const sourceToScriptPreview = new SourceToScriptPreviewService(operations.sources, scriptService);
+  const sourceToBatchAutomation = productionBatchSelection.service
+    ? new SourceToBatchAutomationService(productionBatchSelection.service)
+    : undefined;
   const environment = runtimeEnvironment?.trim().toLowerCase();
   const assetDeliverySigner = dependencies.assetDeliverySigner ?? (() => {
     const productionAssets = createProductionAssetRuntimeFromEnvironment(
@@ -1733,6 +1741,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
       }
       res.locals.sourceScriptPreviewPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+  const requireStrictSourceToBatchAutomation = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.sourceToBatchAutomationPrincipal = sensitiveMutationRequestGuard.authorize(req);
       next();
     } catch (error) {
       next(error);
@@ -2377,6 +2396,24 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
       const result = await sourceAutomationSync.sync(scope, input.data);
       res.json(sourceAutomationSyncResponseSchema.parse(result));
+    }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/production-batch/prepare`,
+    requireStrictSourceToBatchAutomation,
+    requireProductionBatches,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.sourceToBatchAutomationPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId || !sourceToBatchAutomation) throw new ProductionBatchError("INVALID_REQUEST");
+      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+        || !sourceToBatchAutomationRequestSchema.safeParse(req.body).success) {
+        throw new ProductionBatchError("INVALID_REQUEST");
+      }
+      const result = await sourceToBatchAutomation.run({
+        ownerUserId: principal.authenticatedUserId,
+        workspaceId: core.workspaceId,
+      });
+      res.status(result.outcome === "prepared" ? 201 : 200)
+        .json(sourceToBatchAutomationResponseSchema.parse(result));
     }));
 
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review`,
