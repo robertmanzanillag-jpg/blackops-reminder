@@ -823,6 +823,13 @@ function scriptReadiness(batch: ProductionBatch): string {
   return "Not prepared";
 }
 
+export function contentPlanSummary(batch: Pick<ProductionBatch, "status" | "contentPlan" | "plannedVideoCount">): string {
+  const timing = batch.status === "not_started"
+    ? "source topics will be reused across creators. Topic N will supply video N"
+    : "source topics reused across creators. Topic N supplies video N";
+  return `${batch.contentPlan.sourceTopicCount} ${timing} for every creator, producing ${batch.contentPlan.slotCount} planned slots without requiring ${batch.plannedVideoCount} unique sources.`;
+}
+
 export function approvalResultMatchesBatch(
   approval: ProductionBatch | undefined,
   batch: ProductionBatch | undefined,
@@ -1006,6 +1013,10 @@ export function ProductionBatchWorkbench() {
         <Card className="border-white/10 bg-white/[0.035] text-white shadow-none"><CardContent className="p-4"><dt className="text-xs uppercase tracking-[0.12em] text-zinc-500">Scripts ready</dt><dd className="mt-2 text-2xl font-semibold">{readyScripts}/{batch.plannedVideoCount}</dd></CardContent></Card>
         <Card className="border-white/10 bg-white/[0.035] text-white shadow-none"><CardContent className="p-4"><dt className="text-xs uppercase tracking-[0.12em] text-zinc-500">Generation allowed</dt><dd className="mt-2 text-2xl font-semibold text-amber-200">{batch.canGenerate ? "Yes" : "No"}</dd></CardContent></Card>
       </dl>
+
+      <p className="rounded-xl border border-cyan-300/15 bg-cyan-400/[0.05] px-4 py-3 text-sm text-cyan-100">
+        {contentPlanSummary(batch)}
+      </p>
 
       <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
         <div className="flex items-center gap-2"><FileCheck2 className="h-4 w-4 text-emerald-300" aria-hidden="true" /><h3 className="font-semibold text-white">Durable readiness</h3></div>

@@ -9,6 +9,7 @@ function readyBatch(): ProductionBatch {
   return {
     batchId: key("batch", 1), planId: key("plan", 2), status: "draft_ready", avatarCount: 5,
     videosPerAvatar: 10, plannedVideoCount: 50, canGenerate: false, noSpend: true,
+    contentPlan: { strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true },
     preparedAt: "2026-07-21T12:00:00.000Z", approvedAt: null,
     blockers: ["script_approval_required", "governance_approval_required", "budget_reservation_required",
       "sandbox_generation_required", "human_launch_approval_required"],

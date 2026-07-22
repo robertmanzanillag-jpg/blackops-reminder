@@ -13,6 +13,7 @@ function pendingBatch(): ProductionBatch {
   return {
     batchId: `batch_${hex(1)}`, planId: `plan_${hex(2)}`, status: "not_started",
     avatarCount: 5, videosPerAvatar: 10, plannedVideoCount: 50,
+    contentPlan: { strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true },
     canGenerate: false, noSpend: true, preparedAt: null, approvedAt: null,
     blockers: ["script_batch_required", "governance_approval_required", "budget_reservation_required",
       "sandbox_generation_required", "human_launch_approval_required"],
@@ -61,4 +62,23 @@ test("production readiness and blocker projections are exact", () => {
   const invalid = pendingBatch();
   invalid.blockers = ["script_approval_required", ...invalid.blockers.slice(1)] as ProductionBatch["blockers"];
   assert.equal(productionBatchSchema.safeParse(invalid).success, false);
+});
+
+test("content plan policy is public, provider-neutral, server-owned, and bound to the exact slot total", () => {
+  const parsed = productionBatchSchema.parse(pendingBatch());
+  assert.deepEqual(parsed.contentPlan, {
+    strategy: "topic_deck_by_video_number",
+    sourceTopicCount: 10,
+    slotCount: parsed.plannedVideoCount,
+    reuseAcrossCreators: true,
+  });
+  assert.doesNotMatch(JSON.stringify(parsed.contentPlan), /heygen|provider|secret|credential/iu);
+  for (const contentPlan of [
+    { ...parsed.contentPlan, sourceTopicCount: 50 },
+    { ...parsed.contentPlan, slotCount: 100 },
+    { ...parsed.contentPlan, reuseAcrossCreators: false },
+    { ...parsed.contentPlan, strategy: "client_selected_topics" },
+  ]) {
+    assert.equal(productionBatchSchema.safeParse({ ...parsed, contentPlan }).success, false);
+  }
 });

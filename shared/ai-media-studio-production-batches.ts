@@ -4,8 +4,10 @@ import { mediaSourceTypeSchema } from "./ai-media-studio-scripts";
 export const PRODUCTION_BATCH_MIN_AVATARS = 5 as const;
 export const PRODUCTION_BATCH_MAX_AVATARS = 10 as const;
 export const PRODUCTION_BATCH_VIDEOS_PER_AVATAR = 10 as const;
+export const PRODUCTION_BATCH_SOURCE_TOPIC_COUNT = 10 as const;
 export const PRODUCTION_BATCH_MIN_VIDEOS = 50 as const;
 export const PRODUCTION_BATCH_MAX_VIDEOS = 100 as const;
+export const PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY = "topic_deck_by_video_number" as const;
 
 export const PRODUCTION_BATCH_GENERATOR_VERSION = "deterministic-script-v1" as const;
 export const PRODUCTION_BATCH_FIXED_BLOCKERS = [
@@ -60,6 +62,13 @@ export const productionBatchCreativeReviewSchema = z.object({
   seoKeywords: z.array(cleanText(120)).max(50),
 }).strict();
 
+export const productionBatchContentPlanSchema = z.object({
+  strategy: z.literal(PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY),
+  sourceTopicCount: z.literal(PRODUCTION_BATCH_SOURCE_TOPIC_COUNT),
+  slotCount: z.number().int().min(PRODUCTION_BATCH_MIN_VIDEOS).max(PRODUCTION_BATCH_MAX_VIDEOS),
+  reuseAcrossCreators: z.literal(true),
+}).strict();
+
 const productionBatchSlotIdentitySchema = z.object({
   slotId: publicKey("slot"),
   videoNumber: z.number().int().min(1).max(PRODUCTION_BATCH_VIDEOS_PER_AVATAR),
@@ -104,6 +113,7 @@ export const productionBatchSchema = z.object({
   avatarCount: z.number().int().min(PRODUCTION_BATCH_MIN_AVATARS).max(PRODUCTION_BATCH_MAX_AVATARS),
   videosPerAvatar: z.literal(PRODUCTION_BATCH_VIDEOS_PER_AVATAR),
   plannedVideoCount: z.number().int().min(PRODUCTION_BATCH_MIN_VIDEOS).max(PRODUCTION_BATCH_MAX_VIDEOS),
+  contentPlan: productionBatchContentPlanSchema,
   canGenerate: z.literal(false),
   noSpend: z.literal(true),
   preparedAt: z.string().datetime({ offset: true }).nullable(),
@@ -122,6 +132,7 @@ export const productionBatchSchema = z.object({
   const approved = batch.status === "approved_ready";
   if (batch.groups.length !== batch.avatarCount
     || batch.plannedVideoCount !== batch.avatarCount * PRODUCTION_BATCH_VIDEOS_PER_AVATAR
+    || batch.contentPlan.slotCount !== batch.plannedVideoCount
     || batch.groups.reduce((total, group) => total + group.items.length, 0) !== batch.plannedVideoCount
     || (approved ? batch.blockers.length !== 4 : batch.blockers[0] !== expectedPreparationBlocker)
     || (batch.status === "not_started") !== (batch.preparedAt === null)

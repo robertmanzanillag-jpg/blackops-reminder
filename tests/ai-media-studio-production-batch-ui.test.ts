@@ -63,6 +63,10 @@ test("production batch UI is preparation-only, accessible, and explicit about ze
   assert.match(workbench, /href="#heygen-roster"/);
   assert.match(workbench, /No safe in-place refresh is available yet/);
   assert.match(workbench, />Scripts ready</);
+  assert.match(workbench, /source topics will be reused across creators\. Topic N will supply video N/);
+  assert.match(workbench, /source topics reused across creators\. Topic N supplies video N/);
+  assert.match(workbench, /contentPlanSummary\(batch\)/);
+  assert.match(workbench, /batch\.contentPlan\.slotCount/);
   assert.doesNotMatch(workbench, />Draft scripts ready</);
   assert.doesNotMatch(workbench, /Approve (video|slot|script) /);
   assert.match(workbench, /LoadingPanel/);

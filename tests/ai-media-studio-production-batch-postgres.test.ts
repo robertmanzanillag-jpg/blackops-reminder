@@ -159,7 +159,8 @@ async function seedFixture(label: string, avatarCount: number, workspace = `work
     await pool.query(`
       INSERT INTO ai_media_source_items
         (id,owner_user_id,workspace_id,source_type,external_id,title,content,content_hash,status,rights_status,moderation_status,payload)
-      VALUES ($1,$2,$3,'events',$4,$5,$6,$7,'ready','owned','approved','{}'::jsonb)
+      VALUES ($1,$2,$3,'events',$4,$5,$6,$7,'ready','owned','approved',
+        '{"adapterKey":"kong-owned-catalog"}'::jsonb)
     `, [uuid(`${label}:source:${index}`), scope.ownerUserId, scope.workspaceId, `${label}-source-${index}`,
       `${label} Source ${index}`, content, digest(content)]);
   }
@@ -214,6 +215,9 @@ integrationTest("PG16 exact chain prepares durable 5→50 and 10→100 batches w
   assert.deepEqual(concurrentReplay, fiveBatch);
   assert.equal(fiveBatch.avatarCount, 5);
   assert.equal(fiveBatch.plannedVideoCount, 50);
+  assert.deepEqual(fiveBatch.contentPlan, {
+    strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true,
+  });
   assert.equal(fiveBatch.status, "draft_ready");
   assert.equal(fiveBatch.canGenerate, false);
   assert.equal(fiveBatch.noSpend, true);
@@ -227,6 +231,11 @@ integrationTest("PG16 exact chain prepares durable 5→50 and 10→100 batches w
     { idempotencyKey: "batch-ten-idem-0001", variantCount: 5 });
   assert.equal(tenBatch.avatarCount, 10);
   assert.equal(tenBatch.plannedVideoCount, 100);
+  assert.deepEqual(tenBatch.contentPlan, {
+    strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 100, reuseAcrossCreators: true,
+  });
+  assert.equal(tenBatch.canGenerate, false);
+  assert.equal(tenBatch.noSpend, true);
   assert.deepEqual(await counts(ten.scope), { scripts: 100, variants: 500, bindings: 100 });
   const sourceUse = await pool.query<{ used: string; variants: string; checksums_valid: boolean }>(`
     SELECT count(DISTINCT scripts.source_item_id)::text used, count(variants.id)::text variants,
@@ -237,6 +246,20 @@ integrationTest("PG16 exact chain prepares durable 5→50 and 10→100 batches w
     WHERE scripts.owner_user_id=$1 AND scripts.workspace_id=$2
   `, [ten.scope.ownerUserId, ten.scope.workspaceId]);
   assert.deepEqual(sourceUse.rows, [{ used: "10", variants: "500", checksums_valid: true }]);
+  const sourceReuse = await pool.query<{ video_number: number; source_count: string }>(`
+    SELECT slots.video_number, count(DISTINCT scripts.source_item_id)::text source_count
+    FROM ai_media_daily_plan_slots slots
+    JOIN ai_media_script_variants selected ON selected.id=slots.script_variant_id
+      AND selected.owner_user_id=slots.owner_user_id AND selected.workspace_id=slots.workspace_id
+    JOIN ai_media_scripts scripts ON scripts.id=selected.script_id
+      AND scripts.owner_user_id=selected.owner_user_id AND scripts.workspace_id=selected.workspace_id
+    WHERE slots.owner_user_id=$1 AND slots.workspace_id=$2
+    GROUP BY slots.video_number
+    ORDER BY slots.video_number
+  `, [ten.scope.ownerUserId, ten.scope.workspaceId]);
+  assert.deepEqual(sourceReuse.rows.map((row) => Number(row.video_number)), Array.from({ length: 10 }, (_, index) => index + 1));
+  assert.ok(sourceReuse.rows.every((row) => row.source_count === "1"),
+    "the same videoNumber must reuse exactly one source topic across all creators");
   assert.equal(await client().repository.getCurrent(five.scope).then((batch) => batch?.planId), five.planId);
   assert.equal(await client().repository.getCurrent({ ownerUserId: "owner-other", workspaceId: five.scope.workspaceId }), undefined);
   await expectCode(() => client().service.prepare(ten.scope, five.planId,

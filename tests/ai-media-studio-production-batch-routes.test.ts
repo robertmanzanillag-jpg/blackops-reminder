@@ -40,6 +40,7 @@ function pendingBatch(): ProductionBatch {
   return {
     batchId: publicKey("batch", 1), planId: publicKey("plan", 2), status: "not_started", avatarCount: 5,
     videosPerAvatar: 10, plannedVideoCount: 50, canGenerate: false, noSpend: true, preparedAt: null, approvedAt: null,
+    contentPlan: { strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true },
     blockers: ["script_batch_required", "governance_approval_required", "budget_reservation_required",
       "sandbox_generation_required", "human_launch_approval_required"],
     groups: Array.from({ length: 5 }, (_, member) => ({ memberId: publicKey("member", member + 10), creatorName: `Creator ${member + 1}`,
