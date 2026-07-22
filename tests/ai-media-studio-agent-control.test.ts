@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 14);
+  assert.equal(snapshot.summary.done, 15);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -60,6 +60,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const heyGenVerificationEvidence = snapshot.workItems.find((item) => item.id === "ams-agent-heygen-verification-evidence");
   const secureHeyGenSetupRuntime = snapshot.workItems.find((item) => item.id === "ams-agent-secure-heygen-setup-runtime");
   const quoteBoundHumanApproval = snapshot.workItems.find((item) => item.id === "ams-agent-quote-bound-human-approval");
+  const heyGenAccountMaximumQuote = snapshot.workItems.find((item) => item.id === "ams-agent-heygen-account-maximum-quote");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -129,6 +130,12 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(quoteBoundHumanApproval?.acceptance.join(" ") ?? "", /exact latest quote[\s\S]*render specification[\s\S]*prior approval stale/u);
   assert.match(quoteBoundHumanApproval?.evidence.join(" ") ?? "", /PR #165[\s\S]*50 passed[\s\S]*PostgreSQL[\s\S]*build passed/u);
   assert.match(quoteBoundHumanApproval?.blockers.join(" ") ?? "", /No authoritative[\s\S]*pending and unapplied[\s\S]*No generation/u);
+  assert.equal(heyGenAccountMaximumQuote?.state, "done");
+  assert.equal(heyGenAccountMaximumQuote?.branch, "codex/ai-media-studio-heygen-account-quote");
+  assert.equal(heyGenAccountMaximumQuote?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/166");
+  assert.match(heyGenAccountMaximumQuote?.acceptance.join(" ") ?? "", /server-locked[\s\S]*Never convert public rates[\s\S]*explicit unavailable/u);
+  assert.match(heyGenAccountMaximumQuote?.evidence.join(" ") ?? "", /22\/22[\s\S]*P0=P1=P2=P3=0[\s\S]*PR #165/u);
+  assert.match(heyGenAccountMaximumQuote?.blockers.join(" ") ?? "", /account-specific[\s\S]*No maximum-quote evidence[\s\S]*Replit deployment/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T10:45:54.172Z",
+  "generatedAt": "2026-07-22T11:27:13.858Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -94,27 +94,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 884,
-    "filesIndexed": 736,
-    "imports": 3169,
+    "filesVisible": 890,
+    "filesIndexed": 742,
+    "imports": 3181,
     "routes": 501,
-    "symbols": 14606
+    "symbols": 14648
   },
   "directories": {
-    "script": {
-      "files": 46,
-      "indexed": 44,
-      "kinds": {
-        "script": 46
-      }
-    },
-    "tests": {
-      "files": 223,
-      "indexed": 212,
-      "kinds": {
-        "test": 223
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -166,10 +152,10 @@
       }
     },
     "docs/ai-media-studio": {
-      "files": 15,
-      "indexed": 15,
+      "files": 16,
+      "indexed": 16,
       "kinds": {
-        "docs": 15
+        "docs": 16
       }
     },
     "docs": {
@@ -187,6 +173,13 @@
         "docs": 2
       }
     },
+    "script": {
+      "files": 46,
+      "indexed": 44,
+      "kinds": {
+        "script": 46
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -202,10 +195,10 @@
       }
     },
     "server/ai-media-studio": {
-      "files": 168,
-      "indexed": 149,
+      "files": 171,
+      "indexed": 152,
       "kinds": {
-        "server": 168
+        "server": 171
       }
     },
     "server/replit_integrations": {
@@ -227,6 +220,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 225,
+      "indexed": 214,
+      "kinds": {
+        "test": 225
       }
     },
     "tests/fixtures": {
@@ -4981,6 +4981,14 @@
     },
     {
       "path": "docs/ai-media-studio/github-checkpoint-2026-07-21.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/heygen-account-maximum-quote.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11261,6 +11269,42 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/maximum-quote-provider-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "./contracts"
+      ],
+      "exports": [
+        "LockedMaximumQuoteRequest",
+        "MAXIMUM_QUOTE_UNAVAILABLE_REASON_CODES",
+        "MaximumQuoteOutcome",
+        "MaximumQuoteProvider",
+        "MaximumQuoteUnavailableReasonCode",
+        "isLockedMaximumQuoteRequest",
+        "isMaximumQuoteOutcome"
+      ],
+      "symbols": [
+        "IDEMPOTENCY_KEY",
+        "ISO_MILLISECONDS",
+        "MAXIMUM_QUOTE_UNAVAILABLE_REASON_CODES",
+        "MICRO_USD",
+        "PROVIDER_KEY",
+        "SHA256",
+        "UUID",
+        "instant",
+        "isDigest",
+        "isExactIsoInstant",
+        "isExactObject",
+        "isLockedMaximumQuoteRequest",
+        "isMaximumQuoteOutcome",
+        "keys",
+        "outcome",
+        "quote",
+        "request"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/one-video-cost-approval-contracts.ts",
       "kind": "server",
       "imports": [
@@ -11381,6 +11425,27 @@
         "SLOT_KEY",
         "SandboxReadinessService",
         "parsed"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/server-owned-one-video-cost-approval-authorization.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./launch-authority-contracts",
+        "./one-video-cost-approval-contracts"
+      ],
+      "exports": [
+        "createServerOwnedOneVideoCostApprovalAuthorization"
+      ],
+      "symbols": [
+        "SealedAuthorization",
+        "authorization",
+        "context",
+        "createServerOwnedOneVideoCostApprovalAuthorization",
+        "sealed",
+        "validScope"
       ],
       "routes": []
     },
@@ -11826,6 +11891,23 @@
         "rawStatus",
         "status",
         "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-account-maximum-quote-provider.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/maximum-quote-provider-contracts"
+      ],
+      "exports": [
+        "HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY",
+        "HeyGenAccountMaximumQuoteUnavailableProvider"
+      ],
+      "symbols": [
+        "HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY",
+        "HeyGenAccountMaximumQuoteUnavailableProvider",
+        "unavailable"
       ],
       "routes": []
     },
@@ -12656,6 +12738,7 @@
         "attributionQuerySchema",
         "attributionResponseSchema",
         "authenticatedPayload",
+        "authorization",
         "available",
         "batch",
         "candidate",
@@ -12671,6 +12754,7 @@
         "createDefaultDurableHeyGenOnboardingReadinessRepository",
         "createDefaultDurableHeyGenRosterRuntime",
         "createDefaultDurableLaunchPreflightRepository",
+        "createDefaultDurableOneVideoCostApprovalCoordinator",
         "createDefaultDurableOneVideoExecutionControlRepository",
         "createDefaultDurableProductionBatchRepository",
         "createDefaultDurableSandboxReadinessRepository",
@@ -12722,6 +12806,7 @@
         "jobs",
         "key",
         "languageCodes",
+        "launchAuthority",
         "launchPreflightSelection",
         "load",
         "materializeOwnedAsset",
@@ -21386,6 +21471,7 @@
         "canary",
         "durablePlan",
         "durableScriptBatch",
+        "heyGenAccountMaximumQuote",
         "heyGenVerificationEvidence",
         "launchReadiness",
         "officeSource",
@@ -22115,6 +22201,25 @@
         "script",
         "sealedDigest",
         "slot",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-account-maximum-quote-provider.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/maximum-quote-provider-contracts",
+        "../server/ai-media-studio/providers/heygen-account-maximum-quote-provider",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "adapter",
+        "digest",
+        "outcome",
+        "request",
         "valid"
       ],
       "routes": []
@@ -26381,6 +26486,7 @@
       "symbols": [
         "address",
         "approvalCall",
+        "approvalCalls",
         "browser",
         "browserHarnessPlugin",
         "bundledBrowser",
@@ -26693,6 +26799,25 @@
         "scope",
         "source",
         "uuid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/server-owned-one-video-cost-approval-authorization",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "authorized",
+        "id",
+        "pair",
+        "principal",
+        "request",
+        "scope"
       ],
       "routes": []
     },
@@ -28574,6 +28699,7 @@
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
     "tests/ai-media-studio-held-work-activation.test.ts",
+    "tests/ai-media-studio-heygen-account-maximum-quote-provider.test.ts",
     "tests/ai-media-studio-heygen-guided-setup-browser.test.ts",
     "tests/ai-media-studio-heygen-guided-setup-client.test.ts",
     "tests/ai-media-studio-heygen-onboarding-browser.test.ts",
@@ -28703,6 +28829,7 @@
     "tests/ai-media-studio-secure-heygen-setup-postgres.test.ts",
     "tests/ai-media-studio-secure-heygen-setup.test.ts",
     "tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts",
+    "tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts",
     "tests/ai-media-studio-sources.test.ts",
     "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
     "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",
