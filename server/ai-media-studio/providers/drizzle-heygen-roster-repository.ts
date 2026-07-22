@@ -20,6 +20,8 @@ import {
   type HeyGenRosterDailyPlan,
 } from "../../../shared/ai-media-studio-heygen-roster";
 import { INITIAL_CREATOR_CANARY_PROFILE } from "../../../shared/ai-media-studio-launch-plan-profile";
+import { createInfluencerRequestSchema } from "../../../shared/ai-media-studio-core";
+import { buildCanonicalRosterPersona, repairCanonicalRosterPersona } from "../core/canonical-roster-persona";
 import type { TenantScope } from "../core/resource-domain";
 import {
   HeyGenRosterError,
@@ -264,22 +266,37 @@ async function upsertResource(input: {
   externalId: string;
   credentialVersion: number;
   pendingVerification: boolean;
+  preserveExisting?: boolean;
 }): Promise<string> {
-  const { tx, scope, providerAccountId, rosterId, member, kind, externalId, credentialVersion, pendingVerification } = input;
+  const {
+    tx, scope, providerAccountId, rosterId, member, kind, externalId,
+    credentialVersion, pendingVerification, preserveExisting = false,
+  } = input;
   const displayName = kind === "avatar" ? member.name : "HeyGen voice";
   const metadata = resourceMetadata(member, rosterId, kind, credentialVersion, !pendingVerification);
   const status = pendingVerification ? "pending_verification" : "active";
   const synchronizedAt = pendingVerification ? sql`NULL` : sql`clock_timestamp()`;
-  const existing = rows(await tx.execute(sql`
-    UPDATE ${aiMediaProviderResources}
-    SET display_name=${displayName}, status=${status}, metadata=COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb,
-        synchronized_at=${synchronizedAt}, updated_at=clock_timestamp()
-    WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-      AND provider_account_id=${providerAccountId} AND provider_key='heygen'
-      AND resource_type=${kind} AND external_resource_id=${externalId}
-    RETURNING id
-  `))[0];
-  if (existing) return text(existing, "id", "id");
+  if (preserveExisting) {
+    const existing = rows(await tx.execute(sql`
+      SELECT id FROM ${aiMediaProviderResources}
+      WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
+        AND provider_account_id=${providerAccountId} AND provider_key='heygen'
+        AND resource_type=${kind} AND external_resource_id=${externalId}
+      LIMIT 1
+    `))[0];
+    if (existing) return text(existing, "id", "id");
+  } else {
+    const existing = rows(await tx.execute(sql`
+      UPDATE ${aiMediaProviderResources}
+      SET display_name=${displayName}, status=${status}, metadata=COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb,
+          synchronized_at=${synchronizedAt}, updated_at=clock_timestamp()
+      WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
+        AND provider_account_id=${providerAccountId} AND provider_key='heygen'
+        AND resource_type=${kind} AND external_resource_id=${externalId}
+      RETURNING id
+    `))[0];
+    if (existing) return text(existing, "id", "id");
+  }
 
   const id = randomUUID();
   const canonicalKey = opaqueResourceKey(kind, kind === "voice" ? externalId : member.memberId);
@@ -317,6 +334,14 @@ async function createInfluencer(input: {
   const influencerId = randomUUID();
   const slug = `heygen-${member.memberId.slice("member_".length)}`;
   const persona = { source: "heygen_roster", rosterId, memberId: member.memberId };
+  const profile = buildCanonicalRosterPersona({
+    name: member.name,
+    language: member.language,
+    accent: member.accent,
+    gender: member.gender,
+    avatarResourceId,
+    voiceResourceId,
+  });
   const inserted = rows(await tx.execute(sql`
     INSERT INTO ${aiMediaInfluencers} (
       id, owner_user_id, workspace_id, name, slug, status, accent, language, gender,
@@ -324,16 +349,21 @@ async function createInfluencer(input: {
       facial_expressions, brand_colors, persona, default_voice_resource_id, default_avatar_resource_id,
       created_at, updated_at
     ) VALUES (
-      ${influencerId}, ${scope.ownerUserId}, ${scope.workspaceId}, ${member.name}, ${slug}, 'draft',
-      ${member.accent}, ${member.language}, ${member.gender}, '{"minimum":18,"maximum":65}'::jsonb,
-      '[]'::jsonb, '[]'::jsonb, 'natural', '[]'::jsonb, '', '', 5, '[]'::jsonb, '[]'::jsonb,
+      ${influencerId}, ${scope.ownerUserId}, ${scope.workspaceId}, ${profile.name}, ${slug}, ${profile.status},
+      ${profile.accent}, ${profile.language}, ${profile.gender}, ${JSON.stringify(profile.ageRange)}::jsonb,
+      ${JSON.stringify(profile.personality)}::jsonb, ${JSON.stringify(profile.tone)}::jsonb,
+      ${profile.speakingStyle}, ${JSON.stringify(profile.categories)}::jsonb, ${profile.intro}, ${profile.outro},
+      ${profile.energyLevel}, ${JSON.stringify(profile.facialExpressions)}::jsonb, ${JSON.stringify(profile.brandColors)}::jsonb,
       ${JSON.stringify(persona)}::jsonb, ${voiceResourceId}, ${avatarResourceId}, clock_timestamp(), clock_timestamp()
     ) ON CONFLICT (owner_user_id, workspace_id, slug) DO NOTHING RETURNING id
   `))[0];
   if (inserted) return text(inserted, "id", "id");
 
   const existing = rows(await tx.execute(sql`
-    SELECT id, persona FROM ${aiMediaInfluencers}
+    SELECT id, persona, name, status, accent, language, gender, age_range, personality, tone,
+      speaking_style, categories, intro, outro, energy_level, facial_expressions, brand_colors,
+      default_voice_resource_id, default_avatar_resource_id
+    FROM ${aiMediaInfluencers}
     WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId} AND slug=${slug}
     FOR UPDATE
   `))[0];
@@ -342,17 +372,97 @@ async function createInfluencer(input: {
     || existingPersona.rosterId !== rosterId || existingPersona.memberId !== member.memberId) {
     throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
   }
+  const existingId = text(existing, "id", "id");
+  const existingFields = {
+    name: existing.name,
+    avatarResourceId: existing.defaultAvatarResourceId ?? existing.default_avatar_resource_id ?? null,
+    voiceResourceId: existing.defaultVoiceResourceId ?? existing.default_voice_resource_id ?? null,
+    accent: existing.accent,
+    language: existing.language,
+    gender: existing.gender,
+    ageRange: existing.ageRange ?? existing.age_range,
+    personality: existing.personality,
+    tone: existing.tone,
+    speakingStyle: existing.speakingStyle ?? existing.speaking_style,
+    categories: existing.categories,
+    intro: existing.intro,
+    outro: existing.outro,
+    energyLevel: existing.energyLevel ?? existing.energy_level,
+    facialExpressions: existing.facialExpressions ?? existing.facial_expressions,
+    brandColors: existing.brandColors ?? existing.brand_colors,
+    status: existing.status,
+  };
+  const existingProfile = createInfluencerRequestSchema.safeParse(existingFields);
+  if (existingProfile.success
+    && existingProfile.data.avatarResourceId === avatarResourceId
+    && existingProfile.data.voiceResourceId === voiceResourceId) {
+    return existingId;
+  }
+  const repaired = repairCanonicalRosterPersona(existingFields, {
+    name: member.name,
+    language: member.language,
+    accent: member.accent,
+    gender: member.gender,
+    avatarResourceId,
+    voiceResourceId,
+  });
   const updated = rows(await tx.execute(sql`
     UPDATE ${aiMediaInfluencers}
-    SET name=${member.name}, status='draft', accent=${member.accent}, language=${member.language}, gender=${member.gender},
-        persona=${JSON.stringify(persona)}::jsonb, default_voice_resource_id=${voiceResourceId},
-        default_avatar_resource_id=${avatarResourceId}, archived_at=NULL, updated_at=clock_timestamp()
-    WHERE id=${text(existing, "id", "id")} AND owner_user_id=${scope.ownerUserId}
+    SET name=${repaired.name}, status=${repaired.status}, accent=${repaired.accent}, language=${repaired.language}, gender=${repaired.gender},
+        age_range=${JSON.stringify(repaired.ageRange)}::jsonb, personality=${JSON.stringify(repaired.personality)}::jsonb,
+        tone=${JSON.stringify(repaired.tone)}::jsonb, speaking_style=${repaired.speakingStyle},
+        categories=${JSON.stringify(repaired.categories)}::jsonb, intro=${repaired.intro}, outro=${repaired.outro},
+        energy_level=${repaired.energyLevel}, facial_expressions=${JSON.stringify(repaired.facialExpressions)}::jsonb,
+        brand_colors=${JSON.stringify(repaired.brandColors)}::jsonb, persona=${JSON.stringify(persona)}::jsonb,
+        default_voice_resource_id=${voiceResourceId}, default_avatar_resource_id=${avatarResourceId},
+        archived_at=CASE WHEN ${repaired.status}='archived' THEN archived_at ELSE NULL END,
+        updated_at=clock_timestamp()
+    WHERE id=${existingId} AND owner_user_id=${scope.ownerUserId}
       AND workspace_id=${scope.workspaceId} AND slug=${slug}
     RETURNING id
   `))[0];
   if (!updated) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
   return text(updated, "id", "id");
+}
+
+type RosterBinding = Readonly<{
+  member: HeyGenRosterNativeMember;
+  avatarResourceId: string;
+  voiceResourceId: string;
+  influencerId: string;
+}>;
+
+async function reconcileRosterBindings(input: {
+  tx: HeyGenRosterExecutor;
+  record: ConfigureHeyGenRosterRecord;
+  pendingVerification: boolean;
+  preserveExistingResources?: boolean;
+}): Promise<RosterBinding[]> {
+  const { tx, record, pendingVerification, preserveExistingResources = false } = input;
+  const bindings: RosterBinding[] = [];
+  for (const member of record.members) {
+    const avatarResourceId = await upsertResource({
+      tx, scope: record.scope, providerAccountId: record.providerAccountId,
+      rosterId: record.rosterId, member, kind: "avatar", externalId: member.avatarId,
+      credentialVersion: record.credentialVersion, pendingVerification,
+      preserveExisting: preserveExistingResources,
+    });
+    const voiceResourceId = await upsertResource({
+      tx, scope: record.scope, providerAccountId: record.providerAccountId,
+      rosterId: record.rosterId, member, kind: "voice", externalId: member.voiceId,
+      credentialVersion: record.credentialVersion, pendingVerification,
+      preserveExisting: preserveExistingResources,
+    });
+    const influencerId = await createInfluencer({
+      tx, scope: record.scope, rosterId: record.rosterId, member,
+      avatarResourceId, voiceResourceId,
+    });
+    if (!avatarResourceId || !voiceResourceId || !influencerId) {
+      throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
+    }
+    bindings.push({ member, avatarResourceId, voiceResourceId, influencerId });
+  }
+  return bindings;
 }
 
 /** Resolves exactly one static-key HeyGen account without selecting configuration or secret material. */
@@ -406,6 +516,9 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
       const replay = parsed.records.get(input.rosterId);
       if (replay) {
         if (!sameReplay(replay, input)) throw new HeyGenRosterError("IDEMPOTENCY_CONFLICT");
+        await reconcileRosterBindings({
+          tx, record: replay, pendingVerification, preserveExistingResources: true,
+        });
         const durableReplay = await this.loadDailyPlan(tx, replay, accountingTimeZone);
         if (!durableReplay) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
         return replay;
@@ -428,30 +541,7 @@ export class DrizzleHeyGenRosterRepository implements HeyGenRosterRepository {
         requestDigest: input.requestDigest, idempotencyKey: input.idempotencyKey,
         members: input.members.map((member) => ({ ...member })), configuredAt,
       };
-      const bindings: Array<{
-        member: HeyGenRosterNativeMember;
-        avatarResourceId: string;
-        voiceResourceId: string;
-        influencerId: string;
-      }> = [];
-      for (const member of record.members) {
-        const avatarResourceId = await upsertResource({
-          tx, scope: record.scope, providerAccountId: record.providerAccountId,
-          rosterId: record.rosterId, member, kind: "avatar", externalId: member.avatarId,
-          credentialVersion: record.credentialVersion, pendingVerification,
-        });
-        const voiceResourceId = await upsertResource({
-          tx, scope: record.scope, providerAccountId: record.providerAccountId,
-          rosterId: record.rosterId, member, kind: "voice", externalId: member.voiceId,
-          credentialVersion: record.credentialVersion, pendingVerification,
-        });
-        const influencerId = await createInfluencer({
-          tx, scope: record.scope, rosterId: record.rosterId, member,
-          avatarResourceId, voiceResourceId,
-        });
-        if (!avatarResourceId || !voiceResourceId || !influencerId) throw new HeyGenRosterError("ROSTER_UNAVAILABLE");
-        bindings.push({ member, avatarResourceId, voiceResourceId, influencerId });
-      }
+      const bindings = await reconcileRosterBindings({ tx, record, pendingVerification });
 
       const plannedSlotCount = bindings.length * HEYGEN_ROSTER_VIDEOS_PER_AVATAR;
       if (bindings.length < HEYGEN_ROSTER_MIN_AVATARS || bindings.length > HEYGEN_ROSTER_MAX_AVATARS
