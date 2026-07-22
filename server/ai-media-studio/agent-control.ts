@@ -549,7 +549,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     owner: "AI Media Studio source automation squad",
     state: "running",
     branch: "codex/ai-media-studio-kong-http-scheduler",
-    pullRequestUrl: null,
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/174",
     acceptance: [
       "The exact curated KONG HTTPS feed is DNS-pinned, TLS-hostname verified, redirect-free and JSON/body/cursor bounded",
       "One tenant-scoped orchestration row persists the server cursor with SKIP LOCKED claims, leases, fencing and safe retry recovery",
@@ -557,7 +557,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "Exact curated KONG content is content-hash attested and may prepare deterministic draft scripts only after a complete feed cycle",
       "No HeyGen, secret resolution, render, outbox, spend, publishing, migration or deployment capability is invoked",
     ],
-    mergeGate: "Keep stacked on draft PR #173 until its draft PR exists, KONG feed dependency/CI is green and the existing PostgreSQL chain is separately approved and rehearsed.",
+    mergeGate: "Keep draft PR #174 stacked on draft PR #173 until the KONG feed dependency/CI is green and the existing PostgreSQL chain is separately approved and rehearsed.",
     evidence: [
       "Focused HTTP reader, scheduler repository, replay and production-loop tests pass",
       "Reader/scheduler/API 38/38, source-to-batch 12/12, Agent Control 6/6, TypeScript, build, map and diff hygiene pass",
