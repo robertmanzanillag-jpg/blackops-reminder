@@ -46,31 +46,42 @@ function draftAssignments(campaign, experiment, rows) {
     const strategy = experiment.winnerStrategyId && index < winnerSlots
       ? captionStrategies.find((row) => row.id === experiment.winnerStrategyId)
       : explorationOrder[(index - winnerSlots + explorationOrder.length) % explorationOrder.length];
-    const requiresTranscript = strategy.subtitleStyle !== "hook_only";
-    const topic = (namedDrafts[index] ? path.basename(namedDrafts[index], path.extname(namedDrafts[index])) : campaign.title)
+    const draftFile = namedDrafts[index] || null;
+    const draftFilename = draftFile ? path.basename(draftFile) : "";
+    const draftMetadata = campaign.draftMetadata?.[draftFile] || campaign.draftMetadata?.[draftFilename] || {};
+    const requiresTranscript = typeof draftMetadata.requiresTranscript === "boolean"
+      ? draftMetadata.requiresTranscript
+      : strategy.subtitleStyle !== "hook_only";
+    const topic = (draftFile ? path.basename(draftFile, path.extname(draftFile)) : campaign.title)
       .replace(/^streamersclipusa-|^streamersclips-/i, "")
       .replace(/^[^-]+-[^-]+-\d+-/i, "")
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const captionText = strategy.captionStyle === "question"
+    const generatedCaption = strategy.captionStyle === "question"
       ? `Would you have expected this from ${campaign.creator}?`
       : strategy.captionStyle === "context"
         ? `${campaign.creator} explains the context behind ${topic}.`
         : strategy.captionStyle === "minimal"
           ? `${campaign.creator}: ${topic}.`
           : `${topic}: the part worth watching.`;
+    const assignmentHashtags = Array.isArray(draftMetadata.requiredHashtags)
+      ? draftMetadata.requiredHashtags.map((value) => String(value || "").trim()).filter(Boolean)
+      : requiredHashtags;
+    const captionText = String(draftMetadata.caption || "").trim()
+      || `${generatedCaption} ${assignmentHashtags.join(" ")}`.trim();
     return {
       slot: index + 1,
-      draftFile: namedDrafts[index] || null,
+      draftFile,
       strategyId: strategy.id,
       captionStyle: strategy.captionStyle,
       subtitleStyle: strategy.subtitleStyle,
       hookStyle: strategy.hookStyle,
-      requiredHashtags,
-      captionText: `${captionText} ${requiredHashtags.join(" ")}`.trim(),
+      requiredHashtags: assignmentHashtags,
+      captionText,
       requiresTranscript,
-      preparationStatus: requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only",
+      preparationStatus: String(draftMetadata.preparationStatus || "").trim()
+        || (requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only"),
       metricoolStatus: "approval_required",
       publishAllowed: false,
     };
