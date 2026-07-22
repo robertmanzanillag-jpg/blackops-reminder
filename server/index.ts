@@ -8,7 +8,14 @@ import { startHealthCheckScheduler } from "./health-check";
 import { startMarketNewsScheduler } from "./market-news";
 import { setupTelegramWebhook } from "./telegram-chat";
 import { storage } from "./storage";
-import { getSystemUserId, requireAppUser } from "./user-context";
+import {
+  getSystemUserId,
+  exceptProductionBatchMutations,
+  onlyProductionBatchMutations,
+  requireAppUser,
+  requireAuthenticatedProductionBatchMutationBeforeBody,
+  sanitizeProductionBatchJsonParserError,
+} from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
@@ -58,6 +65,17 @@ declare module "http" {
   }
 }
 
+const sessionSettings = resolveSessionRuntimeSettings();
+const sessionMiddleware = createSessionMiddleware(sessionSettings);
+if (sessionMiddleware) {
+  app.use(onlyProductionBatchMutations(sessionMiddleware));
+  log(`Session auth enabled with ${sessionSettings.storeKind} store`, "auth");
+} else {
+  log("SESSION_SECRET not configured; local session auth is disabled", "auth");
+}
+
+app.use(requireAuthenticatedProductionBatchMutationBeforeBody);
+
 app.use(
   express.json({
     limit: '8mb',
@@ -66,6 +84,8 @@ app.use(
     },
   }),
 );
+
+app.use(sanitizeProductionBatchJsonParserError);
 
 app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
@@ -275,13 +295,8 @@ app.get("/dropshipping/legal/checkout-readiness", (_req, res) => {
   ]));
 });
 
-const sessionSettings = resolveSessionRuntimeSettings();
-const sessionMiddleware = createSessionMiddleware(sessionSettings);
 if (sessionMiddleware) {
-  app.use(sessionMiddleware);
-  log(`Session auth enabled with ${sessionSettings.storeKind} store`, "auth");
-} else {
-  log("SESSION_SECRET not configured; local session auth is disabled", "auth");
+  app.use(exceptProductionBatchMutations(sessionMiddleware));
 }
 
 app.use(requireAppUser);

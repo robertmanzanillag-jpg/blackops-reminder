@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+import type { ErrorRequestHandler, NextFunction, Request, RequestHandler, Response } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { hasRealValue } from "./ceo-doctor-cli";
 
@@ -180,6 +180,87 @@ export function requireAppUser(req: Request, res: Response, next: NextFunction):
   }
 
   next();
+}
+
+const PRODUCTION_BATCH_MUTATION_PATH = /^\/api\/ai-media-studio\/production-batches\/[^/?#]+\/(?:prepare-scripts|approve-scripts)\/?$/iu;
+const JSON_DECOMPRESSION_ERROR_CODES = new Set([
+  "Z_BUF_ERROR",
+  "Z_DATA_ERROR",
+  "Z_NEED_DICT",
+  "Z_STREAM_ERROR",
+]);
+
+export function isProductionBatchMutationRequest(method: string | undefined, originalUrl: string | undefined): boolean {
+  if (method !== "POST" || typeof originalUrl !== "string") return false;
+  return PRODUCTION_BATCH_MUTATION_PATH.test(originalUrl.split("?", 1)[0] ?? "");
+}
+
+export function requestHasRawQuery(originalUrl: string | undefined): boolean {
+  return typeof originalUrl === "string" && originalUrl.includes("?");
+}
+
+export function onlyProductionBatchMutations(middleware: RequestHandler): RequestHandler {
+  return (req, res, next) => isProductionBatchMutationRequest(req.method, req.originalUrl)
+    ? middleware(req, res, next) : next();
+}
+
+export function exceptProductionBatchMutations(middleware: RequestHandler): RequestHandler {
+  return (req, res, next) => isProductionBatchMutationRequest(req.method, req.originalUrl)
+    ? next() : middleware(req, res, next);
+}
+
+/** Runs before body parsing so unauthenticated callers cannot exercise the JSON parser. */
+export const requireAuthenticatedProductionBatchMutationBeforeBody: RequestHandler = (req, res, next) => {
+  if (!isProductionBatchMutationRequest(req.method, req.originalUrl)) {
+    next();
+    return;
+  }
+  if (!resolveAuthenticatedUserId(req)) {
+    res.status(401).json({ error: "Production batch mutation is not authorized", code: "UNAUTHENTICATED" });
+    return;
+  }
+  next();
+};
+
+/** Prevent body-parser implementation details or request fragments from entering responses. */
+export const sanitizeProductionBatchJsonParserError: ErrorRequestHandler = (error, req, res, next) => {
+  if (!isProductionBatchMutationRequest(req.method, req.originalUrl) || !isJsonParserError(error)) {
+    next(error);
+    return;
+  }
+  const status = parserErrorStatus(error);
+  res.status(status).json({
+    error: status === 413 ? "Production batch JSON body is too large"
+      : status === 415 ? "Production batch JSON body is unsupported"
+        : "Production batch JSON body is invalid",
+    code: status === 413 ? "JSON_BODY_TOO_LARGE"
+      : status === 415 ? "UNSUPPORTED_JSON_BODY"
+        : "INVALID_JSON_BODY",
+  });
+};
+
+function isJsonParserError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; status?: unknown; statusCode?: unknown; type?: unknown };
+  const knownBodyParserError = candidate.type === "charset.unsupported"
+    || candidate.type === "encoding.unsupported"
+    || candidate.type === "entity.parse.failed"
+    || candidate.type === "entity.too.large"
+    || candidate.type === "entity.verify.failed"
+    || candidate.type === "request.aborted"
+    || candidate.type === "request.size.invalid";
+  if (knownBodyParserError) return true;
+  const status = candidate.status ?? candidate.statusCode;
+  return status === 400
+    && typeof candidate.code === "string"
+    && JSON_DECOMPRESSION_ERROR_CODES.has(candidate.code);
+}
+
+function parserErrorStatus(error: unknown): 400 | 413 | 415 {
+  const type = (error as { type?: unknown }).type;
+  return type === "entity.too.large" ? 413
+    : type === "charset.unsupported" || type === "encoding.unsupported" ? 415
+      : 400;
 }
 
 /**

@@ -24,7 +24,11 @@ import {
   type ProviderResource,
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
-import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
+import {
+  approveProductionBatchRequestSchema,
+  prepareProductionBatchRequestSchema,
+  productionBatchResponseSchema,
+} from "../../shared/ai-media-studio-production-batches";
 import { sourceEligibilityReviewResponseSchema } from "../../shared/ai-media-studio-source-eligibility";
 import {
   sourceScriptPreviewRequestSchema,
@@ -89,7 +93,7 @@ import {
   type PublishingJob,
   type SourceItem,
 } from "../../shared/ai-media-studio-operations";
-import { getCurrentUserId, resolveAuthenticatedUserId } from "../user-context";
+import { getCurrentUserId, requestHasRawQuery, resolveAuthenticatedUserId } from "../user-context";
 import { createAiMediaStudioAgentSnapshot } from "./agent-control";
 import type { CoreCatalogRepositories } from "./core/runtime";
 import {
@@ -1786,6 +1790,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       next(error);
     }
   };
+  const requireStrictProductionBatchMutation = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.productionBatchPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1923,17 +1938,35 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(productionBatchResponseSchema.parse({ batch }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`, requireProductionBatches, asyncRoute(async (req, res) => {
-    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
-    const batch = await productionBatchSelection.service!.prepare(scope, req.params.planId, req.body);
-    res.json(productionBatchResponseSchema.parse({ batch }));
-  }));
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`,
+    requireStrictProductionBatchMutation,
+    requireProductionBatches,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.productionBatchPrincipal as StrictMoneyActionPrincipal | undefined;
+      const parsed = prepareProductionBatchRequestSchema.safeParse(req.body);
+      if (!principal?.authenticatedUserId || !parsed.success
+        || requestHasRawQuery(req.originalUrl) || req.get("transfer-encoding")) {
+        throw new ProductionBatchError("INVALID_REQUEST");
+      }
+      const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
+      const batch = await productionBatchSelection.service!.prepare(scope, req.params.planId, parsed.data);
+      res.json(productionBatchResponseSchema.parse({ batch }));
+    }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts`, requireProductionBatches, asyncRoute(async (req, res) => {
-    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
-    const batch = await productionBatchSelection.service!.approve(scope, req.params.planId, req.body);
-    res.json(productionBatchResponseSchema.parse({ batch }));
-  }));
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts`,
+    requireStrictProductionBatchMutation,
+    requireProductionBatches,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.productionBatchPrincipal as StrictMoneyActionPrincipal | undefined;
+      const parsed = approveProductionBatchRequestSchema.safeParse(req.body);
+      if (!principal?.authenticatedUserId || !parsed.success
+        || requestHasRawQuery(req.originalUrl) || req.get("transfer-encoding")) {
+        throw new ProductionBatchError("INVALID_REQUEST");
+      }
+      const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
+      const batch = await productionBatchSelection.service!.approve(scope, req.params.planId, parsed.data);
+      res.json(productionBatchResponseSchema.parse({ batch }));
+    }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight`, (_req, res, next) => {
     res.set("Cache-Control", "private, no-store"); next();
@@ -2433,7 +2466,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     asyncRoute(async (req, res) => {
       const principal = res.locals.sourceToBatchAutomationPrincipal as StrictMoneyActionPrincipal | undefined;
       if (!principal?.authenticatedUserId || !sourceToBatchAutomation) throw new ProductionBatchError("INVALID_REQUEST");
-      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+      if (requestHasRawQuery(req.originalUrl) || req.get("transfer-encoding")
         || !sourceToBatchAutomationRequestSchema.safeParse(req.body).success) {
         throw new ProductionBatchError("INVALID_REQUEST");
       }
