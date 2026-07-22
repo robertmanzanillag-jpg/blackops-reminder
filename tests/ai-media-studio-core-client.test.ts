@@ -178,7 +178,7 @@ test("dashboard labels persisted provider configuration without claiming live he
   assert.match(dashboard, /Observed locally/);
   assert.match(dashboard, /not a live provider health check/);
   assert.doesNotMatch(dashboard, />Provider health</);
-  assert.match(navigation, /Provider configuration/);
+  assert.match(navigation, /href: "#heygen-setup", label: "HeyGen setup"/);
   assert.doesNotMatch(navigation, /Provider health/);
   assert.match(page, /Provider configuration/);
   assert.doesNotMatch(page, /Provider health/);

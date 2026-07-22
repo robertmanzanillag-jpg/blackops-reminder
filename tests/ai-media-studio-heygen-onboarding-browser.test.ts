@@ -95,32 +95,32 @@ test("configured HeyGen roster stays summarized until confirmed replacement and 
   assert.deepEqual(browserErrors, []);
 
   await assert.doesNotReject(page.getByText("Roster configured: 5 avatars and 50 planned videos.").waitFor());
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 0);
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 0);
   await page.getByRole("button", { name: "Replace roster" }).click();
   await assert.doesNotReject(page.getByRole("alertdialog").waitFor());
   await page.getByRole("button", { name: "Keep current roster" }).click();
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 0);
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 0);
   assert.equal(await page.getByText("Creator 1 · en-US · 10 planned").count(), 1);
 
   await page.getByRole("button", { name: "Replace roster" }).click();
   await page.getByRole("button", { name: "Open replacement form" }).click();
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 5);
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 5);
   assert.equal(await page.getByRole("textbox", { name: /API key|secret|token/iu }).count(), 0);
   assert.deepEqual(await page.evaluate(() => (window as any).__heyGenOnboardingHarness.mutations), []);
 
   await page.evaluate(() => (window as any).__heyGenOnboardingHarness.render("roster_configured_blocked"));
-  await page.getByRole("textbox", { name: "HeyGen avatar ID" }).first().waitFor({ state: "detached" });
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 0);
+  await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).first().waitFor({ state: "detached" });
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 0);
   await page.getByRole("button", { name: "Replace roster" }).click();
   assert.equal(await page.getByRole("button", { name: "Open replacement form" }).isEnabled(), true);
   await page.getByRole("button", { name: "Keep current roster" }).click();
   await page.evaluate(() => (window as any).__heyGenOnboardingHarness.render("stale_roster_binding"));
   await page.getByRole("button", { name: "Replace stale roster" }).click();
   await page.getByRole("button", { name: "Keep blocked roster" }).click();
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 0);
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 0);
   await page.getByRole("button", { name: "Replace stale roster" }).click();
   await page.getByRole("button", { name: "Open replacement form" }).click();
-  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar ID" }).count(), 5);
+  assert.equal(await page.getByRole("textbox", { name: "HeyGen avatar look ID" }).count(), 5);
   await page.evaluate(() => (window as any).__heyGenOnboardingHarness.render("awaiting_secure_credential"));
   await page.waitForTimeout(50);
   const observations = await page.evaluate(() => (window as any).__heyGenOnboardingHarness.observations.slice(-2));

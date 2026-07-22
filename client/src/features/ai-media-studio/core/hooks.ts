@@ -184,6 +184,7 @@ export function useConfigureHeyGenRoster() {
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.resourceCatalogs }),
       queryClient.invalidateQueries({ queryKey: ["ai-media-studio", "options"] }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRoster }),
+      queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenOnboardingReadiness }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.heyGenRosterDailyPlan }),
       queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatch }),
     ]),
