@@ -256,6 +256,24 @@ test("ignores proof flags when the exact TikTok post URL is missing", () => {
   assert.equal(plan.decisions[0].observed.publishedPosts, 0);
 });
 
+test("ignores verified metrics from a different TikTok account", () => {
+  const wrongAccountMetrics = Array.from({ length: 15 }, (_, index) => ({
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl: `https://www.tiktok.com/@wrongaccount/video/${3234567890123456700n + BigInt(index)}`,
+    views: 1_000_000,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  }));
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: wrongAccountMetrics, now, targetDailyClips: 8 });
+  assert.equal(plan.goal.measuredViews, 0);
+  assert.equal(plan.decisions[0].observed.publishedPosts, 0);
+  assert.equal(plan.decisions[0].decision, "test");
+  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+});
+
 test("Metricool rows point to final media while cashout setup remains separate", () => {
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [{ ...campaign, payoutMethodReady: false }], metrics: [], now });
   const rows = buildMetricoolApprovalRows(plan.decisions[0], {

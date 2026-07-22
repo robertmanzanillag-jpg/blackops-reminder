@@ -10,8 +10,14 @@ const captionStrategies = [
   { id: "context_first", captionStyle: "context", subtitleStyle: "clean_sentence", hookStyle: "why_it_matters" },
   { id: "hook_only", captionStyle: "minimal", subtitleStyle: "hook_only", hookStyle: "short_claim" },
 ];
-const exactTikTokPostPattern = /^https:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9._-]{2,40}\/video\/\d{8,30}\/?$/i;
+const exactTikTokPostPattern = /^https:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._-]{2,40})\/video\/\d{8,30}\/?$/i;
 const execFileAsync = promisify(execFile);
+
+function tiktokPostMatchesAccount(url, accountHandle) {
+  const match = String(url || "").trim().match(exactTikTokPostPattern);
+  const expected = String(accountHandle || "").trim().replace(/^@/, "").toLowerCase();
+  return Boolean(match && expected && match[1].toLowerCase() === expected);
+}
 
 function draftAssignments(campaign, experiment, rows) {
   const draftCount = Math.floor(finiteNumber(campaign.draftsReady) || 0);
@@ -190,10 +196,10 @@ function payoutBlockers(campaign) {
   ].filter(Boolean);
 }
 
-function metricRowsForCampaign(metrics, campaignId) {
+function metricRowsForCampaign(metrics, campaignId, campaign) {
   return metrics.filter((row) => row.campaignId === campaignId
     && row.finalStatus === "published"
-    && exactTikTokPostPattern.test(String(row.publishedPostUrl || "").trim())
+    && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
     && row.metricEvidenceVerified === true
     && finiteNumber(row.views) !== null);
 }
@@ -235,7 +241,7 @@ function chooseExperiment(rows) {
 function campaignDecision(campaign, metrics, now, publishingAuthorized = false) {
   const productionBlockers = campaignBlockers(campaign, now);
   const paymentBlockers = payoutBlockers(campaign);
-  const rows = metricRowsForCampaign(metrics, campaign.id);
+  const rows = metricRowsForCampaign(metrics, campaign.id, campaign);
   const medianViews = median(rows.map((row) => Number(row.views)));
   const totalViews = rows.reduce((sum, row) => sum + Number(row.views), 0);
   const totalEarningsUsd = rows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
@@ -323,10 +329,14 @@ export function buildStreamerGrowthCeoPlan({
     : 5;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
-  const actualPublishedRows = metrics.filter((row) => row.finalStatus === "published"
-    && exactTikTokPostPattern.test(String(row.publishedPostUrl || "").trim())
-    && row.metricEvidenceVerified === true
-    && finiteNumber(row.views) !== null);
+  const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
+  const actualPublishedRows = metrics.filter((row) => {
+    const campaign = campaignById.get(row.campaignId);
+    return row.finalStatus === "published"
+      && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
+      && row.metricEvidenceVerified === true
+      && finiteNumber(row.views) !== null;
+  });
   const measuredViews = actualPublishedRows.reduce((sum, row) => sum + Number(row.views), 0);
   const measuredEarningsUsd = actualPublishedRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
   const active = decisions.filter((row) => row.canProduce);
@@ -461,7 +471,8 @@ async function main() {
     ]);
   }
   for (const row of metrics) {
-    const exactPost = exactTikTokPostPattern.test(String(row.publishedPostUrl || "").trim());
+    const campaign = campaigns.find((candidate) => candidate.id === row.campaignId);
+    const exactPost = tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle);
     row.metricEvidenceVerified = exactPost && await verifyTextEvidence(workspaceRoot, row.metricoolProofPath, [
       "Metricool",
       row.publishedPostUrl,

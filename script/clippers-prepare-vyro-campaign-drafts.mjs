@@ -78,15 +78,15 @@ async function outputIsValid(targetPath) {
   }
 }
 
-await mkdir(outputDir, { recursive: true });
-const rendered = [];
-for (const [sourceName, hook] of selectedClips) rendered.push(await renderClip(sourceName, hook));
-
 const evidencePath = path.join(workspaceRoot, "evidence-drop", "vyro", "mrbeast-jre-campaign-2026-07-21.md");
 const evidence = await readFile(evidencePath, "utf8");
 if (!evidence.includes("Successfully joined the campaign!")) {
   throw new Error("Campaign join evidence is missing; drafts remain blocked.");
 }
+
+await mkdir(outputDir, { recursive: true });
+const rendered = [];
+for (const [sourceName, hook] of selectedClips) rendered.push(await renderClip(sourceName, hook));
 
 const manifestClips = clips.map(([sourceName, hook]) => ({ sourceName, hook, targetPath: path.join(outputDir, outputName(sourceName)) }));
 const outputChecks = await Promise.all(manifestClips.map(async (clip) => ({ sourceName: clip.sourceName, valid: await outputIsValid(clip.targetPath) })));
