@@ -27,7 +27,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
   assert.equal(snapshot.summary.done, 13);
-  assert.equal(snapshot.summary.running, 0);
+  assert.equal(snapshot.summary.running, 1);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
@@ -59,6 +59,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const oneVideoExecutionControl = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-execution-control");
   const heyGenVerificationEvidence = snapshot.workItems.find((item) => item.id === "ams-agent-heygen-verification-evidence");
   const secureHeyGenSetupRuntime = snapshot.workItems.find((item) => item.id === "ams-agent-secure-heygen-setup-runtime");
+  const quoteBoundHumanApproval = snapshot.workItems.find((item) => item.id === "ams-agent-quote-bound-human-approval");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -122,6 +123,10 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(secureHeyGenSetupRuntime?.acceptance.join(" ") ?? "", /AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY[\s\S]*5–10[\s\S]*GET-only/u);
   assert.match(secureHeyGenSetupRuntime?.evidence.join(" ") ?? "", /PR #161[\s\S]*22\/22[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(secureHeyGenSetupRuntime?.blockers.join(" ") ?? "", /migrations remain pending[\s\S]*No live verification[\s\S]*quote-to-human-approval/u);
+  assert.equal(quoteBoundHumanApproval?.state, "running");
+  assert.equal(quoteBoundHumanApproval?.branch, "codex/ai-media-studio-quote-bound-approval");
+  assert.match(quoteBoundHumanApproval?.acceptance.join(" ") ?? "", /exact latest quote[\s\S]*render specification[\s\S]*prior approval stale/u);
+  assert.match(quoteBoundHumanApproval?.blockers.join(" ") ?? "", /No authoritative[\s\S]*pending and unapplied[\s\S]*No generation/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

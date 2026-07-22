@@ -32,6 +32,7 @@ export interface MintMaximumQuoteAttestationInput extends RuntimeAttestationBind
   readonly attestationId: string;
   readonly decision: VerifiedMaximumQuoteAttestation["decision"];
   readonly maximumQuoteMicroUsd: string;
+  readonly quoteExpiresAt: Date;
   readonly sourceEvidenceDigest: Digest;
 }
 
@@ -92,17 +93,20 @@ class ProcessLocalLaunchRuntimeAttestationRegistry implements LaunchRuntimeAttes
 
   mintMaximumQuoteAttestation(input: Readonly<MintMaximumQuoteAttestationInput>): string {
     assertExactKeys(input, ["scope", "principal", "subject", "idempotencyKey", "validFrom", "expiresAt",
-      "attestationId", "decision", "maximumQuoteMicroUsd", "sourceEvidenceDigest"]);
+      "attestationId", "decision", "maximumQuoteMicroUsd", "quoteExpiresAt", "sourceEvidenceDigest"]);
     if (!(input.decision === "quoted" || input.decision === "declined" || input.decision === "revoked")) {
       throw new TypeError("Invalid runtime attestation");
     }
     const amount = microUsd(input.maximumQuoteMicroUsd);
+    if (!validDatabaseTime(input.quoteExpiresAt) || input.quoteExpiresAt <= input.validFrom
+      || input.quoteExpiresAt > input.expiresAt) throw new TypeError("Invalid runtime attestation");
     const attestation = Object.freeze({
       kind: "maximum_quote" as const,
       attestationId: safeId(input.attestationId),
       decision: input.decision,
       maximumQuoteMicroUsd: amount,
       currency: "USD" as const,
+      quoteExpiresAt: input.quoteExpiresAt.toISOString(),
       sourceEvidenceDigest: sourceDigest(input.sourceEvidenceDigest),
     }) as VerifiedMaximumQuoteAttestation;
     return this.#mint("maximum_quote", input, attestation);

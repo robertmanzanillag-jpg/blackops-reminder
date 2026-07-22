@@ -13,6 +13,7 @@ import {
   aiMediaLaunchEvidence,
   aiMediaProviderAccounts,
   aiMediaProviderResources,
+  aiMediaQuoteBoundHumanApprovals,
   aiMediaScripts,
   aiMediaScriptVariants,
   aiMediaSourceItems,
@@ -23,6 +24,7 @@ import {
   type CreateLaunchAuthoritySnapshotCommand,
   type DeclareLaunchIntentCommand,
   type LaunchAuthorityCapability,
+  LaunchAuthorityQuoteChangedError,
   type LaunchAuthorityReceipt,
   type LaunchAuthorityRepository,
   type LaunchAuthoritySnapshotReceipt,
@@ -43,6 +45,10 @@ import {
   lockGovernanceProfile,
 } from "./authority-locks";
 import { launchAuthorityInputDigest } from "./launch-authority-service";
+import {
+  deriveLaunchRenderSpecDigest,
+  deriveMaximumQuoteKey,
+} from "./one-video-execution-control-contracts";
 import {
   verifiedProductionBatchApprovalBinding,
   type ApprovedProductionBatchSlotFacts,
@@ -331,8 +337,121 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
 
   async recordHumanLaunchApproval(input: AuthorizedLaunchAuthorityWrite<RecordHumanLaunchApprovalCommand>) {
     assertAuthorized("record_human_launch_approval", input);
-    return this.appendEvidence(input, "human_launch_approval", input.command.decision, "authenticated_human",
-      null, null, null, null);
+    const { command, principal } = input;
+    validSlotCommand(command);
+    if (!/^quote_[a-f0-9]{24}$/u.test(command.expectedQuoteKey)) throw invalid("expectedQuoteKey is invalid");
+    return this.db.transaction(async (tx) => {
+      await lockAuthorityIdempotency(tx, command.scope, "quote-bound-human-approval", command.idempotencyKey);
+      const replay = await this.byIdempotency(tx, aiMediaQuoteBoundHumanApprovals,
+        command.scope, command.idempotencyKey);
+      if (replay) {
+        if (String(value(replay, "inputDigest", "input_digest")) !== input.inputDigest) throw quoteChanged();
+        return quoteBoundHumanReceipt(replay, true);
+      }
+      await lockAuthorityWorkspace(tx, command.scope);
+      const influencerId = await this.influencerForSlot(tx, command.scope, command.dailyPlanSlotId);
+      await lockGovernanceProfile(tx, command.scope, influencerId);
+      const identityRows = rows(await tx.execute(sql`
+        SELECT gen_random_uuid() AS human_evidence_id,gen_random_uuid() AS approval_binding_id,
+          clock_timestamp() AS database_now
+      `));
+      if (identityRows.length !== 1) throw invariant("Database clock unavailable");
+      const identity = identityRows[0]!;
+      const humanEvidenceId = uuid(String(value(identity, "humanEvidenceId", "human_evidence_id")), "humanEvidenceId");
+      const approvalBindingId = uuid(String(value(identity, "approvalBindingId", "approval_binding_id")), "approvalBindingId");
+      const now = databaseNow(identity);
+      const subject = await this.lockExactSubject(tx, command, now);
+
+      // Select the newest whole quote chain under the workspace lock. Filtering
+      // by a caller-supplied key or subject could resurrect an older quote.
+      const quote = rows(await tx.execute(sql`
+        SELECT * FROM ${aiMediaLaunchEvidence}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND daily_plan_slot_id=${command.dailyPlanSlotId} AND slot_attempt=${command.slotAttempt}
+          AND evidence_kind='maximum_quote'
+        ORDER BY revision DESC LIMIT 1 FOR UPDATE
+      `))[0];
+      if (!quote || !evidenceIsExactCurrentQuote(quote, subject, now)) throw quoteChanged();
+      const quoteEvidenceId = uuid(String(quote.id), "quote.id");
+      const quoteEvidenceRevision = positiveInteger(Number(quote.revision), "quote.revision");
+      const quoteEvidenceDigest = validDigest(String(value(quote, "evidenceDigest", "evidence_digest")), "quote.digest");
+      const quoteAmountMicroUsd = databasePositiveMicroUsd(value(quote, "amountMicroUsd", "amount_micro_usd"));
+      const quoteExpiresAt = requiredExpiry(quote);
+      const quoteKey = deriveMaximumQuoteKey({ evidenceId: quoteEvidenceId, evidenceRevision: quoteEvidenceRevision,
+        evidenceDigest: quoteEvidenceDigest, amountMicroUsd: quoteAmountMicroUsd, currency: "USD",
+        expiresAt: quoteExpiresAt, renderSpecDigest: subject.renderSpecDigest });
+      if (quoteKey !== command.expectedQuoteKey) throw quoteChanged();
+
+      const previous = rows(await tx.execute(sql`
+        SELECT * FROM ${aiMediaLaunchEvidence}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND daily_plan_slot_id=${command.dailyPlanSlotId} AND slot_attempt=${command.slotAttempt}
+          AND evidence_kind='human_launch_approval'
+        ORDER BY revision DESC LIMIT 1 FOR UPDATE
+      `))[0];
+      const revision = previous ? positiveInteger(Number(previous.revision), "previous.revision") + 1 : 1;
+      const previousEvidenceId = previous ? uuid(String(previous.id), "previous.id") : null;
+      const previousEvidenceRevision = previous ? revision - 1 : null;
+      const expiryCandidates = [
+        expiryFrom(now, ttlSeconds(this.options.validityPolicy, "human_launch_approval", command.scope)),
+        quoteExpiresAt, subject.planExpiresAt, subject.governanceExpiresAt,
+      ];
+      if (subject.credentialExpiresAt) expiryCandidates.push(subject.credentialExpiresAt);
+      const expiresAt = new Date(Math.min(...expiryCandidates.map((candidate) => candidate.getTime())));
+      if (expiresAt <= now) throw quoteChanged();
+      const humanEvidenceDigest = digest({ domain: "ai-media-quote-bound-human-launch-evidence-v1",
+        id: humanEvidenceId, subject: publicSubject(subject), kind: "human_launch_approval",
+        decision: command.decision, revision, previousEvidenceId, previousEvidenceRevision,
+        validFrom: now.toISOString(), expiresAt: expiresAt.toISOString(), actor: {
+          kind: principal.kind, subjectId: principal.subjectId,
+          authenticationEvidenceDigest: principal.authenticationEvidenceDigest ?? null,
+        }, quote: { id: quoteEvidenceId, revision: quoteEvidenceRevision, digest: quoteEvidenceDigest,
+          key: quoteKey, amountMicroUsd: quoteAmountMicroUsd, currency: "USD",
+          expiresAt: quoteExpiresAt.toISOString(), renderSpecDigest: subject.renderSpecDigest } });
+      const human = rows(await tx.execute(sql`
+        INSERT INTO ${aiMediaLaunchEvidence} (
+          id,owner_user_id,workspace_id,daily_plan_slot_id,slot_attempt,provider_account_id,provider_key,
+          provider_credential_version,script_variant_id,script_variant_checksum,governance_profile_id,
+          governance_evidence_digest,governance_use,governance_territory,content_country,
+          launch_subject_digest,launch_intent_id,launch_intent_digest,evidence_kind,decision,amount_micro_usd,currency,
+          revision,previous_evidence_id,previous_evidence_revision,valid_from,expires_at,actor_user_id,source_kind,
+          source_attestation_id,source_evidence_digest,evidence_digest,input_digest,idempotency_key,created_at)
+        VALUES (${humanEvidenceId},${subject.scope.ownerUserId},${subject.scope.workspaceId},${subject.dailyPlanSlotId},
+          ${subject.slotAttempt},${subject.providerAccountId},${subject.providerKey},${subject.providerCredentialVersion},
+          ${subject.scriptVariantId},${subject.scriptVariantChecksum},${subject.governanceProfileId},
+          ${subject.governanceEvidenceDigest},${subject.governanceUse},${subject.governanceTerritory},
+          ${subject.contentCountry},${subject.launchSubjectDigest},${subject.launchIntentId},${subject.launchIntentDigest},
+          'human_launch_approval',${command.decision},NULL,NULL,${revision},${previousEvidenceId},
+          ${previousEvidenceRevision},${now},${expiresAt},${principal.subjectId},'authenticated_human',NULL,NULL,
+          ${humanEvidenceDigest},${input.inputDigest},${command.idempotencyKey},${now})
+        ON CONFLICT (owner_user_id,workspace_id,idempotency_key) DO NOTHING RETURNING *
+      `))[0];
+      if (!human) throw quoteChanged();
+      const approvalBindingDigest = digest({ domain: "ai-media-quote-bound-human-approval-v1",
+        subject: publicSubject(subject), human: { id: humanEvidenceId, revision, digest: humanEvidenceDigest,
+          decision: command.decision }, quote: { id: quoteEvidenceId, revision: quoteEvidenceRevision,
+          digest: quoteEvidenceDigest, amountMicroUsd: quoteAmountMicroUsd, currency: "USD",
+          expiresAt: quoteExpiresAt.toISOString() }, renderSpecDigest: subject.renderSpecDigest,
+        inputDigest: input.inputDigest, boundAt: now.toISOString() });
+      const bridge = rows(await tx.execute(sql`
+        INSERT INTO ${aiMediaQuoteBoundHumanApprovals} (
+          id,owner_user_id,workspace_id,daily_plan_slot_id,slot_attempt,launch_subject_digest,
+          launch_intent_id,launch_intent_digest,human_launch_approval_evidence_id,
+          human_launch_approval_evidence_revision,human_launch_approval_evidence_digest,human_evidence_kind,
+          maximum_quote_evidence_id,maximum_quote_evidence_revision,maximum_quote_evidence_digest,
+          maximum_quote_evidence_kind,maximum_quote_decision,decision,amount_micro_usd,currency,
+          quote_expires_at,render_spec_digest,approval_binding_digest,input_digest,idempotency_key,bound_at,created_at)
+        VALUES (${approvalBindingId},${subject.scope.ownerUserId},${subject.scope.workspaceId},
+          ${subject.dailyPlanSlotId},${subject.slotAttempt},${subject.launchSubjectDigest},${subject.launchIntentId},
+          ${subject.launchIntentDigest},${humanEvidenceId},${revision},${humanEvidenceDigest},'human_launch_approval',
+          ${quoteEvidenceId},${quoteEvidenceRevision},${quoteEvidenceDigest},'maximum_quote','quoted',
+          ${command.decision},${quoteAmountMicroUsd}::numeric,'USD',${quoteExpiresAt},${subject.renderSpecDigest},
+          ${approvalBindingDigest},${input.inputDigest},${command.idempotencyKey},${now},${now})
+        ON CONFLICT (owner_user_id,workspace_id,idempotency_key) DO NOTHING RETURNING *
+      `))[0];
+      if (!bridge) throw quoteChanged();
+      return receipt(human, "human_launch_approval", false);
+    });
   }
 
   async declareLaunchIntent(input: AuthorizedLaunchAuthorityWrite<DeclareLaunchIntentCommand>) {
@@ -367,6 +486,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           plans.plan_digest,plans.source_roster_key,plans.source_roster_digest,
           slots.id AS daily_plan_slot_id,slots.public_slot_key,slots.status AS slot_status,
           slots.slot_digest,slots.source_member_key,slots.provider_account_id,
+          slots.avatar_resource_id,slots.voice_resource_id,
           slots.provider_key,slots.provider_credential_version,selected.id AS script_variant_id,
           selected.checksum AS script_variant_checksum,scripts.id AS script_id,scripts.source_type,
           scripts.title AS script_title,scripts.status AS script_status,scripts.current_variant_id,
@@ -632,6 +752,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       const identity = await this.identity(tx);
       const { id, now } = identity;
       const subject = await this.lockExactSubject(tx, command, now);
+      let trustedQuoteExpiresAt: Date | null = null;
       if (kind === "sandbox_proof" || kind === "maximum_quote") {
         const runtimeCommand = command as unknown as RecordSandboxAttestationCommand | RecordMaximumQuoteAttestationCommand;
         const verified = await this.options.runtimeAttestationVerifier.verify({
@@ -645,6 +766,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         if (verified.kind === "maximum_quote") {
           amountMicroUsd = microUsd(verified.maximumQuoteMicroUsd, false);
           currency = verified.currency;
+          trustedQuoteExpiresAt = requiredDate(verified.quoteExpiresAt);
+          if (trustedQuoteExpiresAt <= now) throw denied();
         }
         assertEvidenceDecision(kind, decision, amountMicroUsd, currency);
       }
@@ -658,7 +781,15 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       const revision = previous ? positiveInteger(Number(previous.revision), "previous.revision") + 1 : 1;
       const previousEvidenceId = previous ? uuid(String(previous.id), "previous.id") : null;
       const previousEvidenceRevision = previous ? revision - 1 : null;
-      const expiresAt = expiryFrom(now, ttlSeconds(this.options.validityPolicy, kind, command.scope));
+      const authorityExpiry = expiryFrom(now, ttlSeconds(this.options.validityPolicy, kind, command.scope));
+      const expiryCandidates = [authorityExpiry];
+      if (kind === "maximum_quote") {
+        if (!trustedQuoteExpiresAt) throw denied();
+        expiryCandidates.push(trustedQuoteExpiresAt, subject.planExpiresAt, subject.governanceExpiresAt);
+        if (subject.credentialExpiresAt) expiryCandidates.push(subject.credentialExpiresAt);
+      }
+      const expiresAt = new Date(Math.min(...expiryCandidates.map((candidate) => candidate.getTime())));
+      if (expiresAt <= now) throw denied();
       const evidenceDigest = digest({ domain: "ai-media-launch-evidence-v1", id, subject: publicSubject(subject),
         kind, decision, amountMicroUsd, currency, revision, previousEvidenceId, previousEvidenceRevision,
         validFrom: now.toISOString(), expiresAt: expiresAt.toISOString(), actor: {
@@ -810,7 +941,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
   ): Promise<LockedLaunchSubject> {
     const result = rows(await tx.execute(sql`
       SELECT intents.*,plans.public_plan_key,plans.status AS plan_status,plans.planned_slot_count,
-        slots.public_slot_key,slots.status AS slot_status,
+        slots.public_slot_key,slots.status AS slot_status,slots.avatar_resource_id,slots.voice_resource_id,
         plans.plan_date::text,plans.accounting_time_zone,
         ((plans.plan_date+1)::timestamp AT TIME ZONE plans.accounting_time_zone) AS plan_expires_at,
         slots.influencer_id,scripts.language,scripts.title AS script_title,
@@ -927,7 +1058,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
   private async byIdempotency(
     tx: LaunchAuthorityDatabase,
     table: typeof aiMediaAdmissionPolicyRevisions | typeof aiMediaKillSwitchRevisions
-      | typeof aiMediaLaunchIntents | typeof aiMediaLaunchEvidence | typeof aiMediaLaunchAuthoritySnapshots,
+      | typeof aiMediaLaunchIntents | typeof aiMediaLaunchEvidence | typeof aiMediaLaunchAuthoritySnapshots
+      | typeof aiMediaQuoteBoundHumanApprovals,
     scope: TenantScope,
     idempotencyKey: string,
   ): Promise<Row | undefined> {
@@ -986,6 +1118,8 @@ function subjectFromLaunchRow(
     providerAccountId: uuid(String(value(row, "providerAccountId", "provider_account_id")), "providerAccountId"),
     providerKey: safe(String(value(row, "providerKey", "provider_key")), "providerKey", 80),
     providerCredentialVersion: positiveInteger(Number(value(row, "providerCredentialVersion", "provider_credential_version")), "providerCredentialVersion"),
+    avatarResourceId: uuid(String(value(row, "avatarResourceId", "avatar_resource_id")), "avatarResourceId"),
+    voiceResourceId: uuid(String(value(row, "voiceResourceId", "voice_resource_id")), "voiceResourceId"),
     scriptId: uuid(String(value(row, "scriptId", "script_id")), "scriptId"),
     scriptVariantId: uuid(String(value(row, "scriptVariantId", "script_variant_id")), "scriptVariantId"),
     scriptVariantChecksum: String(value(row, "scriptVariantChecksum", "script_variant_checksum")),
@@ -1002,6 +1136,15 @@ function subjectFromLaunchRow(
     launchIntentId: uuid(launchIntentId, "launchIntentId"),
     launchIntentDigest: validDigest(launchIntentDigest, "launchIntentDigest"),
     launchSubjectDigest: digest("temporary-launch-subject"),
+    renderSpecDigest: deriveLaunchRenderSpecDigest({
+      providerAccountId: String(value(row, "providerAccountId", "provider_account_id")),
+      providerKey: String(value(row, "providerKey", "provider_key")),
+      providerCredentialVersion: Number(value(row, "providerCredentialVersion", "provider_credential_version")),
+      avatarResourceId: String(value(row, "avatarResourceId", "avatar_resource_id")),
+      voiceResourceId: String(value(row, "voiceResourceId", "voice_resource_id")),
+      scriptVariantId: String(value(row, "scriptVariantId", "script_variant_id")),
+      scriptVariantChecksum: String(value(row, "scriptVariantChecksum", "script_variant_checksum")),
+    }),
   } as TrustedLaunchSubject;
 }
 
@@ -1016,13 +1159,16 @@ interface LockedLaunchSubject extends TrustedLaunchSubject {
 }
 
 export function deriveLaunchSubjectDigest(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest">): Digest {
-  return digest({ domain: "ai-media-launch-subject-v1", subject: publicSubject(subject) });
+  return digest({ domain: "ai-media-launch-subject-v1", subject: {
+    ...launchFacts(subject), launchIntentId: subject.launchIntentId, launchIntentDigest: subject.launchIntentDigest,
+  } });
 }
 
 function publicSubject(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest"> | TrustedLaunchSubject) {
   return {
     ...launchFacts(subject),
     launchIntentId: subject.launchIntentId, launchIntentDigest: subject.launchIntentDigest,
+    renderSpecDigest: subject.renderSpecDigest,
   };
 }
 
@@ -1045,7 +1191,8 @@ function launchFacts(subject: Omit<TrustedLaunchSubject, "launchSubjectDigest"> 
 function validateTrustedSubject(subject: TrustedLaunchSubject): void {
   validScope(subject.scope);
   for (const [field, id] of [["dailyPlanId", subject.dailyPlanId], ["dailyPlanSlotId", subject.dailyPlanSlotId],
-    ["providerAccountId", subject.providerAccountId], ["scriptId", subject.scriptId],
+    ["providerAccountId", subject.providerAccountId], ["avatarResourceId", subject.avatarResourceId],
+    ["voiceResourceId", subject.voiceResourceId], ["scriptId", subject.scriptId],
     ["scriptVariantId", subject.scriptVariantId], ["governanceProfileId", subject.governanceProfileId],
     ["launchIntentId", subject.launchIntentId]] as const) uuid(id, field);
   positiveInteger(subject.slotAttempt, "slotAttempt");
@@ -1057,6 +1204,7 @@ function validateTrustedSubject(subject: TrustedLaunchSubject): void {
   validDigest(subject.governanceEvidenceDigest, "governanceEvidenceDigest");
   validDigest(subject.launchSubjectDigest, "launchSubjectDigest");
   validDigest(subject.launchIntentDigest, "launchIntentDigest");
+  validDigest(subject.renderSpecDigest, "renderSpecDigest");
   if (!RAW_SHA256.test(subject.scriptVariantChecksum)) throw invalid("scriptVariantChecksum is invalid");
   safe(subject.sourceType, "sourceType", 80);
   if (subject.sourceType === "manual") {

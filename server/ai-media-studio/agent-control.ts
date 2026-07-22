@@ -320,6 +320,31 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #161 unmerged; then Robert supplies the secret through the deployment secret manager and the avatar/voice IDs through the guided roster before separately authorizing GET-only verification.",
   },
   {
+    id: "ams-agent-quote-bound-human-approval",
+    title: "Exact maximum-quote to human-approval binding",
+    owner: "Quote authority, schema, security and App QA agents",
+    state: "running",
+    branch: "codex/ai-media-studio-quote-bound-approval",
+    pullRequestUrl: null,
+    acceptance: [
+      "Robert's decision is durably bound to one exact latest quote, amount, USD currency, expiry and server-derived render specification",
+      "A newer quote, changed subject, credential rotation, expiry or tenant mismatch makes the prior approval stale",
+      "Legacy unbound approvals never satisfy snapshot, admission or the one-video execution read model",
+      "Approval records no provider, secret, reservation, render, outbox, spend, publishing, migration or deployment effect",
+    ],
+    mergeGate: "Pending PR30 PostgreSQL proof, focused tests, independent checker, security and App QA must pass before a stacked draft PR is ready.",
+    evidence: [
+      "Dedicated schema and authority makers have non-overlapping file ownership",
+      "Independent quote, runtime and UI audits identified the exact old-quote/new-approval composition flaw",
+    ],
+    blockers: [
+      "No authoritative account-specific HeyGen quote provider is installed, so no amount may be fabricated",
+      "PR28 and PR29 migrations remain pending and unapplied",
+      "No generation, spend, publishing, migration apply or Replit deployment is authorized",
+    ],
+    nextAction: "Finish the append-only quote binding and source-expiry enforcement, then run PostgreSQL, security, checker and App QA before saving a stacked draft PR.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

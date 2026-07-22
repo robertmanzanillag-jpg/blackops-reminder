@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { TenantScope } from "../core/resource-domain";
 import {
   LAUNCH_AUTHORITY_CAPABILITIES,
+  LaunchAuthorityQuoteChangedError,
   LaunchAuthorityServiceError,
   type AuthorizedLaunchAuthorityWrite,
   type CreateLaunchAuthoritySnapshotCommand,
@@ -119,7 +120,7 @@ export class LaunchAuthorityService {
   }
 
   recordHumanLaunchApproval(context: LaunchAuthorityAuthenticationContext, command: RecordHumanLaunchApprovalCommand) {
-    const normalized = normalizeApproval(command);
+    const normalized = normalizeHumanApproval(command);
     return this.execute("record_human_launch_approval", context, normalized,
       (input) => this.dependencies.repository.recordHumanLaunchApproval(input));
   }
@@ -181,6 +182,7 @@ export class LaunchAuthorityService {
       return receipt;
     } catch (error) {
       if (error instanceof LaunchAuthorityServiceError) throw error;
+      if (error instanceof LaunchAuthorityQuoteChangedError) throw denied("QUOTE_CHANGED");
       throw denied("UNAVAILABLE");
     }
   }
@@ -220,6 +222,15 @@ function normalizeApproval<T extends RecordContentApprovalCommand | RecordHumanL
   const decision: LaunchAuthorityApprovalDecision = input.decision;
   if (!(["approved", "rejected", "revoked"] as const).includes(decision)) throw denied("INVALID_REQUEST");
   return Object.freeze({ ...normalizeSlotCommand(input), decision }) as T;
+}
+
+function normalizeHumanApproval(input: RecordHumanLaunchApprovalCommand): RecordHumanLaunchApprovalCommand {
+  assertExactKeys(input, ["scope", "dailyPlanSlotId", "slotAttempt", "decision", "expectedQuoteKey", "idempotencyKey"]);
+  const decision: LaunchAuthorityApprovalDecision = input.decision;
+  if (!(["approved", "rejected", "revoked"] as const).includes(decision)) throw denied("INVALID_REQUEST");
+  const expectedQuoteKey = boundedText(input.expectedQuoteKey, 30, 30);
+  if (!/^quote_[a-f0-9]{24}$/u.test(expectedQuoteKey)) throw denied("INVALID_REQUEST");
+  return Object.freeze({ ...normalizeSlotCommand(input), decision, expectedQuoteKey });
 }
 
 function normalizeLaunchIntent(input: DeclareLaunchIntentCommand): DeclareLaunchIntentCommand {
