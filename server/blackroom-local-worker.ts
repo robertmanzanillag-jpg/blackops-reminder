@@ -157,7 +157,12 @@ export function createBlackRoomLocalWorkerState(): BlackRoomLocalWorkerState {
 }
 
 export function buildBlackRoomLocalEditorArgs(projectDir: string): string[] {
-  return ["--import", "tsx", path.join(projectDir, "script/blackroom-deterministic-editor.ts")];
+  return [
+    "--experimental-strip-types",
+    "--import",
+    path.join(projectDir, "script/register-native-typescript.mjs"),
+    path.join(projectDir, "script/blackroom-deterministic-editor.ts"),
+  ];
 }
 
 export function shouldRunBlackRoomWorker(

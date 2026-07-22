@@ -86,8 +86,14 @@ test("worker state starts stopped and recoverable", () => {
 
 test("worker launches the local deterministic editor without Codex", () => {
   const args = buildBlackRoomLocalEditorArgs("/tmp/blackroom-project");
-  assert.deepEqual(args, ["--import", "tsx", "/tmp/blackroom-project/script/blackroom-deterministic-editor.ts"]);
+  assert.deepEqual(args, [
+    "--experimental-strip-types",
+    "--import",
+    "/tmp/blackroom-project/script/register-native-typescript.mjs",
+    "/tmp/blackroom-project/script/blackroom-deterministic-editor.ts",
+  ]);
   assert.equal(args.join(" ").toLowerCase().includes("codex"), false);
+  assert.equal(args.join(" ").toLowerCase().includes("tsx"), false);
 });
 
 test("worker records distinct non-overlapping moments from the same source independently", () => {
