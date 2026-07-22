@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { aiMediaPublishingJobs } from "../../../shared/models/ai-media-studio-db";
-import { PublishingInvariantError, PublishingNotFoundError, assertPreviewUnchanged, assertScheduledForInFuture, assertValidApproval, tenantScopeFromKey, type ManualApprovalEvidence, type ManualRejectionEvidence, type PublicationJob, type PublishingPlatform, type PublishingSchedule, type TenantScope } from "./domain";
+import { PublishingInvariantError, PublishingNotFoundError, PublishingPersistenceError, assertPreviewUnchanged, assertScheduledForInFuture, assertValidApproval, tenantScopeFromKey, type ManualApprovalEvidence, type ManualRejectionEvidence, type PublicationJob, type PublishingPlatform, type PublishingSchedule, type TenantScope } from "./domain";
 import type { CreatePublicationRecord, PublishingLeaseRecovery, PublishingRepository } from "./ports";
 
 export type PublishingDatabase = Pick<NodePgDatabase, "execute" | "transaction">;
@@ -59,6 +59,16 @@ export class DrizzlePublishingRepository implements PublishingRepository {
   async get(scope: TenantScope, publicationId: string): Promise<PublicationJob | undefined> { const row = rows(await this.db.execute(sql`SELECT * FROM ${aiMediaPublishingJobs} WHERE id = ${publicationId} AND owner_user_id = ${scope.ownerUserId} AND workspace_id = ${scope.workspaceId} LIMIT 1`))[0]; return row ? mapRow(row) : undefined; }
   async getByIdempotencyKey(scope: TenantScope, idempotencyKey: string): Promise<PublicationJob | undefined> { const row = rows(await this.db.execute(sql`SELECT * FROM ${aiMediaPublishingJobs} WHERE owner_user_id = ${scope.ownerUserId} AND workspace_id = ${scope.workspaceId} AND idempotency_key = ${idempotencyKey} LIMIT 1`))[0]; return row ? mapRow(row) : undefined; }
   async list(scope: TenantScope): Promise<PublicationJob[]> { return rows(await this.db.execute(sql`SELECT * FROM ${aiMediaPublishingJobs} WHERE owner_user_id = ${scope.ownerUserId} AND workspace_id = ${scope.workspaceId} ORDER BY created_at, id`)).map(mapRow); }
+  async countPublished(scope: TenantScope): Promise<number> {
+    const raw = rows(await this.db.execute(sql`SELECT COUNT(*) AS count FROM ${aiMediaPublishingJobs} WHERE owner_user_id = ${scope.ownerUserId} AND workspace_id = ${scope.workspaceId} AND status = 'published'`))[0]?.count;
+    if (typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0) return raw;
+    if (typeof raw === "bigint" && raw >= 0n && raw <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(raw);
+    if (typeof raw === "string" && /^(?:0|[1-9][0-9]*)$/u.test(raw)) {
+      const value = BigInt(raw);
+      if (value <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(value);
+    }
+    throw new PublishingPersistenceError("Published job count from persistence is invalid");
+  }
   async approve(scope: TenantScope, publicationId: string, evidence: ManualApprovalEvidence, now: string): Promise<PublicationJob> {
     const row = rows(await this.db.execute(sql`UPDATE ${aiMediaPublishingJobs} SET approval_status = 'approved', status = CASE WHEN request->'preview'->>'scheduledFor' IS NULL THEN 'queued' ELSE status END, available_at = CASE WHEN request->'preview'->>'scheduledFor' IS NULL THEN ${new Date(now)} ELSE available_at END, approval_evidence = ${JSON.stringify(evidence)}::jsonb, updated_at = ${new Date(now)} WHERE id = ${publicationId} AND owner_user_id = ${scope.ownerUserId} AND workspace_id = ${scope.workspaceId} AND status = 'pending_approval' AND approval_status = 'required' AND preview_digest = ${evidence.previewDigest} AND (request->'preview'->>'scheduledFor' IS NULL OR (request->'preview'->>'scheduledFor')::timestamptz > ${new Date(now)}) RETURNING *`))[0];
     if (!row) throw new PublishingInvariantError("Approval was stale, invalid, or outside tenant scope"); const job = mapRow(row); assertValidApproval(job); return job;

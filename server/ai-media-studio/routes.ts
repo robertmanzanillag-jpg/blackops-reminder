@@ -195,6 +195,7 @@ import {
 } from "./operations-runtime";
 import {
   PublishingInvariantError,
+  PublishingPersistenceError,
   PublishingPolicyDeniedError,
   type PublicationJob,
   type PublicPublication,
@@ -1808,14 +1809,22 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     return scope;
   };
 
-  router.get(`${AI_MEDIA_STUDIO_API_BASE}/dashboard`, requireJobs, asyncRoute(async (req, res) => {
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/dashboard`, (req, res, next) => {
+    res.set("Cache-Control", "private, no-store");
+    getCurrentUserId(req);
+    next();
+  }, requireJobs, requireOperations, asyncRoute(async (req, res) => {
     const ownerUserId = getCurrentUserId(req);
+    const scope = { ownerUserId, workspaceId: core.workspaceId };
     const dashboard = await service.dashboard(ownerUserId);
-    const jobs = await Promise.all((await service.listJobs(ownerUserId)).map(reconcileCompletedArtifact));
+    const [jobs, published] = await Promise.all([
+      service.listJobs(ownerUserId),
+      operations.publishing.countPublished(scope),
+    ]);
     const today = new Date().toISOString().slice(0, 10);
     const durations = jobs.filter((job) => job.startedAt && job.completedAt).map((job) => Date.parse(job.completedAt!) - Date.parse(job.startedAt!));
     res.json(dashboardResponseSchema.parse({
-      summary: { generatedToday: jobs.filter((job) => job.createdAt.startsWith(today)).length, published: 0,
+      summary: { generatedToday: jobs.filter((job) => job.createdAt.startsWith(today)).length, published,
         pending: dashboard.summary.pending + dashboard.summary.rendering, failed: dashboard.summary.failed,
         avgGenerationMs: durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0,
         estimatedCostUsd: jobs.reduce((total, job) => total + (job.estimatedCostUsd ?? 0), 0) },
@@ -2707,6 +2716,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     }
     if (error instanceof GovernanceValidationError || error instanceof GovernanceNotFoundError || error instanceof GovernanceConflictError) {
       res.status(error.statusCode).json({ error: error.message, code: error.code });
+      return;
+    }
+    if (error instanceof PublishingPersistenceError) {
+      res.status(503).json({ error: "Publishing metrics are unavailable" });
       return;
     }
     if (error instanceof MediaStudioError || error instanceof MediaStudioPersistenceUnavailableError) { res.status(error.statusCode).json({ error: error.message }); return; }

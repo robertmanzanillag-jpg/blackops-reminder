@@ -19,6 +19,8 @@ import {
   InMemoryInfluencerRepository,
 } from "../server/ai-media-studio/core/in-memory-core-repositories";
 import type { CoreCatalogRepositories } from "../server/ai-media-studio/core/runtime";
+import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets";
+import type { AssetIngestRepository } from "../server/ai-media-studio/assets";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import type { OperationsRepositories } from "../server/ai-media-studio/operations-runtime";
 import { HeyGenVideoProvider } from "../server/ai-media-studio/providers/heygen-video-provider";
@@ -98,6 +100,8 @@ async function seedAsset(repositories: CoreCatalogRepositories, ownerUserId: str
 async function startHarness(options: {
   core?: CoreCatalogRepositories;
   operations?: OperationsRepositories;
+  repository?: InMemoryMediaJobRepository;
+  assetIngestRepository?: AssetIngestRepository;
   productionWithoutDatabase?: boolean;
   now?: () => Date;
 } = {}) {
@@ -110,7 +114,8 @@ async function startHarness(options: {
     next();
   });
   const runtime = createAiMediaStudioRuntime({
-    repository: new InMemoryMediaJobRepository(),
+    repository: options.repository ?? new InMemoryMediaJobRepository(),
+    ...(options.assetIngestRepository ? { assetIngestRepository: options.assetIngestRepository } : {}),
     providers: [new HeyGenVideoProvider()],
     defaultProviderKey: "heygen",
     runtimeEnvironment: options.productionWithoutDatabase ? "production" : "test",
@@ -559,6 +564,95 @@ test("operations HTTP exposes redacted readiness and tenant analytics/source rea
   })).status, 404, "operations policy is read-only over HTTP");
 });
 
+test("dashboard exposes the tenant-scoped published aggregate without listing publishing jobs", async (t) => {
+  const scopes: Array<{ ownerUserId: string; workspaceId: string }> = [];
+  class DashboardPublishingRepository extends InMemoryPublishingRepository {
+    override async countPublished(scope: { ownerUserId: string; workspaceId: string }) {
+      scopes.push({ ...scope });
+      return scope.ownerUserId === scopeA.ownerUserId ? 12 : 3;
+    }
+    override async list(): Promise<never> {
+      throw new Error("dashboard must not list publishing rows");
+    }
+  }
+  const operations = operationsRepositories();
+  operations.publishing = new DashboardPublishingRepository();
+  const harness = await startHarness({ operations });
+  t.after(harness.close);
+
+  const unauthorized = await fetch(`${harness.baseUrl}/api/ai-media-studio/dashboard`);
+  assert.equal(unauthorized.status, 401);
+  assert.match(unauthorized.headers.get("cache-control") ?? "", /private/);
+  assert.match(unauthorized.headers.get("cache-control") ?? "", /no-store/);
+
+  for (const [scope, expected] of [[scopeA, 12], [scopeB, 3]] as const) {
+    const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/dashboard`, {
+      headers: { "x-test-user": scope.ownerUserId },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("cache-control") ?? "", /private/);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+    const body = await response.json() as { summary: { published: number } };
+    assert.equal(body.summary.published, expected);
+  }
+  assert.deepEqual(scopes, [scopeA, scopeB]);
+});
+
+test("dashboard remains a read-only projection when completed generation artifacts are not linked", async (t) => {
+  const repository = new InMemoryMediaJobRepository();
+  const created = await repository.create(scopeA.ownerUserId, {
+    influencerId: "emily-food",
+    script: "Completed but deliberately unlinked dashboard fixture",
+    voiceId: "voice-emily-en",
+    language: "en",
+    aspectRatio: "9:16",
+    idempotencyKey: "dashboard-read-only-unlinked-001",
+  });
+  await repository.update({
+    ...created,
+    status: "completed",
+    stage: "completed",
+    progress: 100,
+    createdAt: instant,
+    completedAt: instant,
+  });
+  let ingestLookups = 0;
+  class MutationTrapAssetIngestRepository extends InMemoryAssetIngestRepository {
+    override async findByRenderJob(): Promise<never> {
+      ingestLookups += 1;
+      throw new Error("dashboard attempted artifact reconciliation");
+    }
+  }
+  const harness = await startHarness({
+    operations: operationsRepositories(),
+    repository,
+    assetIngestRepository: new MutationTrapAssetIngestRepository(),
+  });
+  t.after(harness.close);
+
+  const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/dashboard`, { headers: headersA });
+  assert.equal(response.status, 200);
+  const body = await response.json() as { summary: { generatedToday: number } };
+  assert.equal(body.summary.generatedToday, 0, "the fixture predates the current day but remains visible to aggregation");
+  assert.equal(ingestLookups, 0, "dashboard never enters artifact reconciliation or mutation hooks");
+});
+
+test("dashboard maps an invalid persisted publishing count to a sanitized unavailable response", async (t) => {
+  class InvalidCountPublishingRepository extends InMemoryPublishingRepository {
+    override async countPublished() { return Number.NaN; }
+  }
+  const operations = operationsRepositories();
+  operations.publishing = new InvalidCountPublishingRepository();
+  const harness = await startHarness({ operations });
+  t.after(harness.close);
+
+  const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/dashboard`, { headers: headersA });
+  assert.equal(response.status, 503);
+  assert.match(response.headers.get("cache-control") ?? "", /private/);
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+  assert.deepEqual(await response.json(), { error: "Publishing metrics are unavailable" });
+});
+
 test("operations HTTP source pagination filters before limit beyond 100 rows and binds cursors to the tenant", async (t) => {
   const core = coreRepositories();
   const operations = operationsRepositories();
@@ -633,6 +727,7 @@ test("production operations without a database return 503 instead of silently us
   t.after(harness.close);
 
   for (const path of [
+    "/api/ai-media-studio/dashboard",
     "/api/ai-media-studio/publishing/jobs",
     "/api/ai-media-studio/publishing/connections",
     "/api/ai-media-studio/analytics/summary",

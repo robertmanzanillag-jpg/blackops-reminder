@@ -121,6 +121,10 @@ export class PublishingInvariantError extends Error {
   readonly statusCode = 409;
 }
 
+export class PublishingPersistenceError extends Error {
+  readonly statusCode = 503;
+}
+
 export class PublishingNotFoundError extends Error {
   readonly statusCode = 404;
 }

@@ -49,7 +49,7 @@ export function DashboardOverview({ dashboard }: { dashboard: StudioDashboard })
   const summary = dashboard.summary;
   const metrics = [
     { label: "Generated today", value: integer.format(summary.generatedToday), icon: Film, tone: "text-emerald-300" },
-    { label: "Publishing (planned)", value: "—", icon: UploadCloud, tone: "text-zinc-400" },
+    { label: "Videos published", value: integer.format(summary.published), icon: UploadCloud, tone: "text-emerald-300" },
     { label: "Pending jobs", value: integer.format(summary.pending), icon: Layers3, tone: "text-amber-300" },
     { label: "Failed jobs", value: integer.format(summary.failed), icon: TriangleAlert, tone: "text-red-300" },
     { label: "Avg. generation", value: duration(summary.avgGenerationMs), icon: Clock3, tone: "text-violet-300" },
@@ -59,7 +59,7 @@ export function DashboardOverview({ dashboard }: { dashboard: StudioDashboard })
   return (
     <>
       <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24">
-        <h2 id="overview-heading" className="sr-only">Today overview</h2>
+        <h2 id="overview-heading" className="sr-only">Studio overview</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {metrics.map((metric) => {
             const Icon = metric.icon;

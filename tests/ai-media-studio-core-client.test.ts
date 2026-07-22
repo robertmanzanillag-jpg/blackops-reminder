@@ -185,6 +185,17 @@ test("dashboard labels persisted provider configuration without claiming live he
   assert.doesNotMatch(dashboard, />Checked /);
 });
 
+test("dashboard presents the exact published summary with an accessible studio heading", async () => {
+  const dashboard = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/dashboard-overview.tsx"), "utf8");
+  const page = await readFile(resolve(repositoryRoot, "client/src/pages/ai-media-studio.tsx"), "utf8");
+  assert.match(dashboard, /Videos published/);
+  assert.match(dashboard, /integer\.format\(summary\.published\)/);
+  assert.match(dashboard, /className="sr-only">Studio overview<\/h2>/);
+  assert.match(page, /className="sr-only">Studio overview<\/h2>/);
+  assert.doesNotMatch(page, /Today overview/);
+  assert.doesNotMatch(dashboard, /Publishing \(planned\)|value: "—"/);
+});
+
 test("influencer mutations refresh both roster and generation options", async () => {
   const hooks = await source("hooks.ts");
   assert.match(hooks, /queryKey: coreStudioKeys\.influencers/);

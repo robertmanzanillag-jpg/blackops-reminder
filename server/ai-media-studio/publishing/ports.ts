@@ -29,6 +29,8 @@ export interface PublishingRepository {
   get(scope: TenantScope, publicationId: string): Promise<PublicationJob | undefined>;
   getByIdempotencyKey(scope: TenantScope, idempotencyKey: string): Promise<PublicationJob | undefined>;
   list(scope: TenantScope): Promise<PublicationJob[]>;
+  /** Exact all-time aggregate for terminal, durably published jobs in one tenant. */
+  countPublished(scope: TenantScope): Promise<number>;
   approve(scope: TenantScope, publicationId: string, evidence: ManualApprovalEvidence, now: string): Promise<PublicationJob>;
   approveScheduled(scope: TenantScope, publicationId: string, evidence: ManualApprovalEvidence, schedule: PublishingSchedule, now: string): Promise<PublicationJob>;
   reject(scope: TenantScope, publicationId: string, evidence: ManualRejectionEvidence, now: string): Promise<PublicationJob>;

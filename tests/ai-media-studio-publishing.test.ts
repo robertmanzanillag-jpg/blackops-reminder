@@ -329,6 +329,37 @@ test("explicit scheduler ticks and reconciliation mark tracked submissions publi
   assert.equal((await fixture.repository.get(scopeA, fixture.draft.id))?.state, "published");
 });
 
+test("published aggregate counts only terminal published state within the exact tenant", async () => {
+  const repository = new InMemoryPublishingRepository();
+  const clock = new Clock(Date.parse("2030-01-02T19:59:00Z"));
+  const tenantA = await scheduledFixture({ repository, clock, scope: scopeA, requestKey: "published-count-a" });
+  await scheduledFixture({ repository, clock, scope: scopeB, requestKey: "published-count-b" });
+  await scheduledFixture({ repository, clock, scope: scopeA, requestKey: "published-count-pending" });
+  clock.advance(60_000);
+  const provider: PublishingProvider = {
+    platform: "tiktok",
+    async submit() { return { providerSubmissionId: "published-count-provider-ref" }; },
+    async reconcile() { return "published"; },
+  };
+  assert.equal((await worker(tenantA, provider).runNext()).outcome, "submitted");
+  assert.deepEqual(
+    await new PublishingReconciler(repository, [provider], clock).reconcileTenant(scopeA),
+    { checked: 1, published: 1, failed: 0 },
+  );
+  assert.equal(await tenantA.service.countPublished(scopeA), 1);
+  assert.equal(await tenantA.service.countPublished(scopeB), 0);
+});
+
+test("publishing service rejects invalid repository aggregate counts", async () => {
+  class InvalidCountRepository extends InMemoryPublishingRepository {
+    override async countPublished() { return Number.MAX_SAFE_INTEGER + 1; }
+  }
+  await assert.rejects(
+    new PublishingService(new InvalidCountRepository()).countPublished(scopeA),
+    /count from persistence is invalid/,
+  );
+});
+
 test("provider reconciliation failure becomes retryable and then dead-letters at the attempt bound", async () => {
   const fixture = await scheduledFixture(); fixture.clock.advance(60_000);
   const provider: PublishingProvider = {
