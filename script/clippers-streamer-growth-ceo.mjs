@@ -160,7 +160,7 @@ function metricoolRowsHtml(decision, rows) {
 <title>Metricool Review Queue</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f7f7f5;color:#171717;font-family:Inter,Arial,sans-serif;letter-spacing:0}header{background:#171717;color:#fff;padding:28px max(20px,calc((100vw - 1120px)/2))}header h1{font-size:28px;margin:0 0 8px}header p{margin:0;color:#cfcfc9}.summary{display:flex;gap:20px;flex-wrap:wrap;padding:18px max(20px,calc((100vw - 1120px)/2));border-bottom:1px solid #d9d9d4;background:#fff}.summary strong{display:block;font-size:20px}.summary span{font-size:12px;color:#666}.notice{padding:14px max(20px,calc((100vw - 1120px)/2));background:#fff3cd;color:#5d4600;border-bottom:1px solid #ead58d}main{max-width:1120px;margin:auto}.clip-row{display:grid;grid-template-columns:180px 1fr;gap:24px;padding:24px 20px;border-bottom:1px solid #d9d9d4}.clip-row video{width:180px;aspect-ratio:9/16;background:#000}.clip-copy{align-self:center;min-width:0}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{font-size:12px;border:1px solid #bbb;padding:4px 7px;border-radius:4px}.clip-copy h2{font-size:18px;line-height:1.35;margin:14px 0 8px}.clip-copy p{font-size:12px;color:#666;overflow-wrap:anywhere;margin:0}@media(max-width:620px){.clip-row{grid-template-columns:110px 1fr;gap:14px}.clip-row video{width:110px}.clip-copy h2{font-size:15px}}
 </style></head><body><header><h1>Metricool Review Queue</h1><p>${htmlValue(decision.title)} · @${htmlValue(decision.accountHandle)}</p></header>
-<section class="summary"><div><strong>${rows.length}</strong><span>real clips</span></div><div><strong>${approvalLabel}</strong><span>Metricool mode</span></div><div><strong>${decision.cashoutReady ? "Ready" : "Pending"}</strong><span>Vyro cashout</span></div></section>
+<section class="summary"><div><strong>${rows.length}</strong><span>real clips</span></div><div><strong>${approvalLabel}</strong><span>Metricool mode</span></div><div><strong>${decision.cashoutReady ? "Ready" : "Pending"}</strong><span>Marketplace cashout</span></div></section>
 <div class="notice">${notice}</div><main>${clips}</main></body></html>`;
 }
 
@@ -175,6 +175,7 @@ function campaignExpiryMs(campaign) {
 function campaignBlockers(campaign, now) {
   const expiresAt = campaignExpiryMs(campaign);
   return [
+    campaign.marketplaceConnectionVerified !== true ? "marketplace_not_connected" : null,
     campaign.active !== true ? "campaign_not_active" : null,
     campaign.joined !== true ? "campaign_not_joined" : null,
     !Number.isFinite(expiresAt) || expiresAt <= now.getTime() ? "campaign_expired_or_unknown" : null,
@@ -197,11 +198,28 @@ function payoutBlockers(campaign) {
 }
 
 function metricRowsForCampaign(metrics, campaignId, campaign) {
-  return metrics.filter((row) => row.campaignId === campaignId
+  return dedupePublishedRows(metrics.filter((row) => row.campaignId === campaignId
     && row.finalStatus === "published"
     && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
     && row.metricEvidenceVerified === true
-    && finiteNumber(row.views) !== null);
+    && finiteNumber(row.views) !== null));
+}
+
+function dedupePublishedRows(rows) {
+  const unique = new Map();
+  for (const row of rows) {
+    const key = `${row.campaignId}\u0000${String(row.publishedPostUrl || "").trim().toLowerCase()}`;
+    const current = unique.get(key);
+    const rowObservedAt = Date.parse(String(row.observedAt || row.updatedAt || ""));
+    const currentObservedAt = Date.parse(String(current?.observedAt || current?.updatedAt || ""));
+    const rowHasTimestamp = Number.isFinite(rowObservedAt);
+    const currentHasTimestamp = Number.isFinite(currentObservedAt);
+    const shouldReplace = !current
+      || (rowHasTimestamp && (!currentHasTimestamp || rowObservedAt > currentObservedAt))
+      || (!rowHasTimestamp && !currentHasTimestamp && Number(row.views || 0) > Number(current?.views || 0));
+    if (shouldReplace) unique.set(key, row);
+  }
+  return [...unique.values()];
 }
 
 function strategyPerformance(rows, strategyId) {
@@ -275,6 +293,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
     creator: campaign.creator,
     creatorTier: campaign.creatorTier || "unknown",
     marketplace: campaign.marketplace,
+    marketplaceStatus: campaign.marketplaceStatus || "unknown",
     accountHandle: campaign.accountHandle,
     decision,
     priorityScore,
@@ -330,13 +349,13 @@ export function buildStreamerGrowthCeoPlan({
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const actualPublishedRows = metrics.filter((row) => {
+  const actualPublishedRows = dedupePublishedRows(metrics.filter((row) => {
     const campaign = campaignById.get(row.campaignId);
     return row.finalStatus === "published"
       && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
       && row.metricEvidenceVerified === true
       && finiteNumber(row.views) !== null;
-  });
+  }));
   const measuredViews = actualPublishedRows.reduce((sum, row) => sum + Number(row.views), 0);
   const measuredEarningsUsd = actualPublishedRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
   const active = decisions.filter((row) => row.canProduce);
@@ -461,9 +480,15 @@ async function main() {
   const reportDir = path.join(workspaceRoot, "reports");
   const campaignsPath = path.join(inputDir, "paid-streamer-campaigns.json");
   const metricsPath = path.join(inputDir, "paid-streamer-campaign-metrics.json");
+  const marketplacesPath = path.join(inputDir, "paid-campaign-marketplaces.json");
   const campaigns = JSON.parse(await readFile(campaignsPath, "utf8").catch(() => "[]"));
   const metrics = JSON.parse(await readFile(metricsPath, "utf8").catch(() => "[]"));
+  const marketplaces = JSON.parse(await readFile(marketplacesPath, "utf8").catch(() => "[]"));
+  const marketplaceById = new Map(marketplaces.map((provider) => [provider.id, provider]));
   for (const campaign of campaigns) {
+    const provider = marketplaceById.get(campaign.marketplace);
+    campaign.marketplaceStatus = provider?.connectionStatus || "not_registered";
+    campaign.marketplaceConnectionVerified = provider?.connectionStatus === "connected";
     campaign.evidenceVerified = await verifyTextEvidence(workspaceRoot, campaign.rightsEvidencePath, [
       campaign.id,
       campaign.marketplace,
@@ -488,6 +513,14 @@ async function main() {
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
   const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 5;
   const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized, targetDailyClips });
+  plan.marketplaces = marketplaces.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    connectionStatus: provider.connectionStatus,
+    providerStatus: provider.providerStatus,
+    canImportCampaigns: provider.connectionStatus === "connected" && provider.providerStatus === "available",
+    nextAction: provider.nextAction,
+  }));
   await mkdir(reportDir, { recursive: true });
   for (const decision of plan.decisions) {
     const mediaReadyBySlot = {};

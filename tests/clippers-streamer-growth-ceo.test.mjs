@@ -8,6 +8,7 @@ import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspac
 
 const now = new Date("2026-07-21T18:00:00.000Z");
 const publishedPostUrl = "https://www.tiktok.com/@streamersclipusa/video/1234567890123456789";
+const publishedPostUrlFor = (index) => `https://www.tiktok.com/@streamersclipusa/video/${String(1234567890123456789n + BigInt(index))}`;
 const campaign = {
   id: "mrbeast-jre",
   title: "MrBeast x Joe Rogan",
@@ -15,6 +16,8 @@ const campaign = {
   creatorTier: "top",
   creatorReachEvidence: "https://www.youtube.com/@MrBeast",
   marketplace: "vyro",
+  marketplaceStatus: "connected",
+  marketplaceConnectionVerified: true,
   active: true,
   joined: true,
   expiresAt: "2026-07-29T18:00:00.000Z",
@@ -154,7 +157,6 @@ test("raises volume only after fifteen verified winning posts", () => {
   assert.equal(plan.operatingPolicy.dailyTestClips, 8);
   assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
-
 test("accepts an observed countdown without inventing an exact campaign deadline", () => {
   const relativeCampaign = {
     ...campaign,
@@ -176,11 +178,29 @@ test("separates Metricool approval readiness from Vyro cashout readiness", () =>
   assert.equal(plan.decisions[0].publishBlockers.length, 0);
 });
 
+test("blocks campaign production when its marketplace connection is not verified", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      marketplace: "whop",
+      marketplaceStatus: "verification_required",
+      marketplaceConnectionVerified: false,
+    }],
+    metrics: [],
+    now,
+  });
+
+  assert.equal(plan.status, "blocked");
+  assert.equal(plan.decisions[0].marketplaceStatus, "verification_required");
+  assert.ok(plan.decisions[0].productionBlockers.includes("marketplace_not_connected"));
+  assert.equal(plan.decisions[0].canEnterApprovalQueue, false);
+});
+
 test("scales only after real qualifying posts and keeps exploration", () => {
   const metrics = [
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(1), views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(2), views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(3), views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
   ];
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(plan.status, "scaling");
@@ -208,7 +228,7 @@ test("pauses a cut style after six posts with no payout qualification", () => {
     campaignId: campaign.id,
     strategyId: index % 2 ? "hook_only" : "curiosity_question",
     finalStatus: "published",
-    publishedPostUrl,
+    publishedPostUrl: publishedPostUrlFor(index + 10),
     views: 500 + index * 100,
     earningsUsd: 0,
     qualifiedForPayout: false,
@@ -219,6 +239,26 @@ test("pauses a cut style after six posts with no payout qualification", () => {
   assert.match(plan.decisions[0].nextAction, /Pause/);
 });
 
+test("deduplicates repeated snapshots of the same TikTok post", () => {
+  const metrics = [
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, observedAt: "2026-07-21T18:00:00.000Z", views: 5000, metricEvidenceVerified: true },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, observedAt: "2026-07-21T19:00:00.000Z", views: 8000, metricEvidenceVerified: true },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, observedAt: "2026-07-21T17:00:00.000Z", views: 9000, metricEvidenceVerified: true },
+  ];
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
+
+  assert.equal(plan.decisions[0].observed.publishedPosts, 1);
+  assert.equal(plan.goal.measuredViews, 8000);
+  assert.equal(plan.decisions[0].decision, "test");
+});
+
+test("blocks a campaign when marketplace verification is omitted", () => {
+  const { marketplaceConnectionVerified, ...unverifiedCampaign } = campaign;
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [unverifiedCampaign], metrics: [], now });
+
+  assert.equal(plan.status, "blocked");
+  assert.ok(plan.decisions[0].productionBlockers.includes("marketplace_not_connected"));
+});
 test("ignores published metrics without local Metricool evidence", () => {
   const plan = buildStreamerGrowthCeoPlan({
     campaigns: [campaign],
@@ -273,7 +313,6 @@ test("ignores verified metrics from a different TikTok account", () => {
   assert.equal(plan.decisions[0].decision, "test");
   assert.equal(plan.operatingPolicy.dailyTestClips, 5);
 });
-
 test("Metricool rows point to final media while cashout setup remains separate", () => {
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [{ ...campaign, payoutMethodReady: false }], metrics: [], now });
   const rows = buildMetricoolApprovalRows(plan.decisions[0], {
