@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T10:45:54.172Z
+Generated: 2026-07-22T11:27:13.858Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 884 | 736 | 3169 | 501 | 14606 |
+| 890 | 742 | 3181 | 501 | 14648 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,14 +29,14 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 223 | 212 | test:223 |
+| `tests` | 225 | 214 | test:225 |
 | `client/src` | 157 | 155 | ui-component:55, other:47, client-page:24, client-component:21 |
-| `server/ai-media-studio` | 168 | 149 | server:168 |
+| `server/ai-media-studio` | 171 | 152 | server:171 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 46 | 44 | script:46 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
+| `docs/ai-media-studio` | 16 | 16 | docs:16 |
 | `shared` | 16 | 16 | shared:16 |
-| `docs/ai-media-studio` | 15 | 15 | docs:15 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `migrations/ai-media-studio` | 53 | 3 | other:51, docs:2 |
@@ -86,6 +86,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
 - `tests/ai-media-studio-governance.test.ts`
 - `tests/ai-media-studio-held-work-activation.test.ts`
+- `tests/ai-media-studio-heygen-account-maximum-quote-provider.test.ts`
 - `tests/ai-media-studio-heygen-guided-setup-browser.test.ts`
 - `tests/ai-media-studio-heygen-guided-setup-client.test.ts`
 - `tests/ai-media-studio-heygen-onboarding-browser.test.ts`
@@ -215,6 +216,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-secure-heygen-setup-postgres.test.ts`
 - `tests/ai-media-studio-secure-heygen-setup.test.ts`
 - `tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts`
+- `tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts`
 - `tests/ai-media-studio-sources.test.ts`
 - `tests/ai-media-studio-staging-rehearsal-runbook.test.ts`
 - `tests/ai-media-studio-static-heygen-credential-drizzle.test.ts`
