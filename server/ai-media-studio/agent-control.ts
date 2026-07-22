@@ -268,6 +268,31 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #154 unmerged; Robert places the API key only in the deployment secret manager, provides 5–10 exact avatar-look/voice pairs, then separately approves live read-only verification.",
   },
   {
+    id: "ams-agent-one-video-verification-read-model",
+    title: "Exact one-video HeyGen verification read model",
+    owner: "AI Media Studio read-model squad",
+    state: "done",
+    branch: "codex/ai-media-studio-one-video-verification-read-model",
+    pullRequestUrl: null,
+    acceptance: [
+      "Project verified state only from the exact immutable PR29 account, avatar-look and voice evidence graph",
+      "Fail closed for expiry, credential rotation, tenant or plan mismatch, and incomplete resource evidence",
+      "Keep the authenticated endpoint GET-only, redact provider-native identities and leave execute, spend, publishing and every effect disabled",
+      "Prove the projection with focused tests and a disposable PostgreSQL 16 integration fixture for the initial 5 avatars × 10 videos shape",
+    ],
+    mergeGate: "Focused, PostgreSQL, TypeScript, build, independent checker, security and App QA evidence must pass with no P0-P3 before a stacked draft PR is ready.",
+    evidence: [
+      "Read-only control, data, test and App QA audits identified the exact PR29 evidence projection gap",
+      "Focused control and authenticated route checks pass 12/12; disposable PostgreSQL 16 exact 5 x 10 and 10 x 10 proof passes 2/2",
+      "TypeScript and production build pass; independent checker and security are P0-P3 clean",
+    ],
+    blockers: [
+      "The PR29 migration remains pending and unapplied; this read model is stacked after that migration",
+      "No API key, live HeyGen verification, quote, spend, generation, publishing or deployment is authorized",
+    ],
+    nextAction: "Keep this stacked checkpoint unmerged; Robert later supplies the API key only through the secret manager and separately approves live read-only verification.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

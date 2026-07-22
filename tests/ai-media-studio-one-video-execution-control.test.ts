@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer, request } from "node:http";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -11,12 +12,29 @@ import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory"
 import { DrizzleOneVideoExecutionControlRepository, derivePersistedProviderVerificationState } from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
 import { OneVideoExecutionControlError } from "../server/ai-media-studio/planning/one-video-execution-control-contracts";
 import { OneVideoExecutionControlService } from "../server/ai-media-studio/planning/one-video-execution-control-service";
+import { productionApprovalInputDigest, productionCreativeDigest } from "../server/ai-media-studio/production-batches/metadata-integrity";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
 
 const planId = `plan_${"1".repeat(24)}`;
 const batchId = `batch_${"2".repeat(24)}`;
 const slotId = `slot_${"3".repeat(24)}`;
 const scope = { ownerUserId: "owner", workspaceId: "personal" } as const;
+const internalPlanId = "11111111-1111-4111-8111-111111111111";
+const internalSlotId = "22222222-2222-4222-8222-222222222222";
+const accountId = "33333333-3333-4333-8333-333333333333";
+const avatarId = "44444444-4444-4444-8444-444444444444";
+const voiceId = "55555555-5555-4555-8555-555555555555";
+const scriptId = "66666666-6666-4666-8666-666666666666";
+const variantId = "77777777-7777-4777-8777-777777777777";
+const sourceId = "88888888-8888-4888-8888-888888888888";
+const governanceId = "99999999-9999-4999-8999-999999999999";
+const verificationHeaderId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const now = new Date("2026-07-22T12:00:00.000Z");
+const verifiedAt = new Date("2026-07-22T11:55:00.000Z");
+const verificationExpiresAt = new Date("2026-07-22T13:00:00.000Z");
+
+const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string): `sha256:${string}` => `sha256:${hash(value)}`;
 
 function packet(overrides: Partial<OneVideoExecutionControl> = {}): OneVideoExecutionControl {
   return oneVideoExecutionControlSchema.parse({
@@ -83,6 +101,192 @@ function queryText(query: unknown): string {
     : typeof chunk?.value?.[0] === "string" ? chunk.value[0] : "?").join("");
 }
 
+function approvedMetadata() {
+  const scriptKey = `script_${"4".repeat(24)}`;
+  const sourceContent = "Owned event source for one approved video.";
+  const sourceContentChecksum = hash(sourceContent);
+  const sourceContentHash = `sha256:${sourceContentChecksum}`;
+  const creative = {
+    title: "Approved launch script",
+    angle: "Local launch angle",
+    hook: "Start with the exact local hook.",
+    script: "This is the approved one-video script.",
+    cta: "Book now",
+    caption: "Approved caption",
+    hashtags: ["#miami"],
+    seoKeywords: ["miami event"],
+  };
+  const creativeDigest = productionCreativeDigest(creative);
+  const variantContent = creative.script;
+  const selectedVariantChecksum = hash(variantContent);
+  const base = {
+    version: 1,
+    batchId,
+    planId,
+    slotId,
+    scriptKey,
+    idempotencyKey: "production-batch-script-001",
+    inputDigest: sha256("production-input"),
+    sourceContentHash,
+    sourceContentChecksum,
+    sourceTitle: "Owned event",
+    sourceCategory: "events",
+    generatorVersion: "deterministic-script-v1",
+    variantCount: 1,
+    preparedAt: "2026-07-22T11:00:00.000Z",
+  };
+  const approval = {
+    version: 1,
+    ownerUserId: scope.ownerUserId,
+    workspaceId: scope.workspaceId,
+    batchId,
+    planId,
+    slotId,
+    scriptKey,
+    selectedVariantChecksum,
+    selectedCreativeDigest: creativeDigest,
+    inputDigest: productionApprovalInputDigest({
+      ...scope, planId, expectedBatchId: batchId, idempotencyKey: "production-batch-approval-001",
+    }),
+    idempotencyKey: "production-batch-approval-001",
+    approvedAt: "2026-07-22T11:30:00.000Z",
+  };
+  const variantMetadata = {
+    productionBatchV1: { ...base, variantKey: `variant_${"7".repeat(24)}`, variantIndex: 0, selected: true },
+    productionCreativeV1: { ...creative, creativeDigest },
+    productionBatchApprovalV1: approval,
+  };
+  return {
+    sourceContent,
+    sourceContentHash,
+    selectedVariantChecksum,
+    scriptMetadata: { productionBatchV1: base, productionBatchApprovalV1: approval },
+    variantMetadata,
+    variantContent,
+    title: creative.title,
+  };
+}
+
+type StaticProjectionOverride = Partial<{
+  staticVerificationHeaderId: string | null;
+  staticVerificationCurrent: boolean;
+  staticVerificationObservedAt: Date | null;
+  staticVerificationExpiresAt: Date | null;
+  accountStatus: string;
+  credentialStatus: string;
+  credentialSource: string;
+  credentialExpiresAt: Date | null;
+  avatarStatus: string;
+  voiceStatus: string;
+  nativeResourceIdsCurrent: boolean;
+}>;
+
+class FakeOneVideoReadModelDatabase {
+  readonly queries: string[] = [];
+  transactionConfig: unknown;
+  private readonly staticProjection: StaticProjectionOverride;
+
+  constructor(staticProjection: StaticProjectionOverride = {}) {
+    this.staticProjection = staticProjection;
+  }
+
+  async transaction<T>(callback: (tx: FakeOneVideoReadModelDatabase) => Promise<T>, config?: unknown): Promise<T> {
+    this.transactionConfig = config;
+    return callback(this);
+  }
+
+  async execute(query: unknown): Promise<{ rows: Record<string, unknown>[] }> {
+    const text = queryText(query);
+    this.queries.push(text);
+    const metadata = approvedMetadata();
+    if (/SELECT transaction_timestamp\(\) AS observed_at/iu.test(text)) {
+      return { rows: [{ observed_at: now }] };
+    }
+    if (/FROM ai_media_daily_plans plans\s+WHERE/iu.test(text)) {
+      return { rows: [{
+        id: internalPlanId, public_plan_key: planId, status: "planned", planned_slot_count: 50,
+        provider_account_id: accountId, provider_key: "heygen", provider_credential_version: 1,
+        source_roster_key: "roster-primary", source_roster_digest: sha256("roster"),
+        plan_digest: sha256("plan"),
+      }] };
+    }
+    if (/FROM ai_media_daily_plan_slots slots\s+LEFT JOIN ai_media_scripts/iu.test(text)) {
+      const accountStatus = this.staticProjection.accountStatus ?? "active";
+      const credentialStatus = this.staticProjection.credentialStatus ?? "active";
+      const credentialSource = this.staticProjection.credentialSource ?? "static_api_key";
+      const credentialExpiresAt = this.staticProjection.credentialExpiresAt === undefined
+        ? verificationExpiresAt : this.staticProjection.credentialExpiresAt;
+      return { rows: [{
+        id: internalSlotId, public_slot_key: slotId, status: "planned", script_variant_id: variantId,
+        source_member_key: `member_${"a".repeat(24)}`, video_number: 1, provider_account_id: accountId,
+        provider_key: "heygen", provider_credential_version: 1, slot_digest: sha256("slot"),
+        script_id: scriptId, script_title: metadata.title, script_status: "approved",
+        current_variant_id: variantId, script_metadata: metadata.scriptMetadata, source_type: "events",
+        source_item_id: sourceId, source_id: sourceId, source_item_type: "events", source_title: "Owned event",
+        source_content: metadata.sourceContent, source_content_hash: metadata.sourceContentHash,
+        source_status: "accepted", rights_status: "owned", moderation_status: "approved",
+        influencer_id: "influencer-1", creator_label: "Creator One",
+        account_id: accountId, account_provider_key: "heygen", account_status: accountStatus,
+        credential_status: credentialStatus, credential_version: 1, credential_expires_at: credentialExpiresAt,
+        credential_source: credentialSource, last_verified_at: verifiedAt,
+        static_credential_verification_id: verificationHeaderId, static_credential_verification_digest: sha256("header"),
+        static_credential_verified_at: verifiedAt, static_credential_verification_expires_at: verificationExpiresAt,
+        avatar_id: avatarId, avatar_type: "avatar", avatar_label: "Avatar One",
+        avatar_status: this.staticProjection.avatarStatus ?? "active", avatar_synchronized_at: verifiedAt,
+        avatar_verification_header_id: verificationHeaderId,
+        avatar_verification_resource_evidence_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        avatar_verification_evidence_digest: sha256("avatar-evidence"), avatar_verified_credential_version: 1,
+        avatar_verified_at: verifiedAt, avatar_verification_expires_at: verificationExpiresAt,
+        voice_id: voiceId, voice_type: "voice", voice_label: "Voice One",
+        voice_status: this.staticProjection.voiceStatus ?? "active", voice_synchronized_at: verifiedAt,
+        voice_verification_header_id: verificationHeaderId,
+        voice_verification_resource_evidence_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        voice_verification_evidence_digest: sha256("voice-evidence"), voice_verified_credential_version: 1,
+        voice_verified_at: verifiedAt, voice_verification_expires_at: verificationExpiresAt,
+        governance_id: governanceId, governance_evidence_digest: sha256("governance"),
+        governance_state: "approved", governance_valid_from: "2026-07-22T10:00:00.000Z",
+        governance_expires_at: "2026-07-23T10:00:00.000Z", revoked_at: null, governance_bound: true,
+      }] };
+    }
+    if (/SELECT slots.source_member_key,slots.video_number,slots.status/iu.test(text)) {
+      return { rows: Array.from({ length: 50 }, (_value, index) => ({
+        source_member_key: `member_${Math.floor(index / 10).toString(16).repeat(24)}`,
+        video_number: (index % 10) + 1,
+        status: "planned",
+      })) };
+    }
+    if (/FROM ai_media_script_variants variants/iu.test(text)) {
+      return { rows: [{
+        id: variantId, version: 1, label: metadata.title, content: metadata.variantContent,
+        status: "approved", checksum: metadata.selectedVariantChecksum, metadata: metadata.variantMetadata,
+      }] };
+    }
+    if (/SELECT attempt\.slot_attempt,intent\.id AS intent_id/iu.test(text)) {
+      return { rows: [{ slot_attempt: 1, intent_id: null, launch_intent_digest: null, intent_current: null,
+        quote_id: null, quote_decision: null, quote_amount: null, quote_currency: null, quote_valid_from: null,
+        quote_expires_at: null, quote_current: null, human_id: null, human_decision: null,
+        human_valid_from: null, human_expires_at: null, human_current: null }] };
+    }
+    if (/ai_media_static_heygen_verification_headers header/iu.test(text)) {
+      const nativeResourceIdsCurrent = this.staticProjection.nativeResourceIdsCurrent ?? true;
+      return { rows: [{
+        static_verification_header_id: this.staticProjection.staticVerificationHeaderId === undefined
+          ? verificationHeaderId : this.staticProjection.staticVerificationHeaderId,
+        static_verification_observed_at: this.staticProjection.staticVerificationObservedAt === undefined
+          ? verifiedAt : this.staticProjection.staticVerificationObservedAt,
+        static_verification_expires_at: this.staticProjection.staticVerificationExpiresAt === undefined
+          ? verificationExpiresAt : this.staticProjection.staticVerificationExpiresAt,
+        avatar_external_resource_id: "look-main",
+        avatar_external_resource_id_digest: nativeResourceIdsCurrent ? sha256("look-main") : sha256("look-old"),
+        voice_external_resource_id: "voice-main",
+        voice_external_resource_id_digest: nativeResourceIdsCurrent ? sha256("voice-main") : sha256("voice-old"),
+        static_verification_current: this.staticProjection.staticVerificationCurrent ?? true,
+      }] };
+    }
+    throw new Error(`Unexpected query: ${text}`);
+  }
+}
+
 test("repository begins with PostgreSQL time in one repeatable-read/read-only tenant-scoped SELECT snapshot", async () => {
   const queries: string[] = []; let config: unknown;
   const repository = new DrizzleOneVideoExecutionControlRepository({
@@ -124,7 +328,67 @@ test("static disconnected/unverified metadata is explicitly not_requested even w
   assert.equal(derivePersistedProviderVerificationState({ bindingState: "invalid", credentialSource: "static_api_key",
     accountStatus: "disconnected", credentialStatus: "unverified" }), "unavailable");
   assert.equal(derivePersistedProviderVerificationState({ bindingState: "current", credentialSource: "static_api_key",
-    accountStatus: "active", credentialStatus: "active" }), "unavailable");
+    accountStatus: "active", credentialStatus: "active", staticVerification: "verified" }), "verified");
+  assert.equal(derivePersistedProviderVerificationState({ bindingState: "current", credentialSource: "static_api_key",
+    accountStatus: "active", credentialStatus: "active", staticVerification: "stale" }), "stale");
+  assert.equal(derivePersistedProviderVerificationState({ bindingState: "current", credentialSource: "static_api_key",
+    accountStatus: "active", credentialStatus: "revoked", staticVerification: "verified" }), "failed");
+});
+
+test("repository projects exact PR29 static HeyGen account, avatar, and voice evidence as verified without enabling execution", async () => {
+  const fake = new FakeOneVideoReadModelDatabase();
+  const control = await new DrizzleOneVideoExecutionControlRepository(fake).observe(scope, planId, slotId);
+  assert.ok(control);
+  assert.equal(control.providerVerification.state, "verified");
+  assert.equal(control.providerVerification.observedAt, verifiedAt.toISOString());
+  assert.equal(control.providerVerification.expiresAt, verificationExpiresAt.toISOString());
+  assert.equal(control.binding.state, "current");
+  assert.deepEqual(control.execute.reasonCodes, [
+    "maximum_quote_missing", "human_approval_not_requested", "one_shot_executor_not_installed",
+  ]);
+  assert.ok(Object.values(control.effects).every((effect) => effect === false));
+  assert.equal(control.execute.postAvailable, false);
+  assert.equal(control.canGenerate || control.spendAuthorized || control.authoritativeForAdmission, false);
+  assert.ok(fake.queries.some((query) => /avatar_evidence\.avatar_look_status='completed'/iu.test(query)));
+  assert.ok(fake.queries.some((query) => /avatar_evidence\.avatar_group_id_digest<>avatar_evidence\.avatar_look_id_digest/iu.test(query)));
+  assert.ok(fake.queries.some((query) => /voice_evidence\.voice_id_digest=voice_evidence\.provider_resource_external_id_digest/iu.test(query)));
+});
+
+test("repository marks static HeyGen verification stale when PR29 evidence is expired, missing, or resource pointers misalign", async () => {
+  for (const override of [
+    { staticVerificationCurrent: false, staticVerificationExpiresAt: new Date("2026-07-22T11:59:00.000Z") },
+    { staticVerificationCurrent: false },
+    { nativeResourceIdsCurrent: false },
+    { staticVerificationHeaderId: null, staticVerificationCurrent: false,
+      staticVerificationObservedAt: null, staticVerificationExpiresAt: null },
+  ] satisfies StaticProjectionOverride[]) {
+    const control = await new DrizzleOneVideoExecutionControlRepository(
+      new FakeOneVideoReadModelDatabase(override),
+    ).observe(scope, planId, slotId);
+    assert.ok(control);
+    assert.equal(control.providerVerification.state, "stale");
+    assert.ok(control.execute.reasonCodes.includes("provider_verification_stale"));
+    assert.ok(control.execute.reasonCodes.includes("one_shot_executor_not_installed"));
+  }
+});
+
+test("repository preserves static disconnected/unverified provider verification as not requested", async () => {
+  const control = await new DrizzleOneVideoExecutionControlRepository(new FakeOneVideoReadModelDatabase({
+    accountStatus: "disconnected",
+    credentialStatus: "unverified",
+    credentialExpiresAt: null,
+    avatarStatus: "pending_verification",
+    voiceStatus: "pending_verification",
+    staticVerificationHeaderId: null,
+    staticVerificationCurrent: false,
+    staticVerificationObservedAt: null,
+    staticVerificationExpiresAt: null,
+  })).observe(scope, planId, slotId);
+  assert.ok(control);
+  assert.equal(control.binding.state, "stale");
+  assert.equal(control.providerVerification.state, "not_requested");
+  assert.ok(control.execute.reasonCodes.includes("binding_stale"));
+  assert.ok(control.execute.reasonCodes.includes("provider_verification_not_requested"));
 });
 
 test("route surface is GET-only and installs no prepare, execute, generate, or retry mutation for the exact slot", () => {
