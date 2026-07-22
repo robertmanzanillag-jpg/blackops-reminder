@@ -89,7 +89,70 @@ test("requires an explicit runtime opt-in before enabling Metricool publishing",
   assert.equal(authorizedRows[1].status, "blocked_media_missing");
   assert.equal(authorizedRows[1].publishAllowed, false);
   assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 1);
+  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 5);
+});
+
+test("starts at five daily and reduces only after enough verified poor results", () => {
+  const metrics = Array.from({ length: 15 }, (_, index) => ({
+    campaignId: campaign.id,
+    strategyId: index % 2 ? "hook_only" : "curiosity_question",
+    finalStatus: "published",
+    publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${1234567890123456700n + BigInt(index)}`,
+    views: 500 + index * 50,
+    earningsUsd: 0,
+    qualifiedForPayout: false,
+    metricEvidenceVerified: true,
+  }));
+
+  const learningPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: metrics.slice(0, 5), now });
+  assert.equal(learningPlan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(learningPlan.operatingPolicy.minimumInitialDailyClips, 5);
+  assert.equal(learningPlan.operatingPolicy.volumeReason, "initial_learning_floor");
+
+  const recutPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
+  assert.equal(recutPlan.operatingPolicy.dailyTestClips, 2);
+  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 8);
+  assert.equal(recutPlan.operatingPolicy.volumeReason, "reduce_while_recutting");
+});
+
+test("scheduled rows cannot raise the five-clip initial learning volume", () => {
+  const scheduledMetrics = Array.from({ length: 20 }, (_, index) => ({
+    campaignId: campaign.id,
+    finalStatus: index % 2 ? "scheduled" : "queued",
+    views: 1_000_000,
+  }));
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: scheduledMetrics,
+    now,
+    targetDailyClips: 8,
+  });
+  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 8);
+  assert.equal(plan.operatingPolicy.volumeReason, "initial_learning_floor");
+});
+
+test("raises volume only after fifteen verified winning posts", () => {
+  const winningMetrics = Array.from({ length: 15 }, (_, index) => ({
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${2234567890123456700n + BigInt(index)}`,
+    views: 10_000 + index * 100,
+    earningsUsd: 15,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    payoutEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  }));
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: winningMetrics,
+    now,
+    targetDailyClips: 8,
+  });
+  assert.equal(plan.operatingPolicy.dailyTestClips, 8);
+  assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
 test("accepts an observed countdown without inventing an exact campaign deadline", () => {

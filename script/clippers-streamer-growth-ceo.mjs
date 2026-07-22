@@ -318,8 +318,8 @@ export function buildStreamerGrowthCeoPlan({
   targetDailyClips = 5,
 }) {
   const parsedTargetDailyClips = Number(targetDailyClips);
-  const safeTargetDailyClips = Number.isFinite(parsedTargetDailyClips)
-    ? Math.max(1, Math.min(5, Math.trunc(parsedTargetDailyClips)))
+  const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips)
+    ? Math.max(5, Math.min(8, Math.trunc(parsedTargetDailyClips)))
     : 5;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
@@ -331,6 +331,30 @@ export function buildStreamerGrowthCeoPlan({
   const measuredEarningsUsd = actualPublishedRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
   const active = decisions.filter((row) => row.canProduce);
   const scaling = decisions.filter((row) => row.decision === "scale");
+  const recutting = decisions.some((row) => row.decision === "pause_and_recut");
+  const optimizing = decisions.some((row) => row.decision === "optimize");
+  const dailyTestClips = !active.length
+    ? 0
+    : actualPublishedRows.length < 15
+      ? 5
+      : recutting
+        ? 2
+        : scaling.length
+          ? Math.max(6, safeConfiguredDailyClips)
+          : optimizing
+            ? 4
+            : 5;
+  const volumeReason = !active.length
+    ? "no_active_campaign"
+    : actualPublishedRows.length < 15
+      ? "initial_learning_floor"
+      : recutting
+        ? "reduce_while_recutting"
+        : scaling.length
+          ? "increase_verified_winners"
+          : optimizing
+            ? "reduce_for_efficiency"
+            : "hold_baseline";
   const next = decisions[0] || null;
   return {
     status: !campaigns.length ? "needs_campaign_catalog" : !active.length ? "blocked" : scaling.length ? "scaling" : "testing",
@@ -351,8 +375,12 @@ export function buildStreamerGrowthCeoPlan({
       blocked: decisions.filter((row) => !row.canProduce).length,
     },
     operatingPolicy: {
-      dailyTestClips: active.length ? safeTargetDailyClips : 0,
-      maximumDailyClipsPerAccount: 5,
+      dailyTestClips,
+      initialDailyClips: 5,
+      minimumInitialDailyClips: 5,
+      configuredDailyCeiling: safeConfiguredDailyClips,
+      maximumDailyClipsPerAccount: 8,
+      volumeReason,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
       minimumSamplesBeforeWinner: 3,
@@ -447,7 +475,8 @@ async function main() {
     row.qualificationEvidenceVerified = row.payoutEvidenceVerified;
   }
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
-  const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized });
+  const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 5;
+  const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized, targetDailyClips });
   await mkdir(reportDir, { recursive: true });
   for (const decision of plan.decisions) {
     const mediaReadyBySlot = {};
