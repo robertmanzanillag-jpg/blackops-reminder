@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-22T06:25:24.948Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-verification-evidence`
+Generated: 2026-07-22T06:55:22.009Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-verification-read-model`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 850 | 710 | 3015 | 498 | 14081 |
+| 852 | 712 | 3036 | 498 | 14230 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,11 +29,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 211 | 200 | test:211 |
+| `tests` | 212 | 201 | test:212 |
 | `client/src` | 154 | 152 | ui-component:55, other:44, client-page:24, client-component:21 |
 | `server/ai-media-studio` | 159 | 146 | server:159 |
 | `server` | 96 | 92 | server:96 |
-| `script` | 43 | 41 | script:43 |
+| `script` | 44 | 42 | script:44 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `shared` | 14 | 14 | shared:14 |
 | `docs/ai-media-studio` | 13 | 13 | docs:13 |
@@ -134,6 +134,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts`
 - `tests/ai-media-studio-offline-launch-preflight-postgres.test.ts`
 - `tests/ai-media-studio-offline-one-slot-runtime.test.ts`
+- `tests/ai-media-studio-one-video-execution-control-postgres.test.ts`
 - `tests/ai-media-studio-one-video-execution-control.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
@@ -303,6 +304,7 @@ Package: `rest-express`
 - `script/ai-media-studio-launch-readiness-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-offline-launch-preflight-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-offline-one-slot-runtime-test.ts` (script; 19 symbols, 6 imports)
+- `script/ai-media-studio-one-video-execution-control-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-pr21-postgres-test.ts` (script; 21 symbols, 6 imports)
 - `script/ai-media-studio-static-heygen-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-worker.ts` (script; 19 symbols, 3 imports)
@@ -356,7 +358,6 @@ Package: `rest-express`
 - `server/ai-media-studio/assets/fakes.ts` (server; 12 symbols, 2 imports)
 - `server/ai-media-studio/assets/http-artifact-reader.ts` (server; 32 symbols, 7 imports)
 - `server/ai-media-studio/assets/in-memory-repository.ts` (server; 10 symbols, 2 imports)
-- `server/ai-media-studio/assets/index.ts` (server; 8 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
