@@ -39,17 +39,57 @@ function packetFor(input, requestNumber) {
       .map((code) => ({ code, state: "required_external" })),
   }};
 }
+function executionControlFor(input, requestNumber, mode) {
+  const videoNumber = Number.parseInt(input.slotId.slice(-2), 16) % 10 || 10;
+  const creatorName = input.planId.endsWith("2") ? "Faye" : videoNumber === 1 ? "Ada" : "Bea";
+  return { executionControl: {
+    version: 1, source: "postgresql_read_only", subject: { ...input, slotAttempt: 1 },
+    observedAt: "2026-07-21T12:12:00.000Z",
+    selection: { selectionKey: "selection_000000000000000000000001",
+      creator: { label: creatorName + " control " + requestNumber },
+      avatar: { key: "resource_000000000000000000000001", label: "Public avatar " + videoNumber },
+      voice: { key: "resource_000000000000000000000002", label: "Public voice " + videoNumber } },
+    format: { aspectRatio: "9:16", container: "mp4" },
+    binding: { state: mode === "blocked" ? "stale" : "current", credentialVersion: 1 },
+    providerVerification: mode === "blocked" ? { state: "not_requested" }
+      : { state: "verified", observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2030-07-21T13:00:00.000Z" },
+    maximumQuote: mode === "blocked" ? { state: "missing" }
+      : { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
+        evidenceKey: "evidence_000000000000000000000001", observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2030-07-21T13:01:00.000Z" },
+    humanApproval: mode === "blocked" ? { state: "not_requested" }
+      : { state: "approved", evidenceKey: "evidence_000000000000000000000002",
+        observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2030-07-21T13:02:00.000Z" },
+    execute: { state: "disabled", postAvailable: false, reasonCodes: mode === "blocked"
+      ? ["binding_stale", "provider_verification_not_requested", "maximum_quote_missing", "human_approval_not_requested", "one_shot_executor_not_installed"]
+      : ["one_shot_executor_not_installed"] },
+    effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false,
+      approvalRecorded: false, reservationCreated: false, renderCreated: false, outboxCreated: false,
+      spendCommitted: false, publishingCreated: false },
+    authoritativeForAdmission: false, canGenerate: false, spendAuthorized: false,
+  }};
+}
 export const mediaStudioCoreApi = {
   async productionBatchSandboxReadiness(input) {
     const harness = window.__sandboxHarness;
     harness.calls.push({ ...input });
     const requestNumber = harness.calls.length;
+    await fetch("/api/ai-media-studio/production-batches/" + encodeURIComponent(input.planId)
+      + "/sandbox-readiness/" + encodeURIComponent(input.slotId), { credentials: "include", cache: "no-store" });
     await wait(harness.delayMs);
     if (harness.failNext) {
       harness.failNext = false;
       throw new Error("Safe browser test failure");
     }
     return packetFor(input, requestNumber);
+  },
+  async oneVideoExecutionControl(input) {
+    const harness = window.__sandboxHarness;
+    harness.executionCalls.push({ ...input });
+    const requestNumber = harness.executionCalls.length;
+    await fetch("/api/ai-media-studio/production-batches/" + encodeURIComponent(input.planId)
+      + "/one-video-execution-control/" + encodeURIComponent(input.slotId), { credentials: "include", cache: "no-store" });
+    await wait(harness.delayMs);
+    return executionControlFor(input, requestNumber, harness.controlMode);
   },
 };
 `;
@@ -81,7 +121,7 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     configFile: false,
     root: repositoryRoot,
     appType: "custom",
-    logLevel: "silent",
+    logLevel: "error",
     plugins: [browserHarnessPlugin(), react()],
     resolve: {
       alias: {
@@ -99,10 +139,15 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     }
     if (request.url === "/") {
       const html = `<!doctype html><html><body><main><div id="root"></div></main><script>
-        window.__sandboxHarness = { calls: [], delayMs: 80, failNext: false };
+        window.__sandboxHarness = { calls: [], executionCalls: [], delayMs: 80, failNext: false, controlMode: "ready" };
       </script><script type="module" src="/${path.relative(repositoryRoot, entryPath)}"></script></body></html>`;
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end(html);
+      return;
+    }
+    if (request.url?.startsWith("/api/ai-media-studio/")) {
+      response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      response.end("{}");
       return;
     }
     vite.middlewares(request, response, () => {
@@ -122,6 +167,10 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   });
   t.after(() => browser.close());
   const page = await browser.newPage();
+  const capturedApiRequests: { url: string; method: string }[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/ai-media-studio/")) capturedApiRequests.push({ url: request.url(), method: request.method() });
+  });
   const consoleErrors: string[] = [];
   page.on("pageerror", (error) => consoleErrors.push(error.message));
   page.on("console", (message) => {
@@ -139,8 +188,23 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   await assert.doesNotReject(selector.waitFor());
   assert.equal(await selector.getAttribute("aria-describedby"), "sandbox-approved-slot-help");
   assert.equal(await selector.inputValue(), "slot_000000000000000000000001");
-  await assert.doesNotReject(page.getByText("Loading the read-only sandbox readiness packet").waitFor());
   await assert.doesNotReject(page.getByText("Ada request 1").waitFor());
+  await assert.doesNotReject(page.getByText("Ada control 1").waitFor());
+  const executeButton = page.getByRole("button", { name: "Execute one approved video", exact: true });
+  assert.equal(await executeButton.count(), 1);
+  assert.equal(await executeButton.isDisabled(), true);
+  assert.ok(await executeButton.getAttribute("aria-describedby"));
+  assert.equal(await page.getByText("$1.25 USD", { exact: false }).count(), 1);
+  assert.equal(await page.getByText("Refresh does not contact HeyGen.", { exact: false }).count(), 1);
+
+  await page.evaluate(() => { (window as any).__sandboxHarness.controlMode = "blocked"; });
+  await page.getByRole("button", { name: "Refresh execution evidence" }).click();
+  await assert.doesNotReject(page.getByText("A server-attested maximum quote is missing.").waitFor());
+  assert.equal(await page.getByText("Missing", { exact: true }).count(), 1);
+  assert.ok(await page.getByText("Not requested", { exact: true }).count() >= 2);
+  await page.evaluate(() => { (window as any).__sandboxHarness.controlMode = "ready"; });
+  await page.getByRole("button", { name: "Refresh execution evidence" }).click();
+  await assert.doesNotReject(page.getByText("$1.25 USD", { exact: false }).waitFor());
 
   await page.locator("body").click({ position: { x: 2, y: 2 } });
   await page.keyboard.press("Tab");
@@ -149,6 +213,7 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   await selector.selectOption("slot_000000000000000000000002");
   assert.equal(await selector.inputValue(), "slot_000000000000000000000002");
   await assert.doesNotReject(page.getByText("Bea request 2").waitFor());
+  await assert.doesNotReject(page.getByText(/Bea control \d+/u).waitFor());
   const selectedCall = await page.evaluate(() => (window as any).__sandboxHarness.calls.at(-1));
   assert.deepEqual(selectedCall, {
     planId: "plan_000000000000000000000001",
@@ -162,6 +227,16 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   await page.getByRole("button", { name: "Refresh readiness packet" }).click();
   await assert.doesNotReject(page.getByText("Refreshing the selected slot packet…").waitFor());
   await assert.doesNotReject(page.getByText("Bea request 3").waitFor());
+  await page.getByRole("button", { name: "Refresh execution evidence" }).click();
+  await assert.doesNotReject(page.getByText(/Bea control \d+/u).waitFor());
+
+  await page.evaluate(() => { (window as any).__sandboxHarness.delayMs = 250; });
+  await selector.selectOption("slot_000000000000000000000001");
+  await selector.selectOption("slot_000000000000000000000002");
+  await page.waitForTimeout(350);
+  assert.equal(await selector.inputValue(), "slot_000000000000000000000002");
+  assert.equal(await page.getByText(/Ada control \d+/u).count(), 0, "a late response for the old slot must not repaint evidence");
+  await page.evaluate(() => { (window as any).__sandboxHarness.delayMs = 80; });
 
   await page.evaluate(() => { (window as any).__sandboxHarness.failNext = true; });
   await selector.selectOption("slot_000000000000000000000001");
@@ -169,7 +244,7 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   await page.getByRole("button", { name: "Retry" }).click();
   await assert.doesNotReject(page.getByText(/Ada request \d+/u).waitFor());
 
-  const unsafeControls = page.getByRole("button", { name: /^(Execute|Generate|Spend)\b/iu });
+  const unsafeControls = page.getByRole("button", { name: /^(Generate|Spend)\b/iu });
   assert.equal(await unsafeControls.count(), 0);
   assert.equal(await page.getByText("No spend · No provider call · No execution.").count(), 1);
   assert.equal(await page.locator('[aria-label="Vertical 9 by 16 video preview"]').count(), 1);
@@ -177,6 +252,7 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
 
   await page.evaluate(() => (window as any).__sandboxHarness.renderSecondBatch());
   await assert.doesNotReject(page.getByText(/Faye request \d+/u).waitFor());
+  await assert.doesNotReject(page.getByText(/Faye control \d+/u).waitFor());
   assert.equal(await selector.inputValue(), "slot_000000000000000000000065");
   const resetCall = await page.evaluate(() => (window as any).__sandboxHarness.calls.at(-1));
   assert.deepEqual(resetCall, {
@@ -184,5 +260,10 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     batchId: "batch_000000000000000000000002",
     slotId: "slot_000000000000000000000065",
   });
+  assert.ok(capturedApiRequests.length >= 8);
+  assert.ok(capturedApiRequests.every((request) => request.method === "GET"));
+  assert.ok(capturedApiRequests.every((request) => new URL(request.url).hostname === "127.0.0.1"));
+  assert.ok(capturedApiRequests.every((request) => /\/(sandbox-readiness|one-video-execution-control)\//u.test(request.url)));
+  assert.equal(capturedApiRequests.some((request) => /heygen\.com|\/execute(?:\/|$)/iu.test(request.url)), false);
   assert.deepEqual(consoleErrors, []);
 });

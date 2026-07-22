@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T04:52:39.372Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-onboarding-readiness",
+  "generatedAt": "2026-07-22T05:24:45.587Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-execution-control",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -88,13 +88,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 833,
-    "filesIndexed": 698,
-    "imports": 2958,
-    "routes": 497,
-    "symbols": 13775
+    "filesVisible": 839,
+    "filesIndexed": 704,
+    "imports": 2986,
+    "routes": 498,
+    "symbols": 13890
   },
   "directories": {
+    "docs/ai-media-studio": {
+      "files": 13,
+      "indexed": 13,
+      "kinds": {
+        "docs": 13
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 154,
+      "indexed": 144,
+      "kinds": {
+        "server": 154
+      }
+    },
+    "shared": {
+      "files": 14,
+      "indexed": 14,
+      "kinds": {
+        "shared": 14
+      }
+    },
+    "tests": {
+      "files": 207,
+      "indexed": 196,
+      "kinds": {
+        "test": 207
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -145,13 +173,6 @@
         "client-page": 24
       }
     },
-    "docs/ai-media-studio": {
-      "files": 12,
-      "indexed": 12,
-      "kinds": {
-        "docs": 12
-      }
-    },
     "docs": {
       "files": 12,
       "indexed": 11,
@@ -188,13 +209,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 151,
-      "indexed": 141,
-      "kinds": {
-        "server": 151
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -202,25 +216,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 13,
-      "indexed": 13,
-      "kinds": {
-        "shared": 13
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 206,
-      "indexed": 195,
-      "kinds": {
-        "test": 206
       }
     },
     "tests/fixtures": {
@@ -2377,6 +2377,7 @@
         "@shared/ai-media-studio-heygen-onboarding",
         "@shared/ai-media-studio-heygen-roster",
         "@shared/ai-media-studio-launch-preflight",
+        "@shared/ai-media-studio-one-video-execution-control",
         "@shared/ai-media-studio-production-batches",
         "@shared/ai-media-studio-sandbox-readiness"
       ],
@@ -2581,6 +2582,7 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "useOneVideoExecutionControl",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
@@ -2603,6 +2605,7 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "useOneVideoExecutionControl",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
@@ -2790,18 +2793,21 @@
         "./types",
         "@/components/ui/button",
         "@/components/ui/card",
+        "@shared/ai-media-studio-one-video-execution-control",
         "lucide-react",
         "react"
       ],
       "exports": [
         "ProductionBatchWorkbench",
         "approvalResultMatchesBatch",
+        "formatMaximumQuoteUsd",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey"
       ],
       "symbols": [
         "LaunchGateIcon",
         "LaunchPreflightPanel",
+        "OneVideoExecutionControlPanel",
         "ProductionBatchWorkbench",
         "SandboxReadinessPanel",
         "action",
@@ -2817,11 +2823,18 @@
         "attemptRef",
         "batch",
         "batchQuery",
+        "blockerId",
+        "candidate",
         "confirmCreatorReview",
         "confirmedMembers",
+        "control",
         "errorMessage",
+        "evidenceTime",
         "externalRequirementLabels",
+        "formatMaximumQuoteUsd",
+        "fraction",
         "identity",
+        "micros",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey",
         "ownApprovalTransition",
@@ -2833,7 +2846,8 @@
         "resultRef",
         "reviewedBatchRef",
         "scriptReadiness",
-        "selectedSlot"
+        "selectedSlot",
+        "whole"
       ],
       "routes": []
     },
@@ -4866,6 +4880,14 @@
     },
     {
       "path": "docs/ai-media-studio/github-checkpoint-2026-07-21.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/heygen-v3-provider-profile.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10596,6 +10618,75 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-execution-control-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-execution-control",
+        "../core/resource-domain",
+        "../production-batches/metadata-integrity",
+        "./one-video-execution-control-contracts",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleOneVideoExecutionControlRepository",
+        "OneVideoExecutionControlDatabase",
+        "OneVideoExecutionControlTransactionalDatabase",
+        "derivePersistedProviderVerificationState"
+      ],
+      "symbols": [
+        "DrizzleOneVideoExecutionControlRepository",
+        "EvidenceState",
+        "ExecuteResult",
+        "Row",
+        "accountPresent",
+        "accountStatus",
+        "amount",
+        "base",
+        "bool",
+        "clock",
+        "credentialExpired",
+        "credentialMatches",
+        "credentialSource",
+        "credentialStatus",
+        "credentialVersion",
+        "databaseNow",
+        "date",
+        "decision",
+        "derivePersistedProviderVerificationState",
+        "envelope",
+        "evidence",
+        "evidenceRows",
+        "exactEvidenceBase",
+        "expires",
+        "human",
+        "id",
+        "lastVerified",
+        "number",
+        "opaque",
+        "optionalIso",
+        "parsed",
+        "plan",
+        "planSlotRows",
+        "plans",
+        "productionMetadataCurrent",
+        "providerVerification",
+        "quote",
+        "reasonCodes",
+        "resourceShape",
+        "resourcesActive",
+        "rows",
+        "slot",
+        "slotRows",
+        "text",
+        "validFrom",
+        "value",
+        "variants",
+        "verificationState"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/drizzle-sandbox-readiness-repository.ts",
       "kind": "server",
       "imports": [
@@ -10884,6 +10975,42 @@
         "validDatabaseTime",
         "validateBinding",
         "verifier"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/one-video-execution-control-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-execution-control",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "OneVideoExecutionControlError",
+        "OneVideoExecutionControlErrorCode",
+        "OneVideoExecutionControlRepository"
+      ],
+      "symbols": [
+        "OneVideoExecutionControlError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/one-video-execution-control-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-execution-control",
+        "../core/resource-domain",
+        "./one-video-execution-control-contracts"
+      ],
+      "exports": [
+        "OneVideoExecutionControlService"
+      ],
+      "symbols": [
+        "OneVideoExecutionControlService",
+        "PLAN_KEY",
+        "SLOT_KEY",
+        "parsed"
       ],
       "routes": []
     },
@@ -11977,6 +12104,7 @@
         "../../shared/ai-media-studio-heygen-onboarding",
         "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-launch-preflight",
+        "../../shared/ai-media-studio-one-video-execution-control",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
         "../../shared/ai-media-studio-sandbox-readiness",
@@ -11997,6 +12125,8 @@
         "./persistence/runtime",
         "./planning/launch-preflight-contracts",
         "./planning/launch-preflight-service",
+        "./planning/one-video-execution-control-contracts",
+        "./planning/one-video-execution-control-service",
         "./planning/sandbox-readiness-contracts",
         "./planning/sandbox-readiness-service",
         "./ports",
@@ -12054,6 +12184,7 @@
         "createDefaultDurableHeyGenOnboardingReadinessRepository",
         "createDefaultDurableHeyGenRosterRuntime",
         "createDefaultDurableLaunchPreflightRepository",
+        "createDefaultDurableOneVideoExecutionControlRepository",
         "createDefaultDurableProductionBatchRepository",
         "createDefaultDurableSandboxReadinessRepository",
         "createDefaultProviderWebhookAccountResolver",
@@ -12075,6 +12206,7 @@
         "environment",
         "error",
         "evidence",
+        "executionControl",
         "existing",
         "expiresInSeconds",
         "explicitHarness",
@@ -12106,6 +12238,7 @@
         "mediaAssetId",
         "message",
         "method",
+        "oneVideoExecutionControlSelection",
         "operations",
         "ownerUserId",
         "page",
@@ -12146,6 +12279,7 @@
         "requireHeyGenRoster",
         "requireJobs",
         "requireLaunchPreflight",
+        "requireOneVideoExecutionControl",
         "requireOperations",
         "requireProductionBatches",
         "requireSandboxReadiness",
@@ -12170,6 +12304,7 @@
         "selectHeyGenOnboardingReadinessRuntime",
         "selectHeyGenRosterRuntime",
         "selectLaunchPreflightRuntime",
+        "selectOneVideoExecutionControlRuntime",
         "selectProductionBatchRuntime",
         "selectSandboxReadinessRuntime",
         "service",
@@ -12218,6 +12353,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/options",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
@@ -19867,6 +20003,36 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-one-video-execution-control.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "OneVideoExecutionControl",
+        "oneVideoExecutionControlResponseSchema",
+        "oneVideoExecutionControlSchema",
+        "oneVideoExecutionReasonCodes"
+      ],
+      "symbols": [
+        "cleanLabel",
+        "currentEvidenceAllowed",
+        "humanApprovalSchema",
+        "humanHasEvidence",
+        "instant",
+        "maximumQuoteSchema",
+        "oneVideoExecutionControlResponseSchema",
+        "oneVideoExecutionControlSchema",
+        "oneVideoExecutionReasonCodes",
+        "providerVerificationSchema",
+        "publicKey",
+        "quoteHasEvidence",
+        "quoteHasMoney",
+        "resourceSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-operations.ts",
       "kind": "shared",
       "imports": [
@@ -20653,6 +20819,7 @@
         "launchReadiness",
         "officeSource",
         "offlinePreflight",
+        "oneVideoExecutionControl",
         "pageSource",
         "routesSource",
         "sandbox",
@@ -20955,12 +21122,14 @@
       "symbols": [
         "api",
         "assets",
+        "dashboard",
         "failed",
         "feedback",
         "form",
         "hooks",
         "influencers",
         "library",
+        "navigation",
         "opened",
         "options",
         "originalFetch",
@@ -22932,6 +23101,53 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-one-video-execution-control.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository",
+        "../server/ai-media-studio/planning/one-video-execution-control-contracts",
+        "../server/ai-media-studio/planning/one-video-execution-control-service",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../shared/ai-media-studio-one-video-execution-control",
+        "express",
+        "node:assert/strict",
+        "node:fs",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "batchId",
+        "body",
+        "candidate",
+        "effect",
+        "getWithBody",
+        "money",
+        "noQuote",
+        "packet",
+        "planId",
+        "previous",
+        "profile",
+        "queryText",
+        "repository",
+        "req",
+        "response",
+        "routeHarness",
+        "routes",
+        "runtime",
+        "scope",
+        "service",
+        "slotId",
+        "source",
+        "url",
+        "value",
+        "wrong"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-operations-client.test.ts",
       "kind": "test",
       "imports": [
@@ -24314,6 +24530,7 @@
       "symbols": [
         "approved",
         "batch",
+        "executionControlResponse",
         "externalBatch",
         "first",
         "gateCodes",
@@ -24596,6 +24813,7 @@
         "approvalControlIndex",
         "buttonBlocks",
         "creatorListIndex",
+        "executionApi",
         "hrefs",
         "launchPreflightIndex",
         "read",
@@ -25073,6 +25291,8 @@
         "bundledBrowser",
         "creatorName",
         "entryPath",
+        "executeButton",
+        "executionControlFor",
         "gateCodes",
         "harness",
         "html",
@@ -27107,6 +27327,7 @@
     "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
     "tests/ai-media-studio-offline-launch-preflight-postgres.test.ts",
     "tests/ai-media-studio-offline-one-slot-runtime.test.ts",
+    "tests/ai-media-studio-one-video-execution-control.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",

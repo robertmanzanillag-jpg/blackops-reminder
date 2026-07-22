@@ -170,6 +170,21 @@ test("global refresh covers all studio queries and fallback keeps dashboard anch
   assert.match(page, /DashboardFallback/);
 });
 
+test("dashboard labels persisted provider configuration without claiming live health", async () => {
+  const dashboard = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/dashboard-overview.tsx"), "utf8");
+  const navigation = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/navigation.ts"), "utf8");
+  const page = await readFile(resolve(repositoryRoot, "client/src/pages/ai-media-studio.tsx"), "utf8");
+  assert.match(dashboard, /Local provider configuration/);
+  assert.match(dashboard, /Observed locally/);
+  assert.match(dashboard, /not a live provider health check/);
+  assert.doesNotMatch(dashboard, />Provider health</);
+  assert.match(navigation, /Provider configuration/);
+  assert.doesNotMatch(navigation, /Provider health/);
+  assert.match(page, /Provider configuration/);
+  assert.doesNotMatch(page, /Provider health/);
+  assert.doesNotMatch(dashboard, />Checked /);
+});
+
 test("influencer mutations refresh both roster and generation options", async () => {
   const hooks = await source("hooks.ts");
   assert.match(hooks, /queryKey: coreStudioKeys\.influencers/);

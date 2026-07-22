@@ -15,12 +15,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "../feedback";
 import {
   useApproveProductionBatchScripts,
+  useOneVideoExecutionControl,
   usePrepareProductionBatchScripts,
   useProductionBatch,
   useProductionBatchLaunchPreflight,
   useProductionBatchSandboxReadiness,
 } from "./hooks";
 import type { LaunchPreflight, LaunchPreflightGate, ProductionBatch, SandboxReadinessGate } from "./types";
+import type { OneVideoExecutionControl } from "@shared/ai-media-studio-one-video-execution-control";
 
 const blockerLabels: Record<ProductionBatch["blockers"][number], string> = {
   script_batch_required: "Script batch preparation required",
@@ -190,6 +192,160 @@ const externalRequirementLabels = {
   callback_readiness: "Callback readiness",
 } as const;
 
+const executionReasonLabels: Record<OneVideoExecutionControl["execute"]["reasonCodes"][number], string> = {
+  binding_stale: "The selected provider binding is stale.",
+  binding_invalid: "The selected provider binding is invalid.",
+  provider_verification_not_requested: "Live provider verification has not been requested.",
+  provider_verification_failed: "The persisted provider verification failed.",
+  provider_verification_stale: "The persisted provider verification is stale.",
+  provider_verification_unavailable: "Provider verification evidence is unavailable.",
+  maximum_quote_missing: "A server-attested maximum quote is missing.",
+  maximum_quote_declined: "The maximum quote was declined.",
+  maximum_quote_expired: "The maximum quote expired.",
+  maximum_quote_stale: "The maximum quote is stale.",
+  maximum_quote_unavailable: "Maximum quote evidence is unavailable.",
+  human_approval_not_requested: "Human one-video cost approval has not been requested.",
+  human_approval_rejected: "Human one-video cost approval was rejected.",
+  human_approval_revoked: "Human one-video cost approval was revoked.",
+  human_approval_expired: "Human one-video cost approval expired.",
+  human_approval_stale: "Human one-video cost approval is stale.",
+  human_approval_unavailable: "Human approval evidence is unavailable.",
+  one_shot_executor_not_installed: "The one-shot executor is not installed.",
+};
+
+const providerVerificationLabels: Record<OneVideoExecutionControl["providerVerification"]["state"], string> = {
+  not_requested: "Not requested",
+  verified: "Verified in persisted evidence",
+  failed: "Failed",
+  stale: "Stale",
+  unavailable: "Unavailable",
+};
+
+const quoteStateLabels: Record<OneVideoExecutionControl["maximumQuote"]["state"], string> = {
+  missing: "Missing",
+  quoted: "Quoted",
+  declined: "Declined",
+  expired: "Expired",
+  stale: "Stale",
+  unavailable: "Unavailable",
+};
+
+const approvalStateLabels: Record<OneVideoExecutionControl["humanApproval"]["state"], string> = {
+  not_requested: "Not requested",
+  approved: "Approved",
+  rejected: "Rejected",
+  revoked: "Revoked",
+  expired: "Expired",
+  stale: "Stale",
+  unavailable: "Unavailable",
+};
+
+export function formatMaximumQuoteUsd(amountMicroUsd: string): string {
+  const micros = BigInt(amountMicroUsd);
+  const whole = micros / 1_000_000n;
+  const fraction = (micros % 1_000_000n).toString().padStart(6, "0").replace(/0+$/u, "").padEnd(2, "0");
+  return `$${new Intl.NumberFormat("en-US").format(whole)}.${fraction}`;
+}
+
+function evidenceTime(value: string | undefined): string {
+  return value ? new Date(value).toLocaleString() : "Not recorded";
+}
+
+function OneVideoExecutionControlPanel({
+  planId,
+  batchId,
+  slotId,
+}: {
+  planId: string;
+  batchId: string;
+  slotId: string;
+}) {
+  const query = useOneVideoExecutionControl({ planId, batchId, slotId, enabled: Boolean(slotId) });
+  const candidate = query.data?.executionControl;
+  const control = candidate
+    && candidate.subject.planId === planId
+    && candidate.subject.batchId === batchId
+    && candidate.subject.slotId === slotId
+    ? candidate
+    : undefined;
+  const blockerId = `one-video-execution-blockers-${slotId}`;
+
+  return (
+    <section aria-labelledby="one-video-execution-control-heading" className="space-y-4 rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/[0.045] p-4 sm:p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-200">One-video execution control · read-only</p>
+          <h4 id="one-video-execution-control-heading" className="mt-2 text-lg font-semibold text-white">Review persisted execution evidence</h4>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">Refresh reads this application only. It does not contact HeyGen, verify credentials, request a quote, record approval, or spend credits.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0 border-white/10 bg-white/5"
+          disabled={query.isFetching}
+          aria-busy={query.isFetching}
+          onClick={() => query.refetch().then(() => undefined)}
+        >
+          <RefreshCcw className={`mr-2 h-4 w-4 ${query.isFetching ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />
+          Refresh execution evidence
+        </Button>
+      </div>
+
+      <p role="status" aria-live="polite" aria-atomic="true" className="rounded-lg border border-red-300/25 bg-red-400/[0.07] p-4 text-sm leading-6 text-red-100">
+        Execution disabled. This screen cannot call HeyGen or spend credits.
+      </p>
+      {query.isFetching && !query.isLoading && <p role="status" aria-live="polite" className="text-sm text-fuchsia-100">Refreshing persisted application evidence only…</p>}
+      {query.isLoading ? (
+        <LoadingPanel label="Loading persisted one-video execution evidence" />
+      ) : query.isError ? (
+        <ErrorPanel message={query.error.message} onRetry={() => query.refetch().then(() => undefined)} />
+      ) : control ? (
+        <div className="space-y-4" aria-live="polite" aria-atomic="true">
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Creator</dt><dd className="mt-1 font-medium text-white">{control.selection.creator.label}</dd></div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Public avatar</dt><dd className="mt-1 font-medium text-white">{control.selection.avatar.label}</dd></div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Public voice</dt><dd className="mt-1 font-medium text-white">{control.selection.voice.label}</dd></div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-3"><dt className="text-xs uppercase tracking-wide text-zinc-500">Output</dt><dd className="mt-1 font-medium text-white">9:16 MP4</dd></div>
+          </dl>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Persisted provider verification</p>
+              <p className="mt-2 font-semibold text-white">{providerVerificationLabels[control.providerVerification.state]}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">Observed: {evidenceTime(control.providerVerification.observedAt)}. Refresh does not contact HeyGen.</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Server-attested maximum quote</p>
+              <p className="mt-2 font-semibold text-white">{quoteStateLabels[control.maximumQuote.state]}{control.maximumQuote.state === "quoted" && control.maximumQuote.amountMicroUsd ? ` · ${formatMaximumQuoteUsd(control.maximumQuote.amountMicroUsd)} USD` : ""}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">Read-only evidence. Expires: {evidenceTime(control.maximumQuote.expiresAt)}.</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-zinc-500">Human one-video approval</p>
+              <p className="mt-2 font-semibold text-white">{approvalStateLabels[control.humanApproval.state]}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">Observed: {evidenceTime(control.humanApproval.observedAt)}. No decision can be recorded here.</p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-4">
+            <p className="text-sm font-medium text-amber-100">Execution blockers</p>
+            <ul id={blockerId} className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-100">
+              {control.execute.reasonCodes.map((reason) => <li key={reason}>{executionReasonLabels[reason]}</li>)}
+            </ul>
+          </div>
+          <button
+            type="button"
+            disabled
+            aria-describedby={blockerId}
+            className="min-h-11 w-full cursor-not-allowed rounded-md border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-400 sm:w-auto"
+          >
+            Execute one approved video
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SandboxReadinessPanel({ batch }: { batch: ProductionBatch }) {
   const approvedSlots = batch.groups.flatMap((group) => group.items.flatMap((item) =>
     item.preparation === "draft" && item.script.status === "approved"
@@ -256,6 +412,15 @@ function SandboxReadinessPanel({ batch }: { batch: ProductionBatch }) {
             ))}
           </select>
         </div>
+      )}
+
+      {selectedSlot && (
+        <OneVideoExecutionControlPanel
+          key={`${batch.planId}:${batch.batchId}:${selectedSlotId}`}
+          planId={batch.planId}
+          batchId={batch.batchId}
+          slotId={selectedSlotId}
+        />
       )}
 
       {query.isFetching && !query.isLoading && <p role="status" aria-live="polite" className="text-sm text-cyan-100">Refreshing the selected slot packet…</p>}

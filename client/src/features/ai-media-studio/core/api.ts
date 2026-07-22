@@ -18,6 +18,10 @@ import type {
   UpdateInfluencerRequest,
 } from "./types";
 import {
+  oneVideoExecutionControlResponseSchema,
+  type OneVideoExecutionControl,
+} from "@shared/ai-media-studio-one-video-execution-control";
+import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
 } from "@shared/ai-media-studio-heygen-roster";
@@ -46,6 +50,12 @@ const sandboxReadinessErrorMessages: Readonly<Record<number, string>> = {
   404: "Sandbox readiness was not found for this approved slot.",
   409: "Sandbox readiness is not available for the current batch or slot state.",
   503: "Sandbox readiness observation is temporarily unavailable.",
+};
+
+const oneVideoExecutionControlErrorMessages: Readonly<Record<number, string>> = {
+  404: "Execution control was not found for this approved slot.",
+  409: "Execution control is not available for the current batch or slot state.",
+  503: "Execution-control observation is temporarily unavailable.",
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -155,6 +165,29 @@ export const mediaStudioCoreApi = {
     const subject = parsed.sandboxReadiness.subject;
     if (subject.planId !== planId || subject.batchId !== batchId || subject.slotId !== slotId) {
       throw new Error("Sandbox readiness identity did not match the selected approved slot.");
+    }
+    return parsed;
+  },
+  oneVideoExecutionControl: async ({
+    planId,
+    batchId,
+    slotId,
+  }: {
+    planId: string;
+    batchId: string;
+    slotId: string;
+  }): Promise<{ executionControl: OneVideoExecutionControl }> => {
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/one-video-execution-control/${encodeURIComponent(slotId)}`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (!response.ok) {
+      throw new Error(oneVideoExecutionControlErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = oneVideoExecutionControlResponseSchema.parse(await response.json());
+    const subject = parsed.executionControl.subject;
+    if (subject.planId !== planId || subject.batchId !== batchId || subject.slotId !== slotId) {
+      throw new Error("Execution-control identity did not match the selected approved slot.");
     }
     return parsed;
   },

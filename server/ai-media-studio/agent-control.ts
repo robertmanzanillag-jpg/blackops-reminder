@@ -215,6 +215,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #148 unmerged; Robert places the API key only in the approved secret manager and supplies 5–10 avatar/voice IDs, then separately approve read-only live verification before any quote or generation.",
   },
   {
+    id: "ams-agent-one-video-execution-control",
+    title: "Inert one-video verification and execution control",
+    owner: "AI Media Studio provider execution squad",
+    state: "done",
+    branch: "codex/ai-media-studio-one-video-execution-control",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/149",
+    acceptance: [
+      "Pin one reviewed official HeyGen API profile behind provider-neutral verification and render contracts",
+      "Bind credential, avatar, voice, approved script, vertical format and maximum quote to exactly one public slot",
+      "Keep verification, quote preparation and human approval distinct while execution, provider calls and spend remain disabled",
+      "Define fail-closed handling for credential rotation, stale evidence, ambiguous submit, callback fallback, ingest and actual-cost settlement",
+    ],
+    mergeGate: "Official-provider documentation audit, focused and PostgreSQL evidence, TypeScript, build, independent checker, security and App QA must pass with no P0-P3 before a stacked draft PR is ready.",
+    evidence: [
+      "Draft PR #149 is stacked on reviewed draft PR #148",
+      "Focused control/client/UI 58/58, one-video control 9/9, isolated browser 1/1, TypeScript and production build pass",
+      "Full serial AI Media Studio suite: 804 passed, one inherited PR26 wording-regex failure and 43 controlled skips of 848",
+      "Independent checker, security and App QA final gates: P0=P1=P2=P3=0 after the V3 avatar-look correction",
+    ],
+    blockers: [
+      "No API key, live account, avatar look, voice, storage or callback has been verified",
+      "Immutable exact static-credential verification and account-specific maximum quote evidence do not exist yet",
+      "Provider verification, any migration apply, one-video POST, spend, publishing and Replit deployment require separate approvals",
+    ],
+    nextAction: "Keep draft PR #149 unmerged; Robert supplies the API key only through the deployment secret manager plus 5–10 avatar-look/voice ID pairs, then separately approve read-only live verification before quote or generation.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

@@ -11,7 +11,7 @@ export const studioNavigation: StudioNavItem[] = [
   { href: "#publishing", label: "Publishing", icon: Send },
   { href: "#analytics", label: "Analytics", icon: BarChart3 },
   { href: "#automation", label: "Automation", icon: Workflow },
-  { href: "#providers", label: "Provider health", icon: Bot },
+  { href: "#providers", label: "Provider configuration", icon: Bot },
   { href: "#activity", label: "Recent activity", icon: Activity },
   { href: "/ai-media-studio-agent", label: "Media Agent", icon: ShieldCheck },
 ];

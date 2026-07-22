@@ -1,6 +1,5 @@
 import {
   Activity,
-  CheckCircle2,
   CircleDollarSign,
   Clock3,
   Film,
@@ -37,6 +36,13 @@ const providerTone: Record<ProviderStatus, string> = {
   degraded: "border-amber-300/30 bg-amber-400/10 text-amber-100",
   offline: "border-red-300/30 bg-red-400/10 text-red-200",
   unconfigured: "border-zinc-600 bg-zinc-800/70 text-zinc-300",
+};
+
+const providerConfigurationLabels: Record<ProviderStatus, string> = {
+  healthy: "Configured locally",
+  degraded: "Local attention needed",
+  offline: "Locally unavailable",
+  unconfigured: "Not configured locally",
 };
 
 export function DashboardOverview({ dashboard }: { dashboard: StudioDashboard }) {
@@ -78,14 +84,13 @@ export function DashboardOverview({ dashboard }: { dashboard: StudioDashboard })
         <Card id="providers" className="scroll-mt-24 border-white/10 bg-white/[0.035] text-white shadow-none">
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle className="text-base">Provider health</CardTitle>
-              <p className="mt-1 text-sm text-zinc-400">Replaceable media capabilities, monitored independently.</p>
+              <CardTitle className="text-base">Local provider configuration</CardTitle>
+              <p className="mt-1 text-sm text-zinc-400">Saved application configuration only; this is not a live provider health check.</p>
             </div>
-            <CheckCircle2 className="h-5 w-5 text-emerald-300" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             {dashboard.providers.length === 0 ? (
-              <EmptyPanel title="No providers configured" description="Connect a compatible media provider to start generating videos." />
+              <EmptyPanel title="No local provider configuration" description="Register a compatible provider in the controlled setup flow before requesting generation approval." />
             ) : (
               <ul className="space-y-3" aria-label="Provider status list">
                 {dashboard.providers.map((provider) => (
@@ -100,8 +105,8 @@ export function DashboardOverview({ dashboard }: { dashboard: StudioDashboard })
                         </div>
                       </div>
                       <div className="text-right">
-                        <Badge variant="outline" className={cn("capitalize", providerTone[provider.status])}>{provider.status}</Badge>
-                        <p className="mt-2 text-xs text-zinc-400">Checked {provider.lastCheckedAt ? relativeTime(provider.lastCheckedAt) : "never"}</p>
+                        <Badge variant="outline" className={cn(providerTone[provider.status])}>{providerConfigurationLabels[provider.status]}</Badge>
+                        <p className="mt-2 text-xs text-zinc-400">Observed locally {provider.lastCheckedAt ? relativeTime(provider.lastCheckedAt) : "never"}</p>
                       </div>
                     </div>
                   </li>

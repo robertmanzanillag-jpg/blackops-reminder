@@ -18,6 +18,9 @@ export const coreStudioKeys = {
   productionBatchSandboxReadiness: (planId: string, batchId: string, slotId: string) => [
     "ai-media-studio", "core", "production-batch", "sandbox-readiness", planId, batchId, slotId,
   ] as const,
+  oneVideoExecutionControl: (planId: string, batchId: string, slotId: string) => [
+    "ai-media-studio", "core", "production-batch", "one-video-execution-control", planId, batchId, slotId,
+  ] as const,
 };
 
 export function useHeyGenOnboardingReadiness() {
@@ -92,6 +95,26 @@ export function useProductionBatchSandboxReadiness({
   return useQuery({
     queryKey: coreStudioKeys.productionBatchSandboxReadiness(planId, batchId, slotId),
     queryFn: () => mediaStudioCoreApi.productionBatchSandboxReadiness({ planId, batchId, slotId }),
+    enabled: enabled && Boolean(planId) && Boolean(batchId) && Boolean(slotId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useOneVideoExecutionControl({
+  planId,
+  batchId,
+  slotId,
+  enabled,
+}: {
+  planId: string;
+  batchId: string;
+  slotId: string;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: coreStudioKeys.oneVideoExecutionControl(planId, batchId, slotId),
+    queryFn: () => mediaStudioCoreApi.oneVideoExecutionControl({ planId, batchId, slotId }),
     enabled: enabled && Boolean(planId) && Boolean(batchId) && Boolean(slotId),
     retry: false,
     refetchOnWindowFocus: false,

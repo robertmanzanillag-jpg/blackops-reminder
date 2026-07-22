@@ -101,5 +101,7 @@ test("HeyGen onboarding UI gates provider IDs and protects configured roster rep
   assert.match(roster, /Keep current roster/);
   assert.match(roster, /setReplaceConfirmed\(true\)/);
   assert.match(roster, /disabled=\{!canCollectProviderIds\}/);
+  assert.match(roster, /currentRoster && !staleRoster/);
+  assert.match(roster, /Register the pending avatar roster/);
   assert.match(sandbox, /No approved public slot is available/);
 });

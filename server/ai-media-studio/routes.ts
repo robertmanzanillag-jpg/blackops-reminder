@@ -27,6 +27,7 @@ import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studi
 import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
 import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-launch-preflight";
 import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
+import { oneVideoExecutionControlResponseSchema } from "../../shared/ai-media-studio-one-video-execution-control";
 import {
   configureHeyGenRosterResponseSchema,
   createHeyGenRosterRequestSchema,
@@ -106,6 +107,8 @@ import { LaunchPreflightError, type LaunchPreflightRepository } from "./planning
 import { LaunchPreflightService } from "./planning/launch-preflight-service";
 import { SandboxReadinessError, type SandboxReadinessRepository } from "./planning/sandbox-readiness-contracts";
 import { SandboxReadinessService } from "./planning/sandbox-readiness-service";
+import { OneVideoExecutionControlError, type OneVideoExecutionControlRepository } from "./planning/one-video-execution-control-contracts";
+import { OneVideoExecutionControlService } from "./planning/one-video-execution-control-service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -199,6 +202,8 @@ export interface AiMediaStudioDependencies {
   createDurableLaunchPreflightRepository?: () => LaunchPreflightRepository;
   sandboxReadinessRepository?: SandboxReadinessRepository;
   createDurableSandboxReadinessRepository?: () => SandboxReadinessRepository;
+  oneVideoExecutionControlRepository?: OneVideoExecutionControlRepository;
+  createDurableOneVideoExecutionControlRepository?: () => OneVideoExecutionControlRepository;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -228,6 +233,8 @@ export interface AiMediaStudioRuntime {
   launchPreflightPersistence: MediaStudioPersistenceStatus;
   sandboxReadiness: SandboxReadinessService | undefined;
   sandboxReadinessPersistence: MediaStudioPersistenceStatus;
+  oneVideoExecutionControl: OneVideoExecutionControlService | undefined;
+  oneVideoExecutionControlPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -433,6 +440,38 @@ function createDefaultDurableSandboxReadinessRepository(): SandboxReadinessRepos
     import("./planning/drizzle-sandbox-readiness-repository"),
   ]).then(([database, adapter]) => new adapter.DrizzleSandboxReadinessRepository(database.db));
   return { observe: async (...args) => (await load()).observe(...args) };
+}
+
+function createDefaultDurableOneVideoExecutionControlRepository(): OneVideoExecutionControlRepository {
+  let pending: Promise<OneVideoExecutionControlRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"), import("./planning/drizzle-one-video-execution-control-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleOneVideoExecutionControlRepository(database.db));
+  return { observe: async (...args) => (await load()).observe(...args) };
+}
+
+function selectOneVideoExecutionControlRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: OneVideoExecutionControlService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.oneVideoExecutionControlRepository) return {
+    service: new OneVideoExecutionControlService(dependencies.oneVideoExecutionControlRepository),
+    status: { mode: "injected", available: true, durable: false,
+      reason: "One-video execution-control repository supplied by the composition caller; durability is not inferred" },
+  };
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableOneVideoExecutionControlRepository
+        ?? createDefaultDurableOneVideoExecutionControlRepository)();
+      return { service: new OneVideoExecutionControlService(repository), status: { mode: "drizzle", available: true,
+        durable: true, reason: "PostgreSQL/Drizzle read-only one-video execution-control persistence selected" } };
+    } catch (error) {
+      return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+        reason: `One-video execution-control initialization failed: ${error instanceof Error ? error.message : "unknown error"}` } };
+    }
+  }
+  return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
+    reason: "DATABASE_URL or an injected one-video execution-control repository is required" } };
 }
 
 function selectSandboxReadinessRuntime(
@@ -811,6 +850,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
+  const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -1056,6 +1096,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-HeyGen-Onboarding", heyGenOnboardingReadinessSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
     next();
   });
 
@@ -1067,7 +1108,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       operations: operations.status, governance: governanceSelection.status,
       heyGenRoster: heyGenRosterSelection.status, heyGenOnboardingReadiness: heyGenOnboardingReadinessSelection.status,
       productionBatches: productionBatchSelection.status,
-      sandboxReadiness: sandboxReadinessSelection.status });
+      sandboxReadiness: sandboxReadinessSelection.status,
+      oneVideoExecutionControl: oneVideoExecutionControlSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
@@ -1084,6 +1126,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
   const requireLaunchPreflight = requireCapability(launchPreflightSelection.status, "AI Media Studio launch preflight");
   const requireSandboxReadiness = requireCapability(sandboxReadinessSelection.status, "AI Media Studio sandbox readiness");
+  const requireOneVideoExecutionControl = requireCapability(oneVideoExecutionControlSelection.status,
+    "AI Media Studio one-video execution control");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1203,6 +1247,21 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const sandboxReadiness = await sandboxReadinessSelection.service!.observe(scope, req.params.planId, req.params.slotId);
     res.json(sandboxReadinessResponseSchema.parse({ sandboxReadiness }));
   }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId`,
+    (req, res, next) => { res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next(); },
+    requireOneVideoExecutionControl, asyncRoute(async (req, res) => {
+      const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+      const contentLength = req.get("content-length");
+      if (Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+        || (contentLength !== undefined && contentLength !== "0")) {
+        throw new OneVideoExecutionControlError("INVALID_REQUEST");
+      }
+      const executionControl = await oneVideoExecutionControlSelection.service!.observe(
+        scope, req.params.planId, req.params.slotId,
+      );
+      res.json(oneVideoExecutionControlResponseSchema.parse({ executionControl }));
+    }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
     const scope = await tenant(req);
@@ -1638,6 +1697,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }
+    if (error instanceof OneVideoExecutionControlError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid one-video execution-control request"
+        : error.code === "NOT_FOUND" ? "Production plan or slot not found" : "One-video execution control is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof LaunchPreflightError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid launch preflight request"
         : error.code === "NOT_FOUND" ? "Production plan not found" : "Launch preflight is unavailable";
@@ -1715,6 +1780,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     launchPreflightPersistence: launchPreflightSelection.status,
     sandboxReadiness: sandboxReadinessSelection.service,
     sandboxReadinessPersistence: sandboxReadinessSelection.status,
+    oneVideoExecutionControl: oneVideoExecutionControlSelection.service,
+    oneVideoExecutionControlPersistence: oneVideoExecutionControlSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

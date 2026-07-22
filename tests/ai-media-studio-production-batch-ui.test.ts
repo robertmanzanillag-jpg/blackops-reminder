@@ -146,7 +146,7 @@ test("launch preflight maps every contract next action locally and only to safe 
   assert.ok(hrefs.every((href) => href === "#production-batch" || href === "#heygen-roster"));
 });
 
-test("approved batch exposes a separate one-video sandbox readiness packet without execution controls", async () => {
+test("approved batch exposes one inert selector-bound execution control without a mutation", async () => {
   const [api, hooks, workbench] = await Promise.all([
     read("client/src/features/ai-media-studio/core/api.ts"),
     read("client/src/features/ai-media-studio/core/hooks.ts"),
@@ -174,9 +174,21 @@ test("approved batch exposes a separate one-video sandbox readiness packet witho
   assert.match(workbench, /packet\.gates\.map/);
   assert.match(workbench, /aria-label="Six one-video sandbox readiness gates"/);
   assert.match(workbench, /Required external steps — not performed here/);
+  assert.match(api, /oneVideoExecutionControlResponseSchema\.parse/);
+  assert.match(api, /one-video-execution-control\/\$\{encodeURIComponent\(slotId\)\}/);
+  const executionApi = api.slice(api.indexOf("oneVideoExecutionControl: async"), api.indexOf("prepareProductionBatchScripts: async"));
+  assert.doesNotMatch(executionApi, /method:\s*"(POST|PUT|PATCH|DELETE)"/);
+  assert.match(hooks, /oneVideoExecutionControl\(planId, batchId, slotId\)/);
+  assert.match(workbench, /key=\{`\$\{batch\.planId\}:\$\{batch\.batchId\}:\$\{selectedSlotId\}`\}/);
+  assert.match(workbench, /Execution disabled\. This screen cannot call HeyGen or spend credits\./);
+  assert.match(workbench, /Refresh does not contact HeyGen/);
+  assert.match(workbench, /Server-attested maximum quote/);
+  assert.match(workbench, /formatMaximumQuoteUsd/);
+  assert.match(workbench, /<button[\s\S]*disabled[\s\S]*aria-describedby=\{blockerId\}[\s\S]*Execute one approved video/);
+  assert.doesNotMatch(workbench, /Execute one approved video[\s\S]{0,180}onClick/);
   assert.doesNotMatch(workbench, /providerAccountId|avatarResourceId|voiceResourceId|nativeId/);
   const buttonBlocks = Array.from(workbench.matchAll(/<Button\b[\s\S]*?<\/Button>/g), (match) => match[0]);
-  for (const button of buttonBlocks) assert.doesNotMatch(button, />\s*(Execute|Generate|Spend)\b/);
+  for (const button of buttonBlocks) assert.doesNotMatch(button, />\s*(Generate|Spend)\b/);
 });
 
 test("studio navigation replaces legacy creation and exposes no generation or retry mutation", async () => {

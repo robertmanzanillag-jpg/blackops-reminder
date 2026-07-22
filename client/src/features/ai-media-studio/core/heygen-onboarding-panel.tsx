@@ -40,7 +40,7 @@ function ReadinessPanel({ readiness, refreshing, onRefresh }: {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Secure HeyGen onboarding · read-only</p>
-          <h2 id="heygen-onboarding-heading" className="mt-2 text-2xl font-semibold text-white">Prepare the provider connection</h2>
+          <h2 id="heygen-onboarding-heading" className="mt-2 text-2xl font-semibold text-white">Prepare local provider configuration</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">Kong checks safe server-side metadata before accepting provider IDs. API keys, secrets, and tokens are never entered or read in this browser.</p>
         </div>
         <Button type="button" variant="outline" className="min-h-11 shrink-0 border-white/15 bg-white/5 text-zinc-100" disabled={refreshing} aria-busy={refreshing} onClick={onRefresh}>
