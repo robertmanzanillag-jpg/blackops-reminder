@@ -44,6 +44,22 @@ export const prepareProductionBatchRequestSchema = z.preprocess(plainObject, z.o
   variantCount: z.number().int().min(1).max(5).optional(),
 }).strict());
 
+export const approveProductionBatchRequestSchema = z.preprocess(plainObject, z.object({
+  idempotencyKey: z.string().trim().min(8).max(200).regex(/^[A-Za-z0-9._:-]+$/u),
+  expectedBatchId: publicKey("batch"),
+}).strict());
+
+export const productionBatchCreativeReviewSchema = z.object({
+  title: cleanText(200),
+  angle: cleanText(120),
+  hook: cleanText(500),
+  script: cleanText(5_000),
+  cta: cleanText(500),
+  caption: cleanText(2_200),
+  hashtags: z.array(cleanText(80)).max(30),
+  seoKeywords: z.array(cleanText(120)).max(50),
+}).strict();
+
 const productionBatchSlotIdentitySchema = z.object({
   slotId: publicKey("slot"),
   videoNumber: z.number().int().min(1).max(PRODUCTION_BATCH_VIDEOS_PER_AVATAR),
@@ -63,8 +79,9 @@ export const productionBatchItemSchema = z.discriminatedUnion("preparation", [
     script: z.object({
       key: publicKey("script"),
       title: cleanText(200),
-      status: z.literal("draft"),
+      status: z.enum(["draft", "approved"]),
       variantCount: z.number().int().min(1).max(5),
+      selectedVariant: productionBatchCreativeReviewSchema,
     }).strict(),
   }).strict(),
 ]);
@@ -83,25 +100,35 @@ export const productionBatchGroupSchema = z.object({
 export const productionBatchSchema = z.object({
   batchId: publicKey("batch"),
   planId: publicKey("plan"),
-  status: z.enum(["not_started", "draft_ready", "stale"]),
+  status: z.enum(["not_started", "draft_ready", "approved_ready", "stale"]),
   avatarCount: z.number().int().min(PRODUCTION_BATCH_MIN_AVATARS).max(PRODUCTION_BATCH_MAX_AVATARS),
   videosPerAvatar: z.literal(PRODUCTION_BATCH_VIDEOS_PER_AVATAR),
   plannedVideoCount: z.number().int().min(PRODUCTION_BATCH_MIN_VIDEOS).max(PRODUCTION_BATCH_MAX_VIDEOS),
   canGenerate: z.literal(false),
   noSpend: z.literal(true),
   preparedAt: z.string().datetime({ offset: true }).nullable(),
-  blockers: exactBlockers,
+  approvedAt: z.string().datetime({ offset: true }).nullable(),
+  blockers: z.union([exactBlockers, z.tuple([
+    z.literal("governance_approval_required"),
+    z.literal("budget_reservation_required"),
+    z.literal("sandbox_generation_required"),
+    z.literal("human_launch_approval_required"),
+  ])]),
   groups: z.array(productionBatchGroupSchema).min(PRODUCTION_BATCH_MIN_AVATARS).max(PRODUCTION_BATCH_MAX_AVATARS),
 }).strict().superRefine((batch, context) => {
   const expectedPreparationBlocker = batch.status === "not_started" ? "script_batch_required"
-    : batch.status === "draft_ready" ? "script_approval_required" : "script_refresh_required";
+    : batch.status === "draft_ready" ? "script_approval_required"
+      : batch.status === "stale" ? "script_refresh_required" : undefined;
+  const approved = batch.status === "approved_ready";
   if (batch.groups.length !== batch.avatarCount
     || batch.plannedVideoCount !== batch.avatarCount * PRODUCTION_BATCH_VIDEOS_PER_AVATAR
     || batch.groups.reduce((total, group) => total + group.items.length, 0) !== batch.plannedVideoCount
-    || batch.blockers[0] !== expectedPreparationBlocker
+    || (approved ? batch.blockers.length !== 4 : batch.blockers[0] !== expectedPreparationBlocker)
     || (batch.status === "not_started") !== (batch.preparedAt === null)
+    || approved !== Boolean(batch.approvedAt)
     || batch.groups.flatMap((group) => group.items).some((item) =>
-      batch.status === "not_started" ? item.preparation !== "pending" : item.preparation !== "draft")) {
+      batch.status === "not_started" ? item.preparation !== "pending"
+        : item.preparation !== "draft" || item.script?.status !== (approved ? "approved" : "draft"))) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Production batch totals or readiness are inconsistent" });
   }
 });
@@ -109,5 +136,6 @@ export const productionBatchSchema = z.object({
 export const productionBatchResponseSchema = z.object({ batch: productionBatchSchema }).strict();
 
 export type PrepareProductionBatchRequest = z.infer<typeof prepareProductionBatchRequestSchema>;
+export type ApproveProductionBatchRequest = z.infer<typeof approveProductionBatchRequestSchema>;
 export type ProductionBatch = z.infer<typeof productionBatchSchema>;
 export type ProductionBatchResponse = z.infer<typeof productionBatchResponseSchema>;

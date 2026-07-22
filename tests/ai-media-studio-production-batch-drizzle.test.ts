@@ -15,6 +15,7 @@ const planId = `plan_${"1".repeat(24)}`;
 const batchId = `batch_${"2".repeat(24)}`;
 const preparedAt = "2026-07-21T12:00:00.000Z";
 const rawHash = (value: string) => createHash("sha256").update(value).digest("hex");
+const rawDigest = (value: unknown) => `sha256:${rawHash(JSON.stringify(value))}`;
 const publicKey = (prefix: string, number: number) => `${prefix}_${number.toString(16).padStart(24, "0")}`;
 
 function durableRows(currentContent = "Exact content") {
@@ -31,18 +32,26 @@ function durableRows(currentContent = "Exact content") {
     };
     for (let variant = 0; variant < 3; variant += 1) {
       const content = `Script ${member}-${video}-${variant}`;
+      const variantTitle = variant === 0 ? `Script ${video}` : `Variant ${variant}`;
+      const creative = { title: variantTitle, angle: `Angle ${variant}`, hook: `Hook ${variant}`, script: content,
+        cta: `CTA ${variant}`, caption: `Caption ${variant}`, hashtags: ["#kong"], seoKeywords: ["kong media"] };
       result.push({
         public_plan_key: planId, plan_status: "blocked", planned_slot_count: 50,
         public_slot_key: slotId, source_member_key: publicKey("member", member + 10), video_number: video,
         slot_status: "blocked", script_variant_id: `${slotId}-selected`, creator_name: `Creator ${member + 1}`,
         script_title: `Script ${video}`, script_status: "draft", current_variant_id: `${slotId}-selected`,
         script_metadata: { productionBatchV1: envelope }, current_source_hash: envelope.sourceContentHash,
+        source_status: "ready", rights_status: "owned", moderation_status: "approved",
         current_source_content: currentContent, variant_id: variant === 0 ? `${slotId}-selected` : `${slotId}-${variant}`,
-        variant_version: variant + 1, variant_content: content, variant_status: "draft",
-        variant_checksum: rawHash(content), variant_metadata: { productionBatchV1: {
-          ...envelope, variantKey: publicKey("variant", member * 100 + video * 5 + variant),
-          variantIndex: variant, selected: variant === 0,
-        } },
+        variant_version: variant + 1, variant_label: variantTitle, variant_content: content, variant_status: "draft",
+        variant_checksum: rawHash(content), variant_metadata: {
+          productionBatchV1: {
+            ...envelope, variantKey: publicKey("variant", member * 100 + video * 5 + variant),
+            variantIndex: variant, selected: variant === 0,
+          },
+          productionCreativeV1: { ...creative,
+            creativeDigest: rawDigest({ domain: "ai-media-production-creative-v1", ...creative }) },
+        },
       });
     }
   }

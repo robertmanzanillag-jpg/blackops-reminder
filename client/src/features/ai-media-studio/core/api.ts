@@ -8,6 +8,7 @@ import type {
   InfluencerListRequest,
   MediaAsset,
   MediaLibraryRequest,
+  ApproveProductionBatchRequest,
   PrepareProductionBatchRequest,
   ProductionBatchResponse,
   ProviderResource,
@@ -50,19 +51,19 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function requestOptionalJson(path: string): Promise<unknown | null> {
+async function requestOptionalJson(path: string, safeErrors: readonly string[] = []): Promise<unknown | null> {
   const response = await fetch(`${API_ROOT}${path}`, { credentials: "include" });
   if (response.status === 404) return null;
   if (!response.ok) {
     const fallback = `Request failed (${response.status})`;
-    let message = fallback;
+    if (safeErrors.length === 0) throw new Error(fallback);
     try {
-      const body = (await response.json()) as { message?: string; error?: string };
-      message = body.message || body.error || fallback;
-    } catch {
-      // Keep the status-based message for empty or non-JSON failures.
+      const body = (await response.json()) as { error?: string };
+      throw new Error(body.error && safeErrors.includes(body.error) ? body.error : fallback);
+    } catch (error) {
+      if (error instanceof Error && safeErrors.includes(error.message)) throw error;
+      throw new Error(fallback);
     }
-    throw new Error(message);
   }
   return response.json() as Promise<unknown>;
 }
@@ -87,11 +88,20 @@ export const mediaStudioCoreApi = {
     return response === null ? null : heyGenRosterDailyPlanResponseSchema.parse(response);
   },
   productionBatch: async (): Promise<ProductionBatchResponse | null> => {
-    const response = await requestOptionalJson("/production-batches/current");
+    const response = await requestOptionalJson("/production-batches/current", [
+      "AI Media Studio production batch persistence is unavailable",
+    ]);
     return response === null ? null : productionBatchResponseSchema.parse(response);
   },
   prepareProductionBatchScripts: async ({ planId, input }: { planId: string; input: PrepareProductionBatchRequest }): Promise<ProductionBatchResponse> => {
     const response = await requestJson<unknown>(`/production-batches/${encodeURIComponent(planId)}/prepare-scripts`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return productionBatchResponseSchema.parse(response);
+  },
+  approveProductionBatchScripts: async ({ planId, input }: { planId: string; input: ApproveProductionBatchRequest }): Promise<ProductionBatchResponse> => {
+    const response = await requestJson<unknown>(`/production-batches/${encodeURIComponent(planId)}/approve-scripts`, {
       method: "POST",
       body: JSON.stringify(input),
     });

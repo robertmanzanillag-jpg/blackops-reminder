@@ -378,6 +378,7 @@ function createDefaultDurableProductionBatchRepository(): ProductionBatchReposit
   return {
     getCurrent: async (...args) => (await load()).getCurrent(...args),
     prepare: async (...args) => (await load()).prepare(...args),
+    approve: async (...args) => (await load()).approve(...args),
   };
 }
 
@@ -1005,6 +1006,12 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`, requireProductionBatches, asyncRoute(async (req, res) => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     const batch = await productionBatchSelection.service!.prepare(scope, req.params.planId, req.body);
+    res.json(productionBatchResponseSchema.parse({ batch }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts`, requireProductionBatches, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const batch = await productionBatchSelection.service!.approve(scope, req.params.planId, req.body);
     res.json(productionBatchResponseSchema.parse({ batch }));
   }));
 

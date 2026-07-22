@@ -12,7 +12,7 @@ const publicKey = (prefix: string, value: number) => `${prefix}_${value.toString
 function pendingBatch(): ProductionBatch {
   return {
     batchId: publicKey("batch", 1), planId: publicKey("plan", 2), status: "not_started", avatarCount: 5,
-    videosPerAvatar: 10, plannedVideoCount: 50, canGenerate: false, noSpend: true, preparedAt: null,
+    videosPerAvatar: 10, plannedVideoCount: 50, canGenerate: false, noSpend: true, preparedAt: null, approvedAt: null,
     blockers: ["script_batch_required", "governance_approval_required", "budget_reservation_required",
       "sandbox_generation_required", "human_launch_approval_required"],
     groups: Array.from({ length: 5 }, (_, member) => ({ memberId: publicKey("member", member + 10), creatorName: `Creator ${member + 1}`,
@@ -44,6 +44,7 @@ test("production batch routes are authenticated, strict, tenant scoped and provi
   const repository: ProductionBatchRepository = {
     getCurrent: async (scope) => { calls.push(["get", scope]); return pendingBatch(); },
     prepare: async (input) => { calls.push(["prepare", input.scope, input.planId, input.idempotencyKey, input.variantCount]); return pendingBatch(); },
+    approve: async (input) => { calls.push(["approve", input.scope, input.planId, input.idempotencyKey, input.expectedBatchId]); return pendingBatch(); },
   };
   const server = await harness(repository); t.after(server.close);
   const endpoint = `${server.baseUrl}/api/ai-media-studio/production-batches/current`;
@@ -63,6 +64,20 @@ test("production batch routes are authenticated, strict, tenant scoped and provi
   });
   assert.equal(spoofed.status, 400);
   assert.equal(calls.length, 2);
+
+  const approve = await fetch(`${server.baseUrl}/api/ai-media-studio/production-batches/${publicKey("plan", 2)}/approve-scripts`, {
+    method: "POST", headers: { "content-type": "application/json", "x-test-user": "user-a" },
+    body: JSON.stringify({ idempotencyKey: "approve-batch-1", expectedBatchId: publicKey("batch", 1) }),
+  });
+  assert.equal(approve.status, 200);
+  assert.deepEqual(calls[2], ["approve", { ownerUserId: "user-a", workspaceId: "personal" }, publicKey("plan", 2),
+    "approve-batch-1", publicKey("batch", 1)]);
+  const unsafeApproval = await fetch(`${server.baseUrl}/api/ai-media-studio/production-batches/${publicKey("plan", 2)}/approve-scripts`, {
+    method: "POST", headers: { "content-type": "application/json", "x-test-user": "user-a" },
+    body: JSON.stringify({ idempotencyKey: "approve-batch-2", expectedBatchId: publicKey("batch", 1), allowSpend: true }),
+  });
+  assert.equal(unsafeApproval.status, 400);
+  assert.equal(calls.length, 3);
 });
 
 test("legacy direct generation and retry fail with admission-required before service parsing or lookup", async (t) => {

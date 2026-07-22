@@ -1,5 +1,6 @@
 import {
   PRODUCTION_BATCH_GENERATOR_VERSION,
+  approveProductionBatchRequestSchema,
   prepareProductionBatchRequestSchema,
   productionBatchSchema,
   type ProductionBatch,
@@ -38,5 +39,14 @@ export class ProductionBatchService {
       variantCount: request.variantCount ?? 3,
       generator: this.generator,
     }));
+  }
+
+
+  async approve(scope: TenantScope, unsafePlanId: unknown, unsafeRequest: unknown): Promise<ProductionBatch> {
+    const planId = typeof unsafePlanId === "string" && /^plan_[a-f0-9]{24}$/u.test(unsafePlanId)
+      ? unsafePlanId : undefined;
+    if (!planId) throw new ProductionBatchError("INVALID_REQUEST");
+    const request = approveProductionBatchRequestSchema.parse(unsafeRequest);
+    return productionBatchSchema.parse(await this.repository.approve({ scope, planId, ...request }));
   }
 }

@@ -14,6 +14,7 @@ test("production batch UI is preparation-only, accessible, and explicit about ze
   assert.match(workbench, /Script refresh requires review/);
   assert.match(workbench, /variantCount: 3/);
   assert.match(workbench, /crypto\.randomUUID/);
+  assert.match(workbench, /return crypto\.randomUUID\(\)/);
   assert.match(workbench, /attemptRef\.current \?\?=/);
   assert.match(workbench, /planId: batch\.planId/);
   assert.match(workbench, /role="status"/);
@@ -26,11 +27,49 @@ test("production batch UI is preparation-only, accessible, and explicit about ze
   assert.match(workbench, /item\.preparation === "draft"/);
   assert.match(workbench, /Source pending preparation/);
   assert.match(workbench, /Script: Not prepared/);
+  assert.match(workbench, /item\.script\.selectedVariant\.angle/);
+  assert.match(workbench, /item\.script\.selectedVariant\.title/);
+  assert.match(workbench, /item\.script\.selectedVariant\.hook/);
+  assert.match(workbench, /item\.script\.selectedVariant\.script/);
+  assert.match(workbench, /item\.script\.selectedVariant\.cta/);
+  assert.match(workbench, /item\.script\.selectedVariant\.caption/);
+  assert.match(workbench, /item\.script\.selectedVariant\.hashtags\.join/);
+  assert.match(workbench, /item\.script\.selectedVariant\.seoKeywords\.join/);
+  assert.match(workbench, /I reviewed the complete content/);
+  assert.match(workbench, /Approve all \$\{batch\.plannedVideoCount\} scripts/);
+  assert.match(workbench, /expectedBatchId: batch\.batchId/);
+  assert.match(workbench, /disabled=\{!approvalAcknowledged \|\| !allReviewsAvailable \|\| approve\.isPending\}/);
+  assert.match(workbench, /const identity = batch \? `\$\{batch\.planId\}:\$\{batch\.batchId\}` : undefined/);
+  assert.match(workbench, /reviewedBatchRef\.current !== identity[\s\S]*setApprovalAcknowledged\(false\)[\s\S]*approvalAttemptRef\.current = undefined/);
+  assert.match(workbench, /\[batch\?\.batchId, batch\?\.planId\]/);
+  assert.match(workbench, /prepare\.reset\(\);[\s\S]*approve\.reset\(\);/);
+  assert.match(workbench, /prepare\.isSuccess && batch\.status === "draft_ready"/);
+  assert.match(workbench, /approve\.isSuccess && batch\.status === "approved_ready"/);
+  assert.match(workbench, /Complete selected-variant content is required for every slot/);
+  assert.match(workbench, /This batch cannot be approved because its source content changed/);
+  assert.match(workbench, /href="#heygen-roster"/);
+  assert.match(workbench, /No safe in-place refresh is available yet/);
+  assert.match(workbench, />Scripts ready</);
+  assert.doesNotMatch(workbench, />Draft scripts ready</);
+  assert.doesNotMatch(workbench, /Approve (video|slot|script) /);
   assert.match(workbench, /LoadingPanel/);
   assert.match(workbench, /ErrorPanel/);
   assert.match(workbench, /EmptyPanel/);
-  assert.doesNotMatch(workbench, />\s*(Generate|Queue|Retry|Approve)\b/);
+  assert.doesNotMatch(workbench, />\s*(Generate|Queue|Retry)\b/);
   assert.doesNotMatch(workbench, /providerAccountId|avatarResourceId|voiceResourceId|nativeId/);
+});
+
+test("approval client action is one batch mutation and refreshes authoritative state", async () => {
+  const [api, hooks] = await Promise.all([
+    read("client/src/features/ai-media-studio/core/api.ts"),
+    read("client/src/features/ai-media-studio/core/hooks.ts"),
+  ]);
+  assert.match(api, /\/production-batches\/\$\{encodeURIComponent\(planId\)\}\/approve-scripts/);
+  assert.match(api, /body: JSON\.stringify\(input\)/);
+  assert.match(hooks, /mutationFn: mediaStudioCoreApi\.approveProductionBatchScripts/);
+  assert.match(hooks, /setQueryData\(coreStudioKeys\.productionBatch, response\)/);
+  assert.match(hooks, /invalidateQueries\(\{ queryKey: coreStudioKeys\.productionBatch \}\)/);
+  assert.doesNotMatch(api, /approve-(slot|item|video|script)\//);
 });
 
 test("studio navigation replaces legacy creation and exposes no generation or retry mutation", async () => {
