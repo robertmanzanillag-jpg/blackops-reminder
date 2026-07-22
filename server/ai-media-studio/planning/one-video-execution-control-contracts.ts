@@ -42,6 +42,14 @@ const canonicalDigest = (domain: string, value: unknown): `sha256:${string}` =>
 
 /** Exact server-owned provider payload identity. The engine and output format are intentionally fixed. */
 export function deriveLaunchRenderSpecDigest(input: LaunchRenderSpecInput): `sha256:${string}` {
+  if (!input || typeof input !== "object" || typeof input.providerAccountId !== "string"
+    || typeof input.providerKey !== "string" || input.providerKey.length < 1 || input.providerKey.length > 80
+    || !Number.isSafeInteger(input.providerCredentialVersion) || input.providerCredentialVersion < 1
+    || ![input.avatarResourceId, input.voiceResourceId, input.scriptVariantId]
+      .every((value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value))
+    || typeof input.scriptVariantChecksum !== "string" || !/^[0-9a-f]{64}$/u.test(input.scriptVariantChecksum)) {
+    throw new TypeError("Invalid launch render specification");
+  }
   return canonicalDigest("ai-media-launch-render-spec-v1", {
     engine: "heygen-video-generate-v2",
     aspectRatio: "9:16",
@@ -58,6 +66,18 @@ export function deriveLaunchRenderSpecDigest(input: LaunchRenderSpecInput): `sha
 
 /** Public CAS token: deliberately not an evidence UUID, digest, amount, or provider identifier. */
 export function deriveMaximumQuoteKey(input: MaximumQuoteKeyInput): string {
+  if (!input || typeof input !== "object"
+    || typeof input.evidenceId !== "string"
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(input.evidenceId)
+    || !Number.isSafeInteger(input.evidenceRevision) || input.evidenceRevision < 1
+    || !/^sha256:[0-9a-f]{64}$/u.test(input.evidenceDigest)
+    || !/^[1-9][0-9]{0,15}$/u.test(input.amountMicroUsd)
+    || BigInt(input.amountMicroUsd) > 9_000_000_000_000_000n
+    || input.currency !== "USD" || !(input.expiresAt instanceof Date)
+    || !Number.isFinite(input.expiresAt.getTime())
+    || !/^sha256:[0-9a-f]{64}$/u.test(input.renderSpecDigest)) {
+    throw new TypeError("Invalid maximum quote key input");
+  }
   return `quote_${canonicalDigest("ai-media-maximum-quote-key-v1", {
     evidenceId: input.evidenceId,
     evidenceRevision: input.evidenceRevision,

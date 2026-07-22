@@ -4,6 +4,11 @@ const publicKey = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[a
 const idempotencyKey = z.string().trim().min(8).max(200)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
 
+export const oneVideoCostApprovalPathSchema = z.object({
+  planId: publicKey("plan"),
+  slotId: publicKey("slot"),
+}).strict();
+
 export const oneVideoCostApprovalRequestSchema = z.object({
   expectedBatchId: publicKey("batch"),
   expectedQuoteKey: publicKey("quote"),

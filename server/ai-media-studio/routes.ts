@@ -31,6 +31,7 @@ import { oneVideoExecutionControlResponseSchema } from "../../shared/ai-media-st
 import {
   oneVideoCostApprovalRequestSchema,
   oneVideoCostApprovalResponseSchema,
+  oneVideoCostApprovalPathSchema,
 } from "../../shared/ai-media-studio-one-video-cost-approval";
 import {
   configureHeyGenRosterResponseSchema,
@@ -1536,13 +1537,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     requireOneVideoCostApproval,
     asyncRoute(async (req, res) => {
       const parsed = oneVideoCostApprovalRequestSchema.safeParse(req.body);
-      if (!parsed.success || Object.keys(req.query).length !== 0) {
+      const path = oneVideoCostApprovalPathSchema.safeParse(req.params);
+      if (!parsed.success || !path.success || Object.keys(req.query).length !== 0) {
         throw new OneVideoCostApprovalError("INVALID_REQUEST");
       }
       const result = await oneVideoCostApprovalSelection.coordinator!.record({
         scope: { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId },
-        publicPlanKey: req.params.planId,
-        publicSlotKey: req.params.slotId,
+        publicPlanKey: path.data.planId,
+        publicSlotKey: path.data.slotId,
         expectedBatchId: parsed.data.expectedBatchId,
         expectedQuoteKey: parsed.data.expectedQuoteKey,
         decision: parsed.data.decision,

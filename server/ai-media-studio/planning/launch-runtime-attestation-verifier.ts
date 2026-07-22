@@ -98,8 +98,9 @@ class ProcessLocalLaunchRuntimeAttestationRegistry implements LaunchRuntimeAttes
       throw new TypeError("Invalid runtime attestation");
     }
     const amount = microUsd(input.maximumQuoteMicroUsd);
-    if (!validDatabaseTime(input.quoteExpiresAt) || input.quoteExpiresAt <= input.validFrom
-      || input.quoteExpiresAt > input.expiresAt) throw new TypeError("Invalid runtime attestation");
+    if (!validDatabaseTime(input.quoteExpiresAt) || input.quoteExpiresAt <= input.validFrom) {
+      throw new TypeError("Invalid runtime attestation");
+    }
     const attestation = Object.freeze({
       kind: "maximum_quote" as const,
       attestationId: safeId(input.attestationId),

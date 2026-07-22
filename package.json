@@ -51,6 +51,7 @@
     "test:ai-media-heygen-secure-setup-routes": "node --import tsx --test tests/ai-media-studio-heygen-secure-setup-routes.test.ts",
     "test:ai-media-heygen-secure-setup-browser": "node --import tsx --test tests/ai-media-studio-heygen-guided-setup-browser.test.ts",
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
+    "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",

@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   oneVideoCostApprovalRequestSchema,
   oneVideoCostApprovalResponseSchema,
+  oneVideoCostApprovalPathSchema,
 } from "../shared/ai-media-studio-one-video-cost-approval";
 import { OneVideoCostApprovalCoordinator } from "../server/ai-media-studio/planning/one-video-cost-approval-coordinator";
 import { OneVideoCostApprovalError } from "../server/ai-media-studio/planning/one-video-cost-approval-contracts";
 import { DrizzleOneVideoCostApprovalContextLoader } from "../server/ai-media-studio/planning/drizzle-one-video-cost-approval-context-loader";
+import { LaunchAuthorityServiceError } from "../server/ai-media-studio/planning/launch-authority-contracts";
 
 const key = (prefix: string, digit: number) => `${prefix}_${digit.toString(16).padStart(24, "0")}`;
 const scope = { ownerUserId: "owner-a", workspaceId: "workspace-a" };
@@ -21,6 +23,8 @@ const context = {
 };
 
 test("public cost-approval contract is exact, redacted, and correlates replay effects", () => {
+  assert.equal(oneVideoCostApprovalPathSchema.safeParse({ planId: context.planId, slotId: context.slotId }).success, true);
+  assert.equal(oneVideoCostApprovalPathSchema.safeParse({ planId: context.planId, slotId: "native-slot" }).success, false);
   assert.equal(oneVideoCostApprovalRequestSchema.safeParse({
     expectedBatchId: context.batchId,
     expectedQuoteKey: context.quoteKey,
@@ -97,6 +101,16 @@ test("coordinator fails closed before tenant lookup when authorization is absent
     launchAuthority: { async recordHumanLaunchApproval() { throw new Error("must not write"); } },
   });
   await assert.rejects(stale.record({ ...command, expectedQuoteKey: key("quote", 2) }), (error: unknown) =>
+    error instanceof OneVideoCostApprovalError && error.code === "STALE_OR_CONFLICT");
+
+  const changedUnderLock = new OneVideoCostApprovalCoordinator({
+    authorizer: { async authorize() { return { launchAuthorityContext: {} }; } },
+    contextLoader: { async load() { return context; } },
+    launchAuthority: {
+      async recordHumanLaunchApproval() { throw new LaunchAuthorityServiceError("QUOTE_CHANGED"); },
+    },
+  });
+  await assert.rejects(changedUnderLock.record(command), (error: unknown) =>
     error instanceof OneVideoCostApprovalError && error.code === "STALE_OR_CONFLICT");
 });
 

@@ -509,6 +509,27 @@ test("human decision rejects stale quote CAS before any evidence or bridge inser
   assert.doesNotMatch(allText(harness.calls), /insert into .*ai_media_(?:launch_evidence|quote_bound_human_approvals)/i);
 });
 
+test("quote-bound human approval replays from the bridge and conflicts on changed CAS input before workspace lock", async () => {
+  const principal = trustedPrincipal("human_launch:decide", "user");
+  const command: RecordHumanLaunchApprovalCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    decision: "approved", expectedQuoteKey: `quote_${"a".repeat(24)}`,
+    idempotencyKey: "quote-bound-human-replay-0001" };
+  const input = authorized("record_human_launch_approval", command, principal);
+  const bridge = approvalBridgeRow({ input_digest: input.inputDigest });
+  const harness = makeDb((call) => call === 2 ? { rows: [bridge] } : { rows: [] });
+  const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
+  assert.equal((await repository.recordHumanLaunchApproval(input)).replayed, true);
+  assert.equal(harness.calls.length, 2);
+
+  const changed = { ...command, expectedQuoteKey: `quote_${"b".repeat(24)}` };
+  const changedInput = authorized("record_human_launch_approval", changed, principal);
+  const conflictHarness = makeDb((call) => call === 2 ? { rows: [bridge] } : { rows: [] });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(conflictHarness.db, options())
+    .recordHumanLaunchApproval(changedInput),
+  (error: unknown) => error?.constructor?.name === "LaunchAuthorityQuoteChangedError");
+  assert.equal(conflictHarness.calls.length, 2);
+});
+
 test("snapshot chooses latest whole chains, validates gates, and derives bounded immutable digests", async () => {
   const principal = trustedPrincipal("snapshot:create", "workload");
   const command: CreateLaunchAuthoritySnapshotCommand = {
@@ -551,4 +572,34 @@ test("snapshot chooses latest whole chains, validates gates, and derives bounded
   assert.ok(insert.params.some((value) => value instanceof Date
     && value.toISOString() === "2026-07-21T12:05:00.000Z"));
   assert.doesNotMatch(allText(harness.calls), /insert into .*render_jobs|insert into .*outbox/i);
+});
+
+test("snapshot denies a historical generic human approval when no exact quote bridge exists", async () => {
+  const principal = trustedPrincipal("snapshot:create", "workload");
+  const command: CreateLaunchAuthoritySnapshotCommand = {
+    scope, dailyPlanSlotId: ids.slot, slotAttempt: 1, idempotencyKey: "authority-snapshot-unbound-human",
+  };
+  const input = authorized("create_authority_snapshot", command, principal);
+  const policy = { id: ids.policy, revision: 1, state: "active", policy_digest: digest("b"),
+    valid_from: now, expires_at: null, allowed_languages: ["en"], allowed_countries: ["US"],
+    allowed_time_zones: ["UTC"] };
+  const kill = { id: ids.kill, revision: 1, active: false, evidence_digest: digest("c"),
+    valid_from: now, expires_at: null };
+  const evidence = [evidenceRow("content_approval"), evidenceRow("human_launch_approval"),
+    evidenceRow("sandbox_proof"), evidenceRow("maximum_quote")];
+  const harness = makeDb((call) => {
+    if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
+    if (call === 7) return { rows: [subjectRow()] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 10) return { rows: [policy] };
+    if (call === 11) return { rows: [kill] };
+    if (call >= 12 && call <= 15) return { rows: [evidence[call - 12]] };
+    return { rows: [] };
+  });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).createAuthoritySnapshot(input),
+    (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
+  assert.equal(harness.calls.length, 16);
+  assert.doesNotMatch(allText(harness.calls), /insert into .*ai_media_launch_authority_snapshots/i);
 });

@@ -4,6 +4,7 @@ import test from "node:test";
 import express, { type Request } from "express";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
+import { OneVideoCostApprovalError } from "../server/ai-media-studio/planning/one-video-cost-approval-contracts";
 
 const key = (prefix: string, digit: number) => `${prefix}_${digit.toString(16).padStart(24, "0")}`;
 const planId = key("plan", 1); const batchId = key("batch", 1); const slotId = key("slot", 1);
@@ -74,6 +75,9 @@ test("cost-approval POST is auth-first, same-origin JSON-only, strict, redacted,
     assert.equal((await fetch(url, { method: "POST", headers, body: JSON.stringify(unsafe) })).status, 400);
   }
   assert.equal((await fetch(`${url}?amountMicroUsd=1`, { method: "POST", headers, body: JSON.stringify(body) })).status, 400);
+  assert.equal((await fetch(`${server.base}/api/ai-media-studio/production-batches/native-plan/one-video-cost-approval/native-slot`, {
+    method: "POST", headers, body: JSON.stringify(body),
+  })).status, 400);
   assert.equal(calls.length, 2);
 });
 
@@ -92,4 +96,27 @@ test("cost approval is unavailable without an injected authorized coordinator", 
       idempotencyKey: "approval_000000000000000000000001" }),
   });
   assert.equal(response.status, 503);
+});
+
+test("cost approval returns a redacted 409 when the exact batch or quote changed", async (t) => {
+  let server: Awaited<ReturnType<typeof harness>>;
+  try {
+    server = await harness({ async record() { throw new OneVideoCostApprovalError("STALE_OR_CONFLICT"); } });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
+      t.skip("optional route dependency is not installed in this worktree"); return;
+    }
+    throw error;
+  }
+  t.after(server.close);
+  const response = await fetch(`${server.base}/api/ai-media-studio/production-batches/${planId}/one-video-cost-approval/${slotId}`, {
+    method: "POST", headers: { "content-type": "application/json", "x-test-user": "owner-a" },
+    body: JSON.stringify({ expectedBatchId: batchId, expectedQuoteKey: quoteKey, decision: "approved",
+      idempotencyKey: "approval_000000000000000000000001" }),
+  });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "The batch or quote changed; refresh before deciding",
+    code: "STALE_OR_CONFLICT",
+  });
 });

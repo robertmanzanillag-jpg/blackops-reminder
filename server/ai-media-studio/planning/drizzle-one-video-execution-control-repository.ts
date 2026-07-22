@@ -26,6 +26,8 @@ export type OneVideoExecutionControlTransactionalDatabase = OneVideoExecutionCon
   }>): Promise<T>;
 };
 type Row = Record<string, unknown>;
+const INTERNAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const SHA256 = /^sha256:[0-9a-f]{64}$/u;
 
 const rows = (result: ExecuteResult): Row[] => (Array.isArray(result) ? result : result.rows ?? []) as Row[];
 const value = (row: Row, camel: string, snake: string): unknown => row[camel] ?? row[snake];
@@ -427,6 +429,8 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     const quote = this.quoteState(evidence, databaseNow,
       exactEvidenceBase && bool(evidence, "quoteCurrent", "quote_current"), renderSpecDigest);
     const exactApprovalBridge = bool(evidence, "approvalBridgeCurrent", "approval_bridge_current")
+      && INTERNAL_UUID.test(text(evidence, "approvalBridgeId", "approval_bridge_id"))
+      && SHA256.test(text(evidence, "approvalBindingDigest", "approval_binding_digest"))
       && text(evidence, "bridgeRenderSpecDigest", "bridge_render_spec_digest") === renderSpecDigest
       && text(evidence, "bridgeQuoteAmount", "bridge_quote_amount") === quote.amountMicroUsd
       && text(evidence, "bridgeQuoteCurrency", "bridge_quote_currency") === quote.currency
@@ -479,12 +483,15 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     if (expires != null && date(expires).getTime() <= now.getTime()) return { state: "expired", ...base };
     if (text(row, "quoteDecision", "quote_decision") !== "quoted") return { state: "declined", ...base };
     const amount = text(row, "quoteAmount", "quote_amount");
-    if (!/^[1-9][0-9]{0,15}$/u.test(amount) || text(row, "quoteCurrency", "quote_currency") !== "USD") {
+    const evidenceDigest = text(row, "quoteEvidenceDigest", "quote_evidence_digest");
+    const revision = number(row, "quoteRevision", "quote_revision");
+    if (!/^[1-9][0-9]{0,15}$/u.test(amount) || BigInt(amount) > 9_000_000_000_000_000n
+      || text(row, "quoteCurrency", "quote_currency") !== "USD" || !INTERNAL_UUID.test(id)
+      || !SHA256.test(evidenceDigest) || !Number.isSafeInteger(revision) || revision < 1 || expires == null) {
       return { state: "unavailable" };
     }
-    const evidenceDigest = text(row, "quoteEvidenceDigest", "quote_evidence_digest") as `sha256:${string}`;
     const quoteKey = deriveMaximumQuoteKey({ evidenceId: id,
-      evidenceRevision: number(row, "quoteRevision", "quote_revision"), evidenceDigest,
+      evidenceRevision: revision, evidenceDigest: evidenceDigest as `sha256:${string}`,
       amountMicroUsd: amount, currency: "USD", expiresAt: date(expires), renderSpecDigest });
     return { state: "quoted", amountMicroUsd: amount, currency: "USD", quoteKey,
       renderSpecKey: deriveRenderSpecKey(renderSpecDigest), ...base };

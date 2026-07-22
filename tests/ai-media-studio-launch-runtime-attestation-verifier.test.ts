@@ -119,6 +119,8 @@ test("minting validates a bounded lifetime, exact input shape, digest, and posit
   }
   assert.throws(() => quoteIssuer.mint({ ...base, attestationId: "short" }), TypeError);
   assert.throws(() => quoteIssuer.mint({ ...base, quoteExpiresAt: new Date(validFrom) }), TypeError);
+  assert.doesNotThrow(() => quoteIssuer.mint({ ...base,
+    quoteExpiresAt: new Date(expiresAt.getTime() + 60_000) }));
   assert.throws(() => quoteIssuer.mint({ ...base, forged: true } as any), TypeError);
   assert.throws(() => quoteIssuer.mint({
     ...base, expiresAt: new Date(validFrom.getTime() + 86_400_001),

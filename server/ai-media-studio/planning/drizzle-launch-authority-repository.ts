@@ -451,12 +451,20 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           maximum_quote_evidence_id,maximum_quote_evidence_revision,maximum_quote_evidence_digest,
           maximum_quote_evidence_kind,maximum_quote_decision,decision,amount_micro_usd,currency,
           quote_expires_at,render_spec_digest,approval_binding_digest,input_digest,idempotency_key,bound_at,created_at)
-        VALUES (${approvalBindingId},${subject.scope.ownerUserId},${subject.scope.workspaceId},
+        SELECT ${approvalBindingId},${subject.scope.ownerUserId},${subject.scope.workspaceId},
           ${subject.dailyPlanSlotId},${subject.slotAttempt},${subject.launchSubjectDigest},${subject.launchIntentId},
           ${subject.launchIntentDigest},${humanEvidenceId},${revision},${humanEvidenceDigest},'human_launch_approval',
-          ${quoteEvidenceId},${quoteEvidenceRevision},${quoteEvidenceDigest},'maximum_quote','quoted',
-          ${command.decision},${quoteAmountMicroUsd}::numeric,'USD',${quoteExpiresAt},${subject.renderSpecDigest},
-          ${approvalBindingDigest},${input.inputDigest},${command.idempotencyKey},${now},${now})
+          quote.id,quote.revision,quote.evidence_digest,'maximum_quote','quoted',${command.decision},
+          quote.amount_micro_usd,quote.currency,quote.expires_at,${subject.renderSpecDigest},
+          ${approvalBindingDigest},${input.inputDigest},${command.idempotencyKey},${now},${now}
+        FROM ${aiMediaLaunchEvidence} quote
+        WHERE quote.owner_user_id=${subject.scope.ownerUserId}
+          AND quote.workspace_id=${subject.scope.workspaceId}
+          AND quote.id=${quoteEvidenceId} AND quote.revision=${quoteEvidenceRevision}
+          AND quote.evidence_digest=${quoteEvidenceDigest}
+          AND quote.evidence_kind='maximum_quote' AND quote.decision='quoted'
+          AND quote.amount_micro_usd=${quoteAmountMicroUsd}::numeric AND quote.currency='USD'
+          AND quote.expires_at>${now}
         ON CONFLICT (owner_user_id,workspace_id,idempotency_key) DO NOTHING RETURNING *
       `))[0];
       if (!bridge) throw quoteChanged();

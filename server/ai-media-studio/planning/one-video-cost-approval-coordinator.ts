@@ -1,7 +1,10 @@
 import {
   oneVideoCostApprovalResponseSchema,
 } from "../../../shared/ai-media-studio-one-video-cost-approval";
-import type { LaunchAuthorityReceipt } from "./launch-authority-contracts";
+import {
+  LaunchAuthorityServiceError,
+  type LaunchAuthorityReceipt,
+} from "./launch-authority-contracts";
 import type { LaunchAuthorityService } from "./launch-authority-service";
 import {
   OneVideoCostApprovalError,
@@ -71,10 +74,12 @@ export class OneVideoCostApprovalCoordinator {
           idempotencyKey: command.idempotencyKey,
         },
       );
-    } catch {
-      // Core authority owns exact quote locking, expiry, CAS and idempotency.
-      // Its intentionally safe error boundary does not distinguish stale from
-      // infrastructure failure, so this boundary fails closed.
+    } catch (error) {
+      // Core authority rechecks the quote under its transaction lock. Preserve
+      // only its generic refresh signal; every other failure stays fail-closed.
+      if (error instanceof LaunchAuthorityServiceError && error.code === "QUOTE_CHANGED") {
+        throw new OneVideoCostApprovalError("STALE_OR_CONFLICT");
+      }
       throw new OneVideoCostApprovalError("UNAVAILABLE");
     }
 
