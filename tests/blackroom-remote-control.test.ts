@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -85,6 +85,20 @@ test("public MP4 serving accepts browser and video-probe byte ranges", () => {
   assert.deepEqual(parseBlackRoomMediaRange("bytes=-100", 1_000), { start: 900, end: 999 });
   assert.equal(parseBlackRoomMediaRange("bytes=1000-", 1_000), false);
   assert.equal(parseBlackRoomMediaRange("items=0-1", 1_000), false);
+});
+
+test("full MP4 downloads stream through deployment proxies without a fixed response length", () => {
+  const fullGet = blackRoomMediaHeaders("upload-1", 92_157_383, null, "GET");
+  assert.equal(fullGet["Content-Length"], undefined);
+  assert.equal(fullGet["Accept-Ranges"], "bytes");
+  assert.equal(fullGet["Content-Type"], "video/mp4");
+
+  const head = blackRoomMediaHeaders("upload-1", 92_157_383, null, "HEAD");
+  assert.equal(head["Content-Length"], "92157383");
+
+  const range = blackRoomMediaHeaders("upload-1", 92_157_383, { start: 0, end: 1_048_575 }, "GET");
+  assert.equal(range["Content-Length"], "1048576");
+  assert.equal(range["Content-Range"], "bytes 0-1048575/92157383");
 });
 
 test("offline paused panel keeps Play available so the command can be queued", () => {
