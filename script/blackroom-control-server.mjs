@@ -12,6 +12,7 @@ const port = Number(process.env.BLACKROOM_CONTROL_PORT || 5020);
 const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
 const workerStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-state.json");
 const workerLedgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-ledger.json");
+const workerActivityPath = path.join(projectDir, "clippers_workspace/blackroom/agent/activity-log.json");
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
 const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
 const remotePollMs = Math.max(10_000, Number(process.env.BLACKROOM_REMOTE_POLL_MS || 15_000));
@@ -37,8 +38,13 @@ function serializedCommand(name, options) {
 }
 
 async function workerState() {
-  try { return JSON.parse(await readFile(workerStatePath, "utf8")); }
-  catch { return { running: false, pid: null, runs: 0, lastError: null }; }
+  let state;
+  try { state = JSON.parse(await readFile(workerStatePath, "utf8")); }
+  catch { state = { running: false, pid: null, runs: 0, lastError: null }; }
+  try {
+    const activity = JSON.parse(await readFile(workerActivityPath, "utf8"));
+    return { ...state, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
+  } catch { return { ...state, activity: [] }; }
 }
 
 async function queueWithDeliveryCounts(queue) {

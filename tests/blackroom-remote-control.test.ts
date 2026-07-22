@@ -78,13 +78,54 @@ test("heartbeat reports the Mac online only inside the freshness window", () => 
   recordBlackRoomRemoteHeartbeat(state, {
     deviceId: "blackroom-mac",
     queue: { enabled: true },
-    worker: { running: true },
+    worker: { running: true, activity: [
+      { id: "event-1", createdAt: "2026-07-21T12:00:00.000Z", stage: "audio", level: "success", message: "Audio validado." },
+      { id: "event-2", createdAt: "invalid", stage: "x".repeat(100), level: "unknown", message: "m".repeat(1_200) },
+      { message: "" },
+    ] },
     lastError: null,
     appliedGeneration: 3,
   }, new Date("2026-07-21T12:00:00.000Z"));
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:01:00.000Z")), true);
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:02:00.000Z")), false);
   assert.equal(state.device?.appliedGeneration, 3);
+  const activity = state.device?.worker.activity as any[];
+  assert.equal(activity.length, 2);
+  assert.equal(activity[0].message, "Audio validado.");
+  assert.equal(activity[1].level, "info");
+  assert.equal(activity[1].stage.length, 80);
+  assert.equal(activity[1].message.length, 1_000);
+  assert.equal(activity[1].createdAt, "2026-07-21T12:00:00.000Z");
+});
+
+test("BlackRoom control mutations and panel data are owner-only", () => {
+  const source = readFileSync("server/blackroom-control-routes.ts", "utf8");
+  for (const signature of [
+    'app.get("/blackroom"',
+    'app.get("/api/blackroom-agent"',
+    'app.post("/api/blackroom-agent/start"',
+    'app.post("/api/blackroom-agent/pause"',
+  ]) {
+    const start = source.indexOf(signature);
+    const nextRoute = source.indexOf("\n  app.", start + signature.length);
+    const route = source.slice(start, nextRoute > start ? nextRoute : undefined);
+    assert.ok(start > 0, `${signature} should exist`);
+    assert.match(route, /hasBlackRoomChatAccess\(req\)/);
+    assert.match(route, /status\(403\)/);
+  }
+});
+
+test("local worker publishes structured live activity with every heartbeat", () => {
+  const worker = readFileSync("script/blackroom-local-worker.ts", "utf8");
+  const control = readFileSync("script/blackroom-control-server.mjs", "utf8");
+
+  assert.match(worker, /activity-log\.json/);
+  assert.match(worker, /Iniciando descarga, selección del drop y edición/);
+  assert.match(worker, /Audio validado/);
+  assert.match(worker, /Subiendo y programando/);
+  assert.match(worker, /archivo local eliminado/);
+  assert.match(control, /workerActivityPath/);
+  assert.match(control, /activity: Array\.isArray\(activity\) \? activity\.slice\(-80\) : \[\]/);
 });
 
 test("panel keeps last confirmed delivery counters when the Mac goes offline", () => {
@@ -175,6 +216,11 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /confirmar las tres cuentas/);
   assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
   assert.match(blackRoomPage, /Trabajando de verdad/);
+  assert.match(blackRoomPage, /Actividad en vivo/);
+  assert.match(blackRoomPage, /Chat y órdenes/);
+  assert.match(blackRoomPage, /aria-live="polite"/);
+  assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
+  assert.match(blackRoomPage, /setInterval\(\(\)=>refreshStatus\(\),5000\)/);
   const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
   assert.doesNotThrow(() => new Function(script));
 });

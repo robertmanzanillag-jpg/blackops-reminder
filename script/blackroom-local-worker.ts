@@ -29,6 +29,7 @@ const ledgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/wor
 const statePath = path.join(projectDir, BLACKROOM_WORKER_STATE_PATH);
 const lockPath = path.join(projectDir, BLACKROOM_WORKER_LOCK_PATH);
 const logPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker.log");
+const activityPath = path.join(projectDir, "clippers_workspace/blackroom/agent/activity-log.json");
 const codexPath = process.env.BLACKROOM_CODEX_PATH || "/Applications/ChatGPT.app/Contents/Resources/codex";
 const pollMs = Math.max(5_000, Number(process.env.BLACKROOM_WORKER_POLL_MS || 15_000));
 const maxRunMs = Math.max(60_000, Number(process.env.BLACKROOM_WORKER_MAX_RUN_MS || 45 * 60_000));
@@ -73,11 +74,17 @@ async function writeJson(filePath: string, value: unknown): Promise<void> {
   await rename(temporary, filePath);
 }
 
-async function appendLog(message: string): Promise<void> {
+async function appendLog(message: string, stage = "sistema", level: "info" | "success" | "error" = "info"): Promise<void> {
   await mkdir(path.dirname(logPath), { recursive: true });
+  const createdAt = new Date().toISOString();
   const handle = await open(logPath, "a");
-  try { await handle.write(`${new Date().toISOString()} ${message}\n`); }
+  try { await handle.write(`${createdAt} ${message}\n`); }
   finally { await handle.close(); }
+  try {
+    const activity = await readJson<any[]>(activityPath, []);
+    activity.push({ id: `${createdAt}-${stage}`, createdAt, stage, level, message: message.slice(0, 1_000) });
+    await writeJson(activityPath, activity.slice(-80));
+  } catch { /* activity visibility must never stop publishing */ }
 }
 
 async function runNpm(args: string[]): Promise<void> {
@@ -161,17 +168,19 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const ledger = await readJson<any>(ledgerPath, { entries: [] });
   const entry = selectPublishableBlackRoomReservation(queue, ledger.entries || []);
   if (!entry) return false;
+  await appendLog(`Preparando el clip ${entry.reservationId} para validación y publicación.`, "preparación");
   const renderInfo = await stat(entry.renderPath).catch(() => null);
   if (!renderInfo?.isFile() || renderInfo.size <= 0 || renderInfo.size > 500 * 1024 * 1024) throw new Error(`Reserved render is missing or too large: ${entry.reservationId}`);
   const { stdout: probeOutput } = await execFileAsync(process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe", [
     "-v", "error", "-show_entries", BLACKROOM_FFPROBE_SHOW_ENTRIES, "-of", "json", entry.renderPath,
   ], { maxBuffer: 4_000_000 });
   validateBlackRoomRenderProbe(JSON.parse(probeOutput), Number(entry.durationSeconds));
+  await appendLog(`Video validado: H.264, duración ${entry.durationSeconds}s y formato ${entry.format}.`, "video", "success");
   const { stderr: loudnessOutput } = await execFileAsync(process.env.BLACKROOM_FFMPEG_PATH || "/opt/homebrew/bin/ffmpeg", [
     "-nostdin", "-hide_banner", "-i", entry.renderPath, "-map", "0:a:0", "-af", "volumedetect", "-vn", "-sn", "-dn", "-f", "null", "-",
   ], { maxBuffer: 8_000_000 });
   const loudness = validateBlackRoomAudioLoudness(loudnessOutput);
-  await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
+  await appendLog(`Audio validado para ${entry.reservationId}: promedio ${loudness.meanVolumeDb.toFixed(1)} dB, máximo ${loudness.maxVolumeDb.toFixed(1)} dB.`, "audio", "success");
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
   const publicationDateTime = resolveBlackRoomPublicationDateTime(
@@ -190,6 +199,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   for (const network of networks) {
     if (entry.networkReceipts[network]) continue;
     const verifyOnly = entry.networkAttempts[network] === "uncertain";
+    await appendLog(`${verifyOnly ? "Verificando" : "Subiendo y programando"} ${network} para ${publicationDateTime}.`, network);
     const upload = verifyOnly ? null : await uploadBlackRoomRender(entry, renderInfo.size);
     const preScheduleQueue = await readJson<any>(queuePath, {});
     if (!isBlackRoomJobPublishable(preScheduleQueue, entry.jobId)) {
@@ -236,6 +246,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
       "--network", network, "--metricool-id", networkId]);
     entry.networkAttempts[network] = "confirmed";
     entry.networkReceipts[network] = networkId;
+    await appendLog(`${network} confirmado por Metricool.`, network, "success");
   }
   const tiktokId = String(entry.networkReceipts.tiktok || "");
   const facebookId = String(entry.networkReceipts.facebook || "");
@@ -245,7 +256,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
-    await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId} and YouTube ${youtubeId} for ${entry.reservationId}; cleanup deferred because BlackRoom is paused`);
+    await appendLog(`TikTok, Facebook y YouTube confirmados para ${entry.reservationId}; limpieza pospuesta porque el agente está pausado.`, "limpieza", "success");
     return true;
   }
   await ensureSourceRecorded(entry);
@@ -253,7 +264,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
   if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
-  await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId} and YouTube ${youtubeId} for ${entry.reservationId}; local media deleted`);
+  await appendLog(`TikTok, Facebook y YouTube confirmados para ${entry.reservationId}; archivo local eliminado.`, "completado", "success");
   return true;
 }
 
@@ -261,7 +272,7 @@ async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
   const startedAt = new Date().toISOString();
   Object.assign(state, { running: true, pid: null, startedAt, finishedAt: null, lastError: null, runs: state.runs + 1 });
   await writeJson(statePath, state);
-  await appendLog("starting one-post Codex cycle");
+  await appendLog("Iniciando descarga, selección del drop y edición de un nuevo clip.", "edición");
 
   const output = await open(logPath, "a");
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -286,6 +297,7 @@ async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
     timeout = null;
     Object.assign(state, { running: false, pid: null, finishedAt: new Date().toISOString(), lastExitCode: exitCode });
     if (exitCode !== 0) state.lastError = `Codex terminó con código ${exitCode}`;
+    else await appendLog("Descarga y edición terminadas; buscando el clip reservado para publicarlo.", "edición", "success");
   } catch (error) {
     Object.assign(state, { running: false, pid: null, finishedAt: new Date().toISOString(), lastExitCode: 1, lastError: error instanceof Error ? error.message : String(error) });
   } finally {
@@ -352,7 +364,7 @@ async function main(): Promise<void> {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         state.lastError = message;
-        await appendLog(`publisher error: ${message}`);
+        await appendLog(`Error del publicador: ${message}`, "error", "error");
         await writeJson(statePath, state);
         if (error instanceof BlackRoomPublishPausedError) continue;
         const ledger = await readJson<any>(ledgerPath, { entries: [] });
@@ -365,6 +377,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(async (error) => {
-  await appendLog(`fatal: ${error instanceof Error ? error.message : String(error)}`).catch(() => undefined);
+  await appendLog(`Error fatal: ${error instanceof Error ? error.message : String(error)}`, "error", "error").catch(() => undefined);
   process.exitCode = 1;
 });

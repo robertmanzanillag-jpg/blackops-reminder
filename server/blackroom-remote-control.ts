@@ -15,6 +15,14 @@ export interface BlackRoomRemoteDeviceStatus {
   appliedGeneration: number;
 }
 
+export interface BlackRoomActivityEvent {
+  id: string;
+  createdAt: string;
+  stage: string;
+  level: "info" | "success" | "error";
+  message: string;
+}
+
 export interface BlackRoomRemoteControlState {
   version: 1;
   desiredEnabled: boolean;
@@ -57,11 +65,23 @@ export function recordBlackRoomRemoteHeartbeat(
   input: Omit<BlackRoomRemoteDeviceStatus, "seenAt">,
   now = new Date(),
 ): BlackRoomRemoteControlState {
+  const worker = input.worker && typeof input.worker === "object" ? input.worker as Record<string, unknown> : {};
+  const activity = Array.isArray(worker.activity) ? worker.activity.slice(-80).map((item, index) => {
+    const event = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const createdAt = String(event.createdAt || now.toISOString());
+    return {
+      id: String(event.id || `${createdAt}-${index}`).slice(0, 160),
+      createdAt: Number.isFinite(new Date(createdAt).getTime()) ? createdAt : now.toISOString(),
+      stage: String(event.stage || "sistema").slice(0, 80),
+      level: (["info", "success", "error"].includes(String(event.level)) ? String(event.level) : "info") as BlackRoomActivityEvent["level"],
+      message: String(event.message || "").trim().slice(0, 1_000),
+    };
+  }).filter((event) => event.message) : [];
   state.device = {
     deviceId: String(input.deviceId || "blackroom-mac").slice(0, 100),
     seenAt: now.toISOString(),
     queue: input.queue && typeof input.queue === "object" ? input.queue : {},
-    worker: input.worker && typeof input.worker === "object" ? input.worker : {},
+    worker: { ...worker, activity },
     lastError: input.lastError ? String(input.lastError).slice(0, 1_000) : null,
     appliedGeneration: Math.max(0, Math.floor(Number(input.appliedGeneration || 0))),
   };
