@@ -6,7 +6,7 @@ function publicKey(prefix: string, value: number): string {
   return `${prefix}_${value.toString(16).padStart(24, "0")}`;
 }
 
-function productionBatchResponse(status: "not_started" | "draft_ready" | "stale" = "draft_ready") {
+function productionBatchResponse(status: "not_started" | "draft_ready" | "approved_ready" | "stale" = "draft_ready") {
   const avatarCount = 5;
   const groups = Array.from({ length: avatarCount }, (_, groupIndex) => ({
     memberId: publicKey("member", groupIndex + 1),
@@ -27,8 +27,18 @@ function productionBatchResponse(status: "not_started" | "draft_ready" | "stale"
         script: {
           key: publicKey("script", position),
           title: `Draft ${position}`,
-          status: "draft",
+          status: status === "approved_ready" ? "approved" : "draft",
           variantCount: 3,
+          selectedVariant: {
+            title: `Draft ${position}`,
+            angle: `Angle ${position}`,
+            hook: `Hook ${position}`,
+            script: `Complete script ${position}`,
+            cta: `CTA ${position}`,
+            caption: `Caption ${position}`,
+            hashtags: [`#creator${position}`, "#kong"],
+            seoKeywords: [`creator ${position}`, "kong media"],
+          },
         },
       };
     }),
@@ -45,8 +55,9 @@ function productionBatchResponse(status: "not_started" | "draft_ready" | "stale"
       canGenerate: false,
       noSpend: true,
       preparedAt: status === "not_started" ? null : "2026-07-21T12:00:00.000Z",
+      approvedAt: status === "approved_ready" ? "2026-07-21T12:05:00.000Z" : null,
       blockers: [
-        status === "not_started" ? "script_batch_required" : status === "draft_ready" ? "script_approval_required" : "script_refresh_required",
+        ...(status === "approved_ready" ? [] : [status === "not_started" ? "script_batch_required" : status === "draft_ready" ? "script_approval_required" : "script_refresh_required"]),
         "governance_approval_required",
         "budget_reservation_required",
         "sandbox_generation_required",
@@ -124,6 +135,33 @@ test("production batch preparation sends only idempotency and variant count", as
       variantCount: 3,
     });
     assert.equal(response.batch.status, "draft_ready");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("atomic production batch approval sends a UUID idempotency key and exact expected batch", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: string; init?: RequestInit } | undefined;
+  globalThis.fetch = (async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(productionBatchResponse("approved_ready")), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const response = await mediaStudioCoreApi.approveProductionBatchScripts({
+      planId: "plan_000000000000000000000001",
+      input: {
+        idempotencyKey: "00000000-0000-4000-8000-000000000001",
+        expectedBatchId: "batch_000000000000000000000001",
+      },
+    });
+    assert.equal(request?.input, "/api/ai-media-studio/production-batches/plan_000000000000000000000001/approve-scripts");
+    assert.equal(request?.init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+      idempotencyKey: "00000000-0000-4000-8000-000000000001",
+      expectedBatchId: "batch_000000000000000000000001",
+    });
+    assert.equal(response.batch.status, "approved_ready");
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -10,11 +10,17 @@ import {
 } from "../../../shared/models/ai-media-studio-db";
 import {
   PRODUCTION_BATCH_FIXED_BLOCKERS,
+  productionBatchCreativeReviewSchema,
   productionBatchSchema,
   type ProductionBatch,
 } from "../../../shared/ai-media-studio-production-batches";
 import { SOURCE_CATEGORIES, type SourceCategory } from "../sources/contracts";
-import { ProductionBatchError, type PrepareProductionBatchInput, type ProductionBatchRepository } from "./contracts";
+import {
+  ProductionBatchError,
+  type ApproveProductionBatchInput,
+  type PrepareProductionBatchInput,
+  type ProductionBatchRepository,
+} from "./contracts";
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type ProductionBatchExecutor = { execute(query: SQL): Promise<ExecuteResult> };
@@ -38,12 +44,33 @@ type Envelope = Readonly<{
   variantCount: number;
   preparedAt: string;
 }>;
+type CreativeReview = ReturnType<typeof productionBatchCreativeReviewSchema.parse>;
+type StoredCreativeReview = Readonly<CreativeReview & { creativeDigest: string }>;
+type ApprovalEnvelope = Readonly<{
+  version: 1;
+  ownerUserId: string;
+  workspaceId: string;
+  batchId: string;
+  planId: string;
+  slotId: string;
+  scriptKey: string;
+  selectedVariantChecksum: string;
+  selectedCreativeDigest: string;
+  inputDigest: string;
+  idempotencyKey: string;
+  approvedAt: string;
+}>;
 
 const ENVELOPE_KEYS = [
   "batchId", "generatorVersion", "idempotencyKey", "inputDigest", "planId", "preparedAt",
   "scriptKey", "slotId", "sourceCategory", "sourceContentChecksum", "sourceContentHash", "sourceTitle", "variantCount", "version",
 ] as const;
 const VARIANT_KEYS = [...ENVELOPE_KEYS, "selected", "variantIndex", "variantKey"].sort();
+const CREATIVE_KEYS = ["angle", "caption", "creativeDigest", "cta", "hashtags", "hook", "script", "seoKeywords", "title"] as const;
+const APPROVAL_KEYS = [
+  "approvedAt", "batchId", "idempotencyKey", "inputDigest", "ownerUserId", "planId", "scriptKey",
+  "selectedCreativeDigest", "selectedVariantChecksum", "slotId", "version", "workspaceId",
+] as const;
 
 function rows(result: ExecuteResult): Record<string, unknown>[] {
   const values = Array.isArray(result) ? result : result.rows;
@@ -84,6 +111,21 @@ function digest(input: unknown): string {
   return `sha256:${hash(JSON.stringify(input))}`;
 }
 
+function approvalInputDigest(input: ApproveProductionBatchInput): string {
+  return digest({
+    domain: "ai-media-production-batch-approval-v1",
+    ownerUserId: input.scope.ownerUserId,
+    workspaceId: input.scope.workspaceId,
+    planId: input.planId,
+    expectedBatchId: input.expectedBatchId,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+function creativeReviewDigest(creative: CreativeReview): string {
+  return digest({ domain: "ai-media-production-creative-v1", ...creative });
+}
+
 function publicKey(prefix: "batch" | "script" | "variant", seed: string): string {
   return `${prefix}_${hash(seed).slice(0, 24)}`;
 }
@@ -94,9 +136,14 @@ function exactKeys(input: Record<string, unknown>, expected: readonly string[]):
   return actual.length === sorted.length && actual.every((key, index) => key === sorted[index]);
 }
 
+function validMetadataKeys(metadata: Record<string, unknown>): boolean {
+  const allowed = ["productionBatchApprovalV1", "productionBatchV1", "productionCreativeV1"];
+  return Object.keys(metadata).every((key) => allowed.includes(key)) && "productionBatchV1" in metadata;
+}
+
 function validEnvelope(input: unknown): Envelope | undefined {
   const metadata = object(input);
-  if (!metadata || !exactKeys(metadata, ["productionBatchV1"])) return undefined;
+  if (!metadata || !validMetadataKeys(metadata)) return undefined;
   const envelope = object(metadata.productionBatchV1);
   if (!envelope || !exactKeys(envelope, ENVELOPE_KEYS)
     || envelope.version !== 1
@@ -116,16 +163,41 @@ function validEnvelope(input: unknown): Envelope | undefined {
   return envelope as unknown as Envelope;
 }
 
-function validVariantEnvelope(input: unknown, base: Envelope, index: number): boolean {
+function validVariantEnvelope(input: unknown, base: Envelope, index: number): { creative: CreativeReview; creativeDigest: string } | undefined {
   const metadata = object(input);
-  if (!metadata || !exactKeys(metadata, ["productionBatchV1"])) return false;
+  if (!metadata || !validMetadataKeys(metadata) || !("productionCreativeV1" in metadata)) return undefined;
   const envelope = object(metadata.productionBatchV1);
-  if (!envelope || !exactKeys(envelope, VARIANT_KEYS)) return false;
+  if (!envelope || !exactKeys(envelope, VARIANT_KEYS)) return undefined;
   const { variantKey, variantIndex, selected, ...candidate } = envelope;
   const baseRecord = base as unknown as Record<string, unknown>;
-  return ENVELOPE_KEYS.every((key) => candidate[key] === baseRecord[key])
+  if (!(ENVELOPE_KEYS.every((key) => candidate[key] === baseRecord[key])
     && typeof variantKey === "string" && /^variant_[a-f0-9]{24}$/u.test(variantKey)
-    && variantIndex === index && selected === (index === 0);
+    && variantIndex === index && selected === (index === 0))) return undefined;
+  const creative = object(metadata.productionCreativeV1);
+  if (!creative || !exactKeys(creative, CREATIVE_KEYS)) return undefined;
+  const { creativeDigest, ...review } = creative;
+  const parsed = productionBatchCreativeReviewSchema.safeParse(review);
+  return parsed.success && typeof creativeDigest === "string"
+    && /^sha256:[a-f0-9]{64}$/u.test(creativeDigest)
+    && creativeDigest === creativeReviewDigest(parsed.data)
+    ? { creative: parsed.data, creativeDigest } : undefined;
+}
+
+function validApproval(input: unknown, base: Envelope, scope: ApproveProductionBatchInput["scope"],
+  selectedChecksum: string, selectedCreativeDigest: string): ApprovalEnvelope | undefined {
+  const metadata = object(input);
+  if (!metadata || !validMetadataKeys(metadata) || !("productionBatchApprovalV1" in metadata)) return undefined;
+  const approval = object(metadata.productionBatchApprovalV1);
+  if (!approval || !exactKeys(approval, APPROVAL_KEYS) || approval.version !== 1
+    || approval.ownerUserId !== scope.ownerUserId || approval.workspaceId !== scope.workspaceId
+    || approval.batchId !== base.batchId || approval.planId !== base.planId || approval.slotId !== base.slotId
+    || approval.scriptKey !== base.scriptKey
+    || typeof approval.inputDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(approval.inputDigest)
+    || approval.selectedVariantChecksum !== selectedChecksum || !/^[a-f0-9]{64}$/u.test(selectedChecksum)
+    || approval.selectedCreativeDigest !== selectedCreativeDigest || !/^sha256:[a-f0-9]{64}$/u.test(selectedCreativeDigest)
+    || typeof approval.idempotencyKey !== "string" || !approval.idempotencyKey
+    || typeof approval.approvedAt !== "string" || !Number.isFinite(Date.parse(approval.approvedAt))) return undefined;
+  return approval as unknown as ApprovalEnvelope;
 }
 
 function category(row: Record<string, unknown>): SourceCategory | undefined {
@@ -134,6 +206,7 @@ function category(row: Record<string, unknown>): SourceCategory | undefined {
 }
 
 function blockers(status: ProductionBatch["status"]): ProductionBatch["blockers"] {
+  if (status === "approved_ready") return [...PRODUCTION_BATCH_FIXED_BLOCKERS];
   return [status === "not_started" ? "script_batch_required"
     : status === "draft_ready" ? "script_approval_required" : "script_refresh_required",
   ...PRODUCTION_BATCH_FIXED_BLOCKERS];
@@ -147,7 +220,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       SELECT public_plan_key
       FROM ${aiMediaDailyPlans}
       WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
-        AND status='blocked' AND planned_slot_count BETWEEN 50 AND 100
+        AND status IN ('blocked','planned') AND planned_slot_count BETWEEN 50 AND 100
       ORDER BY created_at DESC, id DESC LIMIT 2
     `));
     if (plans.length === 0) return undefined;
@@ -308,6 +381,11 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
             variantIndex: index,
             selected: index === 0,
           };
+          const creative = {
+            title: variant.title, angle: variant.angle, hook: variant.hook, script: variant.script, cta: variant.cta,
+            caption: variant.caption, hashtags: variant.hashtags, seoKeywords: variant.seoKeywords,
+          };
+          const storedCreative: StoredCreativeReview = { ...creative, creativeDigest: creativeReviewDigest(creative) };
           const insertedVariant = rows(await tx.execute(sql`
             INSERT INTO ${aiMediaScriptVariants} (
               id, owner_user_id, workspace_id, script_id, version, label, content, status,
@@ -315,7 +393,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
             ) VALUES (
               ${variantUuids[index]}, ${input.scope.ownerUserId}, ${input.scope.workspaceId}, ${scriptUuid},
               ${index + 1}, ${variant.title}, ${variant.script}, 'draft', ${hash(variant.script)},
-              ${JSON.stringify({ productionBatchV1: variantMetadata })}::jsonb,
+              ${JSON.stringify({ productionBatchV1: variantMetadata, productionCreativeV1: storedCreative })}::jsonb,
               ${preparedAt}::timestamptz, ${preparedAt}::timestamptz
             ) RETURNING id
           `));
@@ -345,6 +423,131 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
     });
   }
 
+  async approve(input: ApproveProductionBatchInput): Promise<ProductionBatch> {
+    const approvalDigest = approvalInputDigest(input);
+    return this.db.transaction(async (tx) => {
+      const plans = rows(await tx.execute(sql`
+        SELECT id,public_plan_key,status,planned_slot_count
+        FROM ${aiMediaDailyPlans}
+        WHERE owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
+          AND public_plan_key=${input.planId} AND status IN ('blocked','planned')
+        FOR UPDATE
+      `));
+      if (plans.length !== 1) throw new ProductionBatchError("NOT_FOUND");
+      const plan = plans[0]!;
+      const locked = rows(await tx.execute(sql`
+        SELECT slots.id AS slot_id,slots.public_slot_key,slots.source_member_key,slots.video_number,
+          slots.status AS slot_status,slots.state_version,slots.script_variant_id,
+          scripts.id AS script_id,scripts.status AS script_status,scripts.current_variant_id,
+          scripts.metadata AS script_metadata,selected.checksum AS selected_variant_checksum,
+          selected.metadata AS selected_variant_metadata,
+          variants.id AS variant_id,variants.status AS variant_status,variants.version AS variant_version,
+          variants.content AS variant_content,variants.checksum AS variant_checksum,variants.metadata AS variant_metadata,
+          sources.content_hash AS current_source_hash,sources.content AS current_source_content,
+          sources.status AS source_status,sources.rights_status,sources.moderation_status
+        FROM ${aiMediaDailyPlanSlots} slots
+        INNER JOIN ${aiMediaScriptVariants} selected
+          ON selected.owner_user_id=slots.owner_user_id AND selected.workspace_id=slots.workspace_id
+          AND selected.id=slots.script_variant_id
+        INNER JOIN ${aiMediaScripts} scripts
+          ON scripts.owner_user_id=selected.owner_user_id AND scripts.workspace_id=selected.workspace_id
+          AND scripts.id=selected.script_id AND scripts.current_variant_id=selected.id
+        INNER JOIN ${aiMediaScriptVariants} variants
+          ON variants.owner_user_id=scripts.owner_user_id AND variants.workspace_id=scripts.workspace_id
+          AND variants.script_id=scripts.id
+        INNER JOIN ${aiMediaSourceItems} sources
+          ON sources.owner_user_id=scripts.owner_user_id AND sources.workspace_id=scripts.workspace_id
+          AND sources.id=scripts.source_item_id AND sources.source_type=scripts.source_type
+        WHERE slots.owner_user_id=${input.scope.ownerUserId} AND slots.workspace_id=${input.scope.workspaceId}
+          AND slots.daily_plan_id=${text(plan, "id", "id")} AND slots.status=${text(plan, "status", "status")}
+        ORDER BY slots.source_member_key,slots.video_number,variants.version
+        FOR UPDATE OF slots,scripts,selected,variants,sources
+      `));
+      const uniqueSlots = new Map(locked.map((row) => [text(row, "publicSlotKey", "public_slot_key"), row]));
+      this.assertSlotShape([...uniqueSlots.values()], integer(plan, "plannedSlotCount", "planned_slot_count"), text(plan, "status", "status"));
+      if ([...uniqueSlots.values()].some((row) => !["accepted", "ready"].includes(text(row, "sourceStatus", "source_status"))
+        || !["owned", "licensed"].includes(text(row, "rightsStatus", "rights_status"))
+        || text(row, "moderationStatus", "moderation_status") !== "approved")) {
+        throw new ProductionBatchError("SOURCE_INELIGIBLE");
+      }
+      const batch = await this.load(tx, input.scope, input.planId);
+      if (batch.batchId !== input.expectedBatchId) throw new ProductionBatchError("IDEMPOTENCY_CONFLICT");
+      if (text(plan, "status", "status") === "planned") {
+        const first = locked[0];
+        const envelope = first && validEnvelope(value(first, "scriptMetadata", "script_metadata"));
+        const selectedCreative = envelope && validVariantEnvelope(
+          value(first!, "selectedVariantMetadata", "selected_variant_metadata"), envelope, 0);
+        const approval = envelope && validApproval(value(first!, "scriptMetadata", "script_metadata"), envelope,
+          input.scope, text(first!, "selectedVariantChecksum", "selected_variant_checksum"),
+          selectedCreative?.creativeDigest ?? "");
+        if (!approval || approval.idempotencyKey !== input.idempotencyKey
+          || approval.inputDigest !== approvalDigest) throw new ProductionBatchError("IDEMPOTENCY_CONFLICT");
+        return batch;
+      }
+      if (batch.status === "stale") throw new ProductionBatchError("SOURCE_REFRESHED");
+      if (batch.status !== "draft_ready" || locked.length < batch.plannedVideoCount) {
+        throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      }
+      const observed = rows(await tx.execute(sql`SELECT transaction_timestamp() AS observed_at`))[0];
+      if (!observed) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      const approvedAt = iso(value(observed, "observedAt", "observed_at"));
+      const scripts = rows(await tx.execute(sql`
+        UPDATE ${aiMediaScripts} scripts SET
+          status='approved',updated_at=${approvedAt}::timestamptz,
+          metadata=scripts.metadata || jsonb_build_object('productionBatchApprovalV1',jsonb_build_object(
+            'version',1,'ownerUserId',scripts.owner_user_id,'workspaceId',scripts.workspace_id,
+            'batchId',scripts.metadata->'productionBatchV1'->>'batchId',
+            'planId',scripts.metadata->'productionBatchV1'->>'planId',
+            'slotId',scripts.metadata->'productionBatchV1'->>'slotId',
+            'scriptKey',scripts.metadata->'productionBatchV1'->>'scriptKey',
+            'selectedVariantChecksum',selected.checksum,
+            'selectedCreativeDigest',selected.metadata->'productionCreativeV1'->>'creativeDigest',
+            'inputDigest',${approvalDigest}::text,
+            'idempotencyKey',${input.idempotencyKey}::text,'approvedAt',${approvedAt}::text
+          ))
+        FROM ${aiMediaScriptVariants} selected,${aiMediaDailyPlanSlots} slots
+        WHERE scripts.owner_user_id=${input.scope.ownerUserId} AND scripts.workspace_id=${input.scope.workspaceId}
+          AND selected.owner_user_id=scripts.owner_user_id AND selected.workspace_id=scripts.workspace_id
+          AND selected.id=scripts.current_variant_id AND slots.owner_user_id=scripts.owner_user_id
+          AND slots.workspace_id=scripts.workspace_id AND slots.script_variant_id=selected.id
+          AND slots.daily_plan_id=${text(plan, "id", "id")} AND slots.status='blocked'
+          AND scripts.status='draft' AND scripts.metadata->'productionBatchV1'->>'batchId'=${input.expectedBatchId}
+        RETURNING scripts.id
+      `));
+      if (scripts.length !== batch.plannedVideoCount) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      const variants = rows(await tx.execute(sql`
+        UPDATE ${aiMediaScriptVariants} variants SET
+          status='approved',updated_at=${approvedAt}::timestamptz,
+          metadata=variants.metadata || jsonb_build_object(
+            'productionBatchApprovalV1',scripts.metadata->'productionBatchApprovalV1')
+        FROM ${aiMediaScripts} scripts
+        WHERE variants.owner_user_id=${input.scope.ownerUserId} AND variants.workspace_id=${input.scope.workspaceId}
+          AND scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
+          AND scripts.id=variants.script_id AND scripts.current_variant_id=variants.id
+          AND scripts.status='approved' AND variants.status='draft'
+          AND scripts.metadata->'productionBatchV1'->>'batchId'=${input.expectedBatchId}
+        RETURNING variants.id
+      `));
+      if (variants.length !== batch.plannedVideoCount) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      const slots = rows(await tx.execute(sql`
+        UPDATE ${aiMediaDailyPlanSlots} SET status='planned',state_version=state_version+1,
+          updated_at=${approvedAt}::timestamptz
+        WHERE owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
+          AND daily_plan_id=${text(plan, "id", "id")} AND status='blocked'
+        RETURNING id
+      `));
+      if (slots.length !== batch.plannedVideoCount) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      const promoted = rows(await tx.execute(sql`
+        UPDATE ${aiMediaDailyPlans} SET status='planned',updated_at=${approvedAt}::timestamptz
+        WHERE id=${text(plan, "id", "id")} AND owner_user_id=${input.scope.ownerUserId}
+          AND workspace_id=${input.scope.workspaceId} AND status='blocked'
+        RETURNING id
+      `));
+      if (promoted.length !== 1) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      return this.load(tx, input.scope, input.planId);
+    });
+  }
+
   private async readRows(executor: ProductionBatchExecutor, scope: PrepareProductionBatchInput["scope"], planId: string) {
     return rows(await executor.execute(sql`
       SELECT plans.public_plan_key, plans.status AS plan_status, plans.planned_slot_count,
@@ -352,8 +555,10 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         slots.script_variant_id, influencers.name AS creator_name,
         scripts.title AS script_title, scripts.status AS script_status, scripts.current_variant_id,
         scripts.metadata AS script_metadata, sources.content_hash AS current_source_hash,
-        sources.content AS current_source_content,
-        variants.id AS variant_id, variants.version AS variant_version, variants.content AS variant_content,
+        sources.content AS current_source_content,sources.status AS source_status,
+        sources.rights_status,sources.moderation_status,
+        variants.id AS variant_id, variants.version AS variant_version, variants.label AS variant_label,
+        variants.content AS variant_content,
         variants.status AS variant_status, variants.checksum AS variant_checksum,
         variants.metadata AS variant_metadata
       FROM ${aiMediaDailyPlans} plans
@@ -376,7 +581,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         ON variants.owner_user_id=scripts.owner_user_id AND variants.workspace_id=scripts.workspace_id
         AND variants.script_id=scripts.id
       WHERE plans.owner_user_id=${scope.ownerUserId} AND plans.workspace_id=${scope.workspaceId}
-        AND plans.public_plan_key=${planId} AND plans.status='blocked' AND slots.status='blocked'
+        AND plans.public_plan_key=${planId} AND plans.status IN ('blocked','planned')
+        AND slots.status=plans.status
       ORDER BY slots.source_member_key ASC, slots.video_number ASC, variants.version ASC NULLS FIRST
     `));
   }
@@ -392,7 +598,9 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       bySlot.set(slotId, slotRows);
     }
     const slotRows = [...bySlot.values()].map((entry) => entry[0]!);
-    this.assertSlotShape(slotRows, integer(result[0]!, "plannedSlotCount", "planned_slot_count"));
+    const planStatus = text(result[0]!, "planStatus", "plan_status");
+    if (planStatus !== "blocked" && planStatus !== "planned") throw new ProductionBatchError("BATCH_UNAVAILABLE");
+    this.assertSlotShape(slotRows, integer(result[0]!, "plannedSlotCount", "planned_slot_count"), planStatus);
     const boundCount = slotRows.filter((row) => text(row, "scriptVariantId", "script_variant_id")).length;
     if (boundCount !== 0 && boundCount !== slotRows.length) throw new ProductionBatchError("BATCH_UNAVAILABLE");
     if (boundCount === 0) {
@@ -401,47 +609,89 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         batchId: publicKey("batch", `${scope.ownerUserId}\0${scope.workspaceId}\0${planId}\0not-started`),
         planId, status: "not_started", avatarCount: groups.length, videosPerAvatar: 10,
         plannedVideoCount: slotRows.length, canGenerate: false, noSpend: true, preparedAt: null,
+        approvedAt: null,
         blockers: blockers("not_started"), groups,
       });
     }
     let batchEnvelope: Envelope | undefined;
+    let batchApproval: ApprovalEnvelope | undefined;
     let stale = false;
     const verified = [...bySlot.values()].map((entries) => {
       const row = entries[0]!;
       const envelope = validEnvelope(value(row, "scriptMetadata", "script_metadata"));
+      const expectedScriptStatus = planStatus === "planned" ? "approved" : "draft";
+      const selectedVariantId = text(entries[0]!, "variantId", "variant_id");
       if (!envelope || envelope.planId !== planId || envelope.slotId !== text(row, "publicSlotKey", "public_slot_key")
-        || text(row, "scriptStatus", "script_status") !== "draft"
+        || text(row, "scriptStatus", "script_status") !== expectedScriptStatus
         || text(row, "scriptVariantId", "script_variant_id") !== text(row, "currentVariantId", "current_variant_id")
+        || text(row, "scriptVariantId", "script_variant_id") !== selectedVariantId
         || entries.length !== envelope.variantCount) throw new ProductionBatchError("BATCH_UNAVAILABLE");
       if (batchEnvelope && (batchEnvelope.batchId !== envelope.batchId
         || batchEnvelope.inputDigest !== envelope.inputDigest
         || batchEnvelope.idempotencyKey !== envelope.idempotencyKey
         || batchEnvelope.preparedAt !== envelope.preparedAt)) throw new ProductionBatchError("BATCH_UNAVAILABLE");
       batchEnvelope ??= envelope;
+      let selectedCreative: CreativeReview | undefined;
+      const selectedChecksum = text(entries[0]!, "variantChecksum", "variant_checksum");
+      const selectedVariantEnvelope = validVariantEnvelope(
+        value(entries[0]!, "variantMetadata", "variant_metadata"), envelope, 0);
+      if (!selectedVariantEnvelope) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      const scriptApproval = validApproval(value(row, "scriptMetadata", "script_metadata"), envelope, scope,
+        selectedChecksum, selectedVariantEnvelope.creativeDigest);
+      if (planStatus === "planned") {
+        if (!scriptApproval || (batchApproval && (scriptApproval.idempotencyKey !== batchApproval.idempotencyKey
+          || scriptApproval.inputDigest !== batchApproval.inputDigest
+          || scriptApproval.approvedAt !== batchApproval.approvedAt))) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+        batchApproval ??= scriptApproval;
+      } else if (scriptApproval) throw new ProductionBatchError("BATCH_UNAVAILABLE");
       for (const [index, variantRow] of entries.entries()) {
         const content = text(variantRow, "variantContent", "variant_content");
+        const variantEnvelope = validVariantEnvelope(value(variantRow, "variantMetadata", "variant_metadata"), envelope, index);
+        const variantApproval = validApproval(value(variantRow, "variantMetadata", "variant_metadata"), envelope, scope,
+          selectedChecksum, selectedVariantEnvelope.creativeDigest);
+        const selected = index === 0;
+        const expectedVariantStatus = planStatus === "planned" && selected ? "approved" : "draft";
         if (integer(variantRow, "variantVersion", "variant_version") !== index + 1
-          || text(variantRow, "variantStatus", "variant_status") !== "draft"
+          || text(variantRow, "variantStatus", "variant_status") !== expectedVariantStatus
           || text(variantRow, "variantChecksum", "variant_checksum") !== hash(content)
-          || !validVariantEnvelope(value(variantRow, "variantMetadata", "variant_metadata"), envelope, index)) {
+          || !variantEnvelope
+          || variantEnvelope.creative.title !== text(variantRow, "variantLabel", "variant_label")
+          || variantEnvelope.creative.script !== content
+          || (planStatus === "planned" && selected ? !variantApproval
+            || variantApproval.idempotencyKey !== scriptApproval!.idempotencyKey
+            || variantApproval.approvedAt !== scriptApproval!.approvedAt : Boolean(variantApproval))) {
           throw new ProductionBatchError("BATCH_UNAVAILABLE");
         }
+        if (index === 0) selectedCreative = variantEnvelope.creative;
+      }
+      if (!selectedCreative || selectedCreative.title !== text(row, "scriptTitle", "script_title")) {
+        throw new ProductionBatchError("BATCH_UNAVAILABLE");
       }
       if (text(row, "currentSourceHash", "current_source_hash") !== envelope.sourceContentHash
         || hash(text(row, "currentSourceContent", "current_source_content")) !== envelope.sourceContentChecksum) stale = true;
-      return { row, envelope };
+      const sourceEligible = ["accepted", "ready"].includes(text(row, "sourceStatus", "source_status"))
+        && ["owned", "licensed"].includes(text(row, "rightsStatus", "rights_status"))
+        && text(row, "moderationStatus", "moderation_status") === "approved";
+      if (!sourceEligible) {
+        if (planStatus === "planned") throw new ProductionBatchError("SOURCE_INELIGIBLE");
+        stale = true;
+      }
+      return { row, envelope, selectedCreative };
     });
     if (!batchEnvelope) throw new ProductionBatchError("BATCH_UNAVAILABLE");
-    const status = stale ? "stale" as const : "draft_ready" as const;
+    if (planStatus === "planned" && stale) throw new ProductionBatchError("SOURCE_REFRESHED");
+    const status = planStatus === "planned" ? "approved_ready" as const
+      : stale ? "stale" as const : "draft_ready" as const;
     const groups = this.group(verified);
     return productionBatchSchema.parse({
       batchId: batchEnvelope.batchId, planId, status, avatarCount: groups.length, videosPerAvatar: 10,
       plannedVideoCount: verified.length, canGenerate: false, noSpend: true,
-      preparedAt: batchEnvelope.preparedAt, blockers: blockers(status), groups,
+      preparedAt: batchEnvelope.preparedAt, approvedAt: batchApproval?.approvedAt ?? null,
+      blockers: blockers(status), groups,
     });
   }
 
-  private assertSlotShape(slots: Record<string, unknown>[], planned: number): void {
+  private assertSlotShape(slots: Record<string, unknown>[], planned: number, expectedStatus = "blocked"): void {
     const members = new Map<string, Set<number>>();
     for (const slot of slots) {
       const memberId = text(slot, "sourceMemberKey", "source_member_key");
@@ -450,7 +700,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       numbers.add(videoNumber);
       members.set(memberId, numbers);
       if (!/^member_[a-f0-9]{24}$/u.test(memberId) || !/^slot_[a-f0-9]{24}$/u.test(text(slot, "publicSlotKey", "public_slot_key"))
-        || videoNumber < 1 || videoNumber > 10 || text(slot, "slotStatus", "slot_status") !== "blocked") {
+        || videoNumber < 1 || videoNumber > 10 || text(slot, "slotStatus", "slot_status") !== expectedStatus) {
         throw new ProductionBatchError("BATCH_UNAVAILABLE");
       }
     }
@@ -460,9 +710,10 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
     }
   }
 
-  private group(values: Array<{ row: Record<string, unknown>; envelope?: Envelope }>): ProductionBatch["groups"] {
+  private group(values: Array<{ row: Record<string, unknown>; envelope?: Envelope; selectedCreative?: CreativeReview }>): ProductionBatch["groups"] {
     const groups = new Map<string, ProductionBatch["groups"][number]>();
-    for (const { row, envelope } of values) {
+    for (const { row, envelope, selectedCreative } of values) {
+      if (envelope && !selectedCreative) throw new ProductionBatchError("BATCH_UNAVAILABLE");
       const memberId = text(row, "sourceMemberKey", "source_member_key");
       const group = groups.get(memberId) ?? { memberId, creatorName: text(row, "creatorName", "creator_name"), items: [] };
       group.items.push({
@@ -473,7 +724,9 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
           source: { title: envelope.sourceTitle, category: envelope.sourceCategory },
           script: {
             key: envelope.scriptKey, title: text(row, "scriptTitle", "script_title"),
-            status: "draft" as const, variantCount: envelope.variantCount,
+            status: (text(row, "scriptStatus", "script_status") === "approved" ? "approved" : "draft") as "approved" | "draft",
+            variantCount: envelope.variantCount,
+            selectedVariant: selectedCreative!,
           },
         } : { preparation: "pending" as const, source: null, script: null }),
       });

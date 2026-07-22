@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 5);
+  assert.equal(snapshot.summary.done, 6);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -52,6 +52,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const staging = snapshot.workItems.find((item) => item.id === "ams-agent-staging-migrations");
   const durablePlan = snapshot.workItems.find((item) => item.id === "ams-agent-durable-roster-plan");
   const durableScriptBatch = snapshot.workItems.find((item) => item.id === "ams-agent-durable-script-batch");
+  const launchReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-launch-readiness");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -70,6 +71,13 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(durableScriptBatch?.evidence.join(" ") ?? "", /checker[\s\S]*P0=P1=P2=0/u);
   assert.match(durableScriptBatch?.evidence.join(" ") ?? "", /App QA[\s\S]*P0=P1=P2=0/u);
   assert.match(durableScriptBatch?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment[\s\S]*Clippers chunk warning/u);
+  assert.equal(launchReadiness?.state, "done");
+  assert.equal(launchReadiness?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/144");
+  assert.match(launchReadiness?.acceptance.join(" ") ?? "", /5–10 × 10[\s\S]*Video Title[\s\S]*SEO/u);
+  assert.match(launchReadiness?.acceptance.join(" ") ?? "", /selected\/current variants/u);
+  assert.match(launchReadiness?.evidence.join(" ") ?? "", /722 passed[\s\S]*P0=P1=P2=P3=0/u);
+  assert.match(launchReadiness?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
+  assert.match(launchReadiness?.nextAction ?? "", /PR #144 unmerged[\s\S]*do not call HeyGen/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

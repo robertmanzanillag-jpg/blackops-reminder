@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T00:32:17.334Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-durable-script-batch",
+  "generatedAt": "2026-07-22T01:56:24.665Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-launch-readiness",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -88,45 +88,12 @@
   },
   "totals": {
     "filesVisible": 787,
-    "filesIndexed": 657,
-    "imports": 2710,
-    "routes": 493,
-    "symbols": 12906
+    "filesIndexed": 659,
+    "imports": 2728,
+    "routes": 494,
+    "symbols": 13037
   },
   "directories": {
-    "client/src": {
-      "files": 154,
-      "indexed": 150,
-      "kinds": {
-        "other": 44,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 24
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 140,
-      "indexed": 133,
-      "kinds": {
-        "server": 140
-      }
-    },
-    "shared": {
-      "files": 10,
-      "indexed": 10,
-      "kinds": {
-        "shared": 10
-      }
-    },
-    "tests": {
-      "files": 184,
-      "indexed": 175,
-      "kinds": {
-        "test": 184
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -165,6 +132,18 @@
         "other": 13
       }
     },
+    "client/src": {
+      "files": 152,
+      "indexed": 150,
+      "kinds": {
+        "other": 42,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
+      }
+    },
     "docs/ai-media-studio": {
       "files": 12,
       "indexed": 12,
@@ -188,10 +167,10 @@
       }
     },
     "script": {
-      "files": 39,
-      "indexed": 37,
+      "files": 40,
+      "indexed": 38,
       "kinds": {
-        "script": 39
+        "script": 40
       }
     },
     "scripts": {
@@ -208,6 +187,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 140,
+      "indexed": 133,
+      "kinds": {
+        "server": 140
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -215,11 +201,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 10,
+      "indexed": 10,
+      "kinds": {
+        "shared": 10
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 185,
+      "indexed": 176,
+      "kinds": {
+        "test": 185
       }
     },
     "tests/fixtures": {
@@ -2532,6 +2532,7 @@
       ],
       "exports": [
         "coreStudioKeys",
+        "useApproveProductionBatchScripts",
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
         "useHeyGenRoster",
@@ -2550,6 +2551,7 @@
         "refresh",
         "remove",
         "update",
+        "useApproveProductionBatchScripts",
         "useAssetDelivery",
         "useConfigureHeyGenRoster",
         "useHeyGenRoster",
@@ -2744,18 +2746,27 @@
       ],
       "exports": [
         "ProductionBatchWorkbench",
+        "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey"
       ],
       "symbols": [
         "ProductionBatchWorkbench",
+        "allReviewsAvailable",
+        "approvalAttemptRef",
+        "approve",
+        "approveScripts",
         "attemptRef",
         "batch",
         "batchQuery",
+        "errorMessage",
+        "identity",
+        "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey",
         "prepare",
         "prepareScripts",
         "readyScripts",
         "resultRef",
+        "reviewedBatchRef",
         "scriptReadiness"
       ],
       "routes": []
@@ -5016,6 +5027,38 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-launch-readiness-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "socketDirectory",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
+      ],
       "routes": []
     },
     {
@@ -10506,6 +10549,7 @@
         "../core/resource-domain"
       ],
       "exports": [
+        "ApproveProductionBatchInput",
         "PrepareProductionBatchInput",
         "ProductionBatchError",
         "ProductionBatchErrorCode",
@@ -10534,12 +10578,24 @@
         "ProductionBatchExecutor"
       ],
       "symbols": [
+        "APPROVAL_KEYS",
+        "ApprovalEnvelope",
+        "CREATIVE_KEYS",
+        "CreativeReview",
         "DrizzleProductionBatchRepository",
         "ENVELOPE_KEYS",
         "Envelope",
         "ExecuteResult",
+        "StoredCreativeReview",
         "VARIANT_KEYS",
         "actual",
+        "allowed",
+        "approval",
+        "approvalDigest",
+        "approvalInputDigest",
+        "approvedAt",
+        "baseRecord",
+        "batch",
         "batchId",
         "blockers",
         "bound",
@@ -10549,11 +10605,16 @@
         "category",
         "clock",
         "content",
+        "creative",
+        "creativeReviewDigest",
         "date",
         "digest",
         "envelope",
         "envelopes",
         "exactKeys",
+        "expectedScriptStatus",
+        "expectedVariantStatus",
+        "first",
         "generated",
         "group",
         "groups",
@@ -10563,6 +10624,7 @@
         "insertedVariant",
         "integer",
         "iso",
+        "locked",
         "lockedReplaySources",
         "lockedSlots",
         "memberId",
@@ -10570,31 +10632,48 @@
         "metadata",
         "numbers",
         "object",
+        "observed",
+        "parsed",
         "plan",
+        "planStatus",
         "plans",
         "preparedAt",
+        "promoted",
         "publicKey",
         "result",
         "row",
         "rows",
+        "scriptApproval",
         "scriptKey",
         "scriptUuid",
+        "scripts",
         "selected",
+        "selectedChecksum",
+        "selectedCreative",
+        "selectedVariantEnvelope",
         "selectedVariantId",
         "slotId",
         "slotRows",
+        "slots",
         "sorted",
         "source",
         "sourceCategory",
+        "sourceEligible",
         "sources",
         "status",
         "text",
+        "uniqueSlots",
+        "validApproval",
         "validEnvelope",
+        "validMetadataKeys",
         "validVariantEnvelope",
         "value",
         "values",
+        "variantApproval",
+        "variantEnvelope",
         "variantMetadata",
         "variantUuids",
+        "variants",
         "verified",
         "videoNumber"
       ],
@@ -11594,6 +11673,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets",
         "${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery",
         "${AI_MEDIA_STUDIO_API_BASE}/options",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
@@ -19281,6 +19361,7 @@
         "zod"
       ],
       "exports": [
+        "ApproveProductionBatchRequest",
         "PRODUCTION_BATCH_FIXED_BLOCKERS",
         "PRODUCTION_BATCH_GENERATOR_VERSION",
         "PRODUCTION_BATCH_MAX_AVATARS",
@@ -19291,8 +19372,10 @@
         "PrepareProductionBatchRequest",
         "ProductionBatch",
         "ProductionBatchResponse",
+        "approveProductionBatchRequestSchema",
         "prepareProductionBatchRequestSchema",
         "productionBatchBlockerSchema",
+        "productionBatchCreativeReviewSchema",
         "productionBatchGroupSchema",
         "productionBatchItemSchema",
         "productionBatchPreparationBlockerSchema",
@@ -19307,12 +19390,15 @@
         "PRODUCTION_BATCH_MIN_AVATARS",
         "PRODUCTION_BATCH_MIN_VIDEOS",
         "PRODUCTION_BATCH_VIDEOS_PER_AVATAR",
+        "approveProductionBatchRequestSchema",
+        "approved",
         "cleanText",
         "exactBlockers",
         "expectedPreparationBlocker",
         "plainObject",
         "prepareProductionBatchRequestSchema",
         "productionBatchBlockerSchema",
+        "productionBatchCreativeReviewSchema",
         "productionBatchGroupSchema",
         "productionBatchItemSchema",
         "productionBatchPreparationBlockerSchema",
@@ -19907,6 +19993,7 @@
         "canary",
         "durablePlan",
         "durableScriptBatch",
+        "launchReadiness",
         "officeSource",
         "pageSource",
         "routesSource",
@@ -21113,6 +21200,87 @@
         "slotId",
         "userService",
         "workloadService"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-launch-readiness-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/production-batches/contracts",
+        "../server/ai-media-studio/production-batches/drizzle-repository",
+        "../server/ai-media-studio/production-batches/service",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Fixture",
+        "Manifest",
+        "MigrationFile",
+        "PORT",
+        "Scope",
+        "TEMP_PREFIX",
+        "account",
+        "applyFullChain",
+        "approveFive",
+        "approvedTen",
+        "avatar",
+        "bytes",
+        "changed",
+        "content",
+        "count",
+        "creativeTamper",
+        "digest",
+        "emptySideEffects",
+        "enabled",
+        "expectCode",
+        "five",
+        "hash",
+        "hex",
+        "influencer",
+        "integrationTest",
+        "key",
+        "manifest",
+        "migration",
+        "migrationRoot",
+        "mixed",
+        "parsed",
+        "planId",
+        "planUuid",
+        "pointerTamper",
+        "pool",
+        "prepared",
+        "repository",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "revoked",
+        "rollback",
+        "scope",
+        "seedFixture",
+        "service",
+        "sideEffects",
+        "socket",
+        "staleSource",
+        "staleVariant",
+        "state",
+        "tables",
+        "ten",
+        "titleTamper",
+        "unreviewed",
+        "uuid",
+        "value",
+        "voice"
       ],
       "routes": []
     },
@@ -23026,7 +23194,8 @@
         "invalid",
         "items",
         "parsed",
-        "pendingBatch"
+        "pendingBatch",
+        "request"
       ],
       "routes": []
     },
@@ -23048,6 +23217,7 @@
         "batchId",
         "content",
         "corrupt",
+        "creative",
         "dialect",
         "durable",
         "durableRows",
@@ -23057,6 +23227,7 @@
         "planId",
         "preparedAt",
         "publicKey",
+        "rawDigest",
         "rawHash",
         "readDatabase",
         "ready",
@@ -23067,7 +23238,8 @@
         "slots",
         "stale",
         "text",
-        "unique"
+        "unique",
+        "variantTitle"
       ],
       "routes": []
     },
@@ -23174,6 +23346,7 @@
       "symbols": [
         "address",
         "app",
+        "approve",
         "current",
         "endpoint",
         "generation",
@@ -23186,7 +23359,8 @@
         "retry",
         "runtime",
         "server",
-        "spoofed"
+        "spoofed",
+        "unsafeApproval"
       ],
       "routes": []
     },
@@ -23208,6 +23382,7 @@
         "readyBatch",
         "repository",
         "result",
+        "scope",
         "service"
       ],
       "routes": []
@@ -23544,10 +23719,11 @@
         "base",
         "baseUrl",
         "blocked",
+        "blockedGeneration",
+        "blockedRetry",
         "cancelled",
         "checksum",
         "created",
-        "createdResponse",
         "defaultProductionRuntime",
         "deletedPreview",
         "deletedReview",
@@ -23587,10 +23763,10 @@
         "providerOnlyLegacyRoute",
         "qualityDeniedApproval",
         "replayWithChangedUnsignedHeaders",
+        "repository",
         "response",
         "restoredReview",
         "retried",
-        "retryCreate",
         "retryInternal",
         "retryTarget",
         "reviewPath",
@@ -25438,6 +25614,7 @@
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
     "tests/ai-media-studio-launch-authority-service.test.ts",
+    "tests/ai-media-studio-launch-readiness-postgres.test.ts",
     "tests/ai-media-studio-launch-runtime-attestation-verifier.test.ts",
     "tests/ai-media-studio-migration-manifest.test.ts",
     "tests/ai-media-studio-oauth-authorization-saga.test.ts",

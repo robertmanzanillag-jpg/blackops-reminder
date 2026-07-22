@@ -39,7 +39,15 @@ export interface PrepareProductionBatchInput {
   generator: ProductionScriptGenerator;
 }
 
+export interface ApproveProductionBatchInput {
+  scope: TenantScope;
+  planId: string;
+  idempotencyKey: string;
+  expectedBatchId: string;
+}
+
 export interface ProductionBatchRepository {
   getCurrent(scope: TenantScope): Promise<ProductionBatch | undefined>;
   prepare(input: PrepareProductionBatchInput): Promise<ProductionBatch>;
+  approve(input: ApproveProductionBatchInput): Promise<ProductionBatch>;
 }

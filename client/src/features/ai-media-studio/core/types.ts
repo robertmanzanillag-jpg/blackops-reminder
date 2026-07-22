@@ -23,6 +23,7 @@ import type {
   HeyGenRosterStatus,
 } from "@shared/ai-media-studio-heygen-roster";
 import type {
+  ApproveProductionBatchRequest,
   PrepareProductionBatchRequest,
   ProductionBatch,
   ProductionBatchResponse,
@@ -55,6 +56,7 @@ export type {
 };
 
 export type {
+  ApproveProductionBatchRequest,
   PrepareProductionBatchRequest,
   ProductionBatch,
   ProductionBatchResponse,

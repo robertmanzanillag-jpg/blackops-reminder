@@ -2,7 +2,16 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
-## Active local work: durable production script batch
+## Active local work: durable script review and launch readiness
+
+- Branch: `codex/ai-media-studio-launch-readiness`, preserved as draft PR #144 and stacked on mergeable draft PR #141. Local checker, security and App QA gates are complete.
+- Review boundary: every selected variant exposes its full persisted video title, angle, hook, script, CTA, caption, hashtags and SEO keywords in the authenticated production-batch workbench. Approval requires an explicit acknowledgement and covers the exact complete batch atomically: 5–10 creators × exactly 10 scripts each (50–100).
+- Durable transition: one tenant-scoped, database-locked transaction binds the expected batch, selected-variant content checksum and canonical full-creative digest (including Video Title), records exact approval metadata and PostgreSQL time, promotes all scripts and only their selected/current variants plus their plan/slots together, and rejects partial, stale, ineligible, conflicting or cross-tenant work. Unselected alternatives remain `draft` without approval metadata. Replay is exact; the public projection remains provider-neutral and keeps `canGenerate=false` and `noSpend=true` after approval.
+- Safety boundary: this approval is content readiness only. It issues no governance/content authority, human launch authority, launch intent, sandbox or quote attestation; reserves no budget; creates no render job or outbox command; calls no provider; spends nothing; applies no migration; publishes and deploys nothing.
+- Evidence complete for the local slice: focused service/repository/contract/client/UI checks pass 20/20, authenticated HTTP checks pass 2/2, the owned PostgreSQL 16 harness passes 1/1 after applying the exact manifest-bound 22-pair chain, and TypeScript plus production build pass. PostgreSQL coverage includes approval-time source rights/moderation/status revocation, post-approval CTA/Video Title/current-variant-pointer tamper rejection, and proof that 100 selected variants are approved while all 400 alternatives in a 10-avatar × 10-slot × 5-variant fixture remain draft without approval metadata. The final full AI Media Studio run records 722 passed, one inherited PR26 wording-regex mismatch and 40 controlled PostgreSQL-only skips out of 763. The owned HeyGen/client set passes 13/13. Independent checker, security and App QA are clean at P0=P1=P2=P3=0; App QA reports no slice warning.
+- Exact remaining gates: draft GitHub handoff and later reviewed merge; named staging backup/apply/restart/rollback rehearsal for the still-unapplied migrations; server-side governance/content approval and launch-intent/snapshot authority; provisioned budget plus quote/sandbox attestations; verified HeyGen credentials/account/quota/billing; one separately cost-approved one-video sandbox; then separate batch-spend and Replit deployment approvals.
+
+## Reviewed checkpoint: durable production script batch
 
 - Branch: `codex/ai-media-studio-durable-script-batch`, commit `258b969f`, preserved as mergeable draft PR #141 and stacked on reviewed draft PR #136.
 - Target: select exactly ten tenant-eligible Kong sources, persist deterministic draft scripts for every one of the 50–100 blocked slots, and expose a provider-neutral production-batch workbench.

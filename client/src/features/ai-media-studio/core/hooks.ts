@@ -47,6 +47,17 @@ export function usePrepareProductionBatchScripts() {
   });
 }
 
+export function useApproveProductionBatchScripts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: mediaStudioCoreApi.approveProductionBatchScripts,
+    onSuccess: (response) => {
+      queryClient.setQueryData(coreStudioKeys.productionBatch, response);
+      return queryClient.invalidateQueries({ queryKey: coreStudioKeys.productionBatch });
+    },
+  });
+}
+
 export function useConfigureHeyGenRoster() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  approveProductionBatchRequestSchema,
   prepareProductionBatchRequestSchema,
   productionBatchSchema,
   type ProductionBatch,
@@ -12,7 +13,7 @@ function pendingBatch(): ProductionBatch {
   return {
     batchId: `batch_${hex(1)}`, planId: `plan_${hex(2)}`, status: "not_started",
     avatarCount: 5, videosPerAvatar: 10, plannedVideoCount: 50,
-    canGenerate: false, noSpend: true, preparedAt: null,
+    canGenerate: false, noSpend: true, preparedAt: null, approvedAt: null,
     blockers: ["script_batch_required", "governance_approval_required", "budget_reservation_required",
       "sandbox_generation_required", "human_launch_approval_required"],
     groups: Array.from({ length: 5 }, (_, member) => ({
@@ -35,6 +36,17 @@ test("production batch request is strict and server-owned source fields cannot e
     { idempotencyKey: "batch-key-1", providerAccountId: "private" },
     [], null,
   ]) assert.equal(prepareProductionBatchRequestSchema.safeParse(unsafe).success, false);
+});
+
+test("batch approval request binds one exact public batch and rejects launch or spend controls", () => {
+  const request = { idempotencyKey: "approval-key-1", expectedBatchId: `batch_${hex(9)}` };
+  assert.deepEqual(approveProductionBatchRequestSchema.parse(request), request);
+  for (const unsafe of [
+    { ...request, slotIds: [`slot_${hex(1)}`] },
+    { ...request, allowSpend: true },
+    { ...request, providerKey: "heygen" },
+    { idempotencyKey: "short", expectedBatchId: `batch_${hex(9)}` },
+  ]) assert.equal(approveProductionBatchRequestSchema.safeParse(unsafe).success, false);
 });
 
 test("not-started production batches expose real pending slots with zero invented source/script placeholders", () => {
