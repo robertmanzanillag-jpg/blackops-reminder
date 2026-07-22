@@ -4,13 +4,14 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { planBlackRoomRemoteSync } from "./blackroom-remote-sync.mjs";
+import { applyBlackRoomDeliveryCounts, planBlackRoomRemoteSync, summarizeBlackRoomDeliveryLedger } from "./blackroom-remote-sync.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectDir = process.cwd();
 const port = Number(process.env.BLACKROOM_CONTROL_PORT || 5020);
 const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
 const workerStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-state.json");
+const workerLedgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-ledger.json");
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
 const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
 const remotePollMs = Math.max(10_000, Number(process.env.BLACKROOM_REMOTE_POLL_MS || 15_000));
@@ -38,6 +39,15 @@ function serializedCommand(name, options) {
 async function workerState() {
   try { return JSON.parse(await readFile(workerStatePath, "utf8")); }
   catch { return { running: false, pid: null, runs: 0, lastError: null }; }
+}
+
+async function queueWithDeliveryCounts(queue) {
+  try {
+    const ledger = JSON.parse(await readFile(workerLedgerPath, "utf8"));
+    return applyBlackRoomDeliveryCounts(queue, summarizeBlackRoomDeliveryLedger(ledger, new Date(), queue?.timezone));
+  } catch {
+    return applyBlackRoomDeliveryCounts(queue, { scheduled: 0, completed: 0, confirmed: 0 });
+  }
 }
 
 function wakeWorker() {
@@ -107,6 +117,7 @@ async function syncRemoteControl() {
   }
   try {
     queue ||= await serializedCommand("status");
+    queue = await queueWithDeliveryCounts(queue);
     await remoteRequest("POST", {
       deviceId: "blackroom-mac",
       queue,

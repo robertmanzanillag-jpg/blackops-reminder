@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -76,6 +76,26 @@ test("heartbeat reports the Mac online only inside the freshness window", () => 
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:01:00.000Z")), true);
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:02:00.000Z")), false);
   assert.equal(state.device?.appliedGeneration, 3);
+});
+
+test("panel keeps last confirmed delivery counters when the Mac goes offline", () => {
+  const localQueue = {
+    enabled: true, pausedAt: null, updatedAt: "2026-07-22T07:00:00.000Z", timezone: "America/New_York",
+    bufferDays: 14, bufferWeeks: 2, postsPerDay: 10, pendingPrioritySources: 0, usedSourceVideos: 0,
+    durationSamples: {}, analytics: {}, nextJob: null,
+    totals: { queued: 15, processing: 0, retry: 1, scheduled: 0, completed: 0 },
+  } as any;
+  const remoteQueue = {
+    ...localQueue,
+    totals: { ...localQueue.totals, scheduled: 3, completed: 1 },
+    delivery: { scheduled: 3, completed: 1, confirmed: 4 },
+  };
+
+  assert.equal(resolveBlackRoomPanelAgent(localQueue, remoteQueue, true), remoteQueue);
+  assert.deepEqual(resolveBlackRoomPanelAgent(localQueue, remoteQueue, false).totals, {
+    queued: 15, processing: 0, retry: 1, scheduled: 3, completed: 1,
+  });
+  assert.deepEqual(resolveBlackRoomPanelAgent(localQueue, remoteQueue, false).delivery, remoteQueue.delivery);
 });
 
 test("device authentication rejects missing, short, placeholder, and incorrect tokens", () => {
