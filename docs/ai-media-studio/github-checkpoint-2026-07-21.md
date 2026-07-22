@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local work: durable script review and launch readiness
 
-- Branch: `codex/ai-media-studio-launch-readiness`, stacked on mergeable draft PR #141. Local checker, security and App QA gates are complete; the draft PR URL is added after GitHub creation.
+- Branch: `codex/ai-media-studio-launch-readiness`, preserved as draft PR #144 and stacked on mergeable draft PR #141. Local checker, security and App QA gates are complete.
 - Review boundary: every selected variant exposes its full persisted video title, angle, hook, script, CTA, caption, hashtags and SEO keywords in the authenticated production-batch workbench. Approval requires an explicit acknowledgement and covers the exact complete batch atomically: 5–10 creators × exactly 10 scripts each (50–100).
 - Durable transition: one tenant-scoped, database-locked transaction binds the expected batch, selected-variant content checksum and canonical full-creative digest (including Video Title), records exact approval metadata and PostgreSQL time, promotes all scripts and only their selected/current variants plus their plan/slots together, and rejects partial, stale, ineligible, conflicting or cross-tenant work. Unselected alternatives remain `draft` without approval metadata. Replay is exact; the public projection remains provider-neutral and keeps `canGenerate=false` and `noSpend=true` after approval.
 - Safety boundary: this approval is content readiness only. It issues no governance/content authority, human launch authority, launch intent, sandbox or quote attestation; reserves no budget; creates no render job or outbox command; calls no provider; spends nothing; applies no migration; publishes and deploys nothing.

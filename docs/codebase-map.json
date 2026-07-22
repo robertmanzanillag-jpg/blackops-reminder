@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T01:54:03.440Z",
+  "generatedAt": "2026-07-22T01:56:24.665Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-launch-readiness",
   "packageName": "rest-express",
   "scripts": {
@@ -91,23 +91,9 @@
     "filesIndexed": 659,
     "imports": 2728,
     "routes": 494,
-    "symbols": 13036
+    "symbols": 13037
   },
   "directories": {
-    "script": {
-      "files": 40,
-      "indexed": 38,
-      "kinds": {
-        "script": 40
-      }
-    },
-    "tests": {
-      "files": 185,
-      "indexed": 176,
-      "kinds": {
-        "test": 185
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -180,6 +166,13 @@
         "docs": 1
       }
     },
+    "script": {
+      "files": 40,
+      "indexed": 38,
+      "kinds": {
+        "script": 40
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -220,6 +213,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 185,
+      "indexed": 176,
+      "kinds": {
+        "test": 185
       }
     },
     "tests/fixtures": {
@@ -19993,6 +19993,7 @@
         "canary",
         "durablePlan",
         "durableScriptBatch",
+        "launchReadiness",
         "officeSource",
         "pageSource",
         "routesSource",

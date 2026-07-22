@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T01:54:03.440Z
+Generated: 2026-07-22T01:56:24.665Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-launch-readiness`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 787 | 659 | 2728 | 494 | 13036 |
+| 787 | 659 | 2728 | 494 | 13037 |
 
 ## Entrypoints
 - `client/src/App.tsx`

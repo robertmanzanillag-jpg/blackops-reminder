@@ -109,6 +109,32 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #141 unmerged while the stacked chain is reviewed; request separate approval before staging, HeyGen sandbox, spend or Replit deployment.",
   },
   {
+    id: "ams-agent-launch-readiness",
+    title: "Durable script review and launch readiness",
+    owner: "AI Media Studio content approval squad",
+    state: "done",
+    branch: "codex/ai-media-studio-launch-readiness",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/144",
+    acceptance: [
+      "Every selected 5–10 × 10 creative exposes and seals Video Title, angle, hook, script, CTA, caption, hashtags and SEO",
+      "One tenant-locked whole-batch transition approves only scripts and their selected/current variants",
+      "Approval revalidates exact batch, source content, status, rights and moderation without creating launch or provider work",
+    ],
+    mergeGate: "Focused, HTTP and PostgreSQL proof, TypeScript, build, independent checker, security and App QA must pass before the draft GitHub checkpoint.",
+    evidence: [
+      "Draft PR #144 is stacked on draft PR #141",
+      "Focused checks 20/20; authenticated HTTP routes 2/2; owned PostgreSQL 16 exact-chain harness 1/1",
+      "Full suite: 722 passed, one inherited PR26 wording-regex failure and 40 controlled PostgreSQL-only skips of 763",
+      "TypeScript and production build pass",
+      "Independent checker, security and App QA: P0=P1=P2=P3=0",
+    ],
+    blockers: [
+      "Merge, migration rehearsal, governance and launch authority, one-video sandbox, batch spend and deployment remain separately blocked",
+      "The inherited Clippers chunk warning blocks deployment; no deployment is requested",
+    ],
+    nextAction: "Keep draft PR #144 unmerged and implement the offline authority/admission preflight as a separately reviewed slice; do not call HeyGen or authorize spend.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",
