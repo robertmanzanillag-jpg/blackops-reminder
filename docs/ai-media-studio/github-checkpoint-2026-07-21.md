@@ -4,7 +4,7 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local work: offline launch preflight
 
-- Branch: `codex/ai-media-studio-offline-launch-preflight`, stacked exactly on draft PR #144. No PR URL has been assigned to this branch yet.
+- Branch: `codex/ai-media-studio-offline-launch-preflight`, draft PR #146, stacked exactly on draft PR #144.
 - PR #144 bridge: the authenticated production-batch workbench now requires one explicit review confirmation per creator, covering all ten selected scripts for each of the exact 5–10 creators. Only the resulting exact `approved_ready` plan/batch identity enables the preflight read.
 - Read boundary: `GET /api/ai-media-studio/production-batches/:planId/launch-preflight` derives one coherent PostgreSQL-clock observation with exactly 14 ordered gates: batch integrity, plan window, source eligibility, local provider binding, governance coverage, launch intent, content approval, policy/kill switch, live provider verification, maximum quote, sandbox proof, human launch approval, authority snapshot, and budget/admission capacity. Every gate preserves the 5–10 × 10 shape (50–100 slots) and returns only bounded state, reason, counts and safe next-action codes.
 - Safety boundary: the response is `source=derived_read_only`, `canGenerate=false`, `sandboxExecutionAllowed=false`, `spendAuthorized=false`, `noSpend=true` and `authoritativeForAdmission=false`. All seven effect flags are false. The GET creates no intent, evidence, snapshot, reservation, render or outbox row; it calls no provider and cannot apply a migration, spend, publish or deploy.
