@@ -1,0 +1,47 @@
+# One-video HeyGen sandbox execution chain
+
+Status: design checkpoint only. No executor route, provider call, spend,
+migration, publishing, or deployment is authorized.
+
+## Current reviewed components
+
+1. Secure static secret reference and GET-only HeyGen verification.
+2. Exact plan/slot, approved script, avatar look, voice, governance, account,
+   credential version, vertical MP4 render-spec, and immutable evidence binding.
+3. Exact maximum-quote-to-human-approval bridge.
+4. Provider-neutral quote-readiness projection shared by launch preflight and
+   exact one-video execution control. For the current HeyGen adapter it reports
+   `provider_terms_required` because no authoritative account-specific
+   pre-generation quote is available; it performs no provider request or effect.
+5. Daily admission repository that can atomically create a budget reservation,
+   render job, and held outbox work after a complete authority snapshot.
+6. Held-work activation repository with a branded activation principal.
+7. Admitted submit, terminal observation, renewable artifact resolution, and
+   owned-storage ingest workers, composed with `autostart: false`.
+
+## Missing dependency order
+
+1. Authoritative account-specific maximum quote terms or provider quote.
+2. Durable maximum-quote coordinator and trusted attestation source.
+3. Current exact quote approval and authority snapshot.
+4. Operator-authorized one-slot admission coordinator.
+5. Operator-authorized held-work activation coordinator.
+6. Production runtime binding for the static HeyGen secret, account and
+   credential version, database capability lanes, owned object storage, and
+   artifact binding resolver.
+7. Explicit one-shot worker trigger for submit, terminal observation, and
+   ingest. This is the first step allowed to perform provider I/O and therefore
+   requires a separate Robert approval and exact cost approval.
+
+## Non-bypass rules
+
+- A browser never supplies money, internal UUIDs, provider credentials,
+  authority digests, reservation data, or activation capabilities.
+- Public pricing, wallet balance, and script length are not quote evidence.
+- Admission is not generation: provider I/O remains disabled after a held work
+  item is created until a separate operator authorization activates and runs it.
+- No automatic retry may resubmit an ambiguous provider request. Reconciliation
+  must use the same provider idempotency key.
+- A completed provider URL is ephemeral; the durable artifact identity is
+  resolved again and copied into owned storage before delivery.
+- Publishing remains a separate approval and connector boundary after ingest.

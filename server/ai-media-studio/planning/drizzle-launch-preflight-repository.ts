@@ -9,6 +9,8 @@ import {
 import type { TenantScope } from "../core/resource-domain";
 import { readProductionBatchEnvelope, verifyApprovedProductionBatchSlotMetadata } from "../production-batches/metadata-integrity";
 import { LaunchPreflightError, type LaunchPreflightRepository } from "./launch-preflight-contracts";
+import type { MaximumQuoteReadinessResolver } from "./maximum-quote-provider-contracts";
+import { projectMaximumQuoteReadiness, unavailableMaximumQuoteReadinessResolver } from "./maximum-quote-readiness-registry";
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type LaunchPreflightDatabase = { execute(query: SQL): Promise<ExecuteResult> };
@@ -55,7 +57,10 @@ function passed(code: LaunchPreflightGate["code"], requiredSlots: number): GateI
  * scoped and shares one repeatable-read/read-only snapshot and DB clock.
  */
 export class DrizzleLaunchPreflightRepository implements LaunchPreflightRepository {
-  constructor(private readonly db: LaunchPreflightTransactionalDatabase) {}
+  constructor(
+    private readonly db: LaunchPreflightTransactionalDatabase,
+    private readonly quoteReadinessResolver: MaximumQuoteReadinessResolver = unavailableMaximumQuoteReadinessResolver,
+  ) {}
 
   async observe(scope: TenantScope, publicPlanKey: string): Promise<LaunchPreflight | undefined> {
     try {
@@ -487,6 +492,12 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
     }
     const states = (state: LaunchPreflightGate["state"]) => gates.filter((entry) => entry.state === state).length;
     const passedCount = states("passed");
+    const quoteReadiness = projectMaximumQuoteReadiness({
+      exactEvidencePresent: quote.ready === required,
+      providerConfigured: providerReady === required,
+      providerKey: String(value(plan, "providerKey", "provider_key") ?? ""),
+      resolver: this.quoteReadinessResolver,
+    });
     const foundation = new Set(["batch_integrity", "plan_window", "source_eligibility", "provider_binding_local", "governance_coverage", "policy_kill_switch"]);
     const offlineReady = gates.every((entry) => foundation.has(entry.code) ? entry.state === "passed"
       : ["passed", "pending_external", "pending_human"].includes(entry.state));
@@ -494,6 +505,7 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
       version: 1, source: "derived_read_only",
       subject: { planId: publicPlanKey, batchId, avatarCount, videosPerAvatar: 10, plannedVideoCount: required },
       observedAt: now.toISOString(),
+      quoteReadiness,
       status: passedCount === 14 ? "ready_at_observation" : offlineReady ? "offline_ready_for_external_setup" : "blocked",
       canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
       authoritativeForAdmission: false,
@@ -516,6 +528,7 @@ function invalidBatchShapeReport(publicPlanKey: string, batchId: string, avatarC
     version: 1, source: "derived_read_only",
     subject: { planId: publicPlanKey, batchId, avatarCount, videosPerAvatar: 10, plannedVideoCount: required },
     observedAt: now.toISOString(), status: "blocked",
+    quoteReadiness: { state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider" },
     canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
     authoritativeForAdmission: false,
     effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,

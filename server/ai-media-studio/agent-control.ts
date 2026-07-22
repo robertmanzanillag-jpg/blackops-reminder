@@ -374,6 +374,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #166 unmerged; obtain authoritative account quote terms before adding the durable quote coordinator, then separately approve one live GET-only verification and one-video sandbox.",
   },
   {
+    id: "ams-agent-quote-readiness",
+    title: "Provider-neutral maximum-quote readiness",
+    owner: "Quote readiness maker, checker and App QA agents",
+    state: "done",
+    branch: "codex/ai-media-studio-quote-readiness",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/168",
+    acceptance: [
+      "Launch preflight and exact one-video control expose the same strict readiness states and safe next actions",
+      "Exact quote evidence cannot be impersonated by capability or explanatory readiness",
+      "HeyGen reports account-specific terms required without a provider call, secret resolution or estimated cost",
+      "No quote request, approval, reservation, render, outbox, spend, publishing, migration or deployment effect is introduced",
+    ],
+    mergeGate: "Focused contracts, repositories, client and UI tests, production build, independent checker and App QA must pass before the stacked draft PR is ready.",
+    evidence: [
+      "Both read models use one provider-neutral capability registry and strict public quote-readiness schema",
+      "The exact approval control remains enabled only by current server-attested quote and render-spec evidence",
+      "Production HeyGen composition uses the inert fail-closed adapter from draft PR #166",
+      "Draft PR #168 preserves the checkpoint; independent checker and App QA report P0=P1=P2=P3=0 and the production build passes",
+    ],
+    blockers: [
+      "Authoritative account-specific HeyGen pre-generation quote terms remain unavailable",
+      "The one-shot executor remains uninstalled and provider I/O remains disabled",
+      "Generation, spend, publishing, migration apply and Replit deployment remain separately blocked",
+    ],
+    nextAction: "Keep draft PR #168 unmerged; obtain authoritative account terms before implementing durable quote acquisition, then request separate approvals for live verification and one-video sandbox generation.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

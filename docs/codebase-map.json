@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T11:27:13.858Z",
+  "generatedAt": "2026-07-22T11:54:07.070Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -94,13 +94,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 890,
-    "filesIndexed": 742,
-    "imports": 3181,
+    "filesVisible": 893,
+    "filesIndexed": 745,
+    "imports": 3194,
     "routes": 501,
-    "symbols": 14648
+    "symbols": 14667
   },
   "directories": {
+    "docs/ai-media-studio": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "docs": 17
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 172,
+      "indexed": 153,
+      "kinds": {
+        "server": 172
+      }
+    },
+    "shared": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "shared": 17
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -151,13 +172,6 @@
         "client-page": 24
       }
     },
-    "docs/ai-media-studio": {
-      "files": 16,
-      "indexed": 16,
-      "kinds": {
-        "docs": 16
-      }
-    },
     "docs": {
       "files": 12,
       "indexed": 11,
@@ -194,25 +208,11 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 171,
-      "indexed": 152,
-      "kinds": {
-        "server": 171
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
       "kinds": {
         "server": 8
-      }
-    },
-    "shared": {
-      "files": 16,
-      "indexed": 16,
-      "kinds": {
-        "shared": 16
       }
     },
     "shared/models": {
@@ -5013,6 +5013,14 @@
     },
     {
       "path": "docs/ai-media-studio/oauth-provider-readiness.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/ai-media-studio/one-video-sandbox-execution-chain.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10772,6 +10780,8 @@
         "../core/resource-domain",
         "../production-batches/metadata-integrity",
         "./launch-preflight-contracts",
+        "./maximum-quote-provider-contracts",
+        "./maximum-quote-readiness-registry",
         "drizzle-orm",
         "node:crypto"
       ],
@@ -10843,6 +10853,7 @@
         "presentSnapshots",
         "providerReady",
         "quote",
+        "quoteReadiness",
         "quotesTotal",
         "required",
         "rows",
@@ -10890,8 +10901,11 @@
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-one-video-execution-control",
+        "../../../shared/ai-media-studio-quote-readiness",
         "../core/resource-domain",
         "../production-batches/metadata-integrity",
+        "./maximum-quote-provider-contracts",
+        "./maximum-quote-readiness-registry",
         "./one-video-execution-control-contracts",
         "drizzle-orm",
         "node:crypto"
@@ -10900,7 +10914,8 @@
         "DrizzleOneVideoExecutionControlRepository",
         "OneVideoExecutionControlDatabase",
         "OneVideoExecutionControlTransactionalDatabase",
-        "derivePersistedProviderVerificationState"
+        "derivePersistedProviderVerificationState",
+        "deriveQuoteReadiness"
       ],
       "symbols": [
         "DrizzleOneVideoExecutionControlRepository",
@@ -10926,6 +10941,7 @@
         "date",
         "decision",
         "derivePersistedProviderVerificationState",
+        "deriveQuoteReadiness",
         "envelope",
         "evidence",
         "evidenceDigest",
@@ -10951,6 +10967,7 @@
         "providerVerification",
         "quote",
         "quoteKey",
+        "quoteReadiness",
         "reasonCodes",
         "renderSpecDigest",
         "resourceShape",
@@ -11279,6 +11296,8 @@
         "MAXIMUM_QUOTE_UNAVAILABLE_REASON_CODES",
         "MaximumQuoteOutcome",
         "MaximumQuoteProvider",
+        "MaximumQuoteProviderReadiness",
+        "MaximumQuoteReadinessResolver",
         "MaximumQuoteUnavailableReasonCode",
         "isLockedMaximumQuoteRequest",
         "isMaximumQuoteOutcome"
@@ -11301,6 +11320,26 @@
         "outcome",
         "quote",
         "request"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/maximum-quote-readiness-registry.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-quote-readiness",
+        "./maximum-quote-provider-contracts"
+      ],
+      "exports": [
+        "MaximumQuoteReadinessRegistry",
+        "projectMaximumQuoteReadiness",
+        "unavailableMaximumQuoteReadinessResolver"
+      ],
+      "symbols": [
+        "MaximumQuoteReadinessRegistry",
+        "capability",
+        "projectMaximumQuoteReadiness",
+        "unavailable"
       ],
       "routes": []
     },
@@ -20553,6 +20592,7 @@
       "path": "shared/ai-media-studio-launch-preflight.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-quote-readiness",
         "zod"
       ],
       "exports": [
@@ -20579,8 +20619,10 @@
         "launchPreflightReasonCodes",
         "launchPreflightResponseSchema",
         "launchPreflightSchema",
+        "maximumQuoteGate",
         "minimumReady",
         "offlineReady",
+        "quoteReadinessInvalid",
         "required",
         "summaryInvalid"
       ],
@@ -20653,6 +20695,7 @@
       "path": "shared/ai-media-studio-one-video-execution-control.ts",
       "kind": "shared",
       "imports": [
+        "./ai-media-studio-quote-readiness",
         "zod"
       ],
       "exports": [
@@ -20838,6 +20881,28 @@
         "productionBatchSchema",
         "productionBatchSlotIdentitySchema",
         "publicKey"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/ai-media-studio-quote-readiness.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "QuoteReadiness",
+        "quoteReadinessActionCodes",
+        "quoteReadinessReasonCodes",
+        "quoteReadinessSchema",
+        "quoteReadinessStates"
+      ],
+      "symbols": [
+        "expected",
+        "quoteReadinessActionCodes",
+        "quoteReadinessReasonCodes",
+        "quoteReadinessSchema",
+        "quoteReadinessStates"
       ],
       "routes": []
     },
@@ -22210,6 +22275,7 @@
       "kind": "test",
       "imports": [
         "../server/ai-media-studio/planning/maximum-quote-provider-contracts",
+        "../server/ai-media-studio/planning/maximum-quote-readiness-registry",
         "../server/ai-media-studio/providers/heygen-account-maximum-quote-provider",
         "node:assert/strict",
         "node:test"
@@ -22218,7 +22284,9 @@
       "symbols": [
         "adapter",
         "digest",
+        "heygen",
         "outcome",
+        "registry",
         "request",
         "valid"
       ],
@@ -23021,6 +23089,7 @@
         "badPassed",
         "badSummary",
         "blockedReport",
+        "forgedQuoteReadiness",
         "parsed",
         "required",
         "unsafe"
@@ -24101,10 +24170,12 @@
       "imports": [
         "../server/ai-media-studio/in-memory",
         "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository",
+        "../server/ai-media-studio/planning/maximum-quote-readiness-registry",
         "../server/ai-media-studio/planning/one-video-execution-control-contracts",
         "../server/ai-media-studio/planning/one-video-execution-control-service",
         "../server/ai-media-studio/production-batches/metadata-integrity",
         "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/providers/heygen-account-maximum-quote-provider",
         "../shared/ai-media-studio-one-video-execution-control",
         "express",
         "node:assert/strict",
@@ -24136,6 +24207,7 @@
         "effect",
         "exact",
         "fake",
+        "forged",
         "getWithBody",
         "governanceId",
         "hash",
@@ -24160,6 +24232,7 @@
         "renderSpecKey",
         "repository",
         "req",
+        "resolver",
         "response",
         "routeHarness",
         "routes",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { quoteReadinessSchema } from "./ai-media-studio-quote-readiness";
 
 export const launchPreflightGateCodes = [
   "batch_integrity", "plan_window", "source_eligibility", "provider_binding_local",
@@ -56,6 +57,7 @@ export const launchPreflightSchema = z.object({
     plannedVideoCount: z.number().int().min(50).max(100),
   }).strict(),
   observedAt: z.string().datetime({ offset: true }),
+  quoteReadiness: quoteReadinessSchema,
   status: z.enum(["blocked", "offline_ready_for_external_setup", "ready_at_observation"]),
   canGenerate: z.literal(false),
   sandboxExecutionAllowed: z.literal(false),
@@ -106,7 +108,14 @@ export const launchPreflightSchema = z.object({
     : gate.state === "passed" || gate.state === "pending_external" || gate.state === "pending_human");
   const expectedStatus = allPassed ? "ready_at_observation"
     : offlineReady ? "offline_ready_for_external_setup" : "blocked";
-  if (invalidGate || summaryInvalid || value.status !== expectedStatus) {
+  const maximumQuoteGate = value.gates.find((gate) => gate.code === "maximum_quote")!;
+  const quoteReadinessInvalid = (maximumQuoteGate.state === "passed")
+      !== (value.quoteReadiness.state === "evidence_present")
+    || (["quote_request_available", "provider_terms_required"].includes(value.quoteReadiness.state)
+      && value.gates.find((gate) => gate.code === "provider_binding_local")?.state !== "passed")
+    || (value.quoteReadiness.reasonCode === "provider_not_configured"
+      && value.gates.find((gate) => gate.code === "provider_binding_local")?.state === "passed");
+  if (invalidGate || summaryInvalid || quoteReadinessInvalid || value.status !== expectedStatus) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "launch preflight invariants are inconsistent" });
   }
 });

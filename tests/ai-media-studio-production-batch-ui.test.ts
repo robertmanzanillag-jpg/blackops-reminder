@@ -185,6 +185,11 @@ test("approved batch keeps execution inert while exposing a separate exact-quote
   assert.match(hooks, /oneVideoExecutionControl\(planId, batchId, slotId\)/);
   assert.match(workbench, /key=\{`\$\{batch\.planId\}:\$\{batch\.batchId\}:\$\{selectedSlotId\}`\}/);
   assert.match(workbench, /Execution disabled\. This screen cannot call HeyGen or spend credits\./);
+  assert.match(workbench, /Exact quote evidence present/);
+  assert.match(workbench, /Provider terms required/);
+  assert.match(workbench, /Maximum-quote readiness/);
+  assert.match(workbench, /Public rates, wallet balance, and script length are not quote evidence/);
+  assert.match(workbench, /Add account-specific quote terms/);
   assert.match(workbench, /Refresh does not contact HeyGen/);
   assert.match(workbench, /Server-attested maximum quote/);
   assert.match(workbench, /formatMaximumQuoteUsd/);
