@@ -11,16 +11,29 @@ import type {
   SourceFilters,
   SourcesResponse,
   AutomationPolicy,
+  ReusableScriptAssetListRequest,
+  ReusableScriptAssetSaveRequest,
 } from "./types";
 import type { MediaAsset } from "@shared/ai-media-studio-core";
 import type { PublishingPreview } from "@shared/ai-media-studio-operations";
 import { sourceEligibilityReviewResponseSchema } from "@shared/ai-media-studio-source-eligibility";
 import { sourceScriptPreviewResponseSchema } from "@shared/ai-media-studio-source-to-script";
 import { sourceToBatchAutomationResponseSchema } from "@shared/ai-media-studio-source-to-batch";
+import {
+  reusableScriptAssetListResponseSchema,
+  reusableScriptAssetSaveResponseSchema,
+} from "@shared/ai-media-studio-reusable-script-assets";
 import { actionableApiError } from "../governance/errors";
 import type { SourceEligibilityReviewInput, SourceScriptPreviewRequest } from "./types";
 
 const API_ROOT = "/api/ai-media-studio";
+
+export class OperationsApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "OperationsApiError";
+  }
+}
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
@@ -31,12 +44,15 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const fallback = `Request failed (${response.status})`;
     let message = fallback;
+    let code: string | undefined;
     try {
-      message = actionableApiError(await response.json(), fallback);
+      const body = await response.json() as { code?: unknown };
+      message = actionableApiError(body, fallback);
+      if (typeof body.code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/u.test(body.code)) code = body.code;
     } catch {
       // Retain the bounded status message when no JSON body is available.
     }
-    throw new Error(message);
+    throw new OperationsApiError(message, response.status, code);
   }
   return response.json() as Promise<T>;
 }
@@ -94,6 +110,14 @@ export const operationsApi = {
   previewSourceScript: async (input: SourceScriptPreviewRequest) => {
     const response = await post<unknown>("/automation/sources/scripts/preview", input);
     return sourceScriptPreviewResponseSchema.parse(response);
+  },
+  reusableScriptAssets: async (filters: ReusableScriptAssetListRequest) => {
+    const response = await requestJson<unknown>(`/automation/sources/scripts/assets${queryString(filters)}`);
+    return reusableScriptAssetListResponseSchema.parse(response);
+  },
+  saveReusableScriptAsset: async (input: ReusableScriptAssetSaveRequest) => {
+    const response = await post<unknown>("/automation/sources/scripts/assets", input);
+    return reusableScriptAssetSaveResponseSchema.parse(response);
   },
   prepareSourceProductionBatch: async () => {
     const response = await post<unknown>("/automation/sources/production-batch/prepare", {});
