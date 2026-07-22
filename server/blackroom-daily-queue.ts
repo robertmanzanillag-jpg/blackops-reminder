@@ -136,6 +136,14 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
       confidence: "collecting",
       networkSamples: { tiktok: 0, facebook: 0, youtube: 0 },
       recommendedTimes: [],
+      tiktokMedianViews: 0,
+      tiktokLowViewRate: 0,
+      creativeStrategy: "drop_first",
+      creativeStrategyVersion: 0,
+      creativeStrategySampleBaseline: 0,
+      creativeStrategyPostIdsBaseline: [],
+      creativeChangedAt: "",
+      creativeReason: "Recolectando señal creativa de TikTok (0/5).",
       reason: "Recolectando resultados comparables (0/21); los horarios siguen explorando las 24 horas.",
     },
   };
@@ -454,7 +462,9 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       prioritySources: Array.isArray(parsed.prioritySources) ? parsed.prioritySources : [],
       extraPostsByDate: parsed.extraPostsByDate && typeof parsed.extraPostsByDate === "object" ? parsed.extraPostsByDate : {},
       adHocExtraDates: Array.isArray(parsed.adHocExtraDates) ? parsed.adHocExtraDates : [],
-      analytics: parsed.analytics && typeof parsed.analytics === "object" ? parsed.analytics : createBlackRoomQueueState(now).analytics,
+      analytics: parsed.analytics && typeof parsed.analytics === "object"
+        ? { ...createBlackRoomQueueState(now).analytics, ...parsed.analytics }
+        : createBlackRoomQueueState(now).analytics,
     };
   } catch (error: any) {
     if (error?.code === "ENOENT") return createBlackRoomQueueState(now);

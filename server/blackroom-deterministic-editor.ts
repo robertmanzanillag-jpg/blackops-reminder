@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration } from "./blackroom-daily-queue";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
+import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
 
 export const BLACKROOM_CHANNEL_ID = "UCi__qHBfHLlYg0fu86BUA8g";
 export const BLACKROOM_CHANNEL_HANDLE = "@blackroom_us";
@@ -11,7 +12,7 @@ export interface BlackRoomEnergySample { timeSeconds: number; rmsDb: number }
 export interface BlackRoomEditPlan {
   jobId: string; slot: string; targetDate: string; videoId: string; videoUrl: string; title: string; dj: string;
   language: "en" | "es"; format: "vertical" | "horizontal"; durationSeconds: BlackRoomExperimentDuration;
-  windowStartSeconds: number; windowEndSeconds: number; caption: string;
+  windowStartSeconds: number; windowEndSeconds: number; caption: string; creativeStrategy: BlackRoomCreativeStrategy;
 }
 
 export async function commitBlackRoomReservation(
@@ -49,11 +50,22 @@ function isActionableJob(job: BlackRoomDailyJob, now: Date): boolean {
     && (!job.notBefore || new Date(job.notBefore).getTime() <= now.getTime());
 }
 
-function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[]): BlackRoomExperimentDuration {
+function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[], queue: BlackRoomQueueState): BlackRoomExperimentDuration {
   const allowed = job.requirements.durationsSeconds
     .filter((duration): duration is BlackRoomExperimentDuration => [15, 30, 60, 120, 300, 600].includes(duration));
   if (!allowed.length) throw new Error("BlackRoom job has no supported durations");
   const counts = new Map(allowed.map((duration) => [duration, entries.filter((entry) => entry.durationSeconds === duration).length]));
+  const requiredSamples = Math.max(1, Number(job.requirements.minimumClipsPerDuration || 1));
+  const unexplored = allowed.find((duration) => (counts.get(duration) || 0) < requiredSamples);
+  if (unexplored) return unexplored;
+  if (Number(queue.analytics?.networkSamples?.tiktok || 0) >= 5
+    && Number(queue.analytics?.tiktokLowViewRate || 0) >= 0.7) {
+    const shortTests = allowed.filter((duration) => duration === 15 || duration === 30);
+    if (shortTests.length) {
+      const shortMinimum = Math.min(...shortTests.map((duration) => counts.get(duration) || 0));
+      return shortTests.find((duration) => counts.get(duration) === shortMinimum)!;
+    }
+  }
   const minimum = Math.min(...counts.values());
   return allowed.find((duration) => counts.get(duration) === minimum)!;
 }
@@ -69,10 +81,18 @@ function chooseFormat(duration: BlackRoomExperimentDuration, entries: BlackRoomL
   return vertical <= horizontal ? "vertical" : "horizontal";
 }
 
-function buildCaption(dj: string, language: "en" | "es", duration: number, seed: string): string {
+function buildCaption(dj: string, language: "en" | "es", duration: number, seed: string, strategy: BlackRoomCreativeStrategy): string {
   const templates = language === "en"
-    ? [`${dj} found the drop. Stay for the switch.`, `The room changed when ${dj} hit this transition.`, `${duration >= 300 ? "Long-form session" : "Drop incoming"} with ${dj} at BlackRoom.`]
-    : [`${dj} encontró el drop. Quédate para el cambio.`, `La sala cambió cuando ${dj} soltó esta transición.`, `${duration >= 300 ? "Sesión extendida" : "Se acerca el drop"} con ${dj} en BlackRoom.`];
+    ? strategy === "instant_drop"
+      ? [`No intro. ${dj} goes straight to the drop.`, `${dj} starts at full pressure.`, `The first second belongs to ${dj}.`]
+      : strategy === "build_then_drop"
+        ? [`Wait for ${dj} to flip this room.`, `The tension before ${dj}'s switch is the point.`, `Stay for the payoff from ${dj}.`]
+        : [`${dj} found the drop. Stay for the switch.`, `The room changed when ${dj} hit this transition.`, `${duration >= 300 ? "Long-form session" : "Drop incoming"} with ${dj} at BlackRoom.`]
+    : strategy === "instant_drop"
+      ? [`Sin intro: ${dj} entra directo al drop.`, `${dj} empieza con presión total.`, `El primer segundo es de ${dj}.`]
+      : strategy === "build_then_drop"
+        ? [`Espera a que ${dj} cambie la sala.`, `La tensión antes del cambio de ${dj} es la clave.`, `Quédate para el golpe de ${dj}.`]
+        : [`${dj} encontró el drop. Quédate para el cambio.`, `La sala cambió cuando ${dj} soltó esta transición.`, `${duration >= 300 ? "Sesión extendida" : "Se acerca el drop"} con ${dj} en BlackRoom.`];
   return `${templates[stableNumber(seed) % templates.length]} #BlackRoom #DJSet`;
 }
 
@@ -115,7 +135,8 @@ export function planBlackRoomDeterministicEdit(input: {
   const slot = job.slots.find((candidate) => !occupied.has(candidate.localTime))?.localTime;
   if (!slot) return null;
   const jobEntries = input.ledger.entries.filter((entry) => entry.jobId === job.id);
-  const durationSeconds = chooseDuration(job, jobEntries);
+  const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
+  const durationSeconds = chooseDuration(job, jobEntries, input.queue);
   const format = chooseFormat(durationSeconds, jobEntries);
   const language = chooseLanguage(jobEntries);
   const margin = durationSeconds >= 300 ? 180 : 90;
@@ -155,15 +176,15 @@ export function planBlackRoomDeterministicEdit(input: {
     ? eligible.find((candidate) => candidate.video.id === input.priorityVideoId)
     : undefined;
   eligible.sort((left, right) => left.video.id.localeCompare(right.video.id));
-  const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}`;
+  const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${creativeStrategy}`;
   const selected = priority || eligible[stableNumber(seed) % eligible.length];
   const windowStartSeconds = selected.windowStart;
   return {
     jobId: job.id, slot, targetDate: job.targetDate, videoId: selected.video.id,
     videoUrl: blackRoomVideoUrl(selected.video), title: selected.video.title, dj: selected.dj,
-    language, format, durationSeconds, windowStartSeconds,
+    language, format, durationSeconds, creativeStrategy, windowStartSeconds,
     windowEndSeconds: windowStartSeconds + windowDuration,
-    caption: buildCaption(selected.dj, language, durationSeconds, seed),
+    caption: buildCaption(selected.dj, language, durationSeconds, seed, creativeStrategy),
   };
 }
 
@@ -182,7 +203,12 @@ export function parseBlackRoomEnergySamples(output: string): BlackRoomEnergySamp
   return samples.filter((sample) => Number.isFinite(sample.timeSeconds) && Number.isFinite(sample.rmsDb));
 }
 
-export function findBlackRoomDropOffset(samples: BlackRoomEnergySample[], durationSeconds: number, windowDurationSeconds: number): number {
+export function findBlackRoomDropOffset(
+  samples: BlackRoomEnergySample[],
+  durationSeconds: number,
+  windowDurationSeconds: number,
+  strategy: BlackRoomCreativeStrategy = "drop_first",
+): number {
   const maximumStart = Math.max(0, windowDurationSeconds - durationSeconds);
   let best = { rise: Number.NEGATIVE_INFINITY, timeSeconds: 2 };
   for (let index = 1; index < samples.length; index += 1) {
@@ -190,7 +216,8 @@ export function findBlackRoomDropOffset(samples: BlackRoomEnergySample[], durati
     const rise = current.rmsDb - previous.rmsDb;
     if (current.timeSeconds >= 2 && current.timeSeconds <= maximumStart + 5 && rise > best.rise) best = { rise, timeSeconds: current.timeSeconds };
   }
-  return Math.max(0, Math.min(maximumStart, Math.round((best.timeSeconds - 2) * 10) / 10));
+  const leadSeconds = strategy === "instant_drop" ? 0.25 : strategy === "build_then_drop" ? 4 : 2;
+  return Math.max(0, Math.min(maximumStart, Math.round((best.timeSeconds - leadSeconds) * 10) / 10));
 }
 
 export function buildBlackRoomVideoFilter(format: "vertical" | "horizontal"): string {

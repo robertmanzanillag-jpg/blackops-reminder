@@ -154,6 +154,55 @@ test("audio energy parser places the strongest rise two seconds after clip start
   const samples = parseBlackRoomEnergySamples(output);
   assert.equal(samples.length, 4);
   assert.equal(findBlackRoomDropOffset(samples, 30, 120), 1);
+  assert.equal(findBlackRoomDropOffset(samples, 30, 120, "instant_drop"), 2.8);
+  assert.equal(findBlackRoomDropOffset(samples, 30, 120, "build_then_drop"), 0);
+});
+
+test("CEO low-view strategy favors short clips after every duration has evidence", () => {
+  const state = queue();
+  state.jobs[0].slots.push({ localTime: "09:30", timezone: "America/New_York" });
+  state.jobs[0].requirements.posts = 7;
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 10;
+  state.analytics = { creativeStrategy: "instant_drop", tiktokLowViewRate: 1, networkSamples: { tiktok: 5 } };
+  const explored = {
+    version: 1,
+    entries: [15, 30, 60, 120, 300, 600].map((durationSeconds, index) => ({
+      jobId: "job-1", slot: state.jobs[0].slots[index].localTime,
+      videoId: `old-${index}`, dj: "DJ A", language: index % 2 ? "es" : "en",
+      format: durationSeconds >= 300 ? "horizontal" : "vertical", durationSeconds,
+    })),
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: explored as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "fresh", title: "DJ A - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.durationSeconds, 15);
+  assert.equal(plan?.creativeStrategy, "instant_drop");
+  assert.match(plan?.caption || "", /No intro|Sin intro/);
+});
+
+test("CEO does not bias duration from fewer than five TikTok samples", () => {
+  const state = queue();
+  state.jobs[0].slots = ["00:30", "02:00", "03:30", "05:00", "06:30", "08:00", "09:30", "11:00", "12:30"]
+    .map((localTime) => ({ localTime, timezone: "America/New_York" }));
+  state.jobs[0].requirements.posts = 9;
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 10;
+  state.analytics = { creativeStrategy: "drop_first", tiktokLowViewRate: 1, networkSamples: { tiktok: 4 } };
+  const explored = {
+    version: 1,
+    entries: [15, 15, 30, 30, 60, 120, 300, 600].map((durationSeconds, index) => ({
+      jobId: "job-1", slot: state.jobs[0].slots[index].localTime,
+      videoId: `old-${index}`, dj: "DJ A", language: index % 2 ? "es" : "en",
+      format: durationSeconds >= 300 ? "horizontal" : "vertical", durationSeconds,
+    })),
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: explored as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "fresh", title: "DJ A - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.durationSeconds, 60);
 });
 
 test("command builders keep downloads partial and renders platform-compatible", () => {

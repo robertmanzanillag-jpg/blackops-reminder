@@ -42,7 +42,13 @@ test("CEO schedule advances the generation without adding fake chat messages", (
   const state = createBlackRoomRemoteControlState(now);
   appendBlackRoomCeoCommand(state, {
     id: "ceo-1", type: "ceo_schedule", slotsByDate: { "2026-07-23": ["00:30", "04:00"] }, createdAt: now.toISOString(),
-    analytics: { sampleCount: 4, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting", networkSamples: { tiktok: 2, facebook: 1, youtube: 1 }, recommendedTimes: [], reason: "collecting" },
+    analytics: {
+      sampleCount: 4, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting",
+      networkSamples: { tiktok: 2, facebook: 1, youtube: 1 }, recommendedTimes: [], reason: "collecting",
+      tiktokMedianViews: 0, tiktokLowViewRate: 0, creativeStrategy: "drop_first",
+      creativeStrategyVersion: 0, creativeStrategySampleBaseline: 0, creativeStrategyPostIdsBaseline: [],
+      creativeChangedAt: "", creativeReason: "collecting",
+    },
   });
   assert.equal(state.generation, 1);
   assert.equal(state.commands.at(-1)?.type, "ceo_schedule");
@@ -243,7 +249,7 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /sube 3 videos más hoy/);
   assert.match(blackRoomPage, /TikTok \+ Facebook \+ YouTube/);
   assert.match(blackRoomPage, /facebook\.com\/profile\.php\?id=61568193332044/);
-  assert.match(blackRoomPage, /confirmar las tres cuentas/);
+  assert.match(blackRoomPage, /confirmar todos los destinos requeridos/);
   assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
   assert.match(blackRoomPage, /Trabajando de verdad/);
   assert.match(blackRoomPage, /Actividad en vivo/);
@@ -251,6 +257,8 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /segmentos sin repetir ni solapar/);
   assert.match(blackRoomPage, /Chat y órdenes/);
   assert.match(blackRoomPage, /aria-live="polite"/);
+  assert.match(blackRoomPage, /técnica CEO/);
+  assert.match(blackRoomPage, /mediana TikTok/);
   assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
   assert.match(blackRoomPage, /setAttribute\('role','log'\)/);
   assert.match(blackRoomPage, /aria-relevant','additions/);
