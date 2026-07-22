@@ -189,6 +189,32 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #147 unmerged; accept the HeyGen API key only through the approved secret manager plus 5–10 avatar/voice IDs, and do not call HeyGen until live checks and Robert's explicit one-video cost approval pass.",
   },
   {
+    id: "ams-agent-static-heygen-onboarding",
+    title: "Secure static HeyGen credential and roster onboarding",
+    owner: "AI Media Studio provider onboarding squad",
+    state: "done",
+    branch: "codex/ai-media-studio-heygen-onboarding-readiness",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/148",
+    acceptance: [
+      "Persist only an approved secret-manager reference and digest, never the HeyGen API key value",
+      "Accept 5–10 avatar and voice ID pairs as pending verification and create exactly ten blocked no-spend slots per avatar",
+      "Expose authenticated read-only onboarding readiness while pending resources remain inactive and non-selectable",
+    ],
+    mergeGate: "Static credential, roster, HTTP, browser, PostgreSQL, TypeScript, build, checker, security and App QA evidence must pass with no P0-P3 before the draft checkpoint is ready.",
+    evidence: [
+      "Draft PR #148 is stacked on draft PR #147",
+      "Final App QA targeted run passes 44/44; TypeScript, production build, codebase map and diff hygiene pass",
+      "Disposable PostgreSQL 16 exact PR1–PR27 chain plus pending PR28 forward, rotation and rollback guard passes 1/1",
+      "Independent checker, security and App QA final gates: P0=P1=P2=P3=0",
+    ],
+    blockers: [
+      "The API key has not been placed in the deployment secret manager and no live HeyGen verification has run",
+      "The pending PR28 migration is outside the manifest and unapplied; promotion and application require separate approval",
+      "One-video generation, 5 × 10 batch spend, publishing and Replit deployment remain separately blocked",
+    ],
+    nextAction: "Keep draft PR #148 unmerged; Robert places the API key only in the approved secret manager and supplies 5–10 avatar/voice IDs, then separately approve read-only live verification before any quote or generation.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

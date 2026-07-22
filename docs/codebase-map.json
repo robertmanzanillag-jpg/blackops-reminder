@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T04:50:11.524Z",
+  "generatedAt": "2026-07-22T04:52:39.372Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-onboarding-readiness",
   "packageName": "rest-express",
   "scripts": {
@@ -92,21 +92,9 @@
     "filesIndexed": 698,
     "imports": 2958,
     "routes": 497,
-    "symbols": 13774
+    "symbols": 13775
   },
   "directories": {
-    "client/src": {
-      "files": 154,
-      "indexed": 152,
-      "kinds": {
-        "other": 44,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 24
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -143,6 +131,18 @@
       "indexed": 2,
       "kinds": {
         "other": 13
+      }
+    },
+    "client/src": {
+      "files": 154,
+      "indexed": 152,
+      "kinds": {
+        "other": 44,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
       }
     },
     "docs/ai-media-studio": {
@@ -20658,7 +20658,8 @@
         "sandbox",
         "sandboxReadiness",
         "snapshot",
-        "staging"
+        "staging",
+        "staticHeyGenOnboarding"
       ],
       "routes": []
     },

@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 8);
+  assert.equal(snapshot.summary.done, 9);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -55,6 +55,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const launchReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-launch-readiness");
   const offlinePreflight = snapshot.workItems.find((item) => item.id === "ams-agent-offline-launch-preflight");
   const sandboxReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-sandbox-readiness");
+  const staticHeyGenOnboarding = snapshot.workItems.find((item) => item.id === "ams-agent-static-heygen-onboarding");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -96,6 +97,12 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(sandboxReadiness?.blockers.join(" ") ?? "", /staging migration rehearsal[\s\S]*live HeyGen[\s\S]*maximum quote[\s\S]*owned storage[\s\S]*callbacks[\s\S]*one-video cost approval/u);
   assert.match(sandboxReadiness?.blockers.join(" ") ?? "", /5 × 10 canary spend[\s\S]*Replit deployment[\s\S]*no provider call or spend/u);
   assert.match(sandboxReadiness?.nextAction ?? "", /PR #147 unmerged[\s\S]*approved secret manager[\s\S]*explicit one-video cost approval/u);
+  assert.equal(staticHeyGenOnboarding?.state, "done");
+  assert.equal(staticHeyGenOnboarding?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/148");
+  assert.match(staticHeyGenOnboarding?.acceptance.join(" ") ?? "", /secret-manager reference[\s\S]*5–10 avatar[\s\S]*blocked no-spend slots/u);
+  assert.match(staticHeyGenOnboarding?.evidence.join(" ") ?? "", /PR #148[\s\S]*PostgreSQL 16[\s\S]*P0=P1=P2=P3=0/u);
+  assert.match(staticHeyGenOnboarding?.blockers.join(" ") ?? "", /no live HeyGen verification[\s\S]*unapplied[\s\S]*Replit deployment/u);
+  assert.match(staticHeyGenOnboarding?.nextAction ?? "", /secret manager[\s\S]*avatar\/voice IDs[\s\S]*read-only live verification/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

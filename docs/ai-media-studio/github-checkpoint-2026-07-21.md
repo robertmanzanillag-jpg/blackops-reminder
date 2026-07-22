@@ -13,6 +13,14 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 - Safety boundary: no real API, secret, network/provider call, credit spend, migration application, deployment or publication occurred or is authorized.
 - Next gates: keep draft PR #147 unmerged; then Robert supplies the HeyGen API key through the approved secret manager plus 5–10 avatar and voice IDs. Complete live provider verification, a maximum quote, owned-storage and callback readiness, and explicit one-video cost approval before generating one real video. Only after that proof may the 5 × 10 canary proceed under separate batch-spend and Replit deployment approvals.
 
+## Secure HeyGen onboarding checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-heygen-onboarding-readiness`, preserved in draft PR [#148](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/148) and stacked on draft PR #147.
+- Added: secret-manager-reference-only credential binding; exact rotation; read-only onboarding status; pending 5–10 avatar/voice intake; exactly ten blocked slots per avatar; inactive/non-selectable pending resources.
+- Safety: no key value in HTTP/database/logs, no HeyGen/network call, no provider verification, no migration apply, no generation, no credit spend, no publishing and no deployment.
+- Evidence: final App QA targeted 44/44, PostgreSQL 16 pending PR28 rehearsal 1/1, TypeScript/build/map/diff pass, checker/security/App QA P0=P1=P2=P3=0.
+- Next gates: place the API key only in the deployment secret manager, supply 5–10 avatar/voice ID pairs, and separately approve read-only live verification. Quote, one-video cost, 5 × 10 spend, publishing and Replit deployment remain separate approvals.
+
 ## Active local work: offline launch preflight
 
 - Branch: `codex/ai-media-studio-offline-launch-preflight`, draft PR #146, stacked exactly on draft PR #144.

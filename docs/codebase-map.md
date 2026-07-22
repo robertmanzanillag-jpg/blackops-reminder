@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T04:50:11.524Z
+Generated: 2026-07-22T04:52:39.372Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-onboarding-readiness`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 833 | 698 | 2958 | 497 | 13774 |
+| 833 | 698 | 2958 | 497 | 13775 |
 
 ## Entrypoints
 - `client/src/App.tsx`
