@@ -271,6 +271,7 @@ export function buildMetricoolPayload(
   caption = input.caption,
 ) {
   const timezone = input.timezone || BLACKROOM_TIMEZONE;
+  const postTitle = caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
   const payload: Record<string, any> = {
     autoPublish: true,
     descendants: [],
@@ -292,16 +293,16 @@ export function buildMetricoolPayload(
       privacyOption: "PUBLIC_TO_EVERYONE",
       commercialContentThirdParty: false,
       commercialContentOwnBrand: false,
-      title: "",
+      title: postTitle || "BlackRoom DJ clip",
       autoAddMusic: false,
       photoCoverIndex: 0,
     };
   if (network === "facebook") payload.facebookData = {
     type: input.videoFormat === "vertical" && input.durationSeconds >= 3 && input.durationSeconds <= 90 ? "REEL" : "POST",
-    title: caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100) || "BlackRoom DJ clip",
+    title: postTitle || "BlackRoom DJ clip",
   };
   if (network === "youtube") payload.youtubeData = {
-    title: caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100) || "BlackRoom DJ Short",
+    title: postTitle || "BlackRoom DJ Short",
     type: "short",
     privacy: "public",
     tags: ["BlackRoom", "DJ", "Music", "Shorts"],
