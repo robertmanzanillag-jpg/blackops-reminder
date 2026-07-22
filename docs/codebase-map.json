@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T16:10:02.950Z",
+  "generatedAt": "2026-07-22T17:46:38.876Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -96,11 +96,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 954,
-    "filesIndexed": 804,
-    "imports": 3506,
+    "filesVisible": 957,
+    "filesIndexed": 807,
+    "imports": 3526,
     "routes": 507,
-    "symbols": 15764
+    "symbols": 15829
   },
   "directories": {
     ".agents/skills": {
@@ -225,17 +225,17 @@
       }
     },
     "tests": {
-      "files": 259,
-      "indexed": 248,
+      "files": 260,
+      "indexed": 249,
       "kinds": {
-        "test": 259
+        "test": 260
       }
     },
     "tests/fixtures": {
-      "files": 5,
-      "indexed": 3,
+      "files": 7,
+      "indexed": 5,
       "kinds": {
-        "test": 5
+        "test": 7
       }
     },
     "tests/helpers": {
@@ -13396,6 +13396,7 @@
         "requireStrictHeldAdmissionMutation",
         "requireStrictHeldAdmissionSession",
         "requireStrictHeyGenRosterMutation",
+        "requireStrictProductionBatchMutation",
         "requireStrictSourceAutomationSync",
         "requireStrictSourceEligibilityReview",
         "requireStrictSourceScriptPreview",
@@ -21012,24 +21013,33 @@
         "LOCAL_AUTH_USER_COOKIE_NAME",
         "allowsDevUserFallback",
         "createSignedLocalAuthCookieValue",
+        "exceptProductionBatchMutations",
         "getCurrentUserId",
         "getSystemUserId",
+        "isProductionBatchMutationRequest",
         "isPublicApiPath",
         "isPublicApiRequest",
+        "onlyProductionBatchMutations",
+        "requestHasRawQuery",
         "requireAppUser",
+        "requireAuthenticatedProductionBatchMutationBeforeBody",
         "resolveAuthenticatedUserId",
         "resolveCurrentUserId",
-        "resolveRequestApiPath"
+        "resolveRequestApiPath",
+        "sanitizeProductionBatchJsonParserError"
       ],
       "symbols": [
         "DEFAULT_DEV_USER_ID",
         "DEV_FALLBACK_ENVS",
+        "JSON_DECOMPRESSION_ERROR_CODES",
         "LOCAL_AUTH_USER_COOKIE_NAME",
+        "PRODUCTION_BATCH_MUTATION_PATH",
         "PUBLIC_API_PATHS",
         "RequestWithAuth",
         "actualBuffer",
         "allowsDevUserFallback",
         "authReq",
+        "candidate",
         "cleanUserId",
         "cleaned",
         "cleanedUserId",
@@ -21039,14 +21049,20 @@
         "createSignedLocalAuthCookieValue",
         "directHeader",
         "error",
+        "exceptProductionBatchMutations",
         "expected",
         "expectedBuffer",
         "getCurrentUserId",
         "getLocalAuthCookieSecret",
         "getSystemUserId",
         "header",
+        "isJsonParserError",
+        "isProductionBatchMutationRequest",
         "isPublicApiPath",
         "isPublicApiRequest",
+        "knownBodyParserError",
+        "onlyProductionBatchMutations",
+        "parserErrorStatus",
         "payload",
         "prefix",
         "rawPath",
@@ -21055,12 +21071,15 @@
         "readSignedLocalAuthCookie",
         "request",
         "requestFallbackAllowed",
+        "requestHasRawQuery",
         "requireAppUser",
         "resolveAuthenticatedUserId",
         "resolveCurrentUserId",
         "resolveRequestApiPath",
         "secret",
         "signLocalAuthCookiePayload",
+        "status",
+        "type",
         "userId",
         "verifySignedLocalAuthCookieValue"
       ],
@@ -23644,7 +23663,6 @@
       "exports": [],
       "symbols": [
         "blockers",
-        "component",
         "first",
         "members",
         "originalFetch",
@@ -23979,6 +23997,55 @@
         "verificationUrl",
         "verified",
         "verifiedBody"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-setup-ux-browser.test.ts",
+      "kind": "test",
+      "imports": [
+        "@vitejs/plugin-react",
+        "node:assert/strict",
+        "node:fs",
+        "node:http",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright",
+        "vite"
+      ],
+      "exports": [
+        "useConfigureHeyGenRoster",
+        "useHeyGenOnboardingReadiness",
+        "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan"
+      ],
+      "symbols": [
+        "activeLink",
+        "address",
+        "browser",
+        "bundledBrowser",
+        "cacheDir",
+        "clickSetupAndAssert",
+        "expectedHeading",
+        "invalidationEntry",
+        "launchBrowser",
+        "navigationEntry",
+        "navigationHooksPlugin",
+        "page",
+        "readyReadiness",
+        "repositoryRoot",
+        "server",
+        "setupLink",
+        "state",
+        "systemChrome",
+        "useConfigureHeyGenRoster",
+        "useHeyGenOnboardingReadiness",
+        "useHeyGenRoster",
+        "useHeyGenRosterDailyPlan",
+        "virtualHooksId",
+        "virtualHooksSource",
+        "vite"
       ],
       "routes": []
     },
@@ -27605,6 +27672,7 @@
         "../server/ai-media-studio/production-batches/contracts",
         "../server/ai-media-studio/providers/fake-video-provider",
         "../server/ai-media-studio/routes",
+        "../server/user-context",
         "../shared/ai-media-studio-production-batches",
         "express",
         "node:assert/strict",
@@ -27616,20 +27684,31 @@
         "address",
         "app",
         "approve",
+        "canonicalOrigin",
+        "corruptCompressed",
         "current",
         "endpoint",
         "generation",
         "harness",
         "headers",
+        "malformed",
+        "mutationHeaders",
+        "oversized",
         "pendingBatch",
+        "planId",
         "prepare",
         "previous",
         "publicKey",
+        "rawRequest",
+        "req",
+        "response",
         "retry",
+        "routes",
         "runtime",
         "server",
         "spoofed",
-        "unsafeApproval"
+        "unsafeApproval",
+        "unsupported"
       ],
       "routes": []
     },
@@ -30178,6 +30257,24 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/ai-media-studio-heygen-navigation-browser-entry.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/features/ai-media-studio/core/heygen-onboarding-panel",
+        "../../client/src/features/ai-media-studio/studio-shell",
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client"
+      ],
+      "exports": [],
+      "symbols": [
+        "queryClient",
+        "render",
+        "root"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/fixtures/ai-media-studio-heygen-onboarding-browser-entry.tsx",
       "kind": "test",
       "imports": [
@@ -30192,6 +30289,26 @@
         "readiness",
         "render",
         "root"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/fixtures/ai-media-studio-heygen-roster-invalidation-browser-entry.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/features/ai-media-studio/core/hooks",
+        "../../client/src/features/ai-media-studio/core/types",
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client"
+      ],
+      "exports": [],
+      "symbols": [
+        "MutationHarness",
+        "mutation",
+        "observation",
+        "queryClient",
+        "readiness"
       ],
       "routes": []
     },
@@ -30805,12 +30922,21 @@
       "exports": [],
       "symbols": [
         "cookieValue",
+        "early",
+        "middleware",
         "mountedClipperCallback",
+        "next",
+        "normal",
         "parts",
         "previous",
+        "productionBatchMutationPath",
+        "request",
         "requestWithHeader",
         "res",
+        "response",
         "tamperedCookie",
+        "unrelated",
+        "unrelatedZlib",
         "userId",
         "withEnv"
       ],
@@ -30956,6 +31082,7 @@
     "tests/ai-media-studio-heygen-roster-service.test.ts",
     "tests/ai-media-studio-heygen-secure-setup-contract.test.ts",
     "tests/ai-media-studio-heygen-secure-setup-routes.test.ts",
+    "tests/ai-media-studio-heygen-setup-ux-browser.test.ts",
     "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",
     "tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",

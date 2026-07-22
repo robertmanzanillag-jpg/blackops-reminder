@@ -5,13 +5,20 @@ import {
   LOCAL_AUTH_USER_COOKIE_NAME,
   allowsDevUserFallback,
   createSignedLocalAuthCookieValue,
+  exceptProductionBatchMutations,
   getSystemUserId,
+  isProductionBatchMutationRequest,
   isPublicApiPath,
   isPublicApiRequest,
+  onlyProductionBatchMutations,
+  requestHasRawQuery,
   requireAppUser,
+  sanitizeProductionBatchJsonParserError,
   resolveAuthenticatedUserId,
   resolveCurrentUserId,
 } from "../server/user-context";
+
+const productionBatchMutationPath = "/api/ai-media-studio/production-batches/plan_000000000000000000000002/prepare-scripts";
 
 function requestWithHeader(headerValue?: string, extras: Record<string, unknown> = {}) {
   return {
@@ -99,6 +106,75 @@ test("strict authenticated identity accepts session and signed cookie sources", 
       "cookie-user",
     );
   });
+});
+
+test("production-batch session wrappers run early only for the two protected mutation templates", () => {
+  let middlewareCalls = 0;
+  let nextCalls = 0;
+  const middleware = (_req: any, _res: any, next: () => void) => { middlewareCalls += 1; next(); };
+  const early = onlyProductionBatchMutations(middleware);
+  const normal = exceptProductionBatchMutations(middleware);
+  const response = {} as any;
+  const next = () => { nextCalls += 1; };
+
+  early({ method: "GET", originalUrl: "/clippers/legal/privacy" } as any, response, next);
+  assert.deepEqual({ middlewareCalls, nextCalls }, { middlewareCalls: 0, nextCalls: 1 });
+  normal({ method: "GET", originalUrl: "/clippers/legal/privacy" } as any, response, next);
+  assert.deepEqual({ middlewareCalls, nextCalls }, { middlewareCalls: 1, nextCalls: 2 });
+
+  early({ method: "POST", originalUrl: productionBatchMutationPath } as any, response, next);
+  assert.deepEqual({ middlewareCalls, nextCalls }, { middlewareCalls: 2, nextCalls: 3 });
+  normal({ method: "POST", originalUrl: productionBatchMutationPath } as any, response, next);
+  assert.deepEqual({ middlewareCalls, nextCalls }, { middlewareCalls: 2, nextCalls: 4 });
+
+  assert.equal(isProductionBatchMutationRequest("POST", productionBatchMutationPath.replace("prepare", "approve")), true);
+  assert.equal(isProductionBatchMutationRequest("POST", productionBatchMutationPath.toUpperCase()), true);
+  assert.equal(isProductionBatchMutationRequest("POST", `${productionBatchMutationPath}/`), true);
+  assert.equal(isProductionBatchMutationRequest("GET", productionBatchMutationPath), false);
+  assert.equal(isProductionBatchMutationRequest("POST", "/api/auth/login"), false);
+  assert.equal(requestHasRawQuery(`${productionBatchMutationPath}?__proto__`), true);
+  assert.equal(requestHasRawQuery(productionBatchMutationPath), false);
+});
+
+test("production-batch parser sanitizer maps only known body-parser errors", () => {
+  const request = { method: "POST", originalUrl: productionBatchMutationPath } as any;
+  for (const [type, expectedStatus] of [
+    ["entity.parse.failed", 400],
+    ["entity.verify.failed", 400],
+    ["request.aborted", 400],
+    ["request.size.invalid", 400],
+    ["entity.too.large", 413],
+    ["charset.unsupported", 415],
+    ["encoding.unsupported", 415],
+  ] as const) {
+    let status = 0;
+    let body: unknown;
+    sanitizeProductionBatchJsonParserError({ type, message: "caller-controlled-detail" }, request, {
+      status(value: number) { status = value; return this; },
+      json(value: unknown) { body = value; return this; },
+    } as any, () => assert.fail(`known parser error ${type} must be handled`));
+    assert.equal(status, expectedStatus);
+    assert.doesNotMatch(JSON.stringify(body), /caller-controlled-detail|iso-8859-1|encoding/iu);
+  }
+
+  for (const code of ["Z_BUF_ERROR", "Z_DATA_ERROR", "Z_NEED_DICT", "Z_STREAM_ERROR"]) {
+    let status = 0;
+    let body: unknown;
+    sanitizeProductionBatchJsonParserError({ code, status: 400, message: "incorrect header check" }, request, {
+      status(value: number) { status = value; return this; },
+      json(value: unknown) { body = value; return this; },
+    } as any, () => assert.fail(`known zlib error ${code} must be handled`));
+    assert.equal(status, 400);
+    assert.deepEqual(body, { error: "Production batch JSON body is invalid", code: "INVALID_JSON_BODY" });
+  }
+
+  const unrelated = { type: "database.failed" };
+  let forwarded: unknown;
+  sanitizeProductionBatchJsonParserError(unrelated, request, {} as any, (error) => { forwarded = error; });
+  assert.equal(forwarded, unrelated);
+  const unrelatedZlib = { code: "Z_DATA_ERROR", status: 500 };
+  sanitizeProductionBatchJsonParserError(unrelatedZlib, request, {} as any, (error) => { forwarded = error; });
+  assert.equal(forwarded, unrelatedZlib);
 });
 
 test("rejects tampered signed local auth cookies", () => {

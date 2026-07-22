@@ -128,6 +128,11 @@ test("source-to-batch route is replay-safe and rejects unauthenticated, cross-si
   assert.equal((await fetch(`${server.baseUrl}${endpoint}?planId=${key("plan", 3)}`, {
     method: "POST", headers, body: "{}",
   })).status, 400);
+  for (const rawQuery of ["?__proto__", "?toString"]) {
+    assert.equal((await fetch(`${server.baseUrl}${endpoint}${rawQuery}`, {
+      method: "POST", headers, body: "{}",
+    })).status, 400, "any raw query delimiter must be rejected");
+  }
   assert.equal((await fetch(`${server.baseUrl}${endpoint}`, {
     method: "POST", headers, body: JSON.stringify({ sourceIds: ["private"] }),
   })).status, 400);

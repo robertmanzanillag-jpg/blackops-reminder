@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T16:10:02.950Z
+Generated: 2026-07-22T17:46:38.876Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 954 | 804 | 3506 | 507 | 15764 |
+| 957 | 807 | 3526 | 507 | 15829 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,7 +29,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 259 | 248 | test:259 |
+| `tests` | 260 | 249 | test:260 |
 | `server/ai-media-studio` | 191 | 172 | server:191 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
@@ -39,8 +39,8 @@ Package: `rest-express`
 | `docs/ai-media-studio` | 17 | 17 | docs:17 |
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
+| `tests/fixtures` | 7 | 5 | test:7 |
 | `migrations/ai-media-studio` | 55 | 3 | other:53, docs:2 |
-| `tests/fixtures` | 5 | 3 | test:5 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -105,6 +105,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-roster-service.test.ts`
 - `tests/ai-media-studio-heygen-secure-setup-contract.test.ts`
 - `tests/ai-media-studio-heygen-secure-setup-routes.test.ts`
+- `tests/ai-media-studio-heygen-setup-ux-browser.test.ts`
 - `tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts`
 - `tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
