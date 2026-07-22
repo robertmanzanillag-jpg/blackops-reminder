@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, RefreshCw, Share2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, Navigation, Newspaper, RefreshCw, Route, Share2, ShieldCheck } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 
 type NewsLanguage = "en" | "es";
@@ -56,6 +56,14 @@ type Copy = {
   standardsRoles: string;
   skip: string;
   share: string;
+  dailyEdition: string;
+  activeBriefs: string;
+  trafficDesk: string;
+  routeAdvisory: string;
+  affectedArea: string;
+  whatChanged: string;
+  officialDetails: string;
+  routeVisual: string;
 };
 
 const COPY: Record<NewsLanguage, Copy> = {
@@ -86,6 +94,14 @@ const COPY: Record<NewsLanguage, Copy> = {
     standardsRoles: "Source Verifier · Safety Editor · Monetization Editor",
     skip: "Skip to news",
     share: "Share update",
+    dailyEdition: "The daily local edition",
+    activeBriefs: "active verified briefs",
+    trafficDesk: "Traffic desk",
+    routeAdvisory: "Route advisory",
+    affectedArea: "Affected area or route",
+    whatChanged: "What changed",
+    officialDetails: "Check official details",
+    routeVisual: "Editorial route guide",
   },
   es: {
     independent: "Mesa local independiente",
@@ -114,6 +130,14 @@ const COPY: Record<NewsLanguage, Copy> = {
     standardsRoles: "Verificador de fuentes · Editor de seguridad · Editor de monetización",
     skip: "Ir a las noticias",
     share: "Compartir actualización",
+    dailyEdition: "La edición local del día",
+    activeBriefs: "boletines activos verificados",
+    trafficDesk: "Mesa de tráfico",
+    routeAdvisory: "Alerta de ruta",
+    affectedArea: "Zona o ruta afectada",
+    whatChanged: "Qué cambió",
+    officialDetails: "Consultar detalles oficiales",
+    routeVisual: "Guía editorial de la ruta",
   },
 };
 
@@ -332,11 +356,56 @@ function ArticleMeta({ article, language }: { article: PublicNewsArticle; langua
   );
 }
 
+const TRAFFIC_PATTERN = /\b(traffic|tr[aá]fico|transit|subway|metrobus|metrorail|train|trains|road|route|ruta|street|avenue|highway|expressway|turnpike|bridge|tunnel|lane|carril|carretera|autopista|puente|t[uú]nel|mta|dot|511)\b/i;
+
+function isTrafficArticle(article: PublicNewsArticle): boolean {
+  return TRAFFIC_PATTERN.test([article.category, article.title, article.summary, article.location, article.source].filter(Boolean).join(" "));
+}
+
+function routeLabel(article: PublicNewsArticle, language: NewsLanguage): string {
+  const context = `${article.title} ${article.location || ""}`;
+  const match = context.match(/\b(?:I-|US-|SR-|FL-|NY-|Route\s+|Ruta\s+|Line(?:s)?\s+|L[ií]nea(?:s)?\s+)[A-Z0-9][A-Z0-9,\s-]{0,20}/i);
+  if (match) return match[0].trim().replace(/[,:;-]+$/, "");
+  if (article.location) return article.location.length > 48 ? `${article.location.slice(0, 45).trim()}…` : article.location;
+  return article.city === "miami" ? "Miami-Dade" : language === "es" ? "Área metropolitana de Nueva York" : "New York metro area";
+}
+
+function TrafficRouteVisual({ article, language, compact = false }: { article: PublicNewsArticle; language: NewsLanguage; compact?: boolean }) {
+  const copy = COPY[language];
+  const meta = CITY_META[article.city];
+  const route = routeLabel(article, language);
+  return (
+    <figure
+      className={`relative isolate overflow-hidden border border-[#17395c]/15 bg-[#e7edf0] ${compact ? "min-h-40 p-5" : "min-h-64 p-6 sm:p-8"}`}
+      aria-label={`${copy.routeVisual}: ${route}`}
+    >
+      <div className="absolute inset-0 opacity-60" aria-hidden="true" style={{ backgroundImage: "linear-gradient(rgba(23,57,92,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(23,57,92,.09) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 500 280" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M-20 238 C90 190, 110 80, 230 104 S360 245, 530 84" fill="none" stroke="#ffffff" strokeWidth="30" opacity=".92" />
+        <path d="M-20 238 C90 190, 110 80, 230 104 S360 245, 530 84" fill="none" stroke="#e35d44" strokeWidth="6" strokeDasharray="12 10" />
+        <path d="M70 -15 C110 65, 210 190, 430 305" fill="none" stroke="#8aa1b2" strokeWidth="11" opacity=".45" />
+      </svg>
+      <div className="relative flex h-full flex-col justify-between gap-12">
+        <div className="flex items-start justify-between gap-4">
+          <span className="inline-flex items-center gap-2 bg-[#f1b24a] px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#102a43]"><Navigation className="h-3.5 w-3.5" aria-hidden="true" />{copy.routeAdvisory}</span>
+          <img src={meta.logo} alt="" aria-hidden="true" className="h-10 w-10 rounded-full border-2 border-white object-cover shadow" />
+        </div>
+        <figcaption className="max-w-[88%] bg-[#102a43] p-4 text-white shadow-[0_14px_30px_rgba(16,42,67,.24)]">
+          <span className="block text-[9px] font-black uppercase tracking-[0.2em] text-[#f1b24a]">{copy.affectedArea}</span>
+          <span className={`${compact ? "text-lg" : "text-2xl sm:text-3xl"} mt-1 block font-serif font-black leading-tight`}>{route}</span>
+        </figcaption>
+      </div>
+    </figure>
+  );
+}
+
 function LeadArticle({ article, language }: { article: PublicNewsArticle; language: NewsLanguage }) {
   const city = CITY_META[article.city];
+  const traffic = isTrafficArticle(article);
   return (
-    <article className="grid gap-6 border-b border-[#17395c]/20 pb-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(240px,.55fr)] lg:gap-10">
+    <article className={`grid gap-6 border-b pb-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)] lg:gap-10 ${traffic ? "border-[#d99a2e]" : "border-[#17395c]/20"}`}>
       <div>
+        {traffic && <p className="mb-4 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#a95b13]"><Route className="h-4 w-4" aria-hidden="true" />{COPY[language].trafficDesk}</p>}
         <ArticleMeta article={article} language={language} />
         <h3 className="mt-4 max-w-4xl font-serif text-4xl font-black leading-[1.02] tracking-[-0.035em] text-[#102a43] sm:text-5xl">
           <a href={articleHref(article, language)} className="decoration-[#e35d44] decoration-2 underline-offset-4 hover:underline">{article.title}</a>
@@ -346,17 +415,24 @@ function LeadArticle({ article, language }: { article: PublicNewsArticle; langua
           {COPY[language].readStory}
         </a>
       </div>
-      <a href={articleHref(article, language)} className="group relative flex min-h-52 items-center justify-center overflow-hidden bg-[#e9edf0] p-8">
-        <span className={`absolute inset-x-0 top-0 h-1.5 ${city.accent}`} />
-        <img src={city.logo} alt={`${city.name[language]} News`} className="h-36 w-36 rounded-full object-cover shadow-[0_18px_45px_rgba(16,42,67,.18)] transition duration-300 group-hover:scale-105" />
+      <a href={articleHref(article, language)} className="group block" aria-label={`${COPY[language].readStory}: ${article.title}`}>
+        {traffic ? <TrafficRouteVisual article={article} language={language} /> : (
+          <span className="relative flex min-h-52 items-center justify-center overflow-hidden bg-[#e9edf0] p-8">
+            <span className={`absolute inset-x-0 top-0 h-1.5 ${city.accent}`} />
+            <img src={city.logo} alt={`${city.name[language]} News`} className="h-36 w-36 rounded-full object-cover shadow-[0_18px_45px_rgba(16,42,67,.18)] transition duration-300 group-hover:scale-105" />
+          </span>
+        )}
       </a>
     </article>
   );
 }
 
 function SecondaryArticle({ article, language }: { article: PublicNewsArticle; language: NewsLanguage }) {
+  const traffic = isTrafficArticle(article);
   return (
-    <article className="flex h-full flex-col border-t-4 border-[#17395c] bg-white p-5 shadow-[0_12px_35px_rgba(16,42,67,.07)] sm:p-6">
+    <article className={`flex h-full flex-col border-t-4 bg-white p-5 shadow-[0_12px_35px_rgba(16,42,67,.07)] sm:p-6 ${traffic ? "border-[#e6a536]" : "border-[#17395c]"}`}>
+      {traffic && <div className="-mx-5 -mt-5 mb-5 sm:-mx-6 sm:-mt-6"><TrafficRouteVisual article={article} language={language} compact /></div>}
+      {traffic && <p className="mb-3 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#a95b13]"><Route className="h-3.5 w-3.5" aria-hidden="true" />{COPY[language].trafficDesk}</p>}
       <ArticleMeta article={article} language={language} />
       <h3 className="mt-4 font-serif text-2xl font-bold leading-tight tracking-[-0.02em] text-[#102a43]">
         <a href={articleHref(article, language)} className="hover:text-[#d94f36]">{article.title}</a>
@@ -377,7 +453,10 @@ function CityEdition({ city, articles, language }: { city: NewsCity; articles: P
       <div className="mb-7 flex items-end justify-between gap-4 border-b-4 border-[#17395c] pb-3">
         <div className="flex items-center gap-3">
           <img src={meta.logo} alt="" className="h-10 w-10 rounded-full object-cover" aria-hidden="true" />
-          <h2 id={`${city}-heading`} className="font-serif text-3xl font-black tracking-[-0.04em] text-[#102a43] sm:text-4xl">{meta.name[language]}</h2>
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#68737d]">{COPY[language].dailyEdition}</p>
+            <h2 id={`${city}-heading`} className="font-serif text-3xl font-black tracking-[-0.04em] text-[#102a43] sm:text-4xl">{meta.name[language]}</h2>
+          </div>
         </div>
         <a href={cityHref(city, language)} className="text-[11px] font-black uppercase tracking-[0.14em] text-[#c84631]">
           {language === "es" ? "Ver edición" : "View edition"} →
@@ -461,18 +540,24 @@ function NewsFeed({ language, city }: { language: NewsLanguage; city: NewsCity |
 
   return (
     <>
-      <div className="mb-12 flex flex-col gap-4 border-b border-[#17395c]/20 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#e35d44]">{COPY[language].live}</p>
-          <h1 className="mt-2 font-serif text-3xl font-black tracking-[-0.035em] text-[#102a43] sm:text-5xl">
-            {city ? CITY_META[city].name[language] : COPY[language].latest}
-          </h1>
+      <section className="mb-12 border-y-4 border-double border-[#17395c] bg-[#f5f1e7] px-5 py-6 sm:px-8" aria-labelledby="edition-heading">
+        <div className="grid gap-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+          <Newspaper className="hidden h-10 w-10 text-[#e35d44] sm:block" aria-hidden="true" />
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#b54631]">{COPY[language].dailyEdition}</p>
+            <h1 id="edition-heading" className="mt-2 font-serif text-3xl font-black tracking-[-0.035em] text-[#102a43] sm:text-5xl">
+              {city ? CITY_META[city].name[language] : COPY[language].latest}
+            </h1>
+          </div>
+          <div className="border-t border-[#17395c]/20 pt-4 text-xs text-[#65717c] sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0 sm:text-right" aria-live="polite">
+            <p className="font-black uppercase tracking-[0.14em] text-[#17395c]">{query.data?.articles.length || 0} {COPY[language].activeBriefs}</p>
+            <p className="mt-2 inline-flex items-center gap-2 sm:justify-end">
+              {query.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-label={COPY[language].refreshing} />}
+              {COPY[language].updated}: {formatDate(query.data?.updatedAt || new Date().toISOString(), language)}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-[#65717c]" aria-live="polite">
-          {query.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-label={COPY[language].refreshing} />}
-          <span>{COPY[language].updated}: {formatDate(query.data?.updatedAt || new Date().toISOString(), language)}</span>
-        </div>
-      </div>
+      </section>
       {!hasArticles ? <EmptyState language={language} /> : (
         <div className="space-y-16">
           {cities.map((item) => <CityEdition key={item} city={item} articles={grouped[item]} language={language} />)}
@@ -506,6 +591,7 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
   if (!article) return <ArticleNotFound language={language} />;
   const paragraphs = article.body.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
   const meta = CITY_META[article.city];
+  const traffic = isTrafficArticle(article);
   const shareArticle = async () => {
     const url = window.location.href;
     try {
@@ -525,6 +611,7 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
         <img src={meta.logo} alt="" aria-hidden="true" className="h-11 w-11 rounded-full object-cover" />
         <span className="text-xs font-black uppercase tracking-[0.18em] text-[#17395c]">{meta.name[language]}</span>
       </div>
+      {traffic && <p className="mt-7 inline-flex items-center gap-2 bg-[#f1b24a] px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#102a43]"><Route className="h-4 w-4" aria-hidden="true" />{COPY[language].trafficDesk}</p>}
       <h1 className="mt-7 font-serif text-4xl font-black leading-[1.02] tracking-[-0.04em] text-[#102a43] sm:text-6xl">{article.title}</h1>
       {article.summary && <p className="mt-6 border-l-4 border-[#e35d44] pl-5 text-xl leading-8 text-[#455462] sm:text-2xl">{article.summary}</p>}
       <div className="mt-7 flex flex-col gap-4 border-y border-[#17395c]/20 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -533,6 +620,16 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
           <Share2 className="h-4 w-4" aria-hidden="true" />{COPY[language].share}
         </button>
       </div>
+      {traffic && (
+        <div className="mt-10 grid gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(260px,.8fr)]">
+          <TrafficRouteVisual article={article} language={language} />
+          <aside className="flex flex-col justify-center border-t-4 border-[#e6a536] bg-white p-6 shadow-[0_10px_28px_rgba(16,42,67,.06)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a95b13]">{COPY[language].whatChanged}</p>
+            <p className="mt-3 text-base leading-7 text-[#455462]">{article.summary}</p>
+            {article.sourceUrl && <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-[#17395c] underline decoration-[#e35d44] decoration-2 underline-offset-4">{COPY[language].officialDetails}<ExternalLink className="h-4 w-4" aria-hidden="true" /></a>}
+          </aside>
+        </div>
+      )}
       <div className="mx-auto mt-10 max-w-3xl space-y-6 font-serif text-lg leading-8 text-[#253b4f] sm:text-xl sm:leading-9">
         {(paragraphs.length ? paragraphs : [article.summary]).map((paragraph, index) => <p key={`${article.slug}-${index}`}>{paragraph}</p>)}
       </div>
