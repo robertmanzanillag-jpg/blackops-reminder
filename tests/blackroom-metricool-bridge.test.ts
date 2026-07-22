@@ -26,6 +26,19 @@ const input = {
   mediaUrl: "https://robplanner.replit.app/api/blackroom-agent/media/upload-1",
 };
 
+const mcpSuccess = () => Response.json({
+  jsonrpc: "2.0",
+  id: "test",
+  result: { content: [{ type: "text", text: "Scheduled" }], isError: false },
+});
+
+const mcpSuccessSse = () => new Response(
+  `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: "test", result: { content: [{ type: "text", text: "Scheduled" }], isError: false } })}\n\n`,
+  { headers: { "content-type": "text/event-stream" } },
+);
+
+const mcpInfo = (call: { body?: any }) => JSON.parse(call.body.params.arguments.info);
+
 test("extracts normalized media ids without accepting unrelated top-level ids", () => {
   assert.equal(extractMetricoolMediaId({ data: { mediaId: "media-123" } }), "media-123");
   assert.equal(extractMetricoolMediaId({ data: { id: 456 } }), "456");
@@ -187,7 +200,7 @@ test("finds exact caption and schedule evidence", () => {
   assert.equal(findVerifiedMetricoolPost({ data: [{ ...post, text: "different" }] }, input.caption, input.publicationDateTime), null);
 });
 
-test("normalizes media, schedules, then verifies before returning a receipt", async () => {
+test("schedules through Metricool's official MCP, then verifies before returning a receipt", async () => {
   const calls: Array<{ url: string; method: string; body?: any; headers?: HeadersInit }> = [];
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     const href = String(url);
@@ -200,8 +213,7 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
       const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
       return Response.json({ data: verifications.length === 1 ? [] : verifications.length === 2 ? [tiktok] : verifications.length === 3 ? [tiktok, facebook] : [tiktok, facebook, youtube] });
     }
-    if (href.includes("/normalize/")) return new Response(input.mediaUrl, { headers: { "Content-Type": "text/plain; charset=ISO-8859-1" } });
-    if (method === "POST") return Response.json({ id: 990 + calls.filter((call) => call.method === "POST").length });
+    if (method === "POST") return calls.filter((call) => call.method === "POST").length === 1 ? mcpSuccessSse() : mcpSuccess();
     return Response.json({ data: [] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
@@ -215,17 +227,22 @@ test("normalizes media, schedules, then verifies before returning a receipt", as
     caption: input.caption,
     verified: true,
   });
-  assert.equal(calls.length, 8);
-  assert.deepEqual(calls[2].body.media, { mediaId: input.mediaUrl });
-  assert.deepEqual(calls[2].body.providers, [{ network: "tiktok" }]);
-  assert.deepEqual(calls[4].body.providers, [{ network: "facebook" }]);
-  assert.deepEqual(calls[6].body.providers, [{ network: "youtube" }]);
-  assert.equal(calls[6].body.youtubeData.type, "short");
-  assert.match(calls[2].url, /integrationSource=MCP/);
-  assert.equal((calls[2].headers as Record<string, string>).accept, "application/json");
-  assert.equal((calls[2].headers as Record<string, string>)["content-length"], String(Buffer.byteLength(JSON.stringify(calls[2].body), "utf8")));
-  assert.equal((calls[1].headers as Record<string, string>).accept, "*/*");
-  assert.equal((calls[1].headers as Record<string, string>)["content-type"], undefined);
+  assert.equal(calls.length, 7);
+  assert.equal(calls[1].url, "https://ai.metricool.com/mcp");
+  assert.equal(calls[1].body.method, "tools/call");
+  assert.equal(calls[1].body.params.name, "createScheduledPost");
+  assert.deepEqual(mcpInfo(calls[1]).media, [input.mediaUrl]);
+  assert.deepEqual(mcpInfo(calls[1]).providers, [{ network: "tiktok" }]);
+  assert.deepEqual(mcpInfo(calls[3]).providers, [{ network: "facebook" }]);
+  assert.deepEqual(mcpInfo(calls[5]).providers, [{ network: "youtube" }]);
+  assert.equal(mcpInfo(calls[5]).youtubeData.type, "short");
+  assert.equal(calls[1].body.params.arguments.date, input.publicationDateTime);
+  assert.equal(calls[1].body.params.arguments.blogId, "6585226");
+  assert.deepEqual(calls[1].body.params.arguments.mediaFiles, [{
+    download_url: input.mediaUrl,
+    file_id: `blackroom-${input.sourceVideoId}-tiktok.mp4`,
+  }]);
+  assert.equal((calls[1].headers as Record<string, string>).accept, "application/json, text/event-stream");
 });
 
 test("returns an existing exact post before uploading media or creating a duplicate", async () => {
@@ -255,8 +272,7 @@ test("retries only the missing Facebook post after TikTok was already confirmed"
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     const method = init.method || "GET";
     calls.push({ method, body: init.body ? JSON.parse(String(init.body)) : undefined });
-    if (String(url).includes("/normalize/")) return new Response(input.mediaUrl);
-    if (method === "POST") return Response.json({ id: 992 });
+    if (method === "POST") return mcpSuccess();
     const gets = calls.filter((call) => call.method === "GET").length;
     return Response.json({ data: gets === 1 ? [tiktok, youtube] : [tiktok, facebook, youtube] });
   };
@@ -266,7 +282,7 @@ test("retries only the missing Facebook post after TikTok was already confirmed"
   });
   const posts = calls.filter((call) => call.method === "POST");
   assert.equal(posts.length, 1);
-  assert.deepEqual(posts[0].body.providers, [{ network: "facebook" }]);
+  assert.deepEqual(mcpInfo(posts[0]).providers, [{ network: "facebook" }]);
   assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
 });
 
@@ -276,8 +292,7 @@ test("schedules and verifies only the explicitly requested network", async () =>
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     const method = init.method || "GET";
     calls.push({ method, body: init.body ? JSON.parse(String(init.body)) : undefined });
-    if (String(url).includes("/normalize/")) return new Response(input.mediaUrl);
-    if (method === "POST") return Response.json({ id: 992 });
+    if (method === "POST") return mcpSuccess();
     const gets = calls.filter((call) => call.method === "GET").length;
     return Response.json({ data: gets === 1 ? [] : [facebook] });
   };
@@ -288,7 +303,7 @@ test("schedules and verifies only the explicitly requested network", async () =>
   });
   const posts = calls.filter((call) => call.method === "POST");
   assert.equal(posts.length, 1);
-  assert.deepEqual(posts[0].body.providers, [{ network: "facebook" }]);
+  assert.deepEqual(mcpInfo(posts[0]).providers, [{ network: "facebook" }]);
   assert.equal(receipt.metricoolId, "992");
   assert.deepEqual(receipt.platformReceipts, { facebook: "992" });
 });
@@ -296,8 +311,7 @@ test("schedules and verifies only the explicitly requested network", async () =>
 test("refuses to confirm when the verification response does not contain the post", async () => {
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     if (init.method !== "POST" && String(url).includes("/scheduler/posts")) return Response.json({ data: [] });
-    if (String(url).includes("/normalize/")) return Response.json({ mediaId: "media-123" });
-    if (init.method === "POST") return Response.json({ id: 991 });
+    if (init.method === "POST") return mcpSuccess();
     return Response.json({ data: [] });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
@@ -325,8 +339,11 @@ test("verification-only recovery never POSTs a possibly accepted network twice",
 test("includes a bounded upstream validation message without leaking auth", async () => {
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     if (init.method !== "POST" && String(url).includes("/scheduler/posts")) return Response.json({ data: [] });
-    if (String(url).includes("/normalize/")) return new Response(input.mediaUrl);
-    return Response.json({ error: "invalid tiktokData", token: "super-secret-value" }, { status: 400 });
+    return Response.json({
+      jsonrpc: "2.0",
+      id: "test",
+      result: { content: [{ type: "text", text: "invalid tiktokData" }], isError: true },
+    });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
     env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
@@ -334,7 +351,7 @@ test("includes a bounded upstream validation message without leaking auth", asyn
   }), (error: Error) => error.message.includes("invalid tiktokData") && !error.message.includes("super-secret-value"));
 });
 
-test("includes a bounded media-normalization error without leaking auth", async () => {
+test("includes a bounded MCP transport error without leaking auth", async () => {
   const mockFetch = async (url: string | URL | Request) => {
     if (String(url).includes("/scheduler/posts")) return Response.json({ data: [] });
     return new Response(JSON.stringify({ error: "could not fetch public MP4", token: "super-secret-value" }), { status: 500 });

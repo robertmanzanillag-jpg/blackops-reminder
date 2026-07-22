@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, RefreshCw } from "lucide-react";
+import { ArrowLeft, Clock3, ExternalLink, Globe2, MapPin, RefreshCw, ShieldCheck } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 
 type NewsLanguage = "en" | "es";
@@ -51,6 +51,9 @@ type Copy = {
   notFoundTitle: string;
   notFoundBody: string;
   disclaimer: string;
+  standardsTitle: string;
+  standardsBody: string;
+  standardsRoles: string;
   skip: string;
 };
 
@@ -77,6 +80,9 @@ const COPY: Record<NewsLanguage, Copy> = {
     notFoundTitle: "This update is no longer available",
     notFoundBody: "It may have expired or been replaced by a newer verified update.",
     disclaimer: "Metro Current is an independent publication and is not affiliated with any city, police department, transit agency, 511 service, or government office. Follow the linked source for official instructions.",
+    standardsTitle: "How this newsroom verifies updates",
+    standardsBody: "Each sensitive update is checked independently for official-source evidence, public-safety risk and monetization suitability. Publication requires consensus; conflicting or incomplete claims are quarantined automatically.",
+    standardsRoles: "Source Verifier · Safety Editor · Monetization Editor",
     skip: "Skip to news",
   },
   es: {
@@ -101,6 +107,9 @@ const COPY: Record<NewsLanguage, Copy> = {
     notFoundTitle: "Esta actualización ya no está disponible",
     notFoundBody: "Puede haber vencido o haber sido reemplazada por una actualización verificada más reciente.",
     disclaimer: "Metro Current es una publicación independiente y no está afiliada con ninguna ciudad, policía, agencia de tránsito, servicio 511 u oficina gubernamental. Sigue la fuente enlazada para instrucciones oficiales.",
+    standardsTitle: "Cómo verifica las noticias esta redacción",
+    standardsBody: "Cada noticia sensible se revisa de forma independiente por evidencia oficial, seguridad pública y aptitud para monetización. Publicar exige consenso; las afirmaciones incompletas o contradictorias se aíslan automáticamente.",
+    standardsRoles: "Verificador de fuentes · Editor de seguridad · Editor de monetización",
     skip: "Ir a las noticias",
   },
 };
@@ -525,9 +534,14 @@ function NewsArticle({ slug, language }: { slug: string; language: NewsLanguage 
 function SiteFooter({ language }: { language: NewsLanguage }) {
   return (
     <footer className="mt-20 border-t-4 border-[#17395c] bg-[#e9edf0]">
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-8 sm:grid-cols-[auto_1fr] sm:px-6">
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-8 lg:grid-cols-[auto_minmax(0,1fr)_minmax(320px,0.8fr)] sm:px-6">
         <div className="flex items-center gap-2 font-serif text-xl font-black tracking-[-0.04em] text-[#17395c]"><Globe2 className="h-5 w-5" aria-hidden="true" />Metro Current</div>
-        <p className="max-w-4xl text-xs leading-5 text-[#566471] sm:justify-self-end sm:text-right">{COPY[language].disclaimer}</p>
+        <div className="rounded border border-[#17395c]/15 bg-white/70 p-4">
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-[#17395c]"><ShieldCheck className="h-4 w-4" aria-hidden="true" />{COPY[language].standardsTitle}</p>
+          <p className="mt-2 text-xs leading-5 text-[#566471]">{COPY[language].standardsBody}</p>
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#c84631]">{COPY[language].standardsRoles}</p>
+        </div>
+        <p className="max-w-4xl text-xs leading-5 text-[#566471] lg:justify-self-end lg:text-right">{COPY[language].disclaimer}</p>
       </div>
     </footer>
   );

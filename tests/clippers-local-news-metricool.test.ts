@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness } from "../server/clippers-local-news-metricool";
+import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "../server/clippers-local-news-review-committee";
 
 function item(overrides: Record<string, unknown> = {}) {
   return {
@@ -20,6 +21,29 @@ function item(overrides: Record<string, unknown> = {}) {
     createdAt: "2026-07-21T12:00:00.000Z",
     ...overrides,
   };
+}
+
+function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
+  const base = item(overrides);
+  const checkedAt = "2026-07-21T15:55:00.000Z";
+  const reviewed = {
+    ...base,
+    verdicts: ["source_verifier", "safety_editor", "monetization_editor"].map((role) => ({ role, verdict: "approve", reasons: ["verified"], evidence: ["verified"], checkedAt })),
+    evidence: ["connector=official-test", `claimHash=${"a".repeat(64)}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`],
+    consensus: "unanimous_approve",
+    publishDecision: "auto_publish",
+    checkedAt,
+  };
+  const reviewHash = hashLocalNewsQueueReview({
+    copy: reviewed.copy,
+    platform: reviewed.platform,
+    verdicts: reviewed.verdicts as Parameters<typeof hashLocalNewsQueueReview>[0]["verdicts"],
+    evidence: reviewed.evidence,
+    consensus: reviewed.consensus as "unanimous_approve",
+    publishDecision: reviewed.publishDecision as "auto_publish",
+    checkedAt: reviewed.checkedAt,
+  });
+  return { ...reviewed, reviewHash };
 }
 
 async function workspace(items: unknown[]) {
@@ -227,6 +251,63 @@ test("filters high/critical and approval-required queue items even if their flag
   assert.equal(result.filtered, 3);
   assert.equal(result.scheduled, 1);
   assert.equal(posts, 1);
+});
+
+test("quarantined and rejected stories do not block delivery of a safe item in the same queue", async () => {
+  const dir = await workspace([
+    item({ id: "safe-mixed", platform: "facebook" }),
+    item({ id: "quarantined-mixed", risk: "critical", status: "quarantined", approvalRequired: false, autoEligible: false }),
+    item({ id: "rejected-mixed", risk: "high", status: "rejected", approvalRequired: false, autoEligible: false }),
+  ]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ id: "ok" }), { status: 200 });
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.filtered, 2);
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 1);
+});
+
+test("schedules a sensitive story only after unanimous three-role review with verified evidence", async () => {
+  const dir = await workspace([unanimouslyReviewedItem({ id: "reviewed-high", risk: "high", platform: "facebook" })]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ id: "ok" }), { status: 200 });
+    },
+  });
+  assert.equal(result.filtered, 0);
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 1);
+});
+
+test("blocks sensitive copy changed after committee review", async () => {
+  const reviewed = unanimouslyReviewedItem({ id: "tampered-high", risk: "critical", platform: "facebook" });
+  const dir = await workspace([{ ...reviewed, copy: `${reviewed.copy} Texto añadido después.` }]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ id: "ok" }), { status: 200 });
+    },
+  });
+  assert.equal(result.filtered, 1);
+  assert.equal(result.scheduled, 0);
+  assert.equal(posts, 0);
 });
 
 test("blocks a discovered brand when its requested social profile is not connected", async () => {
