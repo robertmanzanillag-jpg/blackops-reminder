@@ -8,8 +8,10 @@ Status: pinned for new AI Media Studio work on 2026-07-22. This document is a re
 - Origin: `https://api.heygen.com` only.
 - Authentication: server-side `X-Api-Key`; the key must come from the deployment secret manager and must never enter browser requests, API bodies, logs, evidence, or Git.
 - Avatar-group inventory: `GET /v3/avatars`, paginated with `limit`, `token`, `has_more`, and `next_token`. A group represents the character and supplies supporting consent/status evidence; its ID is not the selected render `avatar_id`.
+- Exact parent-group verification: `GET /v3/avatars/{group_id}`. The selected look's parent group must separately prove completed status and approved consent.
 - Avatar-look inventory: `GET /v3/avatars/looks`, optionally filtered by `group_id`, plus `GET /v3/avatars/looks/{look_id}` for exact revalidation. The selected provider avatar resource must bind to the look ID because HeyGen defines that look ID as the `avatar_id` used by `POST /v3/videos`.
 - Voice inventory: `GET /v3/voices`, paginated with `limit`, `token`, `has_more`, and `next_token`.
+- Exact voice verification: `GET /v3/voices/{voice_id}` for each deduplicated selected voice.
 - Account/key verification: `GET /v3/users/me`.
 - Create one avatar video: `POST /v3/videos`.
 - Observe the same video: `GET /v3/videos/{video_id}`.
@@ -19,9 +21,11 @@ Primary sources:
 
 - https://developers.heygen.com/docs/api-key
 - https://developers.heygen.com/reference/list-avatar-groups
+- https://developers.heygen.com/reference/get-avatar-group
 - https://developers.heygen.com/reference/list-avatar-looks
 - https://developers.heygen.com/reference/get-avatar-look
 - https://developers.heygen.com/reference/list-voices
+- https://developers.heygen.com/reference/get-voice
 - https://developers.heygen.com/reference/create-video
 - https://developers.heygen.com/reference/get-video
 
@@ -40,12 +44,14 @@ The existing `HeyGenV3AdmittedRenderProvider` is the only candidate for new admi
 A future explicitly approved read-only verification must prove all of the following for the exact static credential version:
 
 1. `GET /v3/users/me` succeeds and returns a supported billing model.
-2. Every selected provider avatar binds to an exact V3 avatar look returned by `GET /v3/avatars/looks` (and revalidated by its look endpoint); the selected look ID is the future video `avatar_id`. Its parent group is separately resolved and must provide completed/trained status and approved consent. Group identity alone can never satisfy render-resource verification.
-3. Every selected voice appears in the V3 inventory and supports the intended language/locale.
+2. Every selected provider avatar binds to an exact V3 avatar look returned by `GET /v3/avatars/looks/{look_id}`; the selected look ID is the future video `avatar_id`. Its parent group is separately resolved through `GET /v3/avatars/{group_id}` and must provide completed/trained status and approved consent. Group identity alone can never satisfy render-resource verification.
+3. Every selected voice is revalidated through `GET /v3/voices/{voice_id}` and supports the intended language when the launch roster has a language expectation.
 4. Account-specific limits, concurrent-render capacity, output eligibility, wallet/subscription state, and rate-limit behavior are recorded as evidence rather than inferred from public documentation.
 5. Credential rotation makes prior provider, resource, quote, approval, and admission evidence stale.
 
 The read-only verification can contact HeyGen but cannot create a video. It requires a separate Robert approval because it resolves the secret and performs provider network requests.
+
+The static V3 verifier is intentionally unmounted and inert until its explicit `verify` method is called with a server-only `StaticHeyGenApiKey`. It may use only `GET /v3/users/me`, `GET /v3/avatars/looks/{look_id}`, `GET /v3/avatars/{group_id}`, and `GET /v3/voices/{voice_id}`. It must verify 5-10 exact avatar looks, deduplicate voices before provider I/O, cap streamed response bodies at 256 KiB, enforce per-request and overall time bounds, and fail closed for malformed, oversized, unauthorized, forbidden, not-found, rate-limited, timeout, transport, or untrusted provider responses. Verification outcomes are server-side evidence only: they may carry exact selected avatar look IDs and voice IDs for repository matching, plus digests and bounded statuses/support fields, but no provider URLs, raw payloads, raw error messages, credentials, or browser-visible provider-native identifiers.
 
 ## Cost policy
 

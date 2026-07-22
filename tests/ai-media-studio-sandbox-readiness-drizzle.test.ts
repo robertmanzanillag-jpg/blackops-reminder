@@ -94,6 +94,7 @@ test("repository source has no provider/network/secret/authority/reservation/ren
   assert.doesNotMatch(source, /fetch\s*\(|axios|secretRef|externalResourceId|reserveAndAdmit|createAuthoritySnapshot|FOR UPDATE/iu);
   assert.match(source, /verifyApprovedProductionBatchSlotMetadata/u);
   assert.match(source, /isolationLevel: "repeatable read", accessMode: "read only"/u);
+  assert.match(source, /ORDER BY slots\.source_member_key,slots\.video_number\s+LIMIT 101/u);
   assert.match(source, /governance\.allowed_uses \? 'internal_preview'/u);
 });
 

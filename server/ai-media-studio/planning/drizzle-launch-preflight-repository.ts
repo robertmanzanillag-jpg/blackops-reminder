@@ -121,7 +121,9 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
       WHERE slots.owner_user_id=${scope.ownerUserId} AND slots.workspace_id=${scope.workspaceId}
         AND slots.daily_plan_id=${internalPlanId}
       ORDER BY slots.public_slot_key
+      LIMIT 101
     `));
+    if (slotRows.length > 100) throw new LaunchPreflightError("UNAVAILABLE");
     const variantRows = rows(await tx.execute(sql`
       SELECT variants.id,variants.script_id,variants.version,variants.label,variants.content,
         variants.status,variants.checksum,variants.metadata

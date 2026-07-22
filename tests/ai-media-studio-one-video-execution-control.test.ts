@@ -105,6 +105,7 @@ test("repository source has no network, secret resolver, mutation, budget admiss
   assert.doesNotMatch(source, /fetch\s*\(|axios|secretRef|externalResourceId|reserveAndAdmit|FOR UPDATE/iu);
   assert.match(source, /verifyApprovedProductionBatchSlotMetadata/u);
   assert.match(source, /isolationLevel: "repeatable read", accessMode: "read only"/u);
+  assert.match(source, /ORDER BY slots\.source_member_key,slots\.video_number\s+LIMIT 101/u);
   assert.match(source, /static_api_key.*disconnected.*unverified/su);
   assert.match(source, /one_shot_executor_not_installed/u);
 });

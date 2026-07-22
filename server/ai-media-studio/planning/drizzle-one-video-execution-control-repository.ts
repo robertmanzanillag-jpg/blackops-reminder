@@ -138,6 +138,7 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
       SELECT slots.source_member_key,slots.video_number,slots.status FROM ai_media_daily_plan_slots slots
       WHERE slots.owner_user_id=${scope.ownerUserId} AND slots.workspace_id=${scope.workspaceId}
         AND slots.daily_plan_id=${internalPlanId} ORDER BY slots.source_member_key,slots.video_number
+      LIMIT 101
     `));
     const variants = rows(await tx.execute(sql`
       SELECT variants.id,variants.version,variants.label,variants.content,variants.status,variants.checksum,variants.metadata

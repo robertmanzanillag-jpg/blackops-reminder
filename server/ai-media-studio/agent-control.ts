@@ -242,6 +242,31 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #149 unmerged; Robert supplies the API key only through the deployment secret manager plus 5–10 avatar-look/voice ID pairs, then separately approve read-only live verification before quote or generation.",
   },
   {
+    id: "ams-agent-heygen-verification-evidence",
+    title: "Immutable HeyGen V3 verification evidence",
+    owner: "AI Media Studio credential verification squad",
+    state: "running",
+    branch: "codex/ai-media-studio-heygen-verification-evidence",
+    pullRequestUrl: null,
+    acceptance: [
+      "Persist immutable tenant- and credential-version-bound account verification evidence without credential material",
+      "Bind every configured avatar resource to an exact HeyGen V3 avatar look and keep parent-group consent/status evidence separate",
+      "Bind every configured voice to an exact verified V3 voice response and make rotation stale by construction",
+      "Keep provider transport, secret resolution, account activation, migration application, spend and rendering disabled until separate approval",
+    ],
+    mergeGate: "Pending migration and contracts, disposable PostgreSQL 16 proof, focused tests, TypeScript, build, independent checker, security and App QA must pass with no P0-P3 before a stacked draft PR is ready.",
+    evidence: [
+      "Dedicated worktree is stacked on draft PR #149",
+      "Data, provider-documentation, backend, security and PostgreSQL audits have separate read-only owners",
+    ],
+    blockers: [
+      "No API key has been placed in the deployment secret manager and no provider request is approved",
+      "No live account, avatar look, parent group, voice, quota, wallet or billing evidence exists",
+      "Migration application, credential resolution, provider verification, account activation, quote, generation, spend and Replit deployment require separate approvals",
+    ],
+    nextAction: "Implement and review the immutable evidence/control-plane foundation only; do not resolve a secret or contact HeyGen until Robert supplies the secure inputs and separately approves live read-only verification.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

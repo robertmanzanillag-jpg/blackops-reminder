@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T05:24:45.587Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-execution-control",
+  "generatedAt": "2026-07-22T06:08:06.842Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-verification-evidence",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -88,39 +88,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 839,
-    "filesIndexed": 704,
-    "imports": 2986,
+    "filesVisible": 850,
+    "filesIndexed": 710,
+    "imports": 3015,
     "routes": 498,
-    "symbols": 13890
+    "symbols": 14075
   },
   "directories": {
-    "docs/ai-media-studio": {
-      "files": 13,
-      "indexed": 13,
+    "migrations/ai-media-studio": {
+      "files": 51,
+      "indexed": 3,
       "kinds": {
-        "docs": 13
+        "other": 49,
+        "docs": 2
       }
     },
     "server/ai-media-studio": {
-      "files": 154,
-      "indexed": 144,
+      "files": 159,
+      "indexed": 146,
       "kinds": {
-        "server": 154
-      }
-    },
-    "shared": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "shared": 14
+        "server": 159
       }
     },
     "tests": {
-      "files": 207,
-      "indexed": 196,
+      "files": 211,
+      "indexed": 200,
       "kinds": {
-        "test": 207
+        "test": 211
       }
     },
     ".agents/skills": {
@@ -173,19 +167,18 @@
         "client-page": 24
       }
     },
+    "docs/ai-media-studio": {
+      "files": 13,
+      "indexed": 13,
+      "kinds": {
+        "docs": 13
+      }
+    },
     "docs": {
       "files": 12,
       "indexed": 11,
       "kinds": {
         "docs": 12
-      }
-    },
-    "migrations/ai-media-studio": {
-      "files": 49,
-      "indexed": 3,
-      "kinds": {
-        "other": 47,
-        "docs": 2
       }
     },
     "script": {
@@ -214,6 +207,13 @@
       "indexed": 8,
       "kinds": {
         "server": 8
+      }
+    },
+    "shared": {
+      "files": 14,
+      "indexed": 14,
+      "kinds": {
+        "shared": 14
       }
     },
     "shared/models": {
@@ -11737,6 +11737,150 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/providers/heygen-v3-static-verification-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "../provider-credentials/static-heygen-secret-resolver"
+      ],
+      "exports": [
+        "HEYGEN_V3_STATIC_VERIFICATION_PROVIDER_KEY",
+        "HeyGenV3StaticVerificationApiKey",
+        "HeyGenV3StaticVerificationBillingModel",
+        "HeyGenV3StaticVerificationCommand",
+        "HeyGenV3StaticVerificationEngine",
+        "HeyGenV3StaticVerificationFailed",
+        "HeyGenV3StaticVerificationFailureCode",
+        "HeyGenV3StaticVerificationOutcome",
+        "HeyGenV3StaticVerificationPassed",
+        "HeyGenV3StaticVerificationProvider",
+        "HeyGenV3StaticVerificationSelection",
+        "HeyGenV3VerifiedAvatarEvidence",
+        "HeyGenV3VerifiedVoiceEvidence"
+      ],
+      "symbols": [
+        "HEYGEN_V3_STATIC_VERIFICATION_PROVIDER_KEY"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/providers/heygen-v3-static-verification-provider.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/contracts",
+        "./heygen-v3-static-verification-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "HeyGenV3StaticVerificationHttpProvider",
+        "HeyGenV3StaticVerificationProviderOptions"
+      ],
+      "symbols": [
+        "AccountDetail",
+        "DEFAULT_OVERALL_TIMEOUT_MS",
+        "DEFAULT_TIMEOUT_MS",
+        "GroupDetail",
+        "HEYGEN_API_ORIGIN",
+        "HeyGenFetch",
+        "HeyGenV3StaticVerificationHttpProvider",
+        "IDEMPOTENCY_KEY",
+        "LookDetail",
+        "MAX_BODY_BYTES",
+        "MAX_PROVIDER_ID_LENGTH",
+        "MAX_SELECTIONS",
+        "MAX_TIMEOUT_MS",
+        "MIN_SELECTIONS",
+        "ProviderFetchResult",
+        "RequiredSelection",
+        "SHA256",
+        "SUPPORTED_BILLING_MODELS",
+        "SUPPORTED_ENGINES",
+        "ValidatedCommand",
+        "VoiceDetail",
+        "account",
+        "accountResult",
+        "base",
+        "billingModel",
+        "body",
+        "boundedMs",
+        "canonicalJson",
+        "consentStatus",
+        "data",
+        "declaredLength",
+        "decoder",
+        "digest",
+        "evidenceDigest",
+        "exactObservedAt",
+        "existing",
+        "expectedVoiceLanguage",
+        "gender",
+        "group",
+        "groupDetails",
+        "groupId",
+        "groupIdDigest",
+        "httpFailureCode",
+        "id",
+        "isSupportedEngine",
+        "jsonObject",
+        "language",
+        "languageMatches",
+        "look",
+        "lookDetails",
+        "lookIdDigest",
+        "model",
+        "objectValue",
+        "observedAt",
+        "opaqueId",
+        "optionalBoolean",
+        "optionalLabel",
+        "parseAccount",
+        "parseGroup",
+        "parseLook",
+        "parseVoice",
+        "parsed",
+        "providerAccountId",
+        "providerCredentialVersion",
+        "reader",
+        "record",
+        "remainingMs",
+        "request",
+        "requiredEngine",
+        "requiredSelection",
+        "responseDigest",
+        "result",
+        "root",
+        "safeOpaqueId",
+        "safeRequestDigest",
+        "safeResponseBody",
+        "seen",
+        "selections",
+        "sha256",
+        "signature",
+        "startedAtMs",
+        "status",
+        "stringValue",
+        "supportInteractiveAvatar",
+        "supportLocale",
+        "supportPause",
+        "supportedEngines",
+        "timeoutMs",
+        "transportFailureCode",
+        "unique",
+        "uniqueBy",
+        "uniqueLooks",
+        "uniqueVoices",
+        "validScopePart",
+        "validateCommand",
+        "voice",
+        "voiceConflicts",
+        "voiceDetails",
+        "voiceId",
+        "voiceIdDigest"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/providers/heygen-video-provider.ts",
       "kind": "server",
       "imports": [
@@ -20377,6 +20521,8 @@
         "aiMediaScripts",
         "aiMediaSourceItems",
         "aiMediaStaticCredentialBindings",
+        "aiMediaStaticHeyGenResourceVerifications",
+        "aiMediaStaticHeyGenVerificationHeaders",
         "aiMediaStudioTables",
         "aiMediaVideoProjects",
         "aiMediaVideos",
@@ -20426,6 +20572,8 @@
         "aiMediaScripts",
         "aiMediaSourceItems",
         "aiMediaStaticCredentialBindings",
+        "aiMediaStaticHeyGenResourceVerifications",
+        "aiMediaStaticHeyGenVerificationHeaders",
         "aiMediaStudioTables",
         "aiMediaVideoProjects",
         "aiMediaVideos",
@@ -20816,6 +20964,7 @@
         "canary",
         "durablePlan",
         "durableScriptBatch",
+        "heyGenVerificationEvidence",
         "launchReadiness",
         "officeSource",
         "offlinePreflight",
@@ -22000,6 +22149,42 @@
         "secretInThrownMessage",
         "submitContext",
         "terminalContext"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/provider-credentials/static-heygen-secret-resolver",
+        "../server/ai-media-studio/providers/heygen-v3-static-verification-contracts",
+        "../server/ai-media-studio/providers/heygen-v3-static-verification-provider",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakeHandler",
+        "NOW",
+        "RecordedCall",
+        "SECRET",
+        "adapter",
+        "apiKey",
+        "assertFailure",
+        "body",
+        "command",
+        "group",
+        "groupId",
+        "jsonResponse",
+        "key",
+        "look",
+        "okPayload",
+        "outcome",
+        "path",
+        "provider",
+        "resolver",
+        "serialized",
+        "voice"
       ],
       "routes": []
     },
@@ -24295,6 +24480,71 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr29-static-heygen-verification-evidence-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "drizzleSchema",
+        "forward",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr29-static-heygen-verification-evidence-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "TEMP_PREFIX",
+        "activateWithPointers",
+        "applyManifestAndPending",
+        "bytes",
+        "digest",
+        "enabled",
+        "externalDigest",
+        "ids",
+        "insertHeader",
+        "insertResourceEvidence",
+        "integrationTest",
+        "manifest",
+        "migrationRoot",
+        "ownedUrl",
+        "owner",
+        "parsed",
+        "planKey",
+        "pool",
+        "pr28Forward",
+        "pr29Forward",
+        "pr29Rollback",
+        "resolvedSocket",
+        "reviewedForward",
+        "root",
+        "seedStaticPlan",
+        "slotKey",
+        "socket",
+        "value",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr3-contracts.test.ts",
       "kind": "test",
       "imports": [
@@ -25566,6 +25816,49 @@
         "reviewedForward",
         "socket",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-static-heygen-verification-evidence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/provider-credentials/drizzle-static-heygen-verification-repository",
+        "../server/ai-media-studio/provider-credentials/static-heygen-verification-contracts",
+        "../server/ai-media-studio/provider-credentials/static-heygen-verification-service",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Compiled",
+        "FakeDatabase",
+        "accountEvidenceDigest",
+        "avatars",
+        "base",
+        "command",
+        "compiled",
+        "credentialBindingRequestDigest",
+        "entry",
+        "expired",
+        "expiresAt",
+        "extra",
+        "fake",
+        "files",
+        "future",
+        "headerInsert",
+        "look",
+        "mutationCount",
+        "observedAt",
+        "prepared",
+        "providerRequestDigest",
+        "receipt",
+        "replay",
+        "rotated",
+        "uuid"
       ],
       "routes": []
     },
@@ -27294,6 +27587,7 @@
     "tests/ai-media-studio-heygen-roster-routes.test.ts",
     "tests/ai-media-studio-heygen-roster-service.test.ts",
     "tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts",
+    "tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts",
     "tests/ai-media-studio-http-artifact-reader.test.ts",
     "tests/ai-media-studio-influencers.test.ts",
     "tests/ai-media-studio-launch-authority-drizzle.test.ts",
@@ -27360,6 +27654,8 @@
     "tests/ai-media-studio-pr27-terminal-migration.test.ts",
     "tests/ai-media-studio-pr27-terminal-repository.test.ts",
     "tests/ai-media-studio-pr28-static-heygen-migration.test.ts",
+    "tests/ai-media-studio-pr29-static-heygen-verification-evidence-migration.test.ts",
+    "tests/ai-media-studio-pr29-static-heygen-verification-evidence-postgres.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
@@ -27399,6 +27695,7 @@
     "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",
     "tests/ai-media-studio-static-heygen-credentials.test.ts",
     "tests/ai-media-studio-static-heygen-postgres.test.ts",
+    "tests/ai-media-studio-static-heygen-verification-evidence.test.ts",
     "tests/ai-media-studio-webhook-env-secret.test.ts",
     "tests/ai-media-studio-webhook-resolver.test.ts",
     "tests/ai-media-studio-webhook-security.test.ts",
