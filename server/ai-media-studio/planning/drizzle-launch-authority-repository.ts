@@ -170,6 +170,16 @@ function snapshotReceipt(row: Row, replayed: boolean): LaunchAuthoritySnapshotRe
   };
 }
 
+function quoteBoundHumanReceipt(row: Row, replayed: boolean): LaunchAuthorityReceipt {
+  return {
+    id: uuid(String(value(row, "humanLaunchApprovalEvidenceId", "human_launch_approval_evidence_id")),
+      "humanLaunchApprovalEvidenceId"),
+    kind: "human_launch_approval",
+    inputDigest: validDigest(String(value(row, "inputDigest", "input_digest")), "approval.inputDigest"),
+    replayed,
+  };
+}
+
 function assertReplay(row: Row, inputDigest: Digest): void {
   if (String(value(row, "inputDigest", "input_digest")) !== inputDigest) {
     throw conflict("Idempotency key is already bound to another authority command");
@@ -653,6 +663,22 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       assertKillSwitchOpen(kill, now);
       assertEvidenceAdmits(evidence, subject, now);
       const quote = evidence.get("maximum_quote")!;
+      const human = evidence.get("human_launch_approval")!;
+      const bridges = rows(await tx.execute(sql`
+        SELECT * FROM ${aiMediaQuoteBoundHumanApprovals}
+        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
+          AND daily_plan_slot_id=${command.dailyPlanSlotId} AND slot_attempt=${command.slotAttempt}
+          AND human_launch_approval_evidence_id=${human.id}
+          AND human_launch_approval_evidence_revision=${human.revision}
+          AND human_launch_approval_evidence_digest=${value(human, "evidenceDigest", "evidence_digest")}
+          AND maximum_quote_evidence_id=${quote.id}
+          AND maximum_quote_evidence_revision=${quote.revision}
+          AND maximum_quote_evidence_digest=${value(quote, "evidenceDigest", "evidence_digest")}
+        LIMIT 2 FOR UPDATE
+      `));
+      if (bridges.length !== 1) throw denied();
+      const approvalBridge = bridges[0]!;
+      assertQuoteBoundApprovalBridge(approvalBridge, human, quote, subject, now);
       const amount = databasePositiveMicroUsd(value(quote, "amountMicroUsd", "amount_micro_usd"));
       const baseExpiry = expiryFrom(now, ttlSeconds(this.options.validityPolicy, "authority_snapshot", command.scope));
       const expiryCandidates = [
@@ -670,11 +696,15 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       if (expiresAt <= now) throw denied();
 
       const content = evidence.get("content_approval")!;
-      const human = evidence.get("human_launch_approval")!;
       const sandbox = evidence.get("sandbox_proof")!;
       const evidenceBinding = {
         contentApproval: evidenceIdentity(content), humanLaunchApproval: evidenceIdentity(human),
         sandbox: evidenceIdentity(sandbox), maximumQuote: evidenceIdentity(quote),
+      };
+      const quoteBoundApprovalBinding = {
+        digest: validDigest(String(value(approvalBridge, "approvalBindingDigest", "approval_binding_digest")),
+          "approvalBridge.digest"),
+        renderSpecDigest: subject.renderSpecDigest,
       };
       const policyBinding = {
         id: uuid(String(policy.id), "policy.id"), revision: positiveInteger(Number(policy.revision), "policy.revision"),
@@ -685,10 +715,12 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         digest: validDigest(String(value(kill, "evidenceDigest", "evidence_digest")), "kill.digest"),
       };
       const admissionDigest = digest({ domain: "ai-media-launch-admission-v1", subject: publicSubject(subject),
-        evidence: evidenceBinding, policy: policyBinding, killSwitch: killBinding,
+        evidence: evidenceBinding, quoteBoundApproval: quoteBoundApprovalBinding,
+        policy: policyBinding, killSwitch: killBinding,
         maximumQuoteMicroUsd: amount, currency: "USD" });
       const authorityDigest = digest({ domain: "ai-media-launch-authority-snapshot-v1", id,
-        subject: publicSubject(subject), evidence: evidenceBinding, policy: policyBinding, killSwitch: killBinding,
+        subject: publicSubject(subject), evidence: evidenceBinding, quoteBoundApproval: quoteBoundApprovalBinding,
+        policy: policyBinding, killSwitch: killBinding,
         maximumQuoteMicroUsd: amount, currency: "USD", validFrom: now.toISOString(),
         expiresAt: expiresAt.toISOString(), admissionDigest });
       const inserted = rows(await tx.execute(sql`
@@ -1277,6 +1309,47 @@ function assertEvidenceAdmits(evidence: Map<EvidenceKind, Row>, subject: LockedL
   }
 }
 
+function evidenceIsExactCurrentQuote(row: Row, subject: LockedLaunchSubject, now: Date): boolean {
+  try {
+    assertEvidenceAdmits(new Map([["maximum_quote", row]]), subject, now);
+    return String(value(row, "currency", "currency")) === "USD"
+      && databasePositiveMicroUsd(value(row, "amountMicroUsd", "amount_micro_usd")).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function assertQuoteBoundApprovalBridge(
+  bridge: Row,
+  human: Row,
+  quote: Row,
+  subject: LockedLaunchSubject,
+  now: Date,
+): void {
+  const quoteExpiry = requiredExpiry(quote);
+  if (quoteExpiry <= now
+    || String(value(bridge, "launchSubjectDigest", "launch_subject_digest")) !== subject.launchSubjectDigest
+    || String(value(bridge, "launchIntentId", "launch_intent_id")) !== subject.launchIntentId
+    || String(value(bridge, "launchIntentDigest", "launch_intent_digest")) !== subject.launchIntentDigest
+    || String(value(bridge, "humanLaunchApprovalEvidenceId", "human_launch_approval_evidence_id")) !== String(human.id)
+    || Number(value(bridge, "humanLaunchApprovalEvidenceRevision", "human_launch_approval_evidence_revision")) !== Number(human.revision)
+    || String(value(bridge, "humanLaunchApprovalEvidenceDigest", "human_launch_approval_evidence_digest"))
+      !== String(value(human, "evidenceDigest", "evidence_digest"))
+    || String(value(bridge, "maximumQuoteEvidenceId", "maximum_quote_evidence_id")) !== String(quote.id)
+    || Number(value(bridge, "maximumQuoteEvidenceRevision", "maximum_quote_evidence_revision")) !== Number(quote.revision)
+    || String(value(bridge, "maximumQuoteEvidenceDigest", "maximum_quote_evidence_digest"))
+      !== String(value(quote, "evidenceDigest", "evidence_digest"))
+    || String(bridge.decision) !== "approved" || String(human.decision) !== "approved"
+    || String(value(bridge, "maximumQuoteDecision", "maximum_quote_decision")) !== "quoted"
+    || String(quote.decision) !== "quoted"
+    || databasePositiveMicroUsd(value(bridge, "amountMicroUsd", "amount_micro_usd"))
+      !== databasePositiveMicroUsd(value(quote, "amountMicroUsd", "amount_micro_usd"))
+    || String(bridge.currency) !== "USD" || String(quote.currency) !== "USD"
+    || requiredDate(value(bridge, "quoteExpiresAt", "quote_expires_at")).getTime() !== quoteExpiry.getTime()
+    || String(value(bridge, "renderSpecDigest", "render_spec_digest")) !== subject.renderSpecDigest) throw denied();
+  validDigest(String(value(bridge, "approvalBindingDigest", "approval_binding_digest")), "approvalBridge.digest");
+}
+
 function evidenceIdentity(row: Row) {
   return { id: uuid(String(row.id), "evidence.id"),
     digest: validDigest(String(value(row, "evidenceDigest", "evidence_digest")), "evidence.digest") };
@@ -1355,6 +1428,9 @@ function invalid(message: string): LaunchAuthorityPersistenceError {
 }
 function denied(): LaunchAuthorityPersistenceError {
   return new LaunchAuthorityPersistenceError("AUTHORITY_DENIED", "Launch authority request denied");
+}
+function quoteChanged(): LaunchAuthorityQuoteChangedError {
+  return new LaunchAuthorityQuoteChangedError();
 }
 function conflict(message: string): LaunchAuthorityPersistenceError {
   return new LaunchAuthorityPersistenceError("IDEMPOTENCY_CONFLICT", message);
