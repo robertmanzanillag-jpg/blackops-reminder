@@ -52,7 +52,7 @@ async function workspace(items: unknown[]) {
   return dir;
 }
 
-const credentials = { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123" };
+const credentials = { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123", CLIPPERS_LOCAL_NEWS_ENABLE_X: "true" };
 const fixedNow = () => new Date("2026-07-21T16:00:00.000Z");
 
 test("missing credentials blocks without making a network request", async () => {
@@ -65,6 +65,20 @@ test("missing credentials blocks without making a network request", async () => 
   });
   assert.equal(result.status, "blocked");
   assert.equal(result.reason, "missing_metricool_credentials");
+  assert.equal(fetched, false);
+});
+
+test("X delivery is opt-in so the paid Metricool add-on stays off by default", async () => {
+  const dir = await workspace([item()]);
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123" },
+    workspaceDir: dir,
+    fetch: async () => { fetched = true; throw new Error("disabled X must not reach Metricool"); },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.filtered, 1);
   assert.equal(fetched, false);
 });
 
@@ -165,6 +179,58 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   assert.equal("media" in (scheduledPayload || {}), false);
   assert.equal("images" in (scheduledPayload || {}), false);
   assert.equal("attachments" in (scheduledPayload || {}), false);
+});
+
+test("normalizes the existing public brand image and attaches it without any paid generation", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-image", platform: "facebook" })]);
+  let scheduledPayload: Record<string, any> | null = null;
+  let normalizedUrl = "";
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (url.pathname === "/api/actions/normalize/image/url") {
+        normalizedUrl = url.searchParams.get("url") || "";
+        return new Response(JSON.stringify({ mediaId: "media-123" }), { status: 200 });
+      }
+      scheduledPayload = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: "post-with-media" }), { status: 201 });
+    },
+  });
+
+  assert.equal(normalizedUrl, "https://news.example.com/local-news/miami-news-profile.png");
+  assert.deepEqual(scheduledPayload?.media, { mediaId: "media-123" });
+  assert.equal(result.mediaAttached, 1);
+  assert.equal(result.mediaFallback, 0);
+});
+
+test("media normalization failure falls back to publishing the verified text", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-image-fallback", platform: "facebook" })]);
+  let scheduledPayload: Record<string, any> | null = null;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (url.pathname === "/api/actions/normalize/image/url") return new Response("unavailable", { status: 503 });
+      scheduledPayload = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: "fallback-post" }), { status: 201 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.mediaAttached, 0);
+  assert.equal(result.mediaFallback, 1);
+  assert.equal("media" in (scheduledPayload || {}), false);
 });
 
 test("keeps cadence-deferred posts automatic but does not send them before notBefore", async () => {

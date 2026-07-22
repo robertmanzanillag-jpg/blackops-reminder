@@ -98,6 +98,8 @@ export interface ClipperLocalNewsMetricoolResult {
   filtered: number;
   deferred: number;
   failed: number;
+  mediaAttached: number;
+  mediaFallback: number;
   blockedLanes: ClipperLocalNewsLane[];
   ledgerPath: string;
 }
@@ -287,15 +289,46 @@ function localDateTime(date: Date): string {
 }
 
 function responsePostId(value: unknown): string | null {
+  const scalar = normalizeId(value);
+  if (scalar) return scalar;
   if (!value || typeof value !== "object") return null;
   const record = z.record(z.string(), z.unknown()).parse(value);
-  const direct = normalizeId(record.id ?? record.uuid ?? record.postId ?? record.post_id);
+  const direct = normalizeId(record.id ?? record.uuid ?? record.mediaId ?? record.media_id ?? record.postId ?? record.post_id);
   if (direct) return direct;
   for (const key of ["data", "post", "result"]) {
     const nested = responsePostId(record[key]);
     if (nested) return nested;
   }
   return null;
+}
+
+function publicBrandMediaUrl(env: NodeJS.ProcessEnv, lane: ClipperLocalNewsLane): string | null {
+  const value = env.PUBLIC_BASE_URL;
+  if (!value?.trim()) return null;
+  try {
+    const base = new URL(value.trim());
+    if (base.protocol !== "https:" && base.protocol !== "http:") return null;
+    const filename = lane === "miami-news" ? "miami-news-profile.png" : "ny-news-profile.png";
+    return new URL(`/local-news/${filename}`, `${base.protocol}//${base.host}`).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function normalizeMetricoolMedia(
+  fetcher: typeof globalThis.fetch,
+  token: string,
+  mediaUrl: string,
+): Promise<string | null> {
+  const url = new URL("/api/actions/normalize/image/url", METRICOOL_API);
+  url.searchParams.set("url", mediaUrl);
+  try {
+    const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token } });
+    if (!response.ok) return null;
+    return responsePostId(await safeJson(response));
+  } catch {
+    return null;
+  }
 }
 
 async function safeJson(response: Response): Promise<unknown> {
@@ -317,6 +350,8 @@ function emptyResult(ledgerPath: string): ClipperLocalNewsMetricoolResult {
     filtered: 0,
     deferred: 0,
     failed: 0,
+    mediaAttached: 0,
+    mediaFallback: 0,
     blockedLanes: [],
     ledgerPath,
   };
@@ -448,9 +483,11 @@ export async function deliverClipperLocalNewsToMetricool(
     const now = options.now || (() => new Date());
     const fetchedNow = now();
     const safeItems = queue.filter((item) => {
+      const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
       const baseEligible = item.status === "auto_eligible"
         && item.autoEligible
-        && !item.approvalRequired;
+        && !item.approvalRequired
+        && platformEnabled;
       const committeeFieldsPresent = Boolean(item.publishDecision || item.consensus || item.reviewHash || item.verdicts?.length);
       const committeeEligible = committeeFieldsPresent ? hasCompleteCommitteeApproval(item) : item.risk === "low" || item.risk === "medium";
       const eligible = baseEligible && committeeEligible;
@@ -502,6 +539,7 @@ export async function deliverClipperLocalNewsToMetricool(
     }
 
     const fetcher = options.fetch || globalThis.fetch;
+    const mediaIds = new Map<ClipperLocalNewsLane, string | null>();
     let attempts = 0;
     for (const item of safeItems) {
       const profile = laneProfiles.get(item.lane);
@@ -514,6 +552,11 @@ export async function deliverClipperLocalNewsToMetricool(
       const cursorKey = `${item.lane}|${item.platform}`;
       const scheduledMs = Math.max(minimumStart, (cursors.get(cursorKey) || (minimumStart - MIN_SPACING_MS)) + MIN_SPACING_MS);
       const scheduledDate = new Date(scheduledMs);
+      if (!mediaIds.has(item.lane)) {
+        const mediaUrl = publicBrandMediaUrl(env, item.lane);
+        mediaIds.set(item.lane, mediaUrl ? await normalizeMetricoolMedia(fetcher, token, mediaUrl) : null);
+      }
+      const mediaId = mediaIds.get(item.lane) || null;
       const url = new URL("/api/v2/scheduler/posts", METRICOOL_API);
       url.searchParams.set("userId", userId);
       url.searchParams.set("blogId", profile.blogId);
@@ -522,6 +565,7 @@ export async function deliverClipperLocalNewsToMetricool(
         text: item.copy,
         providers: [{ network: providerFor(item.platform) }],
         publicationDate: { dateTime: localDateTime(scheduledDate), timezone: TIME_ZONE },
+        ...(mediaId ? { media: { mediaId } } : {}),
         autoPublish: true,
         draft: false,
       };
@@ -551,6 +595,8 @@ export async function deliverClipperLocalNewsToMetricool(
         await atomicWriteLedger(ledgerPath, ledger);
         cursors.set(cursorKey, scheduledMs);
         result.scheduled += 1;
+        if (mediaId) result.mediaAttached += 1;
+        else if (publicBrandMediaUrl(env, item.lane)) result.mediaFallback += 1;
       } catch {
         result.failed += 1;
       }
@@ -578,4 +624,6 @@ export const __clipperLocalNewsMetricoolInternals = {
   localDateTime,
   providerFor,
   responsePostId,
+  publicBrandMediaUrl,
+  normalizeMetricoolMedia,
 };

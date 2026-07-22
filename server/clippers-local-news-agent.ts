@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { hashLocalNewsQueueReview, hashLocalNewsReviewValue, runLocalNewsReviewCommittee } from "./clippers-local-news-review-committee";
+import { buildLocalNewsGrowthPackage, type LocalNewsGrowthPackage, type LocalNewsGrowthVariantId } from "./clippers-local-news-growth";
 
 export type ClipperLocalNewsLane = "miami-news" | "ny-news";
 export type ClipperLocalNewsPlatform = "x" | "facebook";
@@ -116,6 +117,7 @@ export interface ClipperLocalNewsQueueItem {
   reasons: string[];
   checkedAt: string;
   reviewHash: string;
+  organicGrowth?: LocalNewsGrowthPackage;
 }
 
 export interface ClipperLocalNewsMetricInput {
@@ -130,14 +132,16 @@ export interface ClipperLocalNewsMetricInput {
   revenueUsd?: number;
   costUsd?: number;
   observedAt?: string;
+  variantId?: LocalNewsGrowthVariantId;
 }
 
-export interface ClipperLocalNewsMetric extends Required<Omit<ClipperLocalNewsMetricInput, "queueItemId" | "eventId" | "observedAt">> {
+export interface ClipperLocalNewsMetric extends Required<Omit<ClipperLocalNewsMetricInput, "queueItemId" | "eventId" | "observedAt" | "variantId">> {
   id: string;
   queueItemId: string | null;
   eventId: string | null;
   observedAt: string;
   recordedAt: string;
+  variantId: LocalNewsGrowthVariantId | null;
 }
 
 export interface ClipperLocalNewsStatus {
@@ -163,6 +167,7 @@ export interface ClipperLocalNewsStatus {
     resolvedRevisions: number;
     cadence: { windowMinutes: 60; facebookPerLane: 6; facebookRoutinePerLane: 2; xPerLane: 8; xRoutinePerLane: 3; facebookRelevantMax: 10; adaptive: "urgency_and_observed_performance" };
     committee: { reviewed: number; unanimous: number; quarantined: number; rejected: number; roles: ClipperLocalNewsCommitteeRole[] };
+    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: false; ownedLinks: number; experiments: number; shortFormReady: number };
   };
   metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
   monetization: {
@@ -244,6 +249,7 @@ const FILES = {
   queueCsv: "metricool-queue.csv",
   analytics: "analytics.json",
   analyticsCsv: "analytics.csv",
+  growth: "organic-growth.json",
   runbook: "RUNBOOK.md",
   sources: "SOURCE_SETUP.md",
 } as const;
@@ -381,19 +387,24 @@ function truncate(text: string, limit: number): string {
   return `${text.slice(0, limit - 1).trimEnd()}…`;
 }
 
-export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform: ClipperLocalNewsPlatform): string {
+export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform: ClipperLocalNewsPlatform, growth?: LocalNewsGrowthPackage): string {
   const prefix = event.revisionKind === "correction" ? "CORRECCIÓN" : event.lifecycle === "resolved" ? "RESUELTO" : event.editorialUrgency === "breaking" ? "ÚLTIMA HORA" : event.revision > 1 ? "ACTUALIZACIÓN" : event.section === "traffic" ? "TRÁFICO" : event.section === "weather" ? "TIEMPO" : "NOTICIA LOCAL";
   const observedAt = event.effective || event.updatedAt;
   const time = new Intl.DateTimeFormat("es-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(observedAt));
   const attribution = `Según ${event.source}`;
   const impact = truncate(event.description || "La fuente oficial no publicó detalles adicionales.", FACEBOOK_DETAIL_LIMIT);
   const action = truncate(event.instruction || "Consulta el enlace oficial antes de tomar una decisión.", FACEBOOK_DETAIL_LIMIT);
+  const headline = growth?.headline.es || event.title;
+  const ownedLink = growth?.ownedArticleUrl ? `\nLee la actualización completa: ${growth.ownedArticleUrl}` : "";
+  const tags = growth?.hashtags.length ? `\n${growth.hashtags.join(" ")}` : "";
   if (platform === "x") {
-    const ending = `\n${attribution} (${time}): ${event.sourceUrl}`;
-    const body = `${prefix}: ${event.title} — ${event.location}. ${event.instruction || event.description || "Consulta la fuente oficial."}`.trim();
+    // X has a hard length limit: preserve the primary official source instead of risking
+    // truncation by adding a second, tracked URL. Facebook carries the owned-site link.
+    const ending = `\n${attribution} (${time}): ${event.sourceUrl}${tags}`;
+    const body = `${prefix}: ${headline}. ${event.instruction || event.description || "Consulta la fuente oficial."}`.trim();
     return `${truncate(body, Math.max(1, 280 - ending.length))}${ending}`.slice(0, 280);
   }
-  return `${prefix}: ${event.title}\n\nLugar: ${event.location}\nHora: ${time}\nImpacto: ${impact}\nQué hacer: ${action}\n\n${attribution}. Esta página no es la agencia emisora; verifica la actualización oficial:\n${event.sourceUrl}`;
+  return `${prefix}: ${headline}\n\nLugar: ${event.location}\nHora: ${time}\nImpacto: ${impact}\nQué hacer: ${action}${ownedLink}\n\n${attribution}. Esta página no es la agencia emisora; verifica la actualización oficial:\n${event.sourceUrl}${tags}`;
 }
 
 const rawEventSchema = z.object({
@@ -440,6 +451,7 @@ const metricPayloadSchema = z.object({
     impressions: z.number().finite().nonnegative().optional(), engagements: z.number().finite().nonnegative().optional(), clicks: z.number().finite().nonnegative().optional(), shares: z.number().finite().nonnegative().optional(),
     revenueUsd: z.number().finite().nonnegative().optional(), costUsd: z.number().finite().nonnegative().optional(),
     observedAt: z.string().datetime({ offset: true }).optional(),
+    variantId: z.enum(["utility", "impact"]).optional(),
   }).strict()).max(MAX_BATCH_SIZE),
 });
 
@@ -475,7 +487,7 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "lane", "platform", "section", "editorialUrgency", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
-  const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
+  const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
     atomicWrite(path.join(dir, FILES.events), `${JSON.stringify({ generatedAt: state.updatedAt, events: state.events }, null, 2)}\n`),
@@ -483,6 +495,11 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
     atomicWrite(path.join(dir, FILES.queueCsv), csv(state.queue, queueColumns)),
     atomicWrite(path.join(dir, FILES.analytics), `${JSON.stringify({ generatedAt: state.updatedAt, summary: analytics, metrics: state.metrics }, null, 2)}\n`),
     atomicWrite(path.join(dir, FILES.analyticsCsv), csv(state.metrics, metricColumns)),
+    atomicWrite(path.join(dir, FILES.growth), `${JSON.stringify({
+      generatedAt: state.updatedAt,
+      costPolicy: { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" },
+      items: state.queue.filter((item) => item.organicGrowth).map((item) => ({ queueItemId: item.id, lane: item.lane, platform: item.platform, ...item.organicGrowth })),
+    }, null, 2)}\n`),
   ]);
 }
 
@@ -518,7 +535,7 @@ function sourceSetup(): string {
 }
 
 function runbook(minutes: number): string {
-  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Facebook items are explicitly text-only and never require a photo.\n3. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. No paid LLM API is called. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n4. Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state; they do not wait in a human-review queue. Sensitive manual events without verified connector provenance are quarantined.\n5. Facebook cadence is adaptive but conservative: 6 base posts per city/hour, up to 8 for developing stories and 10 for breaking stories or strong observed performance. Routine posts remain capped at 2; relevance, never filler, unlocks volume.\n6. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; the Metricool executor waits until that timestamp.\n7. Corrections, updates and resolved/reopened notices create attributed revisions. Absence-based resolution is allowed only for an explicit controlled snapshot.\n8. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state.\n9. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
+  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Organic growth uses deterministic headline experiments, owned-site links, brand media and local short-form manifests. Paid ads and paid AI per post remain off.\n3. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. No paid LLM API is called. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n4. Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state; they do not wait in a human-review queue. Sensitive manual events without verified connector provenance are quarantined.\n5. Facebook cadence is adaptive but conservative: 6 base posts per city/hour, up to 8 for developing stories and 10 for breaking stories or strong observed performance. Routine posts remain capped at 2; relevance, never filler, unlocks volume.\n6. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; the Metricool executor waits until that timestamp.\n7. Corrections, updates and resolved/reopened notices create attributed revisions. Absence-based resolution is allowed only for an explicit controlled snapshot.\n8. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state.\n9. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
 }
 
 function migrateLegacyCommitteeState(state: LocalNewsState, now: string): void {
@@ -601,13 +618,15 @@ function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.Process
     const gated = committeeGated || !autoEnabled;
     const latestRecent = recent.reduce((latest, item) => Math.max(latest, new Date(item.notBefore || item.createdAt).getTime()), nowMs);
     const notBefore = cadenceHeld ? new Date(latestRecent + CADENCE.windowMinutes * 60_000).toISOString() : null;
-    const copy = buildClipperLocalNewsCopy(event, platform);
+    const relevantMetrics = metrics.filter((metric) => metric.lane === event.lane && metric.platform === platform);
+    const organicGrowth = buildLocalNewsGrowthPackage(event, relevantMetrics, env.PUBLIC_BASE_URL);
+    const copy = buildClipperLocalNewsCopy(event, platform, organicGrowth);
     const copyHash = hashLocalNewsReviewValue(copy);
     const publishDecision = !autoEnabled && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;
     const status: ClipperLocalNewsQueueStatus = committee.publishDecision === "reject" ? "rejected" : committee.publishDecision === "quarantine" ? "quarantined" : !autoEnabled ? "approval_required" : "auto_eligible";
     const evidence = [...committee.evidence, `copyHash=${copyHash}`];
     const reviewHash = hashLocalNewsQueueReview({ copy, platform, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
-    return { id: digest(`${event.id}|${event.revision}|${platform}`), eventId: event.id, eventRevision: event.revision, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons: !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons, checkedAt: committee.checkedAt, reviewHash };
+    return { id: digest(`${event.id}|${event.revision}|${platform}`), eventId: event.id, eventRevision: event.revision, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons: !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   });
 }
 
@@ -822,7 +841,7 @@ export async function recordClipperLocalNewsMetrics(input: ClipperLocalNewsMetri
   const now = isoNow(input.now);
   for (const item of input.metrics) {
     if (!LANES.includes(item.lane) || !PLATFORMS.includes(item.platform)) throw new Error("Invalid metric lane or platform");
-    const metric: ClipperLocalNewsMetric = { id: digest(JSON.stringify([item.queueItemId, item.eventId, item.lane, item.platform, item.observedAt || now, state.metrics.length])), queueItemId: item.queueItemId || null, eventId: item.eventId || null, lane: item.lane, platform: item.platform, impressions: nonNegativeInteger(item.impressions, "impressions"), engagements: nonNegativeInteger(item.engagements, "engagements"), clicks: nonNegativeInteger(item.clicks, "clicks"), shares: nonNegativeInteger(item.shares, "shares"), revenueUsd: nonNegativeMoney(item.revenueUsd, "revenueUsd"), costUsd: nonNegativeMoney(item.costUsd, "costUsd"), observedAt: isoNow(item.observedAt || now), recordedAt: now };
+    const metric: ClipperLocalNewsMetric = { id: digest(JSON.stringify([item.queueItemId, item.eventId, item.lane, item.platform, item.observedAt || now, state.metrics.length])), queueItemId: item.queueItemId || null, eventId: item.eventId || null, lane: item.lane, platform: item.platform, impressions: nonNegativeInteger(item.impressions, "impressions"), engagements: nonNegativeInteger(item.engagements, "engagements"), clicks: nonNegativeInteger(item.clicks, "clicks"), shares: nonNegativeInteger(item.shares, "shares"), revenueUsd: nonNegativeMoney(item.revenueUsd, "revenueUsd"), costUsd: nonNegativeMoney(item.costUsd, "costUsd"), observedAt: isoNow(item.observedAt || now), recordedAt: now, variantId: item.variantId || null };
     state.metrics.push(metric);
   }
   state.updatedAt = now;
@@ -865,6 +884,14 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
         quarantined: state?.queue.filter((item) => item.publishDecision === "quarantine" || item.gateReason === "committee_quarantine").length || 0,
         rejected: state?.queue.filter((item) => item.publishDecision === "reject" || item.gateReason === "committee_reject").length || 0,
         roles: ["source_verifier", "safety_editor", "monetization_editor"],
+      },
+      growth: {
+        mode: "zero_cost_organic",
+        paidAds: false,
+        paidAiPerPost: false,
+        ownedLinks: state?.queue.filter((item) => Boolean(item.organicGrowth?.ownedArticleUrl)).length || 0,
+        experiments: state?.queue.filter((item) => Boolean(item.organicGrowth?.variantId)).length || 0,
+        shortFormReady: state?.queue.filter((item) => item.organicGrowth?.shortForm.ready === true).length || 0,
       },
     },
     metrics,
