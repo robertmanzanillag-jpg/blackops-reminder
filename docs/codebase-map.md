@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T06:08:06.842Z
+Generated: 2026-07-22T06:25:24.948Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-verification-evidence`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 850 | 710 | 3015 | 498 | 14075 |
+| 850 | 710 | 3015 | 498 | 14081 |
 
 ## Entrypoints
 - `client/src/App.tsx`

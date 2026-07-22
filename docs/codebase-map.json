@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T06:08:06.842Z",
+  "generatedAt": "2026-07-22T06:25:24.948Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-heygen-verification-evidence",
   "packageName": "rest-express",
   "scripts": {
@@ -92,31 +92,9 @@
     "filesIndexed": 710,
     "imports": 3015,
     "routes": 498,
-    "symbols": 14075
+    "symbols": 14081
   },
   "directories": {
-    "migrations/ai-media-studio": {
-      "files": 51,
-      "indexed": 3,
-      "kinds": {
-        "other": 49,
-        "docs": 2
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 159,
-      "indexed": 146,
-      "kinds": {
-        "server": 159
-      }
-    },
-    "tests": {
-      "files": 211,
-      "indexed": 200,
-      "kinds": {
-        "test": 211
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -181,6 +159,14 @@
         "docs": 12
       }
     },
+    "migrations/ai-media-studio": {
+      "files": 51,
+      "indexed": 3,
+      "kinds": {
+        "other": 49,
+        "docs": 2
+      }
+    },
     "script": {
       "files": 43,
       "indexed": 41,
@@ -202,6 +188,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 159,
+      "indexed": 146,
+      "kinds": {
+        "server": 159
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -221,6 +214,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 211,
+      "indexed": 200,
+      "kinds": {
+        "test": 211
       }
     },
     "tests/fixtures": {
@@ -11839,7 +11839,6 @@
         "parseLook",
         "parseVoice",
         "parsed",
-        "providerAccountId",
         "providerCredentialVersion",
         "reader",
         "record",
@@ -11850,7 +11849,6 @@
         "responseDigest",
         "result",
         "root",
-        "safeOpaqueId",
         "safeRequestDigest",
         "safeResponseBody",
         "seen",
@@ -24515,14 +24513,20 @@
         "TEMP_PREFIX",
         "activateWithPointers",
         "applyManifestAndPending",
+        "avatarEvidenceId",
+        "avatarIds",
+        "avatarLook",
         "bytes",
         "digest",
         "enabled",
+        "evidenceId",
         "externalDigest",
         "ids",
+        "influencerIds",
         "insertHeader",
         "insertResourceEvidence",
         "integrationTest",
+        "lookIndex",
         "manifest",
         "migrationRoot",
         "ownedUrl",
@@ -24533,10 +24537,12 @@
         "pr28Forward",
         "pr29Forward",
         "pr29Rollback",
+        "publicSlotKey",
         "resolvedSocket",
         "reviewedForward",
         "root",
         "seedStaticPlan",
+        "slotId",
         "slotKey",
         "socket",
         "value",
