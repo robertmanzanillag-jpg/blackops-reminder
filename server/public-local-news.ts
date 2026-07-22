@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { localNewsArticleSlug } from "./clippers-local-news-growth";
+import { hasCompleteLocalNewsCommitteeApproval } from "./clippers-local-news-metricool";
+import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, hashLocalNewsReviewValue } from "./clippers-local-news-review-committee";
 
 export type PublicLocalNewsCity = "miami" | "new-york";
 export type PublicLocalNewsLanguage = "es" | "en";
@@ -39,6 +41,10 @@ const publicQueueItemSchema = z.object({
   eventRevision: z.number().int().positive(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
+  copy: z.string(),
+  canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  claimIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   risk: z.enum(["low", "medium", "high", "critical"]),
   status: z.enum(["approval_required", "auto_eligible", "quarantined", "rejected"]),
   approvalRequired: z.boolean(),
@@ -71,6 +77,13 @@ const publicStateSchema = z.object({
 const publicLedgerSchema = z.object({
   entries: z.array(z.object({
     queueItemId: z.string().min(1),
+    eventId: z.string().min(1).optional(),
+    eventRevision: z.number().int().positive().optional(),
+    canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    copyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    reviewedCopyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    lane: z.enum(["miami-news", "ny-news"]).optional(),
     platform: z.enum(["x", "facebook"]),
     scheduledFor: z.string().datetime(),
     scheduledAt: z.string().datetime(),
@@ -168,11 +181,24 @@ function cityForLane(lane: StateEvent["lane"]): PublicLocalNewsCity {
 }
 
 function categoryFor(event: StateEvent): PublicLocalNewsArticle["category"] {
-  const text = `${event.eventType} ${event.title} ${event.description}`.toLowerCase();
+  const text = `${event.source} ${event.eventType} ${event.title} ${event.description}`.toLowerCase();
+  if (/police|fire|emergency|evacuat|public safety|bombero|polic[ií]a|emergencia|evacua|federal bureau of investigation|\bfbi\b|department of justice|u\.s\. attorney|arrest|custody|charged|indict|criminal complaint|defendant|homicid|murder|asesinat|robbery|assault|kidnap|secuestr/.test(text)) return "public-safety";
   if (/traffic|road|route|highway|crash|collision|closure|closed|lane|congestion|tr[aá]nsito|carretera|cierre/.test(text)) return "traffic";
   if (/weather|storm|rain|flood|wind|snow|heat|cold|tornado|hurricane|clima|tormenta|lluvia|inundaci|hurac[aá]n/.test(text)) return "weather";
-  if (/police|fire|emergency|evacuat|public safety|bombero|polic[ií]a|emergencia|evacua/.test(text)) return "public-safety";
   return "local";
+}
+
+function isAccusationStory(event: StateEvent): boolean {
+  return detectLocalNewsSensitiveContent({ title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType }).accusation;
+}
+
+function matchesReviewedEventIdentity(item: StateQueueItem, event: StateEvent): boolean {
+  if (!item.canonicalEventIdentity || !item.claimIdentityHash || item.lane !== event.lane || item.risk !== event.risk) return false;
+  return item.canonicalEventIdentity === hashLocalNewsCanonicalEventIdentity({
+    eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction,
+    location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle,
+    effective: event.effective || null, expires: event.expires || null, claimIdentityHash: item.claimIdentityHash,
+  });
 }
 
 function localizedContent(event: StateEvent, category: PublicLocalNewsArticle["category"], queueItems: StateQueueItem[]): Record<PublicLocalNewsLanguage, PublicLocalNewsTranslation> {
@@ -180,16 +206,19 @@ function localizedContent(event: StateEvent, category: PublicLocalNewsArticle["c
   const spanishStatus = event.lifecycle === "resolved" ? "resuelta" : "activa";
   const categoryTerm = CATEGORY_TERMS[category];
   const growth = queueItems.find((item) => item.organicGrowth)?.organicGrowth;
+  const accusation = isAccusationStory(event);
+  const legalEn = accusation ? " An arrest, accusation, or charge is not a finding of guilt; every person is presumed innocent unless proven guilty in court." : "";
+  const legalEs = accusation ? " Una detención, acusación o cargo no equivale a culpabilidad; toda persona se presume inocente hasta que un tribunal determine lo contrario." : "";
   return {
     en: {
       title: growth?.headline.en || `${categoryTerm.en[0].toUpperCase()}${categoryTerm.en.slice(1)} update for ${event.location}`,
-      summary: `${event.title}. An official ${categoryTerm.en} update for ${event.location} is ${englishStatus}. Check the attributed source for the latest details.`,
-      body: `Source headline: ${event.title}. Location: ${event.location}. Status: ${englishStatus}. Severity: ${event.severity}. This structured summary preserves the source attribution and does not claim to be a complete translation of the original notice.`,
+      summary: `${event.title}. An official ${categoryTerm.en} update for ${event.location} is ${englishStatus}. Check the attributed source for the latest details.${legalEn}`,
+      body: `Source headline: ${event.title}. Location: ${event.location}. Status: ${englishStatus}. Severity: ${event.severity}. This structured summary preserves the source attribution and does not claim to be a complete translation of the original notice.${legalEn}`,
     },
     es: {
       title: growth?.headline.es || `Actualización ${categoryTerm.es} para ${event.location}`,
-      summary: `${event.title}. Hay una actualización oficial ${categoryTerm.es} para ${event.location}. La situación está ${spanishStatus}. Consulte la fuente atribuida para conocer los detalles más recientes.`,
-      body: `Titular de la fuente: ${event.title}. Ubicación: ${event.location}. Estado: ${spanishStatus}. Severidad indicada por la fuente: ${event.severity}. Este es un resumen estructurado y no pretende ser una traducción completa del aviso original.`,
+      summary: `${event.title}. Hay una actualización oficial ${categoryTerm.es} para ${event.location}. La situación está ${spanishStatus}. Consulte la fuente atribuida para conocer los detalles más recientes.${legalEs}`,
+      body: `Titular de la fuente: ${event.title}. Ubicación: ${event.location}. Estado: ${spanishStatus}. Severidad indicada por la fuente: ${event.severity}. Este es un resumen estructurado y no pretende ser una traducción completa del aviso original.${legalEs}`,
     },
   };
 }
@@ -267,14 +296,23 @@ export async function listPublicLocalNews(options: PublicLocalNewsOptions = {}):
   const publishedByEvent = new Map<string, { event: StateEvent; queueItems: StateQueueItem[]; evidence: LedgerEntry[] }>();
   for (const item of state.queue) {
     if (!item.autoEligible || item.approvalRequired || item.status !== "auto_eligible") continue;
-    if (item.risk !== "low" && item.risk !== "medium") continue;
     const event = eventById.get(item.eventId);
     // Only expose the exact current revision after its scheduled publication time.
     // This prevents stale safe evidence from publishing a later high-risk snapshot.
     if (!event || event.revision !== item.eventRevision) continue;
-    if (event.risk !== "low" && event.risk !== "medium") continue;
+    const sensitive = item.risk === "high" || item.risk === "critical" || event.risk === "high" || event.risk === "critical";
+    if (sensitive && (!hasCompleteLocalNewsCommitteeApproval(item) || !matchesReviewedEventIdentity(item, event))) continue;
     const evidence = ledgerByQueueId.get(item.id)?.filter((entry) => (
-      entry.platform === item.platform && Date.parse(entry.scheduledFor) <= nowMs
+      entry.platform === item.platform
+      && Date.parse(entry.scheduledFor) <= nowMs
+      && (!sensitive || (
+        entry.eventId === item.eventId
+        && entry.eventRevision === item.eventRevision
+        && entry.lane === item.lane
+        && entry.reviewedCopyHash === hashLocalNewsReviewValue(item.copy)
+        && entry.canonicalEventIdentity === item.canonicalEventIdentity
+        && entry.reviewHash === item.reviewHash
+      ))
     ));
     if (!evidence?.length) continue;
     const existing = publishedByEvent.get(event.id) || {

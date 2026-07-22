@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { z } from "zod";
+import { detectLocalNewsSensitiveContent } from "../server/clippers-local-news-review-committee";
 import { __clipperLocalNewsInternals, bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, normalizeClipperLocalNewsEvent, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "../server/clippers-local-news-agent";
 
 async function fixture(t: test.TestContext) {
@@ -87,11 +88,14 @@ test("status exposes built-in official sources and fetches optional sources only
     return new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   const cycle = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", env: {}, fetch: fetcher as typeof fetch });
-  assert.equal(requested.length, 12);
+  assert.equal(requested.length, 13);
   assert.ok(requested.some((url) => url === "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml"));
-  assert.ok(requested.some((url) => url.includes("subway-alerts.json")));
+  assert.ok(requested.every((url) => !url.includes("subway-alerts.json")));
+  assert.ok(requested.some((url) => url === "https://www.fbi.gov/feeds/new-york-news/rss.xml"));
+  assert.ok(requested.some((url) => url === "https://www.fbi.gov/feeds/miami-news/rss.xml"));
+  assert.ok(requested.some((url) => url.includes("justice.gov/feeds/justice-news.xml")));
   assert.ok(requested.some((url) => url === "https://www.miamidade.gov/global/rss-news.page"));
-  assert.ok(requested.some((url) => url.includes("api/serviceupdates")));
+  assert.ok(requested.every((url) => !url.includes("api/serviceupdates")));
   assert.ok(requested.some((url) => url.includes("news.miami-airport.com/tagfeed")));
   assert.equal(requested.filter((url) => url.includes("Road_Closures/FeatureServer")).length, 4);
   const ny511 = cycle.status.connectors.find((connector) => connector.id === "ny511");
@@ -99,8 +103,8 @@ test("status exposes built-in official sources and fetches optional sources only
   assert.deepEqual({ configured: ny511?.configured, requiresKey: ny511?.requiresKey }, { configured: false, requiresKey: true });
   assert.equal(fl511?.configured, false);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "notify-nyc")?.configured, true);
-  assert.equal(cycle.status.connectors.find((connector) => connector.id === "mta-subway-alerts")?.configured, true);
-  assert.equal(cycle.status.connectors.find((connector) => connector.id === "miami-dade-transit")?.configured, true);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "mta-subway-alerts"), undefined);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "miami-dade-transit"), undefined);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "mia-airport-news")?.configured, true);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "fhp-miami-dade")?.configured, true);
   assert.equal(cycle.status.coverage.miamiTraffic, "public_incident_feed");
@@ -261,7 +265,7 @@ test("official RSS adapters normalize attributed XML items without credentials a
 });
 
 test("MTA adapter ingests only live unscheduled subway alerts and ignores planned-work floods", () => {
-  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "mta-subway-alerts")!;
+  const source = { id: "mta-subway-alerts", lane: "ny-news" as const, url: "https://www.mta.info/alerts", requiresKey: false, format: "mta-json" as const, sourceName: "Metropolitan Transportation Authority" };
   const items = __clipperLocalNewsInternals.mtaAlertEvents({ entity: [
     { id: "lmm:alert:101", alert: {
       active_period: [{ start: 1784633400 }],
@@ -283,7 +287,7 @@ test("MTA adapter ingests only live unscheduled subway alerts and ignores planne
 });
 
 test("Miami-Dade Transit adapter keeps current service updates and drops expired or stale indefinite detours", () => {
-  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "miami-dade-transit")!;
+  const source = { id: "miami-dade-transit", lane: "miami-news" as const, url: "https://www.miamidade.gov/global/transportation/tracker/service-updates.page", requiresKey: false, format: "miami-transit-bootstrap" as const, sourceName: "Miami-Dade Transit" };
   const items = __clipperLocalNewsInternals.miamiTransitEvents({ metrobus: [
     { id: 3020, title: "Route 183 adjustment", serviceUpdate: '<p><a href="https://cloud.info.miamidade.gov/current">Details</a> New schedule.</p>', serviceUpdateType: "Metrobus", serviceUpdateTypeID: "183", inEffect: "2026-07-20T00:00:00", expireDate: "2026-09-01T00:00:00" },
     { id: 2000, title: "Expired detour", serviceUpdate: "Old", serviceUpdateType: "Metrobus", inEffect: "2026-01-01T00:00:00", expireDate: "2026-07-20T00:00:00" },
@@ -309,7 +313,7 @@ test("Miami transit bootstrap key is used ephemerally and never persisted", asyn
     return new Response(JSON.stringify({ features: [] }), { status: 200 });
   };
   const result = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", fetch: fetcher as typeof fetch });
-  assert.equal(headersSeen[0]["x-api-key"], secret);
+  assert.equal(headersSeen.length, 0, "disabled transit connector must not request or use a bootstrap key");
   for (const artifact of Object.values(result.status.artifacts)) assert.doesNotMatch(await readFile(artifact, "utf8"), new RegExp(secret));
 });
 
@@ -420,4 +424,41 @@ test("bootstrap safely backfills committee decisions for legacy queue state", as
   assert.equal(state.version, 1);
   assert.ok(migrated.every((item: any) => item.verdicts.length === 3 && item.consensus === "unanimous_approve" && /^[a-f0-9]{64}$/.test(item.reviewHash)));
   assert.equal(status.editorial.committee.reviewed, 2);
+});
+
+test("official DOJ accusation uses the sensitive connector, public-safety priority, and neutral legal language", async (t) => {
+  const workspaceDir = await fixture(t);
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "doj-sdfl")!;
+  const fetched = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>doj-charge-1</guid><title>Miami resident charged in federal case</title>
+    <description>The defendant was arrested and charged. The allegation remains pending.</description>
+    <link>https://www.justice.gov/usao-sdfl/pr/example-case</link>
+    <pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate>
+  </item></channel></rss>`, source, "2026-07-21T12:00:00Z");
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: fetched });
+  const state = JSON.parse(await readFile(path.join(workspaceDir, "state.json"), "utf8"));
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(state.events[0].section, "public_safety");
+  assert.ok(state.events[0].editorialPriority >= 80);
+  assert.ok(queue.every((item: any) => item.publishDecision === "auto_publish" && item.autoEligible));
+  assert.ok(queue.every((item: any) => /^[a-f0-9]{64}$/.test(item.claimIdentityHash) && /^[a-f0-9]{64}$/.test(item.canonicalEventIdentity)));
+  assert.match(queue.find((item: any) => item.platform === "facebook").copy, /se presume inocente/);
+  assert.match(queue.find((item: any) => item.platform === "x").copy, /Acusación; se presume inocente/);
+});
+
+
+test("sensitive detector covers custody, charge, complaint, and defendant language", () => {
+  const base = { instruction: "", location: "Miami", eventType: "Public safety" };
+  for (const description of ["The suspect was taken into custody.", "The defendant faces 3 counts.", "A criminal complaint was filed.", "The defendant faces multiple charges."]) {
+    assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "Official update", description }).accusation, true, description);
+  }
+});
+
+test("sensitive detector rejects identifiable minors, graphic variants, and private residences without flagging ordinary road locations", () => {
+  const base = { instruction: "", location: "Miami", eventType: "Public safety" };
+  assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "17-year-old boy John Smith located", description: "Official update" }).identifiableMinor, true);
+  assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "Juvenile Jane Smith located", description: "Official update" }).identifiableMinor, true);
+  assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "Investigation update", description: "Authorities reported severed remains." }).graphic, true);
+  assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "Family notice", description: "The victim family residence is 1200 Ocean Boulevard Unit 4." }).victimPrivateAddress, true);
+  assert.equal(detectLocalNewsSensitiveContent({ ...base, title: "Road closure", description: "Traffic is blocked at 1200 Ocean Boulevard." }).victimPrivateAddress, false);
 });

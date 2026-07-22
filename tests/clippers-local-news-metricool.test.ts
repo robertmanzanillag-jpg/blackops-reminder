@@ -3,13 +3,16 @@ import { access, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness } from "../server/clippers-local-news-metricool";
+import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness, hasCompleteLocalNewsCommitteeApproval } from "../server/clippers-local-news-metricool";
 import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "../server/clippers-local-news-review-committee";
 
-function item(overrides: Record<string, unknown> = {}) {
+function rawItem(overrides: Record<string, unknown> = {}) {
   return {
     id: "queue-1",
     eventId: "event-1",
+    eventRevision: 1,
+    canonicalEventIdentity: "b".repeat(64),
+    claimIdentityHash: "a".repeat(64),
     lane: "miami-news",
     platform: "x",
     copy: "Cierre local. Fuente oficial: https://example.gov/road",
@@ -24,7 +27,7 @@ function item(overrides: Record<string, unknown> = {}) {
 }
 
 function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
-  const base = item(overrides);
+  const base = rawItem(overrides);
   const checkedAt = "2026-07-21T15:55:00.000Z";
   const reviewed = {
     ...base,
@@ -35,8 +38,15 @@ function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
     checkedAt,
   };
   const reviewHash = hashLocalNewsQueueReview({
+    queueItemId: reviewed.id,
+    eventId: reviewed.eventId,
+    eventRevision: reviewed.eventRevision,
+    lane: reviewed.lane,
     copy: reviewed.copy,
     platform: reviewed.platform,
+    risk: reviewed.risk,
+    canonicalEventIdentity: reviewed.canonicalEventIdentity,
+    claimIdentityHash: reviewed.claimIdentityHash,
     verdicts: reviewed.verdicts as Parameters<typeof hashLocalNewsQueueReview>[0]["verdicts"],
     evidence: reviewed.evidence,
     consensus: reviewed.consensus as "unanimous_approve",
@@ -44,6 +54,10 @@ function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
     checkedAt: reviewed.checkedAt,
   });
   return { ...reviewed, reviewHash };
+}
+
+function item(overrides: Record<string, unknown> = {}) {
+  return unanimouslyReviewedItem(overrides);
 }
 
 async function workspace(items: unknown[]) {
@@ -297,10 +311,10 @@ test("readiness does not treat a blog id override as proof of an unverified prov
   assert.equal(readiness.platforms.x.ready, false);
 });
 
-test("filters high/critical and approval-required queue items even if their flags conflict", async () => {
+test("filters unsigned high/critical and approval-required queue items even if their flags conflict", async () => {
   const dir = await workspace([
-    item({ id: "high", risk: "high" }),
-    item({ id: "critical", risk: "critical" }),
+    rawItem({ id: "high", risk: "high" }),
+    rawItem({ id: "critical", risk: "critical" }),
     item({ id: "review", status: "approval_required", approvalRequired: true, autoEligible: false }),
     item({ id: "safe", platform: "facebook" }),
   ]);
@@ -445,6 +459,8 @@ test("durable ledger deduplicates the same event and copy when a later cycle cha
   assert.equal(ledger.entries.length, 1);
   assert.equal(ledger.entries[0].eventId, "event-1");
   assert.match(ledger.entries[0].copyHash, /^[a-f0-9]{64}$/);
+  assert.equal(ledger.entries[0].reviewedCopyHash, hashLocalNewsReviewValue(item().copy));
+  assert.notEqual(ledger.entries[0].copyHash, ledger.entries[0].reviewedCopyHash);
 });
 
 test("a real update to an existing event remains publishable when its copy changes", async () => {
@@ -673,4 +689,63 @@ test("spaces posts for the same lane and platform by at least two minutes and ho
   });
   assert.equal(result.scheduled, 2);
   assert.deepEqual(dates, ["2026-07-21T12:02:00", "2026-07-21T12:04:00"]);
+});
+
+test("suppresses routine subway and Metrobus noise before it reaches Metricool", async () => {
+  const dir = await workspace([
+    item({
+      id: "routine-mta",
+      platform: "facebook",
+      source: "MTA Subway Alerts",
+      copy: "MTA subway: demoras rutinarias en la línea A.",
+      editorialUrgency: "routine",
+      editorialPriority: 100,
+    }),
+    item({
+      id: "routine-metrobus",
+      platform: "facebook",
+      source: "Miami-Dade Transit",
+      copy: "Metrobus opera con una demora menor.",
+      editorialUrgency: "routine",
+      editorialPriority: 99,
+    }),
+  ]);
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("routine transit must not reach Metricool"); },
+  });
+
+  assert.equal(result.filtered, 2);
+  assert.equal(result.scheduled, 0);
+  assert.equal(fetched, false);
+});
+
+test("uses editorial priority and recency before applying the per-run cap", async () => {
+  const dir = await workspace([
+    item({ id: "routine-local", platform: "facebook", copy: "Aviso local rutinario.", editorialPriority: 5, createdAt: "2026-07-21T15:58:00.000Z" }),
+    item({ id: "important-public-safety", platform: "facebook", copy: "Actualización verificada de seguridad pública.", editorialPriority: 85, createdAt: "2026-07-21T15:50:00.000Z" }),
+  ]);
+  const posted: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" }, workspaceDir: dir, now: fixedNow, maxPerRun: 1,
+    fetch: async (_input, init) => { posted.push(JSON.parse(String(init?.body)).text); return new Response(JSON.stringify({ id: "priority-post" }), { status: 200 }); },
+  });
+  assert.equal(result.scheduled, 1);
+  assert.match(posted[0], /Actualización verificada/);
+  assert.doesNotMatch(posted[0], /Aviso local rutinario/);
+});
+
+
+test("committee review identity cannot be replayed or risk-downgraded", () => {
+  const reviewed = unanimouslyReviewedItem({ id: "queue-sensitive", eventId: "event-sensitive", eventRevision: 3, lane: "ny-news", risk: "high" });
+  assert.equal(hasCompleteLocalNewsCommitteeApproval(reviewed), true);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, id: "queue-replay" }), false);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, eventId: "another-event" }), false);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, eventRevision: 4 }), false);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, lane: "miami-news" }), false);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, risk: "low" }), false);
+  assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, canonicalEventIdentity: undefined }), false);
 });

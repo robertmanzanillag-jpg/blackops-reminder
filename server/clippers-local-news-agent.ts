@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { hashLocalNewsQueueReview, hashLocalNewsReviewValue, runLocalNewsReviewCommittee } from "./clippers-local-news-review-committee";
+import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, hashLocalNewsQueueReview, hashLocalNewsReviewValue, runLocalNewsReviewCommittee } from "./clippers-local-news-review-committee";
 import { buildLocalNewsGrowthPackage, type LocalNewsGrowthPackage, type LocalNewsGrowthVariantId } from "./clippers-local-news-growth";
 
 export type ClipperLocalNewsLane = "miami-news" | "ny-news";
@@ -56,6 +56,7 @@ export interface ClipperLocalNewsProvenance {
   fetchedAt: string;
   claimHash: string;
   verified: boolean;
+  sensitiveEligible: boolean;
 }
 
 export interface ClipperLocalNewsEvent {
@@ -83,6 +84,7 @@ export interface ClipperLocalNewsEvent {
   fingerprint: string;
   section: ClipperLocalNewsSection;
   editorialUrgency: ClipperLocalNewsEditorialUrgency;
+  editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
   provenance: ClipperLocalNewsProvenance | null;
 }
@@ -91,6 +93,8 @@ export interface ClipperLocalNewsQueueItem {
   id: string;
   eventId: string;
   eventRevision: number;
+  canonicalEventIdentity: string;
+  claimIdentityHash: string;
   lane: ClipperLocalNewsLane;
   platform: ClipperLocalNewsPlatform;
   copy: string;
@@ -105,6 +109,7 @@ export interface ClipperLocalNewsQueueItem {
   createdAt: string;
   section: ClipperLocalNewsSection;
   editorialUrgency: ClipperLocalNewsEditorialUrgency;
+  editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
   textOnly: true;
   mediaRequired: false;
@@ -295,6 +300,7 @@ function attachVerifiedProvenance(raw: ClipperLocalNewsRawEvent, source: SourceD
     fetchedAt,
     claimHash: digest(JSON.stringify([raw.sourceEventId, raw.title, raw.description, raw.instruction, raw.location, raw.eventType, sourceUrl])),
     verified: true,
+    sensitiveEligible: source.sensitiveEligible === true,
   };
   verifiedFetchedEvents.add(raw);
   return raw;
@@ -321,9 +327,9 @@ function riskFor(input: { severity: string; urgency: string; title: string; even
 
 function sectionFor(input: { title: string; eventType: string; description: string; source: string }): ClipperLocalNewsSection {
   const text = `${input.title} ${input.eventType} ${input.description} ${input.source}`.toLowerCase();
+  if (/police|fire|public safety|seguridad p[uú]blica|emergency|rescue|missing person|shelter|federal bureau of investigation|\bfbi\b|department of justice|u\.s\. attorney|arrest|detenid|acusad|charged|indict|homicid|murder|asesinat|robbery|assault|kidnap|secuestr/.test(text)) return "public_safety";
   if (/traffic|tr[aá]nsito|road|route|highway|street|bridge|tunnel|closure|closed|reopened|crash|collision|congestion|lane|subway|transit|\btrains?\b|metropolitan transportation authority|mta|fhp|fl511|511ny/.test(text)) return "traffic";
   if (/weather|nws|storm|\brain\b|flood|snow|wind|heat|cold|hurricane|tornado|thunder|coastal/.test(text)) return "weather";
-  if (/police|fire|public safety|seguridad p[uú]blica|emergency|rescue|missing person|shelter/.test(text)) return "public_safety";
   if (/breaking|urgent|urgente|ultima hora|última hora/.test(text)) return "breaking";
   return "local";
 }
@@ -334,6 +340,13 @@ function editorialUrgencyFor(input: { risk: ClipperLocalNewsRisk; section: Clipp
   if (input.lifecycle === "resolved") return "routine";
   if (input.risk === "high" || input.risk === "medium" || input.section === "traffic" || input.section === "weather") return "developing";
   return "routine";
+}
+
+function editorialPriorityFor(input: { risk: ClipperLocalNewsRisk; section: ClipperLocalNewsSection; editorialUrgency: ClipperLocalNewsEditorialUrgency; lifecycle: ClipperLocalNewsLifecycle }): number {
+  const risk = { low: 0, medium: 15, high: 35, critical: 50 }[input.risk];
+  const section = { traffic: 0, weather: 15, local: 20, public_safety: 35, breaking: 40 }[input.section];
+  const urgency = { routine: 0, developing: 10, breaking: 20 }[input.editorialUrgency];
+  return Math.max(0, Math.min(100, 10 + risk + section + urgency - (input.lifecycle === "resolved" ? 15 : 0)));
 }
 
 function revisionKindFor(raw: ClipperLocalNewsRawEvent, lifecycle: ClipperLocalNewsLifecycle): ClipperLocalNewsRevisionKind {
@@ -377,10 +390,11 @@ export function normalizeClipperLocalNewsEvent(raw: ClipperLocalNewsRawEvent, no
   const risk = riskFor({ severity, urgency, title, eventType, description, instruction, location });
   const section = sectionFor({ title, eventType, description, source });
   const editorialUrgency = editorialUrgencyFor({ risk, section, title, eventType, urgency, lifecycle });
+  const editorialPriority = editorialPriorityFor({ risk, section, editorialUrgency, lifecycle });
   const revisionKind = revisionKindFor(raw, lifecycle);
   const provenance = verifiedFetchedEvents.has(raw) && raw.provenance?.verified ? raw.provenance : null;
   const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, editorialUrgency, revisionKind, claimHash: provenance?.claimHash }));
-  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, revisionKind, provenance };
+  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, editorialPriority, revisionKind, provenance };
 }
 
 function truncate(text: string, limit: number): string {
@@ -390,7 +404,7 @@ function truncate(text: string, limit: number): string {
 }
 
 export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform: ClipperLocalNewsPlatform, growth?: LocalNewsGrowthPackage): string {
-  const prefix = event.revisionKind === "correction" ? "CORRECCIÓN" : event.lifecycle === "resolved" ? "RESUELTO" : event.editorialUrgency === "breaking" ? "ÚLTIMA HORA" : event.revision > 1 ? "ACTUALIZACIÓN" : event.section === "traffic" ? "TRÁFICO" : event.section === "weather" ? "TIEMPO" : "NOTICIA LOCAL";
+  const prefix = event.revisionKind === "correction" ? "CORRECCIÓN" : event.lifecycle === "resolved" ? "RESUELTO" : event.editorialUrgency === "breaking" ? "ÚLTIMA HORA" : event.revision > 1 ? "ACTUALIZACIÓN" : event.section === "traffic" ? "TRÁFICO" : event.section === "weather" ? "TIEMPO" : event.section === "public_safety" ? "SEGURIDAD PÚBLICA" : "NOTICIA LOCAL";
   const observedAt = event.effective || event.updatedAt;
   const time = new Intl.DateTimeFormat("es-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(observedAt));
   const attribution = `Según ${event.source}`;
@@ -399,14 +413,16 @@ export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform
   const headline = growth?.headline.es || event.title;
   const ownedLink = growth?.ownedArticleUrl ? `\nLee la actualización completa: ${growth.ownedArticleUrl}` : "";
   const tags = growth?.hashtags.length ? `\n${growth.hashtags.join(" ")}` : "";
+  const legalNote = detectLocalNewsSensitiveContent(event).accusation ? " Nota legal: una detención, acusación o cargo no equivale a culpabilidad; toda persona se presume inocente hasta que un tribunal determine lo contrario." : "";
   if (platform === "x") {
     // X has a hard length limit: preserve the primary official source instead of risking
     // truncation by adding a second, tracked URL. Facebook carries the owned-site link.
-    const ending = `\n${attribution} (${time}): ${event.sourceUrl}${tags}`;
+    const compactLegalNote = legalNote ? "\nAcusación; se presume inocente." : "";
+    const ending = `${compactLegalNote}\n${attribution} (${time}): ${event.sourceUrl}${tags}`;
     const body = `${prefix}: ${headline}. ${event.instruction || event.description || "Consulta la fuente oficial."}`.trim();
     return `${truncate(body, Math.max(1, 280 - ending.length))}${ending}`.slice(0, 280);
   }
-  return `${prefix}: ${headline}\n\nLugar: ${event.location}\nHora: ${time}\nImpacto: ${impact}\nQué hacer: ${action}${ownedLink}\n\n${attribution}. Esta página no es la agencia emisora; verifica la actualización oficial:\n${event.sourceUrl}${tags}`;
+  return `${prefix}: ${headline}\n\nLugar: ${event.location}\nHora: ${time}\nImpacto: ${impact}\nQué hacer: ${action}${legalNote}${ownedLink}\n\n${attribution}. Esta página no es la agencia emisora; verifica la actualización oficial:\n${event.sourceUrl}${tags}`;
 }
 
 const rawEventSchema = z.object({
@@ -488,7 +504,7 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
-  const queueColumns = ["id", "eventId", "eventRevision", "lane", "platform", "section", "editorialUrgency", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
+  const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "editorialUrgency", "editorialPriority", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
@@ -533,33 +549,35 @@ function summarizeMetricsBySection(state: LocalNewsState | null): ClipperLocalNe
 }
 
 function sourceSetup(): string {
-  return `# Local News Source Setup\n\n- NWS: public, no API key. The agent reads point alerts for Miami and New York City.\n- Notify NYC: official public RSS, no API key. Attribution must make clear that this newsroom is not the issuing agency.\n- MTA: official public real-time subway alerts in JSON. Only live unscheduled alerts are ingested; planned-work floods are excluded.\n- Miami-Dade County: official public news RSS, no API key.\n- Miami-Dade Transit: official service updates. The public webpage supplies its short-lived browser key at request time; it is never stored.\n- Miami International Airport: official Latest News RSS; third-party “In the News” aggregation is intentionally excluded.\n- Florida road incidents: public ArcGIS layers for closures, crashes, brush fires and other incidents, restricted to Miami-Dade. This is useful incident coverage, not a claim of every road condition.\n- NY511: optional and subject to its access agreement. Set both \`NY511_API_KEY\` and \`NY511_FEED_URL\`; the key is sent only at request time and is never written here.\n- Optional authorized feeds: \`FL511_FEED_URL\`, \`MIAMI_NEWS_FEED_URL\`, and \`NY_NEWS_FEED_URL\`.\n- Webhook/manual ingestion: call the ingest function with attributed official/public events.\n\nOnly use official public or authorized feeds. Never copy commercial news articles. Keep secrets in environment variables. Public incident sources do not guarantee complete road coverage.\n`;
+  return `# Local News Source Setup\n\n- NWS: public, no API key. The agent reads point alerts for Miami and New York City.\n- Notify NYC: official public RSS, no API key. Attribution must make clear that this newsroom is not the issuing agency.\n- Miami-Dade County: official public news RSS, no API key.\n- Miami International Airport: official Latest News RSS; third-party “In the News” aggregation is intentionally excluded.\n- Florida road incidents: public ArcGIS layers for closures, crashes, brush fires and other incidents, restricted to Miami-Dade. This is useful incident coverage, not a claim of every road condition.\n- NY511: optional and subject to its access agreement. Set both \`NY511_API_KEY\` and \`NY511_FEED_URL\`; the key is sent only at request time and is never written here.\n- Optional authorized feeds: \`FL511_FEED_URL\`, \`MIAMI_NEWS_FEED_URL\`, and \`NY_NEWS_FEED_URL\`.\n- FBI Miami and New York: official public RSS for verified federal investigations and enforcement updates; sensitive accusations require the strengthened committee gate.\n- U.S. Attorney SDNY and SDFL: official DOJ press-release RSS; charges remain allegations and every accused person is presumed innocent unless a court rules otherwise.\n- Webhook/manual ingestion: call the ingest function with attributed official/public events.\n\nOnly use official public or authorized feeds. Never copy commercial news articles. Keep secrets in environment variables. Public incident sources do not guarantee complete road coverage.\n`;
 }
 
 function runbook(minutes: number): string {
-  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Organic growth uses deterministic headline experiments, owned-site links, brand media and local short-form manifests. Paid ads and paid AI per post remain off.\n3. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. No paid LLM API is called. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n4. Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state; they do not wait in a human-review queue. Sensitive manual events without verified connector provenance are quarantined.\n5. Facebook cadence is adaptive but conservative: 6 base posts per city/hour, up to 8 for developing stories and 10 for breaking stories or strong observed performance. Routine posts remain capped at 2; relevance, never filler, unlocks volume.\n6. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; the Metricool executor waits until that timestamp.\n7. Corrections, updates and resolved/reopened notices create attributed revisions. Absence-based resolution is allowed only for an explicit controlled snapshot.\n8. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state.\n9. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
+  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Organic growth uses deterministic headline experiments, owned-site links, brand media and local short-form manifests. Paid ads and paid AI per post remain off.\n3. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. No paid LLM API is called. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n4. Accusations are eligible only from a configured sensitive-capable official connector with complete provenance and neutral presumption-of-innocence language. Identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state; they do not wait in a human-review queue. Sensitive manual events without verified connector provenance are quarantined.\n5. Facebook cadence is adaptive but conservative: 6 base posts per city/hour, up to 8 for developing stories and 10 for breaking stories or strong observed performance. Routine posts remain capped at 2; relevance, never filler, unlocks volume.\n6. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; the Metricool executor waits until that timestamp.\n7. Corrections, updates and resolved/reopened notices create attributed revisions. Absence-based resolution is allowed only for an explicit controlled snapshot.\n8. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state.\n9. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
 }
 
 function migrateLegacyCommitteeState(state: LocalNewsState, now: string): void {
   const events = new Map(state.events.map((event) => [event.id, event]));
   for (const item of state.queue) {
-    if (Array.isArray(item.verdicts) && item.publishDecision && item.reviewHash) continue;
+    if (Array.isArray(item.verdicts) && item.publishDecision && item.reviewHash && item.canonicalEventIdentity && item.claimIdentityHash) continue;
     const event = events.get(item.eventId);
     const committee = runLocalNewsReviewCommittee({
       source: item.source, sourceUrl: item.sourceUrl, title: event?.title || item.copy, description: event?.description || "",
       instruction: event?.instruction || "", location: event?.location || "", eventType: event?.eventType || item.section,
       risk: item.risk, section: item.section, editorialUrgency: item.editorialUrgency,
       connectorId: event?.provenance?.connectorId, canonicalHost: event?.provenance?.canonicalHost, fetchedAt: event?.provenance?.fetchedAt,
-      claimHash: event?.provenance?.claimHash, provenanceVerified: event?.provenance?.verified, effective: event?.effective, expires: event?.expires,
+      claimHash: event?.provenance?.claimHash, provenanceVerified: event?.provenance?.verified, sensitiveEligibleConnector: event?.provenance?.sensitiveEligible, effective: event?.effective, expires: event?.expires,
     }, item.createdAt || now);
     const copyHash = hashLocalNewsReviewValue(item.copy);
+    item.claimIdentityHash = hashLocalNewsReviewValue(event?.provenance?.claimHash || event?.fingerprint || [item.eventId, item.eventRevision, item.sourceUrl, item.copy]);
+    item.canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, title: event?.title || item.copy, description: event?.description || "", instruction: event?.instruction || "", location: event?.location || "", eventType: event?.eventType || item.section, source: event?.source || item.source, sourceUrl: event?.sourceUrl || item.sourceUrl, risk: item.risk, lifecycle: event?.lifecycle || item.lifecycle, effective: event?.effective || null, expires: event?.expires || null, claimIdentityHash: item.claimIdentityHash });
     item.verdicts = committee.verdicts;
     item.evidence = [...committee.evidence, `copyHash=${copyHash}`, "migrated_from_legacy_queue=true"];
     item.consensus = committee.consensus;
     item.publishDecision = committee.publishDecision;
     item.reasons = [...committee.reasons, "legacy_queue_review_backfilled"];
     item.checkedAt = committee.checkedAt;
-    item.reviewHash = hashLocalNewsQueueReview({ copy: item.copy, platform: item.platform, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
+    item.reviewHash = hashLocalNewsQueueReview({ queueItemId: item.id, eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, copy: item.copy, platform: item.platform, risk: item.risk, canonicalEventIdentity: item.canonicalEventIdentity, claimIdentityHash: item.claimIdentityHash, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
     if (committee.publishDecision !== "auto_publish") {
       item.status = committee.publishDecision === "reject" ? "rejected" : "quarantined";
       item.approvalRequired = false;
@@ -612,7 +630,7 @@ function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.Process
       source: event.source, sourceUrl: event.sourceUrl, title: event.title, description: event.description, instruction: event.instruction,
       location: event.location, eventType: event.eventType, risk: event.risk, section: event.section, editorialUrgency: event.editorialUrgency,
       connectorId: event.provenance?.connectorId, canonicalHost: event.provenance?.canonicalHost, fetchedAt: event.provenance?.fetchedAt,
-      claimHash: event.provenance?.claimHash, provenanceVerified: event.provenance?.verified,
+      claimHash: event.provenance?.claimHash, provenanceVerified: event.provenance?.verified, sensitiveEligibleConnector: event.provenance?.sensitiveEligible,
       effective: event.effective, expires: event.expires,
     }, now);
     const committeeGated = committee.publishDecision !== "auto_publish";
@@ -627,8 +645,11 @@ function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.Process
     const publishDecision = !autoEnabled && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;
     const status: ClipperLocalNewsQueueStatus = committee.publishDecision === "reject" ? "rejected" : committee.publishDecision === "quarantine" ? "quarantined" : !autoEnabled ? "approval_required" : "auto_eligible";
     const evidence = [...committee.evidence, `copyHash=${copyHash}`];
-    const reviewHash = hashLocalNewsQueueReview({ copy, platform, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
-    return { id: digest(`${event.id}|${event.revision}|${platform}`), eventId: event.id, eventRevision: event.revision, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons: !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
+    const id = digest(`${event.id}|${event.revision}|${platform}`);
+    const claimIdentityHash = hashLocalNewsReviewValue(event.provenance?.claimHash || event.fingerprint);
+    const canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, expires: event.expires, claimIdentityHash });
+    const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
+    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons: !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   });
 }
 
@@ -687,7 +708,7 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
   return { created, updated, duplicates, resolved, queued, status: await getClipperLocalNewsStatus({ ...input, workspaceDir: dir }) };
 }
 
-interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap"; sourceName?: string }
+interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap"; sourceName?: string; sensitiveEligible?: boolean }
 interface ConnectorDefinition { id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }
 
 function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
@@ -695,9 +716,11 @@ function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
     { id: "nws-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "nws-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
     { id: "notify-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
-    { id: "mta-subway-alerts", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "fbi-ny", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "doj-sdny", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "fbi-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
+    { id: "doj-sdfl", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "miami-dade-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
-    { id: "miami-dade-transit", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "mia-airport-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "fhp-miami-dade", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "ny511", lane: "ny-news", configured: Boolean(env.NY511_FEED_URL && env.NY511_API_KEY), requiresKey: true, public: false },
@@ -712,9 +735,11 @@ function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
     { id: "nws-miami", lane: "miami-news", url: "https://api.weather.gov/alerts/active?point=25.7617,-80.1918", requiresKey: false, sourceName: "National Weather Service" },
     { id: "nws-nyc", lane: "ny-news", url: "https://api.weather.gov/alerts/active?point=40.7128,-74.0060", requiresKey: false, sourceName: "National Weather Service" },
     { id: "notify-nyc", lane: "ny-news", url: "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml", requiresKey: false, format: "rss", sourceName: "Notify NYC" },
-    { id: "mta-subway-alerts", lane: "ny-news", url: "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json", requiresKey: false, format: "mta-json", sourceName: "Metropolitan Transportation Authority" },
+    { id: "fbi-ny", lane: "ny-news", url: "https://www.fbi.gov/feeds/new-york-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation New York", sensitiveEligible: true },
+    { id: "doj-sdny", lane: "ny-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1981%5D=1981&organization=186051&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of New York", sensitiveEligible: true },
+    { id: "fbi-miami", lane: "miami-news", url: "https://www.fbi.gov/feeds/miami-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation Miami", sensitiveEligible: true },
+    { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1771%5D=1771&organization=185861&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true },
     { id: "miami-dade-news", lane: "miami-news", url: "https://www.miamidade.gov/global/rss-news.page", requiresKey: false, format: "rss", sourceName: "Miami-Dade County" },
-    { id: "miami-dade-transit", lane: "miami-news", url: "https://www.miamidade.gov/global/transportation/tracker/service-updates.page", requiresKey: false, format: "miami-transit-bootstrap", sourceName: "Miami-Dade Transit" },
     { id: "mia-airport-news", lane: "miami-news", url: "https://news.miami-airport.com/tagfeed/en-us/tags/airport%2Clatest__news", requiresKey: false, format: "rss", sourceName: "Miami International Airport" },
   ];
   const arcGisBase = "https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Road_Closures/FeatureServer";

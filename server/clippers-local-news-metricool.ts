@@ -27,6 +27,9 @@ const committeeVerdictSchema = z.object({
 const queueItemSchema = z.object({
   id: z.string().min(1).max(500),
   eventId: z.string().min(1).max(500),
+  eventRevision: z.number().int().positive().optional(),
+  canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  claimIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   copy: z.string().min(1).max(20_000),
@@ -36,6 +39,10 @@ const queueItemSchema = z.object({
   autoEligible: z.boolean(),
   published: z.literal(false),
   createdAt: z.string().datetime(),
+  source: z.string().max(500).optional(),
+  section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
+  editorialUrgency: z.enum(["routine", "developing", "breaking"]).optional(),
+  editorialPriority: z.number().finite().min(0).max(100).optional(),
   notBefore: z.string().datetime().nullable().optional(),
   verdicts: z.array(committeeVerdictSchema).max(3).optional(),
   evidence: z.array(z.string()).max(500).optional(),
@@ -52,7 +59,11 @@ const queueFileSchema = z.object({
 const ledgerEntrySchema = z.object({
   queueItemId: z.string().min(1).max(500),
   eventId: z.string().min(1).max(500).optional(),
+  eventRevision: z.number().int().positive().optional(),
+  canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   copyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  reviewedCopyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   blogId: z.string().min(1).max(100),
@@ -72,13 +83,14 @@ type Ledger = z.infer<typeof ledgerSchema>;
 const COMMITTEE_ROLES = ["source_verifier", "safety_editor", "monetization_editor"] as const;
 
 function hasCompleteCommitteeApproval(item: QueueItem): boolean {
+  if (!item.eventRevision || !item.canonicalEventIdentity || !item.claimIdentityHash) return false;
   if (item.publishDecision !== "auto_publish" || item.consensus !== "unanimous_approve" || !item.reviewHash || !item.checkedAt) return false;
   if (!item.verdicts || item.verdicts.length !== COMMITTEE_ROLES.length || !item.evidence) return false;
   const roles = new Set(item.verdicts.map((verdict) => verdict.role));
   if (!COMMITTEE_ROLES.every((role) => roles.has(role)) || item.verdicts.some((verdict) => verdict.verdict !== "approve")) return false;
   const expectedCopyHash = `copyHash=${hashLocalNewsReviewValue(item.copy)}`;
   if (!item.evidence.includes(expectedCopyHash)) return false;
-  const expectedReviewHash = hashLocalNewsQueueReview({ copy: item.copy, platform: item.platform, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
+  const expectedReviewHash = hashLocalNewsQueueReview({ queueItemId: item.id, eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, copy: item.copy, platform: item.platform, risk: item.risk, canonicalEventIdentity: item.canonicalEventIdentity, claimIdentityHash: item.claimIdentityHash, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
   if (item.reviewHash !== expectedReviewHash) return false;
   if (item.risk === "high" || item.risk === "critical") {
     const connectorEvidence = item.evidence.find((entry) => entry.startsWith("connector="));
@@ -86,6 +98,18 @@ function hasCompleteCommitteeApproval(item: QueueItem): boolean {
     if (!connectorEvidence || connectorEvidence === "connector=none" || !claimHashEvidence || claimHashEvidence === "claimHash=none") return false;
   }
   return true;
+}
+
+/** Fail-closed validator shared with the public feed for sensitive stories. */
+export function hasCompleteLocalNewsCommitteeApproval(value: unknown): boolean {
+  const parsed = queueItemSchema.safeParse(value);
+  return parsed.success && hasCompleteCommitteeApproval(parsed.data);
+}
+
+function isRoutineTransitNoise(item: QueueItem): boolean {
+  if (item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical") return false;
+  const text = `${item.source || ""} ${item.copy}`.normalize("NFKC").toLocaleLowerCase("en-US");
+  return /\b(?:mta|subway|metrobus|miami[- ]dade transit)\b/.test(text);
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -501,12 +525,15 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     const safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
+      if (isRoutineTransitNoise(item)) {
+        result.filtered += 1;
+        return false;
+      }
       const baseEligible = item.status === "auto_eligible"
         && item.autoEligible
         && !item.approvalRequired
         && platformEnabled;
-      const committeeFieldsPresent = Boolean(item.publishDecision || item.consensus || item.reviewHash || item.verdicts?.length);
-      const committeeEligible = committeeFieldsPresent ? hasCompleteCommitteeApproval(item) : item.risk === "low" || item.risk === "medium";
+      const committeeEligible = hasCompleteCommitteeApproval(item);
       const eligible = baseEligible && committeeEligible;
       if (!eligible) result.filtered += 1;
       else result.eligible += 1;
@@ -522,7 +549,10 @@ export async function deliverClipperLocalNewsToMetricool(
         return false;
       }
       return true;
-    });
+    }).sort((left, right) => (
+      (right.editorialPriority || 0) - (left.editorialPriority || 0)
+      || right.createdAt.localeCompare(left.createdAt)
+    ));
 
     const laneConfig = {} as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
     for (const [lane, config] of Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>) {
@@ -615,7 +645,11 @@ export async function deliverClipperLocalNewsToMetricool(
         ledger.entries.push({
           queueItemId: item.id,
           eventId: item.eventId,
+          eventRevision: item.eventRevision,
+          canonicalEventIdentity: item.canonicalEventIdentity,
+          reviewHash: item.reviewHash,
           copyHash: metricoolContentHash(item.copy),
+          reviewedCopyHash: hashLocalNewsReviewValue(item.copy),
           lane: item.lane,
           platform: item.platform,
           blogId: profile.blogId,
