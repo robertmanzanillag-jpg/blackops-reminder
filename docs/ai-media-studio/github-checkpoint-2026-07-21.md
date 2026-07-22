@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## HeyGen roster mutation hardening checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-roster-mutation-hardening`, preserved in draft PR [#170](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/170) and stacked on draft PR #169.
+- Boundary: roster POST now requires a real authenticated session, explicit server-owned exact origin, `same-origin` browser metadata and JSON before onboarding readiness or persistence. Tenant identity comes from the sealed principal; fallback identities, cross-origin requests, query/transfer transport and unknown private fields fail closed.
+- Compatibility correction: held admission retains its dedicated canonical origin when both held-specific and general Studio origins are configured. Independent review found and closed this P2 before the PR was opened.
+- Robert handoff: the UI lists only the exact secret variable name `AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY`, 5–10 creator names, one avatar-look and voice ID per creator, adjustable language/accent/gender defaults, and exactly 10 blocked no-spend videos per avatar. The secret value never belongs in chat, GitHub or UI fields.
+- Evidence: root focused suite 41/41; checker correction recheck 14/14 with P0=P1=P2=P3=0; App QA 43/43 plus 17/17 correction recheck; TypeScript, production build, codebase map and diff hygiene pass.
+- Safety and next gates: no secret value, provider call, generation, spend, publication, migration application or deployment occurred. Keep PR #170 draft and unmerged; real PostgreSQL rehearsal, live GET-only verification, authoritative quote, exact one-video approval, canary generation, batch spend and Replit deployment remain separate approvals.
+
 ## Active local work: one-video sandbox readiness
 
 - Branch: `codex/ai-media-studio-one-video-sandbox-readiness`, preserved in draft PR [#147](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/147) and stacked on draft PR #146.

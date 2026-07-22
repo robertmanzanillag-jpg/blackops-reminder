@@ -72,6 +72,17 @@ test("guided setup exposes the exact safe handoff and keeps later authority cont
   assert.equal(HEYGEN_DEPLOYMENT_SECRET_NAME, "AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY");
   assert.match(guided, /I added the Replit secret — register reference/);
   assert.match(guided, /Registration sends only a random idempotency key/);
+  assert.match(guided, /<section aria-labelledby="heygen-robert-handoff-heading"/);
+  assert.match(guided, /<h4 id="heygen-robert-handoff-heading"[^>]*>What Robert provides later<\/h4>/);
+  assert.match(guided, /The exact deployment variable/);
+  assert.match(guided, /its value never belongs in chat, GitHub, or this UI/);
+  assert.match(guided, /Five to ten creator display names/);
+  assert.match(guided, /One exact HeyGen avatar-look ID and the intended HeyGen voice ID for each creator/);
+  assert.match(guided, /Language defaults to en-US, accent to Neutral, and gender to Unspecified/);
+  assert.match(guided, /each can be adjusted before roster submission/);
+  assert.match(guided, /Each avatar plans exactly 10 blocked videos/);
+  assert.match(guided, /does not generate video, contact HeyGen, or authorize spend/);
+  assert.match(guided, /role="note"/);
   assert.match(guided, /Eight guided HeyGen setup gates/);
   assert.match(guided, /Enter 5–10 avatar-look and voice IDs/);
   assert.match(guided, /Prepare and review 10 scripts per avatar/);

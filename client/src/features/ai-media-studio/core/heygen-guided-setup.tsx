@@ -135,6 +135,19 @@ export function HeyGenGuidedSetup({
         </div>
       </div>
 
+      <section aria-labelledby="heygen-robert-handoff-heading" className="mt-5 rounded-xl border border-violet-300/20 bg-violet-400/[0.05] p-4">
+        <h4 id="heygen-robert-handoff-heading" className="font-medium text-violet-100">What Robert provides later</h4>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-zinc-300">
+          <li>The exact deployment variable <code className="rounded bg-black/30 px-1.5 py-0.5 text-emerald-200">{HEYGEN_DEPLOYMENT_SECRET_NAME}</code>; its value never belongs in chat, GitHub, or this UI.</li>
+          <li>Five to ten creator display names.</li>
+          <li>One exact HeyGen avatar-look ID and the intended HeyGen voice ID for each creator.</li>
+          <li>Language defaults to en-US, accent to Neutral, and gender to Unspecified; each can be adjusted before roster submission.</li>
+        </ul>
+        <p role="note" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-300">
+          Each avatar plans exactly 10 blocked videos. This checklist does not generate video, contact HeyGen, or authorize spend.
+        </p>
+      </section>
+
       <div className="mt-5 rounded-xl border border-sky-300/20 bg-black/20 p-4">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-200">Step 1 · Replit deployment secret</p>
         <p className="mt-2 text-sm leading-6 text-zinc-300">Create this exact variable in Replit Secrets:</p>

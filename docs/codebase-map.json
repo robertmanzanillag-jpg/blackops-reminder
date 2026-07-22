@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T13:17:52.068Z",
+  "generatedAt": "2026-07-22T13:40:41.186Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -98,23 +98,9 @@
     "filesIndexed": 773,
     "imports": 3305,
     "routes": 503,
-    "symbols": 15196
+    "symbols": 15213
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 182,
-      "indexed": 163,
-      "kinds": {
-        "server": 182
-      }
-    },
-    "tests": {
-      "files": 240,
-      "indexed": 229,
-      "kinds": {
-        "test": 240
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -208,6 +194,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 182,
+      "indexed": 163,
+      "kinds": {
+        "server": 182
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -227,6 +220,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 240,
+      "indexed": 229,
+      "kinds": {
+        "test": 240
       }
     },
     "tests/fixtures": {
@@ -13231,6 +13231,7 @@
         "createDefaultDurableSecureHeyGenSetupRepository",
         "createDefaultDurableStaticHeyGenLiveVerificationCoordinator",
         "createDefaultProviderWebhookAccountResolver",
+        "createSensitiveMutationRequestGuard",
         "created",
         "dailyAdmission",
         "dashboard",
@@ -13259,6 +13260,7 @@
         "governanceSeeds",
         "governanceSelection",
         "hasMore",
+        "heldAdmissionCanonicalAppUrl",
         "heyGenOnboardingReadinessSelection",
         "heyGenProvider",
         "heyGenRosterDailyPlan",
@@ -13330,6 +13332,7 @@
         "rejectActionSchema",
         "replayRepository",
         "repository",
+        "requestGuard",
         "requestWithRawBody",
         "requireCapability",
         "requireCatalog",
@@ -13349,6 +13352,7 @@
         "requireStaticHeyGenLiveVerification",
         "requireStrictHeldAdmissionMutation",
         "requireStrictHeldAdmissionSession",
+        "requireStrictHeyGenRosterMutation",
         "reservationTtlSeconds",
         "resolveProviderWebhookAccount",
         "resources",
@@ -13379,6 +13383,7 @@
         "selectSandboxReadinessRuntime",
         "selectSecureHeyGenSetupRuntime",
         "selectStaticHeyGenLiveVerificationRuntime",
+        "sensitiveMutationRequestGuard",
         "service",
         "snapshotRepository",
         "sourceType",
@@ -22077,6 +22082,7 @@
         "canary",
         "durablePlan",
         "durableScriptBatch",
+        "heldAdmission",
         "heyGenAccountMaximumQuote",
         "heyGenVerificationEvidence",
         "launchReadiness",
@@ -22085,6 +22091,7 @@
         "oneVideoExecutionControl",
         "pageSource",
         "quoteBoundHumanApproval",
+        "rosterMutationHardening",
         "routesSource",
         "sandbox",
         "sandboxReadiness",
@@ -23290,17 +23297,24 @@
         "forceNoDevFallback",
         "harness",
         "headers",
+        "local",
+        "mutationHeaders",
         "plan",
         "planResponse",
         "previous",
+        "production",
+        "rawRequest",
+        "req",
         "response",
         "restoreDevFallback",
+        "rosterRepository",
         "rosterRequest",
         "runtime",
         "server",
         "spoofedCalendarPlan",
         "spoofedCalendarResponse",
         "startRosterRuntime",
+        "status",
         "unavailable",
         "unsafe",
         "userId"
@@ -25100,11 +25114,14 @@
         "canonicalOrigin",
         "composition",
         "created",
+        "dedicatedOrigin",
         "end",
+        "generalOrigin",
         "getResponse",
         "getUrl",
         "harness",
         "headers",
+        "heldOrigin",
         "insecureProduction",
         "installRuntime",
         "key",

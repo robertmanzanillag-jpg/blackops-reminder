@@ -38,6 +38,7 @@ function receipt(outcome: "admitted" | "replayed") {
 async function harness(options: Readonly<{
   installRuntime?: boolean;
   canonicalAppUrl?: string;
+  aiMediaStudioCanonicalAppUrl?: string;
   runtimeEnvironment?: string;
   readinessError?: Error;
   admissionError?: Error;
@@ -54,6 +55,7 @@ async function harness(options: Readonly<{
     repository: new InMemoryMediaJobRepository(),
     ...(options.runtimeEnvironment === "production" ? {} : { providers: [new FakeVideoProvider()] }),
     runtimeEnvironment: options.runtimeEnvironment ?? "test", operations: { runtimeEnvironment: "test" },
+    aiMediaStudioCanonicalAppUrl: options.aiMediaStudioCanonicalAppUrl,
     oneVideoHeldAdmissionCanonicalAppUrl: options.canonicalAppUrl ?? canonicalOrigin,
     ...(installRuntime ? {
       oneVideoHeldAdmissionReadiness: { async observe(...args: unknown[]) {
@@ -142,6 +144,29 @@ test("POST requires exact canonical origin scheme, host, port and same-origin br
   assert.equal(server.admissionCalls[0].scope.workspaceId, "personal");
   assert.equal(server.admissionCalls[0].authorizationContext.transport, "same-origin-browser");
   assert.equal(server.admissionCalls[0].authorizationContext.authenticatedUserId, "owner-a");
+});
+
+test("held admission keeps its dedicated canonical origin when the general Studio origin differs", async (t) => {
+  const heldOrigin = "https://held.example:9443";
+  const server = await optionalHarness(t, {
+    canonicalAppUrl: heldOrigin,
+    aiMediaStudioCanonicalAppUrl: "https://studio.example:8443",
+  });
+  if (!server) return;
+  t.after(server.close);
+  const url = `${server.base}/api/ai-media-studio/production-batches/${planId}/one-video-held-admission/${slotId}`;
+  const baseHeaders = { "content-type": "application/json", "x-test-session-user": "owner-a",
+    "sec-fetch-site": "same-origin" };
+
+  const generalOrigin = await fetch(url, { method: "POST", headers: { ...baseHeaders,
+    origin: "https://studio.example:8443" }, body: JSON.stringify(postBody) });
+  assert.equal(generalOrigin.status, 403);
+  assert.equal(server.admissionCalls.length, 0);
+
+  const dedicatedOrigin = await fetch(url, { method: "POST", headers: { ...baseHeaders,
+    origin: heldOrigin }, body: JSON.stringify(postBody) });
+  assert.equal(dedicatedOrigin.status, 201);
+  assert.equal(server.admissionCalls.length, 1);
 });
 
 test("POST accepts exactly five public CAS fields, redacts internals and returns 201 then 200 replay", async (t) => {
