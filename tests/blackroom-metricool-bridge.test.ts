@@ -62,6 +62,17 @@ test("builds a TikTok-only auto-publish payload", () => {
   assert.equal(payload.autoPublish, true);
   assert.equal(payload.publicationDate.timezone, "America/New_York");
   assert.equal(payload.tiktokData.privacyOption, "PUBLIC_TO_EVERYONE");
+  assert.equal(payload.tiktokData.title, input.caption);
+});
+
+test("always supplies a bounded TikTok title without leaking links", () => {
+  const payload = buildMetricoolTikTokPayload({
+    ...input,
+    caption: `${"BlackRoom groove ".repeat(12)}https://example.com/private`,
+  }, "media-123");
+  assert.ok(payload.tiktokData.title.length > 0);
+  assert.ok(payload.tiktokData.title.length <= 100);
+  assert.equal(payload.tiktokData.title.includes("https://"), false);
 });
 
 test("builds a separate Facebook payload with a bilingual main-page funnel CTA", () => {
