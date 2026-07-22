@@ -16,13 +16,10 @@ import { isConfiguredSingleUserOwner } from "../server/single-user-owner";
 
 test("tools page links its BlackRoom card directly to the live panel", () => {
   const toolsPage = readFileSync("client/src/pages/tools.tsx", "utf8");
-  const blackRoomCardStart = toolsPage.indexOf('title: "BlackRoom"');
-  const blackRoomCardEnd = toolsPage.indexOf("},", blackRoomCardStart);
-  const blackRoomCard = toolsPage.slice(blackRoomCardStart, blackRoomCardEnd);
 
-  assert.ok(blackRoomCardStart > 0, "BlackRoom card should be present in Herramientas");
-  assert.match(blackRoomCard, /href: "\/blackroom"/);
-  assert.match(toolsPage, /data-testid={`tool-\${tool\.title\.toLowerCase\(\)}`}/);
+  assert.match(toolsPage, /<a href="\/blackroom" data-testid="tool-blackroom">/);
+  assert.doesNotMatch(toolsPage, /<Link href="\/blackroom">/);
+  assert.match(blackRoomPage, /<title>BlackRoom Content Agent<\/title>/);
 });
 
 test("remote command increments its monotonic generation", () => {
