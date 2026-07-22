@@ -99,6 +99,8 @@ test.before(async () => {
       queueItem({ id: "miami-facebook", platform: "facebook" }),
       queueItem({ id: "ny-x", eventId: nyEvent.id, lane: "ny-news", risk: "low" }),
       queueItem({ id: "high-x", eventId: highRiskEvent.id, eventRevision: 1 }),
+      queueItem({ id: "quarantined-ny", eventId: nyEvent.id, eventRevision: 2, lane: "ny-news", platform: "facebook", risk: "low", status: "quarantined", approvalRequired: false, autoEligible: false }),
+      queueItem({ id: "rejected-ny", eventId: nyEvent.id, eventRevision: 2, lane: "ny-news", platform: "x", risk: "low", status: "rejected", approvalRequired: false, autoEligible: false }),
     ],
     metrics: [],
   }, null, 2));
@@ -109,6 +111,8 @@ test.before(async () => {
       { queueItemId: "miami-facebook", lane: "miami-news", platform: "facebook", blogId: "private-blog-id", scheduledFor: "2026-07-21T11:52:00.000Z", scheduledAt: NOW, metricoolPostId: "secret-provider-id-2" },
       { queueItemId: "ny-x", lane: "ny-news", platform: "x", blogId: "private-ny", scheduledFor: "2099-07-21T12:15:00.000Z", scheduledAt: NOW, metricoolPostId: "future-provider-id" },
       { queueItemId: "high-x", lane: "miami-news", platform: "x", blogId: "private-high", scheduledFor: "2026-07-21T11:55:00.000Z", scheduledAt: NOW, metricoolPostId: null },
+      { queueItemId: "quarantined-ny", lane: "ny-news", platform: "facebook", blogId: "private-quarantine", scheduledFor: "2026-07-21T11:56:00.000Z", scheduledAt: NOW, metricoolPostId: "must-not-publish" },
+      { queueItemId: "rejected-ny", lane: "ny-news", platform: "x", blogId: "private-reject", scheduledFor: "2026-07-21T11:57:00.000Z", scheduledAt: NOW, metricoolPostId: "must-not-publish" },
     ],
   }, null, 2));
 

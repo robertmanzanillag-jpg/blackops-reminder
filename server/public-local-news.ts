@@ -39,7 +39,7 @@ const publicQueueItemSchema = z.object({
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   risk: z.enum(["low", "medium", "high", "critical"]),
-  status: z.enum(["approval_required", "auto_eligible"]),
+  status: z.enum(["approval_required", "auto_eligible", "quarantined", "rejected"]),
   approvalRequired: z.boolean(),
   autoEligible: z.boolean(),
 }).passthrough();
