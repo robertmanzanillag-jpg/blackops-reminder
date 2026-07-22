@@ -282,7 +282,6 @@ export function buildMetricoolPayload(
     draft: false,
     firstCommentText: "",
     hasNotReadNotes: false,
-    media: { mediaId },
     mediaAltText: [],
     providers: [{ network }],
     publicationDate: { dateTime: input.publicationDateTime, timezone },
@@ -290,6 +289,7 @@ export function buildMetricoolPayload(
     smartLinkData: { ids: [] },
     text: caption,
   };
+  if (mediaId) payload.media = { mediaId };
   if (network === "tiktok") payload.tiktokData = {
       disableComment: false,
       disableDuet: false,
@@ -479,9 +479,11 @@ export async function scheduleBlackRoomMetricoolPost(
   }
   for (const network of missingNetworks) {
     const payload = buildMetricoolPayload(input, "", network, captions[network]);
-    // The live MCP schema exposes mediaFiles for attached files. Keep the
-    // public MP4 in info.media too, so non-ChatGPT MCP clients retain media.
-    payload.media = [input.mediaUrl];
+    // createScheduledPost normalizes `mediaFiles` and injects the resulting
+    // media into the scheduled post. Sending the same URL in `info.media` as
+    // well makes Metricool attach the video twice; Facebook then rejects the
+    // post because a Reel/Post accepts only one video.
+    delete payload.media;
     let scheduled: any;
     try {
       const createArgs = {

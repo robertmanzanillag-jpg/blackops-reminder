@@ -256,7 +256,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
   assert.equal(calls[1].url, "https://ai.metricool.com/mcp");
   assert.equal(calls[1].body.method, "tools/call");
   assert.equal(calls[1].body.params.name, "createScheduledPost");
-  assert.deepEqual(mcpInfo(calls[1]).media, [input.mediaUrl]);
+  assert.equal("media" in mcpInfo(calls[1]), false);
   assert.deepEqual(mcpInfo(calls[1]).providers, [{ network: "tiktok" }]);
   assert.deepEqual(mcpInfo(calls[3]).providers, [{ network: "facebook" }]);
   assert.deepEqual(mcpInfo(calls[5]).providers, [{ network: "youtube" }]);

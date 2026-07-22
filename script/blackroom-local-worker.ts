@@ -174,10 +174,26 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await appendLog(`audio QC passed ${entry.reservationId}: mean=${loudness.meanVolumeDb.toFixed(1)}dB max=${loudness.maxVolumeDb.toFixed(1)}dB`);
   const job = (queue.jobs || []).find((candidate: any) => candidate.id === entry.jobId);
   if (!job) throw new Error(`Queue job not found for ${entry.reservationId}`);
-  const publicationDateTime = String(entry.publicationDateTime || "")
-    || nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, queue.timezone || "America/New_York");
   entry.networkAttempts ||= {};
   entry.networkReceipts ||= {};
+  const timezone = queue.timezone || "America/New_York";
+  const requestedPublicationDateTime = String(entry.publicationDateTime || "");
+  const publicationDateTime = requestedPublicationDateTime
+    ? nextBlackRoomPublicationDateTime(
+      requestedPublicationDateTime.slice(0, 10),
+      requestedPublicationDateTime.slice(11, 16),
+      timezone,
+    )
+    : nextBlackRoomPublicationDateTime(job.targetDate, entry.slot, timezone);
+  if (requestedPublicationDateTime && publicationDateTime !== requestedPublicationDateTime) {
+    if (Object.keys(entry.networkAttempts).length) {
+      throw new Error(`BlackRoom cannot move a partially submitted reservation ${entry.reservationId}`);
+    }
+    await runNpm(["run", "blackroom:ledger", "--", "--schedule", "--reservation", entry.reservationId,
+      "--publication-date-time", publicationDateTime]);
+    entry.publicationDateTime = publicationDateTime;
+    await appendLog(`rolled past Metricool slot ${requestedPublicationDateTime} to ${publicationDateTime} for ${entry.reservationId}`);
+  }
   const networks = requiredBlackRoomReceiptNetworks(entry);
   // A legacy whole-reservation uncertainty has no per-network state. Treat every
   // required network as verification-only so an upgrade can never duplicate it.
@@ -216,7 +232,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
           durationSeconds: entry.durationSeconds,
           videoFormat: entry.format,
           publicationDateTime,
-          timezone: queue.timezone || "America/New_York",
+          timezone,
         }),
       });
     } catch (error) {
