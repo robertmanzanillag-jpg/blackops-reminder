@@ -8,11 +8,16 @@ import type {
   DeclareLaunchIntentCommand,
   LaunchAuthorityCapability,
   RecordContentApprovalCommand,
+  RecordHumanLaunchApprovalCommand,
   RecordMaximumQuoteAttestationCommand,
   RecordSandboxAttestationCommand,
   TrustedLaunchAuthorityPrincipal,
   TrustedLaunchSubject,
 } from "../server/ai-media-studio/planning/launch-authority-contracts";
+import {
+  deriveLaunchRenderSpecDigest,
+  deriveMaximumQuoteKey,
+} from "../server/ai-media-studio/planning/one-video-execution-control-contracts";
 import {
   deriveLaunchSubjectDigest,
   DrizzleLaunchAuthorityRepository,
@@ -48,6 +53,9 @@ const ids = {
   intent: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   script: "ffffffff-ffff-4fff-8fff-ffffffffffff",
   source: "12121212-1212-4212-8212-121212121212",
+  avatar: "13131313-1313-4313-8313-131313131313",
+  voice: "14141414-1414-4414-8414-141414141414",
+  binding: "15151515-1515-4515-8515-151515151515",
 } as const;
 const now = new Date("2026-07-21T12:00:00.000Z");
 const expires = new Date("2026-07-21T12:20:00.000Z");
@@ -69,6 +77,7 @@ const subjectBase = {
   planDigest: digest("1"), slotDigest: digest("2"), providerAccountId: ids.account,
   sourceRosterKey: "roster-1", sourceRosterDigest: digest("0"), sourceMemberKey: "member-1",
   providerKey: "heygen", providerCredentialVersion: 3, scriptVariantId: ids.variant,
+  avatarResourceId: ids.avatar, voiceResourceId: ids.voice,
   scriptId: ids.script, scriptVariantChecksum: rawHash("Full selected script"), sourceType: "experiences",
   sourceItemId: ids.source, sourceContentHash: digest("6"), governanceProfileId: ids.governance,
   governanceEvidenceDigest: digest("4"), governanceUse: "paid_ads", governanceTerritory: "US",
@@ -77,6 +86,7 @@ const subjectBase = {
 const subject = {
   ...subjectBase,
   launchIntentId: ids.intent, launchIntentDigest: digest("f"),
+  renderSpecDigest: deriveLaunchRenderSpecDigest(subjectBase),
   launchSubjectDigest: deriveLaunchSubjectDigest({ ...subjectBase,
     launchIntentId: ids.intent, launchIntentDigest: digest("f") } as never),
 } as unknown as TrustedLaunchSubject;
@@ -149,6 +159,7 @@ function subjectRow(overrides: Record<string, unknown> = {}) {
     source_item_id: ids.source, source_content_hash: subject.sourceContentHash,
     plan_expires_at: new Date("2026-07-22T00:00:00.000Z"), influencer_id: ids.influencer,
     provider_account_id: ids.account, provider_key: "heygen", provider_credential_version: 3,
+    avatar_resource_id: ids.avatar, voice_resource_id: ids.voice,
     script_variant_id: ids.variant, script_variant_checksum: subject.scriptVariantChecksum, language: "en",
     script_title: creative.title, script_status: "approved", current_variant_id: ids.variant,
     script_metadata: { productionBatchV1: base, productionBatchApprovalV1: approval },
@@ -203,6 +214,26 @@ function evidenceRow(kind: "content_approval" | "human_launch_approval" | "sandb
     evidence_digest: digest(kind === "content_approval" ? "5" : kind === "human_launch_approval" ? "6"
       : kind === "sandbox_proof" ? "7" : "8"), valid_from: now, expires_at: expires,
     input_digest: digest("9"), idempotency_key: `${kind}-idempotency`,
+  };
+}
+
+function approvalBridgeRow(overrides: Record<string, unknown> = {}) {
+  const human = evidenceRow("human_launch_approval");
+  const quote = evidenceRow("maximum_quote");
+  return {
+    id: ids.binding, owner_user_id: scope.ownerUserId, workspace_id: scope.workspaceId,
+    daily_plan_slot_id: ids.slot, slot_attempt: 1, launch_subject_digest: subject.launchSubjectDigest,
+    launch_intent_id: ids.intent, launch_intent_digest: subject.launchIntentDigest,
+    human_launch_approval_evidence_id: human.id,
+    human_launch_approval_evidence_revision: human.revision,
+    human_launch_approval_evidence_digest: human.evidence_digest,
+    maximum_quote_evidence_id: quote.id, maximum_quote_evidence_revision: quote.revision,
+    maximum_quote_evidence_digest: quote.evidence_digest, maximum_quote_decision: "quoted",
+    decision: "approved", amount_micro_usd: "1250000", currency: "USD",
+    quote_expires_at: expires, render_spec_digest: subject.renderSpecDigest,
+    approval_binding_digest: digest("a"), input_digest: digest("9"),
+    human_evidence_kind: "human_launch_approval", maximum_quote_evidence_kind: "maximum_quote",
+    ...overrides,
   };
 }
 
@@ -388,6 +419,7 @@ test("exact-subject relock revalidates production metadata before appending evid
 });
 
 test("trusted quote is the only evidence method that carries exact micro-USD", async () => {
+  const providerQuoteExpiry = new Date("2026-07-21T12:03:00.000Z");
   const principal = trustedPrincipal("quote:attest", "workload");
   const command = {
     scope, dailyPlanSlotId: ids.slot, slotAttempt: 1, idempotencyKey: "maximum-quote-0001",
@@ -407,6 +439,7 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
     runtimeAttestationVerifier: { async verify() { return {
       kind: "maximum_quote" as const, attestationId: "quote-attestation-1", decision: "quoted" as const,
       maximumQuoteMicroUsd: "1250000", currency: "USD" as const, sourceEvidenceDigest: digest("a"),
+      quoteExpiresAt: providerQuoteExpiry.toISOString(),
     } as never; } }, validityPolicy: { ttlSeconds: () => 600 },
   });
   await repository.recordMaximumQuoteAttestation(input);
@@ -416,7 +449,64 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
   assert.ok(insert.params.includes("provider_quote_adapter"));
   assert.ok(insert.params.includes("1250000"));
   assert.ok(insert.params.includes("USD"));
+  assert.ok(insert.params.some((value) => value instanceof Date
+    && value.toISOString() === providerQuoteExpiry.toISOString()), "provider quote expiry clamps authority TTL");
   assert.doesNotMatch(JSON.stringify(command), /providerAccountId|governanceProfileId|launchSubjectDigest/);
+});
+
+test("human decision CAS atomically appends exact evidence and quote/render bridge", async () => {
+  const principal = trustedPrincipal("human_launch:decide", "user");
+  const quote = evidenceRow("maximum_quote");
+  const expectedQuoteKey = deriveMaximumQuoteKey({ evidenceId: String(quote.id),
+    evidenceRevision: Number(quote.revision), evidenceDigest: quote.evidence_digest,
+    amountMicroUsd: "1250000", currency: "USD", expiresAt: expires,
+    renderSpecDigest: subject.renderSpecDigest });
+  const command: RecordHumanLaunchApprovalCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    decision: "approved", expectedQuoteKey, idempotencyKey: "quote-bound-human-approval-0001" };
+  const input = authorized("record_human_launch_approval", command, principal);
+  const harness = makeDb((call) => {
+    if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 6) return { rows: [{ human_evidence_id: ids.human, approval_binding_id: ids.binding,
+      database_now: now }] };
+    if (call === 7) return { rows: [subjectRow()] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 10) return { rows: [quote] };
+    if (call === 12) return { rows: [{ id: ids.human, input_digest: input.inputDigest }] };
+    if (call === 13) return { rows: [approvalBridgeRow({ input_digest: input.inputDigest })] };
+    return { rows: [] };
+  });
+  const result = await new DrizzleLaunchAuthorityRepository(harness.db, options(900))
+    .recordHumanLaunchApproval(input);
+  assert.equal(result.replayed, false);
+  assert.match(sqlText(harness.calls[9]), /evidence_kind='maximum_quote'.*order by revision desc limit 1 for update/i);
+  assert.match(sqlText(harness.calls[11]), /insert into .*ai_media_launch_evidence/i);
+  assert.match(sqlText(harness.calls[12]), /insert into .*ai_media_quote_bound_human_approvals/i);
+  assert.ok(harness.calls[12].params.includes(subject.renderSpecDigest));
+  assert.ok(harness.calls[12].params.includes("1250000"));
+  assert.doesNotMatch(JSON.stringify(command), /evidenceId|digest|amount|currency|renderSpec/iu);
+  assert.doesNotMatch(allText(harness.calls), /render_jobs|outbox|insert\s+into\s+.*budget_reservations|provider.*submit/i);
+});
+
+test("human decision rejects stale quote CAS before any evidence or bridge insert", async () => {
+  const principal = trustedPrincipal("human_launch:decide", "user");
+  const command: RecordHumanLaunchApprovalCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    decision: "approved", expectedQuoteKey: `quote_${"0".repeat(24)}`,
+    idempotencyKey: "quote-bound-human-stale-0001" };
+  const input = authorized("record_human_launch_approval", command, principal);
+  const harness = makeDb((call) => {
+    if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 6) return { rows: [{ human_evidence_id: ids.human, approval_binding_id: ids.binding,
+      database_now: now }] };
+    if (call === 7) return { rows: [subjectRow()] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 10) return { rows: [evidenceRow("maximum_quote")] };
+    return { rows: [] };
+  });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).recordHumanLaunchApproval(input),
+    (error: unknown) => error?.constructor?.name === "LaunchAuthorityQuoteChangedError");
+  assert.doesNotMatch(allText(harness.calls), /insert into .*ai_media_(?:launch_evidence|quote_bound_human_approvals)/i);
 });
 
 test("snapshot chooses latest whole chains, validates gates, and derives bounded immutable digests", async () => {
@@ -441,7 +531,8 @@ test("snapshot chooses latest whole chains, validates gates, and derives bounded
     if (call === 10) return { rows: [policy] };
     if (call === 11) return { rows: [kill] };
     if (call >= 12 && call <= 15) return { rows: [evidence[call - 12]] };
-    if (call === 16) return { rows: [{ id: ids.created, input_digest: input.inputDigest,
+    if (call === 16) return { rows: [approvalBridgeRow()] };
+    if (call === 17) return { rows: [{ id: ids.created, input_digest: input.inputDigest,
       authority_digest: digest("d"), admission_digest: digest("e") }] };
     return { rows: [] };
   });
@@ -453,7 +544,8 @@ test("snapshot chooses latest whole chains, validates gates, and derives bounded
     assert.match(text, /order by revision desc limit 1 for update/i);
     assert.doesNotMatch(text, /launch_subject_digest/i);
   }
-  const insert = harness.calls[15];
+  assert.match(sqlText(harness.calls[15]), /ai_media_quote_bound_human_approvals/i);
+  const insert = harness.calls[16];
   assert.match(sqlText(insert), /insert into .*ai_media_launch_authority_snapshots/i);
   assert.ok(insert.params.includes("1250000"));
   assert.ok(insert.params.some((value) => value instanceof Date

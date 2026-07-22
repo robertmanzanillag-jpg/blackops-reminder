@@ -11,6 +11,9 @@ import {
   type ApprovedProductionBatchSlotFacts,
 } from "../production-batches/metadata-integrity";
 import {
+  deriveLaunchRenderSpecDigest,
+  deriveMaximumQuoteKey,
+  deriveRenderSpecKey,
   OneVideoExecutionControlError,
   type OneVideoExecutionControlRepository,
 } from "./one-video-execution-control-contracts";
@@ -42,6 +45,7 @@ const sha256 = (input: string): string => `sha256:${createHash("sha256").update(
 type EvidenceState = {
   state: string; evidenceKey?: string; observedAt?: string; expiresAt?: string;
   amountMicroUsd?: string; currency?: "USD";
+  quoteKey?: string; renderSpecKey?: string; approvedQuoteKey?: string;
 };
 type ProviderVerificationState = "not_requested" | "verified" | "failed" | "stale" | "unavailable";
 type StaticVerificationProjection = "verified" | "stale" | "missing";
@@ -193,6 +197,9 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
 
     const evidenceRows = rows(await tx.execute(sql`
       SELECT attempt.slot_attempt,intent.id AS intent_id,intent.launch_intent_digest,
+        slots.provider_account_id,slots.provider_key,slots.provider_credential_version,
+        slots.avatar_resource_id,slots.voice_resource_id,slots.script_variant_id,
+        variant.checksum AS current_script_variant_checksum,
         (intent.provider_account_id=slots.provider_account_id AND intent.provider_key=slots.provider_key
           AND intent.provider_credential_version=slots.provider_credential_version
           AND intent.script_variant_id=slots.script_variant_id AND intent.script_variant_checksum=variant.checksum
@@ -202,18 +209,36 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
           AND intent.source_member_key=slots.source_member_key) AS intent_current,
         quote.id AS quote_id,quote.decision AS quote_decision,quote.amount_micro_usd AS quote_amount,
         quote.currency AS quote_currency,quote.valid_from AS quote_valid_from,quote.expires_at AS quote_expires_at,
+        quote.revision AS quote_revision,quote.evidence_digest AS quote_evidence_digest,
         (quote.launch_intent_id=intent.id AND quote.launch_intent_digest=intent.launch_intent_digest
           AND quote.provider_account_id=slots.provider_account_id AND quote.provider_key=slots.provider_key
           AND quote.provider_credential_version=slots.provider_credential_version
           AND quote.script_variant_id=slots.script_variant_id AND quote.script_variant_checksum=variant.checksum
           AND quote.governance_profile_id=governance.id AND quote.governance_evidence_digest=governance.evidence_digest) AS quote_current,
         human.id AS human_id,human.decision AS human_decision,human.valid_from AS human_valid_from,
-        human.expires_at AS human_expires_at,
+        human.expires_at AS human_expires_at,human.revision AS human_revision,
+        human.evidence_digest AS human_evidence_digest,
         (human.launch_intent_id=intent.id AND human.launch_intent_digest=intent.launch_intent_digest
           AND human.provider_account_id=slots.provider_account_id AND human.provider_key=slots.provider_key
           AND human.provider_credential_version=slots.provider_credential_version
           AND human.script_variant_id=slots.script_variant_id AND human.script_variant_checksum=variant.checksum
-          AND human.governance_profile_id=governance.id AND human.governance_evidence_digest=governance.evidence_digest) AS human_current
+          AND human.governance_profile_id=governance.id AND human.governance_evidence_digest=governance.evidence_digest) AS human_current,
+        bridge.id AS approval_bridge_id,bridge.render_spec_digest AS bridge_render_spec_digest,
+        bridge.quote_expires_at AS bridge_quote_expires_at,bridge.amount_micro_usd AS bridge_quote_amount,
+        bridge.currency AS bridge_quote_currency,bridge.decision AS bridge_decision,
+        bridge.approval_binding_digest AS approval_binding_digest,
+        (bridge.human_launch_approval_evidence_id=human.id
+          AND bridge.human_launch_approval_evidence_revision=human.revision
+          AND bridge.human_launch_approval_evidence_digest=human.evidence_digest
+          AND bridge.maximum_quote_evidence_id=quote.id
+          AND bridge.maximum_quote_evidence_revision=quote.revision
+          AND bridge.maximum_quote_evidence_digest=quote.evidence_digest
+          AND bridge.launch_subject_digest=human.launch_subject_digest
+          AND bridge.launch_subject_digest=quote.launch_subject_digest
+          AND bridge.launch_intent_id=intent.id AND bridge.launch_intent_digest=intent.launch_intent_digest
+          AND bridge.decision=human.decision AND bridge.maximum_quote_decision='quoted'
+          AND bridge.amount_micro_usd=quote.amount_micro_usd AND bridge.currency=quote.currency
+          AND bridge.quote_expires_at=quote.expires_at) AS approval_bridge_current
       FROM ai_media_daily_plan_slots slots
       JOIN ai_media_daily_plans plans ON plans.owner_user_id=slots.owner_user_id AND plans.workspace_id=slots.workspace_id
         AND plans.id=slots.daily_plan_id
@@ -237,6 +262,11 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
         WHERE evidence.owner_user_id=slots.owner_user_id AND evidence.workspace_id=slots.workspace_id
           AND evidence.daily_plan_slot_id=slots.id AND evidence.slot_attempt=attempt.slot_attempt
           AND evidence.evidence_kind='human_launch_approval' ORDER BY evidence.revision DESC LIMIT 1) human ON true
+      LEFT JOIN LATERAL (SELECT approval.* FROM ai_media_quote_bound_human_approvals approval
+        WHERE approval.owner_user_id=slots.owner_user_id AND approval.workspace_id=slots.workspace_id
+          AND approval.daily_plan_slot_id=slots.id AND approval.slot_attempt=attempt.slot_attempt
+          AND approval.human_launch_approval_evidence_id=human.id
+        LIMIT 1) bridge ON true
       WHERE slots.owner_user_id=${scope.ownerUserId} AND slots.workspace_id=${scope.workspaceId}
         AND plans.public_plan_key=${publicPlanKey} AND slots.public_slot_key=${publicSlotKey}
     `));
@@ -385,9 +415,25 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
 
     const exactEvidenceBase = bindingState === "current" && verificationState === "verified"
       && productionMetadataCurrent && bool(evidence, "intentCurrent", "intent_current");
-    const quote = this.quoteState(evidence, databaseNow, exactEvidenceBase && bool(evidence, "quoteCurrent", "quote_current"));
+    const renderSpecDigest = deriveLaunchRenderSpecDigest({
+      providerAccountId: text(evidence, "providerAccountId", "provider_account_id"),
+      providerKey: text(evidence, "providerKey", "provider_key"),
+      providerCredentialVersion: number(evidence, "providerCredentialVersion", "provider_credential_version"),
+      avatarResourceId: text(evidence, "avatarResourceId", "avatar_resource_id"),
+      voiceResourceId: text(evidence, "voiceResourceId", "voice_resource_id"),
+      scriptVariantId: text(evidence, "scriptVariantId", "script_variant_id"),
+      scriptVariantChecksum: text(evidence, "currentScriptVariantChecksum", "current_script_variant_checksum"),
+    });
+    const quote = this.quoteState(evidence, databaseNow,
+      exactEvidenceBase && bool(evidence, "quoteCurrent", "quote_current"), renderSpecDigest);
+    const exactApprovalBridge = bool(evidence, "approvalBridgeCurrent", "approval_bridge_current")
+      && text(evidence, "bridgeRenderSpecDigest", "bridge_render_spec_digest") === renderSpecDigest
+      && text(evidence, "bridgeQuoteAmount", "bridge_quote_amount") === quote.amountMicroUsd
+      && text(evidence, "bridgeQuoteCurrency", "bridge_quote_currency") === quote.currency
+      && optionalIso(value(evidence, "bridgeQuoteExpiresAt", "bridge_quote_expires_at")) === quote.expiresAt;
     const human = this.humanState(evidence, databaseNow,
-      exactEvidenceBase && bool(evidence, "humanCurrent", "human_current") && quote.state === "quoted");
+      exactEvidenceBase && bool(evidence, "humanCurrent", "human_current") && quote.state === "quoted"
+        && exactApprovalBridge, quote);
     const reasonCodes = new Set<OneVideoExecutionControl["execute"]["reasonCodes"][number]>();
     if (bindingState !== "current") reasonCodes.add(bindingState === "stale" ? "binding_stale" : "binding_invalid");
     if (verificationState !== "verified") reasonCodes.add(`provider_verification_${verificationState}` as
@@ -421,7 +467,7 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     });
   }
 
-  private quoteState(row: Row, now: Date, current: boolean): EvidenceState {
+  private quoteState(row: Row, now: Date, current: boolean, renderSpecDigest: `sha256:${string}`): EvidenceState {
     const id = text(row, "quoteId", "quote_id");
     if (!id) return { state: "missing" };
     const base = { evidenceKey: opaque("evidence", id), observedAt: optionalIso(value(row, "quoteValidFrom", "quote_valid_from")),
@@ -436,10 +482,15 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     if (!/^[1-9][0-9]{0,15}$/u.test(amount) || text(row, "quoteCurrency", "quote_currency") !== "USD") {
       return { state: "unavailable" };
     }
-    return { state: "quoted", amountMicroUsd: amount, currency: "USD", ...base };
+    const evidenceDigest = text(row, "quoteEvidenceDigest", "quote_evidence_digest") as `sha256:${string}`;
+    const quoteKey = deriveMaximumQuoteKey({ evidenceId: id,
+      evidenceRevision: number(row, "quoteRevision", "quote_revision"), evidenceDigest,
+      amountMicroUsd: amount, currency: "USD", expiresAt: date(expires), renderSpecDigest });
+    return { state: "quoted", amountMicroUsd: amount, currency: "USD", quoteKey,
+      renderSpecKey: deriveRenderSpecKey(renderSpecDigest), ...base };
   }
 
-  private humanState(row: Row, now: Date, current: boolean): EvidenceState {
+  private humanState(row: Row, now: Date, current: boolean, quote: EvidenceState): EvidenceState {
     const id = text(row, "humanId", "human_id");
     if (!id) return { state: "not_requested" };
     const base = { evidenceKey: opaque("evidence", id), observedAt: optionalIso(value(row, "humanValidFrom", "human_valid_from")),
@@ -451,6 +502,7 @@ export class DrizzleOneVideoExecutionControlRepository implements OneVideoExecut
     if (expires != null && date(expires).getTime() <= now.getTime()) return { state: "expired", ...base };
     const decision = text(row, "humanDecision", "human_decision");
     if (!['approved', 'rejected', 'revoked'].includes(decision)) return { state: "unavailable" };
-    return { state: decision as "approved" | "rejected" | "revoked", ...base };
+    return { state: decision as "approved" | "rejected" | "revoked",
+      ...(decision === "approved" ? { approvedQuoteKey: quote.quoteKey, renderSpecKey: quote.renderSpecKey } : {}), ...base };
   }
 }

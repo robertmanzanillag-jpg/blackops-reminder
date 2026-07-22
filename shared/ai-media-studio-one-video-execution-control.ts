@@ -22,10 +22,12 @@ const maximumQuoteSchema = z.object({
   state: z.enum(["missing", "quoted", "declined", "expired", "stale", "unavailable"]),
   amountMicroUsd: z.string().regex(/^[1-9][0-9]{0,15}$/u).optional(), currency: z.literal("USD").optional(),
   evidenceKey: publicKey("evidence").optional(), observedAt: instant.optional(), expiresAt: instant.optional(),
+  quoteKey: publicKey("quote").optional(), renderSpecKey: publicKey("render_spec").optional(),
 }).strict();
 const humanApprovalSchema = z.object({
   state: z.enum(["not_requested", "approved", "rejected", "revoked", "expired", "stale", "unavailable"]),
   evidenceKey: publicKey("evidence").optional(), observedAt: instant.optional(), expiresAt: instant.optional(),
+  approvedQuoteKey: publicKey("quote").optional(), renderSpecKey: publicKey("render_spec").optional(),
 }).strict();
 
 export const oneVideoExecutionControlSchema = z.object({
@@ -61,10 +63,21 @@ export const oneVideoExecutionControlSchema = z.object({
   const quoteHasMoney = packet.maximumQuote.amountMicroUsd !== undefined || packet.maximumQuote.currency !== undefined;
   const quoteHasEvidence = packet.maximumQuote.evidenceKey !== undefined;
   const humanHasEvidence = packet.humanApproval.evidenceKey !== undefined;
+  const quoteHasBindingKeys = packet.maximumQuote.quoteKey !== undefined
+    && packet.maximumQuote.renderSpecKey !== undefined;
+  const humanHasBindingKeys = packet.humanApproval.approvedQuoteKey !== undefined
+    && packet.humanApproval.renderSpecKey !== undefined;
   const currentEvidenceAllowed = packet.binding.state === "current" && packet.providerVerification.state === "verified";
   if ((packet.maximumQuote.state === "quoted") !== quoteHasMoney
     || (packet.maximumQuote.state !== "missing" && packet.maximumQuote.state !== "unavailable") !== quoteHasEvidence
     || (packet.humanApproval.state !== "not_requested" && packet.humanApproval.state !== "unavailable") !== humanHasEvidence
+    || (packet.maximumQuote.state === "quoted") !== quoteHasBindingKeys
+    || (packet.humanApproval.state === "approved") !== humanHasBindingKeys
+    || (packet.maximumQuote.quoteKey === undefined) !== (packet.maximumQuote.renderSpecKey === undefined)
+    || (packet.humanApproval.approvedQuoteKey === undefined) !== (packet.humanApproval.renderSpecKey === undefined)
+    || (packet.humanApproval.state === "approved"
+      && (packet.humanApproval.approvedQuoteKey !== packet.maximumQuote.quoteKey
+        || packet.humanApproval.renderSpecKey !== packet.maximumQuote.renderSpecKey))
     || (["quoted", "declined", "expired"].includes(packet.maximumQuote.state) && !currentEvidenceAllowed)
     || (["approved", "rejected", "revoked", "expired"].includes(packet.humanApproval.state) && !currentEvidenceAllowed)
     || (packet.humanApproval.state === "approved" && packet.maximumQuote.state !== "quoted")
