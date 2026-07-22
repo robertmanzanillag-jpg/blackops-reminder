@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Durable source-to-batch automation checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-source-to-batch-automation`, stacked on draft PR #172.
+- Implemented locally: strict source automation endpoint `POST /api/ai-media-studio/automation/sources/production-batch/prepare` that reads the current 5–10 creator production batch and, only when it is `not_started`, invokes the existing durable production batch preparation with a server-owned idempotency key.
+- Safety: the browser sends an empty JSON body only. It cannot choose plan IDs, source IDs, provider IDs, cursors, idempotency keys, render/spend/publish flags or adapter configuration. The server constrains source selection to `kong-owned-catalog` rows that are accepted/ready, owned/licensed and moderation-approved.
+- Effects remain blocked: the endpoint may persist deterministic draft scripts and selected variants for blocked slots. It records no script approval, render job, outbox command, video-provider/HeyGen call, secret resolution, spend, publishing job, migration application or deployment.
+- Evidence so far: source-to-batch focused group 12/12; production-batch/source-to-script/source-sync regression 41/41; TypeScript pass; production build pass; codebase map and diff hygiene pass. The build retains inherited warnings for large Clippers chunk and local yt-dlp/Python packaging.
+- Remaining gates: independent final checker/App QA, draft PR, production Kong reader implementation, durable scheduler/cursor loop, PostgreSQL rehearsal and every HeyGen/spend/publishing/migration/deploy approval remain separate.
+
 ## Tenant-safe source automation sync checkpoint (2026-07-22)
 
 - Branch: `codex/ai-media-studio-source-automation-sync`, preserved in draft PR [#171](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/171) and stacked on draft PR #170.

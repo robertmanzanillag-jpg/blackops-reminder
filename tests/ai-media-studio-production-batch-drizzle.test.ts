@@ -107,12 +107,14 @@ test("prepare locks plan, ordered slots, and exactly ten sources without advisor
   };
   await assert.rejects(new DrizzleProductionBatchRepository(database).prepare({
     scope, planId, idempotencyKey: "prepare-batch-1", variantCount: 3,
+    sourceAdapterKey: "kong-owned-catalog",
     generator: { version: "deterministic-script-v1", generate: () => { throw new Error("must not generate without sources"); } },
   }), (error: unknown) => error instanceof ProductionBatchError && error.code === "SOURCE_INELIGIBLE");
   assert.match(queries[0]!, /for update/iu);
   assert.match(queries[1]!, /order by .*source_member_key.*video_number.*for update of/iu);
   assert.match(queries[2]!, /order by .*created_at.*limit 10 for update/iu);
   assert.match(queries[2]!, /title=btrim\(title\).*title !~ '\[\[:cntrl:\]\]'/iu);
+  assert.match(queries[2]!, /adapter_key=/iu);
   const all = queries.join(" ");
   assert.doesNotMatch(all, /advisory|budget|render|outbox|launch_intent|provider_submission/iu);
 });
@@ -145,8 +147,10 @@ test("exact replay locks current sources and fails closed when content refreshed
   };
   await assert.rejects(new DrizzleProductionBatchRepository(database).prepare({
     scope, planId, idempotencyKey: "prepare-batch-1", variantCount: 3,
+    sourceAdapterKey: "kong-owned-catalog",
     generator: { version: "deterministic-script-v1", generate: () => { throw new Error("exact replay must not regenerate"); } },
   }), (error: unknown) => error instanceof ProductionBatchError && error.code === "SOURCE_REFRESHED");
   assert.match(queries[2]!, /order by .*source_member_key.*video_number.*for update of .*sources/iu);
+  assert.match(queries[2]!, /sources\.adapter_key=/iu);
   assert.equal(queries.length, 3, "stale replay fails before script read or mutation");
 });

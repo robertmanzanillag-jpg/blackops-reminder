@@ -28,9 +28,21 @@ export class ProductionBatchService {
   }
 
   async prepare(scope: TenantScope, unsafePlanId: unknown, unsafeRequest: unknown): Promise<ProductionBatch> {
+    return this.prepareFromAdapter(scope, unsafePlanId, undefined, unsafeRequest);
+  }
+
+  async prepareFromAdapter(
+    scope: TenantScope,
+    unsafePlanId: unknown,
+    unsafeAdapterKey: unknown,
+    unsafeRequest: unknown,
+  ): Promise<ProductionBatch> {
     const planId = typeof unsafePlanId === "string" && /^plan_[a-f0-9]{24}$/u.test(unsafePlanId)
       ? unsafePlanId : undefined;
-    if (!planId) throw new ProductionBatchError("INVALID_REQUEST");
+    const sourceAdapterKey = unsafeAdapterKey === undefined ? undefined
+      : typeof unsafeAdapterKey === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(unsafeAdapterKey)
+        ? unsafeAdapterKey : null;
+    if (!planId || sourceAdapterKey === null) throw new ProductionBatchError("INVALID_REQUEST");
     const request = prepareProductionBatchRequestSchema.parse(unsafeRequest);
     return productionBatchSchema.parse(await this.repository.prepare({
       scope,
@@ -38,6 +50,7 @@ export class ProductionBatchService {
       idempotencyKey: request.idempotencyKey,
       variantCount: request.variantCount ?? 3,
       generator: this.generator,
+      ...(sourceAdapterKey !== undefined ? { sourceAdapterKey } : {}),
     }));
   }
 

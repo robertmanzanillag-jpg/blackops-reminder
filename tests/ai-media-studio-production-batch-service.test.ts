@@ -50,6 +50,20 @@ test("production batch service defaults to three deterministic zero-cost variant
   assert.equal(generated.scriptSet.variants.length, 3);
 });
 
+test("server-owned automation can constrain preparation to one validated source adapter", async () => {
+  const repository = new CapturingRepository(readyBatch());
+  const service = new ProductionBatchService(repository);
+  const scope = { ownerUserId: "user-a", workspaceId: "workspace-a" };
+  await service.prepareFromAdapter(scope, key("plan", 2), "kong-owned-catalog", {
+    idempotencyKey: "prepare-batch-1",
+  });
+  assert.equal(repository.input?.sourceAdapterKey, "kong-owned-catalog");
+  await assert.rejects(() => service.prepareFromAdapter(scope, key("plan", 2), "unsafe adapter", {
+    idempotencyKey: "prepare-batch-1",
+  }), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error
+    && error.code === "INVALID_REQUEST"));
+});
+
 test("production batch service rejects malformed plan IDs and client source snapshots", async () => {
   const service = new ProductionBatchService(new CapturingRepository(readyBatch()));
   await assert.rejects(() => service.prepare({ ownerUserId: "user-a", workspaceId: "workspace-a" }, "not-a-plan", {

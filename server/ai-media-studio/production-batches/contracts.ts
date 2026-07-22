@@ -37,6 +37,8 @@ export interface PrepareProductionBatchInput {
   idempotencyKey: string;
   variantCount: number;
   generator: ProductionScriptGenerator;
+  /** Optional server-owned intake boundary. Never accepted from the public batch API. */
+  sourceAdapterKey?: string;
 }
 
 export interface ApproveProductionBatchInput {

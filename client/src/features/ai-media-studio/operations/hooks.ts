@@ -72,6 +72,13 @@ export function useSourceReviewMutations() {
   return {
     review: useMutation({ mutationFn: operationsApi.reviewSourceEligibility, onSuccess: refreshSources }),
     preview: useMutation({ mutationFn: operationsApi.previewSourceScript }),
+    prepareBatch: useMutation({
+      mutationFn: operationsApi.prepareSourceProductionBatch,
+      onSuccess: () => Promise.all([
+        refreshSources(),
+        queryClient.invalidateQueries({ queryKey: ["ai-media-studio", "core", "production-batch"] }),
+      ]),
+    }),
   };
 }
 

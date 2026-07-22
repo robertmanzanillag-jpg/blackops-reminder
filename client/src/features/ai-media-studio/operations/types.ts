@@ -16,6 +16,9 @@ import type {
   SourceScriptPreviewRequest,
   SourceScriptPreviewResponse,
 } from "@shared/ai-media-studio-source-to-script";
+import type {
+  SourceToBatchAutomationResponse,
+} from "@shared/ai-media-studio-source-to-batch";
 
 export type {
   AnalyticsSummary,
@@ -30,6 +33,7 @@ export type {
   SourceEligibilityReviewResponse,
   SourceScriptPreviewRequest,
   SourceScriptPreviewResponse,
+  SourceToBatchAutomationResponse,
 };
 
 export type PublishingJobStatus = PublishingJob["status"];
