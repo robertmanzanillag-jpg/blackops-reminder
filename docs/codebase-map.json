@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T14:14:15.096Z",
+  "generatedAt": "2026-07-22T14:16:42.235Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -101,20 +101,6 @@
     "symbols": 15311
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 183,
-      "indexed": 164,
-      "kinds": {
-        "server": 183
-      }
-    },
-    "tests": {
-      "files": 243,
-      "indexed": 232,
-      "kinds": {
-        "test": 243
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -208,6 +194,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 183,
+      "indexed": 164,
+      "kinds": {
+        "server": 183
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -227,6 +220,13 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 243,
+      "indexed": 232,
+      "kinds": {
+        "test": 243
       }
     },
     "tests/fixtures": {

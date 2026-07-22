@@ -48,13 +48,13 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Events, restaurants, hotels, nightclubs, deals, travel packages, beach clubs and experiences | Proved | Eight-value source enum, bounded snapshot schema, contract tests and workbench selector | Replace manual snapshots with authenticated Kong source adapters |
+| Events, restaurants, hotels, nightclubs, deals, travel packages, beach clubs and experiences | Proved | Eight-value source enum, bounded snapshot schema, contract tests and workbench selector. Draft PR #171 adds a strict tenant-safe server-owned adapter sync boundary covering the same eight categories | Add and review one real Kong adapter plus durable scheduling; keep every new source blocked until rights/moderation approval |
 | Title, hook, script, CTA and caption | Proved | Shared Zod response plus the current stacked slice persist, render and digest-seal Video Title with the complete selected creative for every one of the 50–100 durable slots before atomic batch approval | Apply/rehearse the reviewed migration stack and add versioned post-approval editing/reapproval policy |
 | Hashtags and SEO keywords | Proved | Shared contract plus durable selected-variant metadata and the authenticated full-batch review UI preserve and display both lists | Add quality/duplicate rules and analytics feedback |
 | Alternative versions and different angles | Proved | Stable-ID 1–5 variants; approval promotes only each selected/current variant, and PostgreSQL proof keeps 400 unselected alternatives draft and approval-free | Add explicit alternative selection/editing, experiment identity and performance attribution |
 | Named angles such as Hidden Gem and Worth the Hype | Proved | Deterministic default angle catalog | Make catalog configurable by brand/country |
 | Strong-model script generation | Missing | Existing AI router is only a web-chat classifier; deterministic mode is the only enabled path | Dedicated media feature flag, budget reservation, evals, fallback and approval evidence |
-| Automatic generation directly from live Kong data | Partial | Bounded source-adapter contract, content-hash dedupe, tenant repositories and fake adapter exist | Live Kong/platform adapters, OAuth or trusted ingestion, outbox consumers and operational approval policy |
+| Automatic generation directly from live Kong data | Partial | Draft PR #171 mounts bounded server-owned source synchronization with content-hash dedupe, tenant isolation, full prewrite snapshot normalization and redacted output; it explicitly creates no scripts, render/outbox or provider effects | Real Kong adapter, durable server-side cursor/scheduler, rights/moderation flow and source-to-script consumer; generation remains behind the existing admission/cost gates |
 
 ## Video generation and providers
 
@@ -110,7 +110,7 @@ PR #67 is the foundation. PR #70 lives on `codex/ai-media-studio-core`, PR #71 l
 
 | Requirement | Status | Current evidence | Remaining acceptance |
 | --- | --- | --- | --- |
-| Trigger on new event, restaurant, hotel, promotion, deal or travel package | Partial | Category-aware source snapshots, stable content hashing, tenant dedupe repositories and fake adapter exist | Live domain event producers/consumers, OAuth/trusted ingestion and operational scheduling |
+| Trigger on new event, restaurant, hotel, promotion, deal or travel package | Partial | Category-aware snapshots, stable hashing and tenant dedupe now have a guarded mounted sync in draft PR #171. Browser/provider cursors and native configuration are rejected, and no downstream work is emitted | Configure a trusted Kong event/feed adapter, persist its cursor server-side and add a reviewed no-autostart scheduler/consumer |
 | Analyze data and generate ideas/scripts/titles/captions/hashtags | Partial | Deterministic snapshot-to-variants preparation persists complete review content; PR #144 atomically records one exact batch approval for 50–100 scripts after per-creator confirmation, and the stacked read-only preflight observes all 14 later gates without side effects | Finish independent preflight review, then add automatic consumer and quality/duplicate rules; governance/launch authority and every spend/provider action remain separate authenticated workflows |
 | Automatically render, download, store and queue publishing | Partial | Orchestration gates and CAS/outbox persist; guarded ingest/linkage now has strict production HTTPS/S3-compatible composition with retry, dead-letter and reconciliation | Deployed consumers/heartbeat, real connectors and live end-to-end crash recovery |
 | No-manual-work mode | Missing | Deliberately disabled | Production policy, emergency stop and Robert-approved autonomy level |

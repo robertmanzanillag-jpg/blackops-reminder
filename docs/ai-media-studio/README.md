@@ -2,6 +2,8 @@
 
 AI Media Studio is Kong's provider-neutral content production domain. It owns the workflow from source intake and script/influencer selection through rendering, reusable assets, approval-gated publishing records, and normalized analytics. External publishing and provider ingestion remain behind explicit release gates.
 
+Draft PR [#171](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/171) adds the first mounted provider-neutral source synchronization boundary. A strict real-session, exact-origin JSON request can select only a server-registered adapter key and a bounded 1–100 snapshot. The service validates and copies the entire snapshot before tenant-scoped deduplicated persistence, returns only redacted Studio-owned status data and leaves downstream script/render/publishing effects false. No production Kong adapter or scheduler is installed; rights/moderation, source-to-script orchestration, video generation, spend and deployment remain separately gated.
+
 ## Ownership
 
 The AI Media Studio Lead owns the contracts, architecture decisions, roadmap, and integration gates in this directory. Backend, frontend, automation/data, and QA agents work in non-overlapping file areas and hand changes back to the Lead for integration.
