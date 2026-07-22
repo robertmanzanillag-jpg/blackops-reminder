@@ -141,6 +141,7 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
       creativeStrategy: "drop_first",
       creativeStrategyVersion: 0,
       creativeStrategySampleBaseline: 0,
+      creativeStrategyPostIdsBaseline: [],
       creativeChangedAt: "",
       creativeReason: "Recolectando señal creativa de TikTok (0/5).",
       reason: "Recolectando resultados comparables (0/21); los horarios siguen explorando las 24 horas.",

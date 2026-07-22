@@ -122,7 +122,8 @@ test("applies CEO analytics and learned slots only to pending days", () => {
       sampleCount: 24, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "learning" as const,
       networkSamples: { tiktok: 24, facebook: 24, youtube: 24 }, recommendedTimes: ["13:00"], reason: "learning",
       tiktokMedianViews: 7, tiktokLowViewRate: 0.8, creativeStrategy: "instant_drop" as const,
-      creativeStrategyVersion: 1, creativeStrategySampleBaseline: 24, creativeChangedAt: now.toISOString(), creativeReason: "changed",
+      creativeStrategyVersion: 1, creativeStrategySampleBaseline: 24, creativeStrategyPostIdsBaseline: [],
+      creativeChangedAt: now.toISOString(), creativeReason: "changed",
     },
   };
   assert.equal(applyBlackRoomRemoteCommands(state, [command], now), 1);

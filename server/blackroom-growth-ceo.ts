@@ -22,6 +22,7 @@ export interface BlackRoomCeoAnalytics {
   creativeStrategy: BlackRoomCreativeStrategy;
   creativeStrategyVersion: number;
   creativeStrategySampleBaseline: number;
+  creativeStrategyPostIdsBaseline: string[];
   creativeChangedAt: string;
   creativeReason: string;
   reason: string;
@@ -66,14 +67,18 @@ export function extractBlackRoomMetricSamples(value: unknown): number {
   return ids.size;
 }
 
-export function extractBlackRoomViewSamples(value: unknown): number[] {
+export function extractBlackRoomViewRecords(value: unknown): Array<{ id: string; views: number }> {
   const samples = new Map<string, number>();
   for (const record of records(value)) {
     const views = metricValue(record, ["views", "videoViews", "viewCount", "plays"]);
     const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url;
     if (views !== null && id != null) samples.set(String(id), views);
   }
-  return [...samples.values()];
+  return [...samples].map(([id, views]) => ({ id, views }));
+}
+
+export function extractBlackRoomViewSamples(value: unknown): number[] {
+  return extractBlackRoomViewRecords(value).map((sample) => sample.views);
 }
 
 function median(values: number[]): number {
@@ -85,25 +90,41 @@ function median(values: number[]): number {
 
 export function planBlackRoomCreativeLearning(input: {
   views: number[];
+  postIds?: string[];
   previous?: Partial<BlackRoomCeoAnalytics> | null;
   now?: Date;
 }): Pick<BlackRoomCeoAnalytics,
   "tiktokMedianViews" | "tiktokLowViewRate" | "creativeStrategy" | "creativeStrategyVersion"
-  | "creativeStrategySampleBaseline" | "creativeChangedAt" | "creativeReason"> {
+  | "creativeStrategySampleBaseline" | "creativeStrategyPostIdsBaseline" | "creativeChangedAt" | "creativeReason"> {
   const now = input.now || new Date();
-  const views = input.views.filter((value) => Number.isFinite(value) && value >= 0);
-  const tiktokMedianViews = median(views);
-  const tiktokLowViewRate = views.length
-    ? views.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / views.length
-    : 0;
+  const samples = input.views
+    .map((views, index) => ({ views, id: input.postIds?.[index] == null ? "" : String(input.postIds[index]) }))
+    .filter((sample) => Number.isFinite(sample.views) && sample.views >= 0);
+  const views = samples.map((sample) => sample.views);
   const previousStrategy = BLACKROOM_CREATIVE_STRATEGIES.includes(input.previous?.creativeStrategy as BlackRoomCreativeStrategy)
     ? input.previous!.creativeStrategy as BlackRoomCreativeStrategy
     : "drop_first";
   const previousVersion = Math.max(0, Number(input.previous?.creativeStrategyVersion || 0));
   const previousBaseline = Math.max(0, Number(input.previous?.creativeStrategySampleBaseline || 0));
-  const lowPerformance = views.length >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES
+  const postIds = samples.map((sample) => sample.id).filter(Boolean);
+  const previousPostIds = Array.isArray(input.previous?.creativeStrategyPostIdsBaseline)
+    ? input.previous!.creativeStrategyPostIdsBaseline.map(String)
+    : [];
+  const newViews = postIds.length && previousPostIds.length
+    ? views.filter((_value, index) => !previousPostIds.includes(postIds[index]))
+    : views;
+  const evaluationViews = previousVersion > 0 && previousPostIds.length ? newViews : views;
+  const requiredEvidence = previousVersion > 0 ? BLACKROOM_CEO_CREATIVE_NEW_SAMPLES : BLACKROOM_CEO_CREATIVE_MIN_SAMPLES;
+  const tiktokMedianViews = median(evaluationViews);
+  const tiktokLowViewRate = evaluationViews.length
+    ? evaluationViews.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / evaluationViews.length
+    : 0;
+  const lowPerformance = evaluationViews.length >= requiredEvidence
     && (tiktokMedianViews <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD || tiktokLowViewRate >= 0.7);
-  const enoughNewEvidence = views.length - previousBaseline >= BLACKROOM_CEO_CREATIVE_NEW_SAMPLES;
+  const newPostCount = postIds.length
+    ? postIds.filter((id) => !previousPostIds.includes(id)).length
+    : views.length - previousBaseline;
+  const enoughNewEvidence = newPostCount >= BLACKROOM_CEO_CREATIVE_NEW_SAMPLES;
   const shouldRotate = lowPerformance && enoughNewEvidence;
   const strategyIndex = BLACKROOM_CREATIVE_STRATEGIES.indexOf(previousStrategy);
   const creativeStrategy = shouldRotate
@@ -115,11 +136,12 @@ export function planBlackRoomCreativeLearning(input: {
     creativeStrategy,
     creativeStrategyVersion: previousVersion + (shouldRotate ? 1 : 0),
     creativeStrategySampleBaseline: shouldRotate ? views.length : previousBaseline,
+    creativeStrategyPostIdsBaseline: shouldRotate ? postIds.slice(-200) : previousPostIds,
     creativeChangedAt: shouldRotate ? now.toISOString() : String(input.previous?.creativeChangedAt || ""),
     creativeReason: shouldRotate
       ? `TikTok sigue bajo (${tiktokMedianViews.toFixed(1)} vistas de mediana; ${(tiktokLowViewRate * 100).toFixed(0)}% en 10 o menos). El CEO cambió a ${creativeStrategy}.`
-      : views.length < BLACKROOM_CEO_CREATIVE_MIN_SAMPLES
-        ? `Recolectando señal creativa de TikTok (${views.length}/${BLACKROOM_CEO_CREATIVE_MIN_SAMPLES}).`
+      : evaluationViews.length < requiredEvidence
+        ? `Recolectando señal creativa de TikTok (${evaluationViews.length}/${requiredEvidence}).`
         : lowPerformance
           ? `Rendimiento bajo confirmado, esperando ${BLACKROOM_CEO_CREATIVE_NEW_SAMPLES} resultados nuevos antes de otro cambio.`
           : `La técnica ${creativeStrategy} se mantiene porque la distribución de TikTok mejoró.`,
@@ -208,13 +230,18 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const networkSamples: Record<string, number> = {};
   const times: string[] = [];
   let tiktokViews: number[] = [];
+  let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const networkToolPattern = network === "tiktok" ? /^get_?tiktoks$/i : network === "youtube" ? /^get_?videos$/i : /^get_?posts$/i;
     const selectedTool = tools.find((tool) => networkToolPattern.test(tool.name)) || metricsTool!;
     const metrics = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), selectedTool.name, buildToolArguments(selectedTool.inputSchema, network, now, env));
     const payload = toolPayload(metrics);
     networkSamples[network] = extractBlackRoomMetricSamples(payload);
-    if (network === "tiktok") tiktokViews = extractBlackRoomViewSamples(payload);
+    if (network === "tiktok") {
+      const viewRecords = extractBlackRoomViewRecords(payload);
+      tiktokViews = viewRecords.map((record) => record.views);
+      tiktokPostIds = viewRecords.map((record) => record.id);
+    }
     if (bestTimesTool) {
       const best = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), bestTimesTool.name, buildToolArguments(bestTimesTool.inputSchema, network, now, env));
       times.push(...extractBlackRoomBestTimes(toolPayload(best)));
@@ -222,7 +249,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   }
   const sampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
   const recommendedTimes = [...new Set(times)].slice(0, 12);
-  const creative = planBlackRoomCreativeLearning({ views: tiktokViews, previous: options.previous, now });
+  const creative = planBlackRoomCreativeLearning({ views: tiktokViews, postIds: tiktokPostIds, previous: options.previous, now });
   return {
     sampleCount,
     lastCheckedAt: now.toISOString(),

@@ -46,7 +46,8 @@ test("CEO schedule advances the generation without adding fake chat messages", (
       sampleCount: 4, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting",
       networkSamples: { tiktok: 2, facebook: 1, youtube: 1 }, recommendedTimes: [], reason: "collecting",
       tiktokMedianViews: 0, tiktokLowViewRate: 0, creativeStrategy: "drop_first",
-      creativeStrategyVersion: 0, creativeStrategySampleBaseline: 0, creativeChangedAt: "", creativeReason: "collecting",
+      creativeStrategyVersion: 0, creativeStrategySampleBaseline: 0, creativeStrategyPostIdsBaseline: [],
+      creativeChangedAt: "", creativeReason: "collecting",
     },
   });
   assert.equal(state.generation, 1);

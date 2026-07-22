@@ -58,7 +58,8 @@ function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[],
   const requiredSamples = Math.max(1, Number(job.requirements.minimumClipsPerDuration || 1));
   const unexplored = allowed.find((duration) => (counts.get(duration) || 0) < requiredSamples);
   if (unexplored) return unexplored;
-  if (Number(queue.analytics?.tiktokLowViewRate || 0) >= 0.7) {
+  if (Number(queue.analytics?.networkSamples?.tiktok || 0) >= 5
+    && Number(queue.analytics?.tiktokLowViewRate || 0) >= 0.7) {
     const shortTests = allowed.filter((duration) => duration === 15 || duration === 30);
     if (shortTests.length) {
       const shortMinimum = Math.min(...shortTests.map((duration) => counts.get(duration) || 0));
