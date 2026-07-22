@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomPage, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -24,6 +24,12 @@ test("remote command increments its monotonic generation", () => {
 test("BlackRoom shared controls accept only the configured owner", async () => {
   assert.equal(await isConfiguredSingleUserOwner(DEFAULT_DEV_USER_ID), true);
   assert.equal(await isConfiguredSingleUserOwner("not-the-owner"), false);
+  const request = (userId: string) => ({
+    headers: {},
+    header: (name: string) => name.toLowerCase() === "x-user-id" ? userId : undefined,
+  }) as any;
+  assert.equal(await hasBlackRoomChatAccess(request(DEFAULT_DEV_USER_ID)), true);
+  assert.equal(await hasBlackRoomChatAccess(request("not-the-owner")), false);
 });
 
 test("chat command is persisted and advances the remote generation", () => {
@@ -83,14 +89,18 @@ test("public MP4 serving accepts browser and video-probe byte ranges", () => {
 
 test("offline paused panel keeps Play available so the command can be queued", () => {
   assert.match(blackRoomPage, /pausing=!desired&&remote\.online&&!synced/);
-  assert.match(blackRoomPage, /play\.hidden=desired\|\|pausing/);
+  assert.match(blackRoomPage, /els\.play\.hidden=desired\|\|pausing/);
   const desired = false;
   const remoteOnline = false;
   const synced = false;
   const pausing = !desired && remoteOnline && !synced;
   assert.equal(desired || pausing, false);
-  assert.match(blackRoomPage, /async function run\(path,opt,priority=false\)/);
-  assert.match(blackRoomPage, /pause\.onclick=\(\)=>run\('\/api\/blackroom-agent\/pause',\{method:'POST'\},true\)/);
+  assert.match(blackRoomPage, /let mutationBusy=false,requestGeneration=0/);
+  assert.match(blackRoomPage, /async function refreshStatus\(\)\{if\(mutationBusy\)return/);
+  assert.match(blackRoomPage, /async function mutate\(path,opt\)\{if\(mutationBusy\)return/);
+  assert.match(blackRoomPage, /function disableActions\(value\)/);
+  assert.match(blackRoomPage, /els\.pause\.onclick=\(\)=>mutate\('\/api\/blackroom-agent\/pause'/);
+  assert.match(blackRoomPage, /if\(!message\|\|mutationBusy\)return/);
   assert.match(blackRoomPage, /generation===requestGeneration/);
 });
 
@@ -98,9 +108,11 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /Habla con el agente/);
   assert.match(blackRoomPage, /\/api\/blackroom-agent\/chat/);
   assert.match(blackRoomPage, /sube 3 videos más hoy/);
-  assert.match(blackRoomPage, /TikTok \+ Facebook \+ YouTube Shorts/);
+  assert.match(blackRoomPage, /TikTok \+ Facebook \+ YouTube/);
   assert.match(blackRoomPage, /facebook\.com\/profile\.php\?id=61568193332044/);
-  assert.match(blackRoomPage, /confirmar todos los destinos requeridos/);
+  assert.match(blackRoomPage, /confirmar las tres cuentas/);
+  assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
+  assert.match(blackRoomPage, /Trabajando de verdad/);
   const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
   assert.doesNotThrow(() => new Function(script));
 });

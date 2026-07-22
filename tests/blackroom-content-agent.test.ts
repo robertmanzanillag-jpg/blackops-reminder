@@ -119,6 +119,7 @@ test("creates an approval-only daily Metricool experiment plan", () => {
   assert.equal(plan.localCleanup.keepFailedUploadsForRetry, true);
   assert.ok(plan.metricoolDrafts.every((draft) => draft.status === "approval_required"));
   assert.deepEqual(new Set(plan.metricoolDrafts.map((draft) => draft.durationSeconds)), new Set([15, 30, 60, 120, 300, 600]));
+  assert.ok(plan.metricoolDrafts.filter((draft) => draft.durationSeconds >= 300).every((draft) => draft.videoFormat === "horizontal"));
   assert.equal(plan.renderJobs.length, 8);
 });
 
@@ -180,7 +181,7 @@ test("uses controlled random order without repeating source videos", () => {
   const second = buildBlackRoomAutopilotPlan(input);
   assert.deepEqual(first.metricoolDrafts, second.metricoolDrafts);
   assert.equal(new Set(first.metricoolDrafts.map((draft) => draft.sourceVideoId)).size, first.metricoolDrafts.length);
-  assert.deepEqual(first.metricoolDrafts.map((draft) => draft.videoFormat), ["vertical", "horizontal", "vertical", "horizontal", "vertical", "horizontal"]);
+  assert.deepEqual(first.metricoolDrafts.map((draft) => draft.videoFormat), ["vertical", "horizontal", "vertical", "horizontal", "horizontal", "horizontal"]);
   assert.ok(first.metricoolDrafts.every((draft) => draft.experimentKey.includes("selection:controlled-random")));
 });
 

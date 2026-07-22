@@ -340,7 +340,9 @@ export function buildBlackRoomMetricoolDrafts(input: {
   const remainingVideos = [...randomizedVideos];
   const addDraft = (durationSeconds: BlackRoomDuration, video: BlackRoomYoutubeVideo) => {
     const slot = drafts.length;
-    const videoFormat: BlackRoomVideoFormat = slot % 2 === 0 ? "vertical" : "horizontal";
+    const videoFormat: BlackRoomVideoFormat = durationSeconds >= 300
+      ? "horizontal"
+      : slot % 2 === 0 ? "vertical" : "horizontal";
     const platform = input.platforms[slot % input.platforms.length];
     const scheduledAt = new Date(input.startAt.getTime() + slot * 90 * 60 * 1000);
     drafts.push({

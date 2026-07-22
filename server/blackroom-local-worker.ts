@@ -64,10 +64,9 @@ export interface BlackRoomLedgerEntry {
 export interface BlackRoomWorkerLedger { version: 1; entries: BlackRoomLedgerEntry[] }
 
 export function requiredBlackRoomReceiptNetworks(
-  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
+  _entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
 ): Array<"tiktok" | "facebook" | "youtube"> {
-  const youtubeShort = entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178;
-  return youtubeShort ? ["tiktok", "facebook", "youtube"] : ["tiktok", "facebook"];
+  return ["tiktok", "facebook", "youtube"];
 }
 
 export function hasCompleteBlackRoomMetricoolReceipt(
@@ -356,7 +355,7 @@ export function buildBlackRoomWorkerPrompt(projectDir: string): string {
   const ledgerPath = path.join(projectDir, BLACKROOM_WORKER_LEDGER_PATH);
   return `Eres el editor local de BlackRoom. Prepara y reserva EXACTAMENTE un video pendiente y termina. Usa shell para YouTube/edición; no abras Chrome ni intentes entrar en Metricool. El proceso determinista que te invoca se encarga de subir, verificar y limpiar después. Escribe archivos solo dentro de ${projectDir}.
 
-Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss, la página de clips de Facebook y YouTube Shorts. Facebook llevará un CTA separado hacia la página principal; el publicador determinista lo añade sin poner ese enlace en TikTok. Los cortes verticales de hasta 178 segundos también se publican como Shorts; los horizontales y los de 5/10 minutos no se fuerzan como Shorts.
+Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss, la página de clips de Facebook y YouTube. Facebook llevará un CTA separado hacia la página principal; el publicador determinista lo añade sin poner ese enlace en TikTok. Los cortes verticales elegibles se publican como Shorts; los horizontales y largos se publican como videos normales de YouTube.
 
 Estado persistente:
 - Cola: ${queuePath}
@@ -367,10 +366,10 @@ Reglas obligatorias:
 2. Procesa un solo slot no confirmado del primer lote queued/retry/processing. Respeta la cantidad, DJs y horarios que figuran en requirements/slots; la cantidad puede cambiar por una orden del chat.
 3. No abras ni navegues YouTube con Chrome. Si prioritySources contiene una entrada pending, usa primero esa URL y verifica con yt-dlp que pertenece al canal BlackRoom; si no pertenece, no la reserves y explica el error. Si no hay prioridad, obtén el inventario del canal y selecciona la fuente exclusivamente desde shell con /opt/homebrew/bin/yt-dlp contra https://www.youtube.com/@blackroom_us/videos (por ejemplo, primero --flat-playlist --dump-single-json y luego descarga una URL concreta). Selecciona al azar un video que no aparezca en sourceHistory ni en el ledger. Nunca repitas video fuente ni uses segmentos solapados.
 4. Alterna inglés/español y vertical/horizontal; el momento vertical debe ser diferente del horizontal para un mismo DJ.
-5. Prueba 15, 30, 60, 120, 300 y 600 segundos conforme a requirements. El corte debe incluir un drop cerca del principio. No inventes que un video corto soporta una duración mayor.
+5. Prueba 15, 30, 60, 120, 300 y 600 segundos conforme a requirements. Los cortes de 300 y 600 segundos deben ser horizontales para publicarse como videos normales en YouTube; conserva vertical y horizontal entre los cortes cortos. El corte debe incluir un drop cerca del principio. No inventes que un video corto soporta una duración mayor.
 6. No descargues el set completo. Elige primero una ventana aleatoria suficientemente larga para el formato (duración objetivo + 90 s de margen; para 5/10 min usa +180 s), sin solapar segmentos usados. Descarga solo esa ventana en la mayor calidad disponible mediante /opt/homebrew/bin/yt-dlp con --download-sections "*INICIO-FIN" y --force-keyframes-at-cuts. Analiza el audio de esa ventana con /opt/homebrew/bin/ffmpeg y sitúa un aumento fuerte/drop dentro de los primeros segundos del corte final. Guarda una sola fuente parcial bajo clippers_workspace/blackroom/sources y el render final bajo clippers_workspace/blackroom/rendered; registra en el ledger los tiempos absolutos del set original. Renderiza a 1080p con /opt/homebrew/bin/ffmpeg como MP4 H.264 y AAC 128 kbps, y usa -movflags +faststart. Mantén el video entre 5 y 25 Mbps; para 5/10 minutos usa un objetivo cercano a 5 Mbps para que el MP4 final quede inequívocamente debajo de 500 MB. Si ffmpeg falla o el archivo queda vacío, incompleto o supera 500 MB, borra solo ese render fallido y vuelve a renderizar antes de reservar. Verifica duración, codecs, pixel format, resolución y tamaño con /opt/homebrew/bin/ffprobe y mide el render final con ffmpeg volumedetect; no reserves si la pista AAC no cubre el clip completo, no tiene canales, es silenciosa o su volumen máximo está por debajo de -30 dBFS. No uses Chrome.
 7. Antes de reservar la fuente, vuelve a leer cola y ledger. Reserva exclusivamente con npm run blackroom:ledger -- --reserve --job ID --slot HH:MM --video ID --dj NOMBRE --language en|es --format vertical|horizontal --duration SEGUNDOS --segment-start SEGUNDO --segment-end SEGUNDO --caption TEXTO --render RUTA --source RUTA. Si falla, no publiques. No escribas el ledger directamente.
-8. Termina justo después de que la reserva se haya escrito correctamente. No confirmes, no marques uncertain, no borres archivos, no registres sourceHistory y no cambies el estado final del lote; el publicador determinista hará esas acciones después de obtener evidencia inequívoca de Metricool para TikTok, Facebook y, cuando el formato califique, YouTube Shorts.
+8. Termina justo después de que la reserva se haya escrito correctamente. No confirmes, no marques uncertain, no borres archivos, no registres sourceHistory y no cambies el estado final del lote; el publicador determinista hará esas acciones después de obtener evidencia inequívoca de Metricool para TikTok, Facebook y YouTube.
 9. No añadas links en el caption que generas: TikTok queda sin enlaces y el publicador determinista añadirá solamente al caption de Facebook el enlace exacto del video completo de YouTube y el enlace de la página principal. No resuelvas CAPTCHA, no introduzcas contraseñas y no cambies ajustes de ninguna cuenta.
 10. Deja en el ledger: jobId, slot, videoId, DJ, idioma, formato, duración, segmento, ruta de render, caption, estado reserved y timestamps.
 
