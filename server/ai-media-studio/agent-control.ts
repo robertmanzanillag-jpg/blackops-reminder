@@ -406,7 +406,7 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     owner: "Admission, database safety, authorization, UI, security and App QA agents",
     state: "running",
     branch: "codex/ai-media-studio-one-video-held-admission",
-    pullRequestUrl: null,
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/169",
     acceptance: [
       "An authenticated personal-workspace operator can request one exact held admission using public CAS keys only",
       "The server derives all internal identifiers, authority, budget, versions, money and expiry before a locked revalidation",
