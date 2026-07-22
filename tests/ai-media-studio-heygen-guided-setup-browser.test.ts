@@ -71,7 +71,7 @@ test("guided setup completes only the safe credential-reference handoff and leav
     throw new Error(`Guided setup did not render: ${browserErrors.join(" | ") || "no browser errors"}; body=${body}`, { cause: error });
   }
 
-  assert.equal(await page.getByText("AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY", { exact: true }).count(), 2);
   assert.equal(await page.getByRole("textbox", { name: /API key|secret|token/iu }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "GET-only verification — authorization required" }).isDisabled(), true);
   assert.equal(await page.getByRole("list", { name: "Eight guided HeyGen setup gates" }).getByRole("listitem").count(), 8);
@@ -84,7 +84,7 @@ test("guided setup completes only the safe credential-reference handoff and leav
   assert.deepEqual(Object.keys(requestBody), ["idempotencyKey"]);
   assert.match(requestBody.idempotencyKey, /^heygen-static-reference-[0-9a-f-]{36}$/u);
   assert.doesNotMatch(requests[0]!.body, /api.?key|secret|token|account|credentialVersion/iu);
-  assert.equal(await page.getByRole("link", { name: "Enter 5–10 avatar-look and voice IDs" }).getAttribute("href"), "#heygen-roster");
+  assert.equal(await page.getByRole("link", { name: "Enter 5–10 avatar look ID and voice ID pairs" }).getAttribute("href"), "#heygen-roster");
   assert.equal(await page.getByRole("button", { name: "I added the Replit secret — register reference" }).count(), 0);
   assert.deepEqual(browserErrors, []);
 });

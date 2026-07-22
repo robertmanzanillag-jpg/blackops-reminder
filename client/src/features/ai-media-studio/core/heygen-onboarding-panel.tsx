@@ -9,7 +9,7 @@ const statusLabels: Record<HeyGenOnboardingReadiness["status"], string> = {
   awaiting_secure_credential: "Secure credential handoff required",
   credential_metadata_attention: "Credential metadata needs attention",
   account_ambiguous: "Choose one provider account",
-  ready_for_roster_ids: "Ready for avatar and voice IDs",
+  ready_for_roster_ids: "Ready for avatar look ID and voice ID pairs",
   roster_configured_blocked: "Roster configured; launch remains blocked",
   stale_roster_binding: "Roster binding needs replacement",
   unavailable: "Readiness unavailable",
@@ -55,6 +55,11 @@ function ReadinessPanel({ readiness, refreshing, onRefresh }: {
           {readiness.status === "ready_for_roster_ids" ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" aria-hidden="true" /> : <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />}
           <div><p className="font-semibold text-white">{statusLabels[readiness.status]}</p><p className="mt-1 text-xs leading-5 text-zinc-400">Observed {new Date(readiness.observedAt).toLocaleString()} from private read-only persistence.</p></div>
         </div>
+        {readiness.status === "ready_for_roster_ids" && (
+          <p className="mt-3 text-sm leading-6 text-emerald-100">
+            Robert may now enter 5–10 avatar look ID and voice ID pairs. Verification, quote, generation, and spend remain blocked.
+          </p>
+        )}
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -87,18 +92,18 @@ function ReadinessPanel({ readiness, refreshing, onRefresh }: {
 export function HeyGenOnboardingPanel() {
   const query = useHeyGenOnboardingReadiness();
   if (query.isLoading) {
-    return <section aria-labelledby="heygen-onboarding-loading" className="rounded-2xl border border-white/10 p-6"><h2 id="heygen-onboarding-loading" className="text-xl font-semibold text-white">Secure HeyGen onboarding</h2><p role="status" className="mt-3 text-sm text-zinc-400">Checking read-only onboarding readiness…</p></section>;
+    return <section id="heygen-setup" aria-labelledby="heygen-onboarding-loading" className="scroll-mt-24 rounded-2xl border border-white/10 p-6"><h2 id="heygen-onboarding-loading" className="text-xl font-semibold text-white">Secure HeyGen onboarding</h2><p role="status" className="mt-3 text-sm text-zinc-400">Checking read-only onboarding readiness…</p></section>;
   }
   if (query.isError || !query.data) {
     return (
-      <section aria-labelledby="heygen-onboarding-error" className="rounded-2xl border border-red-300/20 bg-red-400/[0.05] p-6">
+      <section id="heygen-setup" aria-labelledby="heygen-onboarding-error" className="scroll-mt-24 rounded-2xl border border-red-300/20 bg-red-400/[0.05] p-6">
         <h2 id="heygen-onboarding-error" className="text-xl font-semibold text-white">Secure HeyGen onboarding unavailable</h2>
         <div role="alert" className="mt-3 flex flex-col gap-3 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between"><p>Provider IDs remain blocked because readiness could not be verified. No external action occurred.</p><Button type="button" variant="outline" className="border-red-200/30 bg-transparent text-red-50" disabled={query.isFetching} onClick={() => query.refetch().then(() => undefined)}>Retry readiness</Button></div>
       </section>
     );
   }
   return (
-    <div className="space-y-6">
+    <div id="heygen-setup" className="scroll-mt-24 space-y-6">
       <ReadinessPanel readiness={query.data} refreshing={query.isFetching} onRefresh={() => query.refetch().then(() => undefined)} />
       <HeyGenGuidedSetup readiness={query.data} onReadinessRefresh={() => query.refetch().then(() => undefined)} />
       <HeyGenRosterSetup onboardingReadiness={query.data} />

@@ -49,7 +49,7 @@ function setupSteps(readiness: HeyGenOnboardingReadiness): readonly GuidedStep[]
     },
     {
       id: "avatar-roster",
-      label: "Enter 5–10 avatar-look and voice IDs",
+      label: "Enter 5–10 avatar look ID and voice ID pairs",
       description: "Each avatar receives exactly ten blocked, no-spend video slots.",
       state: rosterReady ? "complete" : rosterCurrent ? "current" : "blocked",
       href: rosterCurrent ? "#heygen-roster" : undefined,
@@ -71,7 +71,7 @@ function setupSteps(readiness: HeyGenOnboardingReadiness): readonly GuidedStep[]
     {
       id: "live-verification",
       label: "Approve GET-only HeyGen verification",
-      description: "A later explicit authorization may read account, avatar-look and voice metadata. It cannot generate or spend.",
+      description: "A later explicit authorization may read account, avatar look, and voice metadata. It cannot generate or spend.",
       state: "blocked",
     },
     {
@@ -140,7 +140,7 @@ export function HeyGenGuidedSetup({
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-zinc-300">
           <li>The exact deployment variable <code className="rounded bg-black/30 px-1.5 py-0.5 text-emerald-200">{HEYGEN_DEPLOYMENT_SECRET_NAME}</code>; its value never belongs in chat, GitHub, or this UI.</li>
           <li>Five to ten creator display names.</li>
-          <li>One exact HeyGen avatar-look ID and the intended HeyGen voice ID for each creator.</li>
+          <li>One exact HeyGen avatar look ID and the intended HeyGen voice ID for each creator.</li>
           <li>Language defaults to en-US, accent to Neutral, and gender to Unspecified; each can be adjusted before roster submission.</li>
         </ul>
         <p role="note" className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs leading-5 text-zinc-300">

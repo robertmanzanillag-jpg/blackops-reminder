@@ -188,7 +188,7 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">HeyGen roster registration</p>
           <h2 id="heygen-roster-heading" className="mt-2 text-2xl font-semibold text-white">{staleRoster ? "Replace the stale avatar roster" : currentRoster ? "Review the registered avatar roster" : "Register the pending avatar roster"}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">When secure onboarding allows registration, enter avatar and voice IDs for 5–10 creators. Kong stores those mappings privately and keeps public creator profiles provider-neutral.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">When secure onboarding allows registration, enter one avatar look ID and voice ID pair for each of 5–10 creators. Kong stores those mappings privately and keeps public creator profiles provider-neutral.</p>
         </div>
         <dl className="grid shrink-0 grid-cols-2 gap-2 text-center text-xs">
           <div className="rounded-lg border border-white/10 bg-black/20 px-4 py-3"><dt className="text-zinc-400">Target per avatar</dt><dd className="mt-1 text-lg font-semibold text-white">{HEYGEN_ROSTER_VIDEOS_PER_AVATAR}</dd></div>
@@ -241,7 +241,7 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
       {staleRoster && !replaceConfirmed && (
         <div role="status" className="mt-6 rounded-xl border border-amber-300/25 bg-amber-400/[0.08] p-4 text-sm text-amber-50">
           <p className="font-semibold">The saved roster belongs to an older credential version.</p>
-          <p className="mt-1 text-xs leading-5 text-amber-100/80">Replace all 5–10 avatar and voice mappings before any live verification. The existing blocked plan remains inert.</p>
+          <p className="mt-1 text-xs leading-5 text-amber-100/80">Replace all 5–10 avatar look ID and voice ID mappings before any live verification. The existing blocked plan remains inert.</p>
           <AlertDialog>
             <AlertDialogTrigger asChild><Button type="button" size="sm" variant="outline" className="mt-3 border-amber-200/30 bg-transparent text-amber-50">Replace stale roster</Button></AlertDialogTrigger>
             <AlertDialogContent className="border-white/10 bg-zinc-950 text-white">
@@ -264,7 +264,7 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
 
       {showRosterForm && <form onSubmit={handleSubmit(submit, invalid)} noValidate className="mt-6 space-y-5">
         <fieldset disabled={mutation.isPending || setupBlocked} className="space-y-4">
-          <legend className="sr-only">HeyGen avatar and voice roster</legend>
+          <legend className="sr-only">HeyGen avatar look ID and voice ID roster</legend>
           {fields.map((field, index) => {
             const fieldErrors = errors.members?.[index];
             const prefix = `heygen-member-${index}`;
@@ -278,7 +278,7 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
                 </div>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <TextField id={`${prefix}-name`} label="Creator name" registration={register(`members.${index}.name`, { required: "Enter a creator name", maxLength: { value: 120, message: "Use 120 characters or fewer" }, validate: (value) => !controlCharacterPattern.test(value) || "Remove control characters" })} error={fieldErrors?.name?.message} />
-                  <TextField id={`${prefix}-avatarId`} label="HeyGen avatar ID" privateValue hint="ID only — never paste an API key here." registration={register(`members.${index}.avatarId`, { required: "Enter the HeyGen avatar ID", maxLength: { value: 256, message: "Use 256 characters or fewer" }, pattern: { value: nativeIdPattern, message: "Use a valid HeyGen avatar ID" }, validate: (value, form) => form.members.findIndex((member) => member.avatarId.trim() === value.trim()) === index || "Each avatar ID must be unique" })} error={fieldErrors?.avatarId?.message} />
+                  <TextField id={`${prefix}-avatarId`} label="HeyGen avatar look ID" privateValue hint="ID only — never paste an API key here." registration={register(`members.${index}.avatarId`, { required: "Enter the HeyGen avatar look ID", maxLength: { value: 256, message: "Use 256 characters or fewer" }, pattern: { value: nativeIdPattern, message: "Use a valid HeyGen avatar look ID" }, validate: (value, form) => form.members.findIndex((member) => member.avatarId.trim() === value.trim()) === index || "Each avatar look ID must be unique" })} error={fieldErrors?.avatarId?.message} />
                   <TextField id={`${prefix}-voiceId`} label="HeyGen voice ID" privateValue hint="A voice may be shared by more than one avatar." registration={register(`members.${index}.voiceId`, { required: "Enter the HeyGen voice ID", maxLength: { value: 256, message: "Use 256 characters or fewer" }, pattern: { value: nativeIdPattern, message: "Use a valid HeyGen voice ID" } })} error={fieldErrors?.voiceId?.message} />
                   <TextField id={`${prefix}-language`} label="Language" hint="Use a locale such as en-US or es-MX." registration={register(`members.${index}.language`, { required: "Enter a language", maxLength: { value: 35, message: "Use 35 characters or fewer" }, pattern: { value: languagePattern, message: "Use a valid language locale" } })} error={fieldErrors?.language?.message} />
                   <TextField id={`${prefix}-accent`} label="Accent" registration={register(`members.${index}.accent`, { required: "Enter an accent", maxLength: { value: 80, message: "Use 80 characters or fewer" }, validate: (value) => !controlCharacterPattern.test(value) || "Remove control characters" })} error={fieldErrors?.accent?.message} />

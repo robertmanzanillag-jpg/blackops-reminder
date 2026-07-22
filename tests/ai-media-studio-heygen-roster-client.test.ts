@@ -147,7 +147,10 @@ test("HeyGen roster client rejects provider-native fields in a successful respon
 });
 
 test("HeyGen roster setup starts at five, caps at ten, and exposes accessible safe-only feedback", async () => {
-  const component = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/heygen-roster-setup.tsx"), "utf8");
+  const [component, hooks] = await Promise.all([
+    readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/heygen-roster-setup.tsx"), "utf8"),
+    readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/hooks.ts"), "utf8"),
+  ]);
   assert.equal(emptyHeyGenRosterMember().language, "en-US");
   assert.match(component, /HEYGEN_ROSTER_MIN_AVATARS/);
   assert.match(component, /HEYGEN_ROSTER_MAX_AVATARS/);
@@ -164,6 +167,9 @@ test("HeyGen roster setup starts at five, caps at ten, and exposes accessible sa
   assert.match(component, /Retry daily plan/);
   assert.match(component, /No jobs were queued and no credits were spent/);
   assert.match(component, /disabled=\{mutation\.isPending \|\| setupBlocked\}/);
+  assert.match(component, /label="HeyGen avatar look ID"/);
+  assert.doesNotMatch(component, /HeyGen avatar ID/);
+  assert.match(hooks, /invalidateQueries\(\{ queryKey: coreStudioKeys\.heyGenOnboardingReadiness \}\)/);
   assert.doesNotMatch(component, /localStorage|sessionStorage|URLSearchParams|console\./);
   assert.doesNotMatch(component, /API key.*<input|token.*<input/i);
 });

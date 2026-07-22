@@ -80,15 +80,21 @@ test("HeyGen onboarding client fails closed on secret fields, effects, and reord
   }
 });
 
-test("HeyGen onboarding UI gates provider IDs and protects configured roster replacement", async () => {
-  const [panel, roster, workspace, sandbox] = await Promise.all([
+test("HeyGen onboarding UI exposes stable setup navigation, ready-state limits, and protected roster replacement", async () => {
+  const [panel, roster, workspace, sandbox, navigation] = await Promise.all([
     readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/heygen-onboarding-panel.tsx"), "utf8"),
     readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/heygen-roster-setup.tsx"), "utf8"),
     readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/core-studio-workspace.tsx"), "utf8"),
     readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/core/production-batch-workbench.tsx"), "utf8"),
+    readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/navigation.ts"), "utf8"),
   ]);
 
   assert.ok(workspace.indexOf("<HeyGenOnboardingPanel") < workspace.indexOf("<InfluencerWorkspace"));
+  assert.match(navigation, /href: "#heygen-setup", label: "HeyGen setup"/);
+  assert.doesNotMatch(navigation, /href: "#providers", label: "Provider configuration"/);
+  assert.match(panel, /id="heygen-setup"/);
+  assert.match(panel, /Robert may now enter 5–10 avatar look ID and voice ID pairs/);
+  assert.match(panel, /Verification, quote, generation, and spend remain blocked/);
   assert.match(panel, /API keys, secrets, and tokens are never entered or read in this browser/);
   assert.match(panel, /Secret reference metadata is prepared\. The key value was not observed and has not been live-verified/);
   assert.match(panel, /No provider call · No live verification · No generation · No admission · No spend · No migration · No deployment · No publishing/);
@@ -103,5 +109,7 @@ test("HeyGen onboarding UI gates provider IDs and protects configured roster rep
   assert.match(roster, /disabled=\{!canCollectProviderIds\}/);
   assert.match(roster, /currentRoster && !staleRoster/);
   assert.match(roster, /Register the pending avatar roster/);
+  assert.match(roster, /label="HeyGen avatar look ID"/);
+  assert.doesNotMatch(roster, /HeyGen avatar ID/);
   assert.match(sandbox, /No approved public slot is available/);
 });
