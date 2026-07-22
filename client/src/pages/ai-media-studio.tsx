@@ -14,7 +14,7 @@ function DashboardFallback({ loading, error, onRetry }: { loading: boolean; erro
   return (
     <div className="space-y-5">
       <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24">
-        <h2 id="overview-heading" className="sr-only">Today overview</h2>
+        <h2 id="overview-heading" className="sr-only">Studio overview</h2>
         {loading ? <LoadingPanel label="Loading studio overview" /> : <ErrorPanel message={error ?? "Studio overview is unavailable"} onRetry={onRetry} />}
       </section>
       <div className="grid gap-5 xl:grid-cols-2">

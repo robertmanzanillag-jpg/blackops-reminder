@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T18:57:01.728Z",
+  "generatedAt": "2026-07-22T19:17:08.622Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -98,25 +98,11 @@
   "totals": {
     "filesVisible": 959,
     "filesIndexed": 809,
-    "imports": 3545,
+    "imports": 3546,
     "routes": 507,
-    "symbols": 15865
+    "symbols": 15881
   },
   "directories": {
-    "shared": {
-      "files": 23,
-      "indexed": 23,
-      "kinds": {
-        "shared": 23
-      }
-    },
-    "tests": {
-      "files": 261,
-      "indexed": 250,
-      "kinds": {
-        "test": 261
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -224,11 +210,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 23,
+      "indexed": 23,
+      "kinds": {
+        "shared": 23
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 261,
+      "indexed": 250,
+      "kinds": {
+        "test": 261
       }
     },
     "tests/fixtures": {
@@ -12907,6 +12907,7 @@
         "PublicationState",
         "PublishingInvariantError",
         "PublishingNotFoundError",
+        "PublishingPersistenceError",
         "PublishingPlatform",
         "PublishingPolicyDeniedError",
         "PublishingPreview",
@@ -12931,6 +12932,7 @@
         "PUBLISHING_PLATFORMS",
         "PublishingInvariantError",
         "PublishingNotFoundError",
+        "PublishingPersistenceError",
         "PublishingPolicyDeniedError",
         "assertPreviewUnchanged",
         "assertScheduledForInFuture",
@@ -12986,6 +12988,7 @@
         "mapRow",
         "object",
         "persistedState",
+        "raw",
         "rejection",
         "request",
         "requestWithoutSubmission",
@@ -12993,7 +12996,8 @@
         "row",
         "rows",
         "tenantPredicates",
-        "tenants"
+        "tenants",
+        "value"
       ],
       "routes": []
     },
@@ -13110,6 +13114,7 @@
       ],
       "symbols": [
         "PublishingService",
+        "count",
         "exactReplay",
         "existing",
         "idempotencyKey",
@@ -23881,7 +23886,9 @@
         "TEMP_PREFIX",
         "accounts",
         "applyFullChain",
+        "bindingId",
         "bytes",
+        "client",
         "db",
         "durableFive",
         "durableTen",
@@ -23903,6 +23910,7 @@
         "publicDto",
         "repository",
         "request",
+        "requestDigest",
         "requireOwnedUrl",
         "resolvedRoot",
         "resolvedSocket",
@@ -23917,6 +23925,7 @@
         "sha256",
         "sideEffectTables",
         "socket",
+        "staticCredentialForward",
         "tableCounts",
         "tenClient",
         "tenResult",
@@ -26038,6 +26047,7 @@
       "imports": [
         "../server/ai-media-studio/analytics/fake-ingestion-adapter",
         "../server/ai-media-studio/analytics/in-memory-repository",
+        "../server/ai-media-studio/assets",
         "../server/ai-media-studio/core/in-memory-asset-repository",
         "../server/ai-media-studio/core/in-memory-core-repositories",
         "../server/ai-media-studio/core/runtime",
@@ -26056,6 +26066,9 @@
       ],
       "exports": [],
       "symbols": [
+        "DashboardPublishingRepository",
+        "InvalidCountPublishingRepository",
+        "MutationTrapAssetIngestRepository",
         "address",
         "agingAt",
         "agingCreate",
@@ -26070,6 +26083,7 @@
         "attributionPage",
         "attributionResponse",
         "automatic",
+        "body",
         "cancelledResponse",
         "claim",
         "connectionRaw",
@@ -26120,6 +26134,7 @@
         "rejectedResponse",
         "replay",
         "replayed",
+        "repository",
         "request",
         "response",
         "restoreDevFallback",
@@ -27939,6 +27954,7 @@
         "approved",
         "committed",
         "compiled",
+        "count",
         "db",
         "denied",
         "deniedDb",
@@ -27986,6 +28002,7 @@
       "symbols": [
         "Clock",
         "CrashOnceRepository",
+        "InvalidCountRepository",
         "a",
         "approved",
         "b",
@@ -28018,6 +28035,7 @@
         "stored",
         "submitted",
         "success",
+        "tenantA",
         "unapproved",
         "worker"
       ],

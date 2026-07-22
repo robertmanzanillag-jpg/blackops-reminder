@@ -5,6 +5,7 @@ import {
   normalizeInstant,
   publicationIdempotencyKey,
   PublishingInvariantError,
+  PublishingPersistenceError,
   toPublicPublication,
   validateTimeZone,
   type ManualApprovalEvidence,
@@ -105,5 +106,13 @@ export class PublishingService {
 
   async list(scope: TenantScope): Promise<PublicPublication[]> {
     return (await this.repository.list(scope)).map(toPublicPublication);
+  }
+
+  async countPublished(scope: TenantScope): Promise<number> {
+    const count = await this.repository.countPublished(scope);
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new PublishingPersistenceError("Published job count from persistence is invalid");
+    }
+    return count;
   }
 }

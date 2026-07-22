@@ -53,6 +53,35 @@ test("Drizzle create validates tenant ownership and persists media_asset_id with
   assert.ok(query.params.includes(scope.workspaceId));
 });
 
+test("Drizzle published aggregate is exact, tenant-scoped, and never lists rows", async () => {
+  const db = new FakeDb([[{ count: "42" }]]);
+  const count = await new DrizzlePublishingRepository(db as never, async () => {}).countPublished(scope);
+  assert.equal(count, 42);
+  assert.equal(db.queries.length, 1);
+  const query = db.queries[0]; assert.ok(query);
+  assert.match(query.sql, /^select count\(\*\) as count from /i);
+  assert.match(query.sql, /owner_user_id =/i);
+  assert.match(query.sql, /workspace_id =/i);
+  assert.match(query.sql, /status = 'published'/i);
+  assert.doesNotMatch(query.sql, /order by|limit|select \*/i);
+  assert.ok(query.params.includes(scope.ownerUserId));
+  assert.ok(query.params.includes(scope.workspaceId));
+});
+
+test("Drizzle published aggregate safely parses supported counts and rejects malformed or unsafe values", async () => {
+  for (const [raw, expected] of [[0, 0], [7n, 7], ["9007199254740991", Number.MAX_SAFE_INTEGER]] as const) {
+    const db = new FakeDb([[{ count: raw }]]);
+    assert.equal(await new DrizzlePublishingRepository(db as never, async () => {}).countPublished(scope), expected);
+  }
+  for (const raw of [-1, -1n, "-1", "01", "1.5", "9007199254740992", Number.NaN, undefined]) {
+    const db = new FakeDb([[{ count: raw }]]);
+    await assert.rejects(
+      new DrizzlePublishingRepository(db as never, async () => {}).countPublished(scope),
+      /count from persistence is invalid/,
+    );
+  }
+});
+
 test("Drizzle create rejects past/equal scheduled drafts before ownership or SQL and persists a future draft", async () => {
   const now = "2030-01-02T20:00:00.000Z";
   const record = (scheduledFor: string) => ({

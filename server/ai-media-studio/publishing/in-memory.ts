@@ -64,6 +64,14 @@ export class InMemoryPublishingRepository implements PublishingRepository {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)).map(clone);
   }
 
+  async countPublished(scope: TenantScope): Promise<number> {
+    let count = 0;
+    for (const job of this.values.values()) {
+      if (tenantKey(job.scope) === tenantKey(scope) && job.state === "published") count += 1;
+    }
+    return count;
+  }
+
   async approve(scope: TenantScope, publicationId: string, evidence: ManualApprovalEvidence, now: string): Promise<PublicationJob> {
     const job = this.mutable(scope, publicationId);
     if (job.state !== "pending_approval") throw new PublishingInvariantError("Only a pending preview can be approved");
