@@ -122,11 +122,11 @@ async function analyzeDrop(sourcePath: string, plan: BlackRoomEditPlan): Promise
     "-f", "null", "-",
   ]);
   const samples = parseBlackRoomEnergySamples(stderr);
-  return findBlackRoomDropOffset(samples, plan.durationSeconds, plan.windowEndSeconds - plan.windowStartSeconds);
+  return findBlackRoomDropOffset(samples, plan.durationSeconds, plan.windowEndSeconds - plan.windowStartSeconds, plan.creativeStrategy);
 }
 
 async function renderClip(sourcePath: string, renderPath: string, plan: BlackRoomEditPlan, offsetSeconds: number): Promise<void> {
-  await appendActivity(`Renderizando ${plan.durationSeconds}s en formato ${plan.format}, H.264 y AAC.`, "render");
+  await appendActivity(`Renderizando ${plan.durationSeconds}s en formato ${plan.format}, técnica ${plan.creativeStrategy}, H.264 y AAC.`, "render");
   try {
     await run(ffmpegPath, buildBlackRoomRenderArgs(sourcePath, renderPath, plan, offsetSeconds), 128 * 1024 * 1024);
   } catch {
@@ -185,7 +185,7 @@ async function reserve(
     },
     beginPreservingMedia,
     confirmReservation,
-    () => appendActivity(`Clip reservado sin IA: ${plan.dj}, ${plan.durationSeconds}s, ${plan.format}, ${plan.slot}.`, "reserva", "success"),
+    () => appendActivity(`Clip reservado sin IA: ${plan.dj}, ${plan.durationSeconds}s, ${plan.format}, técnica ${plan.creativeStrategy}, ${plan.slot}.`, "reserva", "success"),
   );
 }
 

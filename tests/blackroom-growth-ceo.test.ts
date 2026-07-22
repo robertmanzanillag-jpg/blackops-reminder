@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BLACKROOM_CEO_MIN_SAMPLES,
+  BLACKROOM_CEO_CREATIVE_MIN_SAMPLES,
   buildBlackRoomLearningSlots,
   collectBlackRoomMetricoolAnalytics,
   extractBlackRoomBestTimes,
   extractBlackRoomMetricSamples,
+  extractBlackRoomViewSamples,
+  planBlackRoomCreativeLearning,
 } from "../server/blackroom-growth-ceo";
 
 function minutes(time: string): number {
@@ -80,4 +83,34 @@ test("Metricool payload extraction deduplicates posts and ranks best times", () 
   assert.deepEqual(extractBlackRoomBestTimes({ data: [
     { time: "18:30", score: 0.8 }, { hour: 2, score: 0.4 }, { time: "12:15", score: 0.9 },
   ] }), ["12:15", "18:30", "02:00"]);
+});
+
+test("CEO waits for enough TikTok evidence before changing creative technique", () => {
+  const result = planBlackRoomCreativeLearning({
+    views: Array(BLACKROOM_CEO_CREATIVE_MIN_SAMPLES - 1).fill(3),
+    now: new Date("2026-07-22T12:00:00.000Z"),
+  });
+  assert.equal(result.creativeStrategy, "drop_first");
+  assert.equal(result.creativeStrategyVersion, 0);
+});
+
+test("CEO rotates technique only after a fresh low-performing sample window", () => {
+  const now = new Date("2026-07-22T12:00:00.000Z");
+  const first = planBlackRoomCreativeLearning({ views: [2, 3, 4, 5, 6], now });
+  assert.equal(first.creativeStrategy, "instant_drop");
+  assert.equal(first.creativeStrategyVersion, 1);
+  assert.equal(first.creativeStrategySampleBaseline, 5);
+
+  const tooSoon = planBlackRoomCreativeLearning({ views: [2, 3, 4, 5, 6, 7], previous: first, now });
+  assert.equal(tooSoon.creativeStrategy, "instant_drop");
+
+  const next = planBlackRoomCreativeLearning({ views: [2, 3, 4, 5, 6, 7, 8, 9], previous: first, now });
+  assert.equal(next.creativeStrategy, "build_then_drop");
+  assert.equal(next.creativeStrategyVersion, 2);
+});
+
+test("TikTok view extraction deduplicates posts and ignores missing metrics", () => {
+  assert.deepEqual(extractBlackRoomViewSamples({ posts: [
+    { id: "a", views: 3 }, { id: "a", views: 7 }, { postId: "b", viewCount: 12 }, { id: "c", impressions: 99 },
+  ] }), [7, 12]);
 });
