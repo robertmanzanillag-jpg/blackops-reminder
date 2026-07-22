@@ -13,12 +13,12 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Source eligibility and script preview checkpoint (2026-07-22)
 
-- Branch: `codex/ai-media-studio-kong-source-to-script`, stacked on PR #171.
+- Branch: `codex/ai-media-studio-kong-source-to-script`, preserved in draft PR [#172](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/172) and stacked on draft PR #171.
 - Implemented locally: an injected provider-neutral Kong reader adapter for all eight source categories, exact-content source eligibility review, deterministic source-to-script preview over persisted Studio sources and the operator UI for those safe actions.
 - Safety: review requires strict real-session exact-origin JSON, current `contentHash`, tenant scope and idempotency. Script preview accepts only Studio source IDs and bounded script options, and rejects sources unless they are accepted plus owned/licensed and moderation-approved.
 - Effects remain blocked: no durable script insert, orchestration run, render/outbox, video-provider/HeyGen call, secret resolution, spend, publishing, migration application or deployment.
 - Evidence: 75/75 focused non-HTTP checks and 18/18 authenticated HTTP checks pass; TypeScript, production build, codebase map and diff hygiene pass. Independent checker/App QA reports P0=P1=P2=P3=0 and no remaining actionable finding.
-- Remaining gates: preserve this slice in a stacked draft PR, then separately implement and rehearse the production Kong reader, durable scheduler and source-to-batch consumer. HeyGen verification, generation, spend, publishing, migrations and deployment remain separately approved gates.
+- Remaining gates: keep PR #172 draft and unmerged, then separately implement and rehearse the production Kong reader, durable scheduler and source-to-batch consumer. HeyGen verification, generation, spend, publishing, migrations and deployment remain separately approved gates.
 
 ## HeyGen roster mutation hardening checkpoint (2026-07-22)
 

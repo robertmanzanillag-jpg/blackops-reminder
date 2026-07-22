@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T14:54:07.183Z",
+  "generatedAt": "2026-07-22T14:56:23.113Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -98,30 +98,9 @@
     "filesIndexed": 791,
     "imports": 3419,
     "routes": 506,
-    "symbols": 15520
+    "symbols": 15521
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 186,
-      "indexed": 167,
-      "kinds": {
-        "server": 186
-      }
-    },
-    "shared": {
-      "files": 21,
-      "indexed": 21,
-      "kinds": {
-        "shared": 21
-      }
-    },
-    "tests": {
-      "files": 252,
-      "indexed": 241,
-      "kinds": {
-        "test": 252
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -215,6 +194,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 186,
+      "indexed": 167,
+      "kinds": {
+        "server": 186
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -222,11 +208,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 21,
+      "indexed": 21,
+      "kinds": {
+        "shared": 21
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests": {
+      "files": 252,
+      "indexed": 241,
+      "kinds": {
+        "test": 252
       }
     },
     "tests/fixtures": {
@@ -22361,6 +22361,7 @@
         "heldAdmission",
         "heyGenAccountMaximumQuote",
         "heyGenVerificationEvidence",
+        "kongSourceToScript",
         "launchReadiness",
         "officeSource",
         "offlinePreflight",

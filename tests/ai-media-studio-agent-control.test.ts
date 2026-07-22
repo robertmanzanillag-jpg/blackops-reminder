@@ -26,8 +26,8 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 19);
-  assert.equal(snapshot.summary.running, 1);
+  assert.equal(snapshot.summary.done, 20);
+  assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(snapshot.workItems.find((item) => item.id === "ams-agent-quote-readiness")?.branch,
@@ -70,6 +70,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const heldAdmission = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-held-admission");
   const rosterMutationHardening = snapshot.workItems.find((item) => item.id === "ams-agent-roster-mutation-hardening");
   const sourceAutomationSync = snapshot.workItems.find((item) => item.id === "ams-agent-source-automation-sync");
+  const kongSourceToScript = snapshot.workItems.find((item) => item.id === "ams-agent-kong-source-to-script");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -162,6 +163,10 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(sourceAutomationSync?.acceptance.join(" ") ?? "", /Server-owned adapters[\s\S]*tenant-scoped sync is bounded and deduplicated[\s\S]*redacts provider payloads[\s\S]*no script[\s\S]*render[\s\S]*video-provider[\s\S]*secret[\s\S]*spend[\s\S]*publishing[\s\S]*migration[\s\S]*deployment effect/u);
   assert.match(sourceAutomationSync?.evidence.join(" ") ?? "", /2452b955[\s\S]*44\/44[\s\S]*26\/26[\s\S]*4\/4[\s\S]*17\/17[\s\S]*P0=P1=P2=P3=0[\s\S]*36\/36/u);
   assert.match(sourceAutomationSync?.blockers.join(" ") ?? "", /production Kong source adapter[\s\S]*source-to-script orchestration[\s\S]*PostgreSQL rehearsal[\s\S]*Video generation[\s\S]*HeyGen[\s\S]*spend[\s\S]*publishing[\s\S]*migrations[\s\S]*deployment/iu);
+  assert.equal(kongSourceToScript?.state, "done");
+  assert.equal(kongSourceToScript?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/172");
+  assert.match(kongSourceToScript?.evidence.join(" ") ?? "", /2cf5ec81[\s\S]*75\/75[\s\S]*18\/18[\s\S]*P0=P1=P2=P3=0/u);
+  assert.match(kongSourceToScript?.blockers.join(" ") ?? "", /production Kong reader[\s\S]*durable source scheduler[\s\S]*preview[\s\S]*HeyGen[\s\S]*spend[\s\S]*publishing[\s\S]*migrations[\s\S]*deployment/iu);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);
