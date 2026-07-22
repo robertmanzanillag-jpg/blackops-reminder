@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T13:17:52.068Z
+Generated: 2026-07-22T13:38:38.699Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 923 | 773 | 3305 | 503 | 15196 |
+| 923 | 773 | 3305 | 503 | 15213 |
 
 ## Entrypoints
 - `client/src/App.tsx`

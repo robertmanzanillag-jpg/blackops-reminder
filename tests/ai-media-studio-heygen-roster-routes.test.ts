@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
 import test from "node:test";
 import express, { type Request } from "express";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
@@ -22,6 +22,9 @@ function forceNoDevFallback(): () => void {
 
 async function startRosterRuntime(accountAvailable = true, credentialSource = "static_api_key") {
   const restoreDevFallback = forceNoDevFallback();
+  const rosterRepository = new InMemoryHeyGenRosterRepository();
+  let configureCalls = 0;
+  let readinessCalls = 0;
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -34,21 +37,33 @@ async function startRosterRuntime(accountAvailable = true, credentialSource = "s
     providers: [new FakeVideoProvider()],
     defaultProviderKey: "fake",
     runtimeEnvironment: "test",
-    heyGenRosterRepository: new InMemoryHeyGenRosterRepository(),
+    aiMediaStudioCanonicalAppUrl: "https://app.example:8443",
+    heyGenRosterRepository: {
+      configure: async (input) => {
+        configureCalls += 1;
+        return rosterRepository.configure(input);
+      },
+      getCurrent: (scope) => rosterRepository.getCurrent(scope),
+      get: (scope, rosterId) => rosterRepository.get(scope, rosterId),
+      getCurrentDailyPlan: (scope) => rosterRepository.getCurrentDailyPlan(scope),
+    },
     resolveHeyGenRosterAccount: {
       resolve: async (scope) => accountAvailable && scope.ownerUserId === "user-a"
         ? { providerAccountId: "private-heygen-account", credentialVersion: 1 }
         : undefined,
     },
     heyGenOnboardingReadinessRepository: {
-      observe: async (scope) => ({
-        observedAt: "2030-01-01T00:00:00.000Z",
-        accounts: accountAvailable && scope.ownerUserId === "user-a" ? [{
-          id: "private-heygen-account", status: "disconnected", credentialStatus: "unverified",
-          credentialVersion: 1, credentialSource,
-        }] : [],
-        plans: [],
-      }),
+      observe: async (scope) => {
+        readinessCalls += 1;
+        return {
+          observedAt: "2030-01-01T00:00:00.000Z",
+          accounts: accountAvailable && scope.ownerUserId === "user-a" ? [{
+            id: "private-heygen-account", status: "disconnected", credentialStatus: "unverified",
+            credentialVersion: 1, credentialSource,
+          }] : [],
+          plans: [],
+        };
+      },
     },
     operations: { runtimeEnvironment: "test" },
   });
@@ -59,6 +74,7 @@ async function startRosterRuntime(accountAvailable = true, credentialSource = "s
   assert.ok(address && typeof address === "object");
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
+    counts: () => ({ configureCalls, readinessCalls }),
     close: async () => {
       try {
         await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -83,10 +99,30 @@ function rosterRequest(count = 5) {
   };
 }
 
+const mutationHeaders = {
+  "content-type": "application/json",
+  "x-test-user": "user-a",
+  origin: "https://app.example:8443",
+  "sec-fetch-site": "same-origin",
+};
+
+async function rawRequest(url: string, options: Readonly<{
+  method: string; headers: Record<string, string>; body?: string;
+}>): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const req = request(url, { method: options.method, headers: options.headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+    });
+    req.on("error", reject); if (options.body) req.write(options.body); req.end();
+  });
+}
+
 test("HeyGen roster routes configure avatars and expose a no-spend daily plan", async (t) => {
   const harness = await startRosterRuntime();
   t.after(harness.close);
-  const headers = { "content-type": "application/json", "x-test-user": "user-a" };
+  const headers = mutationHeaders;
 
   assert.equal((await fetch(`${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster/daily-plan`)).status, 401);
   assert.equal((await fetch(`${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster/daily-plan`, { headers })).status, 404);
@@ -137,7 +173,7 @@ test("roster setup rejects client account and secret fields and fails closed wit
   const harness = await startRosterRuntime(false);
   t.after(harness.close);
   const endpoint = `${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster`;
-  const headers = { "content-type": "application/json", "x-test-user": "user-a" };
+  const headers = mutationHeaders;
 
   const unavailable = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(rosterRequest()) });
   assert.equal(unavailable.status, 503);
@@ -158,10 +194,69 @@ test("direct roster POST cannot bypass static credential onboarding with a legac
   t.after(harness.close);
   const response = await fetch(`${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-test-user": "user-a" },
+    headers: mutationHeaders,
     body: JSON.stringify(rosterRequest()),
   });
   assert.equal(response.status, 503);
   const body = await response.text();
   assert.doesNotMatch(body, /legacy_authorized_unbound|private-heygen-account|native-avatar|native-shared-voice/iu);
+});
+
+test("roster POST is auth-first and requires exact server-owned same-origin JSON transport", async (t) => {
+  const harness = await startRosterRuntime(); t.after(harness.close);
+  process.env.ALLOW_DEV_USER_FALLBACK = "true";
+  const endpoint = `${harness.baseUrl}/api/ai-media-studio/provider-configurations/heygen/roster`;
+  const body = JSON.stringify(rosterRequest());
+
+  assert.equal((await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json",
+    "x-user-id": "user-a", origin: mutationHeaders.origin, "sec-fetch-site": "same-origin" }, body })).status, 401);
+  for (const headers of [
+    { "content-type": "application/json", "x-test-user": "user-a", "sec-fetch-site": "same-origin" },
+    { ...mutationHeaders, "sec-fetch-site": "same-site" },
+    { ...mutationHeaders, "sec-fetch-site": "none" },
+    { ...mutationHeaders, origin: "https://attacker.example", "sec-fetch-site": "cross-site" },
+    { ...mutationHeaders, origin: "https://attacker.example", host: "app.example:8443",
+      "x-forwarded-host": "app.example:8443" },
+  ]) {
+    assert.equal((await fetch(endpoint, { method: "POST", headers, body })).status, 403);
+  }
+  assert.equal((await fetch(endpoint, { method: "POST", headers: { ...mutationHeaders,
+    "content-type": "application/x-www-form-urlencoded" }, body: "members=unsafe" })).status, 415);
+  assert.equal((await fetch(`${endpoint}?providerAccountId=client`, { method: "POST", headers: mutationHeaders,
+    body })).status, 400);
+  assert.equal((await rawRequest(endpoint, { method: "POST", headers: { ...mutationHeaders,
+    "transfer-encoding": "chunked" }, body })).status, 400);
+  for (const count of [4, 11]) {
+    assert.equal((await fetch(endpoint, { method: "POST", headers: mutationHeaders,
+      body: JSON.stringify(rosterRequest(count)) })).status, 400);
+  }
+  assert.deepEqual(harness.counts(), { configureCalls: 0, readinessCalls: 0 },
+    "denied requests must not reach readiness or persistence");
+
+  const status = await fetch(endpoint, { headers: { "x-test-user": "user-a" } });
+  assert.equal(status.status, 404, "denied mutations must not create a roster");
+  assert.doesNotMatch(await status.text(), /native-avatar|native-shared-voice|private-heygen-account/iu);
+});
+
+test("roster strict origin configuration rejects production HTTP and permits only explicit dev loopback", async () => {
+  const production = createAiMediaStudioRuntime({
+    repository: new InMemoryMediaJobRepository(), runtimeEnvironment: "production",
+    aiMediaStudioCanonicalAppUrl: "http://127.0.0.1:4567",
+    heyGenRosterRepository: new InMemoryHeyGenRosterRepository(),
+    resolveHeyGenRosterAccount: { async resolve() { return undefined; } },
+    heyGenOnboardingReadinessRepository: { async observe() { return { observedAt: new Date().toISOString(),
+      accounts: [], plans: [] }; } }, operations: { runtimeEnvironment: "test" },
+  });
+  assert.equal(production.oneVideoHeldAdmissionPersistence.available, false);
+
+  const local = createAiMediaStudioRuntime({
+    repository: new InMemoryMediaJobRepository(), providers: [new FakeVideoProvider()],
+    defaultProviderKey: "fake", runtimeEnvironment: "test",
+    aiMediaStudioCanonicalAppUrl: "http://127.0.0.1:4567/",
+    heyGenRosterRepository: new InMemoryHeyGenRosterRepository(),
+    resolveHeyGenRosterAccount: { async resolve() { return undefined; } },
+    heyGenOnboardingReadinessRepository: { async observe() { return { observedAt: new Date().toISOString(),
+      accounts: [], plans: [] }; } }, operations: { runtimeEnvironment: "test" },
+  });
+  assert.equal(local.oneVideoHeldAdmissionPersistence.reason.includes("canonical application origin"), false);
 });

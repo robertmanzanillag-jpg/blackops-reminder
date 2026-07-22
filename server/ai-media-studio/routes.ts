@@ -272,6 +272,8 @@ export interface AiMediaStudioDependencies {
     coordinator: Pick<OneVideoHeldAdmissionCoordinator, "admit">;
   }>;
   /** Exact server-owned application origin; never inferred from Host/Forwarded headers. */
+  aiMediaStudioCanonicalAppUrl?: string;
+  /** Backward-compatible held-admission-specific canonical origin. */
   oneVideoHeldAdmissionCanonicalAppUrl?: string;
   /** Trusted accounting zone used by the atomic daily-admission repository. */
   oneVideoHeldAdmissionAccountingTimeZone?: string;
@@ -704,18 +706,16 @@ function selectOneVideoHeldAdmissionRuntime(
   dependencies: AiMediaStudioDependencies,
   databaseUrl: string | undefined,
 ): OneVideoHeldAdmissionSelection {
-  const canonicalAppUrl = dependencies.oneVideoHeldAdmissionCanonicalAppUrl ?? process.env.PUBLIC_APP_URL ?? "";
-  const environment = dependencies.runtimeEnvironment?.trim().toLowerCase();
-  const allowInsecureLoopback = (environment === "development" || environment === "test")
-    && isExplicitHttpLoopbackOrigin(canonicalAppUrl);
-  let requestGuard: StrictMoneyActionRequestGuard<Request>;
-  try {
-    requestGuard = createStrictMoneyActionRequestGuard({
-      canonicalAppUrl,
-      allowInsecureLoopback,
-      resolveAuthenticatedUserId,
-    });
-  } catch {
+  const heldAdmissionCanonicalAppUrl = dependencies.oneVideoHeldAdmissionCanonicalAppUrl
+    ?? dependencies.aiMediaStudioCanonicalAppUrl
+    ?? process.env.PUBLIC_APP_URL
+    ?? "";
+  const requestGuard = createSensitiveMutationRequestGuard(
+    dependencies,
+    dependencies.runtimeEnvironment ?? process.env.NODE_ENV,
+    heldAdmissionCanonicalAppUrl,
+  );
+  if (!requestGuard) {
     return { runtime: undefined, requestGuard: undefined,
       status: { mode: "unavailable", available: false, durable: false,
         reason: "An explicit canonical application origin is required for held admission" } };
@@ -764,6 +764,30 @@ function selectOneVideoHeldAdmissionRuntime(
     return { runtime: undefined, requestGuard,
       status: { mode: "unavailable", available: false, durable: false,
         reason: "Held-admission initialization failed closed" } };
+  }
+}
+
+function createSensitiveMutationRequestGuard(
+  dependencies: AiMediaStudioDependencies,
+  runtimeEnvironment: string | undefined,
+  canonicalAppUrlOverride?: string,
+): StrictMoneyActionRequestGuard<Request> | undefined {
+  const canonicalAppUrl = canonicalAppUrlOverride
+    ?? dependencies.aiMediaStudioCanonicalAppUrl
+    ?? dependencies.oneVideoHeldAdmissionCanonicalAppUrl
+    ?? process.env.PUBLIC_APP_URL
+    ?? "";
+  const environment = runtimeEnvironment?.trim().toLowerCase();
+  const allowInsecureLoopback = (environment === "development" || environment === "test")
+    && isExplicitHttpLoopbackOrigin(canonicalAppUrl);
+  try {
+    return createStrictMoneyActionRequestGuard({
+      canonicalAppUrl,
+      allowInsecureLoopback,
+      resolveAuthenticatedUserId,
+    });
+  } catch {
+    return undefined;
   }
 }
 
@@ -1331,6 +1355,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
   const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
   const oneVideoHeldAdmissionSelection = selectOneVideoHeldAdmissionRuntime(dependencies, databaseUrl);
+  const sensitiveMutationRequestGuard = createSensitiveMutationRequestGuard(dependencies, runtimeEnvironment);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -1645,6 +1670,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       next(error);
     }
   };
+  const requireStrictHeyGenRosterMutation = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.heyGenRosterPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1742,18 +1778,25 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(configureHeyGenRosterResponseSchema.parse({ roster }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenOnboardingReadiness, requireHeyGenRoster, asyncRoute(async (req, res) => {
-    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
-    if (!createHeyGenRosterRequestSchema.safeParse(req.body).success) {
-      throw new HeyGenRosterError("INVALID_REQUEST");
-    }
-    const readiness = await heyGenOnboardingReadinessSelection.service!.get(scope);
-    if (!["ready_for_roster_ids", "roster_configured_blocked", "stale_roster_binding"].includes(readiness.status)) {
-      throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
-    }
-    const configured = await heyGenRosterSelection.service!.configure(scope, req.body);
-    res.status(201).json(configureHeyGenRosterResponseSchema.parse(configured));
-  }));
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`,
+    requireStrictHeyGenRosterMutation,
+    requireHeyGenOnboardingReadiness,
+    requireHeyGenRoster,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.heyGenRosterPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId) throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
+      const scope = { ownerUserId: principal.authenticatedUserId, workspaceId: core.workspaceId };
+      const parsed = createHeyGenRosterRequestSchema.safeParse(req.body);
+      if (!parsed.success || Object.keys(req.query).length !== 0 || req.get("transfer-encoding")) {
+        throw new HeyGenRosterError("INVALID_REQUEST");
+      }
+      const readiness = await heyGenOnboardingReadinessSelection.service!.get(scope);
+      if (!["ready_for_roster_ids", "roster_configured_blocked", "stale_roster_binding"].includes(readiness.status)) {
+        throw new HeyGenRosterError("ACCOUNT_UNAVAILABLE");
+      }
+      const configured = await heyGenRosterSelection.service!.configure(scope, parsed.data);
+      res.status(201).json(configureHeyGenRosterResponseSchema.parse(configured));
+    }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan`, requireHeyGenRoster, asyncRoute(async (req, res) => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
@@ -2379,10 +2422,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     }
     if (error instanceof StrictMoneyActionRequestError) {
       const message = error.code === "UNAUTHENTICATED"
-        ? "One-video held admission is not authorized"
+        ? "AI Media Studio mutation is not authorized"
         : error.code === "INVALID_CONFIGURATION"
-          ? "One-video held admission is unavailable"
-          : "One-video held admission request was denied";
+          ? "AI Media Studio mutation is unavailable"
+          : "AI Media Studio mutation request was denied";
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }
