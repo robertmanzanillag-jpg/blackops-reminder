@@ -8,6 +8,7 @@ import {
   blackRoomMetricoolNetworks,
   buildBlackRoomFacebookCaption,
   buildMetricoolFacebookPayload,
+  buildMetricoolYouTubePayload,
   buildMetricoolYouTubeShortPayload,
   buildMetricoolTikTokPayload,
   extractMetricoolMediaId,
@@ -91,7 +92,7 @@ test("builds a separate Facebook payload with a bilingual main-page funnel CTA",
   assert.equal(buildMetricoolTikTokPayload(input, "media-123").text.includes(BLACKROOM_FACEBOOK_MAIN_URL), false);
 });
 
-test("builds YouTube Shorts only for eligible vertical clips", () => {
+test("publishes every clip to YouTube, using Shorts only when eligible", () => {
   const payload = buildMetricoolYouTubeShortPayload(input, "media-123");
   assert.deepEqual(payload.providers, [{ network: "youtube" }]);
   assert.equal(payload.youtubeData.type, "short");
@@ -99,8 +100,13 @@ test("builds YouTube Shorts only for eligible vertical clips", () => {
   assert.equal(payload.youtubeData.category, "MUSIC");
   assert.equal(payload.youtubeData.madeForKids, false);
   assert.deepEqual(blackRoomMetricoolNetworks(input), ["tiktok", "facebook", "youtube"]);
-  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, videoFormat: "horizontal" }), ["tiktok", "facebook"]);
-  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, durationSeconds: 300 }), ["tiktok", "facebook"]);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, videoFormat: "horizontal" }), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, durationSeconds: 300 }), ["tiktok", "facebook", "youtube"]);
+  const horizontal = buildMetricoolYouTubePayload({ ...input, videoFormat: "horizontal" }, "media-456");
+  assert.equal(horizontal.youtubeData.type, "video");
+  assert.equal(horizontal.youtubeData.tags.includes("Shorts"), false);
+  assert.equal(horizontal.youtubeData.tags.includes("DJ Set"), true);
+  assert.match(horizontal.text, /#BlackRoom #DJSet/);
   assert.throws(() => buildMetricoolYouTubeShortPayload({ ...input, videoFormat: "horizontal" }, "media-123"), /vertical clip/);
 });
 
@@ -250,7 +256,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
   assert.equal(calls[1].url, "https://ai.metricool.com/mcp");
   assert.equal(calls[1].body.method, "tools/call");
   assert.equal(calls[1].body.params.name, "createScheduledPost");
-  assert.deepEqual(mcpInfo(calls[1]).media, [input.mediaUrl]);
+  assert.equal("media" in mcpInfo(calls[1]), false);
   assert.deepEqual(mcpInfo(calls[1]).providers, [{ network: "tiktok" }]);
   assert.deepEqual(mcpInfo(calls[3]).providers, [{ network: "facebook" }]);
   assert.deepEqual(mcpInfo(calls[5]).providers, [{ network: "youtube" }]);
@@ -262,6 +268,41 @@ test("schedules through Metricool's official MCP, then verifies before returning
     file_id: `blackroom-${input.sourceVideoId}-tiktok.mp4`,
   }]);
   assert.equal((calls[1].headers as Record<string, string>).accept, "application/json, text/event-stream");
+});
+
+test("retries a transient Metricool media-normalization failure before scheduling", async () => {
+  let mcpAttempts = 0;
+  const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
+    const method = init.method || "GET";
+    if (method === "POST") {
+      mcpAttempts += 1;
+      if (mcpAttempts === 1) return Response.json({
+        jsonrpc: "2.0",
+        id: "test",
+        result: { content: [{ type: "text", text: `Failed to normalize media: ${input.mediaUrl}` }], isError: true },
+      });
+      return mcpSuccess();
+    }
+    const posts = mcpAttempts >= 4 ? [
+      { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } },
+    ] : mcpAttempts >= 3 ? [
+      { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
+    ] : mcpAttempts >= 2 ? [
+      { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
+    ] : [];
+    return Response.json({ data: posts });
+  };
+  const receipt = await scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+    normalizationRetryDelayMs: 0,
+    verificationIntervalMs: 0,
+  });
+  assert.equal(mcpAttempts, 4);
+  assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
 });
 
 test("returns an existing exact post before uploading media or creating a duplicate", async () => {

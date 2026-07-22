@@ -237,11 +237,12 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const tiktokId = String(entry.networkReceipts.tiktok || "");
   const facebookId = String(entry.networkReceipts.facebook || "");
   const youtubeId = String(entry.networkReceipts.youtube || "");
-  const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}${youtubeId ? `|youtube:${youtubeId}` : ""}`;
+  if (!tiktokId || !facebookId || !youtubeId) throw new Error("BlackRoom requires confirmed TikTok, Facebook, and YouTube receipts");
+  const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}|youtube:${youtubeId}`;
   await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
-    await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; cleanup deferred because BlackRoom is paused`);
+    await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId} and YouTube ${youtubeId} for ${entry.reservationId}; cleanup deferred because BlackRoom is paused`);
     return true;
   }
   await ensureSourceRecorded(entry);
@@ -249,7 +250,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
   if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
-  await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId}${youtubeId ? ` and YouTube Shorts ${youtubeId}` : ""} for ${entry.reservationId}; local media deleted`);
+  await appendLog(`Metricool confirmed TikTok ${tiktokId}, Facebook ${facebookId} and YouTube ${youtubeId} for ${entry.reservationId}; local media deleted`);
   return true;
 }
 
