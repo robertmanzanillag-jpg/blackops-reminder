@@ -264,8 +264,10 @@ export function isBlackRoomYouTubeShort(input: Pick<BlackRoomMetricoolScheduleIn
     && input.durationSeconds <= 178;
 }
 
-export function blackRoomMetricoolNetworks(_input: BlackRoomMetricoolScheduleInput): BlackRoomMetricoolNetwork[] {
-  return ["tiktok", "facebook", "youtube"];
+export function blackRoomMetricoolNetworks(input: BlackRoomMetricoolScheduleInput): BlackRoomMetricoolNetwork[] {
+  return isBlackRoomYouTubeShort(input)
+    ? ["tiktok", "facebook", "youtube"]
+    : ["tiktok", "facebook"];
 }
 
 export function buildMetricoolPayload(
@@ -274,6 +276,9 @@ export function buildMetricoolPayload(
   network: BlackRoomMetricoolNetwork,
   caption = input.caption,
 ) {
+  if (network === "youtube" && !isBlackRoomYouTubeShort(input)) {
+    throw new Error("BlackRoom YouTube publishing is limited to vertical Shorts between 3 and 178 seconds");
+  }
   const timezone = input.timezone || BLACKROOM_TIMEZONE;
   const postTitle = caption.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
   const payload: Record<string, any> = {
@@ -339,7 +344,7 @@ export function buildMetricoolYouTubeShortPayload(input: BlackRoomMetricoolSched
 }
 
 export function buildMetricoolYouTubePayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
-  return buildMetricoolPayload(input, mediaId, "youtube", buildBlackRoomYouTubeCaption(input));
+  return buildMetricoolYouTubeShortPayload(input, mediaId);
 }
 
 export function findVerifiedMetricoolPost(value: unknown, caption: string, publicationDateTime: string): Record<string, any> | null {

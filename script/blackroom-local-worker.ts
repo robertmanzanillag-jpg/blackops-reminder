@@ -248,12 +248,19 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const tiktokId = String(entry.networkReceipts.tiktok || "");
   const facebookId = String(entry.networkReceipts.facebook || "");
   const youtubeId = String(entry.networkReceipts.youtube || "");
-  if (!tiktokId || !facebookId || !youtubeId) throw new Error("BlackRoom requires confirmed TikTok, Facebook, and YouTube receipts");
-  const combinedMetricoolId = `tiktok:${tiktokId}|facebook:${facebookId}|youtube:${youtubeId}`;
+  if (!tiktokId || !facebookId || (networks.includes("youtube") && !youtubeId)) {
+    throw new Error("BlackRoom is missing one or more required Metricool receipts");
+  }
+  const combinedMetricoolId = [
+    `tiktok:${tiktokId}`,
+    `facebook:${facebookId}`,
+    ...(networks.includes("youtube") ? [`youtube:${youtubeId}`] : []),
+  ].join("|");
+  const confirmedDestinations = networks.join(", ");
   await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});
   if (!isBlackRoomJobPublishable(postScheduleQueue, entry.jobId)) {
-    await appendLog(`TikTok, Facebook y YouTube confirmados para ${entry.reservationId}; limpieza pospuesta porque el agente está pausado.`, "limpieza", "success");
+    await appendLog(`${confirmedDestinations} confirmados para ${entry.reservationId}; limpieza pospuesta porque el agente está pausado.`, "limpieza", "success");
     return true;
   }
   await ensureSourceRecorded(entry);
@@ -261,7 +268,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
   if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
-  await appendLog(`TikTok, Facebook y YouTube confirmados para ${entry.reservationId}; archivo local eliminado.`, "completado", "success");
+  await appendLog(`${confirmedDestinations} confirmados para ${entry.reservationId}; archivo local eliminado.`, "completado", "success");
   return true;
 }
 

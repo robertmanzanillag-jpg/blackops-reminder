@@ -10,6 +10,7 @@ import {
   confirmBlackRoomNetworkReceipt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
+  hasCompleteBlackRoomMetricoolReceipt,
   nextBlackRoomPublicationDateTime,
   resolveBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
@@ -114,10 +115,20 @@ test("editor completion activity distinguishes a real finish from a pause", () =
   });
 });
 
-test("requires all three Metricool receipts for vertical, horizontal, short, and long clips", () => {
+test("requires YouTube only for clips eligible as Shorts", () => {
   assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "vertical", durationSeconds: 30 }), ["tiktok", "facebook", "youtube"]);
-  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 30 }), ["tiktok", "facebook", "youtube"]);
-  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 600 }), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "vertical", durationSeconds: 120 }), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 30 }), ["tiktok", "facebook"]);
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 600 }), ["tiktok", "facebook"]);
+  assert.equal(hasCompleteBlackRoomMetricoolReceipt({
+    format: "vertical", durationSeconds: 30, metricoolId: "tiktok:1|facebook:2",
+  }), false);
+  assert.equal(hasCompleteBlackRoomMetricoolReceipt({
+    format: "vertical", durationSeconds: 30, metricoolId: "tiktok:1|facebook:2|youtube:3",
+  }), true);
+  assert.equal(hasCompleteBlackRoomMetricoolReceipt({
+    format: "horizontal", durationSeconds: 600, metricoolId: "tiktok:1|facebook:2",
+  }), true);
 });
 
 test("past BlackRoom slots roll forward while future slots keep their target date", () => {

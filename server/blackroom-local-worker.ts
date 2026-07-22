@@ -79,9 +79,11 @@ export interface BlackRoomLedgerEntry {
 export interface BlackRoomWorkerLedger { version: 1; entries: BlackRoomLedgerEntry[] }
 
 export function requiredBlackRoomReceiptNetworks(
-  _entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
 ): Array<"tiktok" | "facebook" | "youtube"> {
-  return ["tiktok", "facebook", "youtube"];
+  const networks: Array<"tiktok" | "facebook" | "youtube"> = ["tiktok", "facebook"];
+  if (entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178) networks.push("youtube");
+  return networks;
 }
 
 export function hasCompleteBlackRoomMetricoolReceipt(

@@ -7,6 +7,7 @@ import {
   BLACKROOM_FACEBOOK_MAIN_URL,
   blackRoomMetricoolNetworks,
   buildBlackRoomFacebookCaption,
+  buildMetricoolPayload,
   buildMetricoolFacebookPayload,
   buildMetricoolYouTubePayload,
   buildMetricoolYouTubeShortPayload,
@@ -92,7 +93,7 @@ test("builds a separate Facebook payload with a bilingual main-page funnel CTA",
   assert.equal(buildMetricoolTikTokPayload(input, "media-123").text.includes(BLACKROOM_FACEBOOK_MAIN_URL), false);
 });
 
-test("publishes every clip to YouTube, using Shorts only when eligible", () => {
+test("publishes to YouTube only when the clip is eligible as a Short", () => {
   const payload = buildMetricoolYouTubeShortPayload(input, "media-123");
   assert.deepEqual(payload.providers, [{ network: "youtube" }]);
   assert.equal(payload.youtubeData.type, "short");
@@ -100,14 +101,12 @@ test("publishes every clip to YouTube, using Shorts only when eligible", () => {
   assert.equal(payload.youtubeData.category, "MUSIC");
   assert.equal(payload.youtubeData.madeForKids, false);
   assert.deepEqual(blackRoomMetricoolNetworks(input), ["tiktok", "facebook", "youtube"]);
-  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, videoFormat: "horizontal" }), ["tiktok", "facebook", "youtube"]);
-  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, durationSeconds: 300 }), ["tiktok", "facebook", "youtube"]);
-  const horizontal = buildMetricoolYouTubePayload({ ...input, videoFormat: "horizontal" }, "media-456");
-  assert.equal(horizontal.youtubeData.type, "video");
-  assert.equal(horizontal.youtubeData.tags.includes("Shorts"), false);
-  assert.equal(horizontal.youtubeData.tags.includes("DJ Set"), true);
-  assert.match(horizontal.text, /#BlackRoom #DJSet/);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, videoFormat: "horizontal" }), ["tiktok", "facebook"]);
+  assert.deepEqual(blackRoomMetricoolNetworks({ ...input, durationSeconds: 300 }), ["tiktok", "facebook"]);
+  assert.throws(() => buildMetricoolYouTubePayload({ ...input, videoFormat: "horizontal" }, "media-456"), /vertical clip/);
   assert.throws(() => buildMetricoolYouTubeShortPayload({ ...input, videoFormat: "horizontal" }, "media-123"), /vertical clip/);
+  assert.throws(() => buildMetricoolPayload({ ...input, videoFormat: "horizontal" }, "media-456", "youtube"), /limited to vertical Shorts/);
+  assert.throws(() => buildMetricoolPayload({ ...input, durationSeconds: 600 }, "media-789", "youtube"), /limited to vertical Shorts/);
 });
 
 test("sends Metricool scheduler JSON as exact UTF-8 bytes", async () => {
