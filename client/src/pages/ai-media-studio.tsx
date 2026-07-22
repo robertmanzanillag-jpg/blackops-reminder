@@ -19,7 +19,7 @@ function DashboardFallback({ loading, error, onRetry }: { loading: boolean; erro
       </section>
       <div className="grid gap-5 xl:grid-cols-2">
         <section id="providers" aria-labelledby="providers-heading" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
-          <h2 id="providers-heading" className="text-base font-semibold text-zinc-100">Provider health</h2>
+          <h2 id="providers-heading" className="text-base font-semibold text-zinc-100">Provider configuration</h2>
           <p className="mt-2 text-sm text-zinc-400">{loading ? "Provider status is loading with the studio overview." : "Provider status is unavailable until the overview request recovers."}</p>
         </section>
         <section id="activity" aria-labelledby="activity-heading" className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.025] p-5">

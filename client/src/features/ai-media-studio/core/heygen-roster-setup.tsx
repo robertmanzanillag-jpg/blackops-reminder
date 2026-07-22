@@ -186,9 +186,9 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
     <section id="heygen-roster" aria-labelledby="heygen-roster-heading" className="scroll-mt-24 rounded-2xl border border-emerald-300/15 bg-emerald-400/[0.035] p-4 sm:p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">HeyGen launch setup</p>
-          <h2 id="heygen-roster-heading" className="mt-2 text-2xl font-semibold text-white">Connect the first avatar roster</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">Paste the avatar and voice IDs from HeyGen for 5–10 creators. Kong stores their provider mapping privately and keeps the public creator profiles provider-neutral.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">HeyGen roster registration</p>
+          <h2 id="heygen-roster-heading" className="mt-2 text-2xl font-semibold text-white">{staleRoster ? "Replace the stale avatar roster" : currentRoster ? "Review the registered avatar roster" : "Register the pending avatar roster"}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">When secure onboarding allows registration, enter avatar and voice IDs for 5–10 creators. Kong stores those mappings privately and keeps public creator profiles provider-neutral.</p>
         </div>
         <dl className="grid shrink-0 grid-cols-2 gap-2 text-center text-xs">
           <div className="rounded-lg border border-white/10 bg-black/20 px-4 py-3"><dt className="text-zinc-400">Target per avatar</dt><dd className="mt-1 text-lg font-semibold text-white">{HEYGEN_ROSTER_VIDEOS_PER_AVATAR}</dd></div>
@@ -208,7 +208,7 @@ export function HeyGenRosterSetup({ onboardingReadiness }: { onboardingReadiness
         </div>
       )}
 
-      {currentRoster && (
+      {currentRoster && !staleRoster && (
         <div ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mt-6 rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-4 text-sm text-emerald-50">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>

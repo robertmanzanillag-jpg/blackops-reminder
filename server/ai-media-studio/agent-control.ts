@@ -215,6 +215,31 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep draft PR #148 unmerged; Robert places the API key only in the approved secret manager and supplies 5–10 avatar/voice IDs, then separately approve read-only live verification before any quote or generation.",
   },
   {
+    id: "ams-agent-one-video-execution-control",
+    title: "Inert one-video verification and execution control",
+    owner: "AI Media Studio provider execution squad",
+    state: "running",
+    branch: "codex/ai-media-studio-one-video-execution-control",
+    pullRequestUrl: null,
+    acceptance: [
+      "Pin one reviewed official HeyGen API profile behind provider-neutral verification and render contracts",
+      "Bind credential, avatar, voice, approved script, vertical format and maximum quote to exactly one public slot",
+      "Keep verification, quote preparation and human approval distinct while execution, provider calls and spend remain disabled",
+      "Define fail-closed handling for credential rotation, stale evidence, ambiguous submit, callback fallback, ingest and actual-cost settlement",
+    ],
+    mergeGate: "Official-provider documentation audit, focused and PostgreSQL evidence, TypeScript, build, independent checker, security and App QA must pass with no P0-P3 before a stacked draft PR is ready.",
+    evidence: [
+      "New worktree is stacked on reviewed draft PR #148",
+      "Backend, provider-documentation, data, security and product audits have separate owners and read-only scopes",
+    ],
+    blockers: [
+      "Official endpoint/profile and account-specific quote capability are still under audit",
+      "No API key, live account, avatar, voice, storage or callback has been verified",
+      "Provider verification, any migration apply, one-video POST, spend, publishing and Replit deployment require separate approvals",
+    ],
+    nextAction: "Complete the five-agent audit, implement an inert exact-slot control packet, and keep every external effect disabled until Robert supplies the secure credential/IDs and grants each later approval.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",

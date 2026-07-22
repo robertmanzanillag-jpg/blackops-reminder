@@ -27,7 +27,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
   assert.equal(snapshot.summary.done, 9);
-  assert.equal(snapshot.summary.running, 0);
+  assert.equal(snapshot.summary.running, 1);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
@@ -56,6 +56,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const offlinePreflight = snapshot.workItems.find((item) => item.id === "ams-agent-offline-launch-preflight");
   const sandboxReadiness = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-sandbox-readiness");
   const staticHeyGenOnboarding = snapshot.workItems.find((item) => item.id === "ams-agent-static-heygen-onboarding");
+  const oneVideoExecutionControl = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-execution-control");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -103,6 +104,11 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(staticHeyGenOnboarding?.evidence.join(" ") ?? "", /PR #148[\s\S]*PostgreSQL 16[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(staticHeyGenOnboarding?.blockers.join(" ") ?? "", /no live HeyGen verification[\s\S]*unapplied[\s\S]*Replit deployment/u);
   assert.match(staticHeyGenOnboarding?.nextAction ?? "", /secret manager[\s\S]*avatar\/voice IDs[\s\S]*read-only live verification/u);
+  assert.equal(oneVideoExecutionControl?.state, "running");
+  assert.equal(oneVideoExecutionControl?.branch, "codex/ai-media-studio-one-video-execution-control");
+  assert.equal(oneVideoExecutionControl?.pullRequestUrl, null);
+  assert.match(oneVideoExecutionControl?.acceptance.join(" ") ?? "", /official HeyGen API profile[\s\S]*exactly one public slot[\s\S]*execution[\s\S]*disabled/u);
+  assert.match(oneVideoExecutionControl?.blockers.join(" ") ?? "", /No API key[\s\S]*one-video POST[\s\S]*separate approvals/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

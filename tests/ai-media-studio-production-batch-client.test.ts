@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mediaStudioCoreApi } from "../client/src/features/ai-media-studio/core/api.ts";
-import { approvalResultMatchesBatch } from "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx";
+import { approvalResultMatchesBatch, formatMaximumQuoteUsd } from "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx";
 
 function publicKey(prefix: string, value: number): string {
   return `${prefix}_${value.toString(16).padStart(24, "0")}`;
@@ -180,6 +180,36 @@ function sandboxReadinessResponse() {
   };
 }
 
+function executionControlResponse() {
+  return {
+    executionControl: {
+      version: 1,
+      source: "postgresql_read_only",
+      subject: { planId: publicKey("plan", 1), batchId: publicKey("batch", 1), slotId: publicKey("slot", 1), slotAttempt: 1 },
+      observedAt: "2026-07-21T12:12:00.000Z",
+      selection: {
+        selectionKey: publicKey("selection", 1), creator: { label: "Creator 1" },
+        avatar: { key: publicKey("resource", 1), label: "Public avatar" },
+        voice: { key: publicKey("resource", 2), label: "Public voice" },
+      },
+      format: { aspectRatio: "9:16", container: "mp4" },
+      binding: { state: "current", credentialVersion: 1 },
+      providerVerification: { state: "verified", observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2026-07-21T13:00:00.000Z" },
+      maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD", evidenceKey: publicKey("evidence", 1), observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2026-07-21T13:01:00.000Z" },
+      humanApproval: { state: "approved", evidenceKey: publicKey("evidence", 2), observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2026-07-21T13:02:00.000Z" },
+      execute: { state: "disabled", postAvailable: false, reasonCodes: ["one_shot_executor_not_installed"] },
+      effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false, approvalRecorded: false, reservationCreated: false, renderCreated: false, outboxCreated: false, spendCommitted: false, publishingCreated: false },
+      authoritativeForAdmission: false, canGenerate: false, spendAuthorized: false,
+    },
+  };
+}
+
+test("server-attested micro-USD quotes format exactly without editable numeric conversion", () => {
+  assert.equal(formatMaximumQuoteUsd("1"), "$0.000001");
+  assert.equal(formatMaximumQuoteUsd("1250000"), "$1.25");
+  assert.equal(formatMaximumQuoteUsd("9000000000000000"), "$9,000,000,000.00");
+});
+
 test("current production batch is fetched with credentials and validated", async () => {
   const originalFetch = globalThis.fetch;
   let request: { input: string; init?: RequestInit } | undefined;
@@ -277,6 +307,42 @@ test("one-video sandbox readiness rejects stale identity and provider-native fie
     privatePreview.providerAccountId = "must-not-cross-boundary";
     globalThis.fetch = (async () => new Response(JSON.stringify(unsafe), { status: 200 })) as typeof fetch;
     await assert.rejects(mediaStudioCoreApi.productionBatchSandboxReadiness(request));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("one-video execution control is a strict no-store GET bound to plan, batch, and slot", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: string; init?: RequestInit } | undefined;
+  globalThis.fetch = (async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(executionControlResponse()), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const response = await mediaStudioCoreApi.oneVideoExecutionControl({
+      planId: publicKey("plan", 1), batchId: publicKey("batch", 1), slotId: publicKey("slot", 1),
+    });
+    assert.equal(request?.input, "/api/ai-media-studio/production-batches/plan_000000000000000000000001/one-video-execution-control/slot_000000000000000000000001");
+    assert.equal(request?.init?.credentials, "include");
+    assert.equal(request?.init?.cache, "no-store");
+    assert.equal(request?.init?.method, undefined);
+    assert.equal(request?.init?.body, undefined);
+    assert.equal(response.executionControl.maximumQuote.amountMicroUsd, "1250000");
+
+    const stale = executionControlResponse();
+    stale.executionControl.subject.batchId = publicKey("batch", 2);
+    globalThis.fetch = (async () => new Response(JSON.stringify(stale), { status: 200 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.oneVideoExecutionControl({
+      planId: publicKey("plan", 1), batchId: publicKey("batch", 1), slotId: publicKey("slot", 1),
+    }), /identity did not match/u);
+
+    const unsafe = executionControlResponse() as ReturnType<typeof executionControlResponse> & { providerAccountId?: string };
+    unsafe.providerAccountId = "private";
+    globalThis.fetch = (async () => new Response(JSON.stringify(unsafe), { status: 200 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.oneVideoExecutionControl({
+      planId: publicKey("plan", 1), batchId: publicKey("batch", 1), slotId: publicKey("slot", 1),
+    }));
   } finally {
     globalThis.fetch = originalFetch;
   }
