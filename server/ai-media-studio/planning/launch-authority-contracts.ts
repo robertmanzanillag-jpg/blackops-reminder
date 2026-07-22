@@ -63,6 +63,8 @@ export interface VerifiedMaximumQuoteAttestation {
   readonly decision: "quoted" | "declined" | "revoked";
   readonly maximumQuoteMicroUsd: string;
   readonly currency: "USD";
+  /** Provider-owned deadline authenticated by the quote adapter. */
+  readonly quoteExpiresAt: string;
   readonly sourceEvidenceDigest: `sha256:${string}`;
   readonly [verifiedMaximumQuoteAttestationBrand]: true;
 }
@@ -88,6 +90,9 @@ export interface TrustedLaunchSubject {
   readonly providerAccountId: string;
   readonly providerKey: string;
   readonly providerCredentialVersion: number;
+  /** Exact server-owned render selection; never accepted from a command. */
+  readonly avatarResourceId: string;
+  readonly voiceResourceId: string;
   readonly scriptVariantId: string;
   readonly scriptVariantChecksum: string;
   readonly scriptId: string;
@@ -102,6 +107,7 @@ export interface TrustedLaunchSubject {
   readonly launchIntentId: string;
   readonly launchIntentDigest: `sha256:${string}`;
   readonly launchSubjectDigest: `sha256:${string}`;
+  readonly renderSpecDigest: `sha256:${string}`;
   readonly [trustedLaunchSubjectBrand]: true;
 }
 
@@ -169,6 +175,8 @@ export interface RecordHumanLaunchApprovalCommand {
   dailyPlanSlotId: string;
   slotAttempt: number;
   decision: LaunchAuthorityApprovalDecision;
+  /** Opaque CAS token obtained from the current read model; never a UUID, digest, or amount. */
+  expectedQuoteKey: string;
   idempotencyKey: string;
 }
 
@@ -241,12 +249,22 @@ export interface LaunchAuthorityRepository {
   createAuthoritySnapshot(input: AuthorizedLaunchAuthorityWrite<CreateLaunchAuthoritySnapshotCommand>): Promise<LaunchAuthoritySnapshotReceipt>;
 }
 
-export type LaunchAuthorityServiceErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | "UNAVAILABLE";
+export type LaunchAuthorityServiceErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "INVALID_REQUEST" | "QUOTE_CHANGED" | "UNAVAILABLE";
+
+/** Internal fail-closed signal mapped to a generic non-leaking 409 outcome. */
+export class LaunchAuthorityQuoteChangedError extends Error {
+  constructor() {
+    super("QUOTE_CHANGED");
+    this.name = "LaunchAuthorityQuoteChangedError";
+  }
+}
 
 /** Generic messages avoid leaking tenant, provider, evidence, or policy state. */
 export class LaunchAuthorityServiceError extends Error {
   constructor(readonly code: LaunchAuthorityServiceErrorCode) {
-    super(code === "UNAVAILABLE" ? "Launch authority service is unavailable" : "Launch authority request denied");
+    super(code === "UNAVAILABLE" ? "Launch authority service is unavailable"
+      : code === "QUOTE_CHANGED" ? "The launch quote changed; refresh before deciding"
+      : "Launch authority request denied");
     this.name = "LaunchAuthorityServiceError";
   }
 }

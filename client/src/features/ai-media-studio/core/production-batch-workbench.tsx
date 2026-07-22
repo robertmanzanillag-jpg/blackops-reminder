@@ -16,13 +16,16 @@ import { EmptyPanel, ErrorPanel, LoadingPanel } from "../feedback";
 import {
   useApproveProductionBatchScripts,
   useOneVideoExecutionControl,
+  useOneVideoCostApprovalRuntime,
   usePrepareProductionBatchScripts,
   useProductionBatch,
   useProductionBatchLaunchPreflight,
   useProductionBatchSandboxReadiness,
+  useRecordOneVideoCostApproval,
 } from "./hooks";
 import type { LaunchPreflight, LaunchPreflightGate, ProductionBatch, SandboxReadinessGate } from "./types";
 import type { OneVideoExecutionControl } from "@shared/ai-media-studio-one-video-execution-control";
+import { OneVideoCostApprovalDialog } from "./one-video-cost-approval-dialog";
 
 const blockerLabels: Record<ProductionBatch["blockers"][number], string> = {
   script_batch_required: "Script batch preparation required",
@@ -251,6 +254,10 @@ function evidenceTime(value: string | undefined): string {
   return value ? new Date(value).toLocaleString() : "Not recorded";
 }
 
+export function createCostApprovalIdempotencyKey(): string {
+  return `approval_${globalThis.crypto.randomUUID().replaceAll("-", "")}`;
+}
+
 function OneVideoExecutionControlPanel({
   planId,
   batchId,
@@ -269,14 +276,61 @@ function OneVideoExecutionControlPanel({
     ? candidate
     : undefined;
   const blockerId = `one-video-execution-blockers-${slotId}`;
+  const approvalRuntime = useOneVideoCostApprovalRuntime(Boolean(control));
+  const approvalMutation = useRecordOneVideoCostApproval({ planId, batchId, slotId });
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const operationRef = useRef<{ quoteKey: string; idempotencyKey: string } | undefined>(undefined);
+  const quoteKey = control?.maximumQuote.quoteKey;
+  const renderSpecKey = control?.maximumQuote.renderSpecKey;
+  const quoteIsExact = control?.maximumQuote.state === "quoted"
+    && Boolean(control.maximumQuote.amountMicroUsd)
+    && control.maximumQuote.currency === "USD"
+    && Boolean(control.maximumQuote.expiresAt)
+    && Boolean(quoteKey)
+    && Boolean(renderSpecKey);
+  const alreadyApproved = Boolean(quoteKey && renderSpecKey
+    && control?.humanApproval.state === "approved"
+    && control.humanApproval.approvedQuoteKey === quoteKey
+    && control.humanApproval.renderSpecKey === renderSpecKey);
+  const runtimeAvailable = approvalRuntime.data?.available === true;
+  const approvalEnabled = quoteIsExact && runtimeAvailable && !alreadyApproved;
+
+  useEffect(() => {
+    setApprovalDialogOpen(false);
+    operationRef.current = undefined;
+    approvalMutation.reset();
+  }, [quoteKey, renderSpecKey]);
+
+  const recordExactApproval = async () => {
+    if (!control || !quoteKey || !renderSpecKey || !quoteIsExact || !approvalEnabled) return;
+    if (!operationRef.current || operationRef.current.quoteKey !== quoteKey) {
+      operationRef.current = { quoteKey, idempotencyKey: createCostApprovalIdempotencyKey() };
+    }
+    try {
+      await approvalMutation.mutateAsync({
+        planId,
+        slotId,
+        input: {
+          expectedBatchId: batchId,
+          expectedQuoteKey: quoteKey,
+          decision: "approved",
+          idempotencyKey: operationRef.current.idempotencyKey,
+        },
+      });
+      setApprovalDialogOpen(false);
+    } catch {
+      // React Query owns the sanitized error rendered inside the dialog. Keep
+      // the same quote and idempotency key available for a deliberate retry.
+    }
+  };
 
   return (
     <section aria-labelledby="one-video-execution-control-heading" className="space-y-4 rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/[0.045] p-4 sm:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-200">One-video execution control · read-only</p>
-          <h4 id="one-video-execution-control-heading" className="mt-2 text-lg font-semibold text-white">Review persisted execution evidence</h4>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">Refresh reads this application only. It does not contact HeyGen, verify credentials, request a quote, record approval, or spend credits.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-200">One-video execution control · exact cost decision</p>
+          <h4 id="one-video-execution-control-heading" className="mt-2 text-lg font-semibold text-white">Review persisted evidence and approve only an exact quote</h4>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">Refresh reads this application only. The separate approval control records one human cost decision; neither action contacts HeyGen, requests a quote, generates video, or spends credits.</p>
         </div>
         <Button
           type="button"
@@ -318,13 +372,44 @@ function OneVideoExecutionControlPanel({
             <div className="rounded-lg border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-wide text-zinc-500">Server-attested maximum quote</p>
               <p className="mt-2 font-semibold text-white">{quoteStateLabels[control.maximumQuote.state]}{control.maximumQuote.state === "quoted" && control.maximumQuote.amountMicroUsd ? ` · ${formatMaximumQuoteUsd(control.maximumQuote.amountMicroUsd)} USD` : ""}</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-400">Read-only evidence. Expires: {evidenceTime(control.maximumQuote.expiresAt)}.</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">Absolute expiry: <span className="break-all">{control.maximumQuote.expiresAt ?? "Not recorded"}</span></p>
+              <p className="mt-2 break-all font-mono text-xs text-fuchsia-100">Quote key: {control.maximumQuote.quoteKey ?? "Unavailable"}</p>
+              <p className="mt-1 break-all font-mono text-xs text-fuchsia-100">Render spec key: {control.maximumQuote.renderSpecKey ?? "Unavailable"}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-wide text-zinc-500">Human one-video approval</p>
               <p className="mt-2 font-semibold text-white">{approvalStateLabels[control.humanApproval.state]}</p>
-              <p className="mt-1 text-xs leading-5 text-zinc-400">Observed: {evidenceTime(control.humanApproval.observedAt)}. No decision can be recorded here.</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-400">Observed: {evidenceTime(control.humanApproval.observedAt)}.</p>
+              {control.humanApproval.approvedQuoteKey && <p className="mt-2 break-all font-mono text-xs text-emerald-100">Approved quote: {control.humanApproval.approvedQuoteKey}</p>}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-400/[0.06] p-4">
+            <p className="text-sm font-medium text-fuchsia-100">Exact one-video cost approval</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-300">
+              {approvalRuntime.isLoading
+                ? "Checking whether the protected approval runtime is available…"
+                : !quoteIsExact
+                  ? "Disabled because there is no complete, current server-attested quote and render specification."
+                  : !runtimeAvailable
+                    ? (approvalRuntime.data?.reason ?? "Disabled because the protected approval runtime is unavailable.")
+                    : alreadyApproved
+                      ? "This exact quote and render specification are already approved."
+                      : "Review the exact amount, absolute expiry, quote key, and render specification before confirming."}
+            </p>
+            <Button
+              type="button"
+              className="mt-3 min-h-11"
+              disabled={!approvalEnabled || approvalMutation.isPending}
+              onClick={() => setApprovalDialogOpen(true)}
+            >
+              Review exact quote approval
+            </Button>
+            {approvalMutation.isSuccess && (
+              <p role="status" aria-live="polite" className="mt-2 text-sm text-emerald-200">
+                Exact quote approval recorded. Generation and spending remain disabled.
+              </p>
+            )}
           </div>
 
           <div className="rounded-lg border border-amber-300/20 bg-amber-400/[0.06] p-4">
@@ -341,6 +426,22 @@ function OneVideoExecutionControlPanel({
           >
             Execute one approved video
           </button>
+          {quoteIsExact && quoteKey && renderSpecKey && control.maximumQuote.amountMicroUsd && control.maximumQuote.expiresAt && (
+            <OneVideoCostApprovalDialog
+              open={approvalDialogOpen}
+              onOpenChange={setApprovalDialogOpen}
+              quote={{
+                quoteKey,
+                renderSpecKey,
+                amountLabel: formatMaximumQuoteUsd(control.maximumQuote.amountMicroUsd),
+                currency: "USD",
+                expiresAt: control.maximumQuote.expiresAt,
+              }}
+              isPending={approvalMutation.isPending}
+              error={approvalMutation.error?.message}
+              onConfirm={() => { void recordExactApproval(); }}
+            />
+          )}
         </div>
       ) : null}
     </section>

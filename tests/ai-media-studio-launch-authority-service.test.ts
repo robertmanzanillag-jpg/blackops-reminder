@@ -69,7 +69,8 @@ const contentCommand: RecordContentApprovalCommand = {
 };
 
 const humanCommand: RecordHumanLaunchApprovalCommand = {
-  scope, dailyPlanSlotId: slotId, slotAttempt: 1, decision: "approved", idempotencyKey: "human-launch-approval-0001",
+  scope, dailyPlanSlotId: slotId, slotAttempt: 1, decision: "approved",
+  expectedQuoteKey: `quote_${"a".repeat(24)}`, idempotencyKey: "human-launch-approval-0001",
 };
 
 const launchIntentCommand: DeclareLaunchIntentCommand = {
@@ -213,8 +214,25 @@ test("human and content inputs reject all caller self-certification fields", asy
     );
     assert.equal(authCalls, 0, `${field} must be rejected before authentication/persistence`);
   }
-  assert.deepEqual(Object.keys(humanCommand).sort(), ["dailyPlanSlotId", "decision", "idempotencyKey", "scope", "slotAttempt"]);
+  assert.deepEqual(Object.keys(humanCommand).sort(), ["dailyPlanSlotId", "decision", "expectedQuoteKey", "idempotencyKey", "scope", "slotAttempt"]);
   assert.deepEqual(Object.keys(contentCommand).sort(), ["dailyPlanSlotId", "decision", "idempotencyKey", "scope", "slotAttempt"]);
+});
+
+test("human approval accepts only an opaque current-quote CAS key and maps quote change without leaking details", async () => {
+  const service = new LaunchAuthorityService({
+    repository: { ...repository([]), recordHumanLaunchApproval: async () => {
+      const { LaunchAuthorityQuoteChangedError } = await import("../server/ai-media-studio/planning/launch-authority-contracts");
+      throw new LaunchAuthorityQuoteChangedError();
+    } },
+    authenticator: authenticator(async () => principal("human_launch:decide", "user")),
+  });
+  for (const expectedQuoteKey of ["quote_short", `quote_${"A".repeat(24)}`, `evidence_${"a".repeat(24)}`]) {
+    assert.throws(() => service.recordHumanLaunchApproval({}, { ...humanCommand, expectedQuoteKey }),
+      (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "INVALID_REQUEST");
+  }
+  await assert.rejects(service.recordHumanLaunchApproval({}, humanCommand),
+    (error: unknown) => error instanceof LaunchAuthorityServiceError && error.code === "QUOTE_CHANGED"
+      && !/uuid|digest|micro|amount/iu.test(error.message));
 });
 
 test("launch intent is human-only and exposes only governance selections over a server-resolved slot", async () => {

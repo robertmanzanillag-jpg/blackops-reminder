@@ -195,8 +195,8 @@ function executionControlResponse() {
       format: { aspectRatio: "9:16", container: "mp4" },
       binding: { state: "current", credentialVersion: 1 },
       providerVerification: { state: "verified", observedAt: "2026-07-21T12:00:00.000Z", expiresAt: "2026-07-21T13:00:00.000Z" },
-      maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD", evidenceKey: publicKey("evidence", 1), observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2026-07-21T13:01:00.000Z" },
-      humanApproval: { state: "approved", evidenceKey: publicKey("evidence", 2), observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2026-07-21T13:02:00.000Z" },
+      maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD", evidenceKey: publicKey("evidence", 1), observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2026-07-21T13:01:00.000Z", quoteKey: publicKey("quote", 1), renderSpecKey: publicKey("render_spec", 1) },
+      humanApproval: { state: "approved", evidenceKey: publicKey("evidence", 2), observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2026-07-21T13:02:00.000Z", approvedQuoteKey: publicKey("quote", 1), renderSpecKey: publicKey("render_spec", 1) },
       execute: { state: "disabled", postAvailable: false, reasonCodes: ["one_shot_executor_not_installed"] },
       effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false, approvalRecorded: false, reservationCreated: false, renderCreated: false, outboxCreated: false, spendCommitted: false, publishingCreated: false },
       authoritativeForAdmission: false, canGenerate: false, spendAuthorized: false,
@@ -343,6 +343,74 @@ test("one-video execution control is a strict no-store GET bound to plan, batch,
     await assert.rejects(mediaStudioCoreApi.oneVideoExecutionControl({
       planId: publicKey("plan", 1), batchId: publicKey("batch", 1), slotId: publicKey("slot", 1),
     }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("exact one-video cost approval sends only public CAS fields and validates the redacted receipt", async () => {
+  const originalFetch = globalThis.fetch;
+  let request: { input: string; init?: RequestInit } | undefined;
+  const planId = publicKey("plan", 1); const batchId = publicKey("batch", 1);
+  const slotId = publicKey("slot", 1); const quoteKey = publicKey("quote", 1);
+  globalThis.fetch = (async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify({
+      outcome: "recorded",
+      approval: { planId, batchId, slotId, decision: "approved", approvedQuoteKey: quoteKey,
+        renderSpecKey: publicKey("render_spec", 1) },
+      effects: { providerCalled: false, secretResolved: false, verificationPerformed: false,
+        quoteRequested: false, approvalRecorded: true, reservationCreated: false, renderCreated: false,
+        outboxCreated: false, spendCommitted: false, publishingCreated: false },
+      canGenerate: false, spendAuthorized: false,
+    }), { status: 201 });
+  }) as typeof fetch;
+  try {
+    const response = await mediaStudioCoreApi.recordOneVideoCostApproval({
+      planId, slotId,
+      input: { expectedBatchId: batchId, expectedQuoteKey: quoteKey, decision: "approved",
+        idempotencyKey: "approval_000000000000000000000001" },
+    });
+    assert.equal(request?.input, `/api/ai-media-studio/production-batches/${planId}/one-video-cost-approval/${slotId}`);
+    assert.equal(request?.init?.method, "POST");
+    assert.equal(request?.init?.credentials, "include");
+    assert.equal(request?.init?.cache, "no-store");
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+      expectedBatchId: batchId, expectedQuoteKey: quoteKey, decision: "approved",
+      idempotencyKey: "approval_000000000000000000000001",
+    });
+    assert.equal(response.effects.approvalRecorded, true);
+    assert.equal(response.canGenerate, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("cost-approval client rejects a stale quote receipt and exposes runtime unavailability safely", async () => {
+  const originalFetch = globalThis.fetch;
+  const planId = publicKey("plan", 1); const batchId = publicKey("batch", 1);
+  const slotId = publicKey("slot", 1); const quoteKey = publicKey("quote", 1);
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      outcome: "recorded",
+      approval: { planId, batchId, slotId, decision: "approved", approvedQuoteKey: publicKey("quote", 2),
+        renderSpecKey: publicKey("render_spec", 1) },
+      effects: { providerCalled: false, secretResolved: false, verificationPerformed: false,
+        quoteRequested: false, approvalRecorded: true, reservationCreated: false, renderCreated: false,
+        outboxCreated: false, spendCommitted: false, publishingCreated: false },
+      canGenerate: false, spendAuthorized: false,
+    }), { status: 201 })) as typeof fetch;
+    await assert.rejects(mediaStudioCoreApi.recordOneVideoCostApproval({
+      planId, slotId, input: { expectedBatchId: batchId, expectedQuoteKey: quoteKey,
+        decision: "approved", idempotencyKey: "approval_000000000000000000000001" },
+    }), /did not match/u);
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      oneVideoCostApproval: { available: false, reason: "Explicit authorizer required" },
+    }), { status: 503 })) as typeof fetch;
+    assert.deepEqual(await mediaStudioCoreApi.oneVideoCostApprovalRuntime(), {
+      available: false, reason: "Explicit authorizer required",
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

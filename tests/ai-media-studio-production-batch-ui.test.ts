@@ -146,7 +146,7 @@ test("launch preflight maps every contract next action locally and only to safe 
   assert.ok(hrefs.every((href) => href === "#production-batch" || href === "#heygen-roster"));
 });
 
-test("approved batch exposes one inert selector-bound execution control without a mutation", async () => {
+test("approved batch keeps execution inert while exposing a separate exact-quote approval mutation", async () => {
   const [api, hooks, workbench] = await Promise.all([
     read("client/src/features/ai-media-studio/core/api.ts"),
     read("client/src/features/ai-media-studio/core/hooks.ts"),
@@ -176,19 +176,51 @@ test("approved batch exposes one inert selector-bound execution control without 
   assert.match(workbench, /Required external steps — not performed here/);
   assert.match(api, /oneVideoExecutionControlResponseSchema\.parse/);
   assert.match(api, /one-video-execution-control\/\$\{encodeURIComponent\(slotId\)\}/);
-  const executionApi = api.slice(api.indexOf("oneVideoExecutionControl: async"), api.indexOf("prepareProductionBatchScripts: async"));
+  const executionApi = api.slice(api.indexOf("oneVideoExecutionControl: async"), api.indexOf("oneVideoCostApprovalRuntime: async"));
   assert.doesNotMatch(executionApi, /method:\s*"(POST|PUT|PATCH|DELETE)"/);
+  assert.match(api, /one-video-cost-approval\/\$\{encodeURIComponent\(slotId\)\}/);
+  assert.match(api, /expectedQuoteKey/);
+  assert.match(api, /oneVideoCostApprovalResponseSchema\.parse/);
+  assert.match(hooks, /mutationFn: mediaStudioCoreApi\.recordOneVideoCostApproval/);
   assert.match(hooks, /oneVideoExecutionControl\(planId, batchId, slotId\)/);
   assert.match(workbench, /key=\{`\$\{batch\.planId\}:\$\{batch\.batchId\}:\$\{selectedSlotId\}`\}/);
   assert.match(workbench, /Execution disabled\. This screen cannot call HeyGen or spend credits\./);
   assert.match(workbench, /Refresh does not contact HeyGen/);
   assert.match(workbench, /Server-attested maximum quote/);
   assert.match(workbench, /formatMaximumQuoteUsd/);
+  assert.match(workbench, /Quote key:/);
+  assert.match(workbench, /Render spec key:/);
+  assert.match(workbench, /Review exact quote approval/);
+  assert.match(workbench, /approvalEnabled = quoteIsExact && runtimeAvailable && !alreadyApproved/);
   assert.match(workbench, /<button[\s\S]*disabled[\s\S]*aria-describedby=\{blockerId\}[\s\S]*Execute one approved video/);
   assert.doesNotMatch(workbench, /Execute one approved video[\s\S]{0,180}onClick/);
   assert.doesNotMatch(workbench, /providerAccountId|avatarResourceId|voiceResourceId|nativeId/);
   const buttonBlocks = Array.from(workbench.matchAll(/<Button\b[\s\S]*?<\/Button>/g), (match) => match[0]);
   for (const button of buttonBlocks) assert.doesNotMatch(button, />\s*(Generate|Spend)\b/);
+});
+
+test("exact quote approval uses a separate accessible confirmation dialog and resets confirmation identity", async () => {
+  const [dialog, workbench] = await Promise.all([
+    read("client/src/features/ai-media-studio/core/one-video-cost-approval-dialog.tsx"),
+    read("client/src/features/ai-media-studio/core/production-batch-workbench.tsx"),
+  ]);
+  assert.match(dialog, /<DialogTitle>Approve this exact one-video quote\?<\/DialogTitle>/);
+  assert.match(dialog, /Approve exact quote — no generation/);
+  assert.match(dialog, /checked=\{confirmed\}/);
+  assert.match(dialog, /disabled=\{!confirmed \|\| isPending\}/);
+  assert.match(dialog, /setConfirmed\(false\)/);
+  assert.match(dialog, /\[open, quote\.quoteKey, quote\.renderSpecKey\]/);
+  assert.match(dialog, /<time dateTime=\{quote\.expiresAt\}>\{quote\.expiresAt\}<\/time>/);
+  assert.match(dialog, /quote\.quoteKey/);
+  assert.match(dialog, /quote\.renderSpecKey/);
+  assert.match(dialog, /does not generate a video, call HeyGen, reserve credits, or authorize spend/);
+  assert.match(workbench, /expectedBatchId: batchId/);
+  assert.match(workbench, /expectedQuoteKey: quoteKey/);
+  assert.match(workbench, /decision: "approved"/);
+  assert.match(workbench, /operationRef\.current = undefined/);
+  assert.match(workbench, /\[quoteKey, renderSpecKey\]/);
+  assert.match(workbench, /Execute one approved video/);
+  assert.doesNotMatch(workbench, /Execute one approved video[\s\S]{0,180}onClick/);
 });
 
 test("studio navigation replaces legacy creation and exposes no generation or retry mutation", async () => {

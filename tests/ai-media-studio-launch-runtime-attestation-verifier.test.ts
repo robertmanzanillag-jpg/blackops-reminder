@@ -28,6 +28,8 @@ const subject = Object.freeze({
   providerAccountId: "33333333-3333-4333-8333-333333333333",
   providerKey: "heygen",
   providerCredentialVersion: 2,
+  avatarResourceId: "88888888-8888-4888-8888-888888888888",
+  voiceResourceId: "99999999-9999-4999-8999-999999999999",
   scriptVariantId: "44444444-4444-4444-8444-444444444444",
   scriptVariantChecksum: "checksum-v1",
   scriptId: "55555555-5555-4555-8555-555555555555",
@@ -42,10 +44,12 @@ const subject = Object.freeze({
   launchIntentId: "77777777-7777-4777-8777-777777777777",
   launchIntentDigest: digest("f"),
   launchSubjectDigest: digest("1"),
+  renderSpecDigest: digest("6"),
 }) as unknown as TrustedLaunchSubject;
 
 const validFrom = new Date("2026-07-21T12:00:00.000Z");
 const expiresAt = new Date("2026-07-21T12:05:00.000Z");
+const quoteExpiresAt = new Date("2026-07-21T12:04:00.000Z");
 
 test("process-local verifier recovers one frozen sandbox decision from an opaque unguessable handle", async () => {
   const { sandboxIssuer, verifier } = createProcessLocalLaunchRuntimeAttestationFacets();
@@ -74,6 +78,7 @@ test("verifier rejects wrong kind, scope, exact principal, durable subject, idem
   const handle = quoteIssuer.mint({
     scope, principal, subject, idempotencyKey: "quote-attestation-0001", validFrom, expiresAt,
     attestationId: "quote-0001", decision: "quoted", maximumQuoteMicroUsd: "1250000",
+    quoteExpiresAt: expiresAt,
     sourceEvidenceDigest: digest("3"),
   });
   const base = {
@@ -84,6 +89,7 @@ test("verifier rejects wrong kind, scope, exact principal, durable subject, idem
   assert.deepEqual(exact, {
     kind: "maximum_quote", attestationId: "quote-0001", decision: "quoted",
     maximumQuoteMicroUsd: "1250000", currency: "USD", sourceEvidenceDigest: digest("3"),
+    quoteExpiresAt: expiresAt.toISOString(),
   });
   assert.ok(Object.isFrozen(exact));
 
@@ -105,12 +111,16 @@ test("minting validates a bounded lifetime, exact input shape, digest, and posit
   const base = {
     scope, principal, subject, idempotencyKey: "quote-attestation-0001", validFrom, expiresAt,
     attestationId: "quote-0001", decision: "quoted" as const, maximumQuoteMicroUsd: "1",
+    quoteExpiresAt: expiresAt,
     sourceEvidenceDigest: digest("4"),
   };
   for (const invalid of ["0", "01", "-1", "9000000000000001"]) {
     assert.throws(() => quoteIssuer.mint({ ...base, maximumQuoteMicroUsd: invalid }), TypeError);
   }
   assert.throws(() => quoteIssuer.mint({ ...base, attestationId: "short" }), TypeError);
+  assert.throws(() => quoteIssuer.mint({ ...base, quoteExpiresAt: new Date(validFrom) }), TypeError);
+  assert.doesNotThrow(() => quoteIssuer.mint({ ...base,
+    quoteExpiresAt: new Date(expiresAt.getTime() + 60_000) }));
   assert.throws(() => quoteIssuer.mint({ ...base, forged: true } as any), TypeError);
   assert.throws(() => quoteIssuer.mint({
     ...base, expiresAt: new Date(validFrom.getTime() + 86_400_001),

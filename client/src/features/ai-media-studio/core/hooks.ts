@@ -21,6 +21,7 @@ export const coreStudioKeys = {
   oneVideoExecutionControl: (planId: string, batchId: string, slotId: string) => [
     "ai-media-studio", "core", "production-batch", "one-video-execution-control", planId, batchId, slotId,
   ] as const,
+  oneVideoCostApprovalRuntime: ["ai-media-studio", "core", "one-video-cost-approval", "runtime"] as const,
 };
 
 export function useHeyGenOnboardingReadiness() {
@@ -118,6 +119,35 @@ export function useOneVideoExecutionControl({
     enabled: enabled && Boolean(planId) && Boolean(batchId) && Boolean(slotId),
     retry: false,
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useOneVideoCostApprovalRuntime(enabled = true) {
+  return useQuery({
+    queryKey: coreStudioKeys.oneVideoCostApprovalRuntime,
+    queryFn: mediaStudioCoreApi.oneVideoCostApprovalRuntime,
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRecordOneVideoCostApproval({
+  planId,
+  batchId,
+  slotId,
+}: {
+  planId: string;
+  batchId: string;
+  slotId: string;
+}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: mediaStudioCoreApi.recordOneVideoCostApproval,
+    onSuccess: () => queryClient.invalidateQueries({
+      queryKey: coreStudioKeys.oneVideoExecutionControl(planId, batchId, slotId),
+    }),
   });
 }
 

@@ -10,7 +10,10 @@ import {
 } from "../shared/ai-media-studio-one-video-execution-control";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import { DrizzleOneVideoExecutionControlRepository, derivePersistedProviderVerificationState } from "../server/ai-media-studio/planning/drizzle-one-video-execution-control-repository";
-import { OneVideoExecutionControlError } from "../server/ai-media-studio/planning/one-video-execution-control-contracts";
+import {
+  deriveLaunchRenderSpecDigest,
+  OneVideoExecutionControlError,
+} from "../server/ai-media-studio/planning/one-video-execution-control-contracts";
 import { OneVideoExecutionControlService } from "../server/ai-media-studio/planning/one-video-execution-control-service";
 import { productionApprovalInputDigest, productionCreativeDigest } from "../server/ai-media-studio/production-batches/metadata-integrity";
 import { FakeVideoProvider } from "../server/ai-media-studio/providers/fake-video-provider";
@@ -35,6 +38,8 @@ const verificationExpiresAt = new Date("2026-07-22T13:00:00.000Z");
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 const sha256 = (value: string): `sha256:${string}` => `sha256:${hash(value)}`;
+const quoteKey = `quote_${"a".repeat(24)}`;
+const renderSpecKey = `render_spec_${"b".repeat(24)}`;
 
 function packet(overrides: Partial<OneVideoExecutionControl> = {}): OneVideoExecutionControl {
   return oneVideoExecutionControlSchema.parse({
@@ -48,9 +53,10 @@ function packet(overrides: Partial<OneVideoExecutionControl> = {}): OneVideoExec
       expiresAt: "2026-07-22T13:00:00.000Z" },
     maximumQuote: { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
       evidenceKey: `evidence_${"7".repeat(24)}`, observedAt: "2026-07-22T11:51:00.000Z",
-      expiresAt: "2026-07-22T12:30:00.000Z" },
+      expiresAt: "2026-07-22T12:30:00.000Z", quoteKey, renderSpecKey },
     humanApproval: { state: "approved", evidenceKey: `evidence_${"8".repeat(24)}`,
-      observedAt: "2026-07-22T11:52:00.000Z", expiresAt: "2026-07-22T12:30:00.000Z" },
+      observedAt: "2026-07-22T11:52:00.000Z", expiresAt: "2026-07-22T12:30:00.000Z",
+      approvedQuoteKey: quoteKey, renderSpecKey },
     execute: { state: "disabled", postAvailable: false, reasonCodes: ["one_shot_executor_not_installed"] },
     effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false,
       approvalRecorded: false, reservationCreated: false, renderCreated: false, outboxCreated: false,
@@ -78,10 +84,13 @@ test("schema rejects private/native fields, money outside a quote, forged effect
   assert.equal(oneVideoExecutionControlSchema.safeParse(money).success, false);
   const effect = structuredClone(packet()) as any; effect.effects.providerCalled = true;
   assert.equal(oneVideoExecutionControlSchema.safeParse(effect).success, false);
-  const noQuote = structuredClone(packet()) as any;
-  noQuote.maximumQuote = { state: "missing" };
-  assert.equal(oneVideoExecutionControlSchema.safeParse(noQuote).success, false);
-});
+    const noQuote = structuredClone(packet()) as any;
+    noQuote.maximumQuote = { state: "missing" };
+    assert.equal(oneVideoExecutionControlSchema.safeParse(noQuote).success, false);
+    const staleApproval = structuredClone(packet()) as any;
+    staleApproval.humanApproval.approvedQuoteKey = `quote_${"c".repeat(24)}`;
+    assert.equal(oneVideoExecutionControlSchema.safeParse(staleApproval).success, false);
+  });
 
 test("service reparses repository output and verifies requested identity plus all denied effects", async () => {
   const calls: unknown[] = [];
@@ -185,9 +194,11 @@ class FakeOneVideoReadModelDatabase {
   readonly queries: string[] = [];
   transactionConfig: unknown;
   private readonly staticProjection: StaticProjectionOverride;
+  private readonly evidenceProjection: Record<string, unknown>;
 
-  constructor(staticProjection: StaticProjectionOverride = {}) {
+  constructor(staticProjection: StaticProjectionOverride = {}, evidenceProjection: Record<string, unknown> = {}) {
     this.staticProjection = staticProjection;
+    this.evidenceProjection = evidenceProjection;
   }
 
   async transaction<T>(callback: (tx: FakeOneVideoReadModelDatabase) => Promise<T>, config?: unknown): Promise<T> {
@@ -262,10 +273,19 @@ class FakeOneVideoReadModelDatabase {
       }] };
     }
     if (/SELECT attempt\.slot_attempt,intent\.id AS intent_id/iu.test(text)) {
-      return { rows: [{ slot_attempt: 1, intent_id: null, launch_intent_digest: null, intent_current: null,
+      return { rows: [{ slot_attempt: 1, intent_id: null, launch_intent_digest: null,
+        provider_account_id: accountId, provider_key: "heygen", provider_credential_version: 1,
+        avatar_resource_id: avatarId, voice_resource_id: voiceId, script_variant_id: variantId,
+        current_script_variant_checksum: metadata.selectedVariantChecksum,
+        intent_current: null,
         quote_id: null, quote_decision: null, quote_amount: null, quote_currency: null, quote_valid_from: null,
-        quote_expires_at: null, quote_current: null, human_id: null, human_decision: null,
-        human_valid_from: null, human_expires_at: null, human_current: null }] };
+        quote_expires_at: null, quote_revision: null, quote_evidence_digest: null, quote_current: null,
+        human_id: null, human_decision: null, human_valid_from: null, human_expires_at: null,
+        human_revision: null, human_evidence_digest: null, human_current: null,
+        approval_bridge_id: null, bridge_render_spec_digest: null, bridge_quote_expires_at: null,
+        bridge_quote_amount: null, bridge_quote_currency: null, bridge_decision: null,
+        approval_binding_digest: null, approval_bridge_current: null,
+        ...this.evidenceProjection }] };
     }
     if (/ai_media_static_heygen_verification_headers header/iu.test(text)) {
       const nativeResourceIdsCurrent = this.staticProjection.nativeResourceIdsCurrent ?? true;
@@ -352,6 +372,53 @@ test("repository projects exact PR29 static HeyGen account, avatar, and voice ev
   assert.ok(fake.queries.some((query) => /avatar_evidence\.avatar_look_status='completed'/iu.test(query)));
   assert.ok(fake.queries.some((query) => /avatar_evidence\.avatar_group_id_digest<>avatar_evidence\.avatar_look_id_digest/iu.test(query)));
   assert.ok(fake.queries.some((query) => /voice_evidence\.voice_id_digest=voice_evidence\.provider_resource_external_id_digest/iu.test(query)));
+});
+
+test("read model exposes opaque quote/render keys only for the exact latest quote-bound human approval", async () => {
+  const metadata = approvedMetadata();
+  const renderSpecDigest = deriveLaunchRenderSpecDigest({ providerAccountId: accountId, providerKey: "heygen",
+    providerCredentialVersion: 1, avatarResourceId: avatarId, voiceResourceId: voiceId,
+    scriptVariantId: variantId, scriptVariantChecksum: metadata.selectedVariantChecksum });
+  const quoteId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const humanId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const quoteExpiresAt = new Date("2026-07-22T12:30:00.000Z");
+  const exact = {
+    intent_id: "ffffffff-ffff-4fff-8fff-ffffffffffff", launch_intent_digest: sha256("intent"), intent_current: true,
+    quote_id: quoteId, quote_decision: "quoted", quote_amount: "1250000", quote_currency: "USD",
+    quote_valid_from: verifiedAt, quote_expires_at: quoteExpiresAt, quote_revision: 1,
+    quote_evidence_digest: sha256("quote-1"), quote_current: true,
+    human_id: humanId, human_decision: "approved", human_valid_from: verifiedAt,
+    human_expires_at: quoteExpiresAt, human_revision: 1, human_evidence_digest: sha256("human-1"),
+    human_current: true, approval_bridge_id: "12121212-1212-4212-8212-121212121212",
+    bridge_render_spec_digest: renderSpecDigest, bridge_quote_expires_at: quoteExpiresAt,
+    bridge_quote_amount: "1250000", bridge_quote_currency: "USD", bridge_decision: "approved",
+    approval_binding_digest: sha256("bridge-1"), approval_bridge_current: true,
+  };
+  const control = await new DrizzleOneVideoExecutionControlRepository(
+    new FakeOneVideoReadModelDatabase({}, exact),
+  ).observe(scope, planId, slotId);
+  assert.ok(control);
+  assert.equal(control.maximumQuote.state, "quoted");
+  assert.match(control.maximumQuote.quoteKey ?? "", /^quote_[a-f0-9]{24}$/u);
+  assert.match(control.maximumQuote.renderSpecKey ?? "", /^render_spec_[a-f0-9]{24}$/u);
+  assert.equal(control.humanApproval.state, "approved");
+  assert.equal(control.humanApproval.approvedQuoteKey, control.maximumQuote.quoteKey);
+  assert.equal(control.humanApproval.renderSpecKey, control.maximumQuote.renderSpecKey);
+  assert.deepEqual(control.execute.reasonCodes, ["one_shot_executor_not_installed"]);
+
+  const newerQuote = await new DrizzleOneVideoExecutionControlRepository(new FakeOneVideoReadModelDatabase({}, {
+    ...exact, quote_id: "13131313-1313-4313-8313-131313131313", quote_revision: 2,
+    quote_evidence_digest: sha256("quote-2"), approval_bridge_current: false,
+  })).observe(scope, planId, slotId);
+  assert.ok(newerQuote);
+  assert.equal(newerQuote.maximumQuote.state, "quoted");
+  assert.notEqual(newerQuote.maximumQuote.quoteKey, control.maximumQuote.quoteKey);
+  assert.deepEqual(newerQuote.humanApproval, {
+    state: "stale", evidenceKey: newerQuote.humanApproval.evidenceKey,
+    observedAt: verifiedAt.toISOString(), expiresAt: quoteExpiresAt.toISOString(),
+  });
+  assert.equal(newerQuote.humanApproval.approvedQuoteKey, undefined);
+  assert.ok(newerQuote.execute.reasonCodes.includes("human_approval_stale"));
 });
 
 test("repository marks static HeyGen verification stale when PR29 evidence is expired, missing, or resource pointers misalign", async () => {

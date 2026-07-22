@@ -29,6 +29,11 @@ import { launchPreflightResponseSchema } from "../../shared/ai-media-studio-laun
 import { sandboxReadinessResponseSchema } from "../../shared/ai-media-studio-sandbox-readiness";
 import { oneVideoExecutionControlResponseSchema } from "../../shared/ai-media-studio-one-video-execution-control";
 import {
+  oneVideoCostApprovalRequestSchema,
+  oneVideoCostApprovalResponseSchema,
+  oneVideoCostApprovalPathSchema,
+} from "../../shared/ai-media-studio-one-video-cost-approval";
+import {
   configureHeyGenRosterResponseSchema,
   createHeyGenRosterRequestSchema,
   heyGenRosterDailyPlanResponseSchema,
@@ -127,6 +132,10 @@ import { SandboxReadinessError, type SandboxReadinessRepository } from "./planni
 import { SandboxReadinessService } from "./planning/sandbox-readiness-service";
 import { OneVideoExecutionControlError, type OneVideoExecutionControlRepository } from "./planning/one-video-execution-control-contracts";
 import { OneVideoExecutionControlService } from "./planning/one-video-execution-control-service";
+import {
+  OneVideoCostApprovalError,
+} from "./planning/one-video-cost-approval-contracts";
+import type { OneVideoCostApprovalCoordinator } from "./planning/one-video-cost-approval-coordinator";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -229,6 +238,10 @@ export interface AiMediaStudioDependencies {
   createDurableSandboxReadinessRepository?: () => SandboxReadinessRepository;
   oneVideoExecutionControlRepository?: OneVideoExecutionControlRepository;
   createDurableOneVideoExecutionControlRepository?: () => OneVideoExecutionControlRepository;
+  /** Explicit server-authorized write coordinator. Absent means approval remains fail-closed. */
+  oneVideoCostApprovalCoordinator?: Pick<OneVideoCostApprovalCoordinator, "record">;
+  /** Durable default composition seam; construction must remain inert. */
+  createDurableOneVideoCostApprovalCoordinator?: () => Pick<OneVideoCostApprovalCoordinator, "record">;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -264,6 +277,8 @@ export interface AiMediaStudioRuntime {
   sandboxReadinessPersistence: MediaStudioPersistenceStatus;
   oneVideoExecutionControl: OneVideoExecutionControlService | undefined;
   oneVideoExecutionControlPersistence: MediaStudioPersistenceStatus;
+  oneVideoCostApproval: Pick<OneVideoCostApprovalCoordinator, "record"> | undefined;
+  oneVideoCostApprovalPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -512,6 +527,38 @@ function createDefaultDurableOneVideoExecutionControlRepository(): OneVideoExecu
   return { observe: async (...args) => (await load()).observe(...args) };
 }
 
+function createDefaultDurableOneVideoCostApprovalCoordinator(): Pick<OneVideoCostApprovalCoordinator, "record"> {
+  let pending: Promise<OneVideoCostApprovalCoordinator> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./planning/drizzle-one-video-execution-control-repository"),
+    import("./planning/drizzle-one-video-cost-approval-context-loader"),
+    import("./planning/drizzle-launch-authority-repository"),
+    import("./planning/launch-authority-service"),
+    import("./planning/one-video-cost-approval-coordinator"),
+    import("./planning/server-owned-one-video-cost-approval-authorization"),
+  ]).then(([database, executionAdapter, contextAdapter, authorityAdapter, authorityService,
+    approvalCoordinator, authorizationAdapter]) => {
+    const authorization = authorizationAdapter.createServerOwnedOneVideoCostApprovalAuthorization(
+      (context) => getCurrentUserId(context as Request),
+    );
+    const executionControl = new executionAdapter.DrizzleOneVideoExecutionControlRepository(database.db);
+    const launchAuthority = new authorityService.LaunchAuthorityService({
+      repository: new authorityAdapter.DrizzleLaunchAuthorityRepository(database.db, {
+        runtimeAttestationVerifier: { async verify() { return undefined; } },
+        validityPolicy: { ttlSeconds() { return 15 * 60; } },
+      }),
+      authenticator: authorization.authenticator,
+    });
+    return new approvalCoordinator.OneVideoCostApprovalCoordinator({
+      authorizer: authorization.authorizer,
+      contextLoader: new contextAdapter.DrizzleOneVideoCostApprovalContextLoader(database.db, executionControl),
+      launchAuthority,
+    });
+  });
+  return { record: async (...args) => (await load()).record(...args) };
+}
+
 function selectOneVideoExecutionControlRuntime(
   dependencies: AiMediaStudioDependencies,
   databaseUrl: string | undefined,
@@ -534,6 +581,41 @@ function selectOneVideoExecutionControlRuntime(
   }
   return { service: undefined, status: { mode: "unavailable", available: false, durable: false,
     reason: "DATABASE_URL or an injected one-video execution-control repository is required" } };
+}
+
+function selectOneVideoCostApprovalRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { coordinator: Pick<OneVideoCostApprovalCoordinator, "record"> | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.oneVideoCostApprovalCoordinator) {
+    return {
+      coordinator: dependencies.oneVideoCostApprovalCoordinator,
+      status: { mode: "injected", available: true, durable: false,
+        reason: "Explicit server-authorized one-video cost-approval coordinator supplied by the composition caller" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const coordinator = (dependencies.createDurableOneVideoCostApprovalCoordinator
+        ?? createDefaultDurableOneVideoCostApprovalCoordinator)();
+      return {
+        coordinator,
+        status: { mode: "drizzle", available: true, durable: true,
+          reason: "PostgreSQL/Drizzle server-authorized one-video cost approval selected" },
+      };
+    } catch (error) {
+      return {
+        coordinator: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `One-video cost approval initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
+  }
+  return {
+    coordinator: undefined,
+    status: { mode: "unavailable", available: false, durable: false,
+      reason: "An explicit server-authorized one-video cost-approval coordinator is required" },
+  };
 }
 
 function selectSandboxReadinessRuntime(
@@ -1028,6 +1110,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
+  const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -1276,6 +1359,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-One-Video-Cost-Approval", oneVideoCostApprovalSelection.status.mode);
     next();
   });
 
@@ -1290,7 +1374,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       staticHeyGenLiveVerification: staticHeyGenLiveVerificationSelection.status,
       productionBatches: productionBatchSelection.status,
       sandboxReadiness: sandboxReadinessSelection.status,
-      oneVideoExecutionControl: oneVideoExecutionControlSelection.status });
+      oneVideoExecutionControl: oneVideoExecutionControlSelection.status,
+      oneVideoCostApproval: oneVideoCostApprovalSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
@@ -1314,6 +1399,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireSandboxReadiness = requireCapability(sandboxReadinessSelection.status, "AI Media Studio sandbox readiness");
   const requireOneVideoExecutionControl = requireCapability(oneVideoExecutionControlSelection.status,
     "AI Media Studio one-video execution control");
+  const requireOneVideoCostApproval = requireCapability(oneVideoCostApprovalSelection.status,
+    "AI Media Studio one-video cost approval");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1494,6 +1581,30 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         scope, req.params.planId, req.params.slotId,
       );
       res.json(oneVideoExecutionControlResponseSchema.parse({ executionControl }));
+    }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId`,
+    (req, res, next) => { res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next(); },
+    requireSameOriginJsonAiMediaStudioMutation,
+    requireOneVideoCostApproval,
+    asyncRoute(async (req, res) => {
+      const parsed = oneVideoCostApprovalRequestSchema.safeParse(req.body);
+      const path = oneVideoCostApprovalPathSchema.safeParse(req.params);
+      if (!parsed.success || !path.success || Object.keys(req.query).length !== 0) {
+        throw new OneVideoCostApprovalError("INVALID_REQUEST");
+      }
+      const result = await oneVideoCostApprovalSelection.coordinator!.record({
+        scope: { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId },
+        publicPlanKey: path.data.planId,
+        publicSlotKey: path.data.slotId,
+        expectedBatchId: parsed.data.expectedBatchId,
+        expectedQuoteKey: parsed.data.expectedQuoteKey,
+        decision: parsed.data.decision,
+        idempotencyKey: parsed.data.idempotencyKey,
+        authorizationContext: req,
+      });
+      res.status(result.outcome === "recorded" ? 201 : 200)
+        .json(oneVideoCostApprovalResponseSchema.parse(result));
     }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1951,6 +2062,16 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }
+    if (error instanceof OneVideoCostApprovalError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid one-video cost approval request"
+        : error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN"
+          ? "One-video cost approval is not authorized"
+          : error.code === "NOT_FOUND" ? "Production plan or slot not found"
+            : error.code === "STALE_OR_CONFLICT" ? "The batch or quote changed; refresh before deciding"
+              : "One-video cost approval is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof LaunchPreflightError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid launch preflight request"
         : error.code === "NOT_FOUND" ? "Production plan not found" : "Launch preflight is unavailable";
@@ -2034,6 +2155,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     sandboxReadinessPersistence: sandboxReadinessSelection.status,
     oneVideoExecutionControl: oneVideoExecutionControlSelection.service,
     oneVideoExecutionControlPersistence: oneVideoExecutionControlSelection.status,
+    oneVideoCostApproval: oneVideoCostApprovalSelection.coordinator,
+    oneVideoCostApprovalPersistence: oneVideoCostApprovalSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

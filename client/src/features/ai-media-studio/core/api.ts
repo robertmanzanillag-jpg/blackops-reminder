@@ -22,6 +22,12 @@ import {
   type OneVideoExecutionControl,
 } from "@shared/ai-media-studio-one-video-execution-control";
 import {
+  oneVideoCostApprovalRequestSchema,
+  oneVideoCostApprovalResponseSchema,
+  type OneVideoCostApprovalRequest,
+  type OneVideoCostApprovalResponse,
+} from "@shared/ai-media-studio-one-video-cost-approval";
+import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
 } from "@shared/ai-media-studio-heygen-roster";
@@ -56,6 +62,15 @@ const oneVideoExecutionControlErrorMessages: Readonly<Record<number, string>> = 
   404: "Execution control was not found for this approved slot.",
   409: "Execution control is not available for the current batch or slot state.",
   503: "Execution-control observation is temporarily unavailable.",
+};
+
+const oneVideoCostApprovalErrorMessages: Readonly<Record<number, string>> = {
+  400: "The one-video cost approval request was invalid.",
+  401: "Sign in again before recording a cost decision.",
+  403: "You are not authorized to approve this one-video cost.",
+  404: "The approved plan or slot was not found.",
+  409: "The batch or quote changed. Refresh the exact quote before deciding.",
+  503: "Exact one-video cost approval is not available in this runtime.",
 };
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -188,6 +203,54 @@ export const mediaStudioCoreApi = {
     const subject = parsed.executionControl.subject;
     if (subject.planId !== planId || subject.batchId !== batchId || subject.slotId !== slotId) {
       throw new Error("Execution-control identity did not match the selected approved slot.");
+    }
+    return parsed;
+  },
+  oneVideoCostApprovalRuntime: async (): Promise<{ available: boolean; reason: string }> => {
+    const response = await fetch(`${API_ROOT}/runtime`, { credentials: "include", cache: "no-store" });
+    let body: unknown;
+    try { body = await response.json(); } catch { throw new Error("Cost-approval runtime status is unavailable."); }
+    const status = (body as { oneVideoCostApproval?: unknown }).oneVideoCostApproval;
+    if (!status || typeof status !== "object") {
+      return { available: false, reason: "Exact one-video cost approval is not installed in this runtime." };
+    }
+    const candidate = status as { available?: unknown; reason?: unknown };
+    return {
+      available: candidate.available === true,
+      reason: typeof candidate.reason === "string" && candidate.reason.trim()
+        ? candidate.reason
+        : "Exact one-video cost approval is unavailable.",
+    };
+  },
+  recordOneVideoCostApproval: async ({
+    planId,
+    slotId,
+    input,
+  }: {
+    planId: string;
+    slotId: string;
+    input: OneVideoCostApprovalRequest;
+  }): Promise<OneVideoCostApprovalResponse> => {
+    const request = oneVideoCostApprovalRequestSchema.parse(input);
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/one-video-cost-approval/${encodeURIComponent(slotId)}`,
+      {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(oneVideoCostApprovalErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = oneVideoCostApprovalResponseSchema.parse(await response.json());
+    if (parsed.approval.planId !== planId || parsed.approval.slotId !== slotId
+      || parsed.approval.batchId !== input.expectedBatchId
+      || parsed.approval.approvedQuoteKey !== input.expectedQuoteKey
+      || parsed.approval.decision !== input.decision) {
+      throw new Error("Cost-approval receipt did not match the exact submitted quote.");
     }
     return parsed;
   },

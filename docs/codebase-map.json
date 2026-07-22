@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T07:35:29.659Z",
+  "generatedAt": "2026-07-22T10:45:54.172Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -46,9 +46,11 @@
     "test:ai-media-postgres": "node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:ai-media-heygen-static-postgres": "node --import tsx script/ai-media-studio-static-heygen-postgres-test.ts",
     "test:ai-media-one-video-control-postgres": "node --import tsx script/ai-media-studio-one-video-execution-control-postgres-test.ts",
-    "test:ai-media-heygen-secure-setup": "node --import tsx --test tests/ai-media-studio-heygen-secure-setup-contract.test.ts tests/ai-media-studio-secure-heygen-setup.test.ts tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts tests/ai-media-studio-heygen-guided-setup-client.test.ts tests/ai-media-studio-heygen-secure-setup-routes.test.ts",
+    "test:ai-media-heygen-secure-setup": "node --import tsx --test tests/ai-media-studio-heygen-secure-setup-contract.test.ts tests/ai-media-studio-secure-heygen-setup.test.ts tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts tests/ai-media-studio-heygen-guided-setup-client.test.ts",
+    "test:ai-media-heygen-secure-setup-routes": "node --import tsx --test tests/ai-media-studio-heygen-secure-setup-routes.test.ts",
     "test:ai-media-heygen-secure-setup-browser": "node --import tsx --test tests/ai-media-studio-heygen-guided-setup-browser.test.ts",
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
+    "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
     "test:conversation": "node --import tsx --test tests/ceo-conversation-history.test.ts",
     "test:revenue-engine": "node --import tsx --test tests/revenue-engine.test.ts",
@@ -92,65 +94,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 871,
-    "filesIndexed": 725,
-    "imports": 3115,
-    "routes": 500,
-    "symbols": 14408
+    "filesVisible": 884,
+    "filesIndexed": 736,
+    "imports": 3169,
+    "routes": 501,
+    "symbols": 14606
   },
   "directories": {
-    "client/src": {
-      "files": 156,
-      "indexed": 154,
-      "kinds": {
-        "other": 46,
-        "client-component": 21,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 24
-      }
-    },
-    "docs/ai-media-studio": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "docs": 14
-      }
-    },
     "script": {
-      "files": 45,
-      "indexed": 43,
+      "files": 46,
+      "indexed": 44,
       "kinds": {
-        "script": 45
-      }
-    },
-    "server/ai-media-studio": {
-      "files": 165,
-      "indexed": 146,
-      "kinds": {
-        "server": 165
-      }
-    },
-    "shared": {
-      "files": 15,
-      "indexed": 15,
-      "kinds": {
-        "shared": 15
+        "script": 46
       }
     },
     "tests": {
-      "files": 219,
-      "indexed": 208,
+      "files": 223,
+      "indexed": 212,
       "kinds": {
-        "test": 219
-      }
-    },
-    "tests/fixtures": {
-      "files": 5,
-      "indexed": 3,
-      "kinds": {
-        "test": 5
+        "test": 223
       }
     },
     ".agents/skills": {
@@ -191,6 +153,25 @@
         "other": 13
       }
     },
+    "client/src": {
+      "files": 157,
+      "indexed": 155,
+      "kinds": {
+        "other": 47,
+        "client-component": 21,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 24
+      }
+    },
+    "docs/ai-media-studio": {
+      "files": 15,
+      "indexed": 15,
+      "kinds": {
+        "docs": 15
+      }
+    },
     "docs": {
       "files": 12,
       "indexed": 11,
@@ -199,10 +180,10 @@
       }
     },
     "migrations/ai-media-studio": {
-      "files": 51,
+      "files": 53,
       "indexed": 3,
       "kinds": {
-        "other": 49,
+        "other": 51,
         "docs": 2
       }
     },
@@ -220,6 +201,13 @@
         "server": 96
       }
     },
+    "server/ai-media-studio": {
+      "files": 168,
+      "indexed": 149,
+      "kinds": {
+        "server": 168
+      }
+    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -227,11 +215,25 @@
         "server": 8
       }
     },
+    "shared": {
+      "files": 16,
+      "indexed": 16,
+      "kinds": {
+        "shared": 16
+      }
+    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
+      }
+    },
+    "tests/fixtures": {
+      "files": 5,
+      "indexed": 3,
+      "kinds": {
+        "test": 5
       }
     },
     "tests/helpers": {
@@ -2381,6 +2383,7 @@
         "@shared/ai-media-studio-heygen-onboarding",
         "@shared/ai-media-studio-heygen-roster",
         "@shared/ai-media-studio-launch-preflight",
+        "@shared/ai-media-studio-one-video-cost-approval",
         "@shared/ai-media-studio-one-video-execution-control",
         "@shared/ai-media-studio-production-batches",
         "@shared/ai-media-studio-sandbox-readiness"
@@ -2397,15 +2400,18 @@
         "MediaLibraryResponse",
         "ProviderResourceListResponse",
         "body",
+        "candidate",
         "fallback",
         "mediaStudioCoreApi",
         "params",
         "parsed",
         "query",
         "queryString",
+        "request",
         "requestJson",
         "requestOptionalJson",
         "response",
+        "status",
         "subject"
       ],
       "routes": []
@@ -2641,12 +2647,14 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "useOneVideoCostApprovalRuntime",
         "useOneVideoExecutionControl",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
         "useProductionBatchSandboxReadiness",
-        "useProviderResources"
+        "useProviderResources",
+        "useRecordOneVideoCostApproval"
       ],
       "symbols": [
         "coreStudioKeys",
@@ -2664,12 +2672,14 @@
         "useInfluencerMutations",
         "useInfluencers",
         "useMediaAssets",
+        "useOneVideoCostApprovalRuntime",
         "useOneVideoExecutionControl",
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
         "useProductionBatchSandboxReadiness",
-        "useProviderResources"
+        "useProviderResources",
+        "useRecordOneVideoCostApproval"
       ],
       "routes": []
     },
@@ -2829,6 +2839,25 @@
       "routes": []
     },
     {
+      "path": "client/src/features/ai-media-studio/core/one-video-cost-approval-dialog.tsx",
+      "kind": "other",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/checkbox",
+        "@/components/ui/dialog",
+        "react"
+      ],
+      "exports": [
+        "ExactQuoteForApproval",
+        "OneVideoCostApprovalDialog"
+      ],
+      "symbols": [
+        "OneVideoCostApprovalDialog",
+        "checkboxId"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/features/ai-media-studio/core/pagination-feedback.tsx",
       "kind": "other",
       "imports": [
@@ -2849,6 +2878,7 @@
       "imports": [
         "../feedback",
         "./hooks",
+        "./one-video-cost-approval-dialog",
         "./types",
         "@/components/ui/button",
         "@/components/ui/card",
@@ -2859,6 +2889,7 @@
       "exports": [
         "ProductionBatchWorkbench",
         "approvalResultMatchesBatch",
+        "createCostApprovalIdempotencyKey",
         "formatMaximumQuoteUsd",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey"
@@ -2872,9 +2903,13 @@
         "action",
         "allCreatorsConfirmed",
         "allReviewsAvailable",
+        "alreadyApproved",
         "approvalAttemptRef",
+        "approvalEnabled",
         "approvalMatchesCurrentBatch",
+        "approvalMutation",
         "approvalResultMatchesBatch",
+        "approvalRuntime",
         "approve",
         "approveScripts",
         "approvedSlots",
@@ -2887,6 +2922,7 @@
         "confirmCreatorReview",
         "confirmedMembers",
         "control",
+        "createCostApprovalIdempotencyKey",
         "errorMessage",
         "evidenceTime",
         "externalRequirementLabels",
@@ -2896,14 +2932,20 @@
         "micros",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey",
+        "operationRef",
         "ownApprovalTransition",
         "packet",
         "prepare",
         "prepareScripts",
         "query",
+        "quoteIsExact",
+        "quoteKey",
         "readyScripts",
+        "recordExactApproval",
+        "renderSpecKey",
         "resultRef",
         "reviewedBatchRef",
+        "runtimeAvailable",
         "scriptReadiness",
         "selectedSlot",
         "whole"
@@ -4999,6 +5041,14 @@
       "routes": []
     },
     {
+      "path": "docs/ai-media-studio/quote-bound-human-approval-work-item.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ai-media-studio/README.md",
       "kind": "docs",
       "imports": [],
@@ -5372,6 +5422,38 @@
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "waitForPostgres"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "socketDirectory",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
       ],
       "routes": []
     },
@@ -10507,6 +10589,7 @@
         "./authority-locks",
         "./launch-authority-contracts",
         "./launch-authority-service",
+        "./one-video-execution-control-contracts",
         "drizzle-orm",
         "node:crypto"
       ],
@@ -10540,15 +10623,22 @@
         "UUID",
         "admissionDigest",
         "amount",
+        "approvalBindingDigest",
+        "approvalBindingId",
+        "approvalBridge",
         "assertAuthorized",
         "assertEvidenceAdmits",
         "assertEvidenceDecision",
         "assertKillSwitchOpen",
         "assertPolicyAdmits",
+        "assertQuoteBoundApprovalBridge",
         "assertReplay",
         "authorityDigest",
+        "authorityExpiry",
         "base",
         "baseExpiry",
+        "bridge",
+        "bridges",
         "canonicalJson",
         "conflict",
         "content",
@@ -10567,6 +10657,7 @@
         "evidenceBinding",
         "evidenceDigest",
         "evidenceIdentity",
+        "evidenceIsExactCurrentQuote",
         "existingIntent",
         "expected",
         "expiresAt",
@@ -10578,7 +10669,10 @@
         "governanceTerritory",
         "governanceUse",
         "human",
+        "humanEvidenceDigest",
+        "humanEvidenceId",
         "identity",
+        "identityRows",
         "influencerId",
         "inserted",
         "invalid",
@@ -10595,6 +10689,7 @@
         "microUsd",
         "normalized",
         "normalizedStrings",
+        "now",
         "nullableDate",
         "parsed",
         "planSlots",
@@ -10611,6 +10706,16 @@
         "provider",
         "publicSubject",
         "quote",
+        "quoteAmountMicroUsd",
+        "quoteBoundApprovalBinding",
+        "quoteBoundHumanReceipt",
+        "quoteChanged",
+        "quoteEvidenceDigest",
+        "quoteEvidenceId",
+        "quoteEvidenceRevision",
+        "quoteExpiresAt",
+        "quoteExpiry",
+        "quoteKey",
         "raced",
         "raw",
         "reason",
@@ -10748,6 +10853,31 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/drizzle-one-video-cost-approval-context-loader.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "./one-video-cost-approval-contracts",
+        "./one-video-execution-control-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleOneVideoCostApprovalContextLoader",
+        "OneVideoCostApprovalDatabase"
+      ],
+      "symbols": [
+        "DrizzleOneVideoCostApprovalContextLoader",
+        "ExecuteResult",
+        "Row",
+        "control",
+        "dailyPlanSlotId",
+        "found",
+        "rows",
+        "text"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/drizzle-one-video-execution-control-repository.ts",
       "kind": "server",
       "imports": [
@@ -10768,8 +10898,10 @@
         "DrizzleOneVideoExecutionControlRepository",
         "EvidenceState",
         "ExecuteResult",
+        "INTERNAL_UUID",
         "ProviderVerificationState",
         "Row",
+        "SHA256",
         "StaticVerificationProjection",
         "accountPresent",
         "accountStatus",
@@ -10788,7 +10920,9 @@
         "derivePersistedProviderVerificationState",
         "envelope",
         "evidence",
+        "evidenceDigest",
         "evidenceRows",
+        "exactApprovalBridge",
         "exactEvidenceBase",
         "exactNativeResourceIds",
         "expires",
@@ -10808,9 +10942,12 @@
         "providerObservedAt",
         "providerVerification",
         "quote",
+        "quoteKey",
         "reasonCodes",
+        "renderSpecDigest",
         "resourceShape",
         "resourcesActive",
+        "revision",
         "rows",
         "sha256",
         "slot",
@@ -10931,6 +11068,7 @@
         "LaunchAuthorityPolicyState",
         "LaunchAuthorityPrincipalAuthenticator",
         "LaunchAuthorityPrincipalKind",
+        "LaunchAuthorityQuoteChangedError",
         "LaunchAuthorityReceipt",
         "LaunchAuthorityRepository",
         "LaunchAuthorityServiceError",
@@ -10953,6 +11091,7 @@
       ],
       "symbols": [
         "LAUNCH_AUTHORITY_CAPABILITIES",
+        "LaunchAuthorityQuoteChangedError",
         "LaunchAuthorityServiceError"
       ],
       "routes": []
@@ -10995,6 +11134,7 @@
         "dailyPlanSlotId",
         "denied",
         "digest",
+        "expectedQuoteKey",
         "governanceTerritory",
         "governanceUse",
         "idempotency",
@@ -11004,6 +11144,7 @@
         "launchAuthorityInputDigest",
         "money",
         "normalizeApproval",
+        "normalizeHumanApproval",
         "normalizeKillSwitch",
         "normalizeLaunchIntent",
         "normalizePolicy",
@@ -11120,19 +11261,71 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/planning/one-video-cost-approval-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-cost-approval",
+        "../core/resource-domain",
+        "./launch-authority-contracts"
+      ],
+      "exports": [
+        "OneVideoCostApprovalAuthorizer",
+        "OneVideoCostApprovalCommand",
+        "OneVideoCostApprovalContext",
+        "OneVideoCostApprovalContextLoader",
+        "OneVideoCostApprovalError",
+        "OneVideoCostApprovalErrorCode",
+        "OneVideoCostApprovalReceipt"
+      ],
+      "symbols": [
+        "OneVideoCostApprovalError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/one-video-cost-approval-coordinator.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-one-video-cost-approval",
+        "./launch-authority-contracts",
+        "./launch-authority-service",
+        "./one-video-cost-approval-contracts"
+      ],
+      "exports": [
+        "OneVideoCostApprovalCoordinator"
+      ],
+      "symbols": [
+        "HumanApprovalWriter",
+        "OneVideoCostApprovalCoordinator"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/planning/one-video-execution-control-contracts.ts",
       "kind": "server",
       "imports": [
         "../../../shared/ai-media-studio-one-video-execution-control",
-        "../core/resource-domain"
+        "../core/resource-domain",
+        "node:crypto"
       ],
       "exports": [
+        "LaunchRenderSpecInput",
+        "MaximumQuoteKeyInput",
         "OneVideoExecutionControlError",
         "OneVideoExecutionControlErrorCode",
-        "OneVideoExecutionControlRepository"
+        "OneVideoExecutionControlRepository",
+        "deriveLaunchRenderSpecDigest",
+        "deriveMaximumQuoteKey",
+        "deriveRenderSpecKey"
       ],
       "symbols": [
-        "OneVideoExecutionControlError"
+        "OneVideoExecutionControlError",
+        "canonicalDigest",
+        "canonicalJson",
+        "deriveLaunchRenderSpecDigest",
+        "deriveMaximumQuoteKey",
+        "deriveRenderSpecKey",
+        "record"
       ],
       "routes": []
     },
@@ -12388,6 +12581,7 @@
         "../../shared/ai-media-studio-heygen-roster",
         "../../shared/ai-media-studio-heygen-secure-setup",
         "../../shared/ai-media-studio-launch-preflight",
+        "../../shared/ai-media-studio-one-video-cost-approval",
         "../../shared/ai-media-studio-one-video-execution-control",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
@@ -12409,6 +12603,8 @@
         "./persistence/runtime",
         "./planning/launch-preflight-contracts",
         "./planning/launch-preflight-service",
+        "./planning/one-video-cost-approval-contracts",
+        "./planning/one-video-cost-approval-coordinator",
         "./planning/one-video-execution-control-contracts",
         "./planning/one-video-execution-control-service",
         "./planning/sandbox-readiness-contracts",
@@ -12533,6 +12729,7 @@
         "mediaAssetId",
         "message",
         "method",
+        "oneVideoCostApprovalSelection",
         "oneVideoExecutionControlSelection",
         "operations",
         "origin",
@@ -12542,6 +12739,7 @@
         "paginate",
         "parseAssetTenantId",
         "parsed",
+        "path",
         "pending",
         "persistence",
         "plan",
@@ -12578,6 +12776,7 @@
         "requireHeyGenRoster",
         "requireJobs",
         "requireLaunchPreflight",
+        "requireOneVideoCostApproval",
         "requireOneVideoExecutionControl",
         "requireOperations",
         "requireProductionBatches",
@@ -12607,6 +12806,7 @@
         "selectHeyGenOnboardingReadinessRuntime",
         "selectHeyGenRosterRuntime",
         "selectLaunchPreflightRuntime",
+        "selectOneVideoCostApprovalRuntime",
         "selectOneVideoExecutionControlRuntime",
         "selectProductionBatchRuntime",
         "selectSandboxReadinessRuntime",
@@ -12659,6 +12859,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/options",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId",
@@ -20252,6 +20453,7 @@
         "runHeyGenLiveVerificationResponseSchema"
       ],
       "symbols": [
+        "calledProvider",
         "idempotencyKeySchema",
         "plainObject",
         "registerHeyGenCredentialReferenceRequestSchema",
@@ -20340,6 +20542,29 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-one-video-cost-approval.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "OneVideoCostApprovalRequest",
+        "OneVideoCostApprovalResponse",
+        "oneVideoCostApprovalPathSchema",
+        "oneVideoCostApprovalRequestSchema",
+        "oneVideoCostApprovalResponseSchema"
+      ],
+      "symbols": [
+        "idempotencyKey",
+        "noSideEffectsSchema",
+        "oneVideoCostApprovalPathSchema",
+        "oneVideoCostApprovalRequestSchema",
+        "oneVideoCostApprovalResponseSchema",
+        "publicKey"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-one-video-execution-control.ts",
       "kind": "shared",
       "imports": [
@@ -20355,6 +20580,7 @@
         "cleanLabel",
         "currentEvidenceAllowed",
         "humanApprovalSchema",
+        "humanHasBindingKeys",
         "humanHasEvidence",
         "instant",
         "maximumQuoteSchema",
@@ -20363,6 +20589,7 @@
         "oneVideoExecutionReasonCodes",
         "providerVerificationSchema",
         "publicKey",
+        "quoteHasBindingKeys",
         "quoteHasEvidence",
         "quoteHasMoney",
         "resourceSchema"
@@ -20709,6 +20936,7 @@
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
+        "aiMediaQuoteBoundHumanApprovals",
         "aiMediaRenderJobs",
         "aiMediaScriptVariants",
         "aiMediaScripts",
@@ -20760,6 +20988,7 @@
         "aiMediaPublications",
         "aiMediaPublishingJobs",
         "aiMediaQualityReviews",
+        "aiMediaQuoteBoundHumanApprovals",
         "aiMediaRenderJobs",
         "aiMediaScriptVariants",
         "aiMediaScripts",
@@ -21163,6 +21392,7 @@
         "offlinePreflight",
         "oneVideoExecutionControl",
         "pageSource",
+        "quoteBoundHumanApproval",
         "routesSource",
         "sandbox",
         "sandboxReadiness",
@@ -22571,6 +22801,7 @@
         "../server/ai-media-studio/planning/drizzle-launch-authority-repository",
         "../server/ai-media-studio/planning/launch-authority-contracts",
         "../server/ai-media-studio/planning/launch-authority-service",
+        "../server/ai-media-studio/planning/one-video-execution-control-contracts",
         "../server/ai-media-studio/production-batches/metadata-integrity",
         "drizzle-orm/pg-core",
         "node:assert/strict",
@@ -22582,9 +22813,13 @@
         "Rendered",
         "allText",
         "approval",
+        "approvalBridgeRow",
         "authorized",
         "base",
+        "bridge",
+        "changed",
         "changedCommand",
+        "changedInput",
         "command",
         "conflictHarness",
         "conflictRepository",
@@ -22596,8 +22831,10 @@
         "evidence",
         "evidenceRow",
         "execute",
+        "expectedQuoteKey",
         "expires",
         "harness",
+        "human",
         "identity",
         "ids",
         "input",
@@ -22614,6 +22851,8 @@
         "productionBatchId",
         "productionPlanId",
         "productionSlotId",
+        "providerQuoteExpiry",
+        "quote",
         "rawHash",
         "rendered",
         "repository",
@@ -22873,6 +23112,7 @@
         "handle",
         "manualSubject",
         "principal",
+        "quoteExpiresAt",
         "result",
         "scope",
         "subject",
@@ -23583,6 +23823,66 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-one-video-cost-approval-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/planning/one-video-cost-approval-contracts",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "harness",
+        "headers",
+        "key",
+        "planId",
+        "previous",
+        "quoteKey",
+        "recorded",
+        "replayed",
+        "response",
+        "runtime",
+        "text",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-one-video-cost-approval.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-one-video-cost-approval-context-loader",
+        "../server/ai-media-studio/planning/launch-authority-contracts",
+        "../server/ai-media-studio/planning/one-video-cost-approval-contracts",
+        "../server/ai-media-studio/planning/one-video-cost-approval-coordinator",
+        "../shared/ai-media-studio-one-video-cost-approval",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "changedUnderLock",
+        "command",
+        "context",
+        "coordinator",
+        "denied",
+        "key",
+        "loader",
+        "response",
+        "result",
+        "scope",
+        "stale"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-one-video-execution-control-postgres.test.ts",
       "kind": "test",
       "imports": [
@@ -23729,15 +24029,18 @@
         "credentialSource",
         "credentialStatus",
         "effect",
+        "exact",
         "fake",
         "getWithBody",
         "governanceId",
         "hash",
+        "humanId",
         "internalPlanId",
         "internalSlotId",
         "metadata",
         "money",
         "nativeResourceIdsCurrent",
+        "newerQuote",
         "noQuote",
         "now",
         "packet",
@@ -23745,6 +24048,11 @@
         "previous",
         "profile",
         "queryText",
+        "quoteExpiresAt",
+        "quoteId",
+        "quoteKey",
+        "renderSpecDigest",
+        "renderSpecKey",
         "repository",
         "req",
         "response",
@@ -23763,6 +24071,7 @@
         "sourceContentChecksum",
         "sourceContentHash",
         "sourceId",
+        "staleApproval",
         "text",
         "url",
         "value",
@@ -25045,6 +25354,86 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-pr30-quote-bound-human-approval-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "forward",
+        "model",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "Bridge",
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "OWNER",
+        "PORT",
+        "SCRIPT_CHECKSUM",
+        "SCRIPT_CONTENT",
+        "TEMP_PREFIX",
+        "WORKSPACE",
+        "applyExactChain",
+        "assertBridgeRejected",
+        "bridge",
+        "bytes",
+        "code",
+        "digest",
+        "enabled",
+        "humanEvidenceDigest",
+        "ids",
+        "inertCounts",
+        "insertBridge",
+        "integrationTest",
+        "launchIntentDigest",
+        "launchSubjectDigest",
+        "manifest",
+        "migrationRoot",
+        "ownedUrl",
+        "parsed",
+        "pool",
+        "pr28Forward",
+        "pr29Forward",
+        "pr30Forward",
+        "pr30Rollback",
+        "quoteAmount",
+        "quoteEvidenceDigest",
+        "quoteExpiresAt",
+        "rawHash",
+        "renderSpecDigest",
+        "resolvedSocket",
+        "result",
+        "reviewedForward",
+        "rollbackClient",
+        "root",
+        "seedExactAuthorityEvidence",
+        "socket",
+        "stored",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-pr4-assets-migration.test.ts",
       "kind": "test",
       "imports": [
@@ -25242,6 +25631,7 @@
         "launchPreflightResponse",
         "observation",
         "originalFetch",
+        "planId",
         "position",
         "privatePreview",
         "privateResponse",
@@ -25251,6 +25641,7 @@
         "requiredSlots",
         "response",
         "sandboxReadinessResponse",
+        "slotId",
         "stale",
         "unsafe",
         "unsafeBatch"
@@ -25989,10 +26380,13 @@
       ],
       "symbols": [
         "address",
+        "approvalCall",
         "browser",
         "browserHarnessPlugin",
         "bundledBrowser",
+        "confirm",
         "creatorName",
+        "dialog",
         "entryPath",
         "executeButton",
         "executionControlFor",
@@ -26007,6 +26401,7 @@
         "repositoryRoot",
         "requestNumber",
         "resetCall",
+        "reviewApproval",
         "selectedCall",
         "selector",
         "systemChrome",
@@ -28231,6 +28626,8 @@
     "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
     "tests/ai-media-studio-offline-launch-preflight-postgres.test.ts",
     "tests/ai-media-studio-offline-one-slot-runtime.test.ts",
+    "tests/ai-media-studio-one-video-cost-approval-routes.test.ts",
+    "tests/ai-media-studio-one-video-cost-approval.test.ts",
     "tests/ai-media-studio-one-video-execution-control-postgres.test.ts",
     "tests/ai-media-studio-one-video-execution-control.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
@@ -28269,6 +28666,8 @@
     "tests/ai-media-studio-pr29-static-heygen-verification-evidence-postgres.test.ts",
     "tests/ai-media-studio-pr3-contracts.test.ts",
     "tests/ai-media-studio-pr3-migration.test.ts",
+    "tests/ai-media-studio-pr30-quote-bound-human-approval-migration.test.ts",
+    "tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",

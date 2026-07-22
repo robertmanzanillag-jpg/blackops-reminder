@@ -3184,6 +3184,21 @@ export const aiMediaLaunchEvidence = pgTable(
       table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.slotAttempt,
       table.evidenceKind, table.id, table.revision,
     ),
+    humanQuoteBindingIdentityUnique: uniqueIndex(
+      "ai_media_launch_evidence_human_quote_binding_identity_uq",
+    ).on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
+      table.launchSubjectDigest, table.launchIntentId, table.launchIntentDigest,
+      table.evidenceKind, table.decision, table.revision, table.evidenceDigest,
+    ),
+    maximumQuoteBindingIdentityUnique: uniqueIndex(
+      "ai_media_launch_evidence_maximum_quote_binding_identity_uq",
+    ).on(
+      table.ownerUserId, table.workspaceId, table.id, table.dailyPlanSlotId, table.slotAttempt,
+      table.launchSubjectDigest, table.launchIntentId, table.launchIntentDigest,
+      table.evidenceKind, table.decision, table.amountMicroUsd, table.currency,
+      table.revision, table.expiresAt, table.evidenceDigest,
+    ),
     lifecycleCheck: check("ai_media_launch_evidence_ck", sql`(
       ${table.revision}>=1 AND ((${table.revision}=1 AND ${table.previousEvidenceId} IS NULL
         AND ${table.previousEvidenceRevision} IS NULL) OR (${table.revision}>1
@@ -3263,6 +3278,114 @@ export const aiMediaLaunchEvidence = pgTable(
       foreignColumns: [table.ownerUserId, table.workspaceId, table.dailyPlanSlotId,
         table.slotAttempt, table.evidenceKind, table.id, table.revision],
       name: "ai_media_launch_evidence_previous_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+  }),
+);
+
+/**
+ * Immutable bridge proving that one human launch decision was made against one
+ * exact, unexpired maximum quote and one exact render specification. Historical
+ * human approval evidence remains intentionally unbound; PR30 performs no
+ * backfill.
+ */
+export const aiMediaQuoteBoundHumanApprovals = pgTable(
+  "ai_media_quote_bound_human_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ...tenantColumns(),
+    dailyPlanSlotId: uuid("daily_plan_slot_id").notNull(),
+    slotAttempt: integer("slot_attempt").notNull(),
+    launchSubjectDigest: text("launch_subject_digest").notNull(),
+    launchIntentId: uuid("launch_intent_id").notNull(),
+    launchIntentDigest: text("launch_intent_digest").notNull(),
+    humanLaunchApprovalEvidenceId: uuid("human_launch_approval_evidence_id").notNull(),
+    humanLaunchApprovalEvidenceRevision: integer("human_launch_approval_evidence_revision").notNull(),
+    humanLaunchApprovalEvidenceDigest: text("human_launch_approval_evidence_digest").notNull(),
+    humanEvidenceKind: text("human_evidence_kind").notNull().default("human_launch_approval"),
+    maximumQuoteEvidenceId: uuid("maximum_quote_evidence_id").notNull(),
+    maximumQuoteEvidenceRevision: integer("maximum_quote_evidence_revision").notNull(),
+    maximumQuoteEvidenceDigest: text("maximum_quote_evidence_digest").notNull(),
+    maximumQuoteEvidenceKind: text("maximum_quote_evidence_kind").notNull().default("maximum_quote"),
+    maximumQuoteDecision: text("maximum_quote_decision").notNull().default("quoted"),
+    decision: text("decision").notNull(),
+    amountMicroUsd: numeric("amount_micro_usd", { precision: 20, scale: 0 }).notNull(),
+    currency: text("currency").notNull(),
+    quoteExpiresAt: timestamp("quote_expires_at", { withTimezone: true }).notNull(),
+    renderSpecDigest: text("render_spec_digest").notNull(),
+    approvalBindingDigest: text("approval_binding_digest").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    boundAt: timestamp("bound_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`transaction_timestamp()`),
+  },
+  (table) => ({
+    idempotencyUnique: uniqueIndex("ai_media_quote_bound_human_approvals_idempotency_uq").on(
+      table.ownerUserId, table.workspaceId, table.idempotencyKey,
+    ),
+    bindingDigestUnique: uniqueIndex("ai_media_quote_bound_human_approvals_binding_digest_uq").on(
+      table.ownerUserId, table.workspaceId, table.approvalBindingDigest,
+    ),
+    humanEvidenceUnique: uniqueIndex("ai_media_quote_bound_human_approvals_human_evidence_uq").on(
+      table.ownerUserId, table.workspaceId, table.humanLaunchApprovalEvidenceId,
+      table.humanLaunchApprovalEvidenceRevision, table.humanLaunchApprovalEvidenceDigest,
+    ),
+    slotAttemptIdx: index("ai_media_quote_bound_human_approvals_slot_attempt_idx").on(
+      table.ownerUserId, table.workspaceId, table.dailyPlanSlotId, table.slotAttempt, table.boundAt,
+    ),
+    quoteIdx: index("ai_media_quote_bound_human_approvals_quote_idx").on(
+      table.ownerUserId, table.workspaceId, table.maximumQuoteEvidenceId,
+      table.maximumQuoteEvidenceRevision,
+    ),
+    lifecycleCheck: check("ai_media_quote_bound_human_approvals_ck", sql`(
+      ${table.slotAttempt}>=1
+      AND ${table.launchSubjectDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.launchIntentDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.humanLaunchApprovalEvidenceRevision}>=1
+      AND ${table.maximumQuoteEvidenceRevision}>=1
+      AND ${table.humanLaunchApprovalEvidenceId}<>${table.maximumQuoteEvidenceId}
+      AND ${table.humanLaunchApprovalEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.maximumQuoteEvidenceDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.humanEvidenceKind}='human_launch_approval'
+      AND ${table.maximumQuoteEvidenceKind}='maximum_quote'
+      AND ${table.maximumQuoteDecision}='quoted'
+      AND ${table.decision} IN ('approved','rejected','revoked')
+      AND ${table.amountMicroUsd} BETWEEN 1 AND 9000000000000000
+      AND ${table.currency}='USD'
+      AND ${table.quoteExpiresAt}>${table.boundAt}
+      AND ${table.renderSpecDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.approvalBindingDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND ${table.inputDigest} ~ '^sha256:[0-9a-f]{64}$'
+      AND length(btrim(${table.idempotencyKey})) BETWEEN 8 AND 200
+      AND ${table.createdAt}=${table.boundAt}
+    )`),
+    humanEvidenceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.humanLaunchApprovalEvidenceId,
+        table.dailyPlanSlotId, table.slotAttempt, table.launchSubjectDigest, table.launchIntentId,
+        table.launchIntentDigest, table.humanEvidenceKind, table.decision,
+        table.humanLaunchApprovalEvidenceRevision, table.humanLaunchApprovalEvidenceDigest],
+      foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
+        aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId,
+        aiMediaLaunchEvidence.slotAttempt, aiMediaLaunchEvidence.launchSubjectDigest,
+        aiMediaLaunchEvidence.launchIntentId, aiMediaLaunchEvidence.launchIntentDigest,
+        aiMediaLaunchEvidence.evidenceKind, aiMediaLaunchEvidence.decision,
+        aiMediaLaunchEvidence.revision, aiMediaLaunchEvidence.evidenceDigest],
+      name: "ai_media_quote_bound_human_approvals_human_evidence_fk",
+    }).onUpdate("no action").onDelete("restrict"),
+    quoteEvidenceFk: foreignKey({
+      columns: [table.ownerUserId, table.workspaceId, table.maximumQuoteEvidenceId,
+        table.dailyPlanSlotId, table.slotAttempt, table.launchSubjectDigest, table.launchIntentId,
+        table.launchIntentDigest, table.maximumQuoteEvidenceKind, table.maximumQuoteDecision,
+        table.amountMicroUsd, table.currency, table.maximumQuoteEvidenceRevision,
+        table.quoteExpiresAt, table.maximumQuoteEvidenceDigest],
+      foreignColumns: [aiMediaLaunchEvidence.ownerUserId, aiMediaLaunchEvidence.workspaceId,
+        aiMediaLaunchEvidence.id, aiMediaLaunchEvidence.dailyPlanSlotId,
+        aiMediaLaunchEvidence.slotAttempt, aiMediaLaunchEvidence.launchSubjectDigest,
+        aiMediaLaunchEvidence.launchIntentId, aiMediaLaunchEvidence.launchIntentDigest,
+        aiMediaLaunchEvidence.evidenceKind, aiMediaLaunchEvidence.decision,
+        aiMediaLaunchEvidence.amountMicroUsd, aiMediaLaunchEvidence.currency,
+        aiMediaLaunchEvidence.revision, aiMediaLaunchEvidence.expiresAt,
+        aiMediaLaunchEvidence.evidenceDigest],
+      name: "ai_media_quote_bound_human_approvals_quote_evidence_fk",
     }).onUpdate("no action").onDelete("restrict"),
   }),
 );
@@ -4184,6 +4307,7 @@ export const aiMediaStudioTables = {
   killSwitchRevisions: aiMediaKillSwitchRevisions,
   launchIntents: aiMediaLaunchIntents,
   launchEvidence: aiMediaLaunchEvidence,
+  quoteBoundHumanApprovals: aiMediaQuoteBoundHumanApprovals,
   launchAuthoritySnapshots: aiMediaLaunchAuthoritySnapshots,
   budgetReservations: aiMediaBudgetReservations,
   workActivations: aiMediaWorkActivations,

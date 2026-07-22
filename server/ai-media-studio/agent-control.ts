@@ -315,9 +315,36 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     blockers: [
       "PR28 and PR29 migrations remain pending and unapplied",
       "No live verification call is authorized; quote, generation, spend, publishing and deployment remain separate gates",
-      "The quote-to-human-approval binding must be corrected before any spend action is mounted",
+      "Draft PR #165 now closes quote-to-human approval binding, but it remains unmerged in the stacked chain",
     ],
     nextAction: "Keep draft PR #161 unmerged; then Robert supplies the secret through the deployment secret manager and the avatar/voice IDs through the guided roster before separately authorizing GET-only verification.",
+  },
+  {
+    id: "ams-agent-quote-bound-human-approval",
+    title: "Exact maximum-quote to human-approval binding",
+    owner: "Quote authority, schema, security and App QA agents",
+    state: "done",
+    branch: "codex/ai-media-studio-quote-bound-approval",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/165",
+    acceptance: [
+      "Robert's decision is durably bound to one exact latest quote, amount, USD currency, expiry and server-derived render specification",
+      "A newer quote, changed subject, credential rotation, expiry or tenant mismatch makes the prior approval stale",
+      "Legacy unbound approvals never satisfy snapshot, admission or the one-video execution read model",
+      "Approval records no provider, secret, reservation, render, outbox, spend, publishing, migration or deployment effect",
+    ],
+    mergeGate: "Draft PR #165 is open and stacked on PR #161; it must remain unmerged until the dependency chain, checker, security and App QA gates stay green.",
+    evidence: [
+      "PR #165 binds human approval to exact quote evidence identity, revision, digest, amount, USD currency, expiry and server render-spec digest",
+      "Focused suite: 50 passed and 3 optional route tests skipped because the local worktree lacks optional route dependency",
+      "Sandbox browser rerun outside sandbox passed 1/1; PR30 isolated PostgreSQL harness passed 1/1; agent control passed 5/5; build passed",
+      "The staged diff secret scan found no new secret/token/private-key patterns",
+    ],
+    blockers: [
+      "No authoritative account-specific HeyGen quote provider is installed, so no amount may be fabricated",
+      "PR28 and PR29 migrations remain pending and unapplied",
+      "No generation, spend, publishing, migration apply or Replit deployment is authorized",
+    ],
+    nextAction: "Keep draft PR #165 unmerged; next implement an authoritative account-specific quote provider and keep generation, spend, publishing, migration apply and Replit deployment behind separate Robert approvals.",
   },
   {
     id: "ams-agent-staging-migrations",
