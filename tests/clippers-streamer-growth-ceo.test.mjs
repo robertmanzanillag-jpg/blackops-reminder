@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspaceMediaPath, validateMetricoolMp4 } from "../script/clippers-streamer-growth-ceo.mjs";
+import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspaceMediaPath, validateMetricoolMp4, verifyBudgetEvidence } from "../script/clippers-streamer-growth-ceo.mjs";
 
 const now = new Date("2026-07-21T18:00:00.000Z");
 const publishedPostUrl = "https://www.tiktok.com/@streamersclipusa/video/1234567890123456789";
@@ -155,6 +155,32 @@ test("raises volume only after fifteen verified winning posts", () => {
   assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
+test("preserves campaign-approved per-draft captions and talent tags", () => {
+  const draftFile = campaign.draftFiles[0];
+  const approvedCaption = "Ryan tries MAC on stage. @drinkmacenergy @kingryan #MACenergy #paidpartner";
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      draftsReady: 1,
+      draftFiles: [draftFile],
+      draftMetadata: {
+        [draftFile]: {
+          caption: approvedCaption,
+          requiredHashtags: ["@drinkmacenergy", "@kingryan", "#MACenergy", "#paidpartner"],
+          requiresTranscript: false,
+          preparationStatus: "ready_with_campaign_hook",
+        },
+      },
+    }],
+    metrics: [],
+    now,
+  });
+  assert.equal(plan.decisions[0].assignments[0].captionText, approvedCaption);
+  assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["@drinkmacenergy", "@kingryan", "#MACenergy", "#paidpartner"]);
+  assert.equal(plan.decisions[0].assignments[0].requiresTranscript, false);
+  assert.equal(plan.decisions[0].assignments[0].preparationStatus, "ready_with_campaign_hook");
+});
+
 test("accepts an observed countdown without inventing an exact campaign deadline", () => {
   const relativeCampaign = {
     ...campaign,
@@ -165,6 +191,69 @@ test("accepts an observed countdown without inventing an exact campaign deadline
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [relativeCampaign], metrics: [], now });
   assert.equal(plan.decisions[0].hoursRemaining, 192);
   assert.equal(plan.decisions[0].canProduce, true);
+});
+
+test("accepts a recently observed rolling campaign while verified budget remains", () => {
+  const rollingCampaign = {
+    ...campaign,
+    expiresAt: "",
+    lastObservedActiveAt: "2026-07-21T17:30:00.000Z",
+    budgetUsd: 2500,
+    paidOutUsdObserved: 44.33,
+    budgetEvidenceVerified: true,
+    budgetEvidencePath: "evidence-drop/whop/mac-energy.md",
+  };
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [rollingCampaign], metrics: [], now });
+  assert.equal(plan.decisions[0].hoursRemaining, null);
+  assert.equal(plan.decisions[0].canProduce, true);
+  assert.ok(!plan.decisions[0].productionBlockers.includes("campaign_expired_or_unknown"));
+});
+
+test("derives rolling budget verification from local evidence instead of trusting JSON", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clipper-budget-evidence-"));
+  const rollingCampaign = {
+    ...campaign,
+    marketplace: "whop",
+    budgetEvidencePath: "evidence-drop/whop/mac-energy.md",
+    budgetEvidenceVerified: true,
+  };
+  assert.equal(await verifyBudgetEvidence(workspaceRoot, rollingCampaign), false);
+
+  const evidencePath = path.join(workspaceRoot, rollingCampaign.budgetEvidencePath);
+  await mkdir(path.dirname(evidencePath), { recursive: true });
+  await writeFile(evidencePath, `${rollingCampaign.id}\nMarketplace: Whop\nCampaign budget verified from the live marketplace interface.\nThis local evidence record includes the observed budget and date for deterministic validation.`);
+  assert.equal(await verifyBudgetEvidence(workspaceRoot, rollingCampaign), true);
+});
+
+test("blocks a stale rolling campaign or one with no verified budget remaining", () => {
+  const stale = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      expiresAt: "",
+      lastObservedActiveAt: "2026-07-19T17:30:00.000Z",
+      budgetUsd: 2500,
+      paidOutUsdObserved: 44.33,
+      budgetEvidenceVerified: true,
+      budgetEvidencePath: "evidence-drop/whop/mac-energy.md",
+    }],
+    metrics: [],
+    now,
+  });
+  const exhausted = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      expiresAt: "",
+      lastObservedActiveAt: "2026-07-21T17:30:00.000Z",
+      budgetUsd: 2500,
+      paidOutUsdObserved: 2500,
+      budgetEvidenceVerified: true,
+      budgetEvidencePath: "evidence-drop/whop/mac-energy.md",
+    }],
+    metrics: [],
+    now,
+  });
+  assert.ok(stale.decisions[0].productionBlockers.includes("campaign_expired_or_unknown"));
+  assert.ok(exhausted.decisions[0].productionBlockers.includes("campaign_expired_or_unknown"));
 });
 
 test("separates Metricool approval readiness from Vyro cashout readiness", () => {

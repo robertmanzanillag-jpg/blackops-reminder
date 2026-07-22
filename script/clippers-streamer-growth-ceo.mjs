@@ -46,31 +46,42 @@ function draftAssignments(campaign, experiment, rows) {
     const strategy = experiment.winnerStrategyId && index < winnerSlots
       ? captionStrategies.find((row) => row.id === experiment.winnerStrategyId)
       : explorationOrder[(index - winnerSlots + explorationOrder.length) % explorationOrder.length];
-    const requiresTranscript = strategy.subtitleStyle !== "hook_only";
-    const topic = (namedDrafts[index] ? path.basename(namedDrafts[index], path.extname(namedDrafts[index])) : campaign.title)
+    const draftFile = namedDrafts[index] || null;
+    const draftFilename = draftFile ? path.basename(draftFile) : "";
+    const draftMetadata = campaign.draftMetadata?.[draftFile] || campaign.draftMetadata?.[draftFilename] || {};
+    const requiresTranscript = typeof draftMetadata.requiresTranscript === "boolean"
+      ? draftMetadata.requiresTranscript
+      : strategy.subtitleStyle !== "hook_only";
+    const topic = (draftFile ? path.basename(draftFile, path.extname(draftFile)) : campaign.title)
       .replace(/^streamersclipusa-|^streamersclips-/i, "")
       .replace(/^[^-]+-[^-]+-\d+-/i, "")
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const captionText = strategy.captionStyle === "question"
+    const generatedCaption = strategy.captionStyle === "question"
       ? `Would you have expected this from ${campaign.creator}?`
       : strategy.captionStyle === "context"
         ? `${campaign.creator} explains the context behind ${topic}.`
         : strategy.captionStyle === "minimal"
           ? `${campaign.creator}: ${topic}.`
           : `${topic}: the part worth watching.`;
+    const assignmentHashtags = Array.isArray(draftMetadata.requiredHashtags)
+      ? draftMetadata.requiredHashtags.map((value) => String(value || "").trim()).filter(Boolean)
+      : requiredHashtags;
+    const captionText = String(draftMetadata.caption || "").trim()
+      || `${generatedCaption} ${assignmentHashtags.join(" ")}`.trim();
     return {
       slot: index + 1,
-      draftFile: namedDrafts[index] || null,
+      draftFile,
       strategyId: strategy.id,
       captionStyle: strategy.captionStyle,
       subtitleStyle: strategy.subtitleStyle,
       hookStyle: strategy.hookStyle,
-      requiredHashtags,
-      captionText: `${captionText} ${requiredHashtags.join(" ")}`.trim(),
+      requiredHashtags: assignmentHashtags,
+      captionText,
       requiresTranscript,
-      preparationStatus: requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only",
+      preparationStatus: String(draftMetadata.preparationStatus || "").trim()
+        || (requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only"),
       metricoolStatus: "approval_required",
       publishAllowed: false,
     };
@@ -172,12 +183,29 @@ function campaignExpiryMs(campaign) {
   return Number.isFinite(observedAt) && hoursRemaining !== null ? observedAt + hoursRemaining * 3_600_000 : NaN;
 }
 
+function rollingCampaignRecentlyActive(campaign, now) {
+  const observedAt = Date.parse(String(campaign.lastObservedActiveAt || ""));
+  const budget = finiteNumber(campaign.budgetUsd);
+  const paidOut = finiteNumber(campaign.paidOutUsdObserved) || 0;
+  const ageMs = now.getTime() - observedAt;
+  return campaign.active === true
+    && Number.isFinite(observedAt)
+    && ageMs >= 0
+    && ageMs <= 24 * 3_600_000
+    && campaign.budgetEvidenceVerified === true
+    && exactEvidence(campaign.budgetEvidencePath)
+    && budget !== null
+    && budget > paidOut;
+}
+
 function campaignBlockers(campaign, now) {
   const expiresAt = campaignExpiryMs(campaign);
+  const campaignWindowOpen = (Number.isFinite(expiresAt) && expiresAt > now.getTime())
+    || rollingCampaignRecentlyActive(campaign, now);
   return [
     campaign.active !== true ? "campaign_not_active" : null,
     campaign.joined !== true ? "campaign_not_joined" : null,
-    !Number.isFinite(expiresAt) || expiresAt <= now.getTime() ? "campaign_expired_or_unknown" : null,
+    !campaignWindowOpen ? "campaign_expired_or_unknown" : null,
     !exactEvidence(campaign.rightsEvidencePath) || campaign.evidenceVerified !== true ? "campaign_rights_evidence_missing" : null,
     !exactEvidence(campaign.sourceUrl) ? "authorized_source_missing" : null,
     !exactEvidence(campaign.creatorReachEvidence) ? "creator_reach_evidence_missing" : null,
@@ -455,6 +483,14 @@ async function verifyTextEvidence(workspaceRoot, evidencePath, requiredValues) {
     && requiredValues.every((value) => text.toLowerCase().includes(String(value || "").toLowerCase()));
 }
 
+export async function verifyBudgetEvidence(workspaceRoot, campaign) {
+  return verifyTextEvidence(workspaceRoot, campaign.budgetEvidencePath, [
+    campaign.id,
+    campaign.marketplace,
+    "budget",
+  ]);
+}
+
 async function main() {
   const workspaceRoot = path.resolve(process.env.CLIPPERS_WORKSPACE_ROOT || "clippers_workspace");
   const inputDir = path.join(workspaceRoot, "research");
@@ -469,6 +505,7 @@ async function main() {
       campaign.marketplace,
       campaign.sourceUrl,
     ]);
+    campaign.budgetEvidenceVerified = await verifyBudgetEvidence(workspaceRoot, campaign);
   }
   for (const row of metrics) {
     const campaign = campaigns.find((candidate) => candidate.id === row.campaignId);
