@@ -34,6 +34,12 @@ import {
   oneVideoCostApprovalPathSchema,
 } from "../../shared/ai-media-studio-one-video-cost-approval";
 import {
+  oneVideoHeldAdmissionPathSchema,
+  oneVideoHeldAdmissionRequestSchema,
+  oneVideoHeldAdmissionResponseSchema,
+} from "../../shared/ai-media-studio-one-video-held-admission";
+import { oneVideoHeldAdmissionReadinessResponseSchema } from "../../shared/ai-media-studio-one-video-held-admission-readiness";
+import {
   configureHeyGenRosterResponseSchema,
   createHeyGenRosterRequestSchema,
   heyGenRosterDailyPlanResponseSchema,
@@ -72,7 +78,7 @@ import {
   type PublishingJob,
   type SourceItem,
 } from "../../shared/ai-media-studio-operations";
-import { getCurrentUserId } from "../user-context";
+import { getCurrentUserId, resolveAuthenticatedUserId } from "../user-context";
 import { createAiMediaStudioAgentSnapshot } from "./agent-control";
 import type { CoreCatalogRepositories } from "./core/runtime";
 import {
@@ -136,6 +142,18 @@ import {
   OneVideoCostApprovalError,
 } from "./planning/one-video-cost-approval-contracts";
 import type { OneVideoCostApprovalCoordinator } from "./planning/one-video-cost-approval-coordinator";
+import { OneVideoHeldAdmissionError } from "./planning/one-video-held-admission-contracts";
+import type { OneVideoHeldAdmissionCoordinator } from "./planning/one-video-held-admission-coordinator";
+import type {
+  OneVideoHeldAdmissionReadinessObservationRepository,
+  OneVideoHeldAdmissionReadinessService,
+} from "./planning/one-video-held-admission-readiness-service";
+import {
+  createStrictMoneyActionRequestGuard,
+  StrictMoneyActionRequestError,
+  type StrictMoneyActionRequestGuard,
+  type StrictMoneyActionPrincipal,
+} from "./strict-money-action-request";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -242,6 +260,22 @@ export interface AiMediaStudioDependencies {
   oneVideoCostApprovalCoordinator?: Pick<OneVideoCostApprovalCoordinator, "record">;
   /** Durable default composition seam; construction must remain inert. */
   createDurableOneVideoCostApprovalCoordinator?: () => Pick<OneVideoCostApprovalCoordinator, "record">;
+  /** Explicit read-only adjudicator and held-only coordinator. Both are required together. */
+  oneVideoHeldAdmissionReadiness?: Pick<OneVideoHeldAdmissionReadinessService, "observe">;
+  oneVideoHeldAdmissionCoordinator?: Pick<OneVideoHeldAdmissionCoordinator, "admit">;
+  /** Durable PostgreSQL observation seam. It must remain read-only. */
+  oneVideoHeldAdmissionReadinessObservationRepository?: OneVideoHeldAdmissionReadinessObservationRepository;
+  createDurableOneVideoHeldAdmissionReadinessObservationRepository?: () => OneVideoHeldAdmissionReadinessObservationRepository;
+  /** Inert durable composition override; no database/provider work may run during construction. */
+  createDurableOneVideoHeldAdmissionRuntime?: () => Readonly<{
+    readiness: Pick<OneVideoHeldAdmissionReadinessService, "observe">;
+    coordinator: Pick<OneVideoHeldAdmissionCoordinator, "admit">;
+  }>;
+  /** Exact server-owned application origin; never inferred from Host/Forwarded headers. */
+  oneVideoHeldAdmissionCanonicalAppUrl?: string;
+  /** Trusted accounting zone used by the atomic daily-admission repository. */
+  oneVideoHeldAdmissionAccountingTimeZone?: string;
+  oneVideoHeldAdmissionReservationTtlSeconds?: number;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -279,6 +313,9 @@ export interface AiMediaStudioRuntime {
   oneVideoExecutionControlPersistence: MediaStudioPersistenceStatus;
   oneVideoCostApproval: Pick<OneVideoCostApprovalCoordinator, "record"> | undefined;
   oneVideoCostApprovalPersistence: MediaStudioPersistenceStatus;
+  oneVideoHeldAdmissionReadiness: Pick<OneVideoHeldAdmissionReadinessService, "observe"> | undefined;
+  oneVideoHeldAdmission: Pick<OneVideoHeldAdmissionCoordinator, "admit"> | undefined;
+  oneVideoHeldAdmissionPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -577,6 +614,168 @@ function createDefaultDurableOneVideoCostApprovalCoordinator(): Pick<OneVideoCos
     });
   });
   return { record: async (...args) => (await load()).record(...args) };
+}
+
+type OneVideoHeldAdmissionRuntimePort = Readonly<{
+  readiness: Pick<OneVideoHeldAdmissionReadinessService, "observe">;
+  coordinator: Pick<OneVideoHeldAdmissionCoordinator, "admit">;
+}>;
+
+/** Lazy and inert: imports and database construction begin only on first request. */
+function createDefaultDurableOneVideoHeldAdmissionRuntime(options: Readonly<{
+  observationRepository?: OneVideoHeldAdmissionReadinessObservationRepository;
+  accountingTimeZone: string;
+  reservationTtlSeconds: number;
+}>): OneVideoHeldAdmissionRuntimePort {
+  let pending: Promise<OneVideoHeldAdmissionRuntimePort> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./planning/drizzle-one-video-execution-control-repository"),
+    import("./planning/drizzle-one-video-held-admission-context-loader"),
+    import("./planning/drizzle-one-video-held-admission-snapshot-repository"),
+    import("./planning/drizzle-daily-admission-repository"),
+    import("./planning/drizzle-one-video-held-admission-repository"),
+    import("./planning/one-video-held-admission-coordinator"),
+    import("./planning/one-video-held-admission-readiness-service"),
+    import("./planning/server-owned-one-video-held-admission-authorization"),
+    import("./planning/drizzle-one-video-held-admission-readiness-repository"),
+    import("./planning/drizzle-one-video-held-admission-replay-repository"),
+    import("./planning/maximum-quote-readiness-registry"),
+    import("./providers/heygen-account-maximum-quote-provider"),
+  ]).then(([database, executionAdapter, contextAdapter, snapshotAdapter, dailyAdmissionAdapter,
+    heldAdmissionAdapter, coordinatorAdapter, readinessAdapter, authorizationAdapter, readinessRepositoryAdapter,
+    replayRepositoryAdapter, registryAdapter, heygenAdapter]) => {
+    const executionControl = new executionAdapter.DrizzleOneVideoExecutionControlRepository(database.db,
+      new registryAdapter.MaximumQuoteReadinessRegistry([
+        [heygenAdapter.HEYGEN_MAXIMUM_QUOTE_PROVIDER_KEY,
+          new heygenAdapter.HeyGenAccountMaximumQuoteUnavailableProvider()],
+      ]));
+    const contextLoader = new contextAdapter.DrizzleOneVideoHeldAdmissionContextLoader(
+      database.db,
+      executionControl,
+      { reservationTtlSeconds: options.reservationTtlSeconds },
+    );
+    const snapshotRepository = new snapshotAdapter.DrizzleOneVideoHeldAdmissionSnapshotRepository(database.db);
+    const replayRepository = new replayRepositoryAdapter.DrizzleOneVideoHeldAdmissionReplayRepository(database.db);
+    const authorization = authorizationAdapter.createServerOwnedOneVideoHeldAdmissionAuthorization((context) => {
+      const principal = context as Partial<StrictMoneyActionPrincipal>;
+      if (principal.transport !== "same-origin-browser" || typeof principal.authenticatedUserId !== "string") {
+        throw new OneVideoHeldAdmissionError("UNAUTHENTICATED");
+      }
+      return principal.authenticatedUserId;
+    });
+    const dailyAdmission = new dailyAdmissionAdapter.DrizzleDailyAdmissionRepository(database.db, {
+      accountingTimeZone: options.accountingTimeZone,
+    });
+    return Object.freeze({
+      readiness: new readinessAdapter.OneVideoHeldAdmissionReadinessService({
+        contextLoader,
+        replayRepository,
+        snapshotRepository,
+        observationRepository: options.observationRepository
+          ?? new readinessRepositoryAdapter.DrizzleOneVideoHeldAdmissionReadinessRepository(database.db),
+      }),
+      coordinator: new coordinatorAdapter.OneVideoHeldAdmissionCoordinator({
+        authorizer: authorization.authorizer,
+        authenticator: authorization.authenticator,
+        contextLoader,
+        replayRepository,
+        snapshotRepository,
+        admissionRepository: new heldAdmissionAdapter.DrizzleOneVideoHeldAdmissionRepository(dailyAdmission),
+      }),
+    });
+  });
+  const loaded = async (): Promise<OneVideoHeldAdmissionRuntimePort> => {
+    try { return await load(); } catch { throw new OneVideoHeldAdmissionError("UNAVAILABLE"); }
+  };
+  return Object.freeze({
+    readiness: { observe: async (...args) => (await loaded()).readiness.observe(...args) },
+    coordinator: { admit: async (...args) => (await loaded()).coordinator.admit(...args) },
+  });
+}
+
+type OneVideoHeldAdmissionSelection = Readonly<{
+  runtime: OneVideoHeldAdmissionRuntimePort | undefined;
+  requestGuard: StrictMoneyActionRequestGuard<Request> | undefined;
+  status: MediaStudioPersistenceStatus;
+}>;
+
+function selectOneVideoHeldAdmissionRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): OneVideoHeldAdmissionSelection {
+  const canonicalAppUrl = dependencies.oneVideoHeldAdmissionCanonicalAppUrl ?? process.env.PUBLIC_APP_URL ?? "";
+  const environment = dependencies.runtimeEnvironment?.trim().toLowerCase();
+  const allowInsecureLoopback = (environment === "development" || environment === "test")
+    && isExplicitHttpLoopbackOrigin(canonicalAppUrl);
+  let requestGuard: StrictMoneyActionRequestGuard<Request>;
+  try {
+    requestGuard = createStrictMoneyActionRequestGuard({
+      canonicalAppUrl,
+      allowInsecureLoopback,
+      resolveAuthenticatedUserId,
+    });
+  } catch {
+    return { runtime: undefined, requestGuard: undefined,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "An explicit canonical application origin is required for held admission" } };
+  }
+
+  if (dependencies.oneVideoHeldAdmissionReadiness && dependencies.oneVideoHeldAdmissionCoordinator) {
+    return {
+      runtime: { readiness: dependencies.oneVideoHeldAdmissionReadiness,
+        coordinator: dependencies.oneVideoHeldAdmissionCoordinator },
+      requestGuard,
+      status: { mode: "injected", available: true, durable: false,
+        reason: "Explicit server-authorized held-admission runtime supplied by the composition caller" },
+    };
+  }
+  if (dependencies.oneVideoHeldAdmissionReadiness || dependencies.oneVideoHeldAdmissionCoordinator) {
+    return { runtime: undefined, requestGuard,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "Held-admission readiness and coordinator must be supplied together" } };
+  }
+  if (!configuredDatabase(databaseUrl)) {
+    return { runtime: undefined, requestGuard,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "DATABASE_URL and a durable held-admission runtime are required" } };
+  }
+  try {
+    let runtime: OneVideoHeldAdmissionRuntimePort;
+    if (dependencies.createDurableOneVideoHeldAdmissionRuntime) {
+      runtime = dependencies.createDurableOneVideoHeldAdmissionRuntime();
+    } else {
+      const observationRepository = dependencies.oneVideoHeldAdmissionReadinessObservationRepository
+        ?? dependencies.createDurableOneVideoHeldAdmissionReadinessObservationRepository?.();
+      const accountingTimeZone = (dependencies.oneVideoHeldAdmissionAccountingTimeZone
+        ?? dependencies.heyGenRosterDailyPlanTimeZone
+        ?? process.env.AI_MEDIA_STUDIO_ACCOUNTING_TIME_ZONE)?.trim();
+      const reservationTtlSeconds = dependencies.oneVideoHeldAdmissionReservationTtlSeconds ?? 10 * 60;
+      if (!accountingTimeZone) throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+      runtime = createDefaultDurableOneVideoHeldAdmissionRuntime({
+        observationRepository, accountingTimeZone, reservationTtlSeconds,
+      });
+    }
+    if (!runtime?.readiness || !runtime.coordinator) throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+    return { runtime, requestGuard,
+      status: { mode: "drizzle", available: true, durable: true,
+        reason: "PostgreSQL read-only readiness and atomic held-only admission selected" } };
+  } catch (error) {
+    return { runtime: undefined, requestGuard,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "Held-admission initialization failed closed" } };
+  }
+}
+
+function isExplicitHttpLoopbackOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:"
+      && (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]")
+      && (value === url.origin || value === `${url.origin}/`);
+  } catch {
+    return false;
+  }
 }
 
 function selectOneVideoExecutionControlRuntime(
@@ -1131,6 +1330,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
   const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
+  const oneVideoHeldAdmissionSelection = selectOneVideoHeldAdmissionRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -1380,6 +1580,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Cost-Approval", oneVideoCostApprovalSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-One-Video-Held-Admission", oneVideoHeldAdmissionSelection.status.mode);
     next();
   });
 
@@ -1395,7 +1596,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       productionBatches: productionBatchSelection.status,
       sandboxReadiness: sandboxReadinessSelection.status,
       oneVideoExecutionControl: oneVideoExecutionControlSelection.status,
-      oneVideoCostApproval: oneVideoCostApprovalSelection.status });
+      oneVideoCostApproval: oneVideoCostApprovalSelection.status,
+      oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
@@ -1421,6 +1623,28 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     "AI Media Studio one-video execution control");
   const requireOneVideoCostApproval = requireCapability(oneVideoCostApprovalSelection.status,
     "AI Media Studio one-video cost approval");
+  const requireOneVideoHeldAdmission = requireCapability(oneVideoHeldAdmissionSelection.status,
+    "AI Media Studio one-video held admission");
+  const requireStrictHeldAdmissionSession = (req: Request, res: Response, next: NextFunction): void => {
+    const ownerUserId = resolveAuthenticatedUserId(req);
+    if (!ownerUserId) {
+      res.status(401).json({ error: "One-video held admission is not authorized", code: "UNAUTHENTICATED" });
+      return;
+    }
+    res.locals.heldAdmissionUserId = ownerUserId;
+    next();
+  };
+  const requireStrictHeldAdmissionMutation = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!oneVideoHeldAdmissionSelection.requestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.heldAdmissionPrincipal = oneVideoHeldAdmissionSelection.requestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -1601,6 +1825,67 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         scope, req.params.planId, req.params.slotId,
       );
       res.json(oneVideoExecutionControlResponseSchema.parse({ executionControl }));
+    }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission-readiness/:slotId`,
+    (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); },
+    requireStrictHeldAdmissionSession,
+    requireOneVideoHeldAdmission,
+    asyncRoute(async (req, res) => {
+      const path = oneVideoHeldAdmissionPathSchema.safeParse(req.params);
+      const contentLength = req.get("content-length");
+      if (!path.success || Object.keys(req.query).length !== 0 || req.get("transfer-encoding")
+        || (contentLength !== undefined && contentLength !== "0")) {
+        throw new OneVideoHeldAdmissionError("INVALID_REQUEST");
+      }
+      const ownerUserId = res.locals.heldAdmissionUserId;
+      if (typeof ownerUserId !== "string") throw new OneVideoHeldAdmissionError("UNAUTHENTICATED");
+      let readiness;
+      try {
+        readiness = await oneVideoHeldAdmissionSelection.runtime!.readiness.observe(
+          { ownerUserId, workspaceId: "personal" }, path.data.planId, path.data.slotId,
+        );
+      } catch (error) {
+        if (error instanceof OneVideoHeldAdmissionError) throw error;
+        throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+      }
+      if (!readiness) throw new OneVideoHeldAdmissionError("NOT_FOUND");
+      res.json(oneVideoHeldAdmissionReadinessResponseSchema.parse({ readiness }));
+    }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission/:slotId`,
+    (_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); },
+    requireStrictHeldAdmissionMutation,
+    requireOneVideoHeldAdmission,
+    asyncRoute(async (req, res) => {
+      const path = oneVideoHeldAdmissionPathSchema.safeParse(req.params);
+      const parsed = oneVideoHeldAdmissionRequestSchema.safeParse(req.body);
+      if (!path.success || !parsed.success || Object.keys(req.query).length !== 0
+        || req.get("transfer-encoding")) {
+        throw new OneVideoHeldAdmissionError("INVALID_REQUEST");
+      }
+      const principal = res.locals.heldAdmissionPrincipal as StrictMoneyActionPrincipal | undefined;
+      const ownerUserId = principal?.authenticatedUserId;
+      if (!ownerUserId) throw new OneVideoHeldAdmissionError("UNAUTHENTICATED");
+      let result;
+      try {
+        result = await oneVideoHeldAdmissionSelection.runtime!.coordinator.admit({
+          scope: { ownerUserId, workspaceId: "personal" },
+          publicPlanKey: path.data.planId,
+          publicSlotKey: path.data.slotId,
+          expectedBatchId: parsed.data.expectedBatchId,
+          expectedQuoteKey: parsed.data.expectedQuoteKey,
+          expectedRenderSpecKey: parsed.data.expectedRenderSpecKey,
+          expectedSlotAttempt: parsed.data.expectedSlotAttempt,
+          idempotencyKey: parsed.data.idempotencyKey,
+          authorizationContext: principal,
+        });
+      } catch (error) {
+        if (error instanceof OneVideoHeldAdmissionError) throw error;
+        throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+      }
+      res.status(result.outcome === "admitted" ? 201 : 200)
+        .json(oneVideoHeldAdmissionResponseSchema.parse(result));
     }));
 
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId`,
@@ -2092,6 +2377,26 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }
+    if (error instanceof StrictMoneyActionRequestError) {
+      const message = error.code === "UNAUTHENTICATED"
+        ? "One-video held admission is not authorized"
+        : error.code === "INVALID_CONFIGURATION"
+          ? "One-video held admission is unavailable"
+          : "One-video held admission request was denied";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
+    if (error instanceof OneVideoHeldAdmissionError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid one-video held admission request"
+        : error.code === "UNAUTHENTICATED" || error.code === "FORBIDDEN"
+          ? "One-video held admission is not authorized"
+          : error.code === "NOT_FOUND" ? "Production plan or slot not found"
+            : error.code === "STALE_OR_CONFLICT" ? "Held admission changed; refresh before retrying"
+              : error.code === "ADMISSION_DENIED" ? "Held admission is not currently available"
+                : "One-video held admission is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof LaunchPreflightError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid launch preflight request"
         : error.code === "NOT_FOUND" ? "Production plan not found" : "Launch preflight is unavailable";
@@ -2177,6 +2482,9 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     oneVideoExecutionControlPersistence: oneVideoExecutionControlSelection.status,
     oneVideoCostApproval: oneVideoCostApprovalSelection.coordinator,
     oneVideoCostApprovalPersistence: oneVideoCostApprovalSelection.status,
+    oneVideoHeldAdmissionReadiness: oneVideoHeldAdmissionSelection.runtime?.readiness,
+    oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.runtime?.coordinator,
+    oneVideoHeldAdmissionPersistence: oneVideoHeldAdmissionSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

@@ -8,6 +8,7 @@ import {
 import {
   OneVideoHeldAdmissionError,
   type OneVideoHeldAdmissionContext,
+  type OneVideoHeldAdmissionExistingAttempt,
 } from "../server/ai-media-studio/planning/one-video-held-admission-contracts";
 
 const key = (prefix: string, digit: string) => `${prefix}_${digit.repeat(24)}`;
@@ -49,19 +50,29 @@ function service(input: {
   observed?: OneVideoHeldAdmissionReadinessObservation;
   currentContext?: OneVideoHeldAdmissionContext | undefined;
   currentSnapshot?: typeof snapshot | undefined;
+  existingAttempt?: OneVideoHeldAdmissionExistingAttempt | undefined;
 } = {}) {
   let snapshots = 0;
+  let contexts = 0;
   const instance = new OneVideoHeldAdmissionReadinessService({
     contextLoader: { async load() {
+      contexts += 1;
       return Object.hasOwn(input, "currentContext") ? input.currentContext : context;
     } },
+    replayRepository: {
+      async observeExisting(receivedScope, plan, slot) {
+        assert.deepEqual(receivedScope, scope); assert.equal(plan, context.publicPlanKey); assert.equal(slot, context.publicSlotKey);
+        return input.existingAttempt;
+      },
+      async loadExactReplay() { return undefined; },
+    },
     snapshotRepository: { async loadCurrent() {
       snapshots += 1;
       return Object.hasOwn(input, "currentSnapshot") ? input.currentSnapshot : snapshot;
     } },
     observationRepository: { async observe() { return input.observed ?? observation(); } },
   });
-  return { instance, snapshots: () => snapshots };
+  return { instance, snapshots: () => snapshots, contexts: () => contexts };
 }
 
 test("all read-only gates plus one exact current snapshot produce advisory POST availability", async () => {
@@ -131,6 +142,46 @@ test("existing reserved work projects a redacted held receipt and bypasses no ex
   assert.equal(readiness?.postAvailable, false);
   assert.equal(readiness?.canGenerate || readiness?.spendAuthorized, false);
   assert.equal(harness.snapshots(), 0);
+});
+
+test("durable existing reader projects held before the planned-only context loader", async () => {
+  const existingAttempt: OneVideoHeldAdmissionExistingAttempt = {
+    ownerUserId: scope.ownerUserId, workspaceId: "personal",
+    observedAt: "2026-07-22T12:00:00.000Z",
+    publicPlanKey: context.publicPlanKey, publicBatchKey: context.publicBatchKey,
+    publicSlotKey: context.publicSlotKey, publicQuoteKey: context.publicQuoteKey,
+    publicRenderSpecKey: context.publicRenderSpecKey, slotAttempt: 1,
+    idempotencyKey: "held-admission-0001", reservationId: uuid("5"),
+    maximumQuoteMicroUsd: "1250000", currency: "USD",
+    expiresAt: "2026-07-22T12:10:00.000Z", state: "held",
+  };
+  const harness = service({ existingAttempt, currentContext: undefined });
+  const readiness = await harness.instance.observe(scope, context.publicPlanKey, context.publicSlotKey);
+  assert.equal(readiness?.state, "held");
+  assert.equal(readiness?.currentReservation?.maximumQuoteMicroUsd, "1250000");
+  assert.equal(harness.contexts(), 0); assert.equal(harness.snapshots(), 0);
+});
+
+test("durable existing reader projects expired and blocks progressed work before context loading", async () => {
+  const base: OneVideoHeldAdmissionExistingAttempt = {
+    ownerUserId: scope.ownerUserId, workspaceId: "personal",
+    observedAt: "2026-07-22T12:00:00.000Z",
+    publicPlanKey: context.publicPlanKey, publicBatchKey: context.publicBatchKey,
+    publicSlotKey: context.publicSlotKey, publicQuoteKey: context.publicQuoteKey,
+    publicRenderSpecKey: context.publicRenderSpecKey, slotAttempt: 1,
+    idempotencyKey: "held-admission-0001", reservationId: uuid("5"),
+    maximumQuoteMicroUsd: "1250000", currency: "USD",
+    expiresAt: "2026-07-22T11:59:59.000Z", state: "expired",
+  };
+  const expired = service({ existingAttempt: base, currentContext: undefined });
+  assert.equal((await expired.instance.observe(scope, context.publicPlanKey, context.publicSlotKey))?.state, "expired");
+  assert.equal(expired.contexts(), 0);
+  const blockedAttempt = { ...base, state: "blocked" as const, expiresAt: "2026-07-22T12:10:00.000Z" };
+  const blockedHarness = service({ existingAttempt: blockedAttempt, currentContext: undefined });
+  const blockedResult = await blockedHarness.instance.observe(scope, context.publicPlanKey, context.publicSlotKey);
+  assert.equal(blockedResult?.state, "blocked");
+  assert.deepEqual(blockedResult?.reasonCodes, ["existing_attempt"]);
+  assert.equal(blockedHarness.contexts(), 0);
 });
 
 test("expired reserved work is visible as expired; committed or ambiguous attempts stay blocked", async () => {

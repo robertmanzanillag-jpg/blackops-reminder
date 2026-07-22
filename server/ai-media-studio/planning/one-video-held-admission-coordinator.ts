@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   oneVideoHeldAdmissionPathSchema,
   oneVideoHeldAdmissionRequestSchema,
@@ -6,6 +5,7 @@ import {
 } from "../../../shared/ai-media-studio-one-video-held-admission";
 import {
   ONE_VIDEO_HELD_ADMISSION_OPERATION,
+  deriveOneVideoHeldAdmissionReservationKey,
   OneVideoHeldAdmissionError,
   type OneVideoHeldAdmissionAuthorizer,
   type OneVideoHeldAdmissionCommand,
@@ -14,6 +14,7 @@ import {
   type OneVideoHeldAdmissionPrincipalAuthenticator,
   type OneVideoHeldAdmissionPublicCas,
   type OneVideoHeldAdmissionReceipt,
+  type OneVideoHeldAdmissionReplayRepository,
   type OneVideoHeldAdmissionRepository,
   type OneVideoHeldAdmissionSnapshotRepository,
 } from "./one-video-held-admission-contracts";
@@ -34,10 +35,12 @@ export class OneVideoHeldAdmissionCoordinator {
     authorizer: OneVideoHeldAdmissionAuthorizer;
     authenticator: OneVideoHeldAdmissionPrincipalAuthenticator;
     contextLoader: OneVideoHeldAdmissionContextLoader;
+    replayRepository: OneVideoHeldAdmissionReplayRepository;
     snapshotRepository: OneVideoHeldAdmissionSnapshotRepository;
     admissionRepository: OneVideoHeldAdmissionRepository;
   }>) {
     if (!dependencies?.authorizer || !dependencies.authenticator || !dependencies.contextLoader
+      || !dependencies.replayRepository
       || !dependencies.snapshotRepository || !dependencies.admissionRepository) {
       throw new OneVideoHeldAdmissionError("UNAVAILABLE");
     }
@@ -82,13 +85,38 @@ export class OneVideoHeldAdmissionCoordinator {
       throw new OneVideoHeldAdmissionError("FORBIDDEN");
     }
 
+    let replay;
+    try {
+      replay = await this.dependencies.replayRepository.loadExactReplay(scope, cas);
+    } catch (error) {
+      throw safeDependencyError(error);
+    }
+    if (replay) {
+      assertExactReplay(replay, scope, cas);
+      return receipt({
+        outcome: "replayed",
+        publicPlanKey: replay.publicPlanKey,
+        publicBatchKey: replay.publicBatchKey,
+        publicSlotKey: replay.publicSlotKey,
+        publicQuoteKey: replay.publicQuoteKey,
+        publicRenderSpecKey: replay.publicRenderSpecKey,
+        slotAttempt: replay.slotAttempt,
+        reservationId: replay.reservationId,
+        maximumQuoteMicroUsd: replay.maximumQuoteMicroUsd,
+        expiresAt: replay.expiresAt,
+        internalBudgetReserved: false,
+        heldRenderCreated: false,
+        heldOutboxCreated: false,
+      });
+    }
+
     let context: OneVideoHeldAdmissionContext | undefined;
     try {
       context = await this.dependencies.contextLoader.load(scope, cas.publicPlanKey, cas.publicSlotKey);
     } catch (error) {
       throw safeDependencyError(error);
     }
-    if (!context) throw new OneVideoHeldAdmissionError("NOT_FOUND");
+    if (!context) throw new OneVideoHeldAdmissionError("STALE_OR_CONFLICT");
     assertExactContext(context, scope, cas);
 
     let snapshot;
@@ -136,26 +164,82 @@ export class OneVideoHeldAdmissionCoordinator {
       throw new OneVideoHeldAdmissionError("UNAVAILABLE");
     }
 
-    return oneVideoHeldAdmissionResponseSchema.parse({
+    return receipt({
       outcome: result.replayed ? "replayed" : "admitted",
+      publicPlanKey: context.publicPlanKey,
+      publicBatchKey: context.publicBatchKey,
+      publicSlotKey: context.publicSlotKey,
+      publicQuoteKey: context.publicQuoteKey,
+      publicRenderSpecKey: context.publicRenderSpecKey,
+      slotAttempt: context.slotAttempt,
+      reservationId: result.reservationId,
+      maximumQuoteMicroUsd: context.maximumQuoteMicroUsd,
+      expiresAt: context.reservationExpiresAt,
+      internalBudgetReserved: result.effects.internalBudgetReserved,
+      heldRenderCreated: result.effects.heldRenderCreated,
+      heldOutboxCreated: result.effects.heldOutboxCreated,
+    });
+  }
+}
+
+function assertExactReplay(
+  replay: Awaited<ReturnType<OneVideoHeldAdmissionReplayRepository["loadExactReplay"]>>,
+  scope: OneVideoHeldAdmissionCommand["scope"],
+  cas: Readonly<OneVideoHeldAdmissionPublicCas>,
+): asserts replay is NonNullable<typeof replay> {
+  if (!replay) throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+  if (replay.ownerUserId !== scope.ownerUserId || replay.workspaceId !== scope.workspaceId
+    || replay.publicPlanKey !== cas.publicPlanKey || replay.publicSlotKey !== cas.publicSlotKey
+    || replay.publicBatchKey !== cas.expectedBatchId || replay.publicQuoteKey !== cas.expectedQuoteKey
+    || replay.publicRenderSpecKey !== cas.expectedRenderSpecKey || replay.slotAttempt !== cas.expectedSlotAttempt
+    || replay.idempotencyKey !== cas.idempotencyKey || replay.state !== "held") {
+    throw new OneVideoHeldAdmissionError("STALE_OR_CONFLICT");
+  }
+  const observedAt = canonicalInstant(replay.observedAt);
+  const expiresAt = canonicalInstant(replay.expiresAt);
+  const validMoney = POSITIVE_MICRO_USD.test(replay.maximumQuoteMicroUsd)
+    && BigInt(replay.maximumQuoteMicroUsd) <= MAXIMUM_MICRO_USD;
+  if (!UUID.test(replay.reservationId) || !observedAt || !expiresAt
+    || Date.parse(expiresAt) <= Date.parse(observedAt) || replay.currency !== "USD" || !validMoney) {
+    throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+  }
+}
+
+function receipt(input: Readonly<{
+  outcome: "admitted" | "replayed";
+  publicPlanKey: string;
+  publicBatchKey: string;
+  publicSlotKey: string;
+  publicQuoteKey: string;
+  publicRenderSpecKey: string;
+  slotAttempt: number;
+  reservationId: string;
+  maximumQuoteMicroUsd: string;
+  expiresAt: string;
+  internalBudgetReserved: boolean;
+  heldRenderCreated: boolean;
+  heldOutboxCreated: boolean;
+}>): OneVideoHeldAdmissionReceipt {
+  return oneVideoHeldAdmissionResponseSchema.parse({
+      outcome: input.outcome,
       admission: {
-        planId: context.publicPlanKey,
-        batchId: context.publicBatchKey,
-        slotId: context.publicSlotKey,
-        slotAttempt: context.slotAttempt,
-        quoteKey: context.publicQuoteKey,
-        renderSpecKey: context.publicRenderSpecKey,
-        reservationKey: publicReservationKey(result.reservationId),
-        maximumQuoteMicroUsd: context.maximumQuoteMicroUsd,
+        planId: input.publicPlanKey,
+        batchId: input.publicBatchKey,
+        slotId: input.publicSlotKey,
+        slotAttempt: input.slotAttempt,
+        quoteKey: input.publicQuoteKey,
+        renderSpecKey: input.publicRenderSpecKey,
+        reservationKey: deriveOneVideoHeldAdmissionReservationKey(input.reservationId),
+        maximumQuoteMicroUsd: input.maximumQuoteMicroUsd,
         currency: "USD",
-        reservationExpiresAt: context.reservationExpiresAt,
+        reservationExpiresAt: input.expiresAt,
         state: "held",
       },
       effects: {
         internal: {
-          internalBudgetReserved: result.effects.internalBudgetReserved,
-          heldRenderCreated: result.effects.heldRenderCreated,
-          heldOutboxCreated: result.effects.heldOutboxCreated,
+          internalBudgetReserved: input.internalBudgetReserved,
+          heldRenderCreated: input.heldRenderCreated,
+          heldOutboxCreated: input.heldOutboxCreated,
         },
         external: {
           secretResolved: false,
@@ -173,7 +257,6 @@ export class OneVideoHeldAdmissionCoordinator {
       canGenerate: false,
       spendAuthorized: false,
     });
-  }
 }
 
 function parsePublicCas(command: OneVideoHeldAdmissionCommand): Readonly<OneVideoHeldAdmissionPublicCas> {
@@ -230,11 +313,6 @@ function sameCas(left: Readonly<OneVideoHeldAdmissionPublicCas>, right: Readonly
     && left.expectedBatchId === right.expectedBatchId && left.expectedQuoteKey === right.expectedQuoteKey
     && left.expectedRenderSpecKey === right.expectedRenderSpecKey
     && left.expectedSlotAttempt === right.expectedSlotAttempt && left.idempotencyKey === right.idempotencyKey;
-}
-
-function publicReservationKey(reservationId: string): string {
-  return `reservation_${createHash("sha256").update(`ai-media-held-reservation-v1\0${reservationId}`)
-    .digest("hex").slice(0, 24)}`;
 }
 
 function safeDependencyError(error: unknown): OneVideoHeldAdmissionError {

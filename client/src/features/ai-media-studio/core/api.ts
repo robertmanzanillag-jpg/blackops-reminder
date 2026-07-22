@@ -83,14 +83,42 @@ const oneVideoCostApprovalErrorMessages: Readonly<Record<number, string>> = {
   503: "Exact one-video cost approval is not available in this runtime.",
 };
 
-const oneVideoHeldAdmissionErrorMessages: Readonly<Record<number, string>> = {
-  400: "The held-admission request was invalid.",
-  401: "Sign in again before creating a held admission.",
-  403: "You are not authorized to create this held admission.",
-  404: "The approved plan or slot was not found.",
-  409: "The batch, quote, render specification, or slot attempt changed. Refresh execution control before trying again.",
-  429: "The approved internal budget or one-video capacity is not currently available.",
-  503: "Held one-video admission is not available in this runtime.",
+export type OneVideoHeldAdmissionClientErrorCode =
+  | "INVALID_REQUEST"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "STALE_OR_CONFLICT"
+  | "ADMISSION_DENIED"
+  | "RATE_LIMITED"
+  | "UNAVAILABLE";
+
+export class OneVideoHeldAdmissionClientError extends Error {
+  readonly name = "OneVideoHeldAdmissionClientError";
+
+  constructor(
+    message: string,
+    readonly code: OneVideoHeldAdmissionClientErrorCode,
+    readonly statusCode: number,
+  ) {
+    super(message);
+  }
+}
+
+const oneVideoHeldAdmissionErrors: Readonly<Record<number, {
+  code: OneVideoHeldAdmissionClientErrorCode;
+  message: string;
+}>> = {
+  400: { code: "INVALID_REQUEST", message: "The held-admission request was invalid." },
+  401: { code: "UNAUTHENTICATED", message: "Sign in again before creating a held admission." },
+  403: { code: "FORBIDDEN", message: "You are not authorized to create this held admission." },
+  404: { code: "NOT_FOUND", message: "The approved plan or slot was not found." },
+  409: { code: "STALE_OR_CONFLICT", message: "The batch, quote, render specification, or slot attempt changed. Refresh the admission gate before trying again." },
+  422: { code: "ADMISSION_DENIED", message: "Held admission is not currently available. Refresh the admission gate to review current blockers." },
+  // The application-level rate limiter can return 429 before this route runs;
+  // it does not mean budget or admission capacity was denied.
+  429: { code: "RATE_LIMITED", message: "Too many requests. Wait briefly and refresh the admission gate before retrying." },
+  503: { code: "UNAVAILABLE", message: "Held one-video admission is not available in this runtime." },
 };
 
 const oneVideoHeldAdmissionReadinessErrorMessages: Readonly<Record<number, string>> = {
@@ -324,7 +352,11 @@ export const mediaStudioCoreApi = {
       },
     );
     if (!response.ok) {
-      throw new Error(oneVideoHeldAdmissionErrorMessages[response.status] ?? `Request failed (${response.status})`);
+      const failure = oneVideoHeldAdmissionErrors[response.status];
+      if (failure) {
+        throw new OneVideoHeldAdmissionClientError(failure.message, failure.code, response.status);
+      }
+      throw new Error(`Request failed (${response.status})`);
     }
     const parsed = oneVideoHeldAdmissionResponseSchema.parse(await response.json());
     if (parsed.admission.planId !== planId

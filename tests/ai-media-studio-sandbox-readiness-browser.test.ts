@@ -57,6 +57,9 @@ function executionControlFor(input, requestNumber, mode) {
       : { state: "quoted", amountMicroUsd: "1250000", currency: "USD",
         evidenceKey: "evidence_000000000000000000000001", observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2030-07-21T13:01:00.000Z",
         quoteKey: "quote_000000000000000000000001", renderSpecKey: "render_spec_000000000000000000000001" },
+    quoteReadiness: mode === "blocked"
+      ? { state: "unavailable", reasonCode: "provider_not_configured", actionCode: "configure_provider" }
+      : { state: "evidence_present", reasonCode: "exact_quote_evidence_present", actionCode: "review_exact_quote" },
     humanApproval: mode === "blocked" ? { state: "not_requested" }
       : window.__sandboxHarness.approvalSuccesses === 0 ? { state: "not_requested" }
       : { state: "approved", evidenceKey: "evidence_000000000000000000000002",
@@ -74,6 +77,27 @@ function executionControlFor(input, requestNumber, mode) {
   }};
 }
 export const mediaStudioCoreApi = {
+  async oneVideoHeldAdmissionReadiness(input) {
+    const harness = window.__sandboxHarness;
+    harness.heldAdmissionReadinessCalls.push(structuredClone(input));
+    await fetch("/api/ai-media-studio/production-batches/" + encodeURIComponent(input.planId)
+      + "/one-video-held-admission-readiness/" + encodeURIComponent(input.slotId), {
+        credentials: "include", cache: "no-store",
+      });
+    return { readiness: {
+      version: 1, source: "postgresql_read_only", subject: { ...input, slotAttempt: 1 },
+      observedAt: "2026-07-21T12:12:30.000Z", state: "blocked", postAvailable: false,
+      reasonCodes: ["observation_unavailable"],
+      effects: { providerCalled: false, secretResolved: false, externalSpendCommitted: false,
+        renderArtifactCreated: false, publishingCreated: false },
+      canGenerate: false, spendAuthorized: false,
+    }};
+  },
+  async createOneVideoHeldAdmission(input) {
+    const harness = window.__sandboxHarness;
+    harness.heldAdmissionMutationCalls.push(structuredClone(input));
+    throw new Error("Browser harness held admission must remain inert");
+  },
   async oneVideoCostApprovalRuntime() {
     const harness = window.__sandboxHarness;
     await fetch("/api/ai-media-studio/runtime", { credentials: "include", cache: "no-store" });
@@ -127,7 +151,8 @@ function browserHarnessPlugin(): Plugin {
     name: "sandbox-readiness-browser-harness",
     enforce: "pre",
     resolveId(source, importer) {
-      if (source === "./api" && importer?.endsWith("/client/src/features/ai-media-studio/core/hooks.ts")) {
+      if (source === "./api" && (importer?.endsWith("/client/src/features/ai-media-studio/core/hooks.ts")
+        || importer?.endsWith("/client/src/features/ai-media-studio/core/production-batch-workbench.tsx"))) {
         return virtualApiId;
       }
       return null;
@@ -168,6 +193,7 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     if (request.url === "/") {
       const html = `<!doctype html><html><body><main><div id="root"></div></main><script>
         window.__sandboxHarness = { calls: [], executionCalls: [], approvalCalls: [], approvalSuccesses: 0,
+          heldAdmissionReadinessCalls: [], heldAdmissionMutationCalls: [],
           approvalFailureMessage: "", approvalRuntimeAvailable: true,
           delayMs: 80, failNext: false, controlMode: "ready" };
       </script><script type="module" src="/${path.relative(repositoryRoot, entryPath)}"></script></body></html>`;
@@ -226,6 +252,10 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   assert.ok(await executeButton.getAttribute("aria-describedby"));
   assert.equal(await page.getByText("$1.25 USD", { exact: false }).count(), 1);
   assert.equal(await page.getByText("Refresh does not contact HeyGen.", { exact: false }).count(), 1);
+  const reviewHeldAdmission = page.getByRole("button", { name: "Review held admission", exact: true });
+  await assert.doesNotReject(reviewHeldAdmission.waitFor());
+  assert.equal(await reviewHeldAdmission.isDisabled(), true);
+  await assert.doesNotReject(page.getByText("The server could not adjudicate every admission gate.", { exact: true }).waitFor());
 
   const reviewApproval = page.getByRole("button", { name: "Review exact quote approval", exact: true });
   await assert.doesNotReject(reviewApproval.waitFor());
@@ -328,9 +358,14 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   assert.ok(capturedApiRequests.length >= 8);
   assert.equal(capturedApiRequests.filter((request) => request.method === "POST").length, 2,
     "one rejected approval and its deliberate same-key retry are the only POSTs");
+  const heldAdmissionMutationCalls = await page.evaluate(() => (window as any).__sandboxHarness.heldAdmissionMutationCalls);
+  assert.deepEqual(heldAdmissionMutationCalls, [], "blocked readiness must never call the held-admission mutation");
+  const heldAdmissionReadinessCalls = await page.evaluate(() => (window as any).__sandboxHarness.heldAdmissionReadinessCalls);
+  assert.ok(heldAdmissionReadinessCalls.length > 0, "the UI must obtain held-admission authority only from read-only readiness");
   assert.ok(capturedApiRequests.every((request) => request.method === "GET" || request.method === "POST"));
   assert.ok(capturedApiRequests.every((request) => new URL(request.url).hostname === "127.0.0.1"));
-  assert.ok(capturedApiRequests.every((request) => /\/runtime$|\/(sandbox-readiness|one-video-execution-control|one-video-cost-approval)\//u.test(request.url)));
+  assert.ok(capturedApiRequests.every((request) => /\/runtime$|\/(sandbox-readiness|one-video-execution-control|one-video-cost-approval|one-video-held-admission-readiness)\//u.test(request.url)));
+  assert.equal(capturedApiRequests.some((request) => /\/one-video-held-admission\//u.test(request.url)), false);
   assert.equal(capturedApiRequests.some((request) => /heygen\.com|\/execute(?:\/|$)/iu.test(request.url)), false);
   assert.deepEqual(consoleErrors, []);
 });

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mediaStudioCoreApi } from "../client/src/features/ai-media-studio/core/api";
+import {
+  mediaStudioCoreApi,
+  OneVideoHeldAdmissionClientError,
+} from "../client/src/features/ai-media-studio/core/api";
 
 const key = (prefix: string, character: string) => `${prefix}_${character.repeat(24)}`;
 const planId = key("plan", "a");
@@ -106,4 +109,40 @@ test("held-admission client rejects stale identity and private browser fields", 
       maximumQuoteMicroUsd: "1",
     } as never,
   }));
+});
+
+test("ADMISSION_DENIED 422 exposes a stable actionable client message and code", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    error: "Held admission is not currently available",
+    code: "ADMISSION_DENIED",
+  }), { status: 422 })) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      mediaStudioCoreApi.createOneVideoHeldAdmission({
+        planId,
+        slotId,
+        input: {
+          expectedBatchId: batchId,
+          expectedQuoteKey: quoteKey,
+          expectedRenderSpecKey: renderSpecKey,
+          expectedSlotAttempt: 1,
+          idempotencyKey: "held_admission_000000000000000000000001",
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof OneVideoHeldAdmissionClientError);
+        assert.equal(error.statusCode, 422);
+        assert.equal(error.code, "ADMISSION_DENIED");
+        assert.equal(
+          error.message,
+          "Held admission is not currently available. Refresh the admission gate to review current blockers.",
+        );
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

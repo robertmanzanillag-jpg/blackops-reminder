@@ -122,6 +122,7 @@ test("canonical authority is explicit server configuration and never Host or for
     "https://studio.kong.example/app",
     "https://studio.kong.example?host=attacker",
     " https://studio.kong.example",
+    "http://studio.kong.example",
   ]) {
     assert.throws(() => createStrictMoneyActionRequestGuard<TestRequest>({
       canonicalAppUrl,
@@ -129,6 +130,35 @@ test("canonical authority is explicit server configuration and never Host or for
     }), (error: unknown) => error instanceof StrictMoneyActionRequestError
       && error.code === "INVALID_CONFIGURATION");
   }
+});
+
+test("insecure origins are restricted to an explicit local/test loopback escape hatch", () => {
+  for (const canonicalAppUrl of [
+    "http://localhost:5010",
+    "http://127.0.0.1:5010",
+    "http://[::1]:5010",
+  ]) {
+    assert.throws(() => createStrictMoneyActionRequestGuard<TestRequest>({
+      canonicalAppUrl,
+      resolveAuthenticatedUserId: () => "owner-a",
+    }), (error: unknown) => error instanceof StrictMoneyActionRequestError
+      && error.code === "INVALID_CONFIGURATION");
+
+    const localGuard = createStrictMoneyActionRequestGuard<TestRequest>({
+      canonicalAppUrl,
+      allowInsecureLoopback: true,
+      resolveAuthenticatedUserId: () => "owner-a",
+    });
+    const localRequest = request({ headers: { origin: new URL(canonicalAppUrl).origin } });
+    assert.equal(localGuard.authorize(localRequest).authenticatedUserId, "owner-a");
+  }
+
+  assert.throws(() => createStrictMoneyActionRequestGuard<TestRequest>({
+    canonicalAppUrl: "http://studio.kong.example",
+    allowInsecureLoopback: true,
+    resolveAuthenticatedUserId: () => "owner-a",
+  }), (error: unknown) => error instanceof StrictMoneyActionRequestError
+    && error.code === "INVALID_CONFIGURATION");
 });
 
 test("non-browser clients remain denied without a separate server-owned capability boundary", () => {

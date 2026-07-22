@@ -42,6 +42,8 @@ export interface StrictMoneyActionRequestGuard<TRequest extends StrictMoneyActio
 export interface StrictMoneyActionRequestGuardOptions<TRequest extends StrictMoneyActionHttpRequest> {
   /** Explicit server-owned application URL. It is never inferred from request headers. */
   readonly canonicalAppUrl: string;
+  /** Test/local-only escape hatch. Production authority actions require HTTPS. */
+  readonly allowInsecureLoopback?: boolean;
   /** Must resolve only a real authenticated session; dev/header/body fallbacks are forbidden. */
   readonly resolveAuthenticatedUserId: (request: TRequest) => string | null | undefined;
 }
@@ -58,7 +60,10 @@ export function createStrictMoneyActionRequestGuard<TRequest extends StrictMoney
   if (!options || typeof options.resolveAuthenticatedUserId !== "function") {
     throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
   }
-  const canonicalOrigin = configuredCanonicalOrigin(options.canonicalAppUrl);
+  const canonicalOrigin = configuredCanonicalOrigin(
+    options.canonicalAppUrl,
+    options.allowInsecureLoopback === true,
+  );
 
   return Object.freeze({
     authorize(request: TRequest): StrictMoneyActionPrincipal {
@@ -97,13 +102,15 @@ export function createStrictMoneyActionRequestGuard<TRequest extends StrictMoney
   });
 }
 
-function configuredCanonicalOrigin(value: unknown): string {
+function configuredCanonicalOrigin(value: unknown, allowInsecureLoopback: boolean): string {
   if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
     throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
   }
   try {
     const url = new URL(value);
-    if ((url.protocol !== "https:" && url.protocol !== "http:")
+    const allowedProtocol = url.protocol === "https:"
+      || (url.protocol === "http:" && allowInsecureLoopback && isLoopbackHost(url.hostname));
+    if (!allowedProtocol
       || !url.hostname
       || url.username
       || url.password
@@ -118,6 +125,10 @@ function configuredCanonicalOrigin(value: unknown): string {
     if (error instanceof StrictMoneyActionRequestError) throw error;
     throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
   }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
 function safeHeader(request: StrictMoneyActionHttpRequest, name: string): string | undefined {

@@ -21,6 +21,16 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 - Evidence: final App QA targeted 44/44, PostgreSQL 16 pending PR28 rehearsal 1/1, TypeScript/build/map/diff pass, checker/security/App QA P0=P1=P2=P3=0.
 - Next gates: place the API key only in the deployment secret manager, supply 5–10 avatar/voice ID pairs, and separately approve read-only live verification. Quote, one-video cost, 5 × 10 spend, publishing and Replit deployment remain separate approvals.
 
+## Held one-video admission checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-one-video-held-admission`, preserved in draft PR [#169](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/169) and stacked on `codex/ai-media-studio-quote-readiness`.
+- Mounted boundary: authenticated no-store GET readiness and strict authenticated same-origin JSON POST admission are mounted. The POST accepts exactly five public CAS fields, revalidates the tenant and every server-owned gate, and can create only an internal held reservation/render/outbox tuple. It cannot activate work or contact HeyGen.
+- Durable replay: an identical authenticated retry reads the original tenant-bound held tuple before the planned-only loader, returns the same opaque reservation receipt with every per-call creation effect false, and creates no duplicate rows. Changed tenant, public CAS, slot attempt or idempotency binding fails closed. GET continues to show held or expired state after admission without turning either state into generation authority.
+- Initial launch shape: readiness requires one approved 5–10 creator batch with exactly ten slots per creator, or 50–100 planned videos. The work remains provider-neutral; HeyGen is present only as an unavailable account-specific quote adapter until later approved setup and verification.
+- Evidence: the maker's final 83/83 integral held-admission, strict-origin and isolated browser tests pass, including authenticated HTTP, replay isolation, read-only PostgreSQL projections, UI/client contracts, pending PR31 expiry artifacts and server-owned authorization. The independent checker separately passed 62/62 focused cases; App QA passed its corrected client/UI/HTTP gate 13/13 for a draft checkpoint. TypeScript, production build and diff hygiene pass. The missing real-PostgreSQL query rehearsal remains an explicit pre-merge caveat.
+- Safety: no API key or secret was stored, no provider request or generation occurred, no external spend was committed, no publication was created, no migration was applied and no deployment was performed. PR31 remains pending and unapplied.
+- Next gates: keep PR #169 draft and unmerged; add a real PostgreSQL opt-in/rehearsal for the two new Drizzle observation queries before merge; obtain review of the stacked chain; separately approve the named migration rehearsal; then Robert stores `AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY` only in the deployment secret manager and supplies 5–10 avatar-look/voice ID pairs. Read-only HeyGen verification, authoritative maximum quote, exact one-video cost approval, one canary generation, 5 × 10 batch spend and Replit deployment each remain separate approvals.
+
 ## Active local work: offline launch preflight
 
 - Branch: `codex/ai-media-studio-offline-launch-preflight`, draft PR #146, stacked exactly on draft PR #144.

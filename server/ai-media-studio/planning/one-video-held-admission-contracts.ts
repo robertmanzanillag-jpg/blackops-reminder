@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { OneVideoHeldAdmissionResponse } from "../../../shared/ai-media-studio-one-video-held-admission";
 import type { TenantScope } from "../core/resource-domain";
 
@@ -107,6 +108,42 @@ export interface OneVideoHeldAdmissionContextLoader {
   ): Promise<OneVideoHeldAdmissionContext | undefined>;
 }
 
+/**
+ * A server-validated projection of one durable attempt. Internal identifiers
+ * remain inside the planning layer and are converted to opaque public keys at
+ * the response boundary.
+ */
+export interface OneVideoHeldAdmissionExistingAttempt {
+  readonly ownerUserId: string;
+  readonly workspaceId: "personal";
+  readonly observedAt: string;
+  readonly publicPlanKey: string;
+  readonly publicBatchKey: string;
+  readonly publicSlotKey: string;
+  readonly publicQuoteKey: string;
+  readonly publicRenderSpecKey: string;
+  readonly slotAttempt: number;
+  readonly idempotencyKey: string;
+  readonly reservationId: string;
+  readonly maximumQuoteMicroUsd: string;
+  readonly currency: "USD";
+  readonly expiresAt: string;
+  readonly state: "held" | "expired" | "blocked";
+}
+
+/** Read-only replay/existing-attempt boundary; it never creates or activates work. */
+export interface OneVideoHeldAdmissionReplayRepository {
+  observeExisting(
+    scope: TenantScope,
+    publicPlanKey: string,
+    publicSlotKey: string,
+  ): Promise<OneVideoHeldAdmissionExistingAttempt | undefined>;
+  loadExactReplay(
+    scope: TenantScope,
+    cas: Readonly<OneVideoHeldAdmissionPublicCas>,
+  ): Promise<OneVideoHeldAdmissionExistingAttempt | undefined>;
+}
+
 /** Exact, current authority snapshot selected under server ownership. */
 export interface OneVideoHeldAdmissionAuthoritySnapshot {
   readonly authoritySnapshotId: string;
@@ -164,3 +201,12 @@ export interface OneVideoHeldAdmissionCommand extends OneVideoHeldAdmissionPubli
 }
 
 export type OneVideoHeldAdmissionReceipt = OneVideoHeldAdmissionResponse;
+
+/** One canonical opaque reservation key shared by POST replay and GET readiness. */
+export function deriveOneVideoHeldAdmissionReservationKey(reservationId: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(reservationId)) {
+    throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+  }
+  return `reservation_${createHash("sha256").update(`ai-media-held-reservation-v1\0${reservationId}`)
+    .digest("hex").slice(0, 24)}`;
+}

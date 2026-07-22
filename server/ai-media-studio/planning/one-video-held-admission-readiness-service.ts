@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   oneVideoHeldAdmissionReadinessReasonCodes,
   oneVideoHeldAdmissionReadinessSchema,
@@ -7,8 +6,11 @@ import {
 import type { TenantScope } from "../core/resource-domain";
 import {
   OneVideoHeldAdmissionError,
+  deriveOneVideoHeldAdmissionReservationKey,
   type OneVideoHeldAdmissionContext,
   type OneVideoHeldAdmissionContextLoader,
+  type OneVideoHeldAdmissionExistingAttempt,
+  type OneVideoHeldAdmissionReplayRepository,
   type OneVideoHeldAdmissionSnapshotRepository,
 } from "./one-video-held-admission-contracts";
 
@@ -82,10 +84,12 @@ const EFFECTS = Object.freeze({
 export class OneVideoHeldAdmissionReadinessService {
   constructor(private readonly dependencies: Readonly<{
     contextLoader: OneVideoHeldAdmissionContextLoader;
+    replayRepository: OneVideoHeldAdmissionReplayRepository;
     snapshotRepository: OneVideoHeldAdmissionSnapshotRepository;
     observationRepository: OneVideoHeldAdmissionReadinessObservationRepository;
   }>) {
-    if (!dependencies?.contextLoader || !dependencies.snapshotRepository || !dependencies.observationRepository) {
+    if (!dependencies?.contextLoader || !dependencies.replayRepository
+      || !dependencies.snapshotRepository || !dependencies.observationRepository) {
       throw new OneVideoHeldAdmissionError("UNAVAILABLE");
     }
   }
@@ -96,6 +100,14 @@ export class OneVideoHeldAdmissionReadinessService {
     publicSlotKey: string,
   ): Promise<OneVideoHeldAdmissionReadiness | undefined> {
     assertPublicInput(scope, publicPlanKey, publicSlotKey);
+    let durableAttempt: OneVideoHeldAdmissionExistingAttempt | undefined;
+    try {
+      durableAttempt = await this.dependencies.replayRepository.observeExisting(scope, publicPlanKey, publicSlotKey);
+    } catch (error) {
+      throw safeError(error);
+    }
+    if (durableAttempt) return projectDurableAttempt(durableAttempt, scope, publicPlanKey, publicSlotKey);
+
     let context: OneVideoHeldAdmissionContext | undefined;
     try {
       context = await this.dependencies.contextLoader.load(scope, publicPlanKey, publicSlotKey);
@@ -243,7 +255,7 @@ function projectExistingReservation(
       : undefined;
   if (!state) return undefined;
   return Object.freeze({
-    reservationKey: publicReservationKey(reservation.reservationId),
+    reservationKey: deriveOneVideoHeldAdmissionReservationKey(reservation.reservationId),
     maximumQuoteMicroUsd: reservation.amountMicroUsd,
     currency: "USD",
     expiresAt,
@@ -302,9 +314,55 @@ function canonicalInstant(value: unknown): string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value ? value : "";
 }
 
-function publicReservationKey(reservationId: string): string {
-  return `reservation_${createHash("sha256").update(`ai-media-held-reservation-v1\0${reservationId}`)
-    .digest("hex").slice(0, 24)}`;
+function projectDurableAttempt(
+  attempt: OneVideoHeldAdmissionExistingAttempt,
+  scope: TenantScope,
+  publicPlanKey: string,
+  publicSlotKey: string,
+): OneVideoHeldAdmissionReadiness {
+  const observedAt = canonicalInstant(attempt.observedAt);
+  const expiresAt = canonicalInstant(attempt.expiresAt);
+  const subject = Object.freeze({
+    planId: attempt.publicPlanKey,
+    batchId: attempt.publicBatchKey,
+    slotId: attempt.publicSlotKey,
+    slotAttempt: attempt.slotAttempt,
+  });
+  if (scope.workspaceId !== "personal" || attempt.ownerUserId !== scope.ownerUserId
+    || attempt.workspaceId !== scope.workspaceId || attempt.publicPlanKey !== publicPlanKey
+    || attempt.publicSlotKey !== publicSlotKey || !PUBLIC_KEY("batch").test(attempt.publicBatchKey)
+    || !PUBLIC_KEY("quote").test(attempt.publicQuoteKey)
+    || !PUBLIC_KEY("render_spec").test(attempt.publicRenderSpecKey)
+    || !Number.isSafeInteger(attempt.slotAttempt) || attempt.slotAttempt < 1
+    || !UUID.test(attempt.reservationId) || !observedAt || !expiresAt
+    || !/^[1-9]\d{0,15}$/u.test(attempt.maximumQuoteMicroUsd)
+    || BigInt(attempt.maximumQuoteMicroUsd) > 9_000_000_000_000_000n
+    || attempt.currency !== "USD" || !["held", "expired", "blocked"].includes(attempt.state)) {
+    throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+  }
+  if (attempt.state === "blocked") return blocked(subject, observedAt, ["existing_attempt"]);
+  if ((attempt.state === "held") !== (Date.parse(expiresAt) > Date.parse(observedAt))) {
+    throw new OneVideoHeldAdmissionError("UNAVAILABLE");
+  }
+  return oneVideoHeldAdmissionReadinessSchema.parse({
+    version: 1,
+    source: "postgresql_read_only",
+    subject,
+    observedAt,
+    state: attempt.state,
+    postAvailable: false,
+    reasonCodes: [],
+    currentReservation: {
+      reservationKey: deriveOneVideoHeldAdmissionReservationKey(attempt.reservationId),
+      maximumQuoteMicroUsd: attempt.maximumQuoteMicroUsd,
+      currency: "USD",
+      expiresAt,
+      state: attempt.state,
+    },
+    effects: EFFECTS,
+    canGenerate: false,
+    spendAuthorized: false,
+  });
 }
 
 function safeError(error: unknown): OneVideoHeldAdmissionError {
