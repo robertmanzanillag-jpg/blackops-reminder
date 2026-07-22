@@ -466,7 +466,7 @@ async function main() {
     const rows = buildMetricoolApprovalRows(decision, mediaReadyBySlot);
     decision.realPublishEnabled = rows.some((row) => row.status === "authorized_for_metricool");
     decision.metricoolApprovalRequired = !decision.realPublishEnabled;
-    if (decision.publishingAuthorized) {
+    if (decision.publishingAuthorized && decision.canProduce) {
       decision.nextAction = decision.realPublishEnabled
         ? `Schedule the next eligible ${decision.experiment.nextStrategyId} test in Metricool${decision.cashoutBlockers.length ? `; resolve ${decision.cashoutBlockers[0]} before cashout` : ""}.`
         : `Render and validate final media for the next ${decision.experiment.nextStrategyId} test before scheduling.`;

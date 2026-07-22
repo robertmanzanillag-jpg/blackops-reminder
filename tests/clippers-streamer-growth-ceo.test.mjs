@@ -39,6 +39,13 @@ test("blocks famous creators when campaign rights evidence is missing", () => {
   assert.equal(plan.decisions[0].decision, "blocked");
   assert.ok(plan.decisions[0].productionBlockers.includes("campaign_rights_evidence_missing"));
   assert.equal(plan.decisions[0].priorityScore, 0);
+  const authorizedPlan = buildStreamerGrowthCeoPlan({
+    campaigns: [{ ...campaign, rightsEvidencePath: "" }],
+    metrics: [],
+    now,
+    publishingAuthorized: true,
+  });
+  assert.match(authorizedPlan.nextBestAction, /campaign_rights_evidence_missing/);
 });
 
 test("tests a verified top creator without fabricating expected revenue", () => {
