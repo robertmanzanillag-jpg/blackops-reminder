@@ -377,9 +377,9 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     id: "ams-agent-quote-readiness",
     title: "Provider-neutral maximum-quote readiness",
     owner: "Quote readiness maker, checker and App QA agents",
-    state: "ready",
+    state: "done",
     branch: "codex/ai-media-studio-quote-readiness",
-    pullRequestUrl: null,
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/168",
     acceptance: [
       "Launch preflight and exact one-video control expose the same strict readiness states and safe next actions",
       "Exact quote evidence cannot be impersonated by capability or explanatory readiness",
@@ -391,13 +391,14 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
       "Both read models use one provider-neutral capability registry and strict public quote-readiness schema",
       "The exact approval control remains enabled only by current server-attested quote and render-spec evidence",
       "Production HeyGen composition uses the inert fail-closed adapter from draft PR #166",
+      "Draft PR #168 preserves the checkpoint; independent checker and App QA report P0=P1=P2=P3=0 and the production build passes",
     ],
     blockers: [
       "Authoritative account-specific HeyGen pre-generation quote terms remain unavailable",
       "The one-shot executor remains uninstalled and provider I/O remains disabled",
       "Generation, spend, publishing, migration apply and Replit deployment remain separately blocked",
     ],
-    nextAction: "Complete checker and App QA review, preserve the checkpoint in a stacked draft PR, then obtain authoritative account terms before implementing durable quote acquisition.",
+    nextAction: "Keep draft PR #168 unmerged; obtain authoritative account terms before implementing durable quote acquisition, then request separate approvals for live verification and one-video sandbox generation.",
   },
   {
     id: "ams-agent-staging-migrations",
