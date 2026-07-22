@@ -7,6 +7,8 @@ import process from "node:process";
 import test, { after } from "node:test";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { toPublicInfluencer } from "../server/ai-media-studio/core/runtime";
+import { DrizzleInfluencerRepository } from "../server/ai-media-studio/persistence/drizzle-core-repositories";
 import {
   createDrizzleHeyGenRosterAccountResolver,
   DrizzleHeyGenRosterRepository,
@@ -15,6 +17,7 @@ import {
 import { HeyGenRosterError } from "../server/ai-media-studio/providers/heygen-roster-contracts";
 import { HeyGenRosterDailyPlanService } from "../server/ai-media-studio/providers/heygen-roster-daily-plan-service";
 import { HeyGenRosterService } from "../server/ai-media-studio/providers/heygen-roster-service";
+import { influencerListResponseSchema } from "../shared/ai-media-studio-core";
 
 type MigrationFile = { path: string; sha256: string };
 type Manifest = {
@@ -214,14 +217,77 @@ integrationTest("real PG16 full chain atomically materializes safe 5→50 and 10
   const publicDto = JSON.stringify(durableFive);
   assert.doesNotMatch(publicDto, /native-avatar|native-voice|providerAccountId|credentialVersion|influencerId|avatarResourceId|voiceResourceId/iu);
 
+  const catalog = new DrizzleInfluencerRepository(drizzle(pool));
+  const firstCatalog = (await catalog.list(fiveScope)).map(toPublicInfluencer);
+  const firstPublicCatalog = influencerListResponseSchema.parse({
+    influencers: firstCatalog,
+    nextCursor: null,
+    hasMore: false,
+  });
+  assert.equal(firstPublicCatalog.influencers.length, 5, "the roster is immediately readable through the public influencer contract");
+  assert.equal(await catalog.list({ ownerUserId: accounts.ten.owner, workspaceId: accounts.ten.workspace }).then((rows) => rows.length), 0,
+    "the canonical catalog remains tenant-isolated before the other tenant configures a roster");
+
+  const editorialRows = await pool.query<{ id: string }>(`
+    SELECT id FROM ai_media_influencers
+    WHERE owner_user_id=$1 AND workspace_id=$2
+    ORDER BY created_at,id LIMIT 2
+  `, [fiveScope.ownerUserId, fiveScope.workspaceId]);
+  assert.equal(editorialRows.rowCount, 2);
+  const editorialId = editorialRows.rows[0]!.id;
+  const archivedId = editorialRows.rows[1]!.id;
+  const corrupted = await pool.query<{ id: string }>(`
+    UPDATE ai_media_influencers
+    SET personality='["editorial-bold"]'::jsonb,tone='["editorial-premium"]'::jsonb,
+      speaking_style='Editorial custom delivery',categories='["editorial-category"]'::jsonb,
+      intro='Editorial intro',outro='Editorial outro',energy_level=9,
+      facial_expressions='["editorial-expression"]'::jsonb,brand_colors='[]'::jsonb,status='active'
+    WHERE id=$1 AND owner_user_id=$2 AND workspace_id=$3
+    RETURNING id
+  `, [editorialId, fiveScope.ownerUserId, fiveScope.workspaceId]);
+  assert.equal(corrupted.rowCount, 1);
+  const archived = await pool.query<{ id: string }>(`
+    UPDATE ai_media_influencers
+    SET status='archived',archived_at=clock_timestamp(),brand_colors='[]'::jsonb,
+      default_voice_resource_id=NULL,default_avatar_resource_id=NULL
+    WHERE id=$1 AND owner_user_id=$2 AND workspace_id=$3
+    RETURNING id
+  `, [archivedId, fiveScope.ownerUserId, fiveScope.workspaceId]);
+  assert.equal(archived.rowCount, 1);
+
   const exactReplay = await firstClient.rosterService.configure(fiveScope, fiveRequest);
   assert.deepEqual(exactReplay, firstFive);
-  const fiveCounts = await pool.query<{ plans: string; slots: string }>(`
+  const repairedCatalog = (await catalog.list(fiveScope, { includeArchived: true })).map(toPublicInfluencer);
+  influencerListResponseSchema.parse({ influencers: repairedCatalog, nextCursor: null, hasMore: false });
+  assert.equal(repairedCatalog.length, 5, "exact replay repairs the legacy profile without duplicating creators");
+  const repairedEditorial = repairedCatalog.find((influencer) => influencer.id === editorialId);
+  assert.ok(repairedEditorial);
+  assert.deepEqual(repairedEditorial.personality, ["editorial-bold"]);
+  assert.deepEqual(repairedEditorial.tone, ["editorial-premium"]);
+  assert.equal(repairedEditorial.speakingStyle, "Editorial custom delivery");
+  assert.deepEqual(repairedEditorial.categories, ["editorial-category"]);
+  assert.equal(repairedEditorial.intro, "Editorial intro");
+  assert.equal(repairedEditorial.outro, "Editorial outro");
+  assert.equal(repairedEditorial.energyLevel, 9);
+  assert.deepEqual(repairedEditorial.facialExpressions, ["editorial-expression"]);
+  assert.ok(repairedEditorial.brandColors.length > 0, "only the invalid brand colors receive canonical repair defaults");
+  assert.equal(repairedEditorial.status, "active");
+
+  const repairedArchived = repairedCatalog.find((influencer) => influencer.id === archivedId);
+  assert.ok(repairedArchived);
+  assert.equal(repairedArchived.status, "archived", "roster reconciliation never reactivates an archived creator");
+  assert.ok(repairedArchived.brandColors.length > 0);
+  assert.ok(repairedArchived.avatarResourceId, "canonical avatar binding is restored");
+  assert.ok(repairedArchived.voiceResourceId, "canonical voice binding is restored");
+  assert.equal((await catalog.list(fiveScope)).length, 4, "archived creators remain excluded from the active catalog view");
+
+  const fiveCounts = await pool.query<{ influencers: string; plans: string; slots: string }>(`
     SELECT
+      (SELECT count(*)::text FROM ai_media_influencers WHERE owner_user_id=$1 AND workspace_id=$2) AS influencers,
       (SELECT count(*)::text FROM ai_media_daily_plans WHERE owner_user_id=$1 AND workspace_id=$2) AS plans,
       (SELECT count(*)::text FROM ai_media_daily_plan_slots WHERE owner_user_id=$1 AND workspace_id=$2) AS slots
   `, [fiveScope.ownerUserId, fiveScope.workspaceId]);
-  assert.deepEqual(fiveCounts.rows, [{ plans: "1", slots: "50" }]);
+  assert.deepEqual(fiveCounts.rows, [{ influencers: "5", plans: "1", slots: "50" }]);
 
   const tenScope = { ownerUserId: accounts.ten.owner, workspaceId: accounts.ten.workspace };
   const tenClient = service();

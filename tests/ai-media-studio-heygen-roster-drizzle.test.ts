@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -17,9 +18,11 @@ class FakeRosterDatabase {
   transactionCalls = 0;
   configuration: Record<string, unknown> = {};
   influencerCollisionPersona: Record<string, unknown> | undefined;
+  influencerCollisionOnlyFirst = false;
   failSlotNumber: number | undefined;
   private readonly dialect = new PgDialect();
   private resourceSequence = 0;
+  private influencerCollisionConsumed = false;
   private plan: Record<string, unknown> | undefined;
   private readonly slots: Record<string, unknown>[] = [];
 
@@ -43,10 +46,14 @@ class FakeRosterDatabase {
       return { rows: [{ id: `00000000-0000-4000-8000-${String(this.resourceSequence).padStart(12, "0")}` }] };
     }
     if (/^INSERT INTO .*ai_media_influencers/iu.test(entry.text)) {
-      if (this.influencerCollisionPersona) return { rows: [] };
+      if (this.influencerCollisionPersona
+        && (!this.influencerCollisionOnlyFirst || !this.influencerCollisionConsumed)) {
+        this.influencerCollisionConsumed = true;
+        return { rows: [] };
+      }
       return { rows: [{ id: "22222222-2222-4222-8222-222222222222" }] };
     }
-    if (/^SELECT id, persona FROM .*ai_media_influencers/iu.test(entry.text)) {
+    if (/^SELECT id, persona(?:,| FROM) .*ai_media_influencers/iu.test(entry.text)) {
       return { rows: [{ id: "22222222-2222-4222-8222-222222222222", persona: this.influencerCollisionPersona }] };
     }
     if (/^UPDATE .*ai_media_influencers/iu.test(entry.text)) {
@@ -136,6 +143,10 @@ function requestWithCount(count: number, idempotencyKey = `launch-roster-${count
   };
 }
 
+function opaqueId(prefix: "roster" | "member", seed: string): string {
+  return `${prefix}_${createHash("sha256").update(seed).digest("hex").slice(0, 24)}`;
+}
+
 test("durable roster setup locks the exact pending static account and atomically writes pending resources, influencers and configuration", async () => {
   const fake = new FakeRosterDatabase();
   const db = fake.asDatabase();
@@ -158,7 +169,13 @@ test("durable roster setup locks the exact pending static account and atomically
   assert.match(lock.text, /credential_status.*unverified/iu);
   assert.match(lock.text, /credential_version/iu);
   assert.match(lock.text, /FOR UPDATE/iu);
-  assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_influencers/iu.test(query.text)).length, 5);
+  const influencerInserts = fake.queries.filter((query) => /^INSERT INTO .*ai_media_influencers/iu.test(query.text));
+  assert.equal(influencerInserts.length, 5);
+  for (const query of influencerInserts) {
+    assert.doesNotMatch(query.text, /'\[\]'::jsonb/iu, "roster personas cannot persist empty required arrays");
+    assert.doesNotMatch(query.text, /'',\s*''/iu, "roster personas cannot persist empty intro/outro fields");
+    assert.match(query.text, /personality.*tone.*speaking_style.*categories.*intro.*outro.*energy_level.*facial_expressions.*brand_colors/iu);
+  }
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_provider_resources/iu.test(query.text)).length, 10);
   assert.ok(fake.queries.filter((query) => /^INSERT INTO .*ai_media_provider_resources/iu.test(query.text))
     .every((query) => query.params.includes("pending_verification")));
@@ -187,7 +204,7 @@ test("durable roster setup locks the exact pending static account and atomically
   }
 });
 
-test("exact durable replay returns without rewriting catalog rows", async () => {
+test("exact durable replay does not duplicate plan or slot rows while allowing catalog reconciliation", async () => {
   const fake = new FakeRosterDatabase();
   const db = fake.asDatabase();
   const service = new HeyGenRosterService(
@@ -195,10 +212,15 @@ test("exact durable replay returns without rewriting catalog rows", async () => 
     () => "2026-07-21T15:00:00.000Z",
   );
   const first = await service.configure({ ownerUserId: "owner-a", workspaceId: "personal" }, request());
-  const mutationsAfterFirst = fake.queries.filter((query) => /^INSERT INTO .*ai_media_(provider_resources|influencers)/iu.test(query.text)).length;
+  const resourceUpdatesAfterFirst = fake.queries.filter((query) => /^UPDATE .*ai_media_provider_resources/iu.test(query.text)).length;
   const replay = await service.configure({ ownerUserId: "owner-a", workspaceId: "personal" }, request());
   assert.deepEqual(replay, first);
-  assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_(provider_resources|influencers)/iu.test(query.text)).length, mutationsAfterFirst);
+  assert.ok(fake.queries.filter((query) => /^INSERT INTO .*ai_media_(provider_resources|influencers)/iu.test(query.text)).length > 0,
+    "replay may reconcile provider bindings and catalog rows");
+  assert.equal(fake.queries.filter((query) => /^UPDATE .*ai_media_provider_resources/iu.test(query.text)).length,
+    resourceUpdatesAfterFirst, "exact replay does not mutate existing provider resources");
+  assert.equal(fake.queries.filter((query) => /^SELECT id FROM .*ai_media_provider_resources/iu.test(query.text)).length, 10,
+    "exact replay performs a read-first lookup for each avatar and voice resource");
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plans/iu.test(query.text)).length, 1);
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plan_slots/iu.test(query.text)).length, 50);
   assert.equal(fake.transactionCalls, 2);
@@ -210,6 +232,37 @@ test("exact durable replay returns without rewriting catalog rows", async () => 
     (error: unknown) => error instanceof HeyGenRosterError && error.code === "IDEMPOTENCY_CONFLICT",
   );
   assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plans/iu.test(query.text)).length, 1);
+});
+
+test("an owned legacy roster persona is reconciled with every public-contract field", async () => {
+  const fake = new FakeRosterDatabase();
+  const rosterId = opaqueId("roster", "owner-a\0personal\0launch-roster-0001");
+  const memberId = opaqueId("member", [rosterId, "0", "native-avatar-1"].join("\0"));
+  fake.influencerCollisionPersona = { source: "heygen_roster", rosterId, memberId };
+  fake.influencerCollisionOnlyFirst = true;
+  const db = fake.asDatabase();
+  const service = new HeyGenRosterService(
+    new DrizzleHeyGenRosterRepository(db), createDrizzleHeyGenRosterAccountResolver(db),
+    () => "2026-07-21T15:00:00.000Z",
+  );
+
+  const response = await service.configure({ ownerUserId: "owner-a", workspaceId: "personal" }, request());
+  assert.equal(response.roster.avatarCount, 5);
+  const influencerUpdates = fake.queries.filter((query) => /^UPDATE .*ai_media_influencers/iu.test(query.text));
+  assert.equal(influencerUpdates.length, 1);
+  for (const query of influencerUpdates) {
+    assert.match(query.text, /age_range/iu);
+    assert.match(query.text, /personality/iu);
+    assert.match(query.text, /tone/iu);
+    assert.match(query.text, /speaking_style/iu);
+    assert.match(query.text, /categories/iu);
+    assert.match(query.text, /intro/iu);
+    assert.match(query.text, /outro/iu);
+    assert.match(query.text, /energy_level/iu);
+    assert.match(query.text, /facial_expressions/iu);
+    assert.match(query.text, /brand_colors/iu);
+  }
+  assert.equal(fake.queries.filter((query) => /^INSERT INTO .*ai_media_daily_plan_slots/iu.test(query.text)).length, 50);
 });
 
 test("10-avatar Drizzle roster atomically materializes exactly 100 blocked slots without spend or queue side effects", async () => {
