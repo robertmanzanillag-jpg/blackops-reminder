@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { z } from "zod";
-import { __clipperLocalNewsInternals, bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "../server/clippers-local-news-agent";
+import { __clipperLocalNewsInternals, bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, normalizeClipperLocalNewsEvent, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "../server/clippers-local-news-agent";
 
 async function fixture(t: test.TestContext) {
   const workspaceDir = await mkdtemp(path.join(os.tmpdir(), "local-news-agent-"));
@@ -80,19 +80,28 @@ test("status exposes built-in official sources and fetches optional sources only
   const workspaceDir = await fixture(t);
   const requested: string[] = [];
   const fetcher = async (url: string | URL | Request) => {
-    requested.push(String(url));
+    const requestedUrl = String(url);
+    requested.push(requestedUrl);
+    if (requestedUrl.includes("service-updates.page")) return new Response('<service-updates apikey="public-runtime-key"></service-updates>', { status: 200, headers: { "content-type": "text/html" } });
+    if (requestedUrl.includes("api/serviceupdates")) return new Response(JSON.stringify({ universal: [], metrorail: [], metrobus: [], metromover: [] }), { status: 200, headers: { "content-type": "application/json" } });
     return new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   const cycle = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", env: {}, fetch: fetcher as typeof fetch });
-  assert.equal(requested.length, 8);
+  assert.equal(requested.length, 12);
   assert.ok(requested.some((url) => url === "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml"));
+  assert.ok(requested.some((url) => url.includes("subway-alerts.json")));
   assert.ok(requested.some((url) => url === "https://www.miamidade.gov/global/rss-news.page"));
+  assert.ok(requested.some((url) => url.includes("api/serviceupdates")));
+  assert.ok(requested.some((url) => url.includes("news.miami-airport.com/tagfeed")));
   assert.equal(requested.filter((url) => url.includes("Road_Closures/FeatureServer")).length, 4);
   const ny511 = cycle.status.connectors.find((connector) => connector.id === "ny511");
   const fl511 = cycle.status.connectors.find((connector) => connector.id === "fl511");
   assert.deepEqual({ configured: ny511?.configured, requiresKey: ny511?.requiresKey }, { configured: false, requiresKey: true });
   assert.equal(fl511?.configured, false);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "notify-nyc")?.configured, true);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "mta-subway-alerts")?.configured, true);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "miami-dade-transit")?.configured, true);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "mia-airport-news")?.configured, true);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "fhp-miami-dade")?.configured, true);
   assert.equal(cycle.status.coverage.miamiTraffic, "public_incident_feed");
   assert.equal(cycle.status.coverage.nyTraffic, "notify_nyc_public");
@@ -251,6 +260,59 @@ test("official RSS adapters normalize attributed XML items without credentials a
   assert.equal(items[0].effective, "2026-07-21T12:00:00.000Z");
 });
 
+test("MTA adapter ingests only live unscheduled subway alerts and ignores planned-work floods", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "mta-subway-alerts")!;
+  const items = __clipperLocalNewsInternals.mtaAlertEvents({ entity: [
+    { id: "lmm:alert:101", alert: {
+      active_period: [{ start: 1784633400 }],
+      informed_entity: [{ route_id: "E" }, { route_id: "F" }],
+      header_text: { translation: [{ text: "[E][F] trains are delayed in Queens.", language: "en" }] },
+      description_text: { translation: [{ text: "Allow additional travel time.", language: "en" }] },
+      "transit_realtime.mercury_alert": { created_at: 1784633400, updated_at: 1784633500, alert_type: "Delays" },
+    } },
+    { id: "lmm:planned_work:202", alert: { header_text: { translation: [{ text: "Weekend work", language: "en" }] } } },
+    { id: "lmm:alert:303", alert: { active_period: [{ start: 1784547000, end: 1784550600 }], header_text: { translation: [{ text: "Expired delay", language: "en" }] } } },
+  ] }, source, "2026-07-21T12:00:00Z");
+  assert.equal(items.length, 1);
+  assert.deepEqual({ id: items[0].sourceEventId, source: items[0].source, location: items[0].location, type: items[0].eventType }, {
+    id: "lmm:alert:101", source: "Metropolitan Transportation Authority", location: "NYC Subway · Lines E, F", type: "Delays",
+  });
+  assert.equal(items[0].sourceUrl, "https://www.mta.info/alerts");
+  const normalized = normalizeClipperLocalNewsEvent(items[0], "2026-07-21T12:00:00Z");
+  assert.equal(normalized.section, "traffic");
+});
+
+test("Miami-Dade Transit adapter keeps current service updates and drops expired or stale indefinite detours", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "miami-dade-transit")!;
+  const items = __clipperLocalNewsInternals.miamiTransitEvents({ metrobus: [
+    { id: 3020, title: "Route 183 adjustment", serviceUpdate: '<p><a href="https://cloud.info.miamidade.gov/current">Details</a> New schedule.</p>', serviceUpdateType: "Metrobus", serviceUpdateTypeID: "183", inEffect: "2026-07-20T00:00:00", expireDate: "2026-09-01T00:00:00" },
+    { id: 2000, title: "Expired detour", serviceUpdate: "Old", serviceUpdateType: "Metrobus", inEffect: "2026-01-01T00:00:00", expireDate: "2026-07-20T00:00:00" },
+    { id: 1000, title: "Stale indefinite detour", serviceUpdate: "Very old", serviceUpdateType: "Metrobus", inEffect: "2025-01-01T00:00:00", expireDate: null },
+  ] }, source, "2026-07-21T12:00:00Z");
+  assert.equal(items.length, 1);
+  assert.deepEqual({ id: items[0].sourceEventId, title: items[0].title, location: items[0].location }, { id: "service-update-3020", title: "Route 183 adjustment", location: "Miami-Dade Metrobus · Route 183" });
+  assert.equal(items[0].sourceUrl, "https://cloud.info.miamidade.gov/current");
+  assert.match(items[0].description || "", /Details New schedule/);
+});
+
+test("Miami transit bootstrap key is used ephemerally and never persisted", async (t) => {
+  const workspaceDir = await fixture(t);
+  const secret = "public-key-from-official-page";
+  const headersSeen: Array<Record<string, string>> = [];
+  const fetcher = async (url: string | URL | Request, init?: RequestInit) => {
+    const requestedUrl = String(url);
+    if (requestedUrl.includes("service-updates.page")) return new Response(`<service-updates apikey="${secret}"></service-updates>`, { status: 200 });
+    if (requestedUrl.includes("api/serviceupdates")) {
+      headersSeen.push(Object.fromEntries(new Headers(init?.headers).entries()));
+      return new Response(JSON.stringify({ universal: [], metrorail: [], metrobus: [], metromover: [] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ features: [] }), { status: 200 });
+  };
+  const result = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", fetch: fetcher as typeof fetch });
+  assert.equal(headersSeen[0]["x-api-key"], secret);
+  for (const artifact of Object.values(result.status.artifacts)) assert.doesNotMatch(await readFile(artifact, "utf8"), new RegExp(secret));
+});
+
 test("Facebook newsroom copy keeps official detail concise for long source descriptions", async (t) => {
   const workspaceDir = await fixture(t);
   await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [{
@@ -308,7 +370,12 @@ test("a successful NWS fetch does not resolve an absent FL511 event, while expli
     { ...event, source: "fl511", sourceEventId: "fl511-active", title: "Cierre vial", expires: "2026-07-21T14:00:00Z" },
     { ...event, source: "fl511", sourceEventId: "fl511-expired", title: "Cierre temporal", expires: "2026-07-21T12:02:00Z" },
   ] });
-  const fetcher = async () => new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  const fetcher = async (url: string | URL | Request) => {
+    const requestedUrl = String(url);
+    if (requestedUrl.includes("service-updates.page")) return new Response('<service-updates apikey="public-runtime-key"></service-updates>', { status: 200 });
+    if (requestedUrl.includes("api/serviceupdates")) return new Response(JSON.stringify({ universal: [], metrorail: [], metrobus: [], metromover: [] }), { status: 200 });
+    return new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
   const cycle = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:03:00Z", fetch: fetcher as typeof fetch });
   assert.equal(cycle.failedSources.length, 0);
   assert.equal(cycle.status.events.active, 1);
