@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Store,
   Megaphone,
+  Music2,
   MousePointerClick,
   TrendingUp,
 } from "lucide-react";
@@ -172,6 +173,22 @@ export default function ToolsPage() {
               </CardContent>
             </Card>
           </button>
+
+          <a href="/blackroom" data-testid="tool-blackroom">
+            <Card className="cursor-pointer border-zinc-800 bg-white/[0.04] transition-colors hover:border-white/20">
+              <CardContent className="flex items-center gap-4 p-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black">
+                  <Music2 className="h-5 w-5 text-zinc-300" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-white">BlackRoom</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    Panel del agente de clips, cola, publicaciones y estado en vivo.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </a>
 
           {tools.map((tool) => {
             const Icon = tool.icon;

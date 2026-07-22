@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -12,6 +13,14 @@ import {
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
 import { isConfiguredSingleUserOwner } from "../server/single-user-owner";
+
+test("tools page links its BlackRoom card directly to the live panel", () => {
+  const toolsPage = readFileSync("client/src/pages/tools.tsx", "utf8");
+
+  assert.match(toolsPage, /<a href="\/blackroom" data-testid="tool-blackroom">/);
+  assert.doesNotMatch(toolsPage, /<Link href="\/blackroom">/);
+  assert.match(blackRoomPage, /<title>BlackRoom Content Agent<\/title>/);
+});
 
 test("remote command increments its monotonic generation", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
@@ -69,13 +78,84 @@ test("heartbeat reports the Mac online only inside the freshness window", () => 
   recordBlackRoomRemoteHeartbeat(state, {
     deviceId: "blackroom-mac",
     queue: { enabled: true },
-    worker: { running: true },
+    worker: { running: true, activity: [
+      { id: "event-1", createdAt: "2026-07-21T12:00:00.000Z", stage: "audio", level: "success", message: "Audio validado." },
+      { id: "event-2", createdAt: "invalid", stage: "x".repeat(100), level: "unknown", message: "m".repeat(1_200) },
+      { message: "" },
+    ] },
     lastError: null,
     appliedGeneration: 3,
   }, new Date("2026-07-21T12:00:00.000Z"));
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:01:00.000Z")), true);
   assert.equal(isBlackRoomRemoteDeviceOnline(state, new Date("2026-07-21T12:02:00.000Z")), false);
   assert.equal(state.device?.appliedGeneration, 3);
+  const activity = state.device?.worker.activity as any[];
+  assert.equal(activity.length, 2);
+  assert.equal(activity[0].message, "Audio validado.");
+  assert.equal(activity[1].level, "info");
+  assert.equal(activity[1].stage.length, 80);
+  assert.equal(activity[1].message.length, 1_000);
+  assert.equal(activity[1].createdAt, "2026-07-21T12:00:00.000Z");
+});
+
+test("BlackRoom control mutations and panel data are owner-only", () => {
+  const source = readFileSync("server/blackroom-control-routes.ts", "utf8");
+  for (const signature of [
+    'app.get("/blackroom"',
+    'app.get("/api/blackroom-agent"',
+    'app.post("/api/blackroom-agent/start"',
+    'app.post("/api/blackroom-agent/pause"',
+  ]) {
+    const start = source.indexOf(signature);
+    const nextRoute = source.indexOf("\n  app.", start + signature.length);
+    const route = source.slice(start, nextRoute > start ? nextRoute : undefined);
+    assert.ok(start > 0, `${signature} should exist`);
+    assert.match(route, /hasBlackRoomChatAccess\(req\)/);
+    assert.match(route, /status\(403\)/);
+  }
+});
+
+test("BlackRoom HTML route returns a controlled 401 when the session expired", async () => {
+  const handlers = new Map<string, Function>();
+  const app: any = {};
+  for (const method of ["get", "post", "put", "head"]) {
+    app[method] = (route: string, ...callbacks: Function[]) => {
+      handlers.set(`${method.toUpperCase()} ${route}`, callbacks.at(-1)!);
+      return app;
+    };
+  }
+  registerBlackRoomControlRoutes(app);
+  const response: any = {
+    statusCode: 200,
+    body: "",
+    status(code: number) { this.statusCode = code; return this; },
+    type() { return this; },
+    set() { return this; },
+    send(body: string) { this.body = body; return this; },
+  };
+  const previousFallback = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.ALLOW_DEV_USER_FALLBACK = "false";
+  try {
+    await handlers.get("GET /blackroom")!({ headers: {}, header: () => undefined }, response);
+  } finally {
+    if (previousFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previousFallback;
+  }
+  assert.equal(response.statusCode, 401);
+  assert.match(response.body, /sesión expiró/);
+});
+
+test("local worker publishes structured live activity with every heartbeat", () => {
+  const worker = readFileSync("script/blackroom-local-worker.ts", "utf8");
+  const control = readFileSync("script/blackroom-control-server.mjs", "utf8");
+
+  assert.match(worker, /activity-log\.json/);
+  assert.match(worker, /Iniciando descarga, selección del drop y edición/);
+  assert.match(worker, /Audio validado/);
+  assert.match(worker, /Subiendo y programando/);
+  assert.match(worker, /archivo local eliminado/);
+  assert.match(control, /workerActivityPath/);
+  assert.match(control, /activity: Array\.isArray\(activity\) \? activity\.slice\(-80\) : \[\]/);
 });
 
 test("panel keeps last confirmed delivery counters when the Mac goes offline", () => {
@@ -166,6 +246,17 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /confirmar las tres cuentas/);
   assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
   assert.match(blackRoomPage, /Trabajando de verdad/);
-  const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
-  assert.doesNotThrow(() => new Function(script));
+  assert.match(blackRoomPage, /Actividad en vivo/);
+  assert.match(blackRoomPage, /Chat y órdenes/);
+  assert.match(blackRoomPage, /aria-live="polite"/);
+  assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
+  assert.match(blackRoomPage, /setAttribute\('role','log'\)/);
+  assert.match(blackRoomPage, /aria-relevant','additions/);
+  assert.match(blackRoomPage, /renderedActivityIds/);
+  assert.match(blackRoomPage, /ArrowLeft','ArrowRight','Home','End/);
+  assert.match(blackRoomPage, /tabIndex=activity\?0:-1/);
+  assert.match(blackRoomPage, /setInterval\(\(\)=>refreshStatus\(\),5000\)/);
+  const scripts = [...blackRoomPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  assert.equal(scripts.length, 2);
+  for (const script of scripts) assert.doesNotThrow(() => new Function(script));
 });
